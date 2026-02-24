@@ -19,6 +19,8 @@ builder.Services.AddSingleton<AssetService>();
 builder.Services.AddSingleton<BlueprintReader>();
 builder.Services.AddSingleton<DataTableReader>();
 builder.Services.AddSingleton<AssetSearch>();
+builder.Services.AddSingleton<ConfigReader>();
+builder.Services.AddSingleton<CppHeaderParser>();
 builder.Services.AddSingleton<EditorBridge>();
 
 builder.Services
