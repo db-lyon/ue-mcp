@@ -47,18 +47,33 @@ BlueprintAnatomy:
       meaning: A reusable graph fragment. Inlined at compile time. Has tunnel entry/exit nodes instead of function signatures.
 
   SpaceBond@Nodes:
-    meaning: The atomic units of a Blueprint graph. Each node is a separate export in the asset with a class type, property data, and pin connections.
+    meaning: The atomic units of a Blueprint graph. Each node is a separate export in the asset with a class type (K2Node_*), property data, and pin connections.
+    discover_via: read_blueprint_graph, list_node_types, search_node_types
+    mutation: add_blueprint_node, connect_blueprint_pins
     SpaceBond@ExecNodes:
       meaning: Nodes with execution pins (white arrows). They run sequentially along the exec wire.
-      examples: CallFunction, IfThenElse, ForEachLoop, Sequence, Branch, Switch, Delay
+      examples: K2Node_CallFunction, K2Node_IfThenElse, K2Node_ForEachLoop, K2Node_ExecutionSequence, K2Node_Delay
+      discover_via: list_node_types (category Flow Control)
     SpaceBond@PureNodes:
       meaning: Nodes without execution pins. Evaluated on demand when their output is read. No side effects.
-      examples: MathExpression, GetVariable, BreakStruct, MakeVector, Comparison
+      examples: K2Node_VariableGet, K2Node_BreakStruct, K2Node_MakeStruct, K2Node_PromotableOperator
+      discover_via: list_node_types (category Variables, Math, Struct)
     SpaceBond@EventNodes:
       meaning: Entry points for execution. Red title bar. BeginPlay, Tick, InputAction, Custom Events, Dispatchers.
+      examples: K2Node_Event, K2Node_InputAction, K2Node_InputKey, K2Node_ComponentBoundEvent
+      discover_via: list_node_types (category Events)
+    SpaceBond@LifecycleNodes:
+      meaning: Nodes that create or destroy objects in the world.
+      examples: K2Node_SpawnActorFromClass, K2Node_ConstructObjectFromClass, K2Node_DestroyActor
+      discover_via: list_node_types (category Object Lifecycle)
+    SpaceBond@CastNodes:
+      meaning: Type casting nodes. Convert a reference to a more specific type.
+      examples: K2Node_DynamicCast, K2Node_ClassDynamicCast
+      discover_via: list_node_types (category Casting & Type)
     SpaceBond@Pins:
       meaning: Connection points on nodes. Exec pins (white) carry control flow. Data pins (colored by type) carry values. Each pin has a name, type, direction (input/output), and optional default value.
       constraint: An output pin can connect to multiple input pins of compatible type. An exec output connects to exactly one exec input.
+      mutation: connect_blueprint_pins
 
   SpaceBond@Components:
     meaning: Simple Construction Script (SCS) components. These are the components visible in the Components panel. Each is an SCS_Node export with a component class reference and an InternalVariableName.
@@ -88,6 +103,20 @@ EditorStates:
           connection: transitions_to
       🪝 Stop: /EditorStates/PIE/Stopped
           connection: transitions_to
+
+  SpaceBond@UndoSystem:
+    meaning: The editor's transaction system. Every mutation (add variable, add node, wire pins, set property, place actor, move actor, set material parameter, set widget property) is recorded as a transaction that can be undone.
+    purpose: The AI should know that mistakes are recoverable. Undo/redo is the safety net for all mutation operations.
+    discover_via: undo, redo
+    constraint: Undo operates on the transaction stack, not individual tools. One undo may revert multiple property changes if they were part of the same transaction.
+    🪝 AllMutation: /ToolSurface/EditorMutation
+        connection: safety_net
+    🪝 LevelMutation: /ToolSurface/LevelManipulation
+        connection: safety_net
+    🪝 MaterialMutation: /ToolSurface/MaterialEditing
+        connection: safety_net
+    🪝 WidgetMutation: /ToolSurface/WidgetUMG
+        connection: safety_net
 
   SpaceBond@BlueprintCompilation:
     meaning: Blueprint compilation state machine. Compilation turns the visual graph into executable bytecode.
