@@ -1,0 +1,314 @@
+"""
+Reflection handlers — expose UE's own type system to the MCP server.
+This is the highest-leverage feature in the entire MCP: it turns every
+class, struct, and enum in the running editor into on-demand context.
+"""
+
+try:
+    import unreal
+    HAS_UNREAL = True
+except ImportError:
+    HAS_UNREAL = False
+
+
+def reflect_class(params: dict) -> dict:
+    """Reflect a UClass: parent chain, properties, functions, specifiers, interfaces."""
+    class_name = params.get("className", "")
+    include_inherited = params.get("includeInherited", False)
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    cls = _find_class(class_name)
+    if cls is None:
+        raise ValueError(f"Class not found: {class_name}")
+
+    parent = cls.get_super_class()
+    parent_chain = []
+    p = parent
+    while p is not None:
+        parent_chain.append(p.get_name())
+        p = p.get_super_class()
+
+    properties = _get_class_properties(cls, include_inherited)
+    functions = _get_class_functions(cls, include_inherited)
+
+    result = {
+        "className": cls.get_name(),
+        "parentClass": parent.get_name() if parent else None,
+        "parentChain": parent_chain,
+        "isAbstract": cls.has_any_class_flags(unreal.ClassFlags.CLASS_ABSTRACT) if hasattr(unreal, "ClassFlags") else None,
+        "propertyCount": len(properties),
+        "functionCount": len(functions),
+        "properties": properties,
+        "functions": functions,
+    }
+
+    return result
+
+
+def reflect_struct(params: dict) -> dict:
+    """Reflect a UScriptStruct: fields and parent."""
+    struct_name = params.get("structName", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    struct = unreal.find_struct(struct_name) if hasattr(unreal, "find_struct") else None
+    if struct is None:
+        raise ValueError(f"Struct not found: {struct_name}. Try the full path e.g. '/Script/Engine.HitResult'")
+
+    fields = []
+    for prop_name in dir(struct):
+        if prop_name.startswith("_"):
+            continue
+        try:
+            fields.append({
+                "name": prop_name,
+                "type": "unknown",
+            })
+        except Exception:
+            continue
+
+    return {
+        "structName": struct_name,
+        "fields": fields,
+    }
+
+
+def reflect_enum(params: dict) -> dict:
+    """Reflect a UEnum: all values with display names."""
+    enum_name = params.get("enumName", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    try:
+        enum_class = getattr(unreal, enum_name, None)
+        if enum_class is None:
+            raise ValueError(f"Enum not found: {enum_name}")
+
+        values = []
+        for attr_name in dir(enum_class):
+            if attr_name.startswith("_"):
+                continue
+            attr = getattr(enum_class, attr_name, None)
+            if isinstance(attr, enum_class):
+                values.append({
+                    "name": attr_name,
+                    "value": int(attr) if hasattr(attr, "__int__") else str(attr),
+                    "displayName": attr_name.replace("_", " ").title(),
+                })
+
+        return {
+            "enumName": enum_name,
+            "valueCount": len(values),
+            "values": values,
+        }
+    except Exception as e:
+        raise RuntimeError(f"Failed to reflect enum '{enum_name}': {e}")
+
+
+def list_classes(params: dict) -> dict:
+    """List classes, optionally filtered by parent class."""
+    parent_filter = params.get("parentFilter", None)
+    limit = params.get("limit", 100)
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    if parent_filter:
+        parent_cls = _find_class(parent_filter)
+        if parent_cls is None:
+            raise ValueError(f"Parent class not found: {parent_filter}")
+
+        registry = unreal.AssetRegistryHelpers.get_asset_registry()
+        derived = unreal.EditorAssetLibrary
+        all_classes = []
+
+        try:
+            objs = unreal.EditorUtilityLibrary.get_all_blueprint_classes() if hasattr(unreal, "EditorUtilityLibrary") else []
+        except Exception:
+            objs = []
+
+        result_classes = []
+        for cls_obj in objs:
+            try:
+                if cls_obj.is_child_of(parent_cls):
+                    result_classes.append(cls_obj.get_name())
+            except Exception:
+                continue
+
+        return {
+            "parentFilter": parent_filter,
+            "count": min(len(result_classes), limit),
+            "classes": result_classes[:limit],
+        }
+    else:
+        common_classes = [
+            "Actor", "Pawn", "Character", "PlayerController", "GameModeBase",
+            "GameStateBase", "PlayerState", "HUD", "ActorComponent",
+            "SceneComponent", "PrimitiveComponent", "StaticMeshComponent",
+            "SkeletalMeshComponent", "CameraComponent", "AudioComponent",
+            "LightComponent", "UserWidget", "AnimInstance",
+            "GameInstance", "SaveGame", "DataAsset", "PrimaryDataAsset",
+            "BlueprintFunctionLibrary", "DeveloperSettings",
+            "CheatManager", "WorldSubsystem", "GameInstanceSubsystem",
+            "LocalPlayerSubsystem",
+        ]
+
+        results = []
+        for name in common_classes:
+            cls = _find_class(name)
+            if cls:
+                parent = cls.get_super_class()
+                results.append({
+                    "name": cls.get_name(),
+                    "parent": parent.get_name() if parent else None,
+                })
+
+        return {
+            "note": "Showing common base classes. Use parentFilter to find derived classes.",
+            "count": len(results),
+            "classes": results,
+        }
+
+
+def list_gameplay_tags(params: dict) -> dict:
+    """Get the full gameplay tag hierarchy from the running editor."""
+    filter_prefix = params.get("filter", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    try:
+        manager = unreal.GameplayTagsManager.get()
+        if hasattr(manager, "request_all_gameplay_tags"):
+            container = manager.request_all_gameplay_tags()
+            tags = container.get_gameplay_tag_array() if hasattr(container, "get_gameplay_tag_array") else []
+
+            tag_strings = []
+            for tag in tags:
+                tag_str = str(tag.tag_name) if hasattr(tag, "tag_name") else str(tag)
+                if filter_prefix and not tag_str.startswith(filter_prefix):
+                    continue
+                tag_strings.append(tag_str)
+
+            tag_strings.sort()
+            return {
+                "filter": filter_prefix or "(all)",
+                "count": len(tag_strings),
+                "tags": tag_strings,
+            }
+    except Exception:
+        pass
+
+    return {
+        "error": "GameplayTagsManager not accessible. Tags may not be initialized.",
+        "count": 0,
+        "tags": [],
+    }
+
+
+def _find_class(class_name: str):
+    """Find a UClass by name, trying multiple resolution strategies."""
+    if not HAS_UNREAL:
+        return None
+
+    cls = unreal.find_class(class_name) if hasattr(unreal, "find_class") else None
+    if cls:
+        return cls
+
+    cls = getattr(unreal, class_name, None)
+    if cls and hasattr(cls, "static_class"):
+        return cls.static_class()
+
+    for prefix in ["", "A", "U", "F"]:
+        candidate = getattr(unreal, f"{prefix}{class_name}", None)
+        if candidate and hasattr(candidate, "static_class"):
+            return candidate.static_class()
+
+    return None
+
+
+def _get_class_properties(cls, include_inherited: bool) -> list[dict]:
+    """Extract properties from a UClass using editor reflection."""
+    properties = []
+
+    try:
+        cdo = unreal.get_default_object(cls) if hasattr(unreal, "get_default_object") else None
+        if cdo is None:
+            return properties
+
+        for prop_name in dir(cdo):
+            if prop_name.startswith("_"):
+                continue
+            try:
+                val = getattr(cdo, prop_name)
+                if callable(val):
+                    continue
+                properties.append({
+                    "name": prop_name,
+                    "type": type(val).__name__,
+                    "value": _serialize_value(val),
+                })
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return properties
+
+
+def _get_class_functions(cls, include_inherited: bool) -> list[dict]:
+    """Extract function signatures from a UClass."""
+    functions = []
+
+    try:
+        target_class = getattr(unreal, cls.get_name(), None)
+        if target_class is None:
+            return functions
+
+        for name in dir(target_class):
+            if name.startswith("_"):
+                continue
+            attr = getattr(target_class, name, None)
+            if callable(attr) and not isinstance(attr, type):
+                doc = getattr(attr, "__doc__", "") or ""
+                functions.append({
+                    "name": name,
+                    "doc": doc[:200] if doc else None,
+                })
+    except Exception:
+        pass
+
+    return functions
+
+
+def _serialize_value(val):
+    """Convert UE values to JSON-serializable types."""
+    if val is None:
+        return None
+    if isinstance(val, (bool, int, float, str)):
+        return val
+    if isinstance(val, (list, tuple)):
+        return [_serialize_value(v) for v in val[:10]]
+
+    if HAS_UNREAL:
+        if isinstance(val, unreal.Vector):
+            return {"x": val.x, "y": val.y, "z": val.z}
+        if isinstance(val, unreal.Rotator):
+            return {"pitch": val.pitch, "yaw": val.yaw, "roll": val.roll}
+        if isinstance(val, unreal.LinearColor):
+            return {"r": val.r, "g": val.g, "b": val.b, "a": val.a}
+
+    return str(val)
+
+
+HANDLERS = {
+    "reflect_class": reflect_class,
+    "reflect_struct": reflect_struct,
+    "reflect_enum": reflect_enum,
+    "list_classes": list_classes,
+    "list_gameplay_tags": list_gameplay_tags,
+}
