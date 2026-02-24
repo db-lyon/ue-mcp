@@ -70,8 +70,60 @@ def save_asset(params: dict) -> dict:
     }
 
 
+def undo(params: dict) -> dict:
+    """Undo the last editor transaction."""
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    count = params.get("count", 1)
+    results = []
+    for _ in range(count):
+        success = unreal.EditorLevelLibrary.editor_undo() if hasattr(unreal.EditorLevelLibrary, "editor_undo") else False
+        if not success:
+            try:
+                unreal.SystemLibrary.execute_console_command(
+                    unreal.EditorLevelLibrary.get_editor_world(), "TRANSACTION UNDO")
+                success = True
+            except Exception:
+                success = False
+        results.append(success)
+
+    return {
+        "undoCount": count,
+        "results": results,
+        "success": all(results),
+    }
+
+
+def redo(params: dict) -> dict:
+    """Redo the last undone editor transaction."""
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    count = params.get("count", 1)
+    results = []
+    for _ in range(count):
+        success = unreal.EditorLevelLibrary.editor_redo() if hasattr(unreal.EditorLevelLibrary, "editor_redo") else False
+        if not success:
+            try:
+                unreal.SystemLibrary.execute_console_command(
+                    unreal.EditorLevelLibrary.get_editor_world(), "TRANSACTION REDO")
+                success = True
+            except Exception:
+                success = False
+        results.append(success)
+
+    return {
+        "redoCount": count,
+        "results": results,
+        "success": all(results),
+    }
+
+
 HANDLERS = {
     "execute_command": execute_command,
     "set_property": set_property,
     "save_asset": save_asset,
+    "undo": undo,
+    "redo": redo,
 }

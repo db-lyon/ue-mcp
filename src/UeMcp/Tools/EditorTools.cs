@@ -122,6 +122,29 @@ public static class EditorTools
     }
 
     [McpServerTool, Description(
+        "Undo the last editor action(s). Reverts Blueprint modifications, property changes, " +
+        "actor placement, etc. Use to recover from mistakes.")]
+    public static async Task<string> undo(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Number of actions to undo. Default: 1")] int count = 1)
+    {
+        router.EnsureLiveMode("undo");
+        return await bridge.SendAndSerializeAsync("undo", new() { ["count"] = count });
+    }
+
+    [McpServerTool, Description(
+        "Redo the last undone editor action(s). Reapplies previously undone changes.")]
+    public static async Task<string> redo(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Number of actions to redo. Default: 1")] int count = 1)
+    {
+        router.EnsureLiveMode("redo");
+        return await bridge.SendAndSerializeAsync("redo", new() { ["count"] = count });
+    }
+
+    [McpServerTool, Description(
         "Save one or all modified assets in the editor. Requires live editor connection.")]
     public static async Task<string> save_asset(
         ModeRouter router,
