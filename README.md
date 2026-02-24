@@ -175,6 +175,27 @@ This loads the project, detects the engine version, and attempts to connect to a
 | `set_material_parameter` | Live | Set scalar, vector, or texture parameter on a material instance |
 | `create_material_instance` | Live | Create a new material instance from a parent |
 
+### Animation (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `read_anim_blueprint` | Live | Read Anim BP: target skeleton, parent, state machines, variables |
+| `read_anim_montage` | Live | Read montage: sections, notifies, slot tracks, blend times |
+| `read_anim_sequence` | Live | Read sequence: length, frames, rate, notifies, curves |
+| `read_blendspace` | Live | Read blendspace: axes, sample points with animations |
+| `list_anim_assets` | Live | List montages, sequences, blendspaces, anim BPs in a directory |
+| `add_anim_notify` | Live | Add a notify to a montage or sequence at a specific time |
+
+### Widgets / UMG (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `read_widget_tree` | Live | Full widget hierarchy with class, visibility, slot info |
+| `get_widget_details` | Live | Detailed widget properties: text, font, color, image, progress |
+| `set_widget_property` | Live | Set widget property: visibility, text, color, opacity, etc. |
+| `list_widget_blueprints` | Live | List Widget Blueprints in a directory |
+| `read_widget_animations` | Live | Read UMG animations: names, lengths, bindings |
+
 ### Editor (Live Mode)
 
 | Tool | Mode | Description |
@@ -290,6 +311,8 @@ ue-mcp/
 │       ├── NodeTools.cs          # list_node_types, search_node_types
 │       ├── LevelTools.cs         # get_world_outliner, place_actor, move_actor
 │       ├── MaterialTools.cs      # read_material, set_material_parameter
+│       ├── AnimationTools.cs     # read_anim_montage, read_blendspace, etc.
+│       ├── WidgetTools.cs        # read_widget_tree, get_widget_details
 │       └── EditorTools.cs        # Live editor ops, undo/redo
 ├── plugin/ue_mcp_bridge/         # UE Editor Python plugin
 │   ├── bridge_server.py          # WebSocket server
@@ -301,7 +324,9 @@ ue-mcp/
 │   │   ├── reflection.py         # Live type reflection (classes, structs, enums, tags)
 │   │   ├── nodes.py              # Blueprint node type discovery
 │   │   ├── level.py              # World outliner, actor placement/manipulation
-│   │   └── material.py           # Material reading, parameter setting
+│   │   ├── material.py           # Material reading, parameter setting
+│   │   ├── animation.py          # Montages, sequences, blendspaces, anim BPs
+│   │   └── umg.py                # Widget trees, widget properties, UMG animations
 │   └── startup_script.py         # Auto-start for editor
 ├── .kantext/                     # Ontology (Kantext compositional language)
 │   ├── Kantext.kant              # Root config + signals
