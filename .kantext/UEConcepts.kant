@@ -390,6 +390,80 @@ ModuleSystem:
     meaning: Module inside a plugin. Has its own .uplugin descriptor.
     discover_via: read_config (plugin descriptors)
 
+PCGSystem:
+  meaning: Procedural Content Generation framework (UE 5.2+). PCG graphs are node-based procedural pipelines that generate points, filter them, and spawn meshes/actors. Tightly coupled with Landscape (height/slope sampling) and Foliage (instance scattering).
+  discover_via: list_pcg_graphs, read_pcg_graph, get_pcg_components
+
+  SpaceBond@PCGGraph:
+    meaning: The asset that defines a procedural pipeline. Contains nodes (samplers, filters, spawners, transformers) connected by edges. Executed by PCGComponents in the level.
+    discover_via: read_pcg_graph
+    mutation: create_pcg_graph, add_pcg_node, connect_pcg_nodes, set_pcg_node_settings, remove_pcg_node
+    shape: Has nodes (type, settings, comment), edges (source/target pins). Nodes are config-heavy — each has a settings object with type-specific parameters.
+    SpaceBond@PCGNodes:
+      meaning: The processing units in a PCG graph. Common types include surface samplers, density filters, point filters, transform operations, mesh spawners, attribute noise.
+      common_types: PCGSurfaceSampler, PCGStaticMeshSpawner, PCGDensityFilter, PCGPointFilter, PCGTransformPoints, PCGBoundsModifier, PCGAttributeNoise
+      discover_via: read_pcg_node_settings
+    SpaceBond@PCGEdges:
+      meaning: Connections between nodes. Data flows from output pins to input pins. The graph is a DAG.
+      mutation: connect_pcg_nodes
+
+  SpaceBond@PCGComponent:
+    meaning: An ActorComponent that references a PCG graph and controls its execution. Lives on an actor in the level. Has a seed, generation trigger, and bounds volume.
+    discover_via: get_pcg_components, get_pcg_component_details
+    mutation: execute_pcg_graph, add_pcg_volume
+    SpaceBond@GenerationTrigger:
+      meaning: When the PCG graph regenerates — on load, on demand, or on property change.
+    SpaceBond@PCGSeed:
+      meaning: Random seed controlling generation output. Same seed = same result. Change seed to explore variations.
+
+LandscapeSystem:
+  meaning: UE's terrain system. A Landscape is a heightfield mesh with paint layers for material blending and physical properties. The foundation for outdoor environments.
+  discover_via: get_landscape_info, list_landscape_layers, sample_landscape
+  mutation: sculpt_landscape, paint_landscape_layer, set_landscape_material
+
+  SpaceBond@LandscapeActor:
+    meaning: The actor that owns the landscape heightfield. Has a material, component grid, paint layers, and optional splines.
+    discover_via: get_landscape_info
+    shape: Has landscape_material, component_size_quads, componentCount, location.
+
+  SpaceBond@LandscapeLayers:
+    meaning: Paint/weight layers that control material blending on the landscape surface. Each layer has a name, physical material, and blend mode. PCG graphs can sample these layers.
+    discover_via: list_landscape_layers
+    mutation: paint_landscape_layer, add_landscape_layer_info
+
+  SpaceBond@LandscapeSampling:
+    meaning: Querying height, normal, and layer weights at world coordinates. The bridge between landscape state and procedural logic (PCG) or AI reasoning.
+    discover_via: sample_landscape
+    constraint: Sampling is the key tool for understanding terrain without visual inspection. Use to verify slope, altitude, and layer coverage.
+
+  SpaceBond@LandscapeSplines:
+    meaning: Spline paths on the landscape for roads, rivers, paths. Control points with tangents, connected segments.
+    discover_via: list_landscape_splines
+
+  SpaceBond@LandscapeComponents:
+    meaning: The grid of individual components that make up the landscape. Each has its own heightmap section, LOD, and layer weights.
+    discover_via: get_landscape_component
+
+FoliageSystem:
+  meaning: UE's instanced foliage system. Foliage types define what meshes to scatter and how. Instances are painted onto surfaces (typically landscape) with density, scale, and placement rules.
+  discover_via: list_foliage_types, get_foliage_type_settings, sample_foliage
+  mutation: paint_foliage, erase_foliage, set_foliage_type_settings
+
+  SpaceBond@FoliageType:
+    meaning: Defines a foliage mesh and its placement rules: density, scale range, ground slope angle, height range, cull distance, collision, clustering, random rotation, landscape layer filter.
+    discover_via: get_foliage_type_settings
+    mutation: set_foliage_type_settings
+    shape: Has mesh reference, density, scale min/max, align_to_normal, ground_slope_angle, height range, cull distances, collision settings.
+
+  SpaceBond@FoliageInstances:
+    meaning: Individual placed instances of a foliage type. Stored as instanced static meshes for performance. Can be sampled by region.
+    discover_via: sample_foliage
+    mutation: paint_foliage, erase_foliage
+
+  SpaceBond@FoliageLandscapeIntegration:
+    meaning: Foliage can be restricted to specific landscape paint layers. This lets you paint grass on the "grass" layer and rocks on the "rock" layer automatically.
+    constraint: Change the landscape layers → foliage distribution changes. These systems are coupled.
+
 ConfigSystem:
   meaning: UE's layered INI configuration system. DefaultEngine.ini, DefaultGame.ini, etc. Config files control physics, rendering, input bindings, gameplay tags, and nearly every engine subsystem.
   discover_via: read_config, search_config
