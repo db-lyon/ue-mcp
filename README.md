@@ -196,6 +196,49 @@ This loads the project, detects the engine version, and attempts to connect to a
 | `list_widget_blueprints` | Live | List Widget Blueprints in a directory |
 | `read_widget_animations` | Live | Read UMG animations: names, lengths, bindings |
 
+### PCG — Procedural Content Generation (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `list_pcg_graphs` | Live | List PCG graph assets in a directory |
+| `read_pcg_graph` | Live | Full PCG graph structure: nodes, edges, parameters |
+| `read_pcg_node_settings` | Live | Detailed settings of a specific PCG node |
+| `get_pcg_components` | Live | List PCG components in the level with graph, seed, trigger |
+| `get_pcg_component_details` | Live | Deep inspect a PCG component: settings, resources, state |
+| `create_pcg_graph` | Live | Create a new PCG graph asset |
+| `add_pcg_node` | Live | Add a node (sampler, filter, spawner, etc.) to a PCG graph |
+| `connect_pcg_nodes` | Live | Wire PCG nodes together via pins |
+| `set_pcg_node_settings` | Live | Set/update parameters on a PCG node |
+| `remove_pcg_node` | Live | Remove a node and its connections |
+| `execute_pcg_graph` | Live | Trigger PCG regeneration on a level actor |
+| `add_pcg_volume` | Live | Place a PCG volume with graph, bounds, and seed |
+
+### Landscape (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `get_landscape_info` | Live | Landscape setup: components, resolution, material, size |
+| `list_landscape_layers` | Live | All paint/weight layers with physical materials and blend type |
+| `sample_landscape` | Live | Height, normal, and layer weights at world coordinates |
+| `list_landscape_splines` | Live | Landscape spline control points and segments |
+| `get_landscape_component` | Live | Inspect a landscape component by grid coordinates |
+| `sculpt_landscape` | Live | Sculpt the heightmap: raise, lower, smooth, flatten, noise |
+| `paint_landscape_layer` | Live | Paint a weight layer at a location |
+| `set_landscape_material` | Live | Set the landscape's material |
+| `add_landscape_layer_info` | Live | Register a new paint layer on the landscape |
+| `import_landscape_heightmap` | Live | Import a heightmap from a raw/png file |
+
+### Foliage (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `list_foliage_types` | Live | List all foliage types in the level with mesh and settings |
+| `get_foliage_type_settings` | Live | Full foliage type settings: density, scale, slope, cull, etc. |
+| `sample_foliage` | Live | Query foliage instances in a region for density verification |
+| `paint_foliage` | Live | Add foliage instances with optional landscape layer filter |
+| `erase_foliage` | Live | Remove foliage instances in a radius |
+| `set_foliage_type_settings` | Live | Modify foliage type settings (partial update) |
+
 ### Editor (Live Mode)
 
 | Tool | Mode | Description |
@@ -313,6 +356,9 @@ ue-mcp/
 │       ├── MaterialTools.cs      # read_material, set_material_parameter
 │       ├── AnimationTools.cs     # read_anim_montage, read_blendspace, etc.
 │       ├── WidgetTools.cs        # read_widget_tree, get_widget_details
+│       ├── PcgTools.cs           # PCG graph read/write/execute
+│       ├── LandscapeTools.cs     # Landscape info, sculpt, paint, heightmap
+│       ├── FoliageTools.cs       # Foliage types, paint, erase, sample
 │       └── EditorTools.cs        # Live editor ops, undo/redo
 ├── plugin/ue_mcp_bridge/         # UE Editor Python plugin
 │   ├── bridge_server.py          # WebSocket server
@@ -326,7 +372,10 @@ ue-mcp/
 │   │   ├── level.py              # World outliner, actor placement/manipulation
 │   │   ├── material.py           # Material reading, parameter setting
 │   │   ├── animation.py          # Montages, sequences, blendspaces, anim BPs
-│   │   └── umg.py                # Widget trees, widget properties, UMG animations
+│   │   ├── umg.py                # Widget trees, widget properties, UMG animations
+│   │   ├── pcg.py                # PCG graph reading, authoring, execution
+│   │   ├── landscape.py          # Landscape info, sculpt, paint, heightmap
+│   │   └── foliage.py            # Foliage types, paint, erase, sampling
 │   └── startup_script.py         # Auto-start for editor
 ├── .kantext/                     # Ontology (Kantext compositional language)
 │   ├── Kantext.kant              # Root config + signals
