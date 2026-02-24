@@ -1,29 +1,39 @@
 # UE-MCP — Unreal Engine Model Context Protocol Server
 
-A hybrid MCP server that gives AI assistants deep read/write access to Unreal Engine projects. Works in two modes:
+A hybrid MCP server that gives AI assistants deep read/write access to Unreal Engine projects. 
+
+Operates in two modes, switching automatically based on whether the editor is running:
 
 - **Offline mode** — Parses raw `.uasset` / `.umap` binaries using [UAssetAPI](https://github.com/atenfyr/UAssetAPI). Reads C++ headers, config files, and module structure. No Unreal Editor required.
 - **Live mode** — Connects to a running Unreal Editor via a WebSocket bridge plugin for full read/write access with undo, compilation, runtime reflection, and PIE introspection.
 
+## **Offline** — no editor required:
+
+```mermaid
+sequenceDiagram
+    participant AI as AI Assistant
+    participant MCP as MCP Server
+    participant UAsset as UAssetAPI
+
+    AI->>MCP: read_blueprint("/Game/BP_Character")
+    MCP->>UAsset: Parse .uasset binary
+    UAsset-->>MCP: Exports, properties, graphs
+    MCP-->>AI: Blueprint structure as JSON
 ```
-┌─────────────────────────────────────┐
-│          MCP Server (C#)            │
-│                                     │
-│  ┌───────────┐   ┌──────────────┐  │
-│  │ UAssetAPI  │   │  UE Bridge   │  │
-│  │ (offline)  │   │  (live)      │  │
-│  └─────┬─────┘   └──────┬───────┘  │
-│        │                 │          │
-│        └────────┬────────┘          │
-│           Mode Router               │
-│   "Is the editor connected? Use     │
-│    bridge. Otherwise, parse raw."   │
-└─────────────────────────────────────┘
-         ▲                    ▲
-         │ MCP Protocol       │ TCP/WebSocket
-         │ (stdio)            │ (ws://localhost:9877)
-         ▼                    ▼
-    AI Assistant         UE Editor (Python plugin)
+
+## **Live** — connected to a running editor:
+
+```mermaid
+sequenceDiagram
+    participant AI as AI Assistant
+    participant MCP as MCP Server
+    participant Editor as Unreal Editor
+
+    AI->>MCP: sculpt_landscape(location, radius, "raise")
+    MCP->>Editor: JSON-RPC over WebSocket
+    Editor->>Editor: Execute via Python API
+    Editor-->>MCP: Result
+    MCP-->>AI: Success + undo available
 ```
 
 ## Prerequisites
