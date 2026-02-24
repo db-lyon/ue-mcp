@@ -125,3 +125,81 @@ ConfigTuning:
     3_understand: Identify which CVar or setting controls the behavior
     4_modify: set_property or direct edit of the INI file (outside MCP scope) with the new value
   postcondition: AI knows exactly which config key to change and what values are valid.
+
+UnderstandAnimSystem:
+  meaning: Comprehend a character's animation setup end-to-end — from AnimBlueprint state machines through montages to individual sequences.
+  precondition: Live mode. Character Blueprint or AnimBlueprint path known.
+  steps:
+    1_find: list_anim_assets to survey all animation content in the relevant directory
+    2_anim_bp: read_anim_blueprint to understand the state machine structure, skeleton, and driving variables
+    3_reflect: reflect_class on the AnimInstance class to understand the variables that drive transitions
+    4_montages: read_anim_montage on key montages to understand sections, notifies, and slot tracks
+    5_sequences: read_anim_sequence on referenced sequences to understand lengths, rates, and curves
+    6_blendspaces: read_blendspace on any blendspaces to understand locomotion blending
+  postcondition: AI understands the full animation pipeline — what drives state transitions, what each montage does, and how motion blends.
+  🪝 AnimTools: /ToolSurface/Animation
+      connection: primary_discovery
+
+CreateMontage:
+  meaning: Set up an animation montage for a gameplay action (attack, ability, item use).
+  precondition: Live mode. AnimSequence exists. Target skeleton known.
+  steps:
+    1_inspect_sequence: read_anim_sequence to understand length and existing notifies
+    2_create: Create the montage asset (via editor or existing asset)
+    3_add_notifies: add_anim_notify at key times — e.g. damage window start/end, sound cue, VFX trigger
+    4_verify: read_anim_montage to confirm sections and notifies are correct
+    5_test: Wire the montage into the AnimBlueprint and test via PIE
+  postcondition: Montage exists with correct timing, notifies fire at the right moments.
+  constraint: Notify timing must match the animation frames. Always inspect the sequence length first.
+
+BuildUI:
+  meaning: Understand and work with a Widget Blueprint's UI structure.
+  precondition: Live mode. Widget Blueprint path known.
+  steps:
+    1_survey: list_widget_blueprints to find all UI assets in the project
+    2_tree: read_widget_tree to understand the full hierarchy — panels, containers, leaf widgets
+    3_details: get_widget_details on key widgets (buttons, text, progress bars) for type-specific properties
+    4_animations: read_widget_animations to understand UMG animations and what they affect
+    5_variables: Check the Widget Blueprint's variables to understand data bindings
+  postcondition: AI understands the UI layout, widget types, bindings, and animations.
+  🪝 WidgetTools: /ToolSurface/WidgetUMG
+      connection: primary_discovery
+
+ModifyUI:
+  meaning: Safely modify a Widget Blueprint — change text, colors, visibility, properties.
+  precondition: Live mode. Widget Blueprint exists. Widget name known.
+  steps:
+    1_read: read_widget_tree to understand current state
+    2_inspect: get_widget_details on the target widget to see all current property values
+    3_modify: set_widget_property to change the desired property
+    4_verify: get_widget_details again to confirm the change took effect
+    5_undo: If wrong, undo to revert
+    6_save: save_asset if satisfied
+  constraint: Always read before writing. Always verify after writing.
+
+LevelComposition:
+  meaning: Work with level layout — place, arrange, and inspect actors in the world.
+  precondition: Live mode. Level is open in editor.
+  steps:
+    1_survey: get_world_outliner to understand what's already placed
+    2_filter: get_world_outliner with classFilter to find specific actor types
+    3_inspect: get_actor_details on actors of interest for components and properties
+    4_place: place_actor to add new actors with position, rotation, label, folder
+    5_arrange: move_actor to adjust transforms
+    6_cleanup: delete_actor to remove unwanted actors
+    7_save: save_asset to persist level changes
+  postcondition: Level is populated and organized.
+  🪝 LevelTools: /ToolSurface/LevelManipulation
+      connection: primary_discovery
+
+MaterialSetup:
+  meaning: Understand and configure materials for an asset.
+  precondition: Live mode. Material or material instance path known.
+  steps:
+    1_read: read_material to understand the base material — shading model, blend mode, expressions
+    2_params: list_material_parameters to see all tweakable parameters with current values
+    3_instance: If needed, create_material_instance from the base material
+    4_tune: set_material_parameter to adjust scalar (roughness, metallic), vector (color), or texture params
+    5_verify: list_material_parameters again to confirm new values
+    6_save: save_asset
+  postcondition: Material instance exists with correct parameter values applied.
