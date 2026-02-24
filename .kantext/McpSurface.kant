@@ -20,7 +20,7 @@ McpModes:
       Convert: Signal
       value: 1.0
     capabilities: Everything offline can do, plus authoritative type reflection, write operations, Blueprint compilation with error feedback, PIE control and runtime introspection, GameplayTag enumeration, console commands, asset saving with undo.
-    additional_tools: reflect_class, reflect_struct, reflect_enum, list_classes, list_gameplay_tags, list_node_types, search_node_types, get_world_outliner, place_actor, delete_actor, get_actor_details, move_actor, read_material, list_material_parameters, set_material_parameter, create_material_instance, read_anim_blueprint, read_anim_montage, read_anim_sequence, read_blendspace, list_anim_assets, add_anim_notify, read_widget_tree, get_widget_details, set_widget_property, list_widget_blueprints, read_widget_animations, undo, redo, editor_execute, set_property, compile_blueprint, create_blueprint, add_blueprint_variable, add_blueprint_node, connect_blueprint_pins, save_asset, play_in_editor, get_runtime_value
+    additional_tools: reflect_class, reflect_struct, reflect_enum, list_classes, list_gameplay_tags, list_node_types, search_node_types, get_world_outliner, place_actor, delete_actor, get_actor_details, move_actor, read_material, list_material_parameters, set_material_parameter, create_material_instance, read_anim_blueprint, read_anim_montage, read_anim_sequence, read_blendspace, list_anim_assets, add_anim_notify, read_widget_tree, get_widget_details, set_widget_property, list_widget_blueprints, read_widget_animations, list_pcg_graphs, read_pcg_graph, read_pcg_node_settings, get_pcg_components, get_pcg_component_details, create_pcg_graph, add_pcg_node, connect_pcg_nodes, set_pcg_node_settings, remove_pcg_node, execute_pcg_graph, add_pcg_volume, get_landscape_info, list_landscape_layers, sample_landscape, list_landscape_splines, get_landscape_component, sculpt_landscape, paint_landscape_layer, set_landscape_material, add_landscape_layer_info, import_landscape_heightmap, list_foliage_types, get_foliage_type_settings, sample_foliage, paint_foliage, erase_foliage, set_foliage_type_settings, undo, redo, editor_execute, set_property, compile_blueprint, create_blueprint, add_blueprint_variable, add_blueprint_node, connect_blueprint_pins, save_asset, play_in_editor, get_runtime_value
     🪝 RequiresPlugin: /McpBridge
         connection: depends_on
 
@@ -315,6 +315,146 @@ ToolSurface:
       mutability:
         Convert: Signal
         value: 0.0
+
+  SpaceBond@PCG:
+    meaning: Tools for Procedural Content Generation — read, author, and execute PCG graphs. PCG scatters meshes/actors based on landscape data. Tightly coupled with Landscape and Foliage.
+    mutability:
+      Convert: Signal
+      value: 1.0
+    🪝 RequiresLive: /McpModes/Live
+        connection: requires
+    discovers: PCGSystem, PCGGraph, PCGComponent
+    SpaceBond@list_pcg_graphs:
+      meaning: List PCG graph assets in a directory. Discovery entry point.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@read_pcg_graph:
+      meaning: Full PCG graph structure — nodes, edges, parameters. The PCG equivalent of read_blueprint.
+      mutability:
+        Convert: Signal
+        value: 0.0
+      🪝 Concepts: /PCGSystem/PCGGraph
+          connection: discovers
+    SpaceBond@read_pcg_node_settings:
+      meaning: Detailed settings of a specific PCG node. Nodes are config-heavy.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@get_pcg_components:
+      meaning: List PCG components in the level — actor, graph, trigger, seed.
+      mutability:
+        Convert: Signal
+        value: 0.0
+      🪝 Concepts: /PCGSystem/PCGComponent
+          connection: discovers
+    SpaceBond@get_pcg_component_details:
+      meaning: Deep inspect a PCG component — full settings, resources, generation state.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@create_pcg_graph:
+      meaning: Create a new PCG graph asset.
+      🪝 Workflow: /PCGScatterWorkflow
+          connection: entry_point
+    SpaceBond@add_pcg_node:
+      meaning: Add a node to a PCG graph. Returns node ID for wiring.
+    SpaceBond@connect_pcg_nodes:
+      meaning: Wire PCG nodes together via output/input pins.
+    SpaceBond@set_pcg_node_settings:
+      meaning: Partial update of node parameters.
+    SpaceBond@remove_pcg_node:
+      meaning: Remove a node and its connections.
+    SpaceBond@execute_pcg_graph:
+      meaning: Trigger PCG regeneration on a level actor.
+    SpaceBond@add_pcg_volume:
+      meaning: Place a PCG volume with graph, bounds, and seed.
+      🪝 Workflow: /LevelComposition
+          connection: participates_in
+
+  SpaceBond@Landscape:
+    meaning: Tools for reading and modifying the level's landscape — terrain info, paint layers, sculpting, heightmap import.
+    mutability:
+      Convert: Signal
+      value: 1.0
+    🪝 RequiresLive: /McpModes/Live
+        connection: requires
+    discovers: LandscapeSystem, LandscapeLayers, LandscapeSplines
+    SpaceBond@get_landscape_info:
+      meaning: Landscape setup — components, resolution, material, location.
+      mutability:
+        Convert: Signal
+        value: 0.0
+      🪝 Concepts: /LandscapeSystem/LandscapeActor
+          connection: discovers
+    SpaceBond@list_landscape_layers:
+      meaning: All paint layers with physical materials and blend type.
+      mutability:
+        Convert: Signal
+        value: 0.0
+      🪝 Concepts: /LandscapeSystem/LandscapeLayers
+          connection: discovers
+    SpaceBond@sample_landscape:
+      meaning: Height, normal, and layer weights at world coordinates. Bridge between landscape state and AI reasoning.
+      mutability:
+        Convert: Signal
+        value: 0.0
+      🪝 Concepts: /LandscapeSystem/LandscapeSampling
+          connection: discovers
+    SpaceBond@list_landscape_splines:
+      meaning: Landscape spline control points and segments.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@get_landscape_component:
+      meaning: Inspect a landscape component by grid coordinates.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@sculpt_landscape:
+      meaning: Modify heightmap — raise, lower, smooth, flatten, noise.
+    SpaceBond@paint_landscape_layer:
+      meaning: Paint a weight layer at a location. Affects foliage distribution and material blending.
+    SpaceBond@set_landscape_material:
+      meaning: Assign a material to the landscape.
+    SpaceBond@add_landscape_layer_info:
+      meaning: Register a new paint layer on the landscape.
+    SpaceBond@import_landscape_heightmap:
+      meaning: Import heightmap from raw/png file.
+
+  SpaceBond@Foliage:
+    meaning: Tools for reading and modifying foliage — types, settings, instance painting/erasure. Foliage distribution couples to landscape paint layers.
+    mutability:
+      Convert: Signal
+      value: 1.0
+    🪝 RequiresLive: /McpModes/Live
+        connection: requires
+    discovers: FoliageSystem, FoliageType, FoliageInstances
+    SpaceBond@list_foliage_types:
+      meaning: All foliage types in the level with mesh, density, and key settings.
+      mutability:
+        Convert: Signal
+        value: 0.0
+      🪝 Concepts: /FoliageSystem/FoliageType
+          connection: discovers
+    SpaceBond@get_foliage_type_settings:
+      meaning: Full settings for a foliage type — density, scale, slope, height, cull, collision.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@sample_foliage:
+      meaning: Query foliage instances in a region. Verify density before/after painting.
+      mutability:
+        Convert: Signal
+        value: 0.0
+      🪝 Concepts: /FoliageSystem/FoliageInstances
+          connection: discovers
+    SpaceBond@paint_foliage:
+      meaning: Add foliage instances at a location. Optional landscape layer filter.
+    SpaceBond@erase_foliage:
+      meaning: Remove foliage instances in a radius.
+    SpaceBond@set_foliage_type_settings:
+      meaning: Modify foliage type settings — density, scale range, alignment, cull distance.
 
   SpaceBond@EditorMutation:
     meaning: Tools that modify assets or editor state. Live mode only. All changes go through the editor's transaction system with undo.

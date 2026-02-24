@@ -203,3 +203,75 @@ MaterialSetup:
     5_verify: list_material_parameters again to confirm new values
     6_save: save_asset
   postcondition: Material instance exists with correct parameter values applied.
+
+PCGScatterWorkflow:
+  meaning: Build a procedural content pipeline from scratch using PCG — from graph creation through node wiring to execution.
+  precondition: Live mode. Know what to scatter (mesh) and where (surface/volume).
+  steps:
+    1_survey: list_pcg_graphs to see existing graphs for reference or reuse
+    2_create: create_pcg_graph at the desired asset path
+    3_sampler: add_pcg_node with type PCGSurfaceSampler to generate initial points from landscape
+    4_filter: add_pcg_node with density or point filter to refine placement (slope, height, exclusion zones)
+    5_transform: add_pcg_node with PCGTransformPoints for random rotation/scale variation
+    6_spawner: add_pcg_node with PCGStaticMeshSpawner, set mesh reference in settings
+    7_wire: connect_pcg_nodes to create the pipeline: Sampler → Filter → Transform → Spawner
+    8_tune: set_pcg_node_settings to adjust density, scale ranges, filter thresholds
+    9_place: add_pcg_volume in the level with the graph and desired bounds
+    10_execute: execute_pcg_graph to generate and preview results
+    11_iterate: sample_landscape at key points to verify terrain context, adjust settings, re-execute
+  postcondition: PCG volume generates content procedurally with correct density, filtering, and mesh placement.
+  constraint: Always wire nodes before executing. Always verify landscape context with sample_landscape when filtering by terrain properties.
+  🪝 PCGTools: /ToolSurface/PCG
+      connection: primary_discovery
+  🪝 LandscapeSampling: /ToolSurface/Landscape/sample_landscape
+      connection: verification
+
+TerrainSetup:
+  meaning: Set up or modify the landscape for a level — material, layers, sculpting, heightmap import.
+  precondition: Live mode. Level with landscape is open.
+  steps:
+    1_info: get_landscape_info to understand current terrain setup (resolution, material, size)
+    2_layers: list_landscape_layers to see existing paint layers
+    3_material: set_landscape_material if a new landscape material is needed
+    4_add_layers: add_landscape_layer_info for any new paint layers (dirt, rock, snow, etc.)
+    5_heightmap: import_landscape_heightmap if working from authored terrain data
+    6_sculpt: sculpt_landscape to shape terrain — raise peaks, flatten plateaus, smooth transitions
+    7_paint: paint_landscape_layer to apply material layers by region
+    8_verify: sample_landscape at key coordinates to confirm height and layer weights
+    9_splines: list_landscape_splines to check road/river paths
+  postcondition: Landscape has correct shape, materials, and layer distribution.
+  🪝 LandscapeTools: /ToolSurface/Landscape
+      connection: primary_discovery
+
+FoliageDistribution:
+  meaning: Configure and paint foliage across a landscape — trees, grass, rocks with density and placement rules.
+  precondition: Live mode. Landscape exists with paint layers. Foliage type assets available.
+  steps:
+    1_survey: list_foliage_types to see what's already placed
+    2_settings: get_foliage_type_settings on each type to understand placement rules
+    3_tune: set_foliage_type_settings to adjust density, scale range, ground slope, height range, landscape layer filter
+    4_paint: paint_foliage at target locations with appropriate radius and density
+    5_verify: sample_foliage in painted regions to confirm instance count and distribution
+    6_refine: Adjust density or erase_foliage in over-populated areas
+    7_landscape_check: sample_landscape to verify terrain context matches foliage expectations
+  postcondition: Foliage is distributed naturally with correct density tied to landscape layers and terrain features.
+  constraint: Foliage density couples to landscape layers. Always verify with sample_foliage after painting. Use erase_foliage + undo if results are wrong.
+  🪝 FoliageTools: /ToolSurface/Foliage
+      connection: primary_discovery
+  🪝 LandscapeSampling: /ToolSurface/Landscape/sample_landscape
+      connection: verification
+
+WorldBuildingPipeline:
+  meaning: End-to-end outdoor world-building workflow combining Landscape, Foliage, and PCG for a complete environment.
+  precondition: Live mode. Empty or in-progress level.
+  steps:
+    1_terrain: Follow TerrainSetup workflow — heightmap, material, layers, sculpting
+    2_landscape_verify: sample_landscape across grid of points to build mental model of the terrain
+    3_foliage: Follow FoliageDistribution workflow — configure types, paint, verify density
+    4_pcg_scatter: Follow PCGScatterWorkflow — procedural rock/prop scattering based on landscape data
+    5_actors: Use LevelComposition workflow to place unique actors, landmarks, gameplay elements
+    6_materials: Use MaterialSetup workflow for terrain and prop materials
+    7_full_verify: sample_landscape + sample_foliage + get_world_outliner to survey final state
+    8_save: save_asset
+  postcondition: Level has shaped terrain, painted layers, distributed foliage, procedural scattering, and placed actors.
+  constraint: This is a large workflow. Break it into sub-workflows and verify at each stage.
