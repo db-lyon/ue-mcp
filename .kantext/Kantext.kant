@@ -1,12 +1,16 @@
 KantextConfig:
   Preload:
     .kantext/UEConcepts.kant
-    .kantext/McpSurface.kant
     .kantext/BlueprintOntology.kant
+    .kantext/Traits.kant
+    .kantext/Workflows.kant
+    .kantext/McpSurface.kant
   Loadable:
     .kantext/UEConcepts.kant
-    .kantext/McpSurface.kant
     .kantext/BlueprintOntology.kant
+    .kantext/Traits.kant
+    .kantext/Workflows.kant
+    .kantext/McpSurface.kant
 
 ⛩️:
   Meaning@mode:
