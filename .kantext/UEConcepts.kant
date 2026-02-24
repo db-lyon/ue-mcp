@@ -1,171 +1,211 @@
 ⛩️:
   SpaceBond@AssetType:
-    meaning: A category of Unreal Engine asset. Assets are the atomic unit of content -- every file in the Content directory is an asset.
-    purpose: Defines the type taxonomy so the AI knows what kinds of things it can encounter and how they nest.
+    meaning: A category of Unreal Engine asset. Every file in the Content directory is an asset.
+    purpose: Shape descriptions — not exhaustive lists — so the AI recognizes types when encountered.
+    discover_via: list_assets, read_asset, search_assets
 
   SpaceBond@PropertyType:
-    meaning: A data type within UE's property system (UProperty/FProperty). Every variable, parameter, and struct field has one.
-    purpose: The AI must understand the type system to interpret property values and suggest valid modifications.
+    meaning: A data type in UE's property system (FProperty). Every variable, parameter, struct field, and container has one.
+    purpose: The AI must understand the type system to interpret reflection results and suggest valid modifications.
+    discover_via: reflect_class, read_cpp_header, read_blueprint
 
   SpaceBond@Relationship:
-    meaning: A structural relationship between UE concepts.
-    purpose: Makes dependency and containment structure explicit so the AI reasons about consequences of changes.
+    meaning: A structural relationship between UE concepts — dependency, inheritance, containment.
+    purpose: Makes consequence chains explicit. Changing a parent class affects all children. Hard references create load dependencies.
+
+  SpaceBond@TypeSystem:
+    meaning: UE's runtime type system built on UObject and UStruct hierarchies. Everything reflected through UCLASS, USTRUCT, UENUM, UPROPERTY, UFUNCTION macros.
+    purpose: This is what reflection tools expose. Understanding the type system IS understanding UE.
+    discover_via: reflect_class, reflect_struct, reflect_enum, read_cpp_header
 
   Meaning@assetClass:
-    meaning: The C++ class that defines an asset type's behavior
+    meaning: The C++ class that backs an asset type
     Category: /UE/Asset
 
+  Meaning@discover_via:
+    meaning: MCP tool(s) that reveal this concept
+    Category: /MCP/Discovery
+
 AssetTaxonomy:
+  meaning: Assets organized by what they ARE, not by file extension. Each type has a shape — a set of structural expectations the AI can rely on.
+  discover_via: list_assets, search_assets
+
   SpaceBond@Blueprint:
-    meaning: Visual scripting asset. Compiles to a UClass. The primary authoring format for gameplay objects, UI, and actor composition.
+    meaning: Visual scripting asset. Compiles to a UClass. The primary authoring format for gameplay.
     assetClass: UBlueprint
     extension: .uasset
+    shape: Has ClassExport, DefaultObject, optional SCS components, optional graphs. Parent class is always identifiable.
+    discover_via: read_blueprint, reflect_class
     SpaceBond@ActorBlueprint:
-      meaning: Blueprint whose parent class derives from AActor. Placeable in levels.
+      meaning: Blueprint whose parent derives from AActor. Placeable in levels.
       typical_parents: Actor, Character, Pawn, GameModeBase, PlayerController
     SpaceBond@WidgetBlueprint:
-      meaning: Blueprint for UMG UI widgets. Parent is UUserWidget.
+      meaning: UMG UI widget Blueprint. Parent is UUserWidget.
       assetClass: UWidgetBlueprint
       prefix: WBP_
     SpaceBond@AnimBlueprint:
-      meaning: Animation state machine Blueprint. Drives skeletal mesh animation.
+      meaning: Animation state machine. Drives skeletal mesh animation.
       assetClass: UAnimBlueprint
       prefix: ABP_
     SpaceBond@ComponentBlueprint:
-      meaning: Blueprint for a reusable component. Parent derives from UActorComponent.
+      meaning: Reusable component. Parent derives from UActorComponent.
     SpaceBond@InterfaceBlueprint:
-      meaning: Defines a contract (set of functions) that Blueprints can implement. No variables.
-      assetClass: UBlueprintGeneratedClass (interface)
+      meaning: Contract (function set) that Blueprints implement. No variables.
     SpaceBond@FunctionLibrary:
-      meaning: Static function container. No instances. Used for utility functions.
+      meaning: Static utility functions. No instances.
       parent: BlueprintFunctionLibrary
     SpaceBond@MacroLibrary:
-      meaning: Reusable graph fragments. Inlined at compile time, not called.
+      meaning: Reusable graph fragments inlined at compile time.
 
   SpaceBond@DataTable:
-    meaning: Spreadsheet-like asset. Each row is a struct instance keyed by FName. Rows share a common struct type (RowStruct).
+    meaning: Spreadsheet-like asset. Rows share a RowStruct. The struct type defines the schema.
     assetClass: UDataTable
     prefix: DT_
-    🪝 RowType: /PropertySystem/Struct
+    shape: Has RowStruct reference, row keys are FName. Columns are struct fields.
+    discover_via: read_datatable
+    🪝 RowType: /TypeSystem/Struct
         connection: row_defined_by
-        meaning: Every DataTable has a RowStruct that defines the column schema.
 
   SpaceBond@DataAsset:
-    meaning: Pure data container. Subclass UPrimaryDataAsset or UDataAsset. No visual scripting, just UPROPERTY fields.
+    meaning: Pure data container. UPROPERTY fields, no visual scripting.
     assetClass: UDataAsset
     prefix: DA_
+    discover_via: read_asset, reflect_class
 
   SpaceBond@Material:
-    meaning: Shader graph asset defining surface appearance.
+    meaning: Shader graph defining surface appearance.
     assetClass: UMaterial
     prefix: M_
     SpaceBond@MaterialInstance:
-      meaning: Parameterized instance of a parent Material. Cheaper to create than a full Material.
+      meaning: Parameterized instance of a parent Material.
       assetClass: UMaterialInstanceConstant
       prefix: MI_
 
-  SpaceBond@Texture:
-    meaning: Image data (diffuse, normal, mask, etc). Imported from PNG/TGA/EXR.
-    assetClass: UTexture2D
-    prefix: T_
+  SpaceBond@Mesh:
+    meaning: 3D geometry assets.
+    SpaceBond@StaticMesh:
+      meaning: Non-deforming geometry. Props, architecture, environment.
+      assetClass: UStaticMesh
+      prefix: SM_
+    SpaceBond@SkeletalMesh:
+      meaning: Deformable geometry with skeleton. Characters, creatures.
+      assetClass: USkeletalMesh
+      prefix: SK_
 
-  SpaceBond@StaticMesh:
-    meaning: Non-deforming 3D geometry. Props, architecture, environment.
-    assetClass: UStaticMesh
-    prefix: SM_
+  SpaceBond@Animation:
+    meaning: Animation data on skeletons.
+    SpaceBond@AnimSequence:
+      meaning: Single animation clip.
+      assetClass: UAnimSequence
+    SpaceBond@AnimMontage:
+      meaning: Composite animation with sections and notifies.
+      assetClass: UAnimMontage
+      prefix: AM_
 
-  SpaceBond@SkeletalMesh:
-    meaning: Deformable 3D geometry with a skeleton. Characters, creatures, anything animated.
-    assetClass: USkeletalMesh
-    prefix: SK_
-
-  SpaceBond@AnimSequence:
-    meaning: Single animation clip on a skeleton.
-    assetClass: UAnimSequence
-
-  SpaceBond@AnimMontage:
-    meaning: Composite animation with sections and notifies. Used for gameplay actions (attacks, item use, emotes).
-    assetClass: UAnimMontage
-    prefix: AM_
-
-  SpaceBond@SoundWave:
-    meaning: Audio data (imported WAV/OGG).
-    assetClass: USoundWave
+  SpaceBond@Audio:
+    meaning: Sound assets.
+    SpaceBond@SoundWave:
+      meaning: Raw audio data.
+      assetClass: USoundWave
+    SpaceBond@SoundCue:
+      meaning: Audio node graph for mixing, randomization, attenuation.
+      assetClass: USoundCue
 
   SpaceBond@Level:
-    meaning: A world partition or streaming level. Contains placed actors.
+    meaning: World/map asset. Contains placed actors.
     assetClass: UWorld
     extension: .umap
 
+  SpaceBond@EditorDefined:
+    meaning: Types defined in the editor rather than C++. Appear as exports in .uasset.
+    SpaceBond@UserDefinedStruct:
+      meaning: Struct created in the editor.
+      assetClass: UUserDefinedStruct
+      discover_via: read_asset, reflect_struct
+    SpaceBond@UserDefinedEnum:
+      meaning: Enum created in the editor.
+      assetClass: UUserDefinedEnum
+      discover_via: read_asset, reflect_enum
+
   SpaceBond@CurveTable:
-    meaning: Table of float curves, keyed by FName. Used for data-driven tuning.
+    meaning: Table of float curves keyed by FName. Data-driven tuning.
     assetClass: UCurveTable
 
-  SpaceBond@UserDefinedStruct:
-    meaning: Struct defined in the editor (not C++). Appears as export in .uasset.
-    assetClass: UUserDefinedStruct
+TypeSystem:
+  meaning: UE's reflection-based type system. Everything the AI needs to understand about how UE represents data at runtime. This is what reflect_class, reflect_struct, reflect_enum expose.
+  discover_via: reflect_class, reflect_struct, reflect_enum, read_cpp_header
 
-  SpaceBond@UserDefinedEnum:
-    meaning: Enum defined in the editor. Appears as export in .uasset.
-    assetClass: UUserDefinedEnum
+  SpaceBond@UObject:
+    meaning: Root of the UE object hierarchy. Every class, actor, component, asset ultimately derives from UObject. Has garbage collection, serialization, reflection, and CDO (Class Default Object).
+    key_concepts: Name, Outer (ownership chain), Class (UClass pointer), Flags
 
-  SpaceBond@GameplayAbility:
-    meaning: GAS ability asset. Only present in projects using the Gameplay Ability System.
-    assetClass: UGameplayAbility
-
-PropertySystem:
   SpaceBond@Primitives:
     meaning: Scalar value types in UE's property system.
     SpaceBond@Bool:
-      meaning: Boolean. BoolProperty.
       cppType: bool
+      property: BoolProperty
     SpaceBond@Int:
-      meaning: 32-bit signed integer. IntProperty.
       cppType: int32
+      property: IntProperty
     SpaceBond@Int64:
-      meaning: 64-bit signed integer. Int64Property.
       cppType: int64
+      property: Int64Property
     SpaceBond@Float:
-      meaning: 32-bit float. FloatProperty.
       cppType: float
+      property: FloatProperty
     SpaceBond@Double:
-      meaning: 64-bit double. DoubleProperty.
       cppType: double
+      property: DoubleProperty
     SpaceBond@Byte:
-      meaning: 8-bit unsigned. Also used for legacy enum backing. ByteProperty.
       cppType: uint8
+      property: ByteProperty
+      note: Also used as legacy enum backing type
 
   SpaceBond@StringTypes:
-    meaning: Text representations in UE.
+    meaning: Text representations. Critical to distinguish — wrong choice causes subtle bugs.
     SpaceBond@FString:
       meaning: Mutable general-purpose string. StrProperty.
+      use_for: Paths, user input, general text manipulation
     SpaceBond@FName:
-      meaning: Immutable interned name. Case-preserving, case-insensitive comparison. Used for asset paths, property names, row keys. NameProperty.
+      meaning: Immutable interned name. Case-preserving, case-insensitive. NameProperty.
+      use_for: Asset paths, property names, row keys, identifiers
     SpaceBond@FText:
-      meaning: Localization-aware display text. TextProperty. Never use for identifiers.
+      meaning: Localization-aware display text. TextProperty.
+      use_for: UI labels, dialogue, anything player-visible
+      never_use_for: Identifiers, comparisons, programmatic logic
 
   SpaceBond@ObjectReferences:
-    meaning: Ways to reference another UObject.
+    meaning: Ways to reference another UObject. Choice affects loading, memory, and dependency chains.
     SpaceBond@HardReference:
-      meaning: Direct pointer. Target is loaded when the referencing asset loads. Creates a load dependency. ObjectProperty.
+      meaning: Direct pointer. Target loads when referencing asset loads.
+      property: ObjectProperty
+      consequence: Creates a load dependency. Too many → memory bloat.
     SpaceBond@SoftReference:
-      meaning: String path to an asset. Does not force loading. Resolved at runtime. SoftObjectProperty.
+      meaning: String path. Does not force loading. Resolved at runtime via LoadObject/StreamableManager.
+      property: SoftObjectProperty
+      use_for: Optional references, cross-module, large assets
     SpaceBond@ClassReference:
-      meaning: Reference to a UClass (the type itself, not an instance). ClassProperty or SoftClassProperty.
+      meaning: Reference to a UClass itself. TSubclassOf<T>.
+      property: ClassProperty, SoftClassProperty
+      use_for: Spawning, factory patterns, data-driven class selection
 
   SpaceBond@Containers:
     meaning: Collection types that hold other properties.
     SpaceBond@Array:
-      meaning: Dynamic array of a single element type. ArrayProperty.
+      meaning: TArray<T>. Dynamic array.
+      property: ArrayProperty
     SpaceBond@Map:
-      meaning: Key-value dictionary. MapProperty.
+      meaning: TMap<K,V>. Key-value dictionary.
+      property: MapProperty
     SpaceBond@Set:
-      meaning: Unique unordered collection. SetProperty.
+      meaning: TSet<T>. Unique unordered collection.
+      property: SetProperty
 
   SpaceBond@Struct:
-    meaning: Composite value type (USTRUCT). Inlined, not heap-allocated. StructProperty. Common built-in structs include FVector, FRotator, FTransform, FLinearColor, FGameplayTag.
+    meaning: USTRUCT value type. Inlined, not heap-allocated. StructProperty. Discover fields via reflect_struct or read_cpp_header.
+    discover_via: reflect_struct, read_cpp_header
     SpaceBond@FVector:
-      meaning: 3D position or direction. X, Y, Z floats.
+      meaning: 3D position/direction. X, Y, Z floats.
     SpaceBond@FRotator:
       meaning: Euler rotation. Pitch, Yaw, Roll.
     SpaceBond@FTransform:
@@ -173,26 +213,88 @@ PropertySystem:
     SpaceBond@FLinearColor:
       meaning: HDR color. R, G, B, A floats.
     SpaceBond@FGameplayTag:
-      meaning: Hierarchical tag from the GameplayTag system. Dot-separated (e.g. Item.Consumable.Food). Used for data-driven classification and behavior dispatch.
+      meaning: Hierarchical dot-separated tag. Data-driven classification.
+      discover_via: list_gameplay_tags, list_config_tags, search_config
+    SpaceBond@FGameplayTagContainer:
+      meaning: Collection of GameplayTags. Supports query operations (HasTag, HasAll, HasAny).
 
   SpaceBond@Enum:
-    meaning: Enumeration type. EnumProperty. Can be C++ UENUM or editor-defined UserDefinedEnum.
+    meaning: UENUM enumeration type. EnumProperty. Can be C++ or editor-defined.
+    discover_via: reflect_enum, read_cpp_header
+
+  SpaceBond@Delegates:
+    meaning: Type-safe function pointers. Single-cast (FDelegate) or multi-cast (FMulticastDelegate). Used for events and callbacks.
+    SpaceBond@DynamicDelegate:
+      meaning: Blueprint-compatible delegate. Slower but serializable and bindable in Blueprint graphs.
+    SpaceBond@NativeDelegate:
+      meaning: C++-only delegate. Fastest dispatch. Not visible in Blueprint.
 
 AssetRelationships:
+  meaning: How assets connect. Understanding these is critical for predicting side effects of changes.
+
   SpaceBond@HardDependency:
-    meaning: Asset A has a HardReference to Asset B. Loading A forces B to load. Circular hard dependencies cause load failures.
+    meaning: Loading A forces B to load. Circular hard deps cause load failures.
+    discover_via: read_asset (imports section)
     🪝 Source: /AssetTaxonomy
         connection: references
     🪝 Target: /AssetTaxonomy
         connection: referenced_by
 
   SpaceBond@SoftDependency:
-    meaning: Asset A has a SoftReference to Asset B. B is not loaded until explicitly resolved. Safe for cross-module or optional references.
+    meaning: A holds a path to B. B not loaded until explicitly resolved. Safe for cross-module.
 
   SpaceBond@Inheritance:
-    meaning: Blueprint A's generated class derives from Blueprint B's generated class (or a C++ class). The parent defines the base variables, functions, and components that the child inherits.
-    constraint: Reparenting can break if the child overrides functions or accesses parent-only variables. Always check the child's overrides before changing parent class.
+    meaning: Blueprint A derives from Blueprint B (or a C++ class). Parent defines base variables, functions, components.
+    constraint: Reparenting can break if child overrides functions or accesses parent-only variables.
+    discover_via: read_blueprint, reflect_class (parentChain)
 
   SpaceBond@InterfaceImplementation:
-    meaning: A Blueprint declares that it implements an Interface. This is a contract -- the Blueprint must provide implementations for the interface's functions.
-    constraint: Removing an interface from a Blueprint will break all callers that dispatch through that interface.
+    meaning: Blueprint declares it implements an Interface. Contract: must implement interface functions.
+    constraint: Removing an interface breaks all callers dispatching through it.
+    discover_via: read_blueprint, reflect_class
+
+  SpaceBond@Composition:
+    meaning: Actor contains Components. Components are the atoms of actor structure.
+    discover_via: read_blueprint (components section), reflect_class
+
+ModuleSystem:
+  meaning: UE organizes C++ code into modules. Each module has a Build.cs, public/private source, and dependency declarations. Understanding module boundaries is essential for knowing what code sees what.
+  discover_via: list_modules, read_module
+
+  SpaceBond@RuntimeModule:
+    meaning: Compiled into the game. Available at runtime.
+    dependencies: PublicDependencyModuleNames, PrivateDependencyModuleNames
+
+  SpaceBond@EditorModule:
+    meaning: Only compiled for editor builds. Cannot be referenced by runtime modules.
+    use_for: Custom editors, detail panels, editor utilities
+
+  SpaceBond@PluginModule:
+    meaning: Module inside a plugin. Has its own .uplugin descriptor.
+    discover_via: read_config (plugin descriptors)
+
+ConfigSystem:
+  meaning: UE's layered INI configuration system. DefaultEngine.ini, DefaultGame.ini, etc. Config files control physics, rendering, input bindings, gameplay tags, and nearly every engine subsystem.
+  discover_via: read_config, search_config
+
+  SpaceBond@ConfigLayers:
+    meaning: Configs are layered — Base → Default → Platform → User. Later layers override earlier.
+    SpaceBond@DefaultConfigs:
+      meaning: Project-level defaults in Config/Default*.ini. Most commonly edited.
+      files: DefaultEngine.ini, DefaultGame.ini, DefaultInput.ini, DefaultGameplayTags.ini, DefaultEditor.ini
+    SpaceBond@PlatformConfigs:
+      meaning: Platform-specific overrides. Config/Windows/, Config/Android/, etc.
+    SpaceBond@SavedConfigs:
+      meaning: User-specific and saved configs in Saved/Config/. Not committed to source control.
+
+  SpaceBond@ConfigCategories:
+    meaning: Key config categories and what they control.
+    SpaceBond@EngineConfig:
+      meaning: DefaultEngine.ini — rendering, physics, streaming, GC, console variables.
+    SpaceBond@GameConfig:
+      meaning: DefaultGame.ini — project name, version, default maps.
+    SpaceBond@InputConfig:
+      meaning: DefaultInput.ini — action/axis mappings, Enhanced Input config.
+    SpaceBond@TagConfig:
+      meaning: DefaultGameplayTags.ini — gameplay tag definitions and categories.
+      discover_via: list_config_tags, search_config
