@@ -37,11 +37,13 @@ class BridgeServer:
         from .handlers import blueprint as bp_h
         from .handlers import editor as editor_h
         from .handlers import pie as pie_h
+        from .handlers import reflection as reflect_h
 
         self._handlers.update(asset_h.HANDLERS)
         self._handlers.update(bp_h.HANDLERS)
         self._handlers.update(editor_h.HANDLERS)
         self._handlers.update(pie_h.HANDLERS)
+        self._handlers.update(reflect_h.HANDLERS)
 
     def start(self):
         if websockets is None:
