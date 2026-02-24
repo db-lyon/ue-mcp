@@ -38,12 +38,18 @@ class BridgeServer:
         from .handlers import editor as editor_h
         from .handlers import pie as pie_h
         from .handlers import reflection as reflect_h
+        from .handlers import nodes as nodes_h
+        from .handlers import level as level_h
+        from .handlers import material as material_h
 
         self._handlers.update(asset_h.HANDLERS)
         self._handlers.update(bp_h.HANDLERS)
         self._handlers.update(editor_h.HANDLERS)
         self._handlers.update(pie_h.HANDLERS)
         self._handlers.update(reflect_h.HANDLERS)
+        self._handlers.update(nodes_h.HANDLERS)
+        self._handlers.update(level_h.HANDLERS)
+        self._handlers.update(material_h.HANDLERS)
 
     def start(self):
         if websockets is None:
