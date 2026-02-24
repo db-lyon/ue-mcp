@@ -6,11 +6,23 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            rid: win-x64
+            artifact: ue-mcp-windows-x64.zip
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact: ue-mcp-linux-x64.tar.gz
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: ue-mcp-macos-arm64.tar.gz
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -31,3 +43,68 @@ jobs:
       - name: Test
         run: dotnet test --no-build -c Release --verbosity normal
         continue-on-error: true
+
+      - name: Publish
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: >
+          dotnet publish src/UeMcp/UeMcp.csproj
+          -c Release
+          -r ${{ matrix.rid }}
+          --self-contained
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o dist/
+
+      - name: Copy plugin
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: cp -r plugin dist/plugin
+
+      - name: Package (Windows)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.os == 'windows-latest'
+        shell: pwsh
+        run: Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact }}
+
+      - name: Package (Linux/macOS)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.os != 'windows-latest'
+        run: tar -czf ${{ matrix.artifact }} -C dist .
+
+      - name: Upload artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: ${{ matrix.artifact }}
+
+  pre-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate tag
+        id: tag
+        run: echo "tag=nightly-$(date -u +'%Y%m%d-%H%M%S')-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag
+        run: |
+          git tag ${{ steps.tag.outputs.tag }}
+          git push origin ${{ steps.tag.outputs.tag }}
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Nightly ${{ steps.tag.outputs.tag }}"
+          prerelease: true
+          generate_release_notes: true
+          files: artifacts/**/*
