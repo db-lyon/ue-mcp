@@ -1,0 +1,68 @@
+KantextConfig:
+  Preload:
+    .kantext/UEConcepts.kant
+    .kantext/McpSurface.kant
+    .kantext/BlueprintOntology.kant
+  Loadable:
+    .kantext/UEConcepts.kant
+    .kantext/McpSurface.kant
+    .kantext/BlueprintOntology.kant
+
+⛩️:
+  Meaning@mode:
+    meaning: MCP server operating mode
+    purpose: Determines available capabilities. Offline parses raw binaries via UAssetAPI. Live connects to a running editor for full reflection and mutation.
+    Category: /MCP/Mode
+    Mapping:
+      0.0: Offline
+        meaning: No editor connection. Read-only via binary parsing.
+      1.0: Live
+        meaning: Editor bridge connected. Full read/write via reflection.
+
+  ValueBond@mode:
+    Convert: Signal
+
+  Meaning@fidelity:
+    meaning: Confidence level in parsed data
+    purpose: Offline parsing is best-effort; live mode has perfect fidelity from the engine's own type system.
+    Category: /MCP/Quality
+    Mapping:
+      0.0: Unavailable
+        meaning: Cannot be determined in this mode
+      0.5: Parsed
+        meaning: Reconstructed from binary. May miss runtime-resolved types.
+      1.0: Reflected
+        meaning: Read from engine reflection. Authoritative.
+
+  ValueBond@fidelity:
+    Convert: Signal
+
+  Meaning@mutability:
+    meaning: Whether an operation reads or writes
+    purpose: Write operations are gated behind live mode for safety. The editor provides undo, validation, and compilation.
+    Category: /MCP/Safety
+    Mapping:
+      0.0: ReadOnly
+        meaning: Observes state without modification
+      1.0: Mutating
+        meaning: Changes asset or editor state
+
+  ValueBond@mutability:
+    Convert: Signal
+
+UeMcp:
+  SpaceBond@Identity:
+    meaning: Hybrid MCP server for Unreal Engine. Provides an instrumentation surface for AI to compose, modify, and read UE project assets.
+    runtime: .NET 8.0
+    protocol: MCP stdio
+    offline_engine: UAssetAPI (git submodule)
+    live_bridge: WebSocket JSON-RPC on ws://localhost:9877
+    ue_versions: 4.13 through 5.5+
+
+  SpaceBond@Invariants:
+    meaning: Rules that always hold regardless of mode or project.
+    project_required: set_project must be called before any asset operation. Without it, there is no Content directory to resolve paths against.
+    path_resolution: Asset paths accept three forms -- absolute filesystem path, relative to Content directory, or /Game/ virtual path. All are normalized to absolute before use.
+    offline_is_readonly: Offline mode never writes to disk. All mutation goes through the live editor bridge where the engine handles validation, undo, and save.
+    live_preferred: When the editor bridge is connected, read operations prefer live reflection (richer, authoritative) and fall back to offline parsing on failure.
+    graceful_degradation: Every read tool works in offline mode. Live mode is an enhancement, never a requirement for reading.
