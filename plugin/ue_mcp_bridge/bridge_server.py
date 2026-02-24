@@ -43,6 +43,9 @@ class BridgeServer:
         from .handlers import material as material_h
         from .handlers import animation as anim_h
         from .handlers import umg as umg_h
+        from .handlers import pcg as pcg_h
+        from .handlers import landscape as landscape_h
+        from .handlers import foliage as foliage_h
 
         self._handlers.update(asset_h.HANDLERS)
         self._handlers.update(bp_h.HANDLERS)
@@ -54,6 +57,9 @@ class BridgeServer:
         self._handlers.update(material_h.HANDLERS)
         self._handlers.update(anim_h.HANDLERS)
         self._handlers.update(umg_h.HANDLERS)
+        self._handlers.update(pcg_h.HANDLERS)
+        self._handlers.update(landscape_h.HANDLERS)
+        self._handlers.update(foliage_h.HANDLERS)
 
     def start(self):
         if websockets is None:
