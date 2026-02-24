@@ -20,7 +20,7 @@ McpModes:
       Convert: Signal
       value: 1.0
     capabilities: Everything offline can do, plus authoritative type reflection, write operations, Blueprint compilation with error feedback, PIE control and runtime introspection, GameplayTag enumeration, console commands, asset saving with undo.
-    additional_tools: reflect_class, reflect_struct, reflect_enum, list_classes, list_gameplay_tags, editor_execute, set_property, compile_blueprint, create_blueprint, add_blueprint_variable, add_blueprint_node, connect_blueprint_pins, save_asset, play_in_editor, get_runtime_value
+    additional_tools: reflect_class, reflect_struct, reflect_enum, list_classes, list_gameplay_tags, list_node_types, search_node_types, get_world_outliner, place_actor, delete_actor, get_actor_details, move_actor, read_material, list_material_parameters, set_material_parameter, create_material_instance, undo, redo, editor_execute, set_property, compile_blueprint, create_blueprint, add_blueprint_variable, add_blueprint_node, connect_blueprint_pins, save_asset, play_in_editor, get_runtime_value
     🪝 RequiresPlugin: /McpBridge
         connection: depends_on
 
@@ -191,6 +191,64 @@ ToolSurface:
     SpaceBond@search_cpp:
       meaning: Search C++ source for symbols, macros, or text patterns.
 
+  SpaceBond@NodeDiscovery:
+    meaning: Tools for discovering Blueprint node types. Closes the discoverability loop for add_blueprint_node — the AI can find what nodes exist instead of guessing K2Node class names.
+    mutability:
+      Convert: Signal
+      value: 0.0
+    🪝 RequiresLive: /McpModes/Live
+        connection: requires
+    SpaceBond@list_node_types:
+      meaning: List all available K2Node types by category. With includeFunctions, also discovers BlueprintCallable library functions.
+    SpaceBond@search_node_types:
+      meaning: Search for node types by name or description. Use when you need a specific behavior but don't know the class name.
+
+  SpaceBond@LevelManipulation:
+    meaning: Tools for reading and modifying the current level. World outliner, actor placement, spatial queries.
+    mutability:
+      Convert: Signal
+      value: 1.0
+    🪝 RequiresLive: /McpModes/Live
+        connection: requires
+    SpaceBond@get_world_outliner:
+      meaning: List all actors in the level with class, transform, and folder. Filterable.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@place_actor:
+      meaning: Spawn an actor in the level with class, position, rotation, label, and folder.
+    SpaceBond@delete_actor:
+      meaning: Remove an actor from the level by name or label.
+    SpaceBond@get_actor_details:
+      meaning: Detailed actor info — components, tags, all properties.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@move_actor:
+      meaning: Relocate, rotate, or rescale an actor in the level.
+
+  SpaceBond@MaterialEditing:
+    meaning: Tools for reading and modifying materials and material instances.
+    mutability:
+      Convert: Signal
+      value: 1.0
+    🪝 RequiresLive: /McpModes/Live
+        connection: requires
+    SpaceBond@read_material:
+      meaning: Read a material's structure — parent, shading model, blend mode, parameter overrides.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@list_material_parameters:
+      meaning: All overridable parameters with current values. Works on base materials and instances.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@set_material_parameter:
+      meaning: Set scalar, vector, or texture parameter on a material instance.
+    SpaceBond@create_material_instance:
+      meaning: Create a new material instance from a parent material.
+
   SpaceBond@EditorMutation:
     meaning: Tools that modify assets or editor state. Live mode only. All changes go through the editor's transaction system with undo.
     mutability:
@@ -202,6 +260,10 @@ ToolSurface:
       meaning: Run a console command in the editor.
     SpaceBond@set_property:
       meaning: Set a property value on an asset object. Undo supported.
+    SpaceBond@undo:
+      meaning: Undo the last editor action(s). Reverts any mutation. Use to recover from mistakes.
+    SpaceBond@redo:
+      meaning: Redo the last undone action(s). Reapplies previously undone changes.
     SpaceBond@compile_blueprint:
       meaning: Compile a Blueprint. Returns success/failure with errors.
       🪝 State: /EditorStates/BlueprintCompilation
@@ -213,7 +275,9 @@ ToolSurface:
     SpaceBond@add_blueprint_variable:
       meaning: Add a variable to a Blueprint. Requires compile afterwards.
     SpaceBond@add_blueprint_node:
-      meaning: Add a node to a graph. Returns node ID.
+      meaning: Add a node to a graph. Returns node ID. Use list_node_types or search_node_types to discover valid nodeClass values.
+      🪝 Discovery: /ToolSurface/NodeDiscovery
+          connection: discoverability
     SpaceBond@connect_blueprint_pins:
       meaning: Wire two pins between nodes.
     SpaceBond@save_asset:
