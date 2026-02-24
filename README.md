@@ -132,6 +132,13 @@ This loads the project, detects the engine version, and attempts to connect to a
 | `list_classes` | Live | List classes, optionally filtered by parent class |
 | `list_gameplay_tags` | Live | Full GameplayTag hierarchy, filterable by prefix |
 
+### Node Discovery (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `list_node_types` | Live | List Blueprint node types by category (Flow Control, Events, Functions, etc.) |
+| `search_node_types` | Live | Search for node types by name or description |
+
 ### Config / INI
 
 | Tool | Mode | Description |
@@ -149,12 +156,33 @@ This loads the project, detects the engine version, and attempts to connect to a
 | `list_modules` | Offline | All C++ modules with types, file counts, dependencies |
 | `search_cpp` | Offline | Search C++ source for symbols, macros, or text |
 
+### Level / World (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `get_world_outliner` | Live | List all actors in the level with class, transform, folder |
+| `place_actor` | Live | Spawn an actor with class, position, rotation, label |
+| `delete_actor` | Live | Remove an actor by name or label |
+| `get_actor_details` | Live | Detailed actor info: components, tags, properties |
+| `move_actor` | Live | Relocate, rotate, or rescale an actor |
+
+### Materials (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `read_material` | Live | Read material structure: parent, shading model, parameters |
+| `list_material_parameters` | Live | All overridable parameters with current values |
+| `set_material_parameter` | Live | Set scalar, vector, or texture parameter on a material instance |
+| `create_material_instance` | Live | Create a new material instance from a parent |
+
 ### Editor (Live Mode)
 
 | Tool | Mode | Description |
 |------|------|-------------|
 | `editor_execute` | Live | Run a console command in the editor |
 | `set_property` | Live | Set a property value with undo support |
+| `undo` | Live | Undo last editor action(s) — reverts any mutation |
+| `redo` | Live | Redo last undone action(s) |
 | `compile_blueprint` | Live | Compile a Blueprint and get error feedback |
 | `create_blueprint` | Live | Create a new Blueprint with specified parent class |
 | `add_blueprint_variable` | Live | Add a variable to a Blueprint |
@@ -259,7 +287,10 @@ ue-mcp/
 │       ├── ReflectionTools.cs    # reflect_class, reflect_struct, reflect_enum
 │       ├── ConfigTools.cs        # read_config, search_config, list_config_tags
 │       ├── CppTools.cs           # read_cpp_header, read_module, list_modules
-│       └── EditorTools.cs        # Live editor operations
+│       ├── NodeTools.cs          # list_node_types, search_node_types
+│       ├── LevelTools.cs         # get_world_outliner, place_actor, move_actor
+│       ├── MaterialTools.cs      # read_material, set_material_parameter
+│       └── EditorTools.cs        # Live editor ops, undo/redo
 ├── plugin/ue_mcp_bridge/         # UE Editor Python plugin
 │   ├── bridge_server.py          # WebSocket server
 │   ├── handlers/
@@ -267,7 +298,10 @@ ue-mcp/
 │   │   ├── blueprint.py          # Blueprint CRUD operations
 │   │   ├── editor.py             # Console commands, property setting
 │   │   ├── pie.py                # Play-in-Editor control
-│   │   └── reflection.py         # Live type reflection (classes, structs, enums, tags)
+│   │   ├── reflection.py         # Live type reflection (classes, structs, enums, tags)
+│   │   ├── nodes.py              # Blueprint node type discovery
+│   │   ├── level.py              # World outliner, actor placement/manipulation
+│   │   └── material.py           # Material reading, parameter setting
 │   └── startup_script.py         # Auto-start for editor
 ├── .kantext/                     # Ontology (Kantext compositional language)
 │   ├── Kantext.kant              # Root config + signals
