@@ -36,29 +36,19 @@ sequenceDiagram
     MCP-->>AI: Success + undo available
 ```
 
-## Prerequisites
-
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later
-- Git (for cloning with submodules)
-- Unreal Engine 4.13+ or 5.x project (for offline mode)
-- Unreal Engine with Python plugin enabled (for live mode)
-
 ## Quick Start
 
-### 1. Clone and build
+### 1. Download
 
-```bash
-git clone --recursive https://github.com/YOUR_USERNAME/ue-mcp.git
-cd ue-mcp
-dotnet build
-```
+Grab the latest release for your platform from [Releases](https://github.com/db-lyon/ue-mcp/releases):
 
-If you already cloned without `--recursive`:
+| Platform | File |
+|----------|------|
+| Windows | `ue-mcp-windows-x64.zip` |
+| Linux | `ue-mcp-linux-x64.tar.gz` |
+| macOS (Apple Silicon) | `ue-mcp-macos-arm64.tar.gz` |
 
-```bash
-git submodule update --init --recursive
-dotnet build
-```
+Extract it anywhere. No dependencies — the binary is self-contained.
 
 ### 2. Configure your MCP client
 
@@ -68,24 +58,26 @@ Add to your MCP configuration (e.g., Cursor `mcp.json` or Claude Desktop `claude
 {
   "mcpServers": {
     "ue-mcp": {
-      "command": "dotnet",
-      "args": ["run", "--project", "/absolute/path/to/ue-mcp/src/UeMcp/UeMcp.csproj"]
+      "command": "/path/to/ue-mcp"
     }
   }
 }
 ```
 
-Or after publishing:
+<details>
+<summary>Building from source</summary>
 
-```json
-{
-  "mcpServers": {
-    "ue-mcp": {
-      "command": "/path/to/ue-mcp/publish/ue-mcp"
-    }
-  }
-}
+Requires [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) and Git.
+
+```bash
+git clone --recursive https://github.com/db-lyon/ue-mcp.git
+cd ue-mcp
+dotnet publish src/UeMcp/UeMcp.csproj -c Release -o publish/ --self-contained -r win-x64 -p:PublishSingleFile=true
 ```
+
+Replace `win-x64` with `linux-x64` or `osx-arm64` as needed. Point your MCP config at `publish/ue-mcp`.
+
+</details>
 
 ### 3. Point it at your UE project
 
@@ -402,16 +394,6 @@ ue-mcp/
 Offline mode (via UAssetAPI) supports: **UE 4.13 through 5.5+**
 
 Live mode supports whatever version of Unreal Editor you're running — it uses the editor's own reflection system.
-
-## Publishing
-
-Build a self-contained executable:
-
-```bash
-dotnet publish src/UeMcp/UeMcp.csproj -c Release -o publish/ --self-contained -r win-x64
-```
-
-Replace `win-x64` with `linux-x64` or `osx-arm64` as needed.
 
 ## License
 
