@@ -1,123 +1,226 @@
 McpModes:
   SpaceBond@Offline:
-    meaning: Server is parsing raw .uasset/.umap binaries via UAssetAPI. No editor connection. Available immediately without Unreal Engine installed.
+    meaning: Server parses raw .uasset/.umap binaries via UAssetAPI. No editor connection. Available without Unreal Engine installed.
     mode:
       Convert: Signal
       value: 0.0
     fidelity:
       Convert: Signal
       value: 0.5
-    capabilities: Read any asset's structure, properties, exports, imports. Search across project. Parse Blueprints (class info, variables, functions, graph nodes). Parse DataTables (rows, columns, struct types). Export to JSON.
-    limitations: Cannot resolve generic pin types after compilation. Cannot read inherited properties from C++ parents. Cannot see runtime values. Cannot write or modify anything.
+    capabilities: Read asset structure and properties. Search and list assets. Parse Blueprints. Parse DataTables. Read C++ headers for UE macros. Read config/INI files. Export to JSON.
+    limitations: Cannot resolve generic pin types after compilation. Cannot read inherited properties from C++ parents. Cannot see runtime values. Cannot write.
+    tools_available: set_project, get_status, get_project_info, read_asset, read_asset_properties, list_assets, search_assets, asset_to_json, read_blueprint, list_blueprint_variables, list_blueprint_functions, read_blueprint_graph, read_datatable, read_config, search_config, list_config_tags, read_cpp_header, read_module, list_modules, search_cpp
 
   SpaceBond@Live:
-    meaning: Server is connected to a running Unreal Editor via WebSocket bridge on ws://localhost:9877. Full read/write access through the engine's own reflection and editor APIs.
+    meaning: Server connected to running Unreal Editor via WebSocket bridge on ws://localhost:9877. Full read/write with engine reflection.
     mode:
       Convert: Signal
       value: 1.0
     fidelity:
       Convert: Signal
       value: 1.0
-    capabilities: Everything offline can do, plus authoritative type resolution, write operations (create assets, add variables, add/wire nodes, set properties), Blueprint compilation with error feedback, PIE control and runtime introspection, console command execution, asset saving with undo support.
+    capabilities: Everything offline can do, plus authoritative type reflection, write operations, Blueprint compilation with error feedback, PIE control and runtime introspection, GameplayTag enumeration, console commands, asset saving with undo.
+    additional_tools: reflect_class, reflect_struct, reflect_enum, list_classes, list_gameplay_tags, editor_execute, set_property, compile_blueprint, create_blueprint, add_blueprint_variable, add_blueprint_node, connect_blueprint_pins, save_asset, play_in_editor, get_runtime_value
     🪝 RequiresPlugin: /McpBridge
         connection: depends_on
-        meaning: Live mode requires the ue_mcp_bridge Python plugin running inside the editor.
 
 McpBridge:
   SpaceBond@Plugin:
-    meaning: The UE-side Python plugin that hosts the WebSocket server. Runs inside the editor as a daemon thread.
+    meaning: UE-side Python plugin hosting the WebSocket server. Runs inside the editor as a daemon thread.
     host: localhost
     port: 9877
     protocol: JSON-RPC over WebSocket
     language: Python (UE embedded interpreter)
-    dependency: websockets pip package in UE's Python environment
+    dependency: websockets pip package
 
   SpaceBond@Setup:
-    meaning: How to install and activate the bridge.
-    prerequisite: Python Editor Script Plugin must be enabled in the UE project.
-    install_websockets: Run pip install websockets using UE's bundled Python interpreter.
+    meaning: Installation and activation steps.
+    prerequisite: Python Editor Script Plugin enabled in the UE project.
+    install_websockets: pip install websockets using UE's bundled Python
     copy_plugin: Copy plugin/ue_mcp_bridge/ to <Project>/Content/Python/
-    manual_start: In UE Python console run import ue_mcp_bridge; ue_mcp_bridge.start()
-    auto_start: Add startup_script.py path to DefaultEngine.ini PythonScriptPluginSettings StartupScripts.
+    manual_start: In UE Python console — import ue_mcp_bridge; ue_mcp_bridge.start()
+    auto_start: Add startup_script.py path to DefaultEngine.ini under PythonScriptPluginSettings
 
 ToolSurface:
+  meaning: The complete MCP tool surface organized by capability domain. Each tool links back to the concepts it discovers and the workflows it participates in.
+
   SpaceBond@StatusAndProject:
-    meaning: Tools for server state and project configuration. Always available in both modes.
+    meaning: Server state and project configuration. Always available.
     mutability:
       Convert: Signal
       value: 0.0
     SpaceBond@get_status:
-      meaning: Returns current mode, editor connection state, loaded project info. Call first to understand available capabilities.
+      meaning: Returns current mode, connection state, loaded project. Call first.
     SpaceBond@set_project:
-      meaning: Points the server at a UE project. Parses the .uproject, detects engine version, attempts editor bridge connection. Must be called before any asset tool.
+      meaning: Points server at a .uproject. Parses project, detects engine version, attempts bridge connection.
+      🪝 Workflow: /UnderstandProject
+          connection: entry_point
     SpaceBond@get_project_info:
-      meaning: Returns the full .uproject file contents including modules, plugins, target platforms.
+      meaning: Full .uproject contents — modules, plugins, target platforms.
 
   SpaceBond@AssetReading:
-    meaning: Tools for reading and searching assets. Available in both modes. Live mode provides richer data via editor reflection.
+    meaning: Read and search assets. Both modes. Live mode provides richer data.
     mutability:
       Convert: Signal
       value: 0.0
+    discovers: AssetTaxonomy, AssetRelationships
     SpaceBond@read_asset:
-      meaning: Read any asset's full structure. Returns exports, imports, properties as JSON. The general-purpose tool for understanding any asset.
+      meaning: Read any asset's structure — exports, imports, properties as JSON.
+      🪝 Concepts: /AssetTaxonomy
+          connection: discovers
     SpaceBond@read_asset_properties:
-      meaning: Read specific properties from a named export. More targeted than read_asset. Use when you know which export and property you need.
+      meaning: Read specific properties from a named export.
     SpaceBond@list_assets:
-      meaning: List assets in a directory with optional type filter. Supports recursive search. Use to discover what exists in a project.
+      meaning: List assets in a directory with optional type filter. Recursive.
+      🪝 Concepts: /AssetTaxonomy
+          connection: discovers
     SpaceBond@search_assets:
-      meaning: Search across the project by name or content. Matches filenames, export names, class types, and property values.
+      meaning: Search project by name, export name, class type, or property value.
     SpaceBond@asset_to_json:
-      meaning: Full UAssetAPI native JSON serialization. Most detailed low-level view. Large output. Use for deep inspection.
+      meaning: Full UAssetAPI native JSON. Most detailed. Large output.
 
   SpaceBond@BlueprintReading:
-    meaning: Blueprint-specific reading tools. Available in both modes. Structured output tuned for Blueprint comprehension.
+    meaning: Blueprint-specific reading. Both modes.
     mutability:
       Convert: Signal
       value: 0.0
+    discovers: BlueprintAnatomy, Variables, Functions, Graphs, Components
     SpaceBond@read_blueprint:
-      meaning: The primary Blueprint comprehension tool. Returns parent class, interfaces, variables with defaults, functions with parameters, graph names, and SCS components.
+      meaning: Primary Blueprint comprehension tool. Parent, interfaces, variables, functions, graphs, SCS components.
+      🪝 Workflow: /UnderstandBlueprint
+          connection: entry_point
+      🪝 Concepts: /BlueprintAnatomy
+          connection: discovers
     SpaceBond@list_blueprint_variables:
-      meaning: All variables with serialized types, flags, and default values. Use to understand a Blueprint's data model.
+      meaning: All variables with types, flags, defaults.
+      🪝 Concepts: /TypeSystem
+          connection: discovers
     SpaceBond@list_blueprint_functions:
-      meaning: All functions with parameters, flags, and bytecode size. Use to understand a Blueprint's behavior surface.
+      meaning: All functions with parameters, flags, bytecode size.
     SpaceBond@read_blueprint_graph:
-      meaning: Nodes and their properties within a specific graph. Use to understand execution flow and node wiring.
+      meaning: Nodes and connections within a specific graph.
+      🪝 Concepts: /BlueprintAnatomy/Graphs
+          connection: discovers
 
   SpaceBond@DataTableReading:
-    meaning: DataTable-specific reading. Available in both modes.
+    meaning: DataTable-specific reading. Both modes.
     mutability:
       Convert: Signal
       value: 0.0
     SpaceBond@read_datatable:
-      meaning: Read rows and column structure. Returns row struct type, column definitions, and all row data. Supports row name filtering.
+      meaning: Rows, column structure, row struct type. Supports row filtering.
+      🪝 Concepts: /AssetTaxonomy/DataTable
+          connection: discovers
+      🪝 Workflow: /DataTableWorkflow
+          connection: entry_point
+
+  SpaceBond@Reflection:
+    meaning: Live reflection tools. Query UE's own type system at runtime. The highest-leverage tools in the MCP — they turn any class, struct, or enum into on-demand context.
+    mutability:
+      Convert: Signal
+      value: 0.0
+    🪝 RequiresLive: /McpModes/Live
+        connection: requires
+    discovers: TypeSystem, Inheritance, InterfaceImplementation, BlueprintExposure
+    SpaceBond@reflect_class:
+      meaning: The primary discovery tool. Returns parent chain, properties with types and defaults, functions, flags, interfaces.
+      🪝 Concepts: /TypeSystem/UObject
+          connection: discovers
+      🪝 Traits: /BlueprintExposure
+          connection: discovers
+      🪝 Traits: /Replication
+          connection: discovers
+      🪝 Workflow: /UnderstandClass
+          connection: entry_point
+    SpaceBond@reflect_struct:
+      meaning: Reflect a UScriptStruct — fields with types. For FVector, FHitResult, custom structs.
+      🪝 Concepts: /TypeSystem/Struct
+          connection: discovers
+    SpaceBond@reflect_enum:
+      meaning: Reflect a UEnum — all values with display names.
+      🪝 Concepts: /TypeSystem/Enum
+          connection: discovers
+    SpaceBond@list_classes:
+      meaning: List classes, optionally filtered by parent. Discover the class hierarchy.
+    SpaceBond@list_gameplay_tags:
+      meaning: Full GameplayTag hierarchy from the running editor. Filter by prefix.
+      🪝 Concepts: /TypeSystem/Struct/FGameplayTag
+          connection: discovers
+
+  SpaceBond@ConfigReading:
+    meaning: Config/INI file tools. Offline mode. Reads the layered configuration system.
+    mutability:
+      Convert: Signal
+      value: 0.0
+    discovers: ConfigSystem, ConfigCategories
+    SpaceBond@read_config:
+      meaning: Parse a config file. Accepts name (Engine → DefaultEngine.ini) or path.
+      🪝 Concepts: /ConfigSystem
+          connection: discovers
+      🪝 Workflow: /ConfigTuning
+          connection: entry_point
+    SpaceBond@search_config:
+      meaning: Search all config files for keys, values, or section names.
+      🪝 Concepts: /ConfigSystem
+          connection: discovers
+    SpaceBond@list_config_tags:
+      meaning: GameplayTags from config files. Offline alternative to list_gameplay_tags.
+      🪝 Concepts: /ConfigSystem/ConfigCategories/TagConfig
+          connection: discovers
+
+  SpaceBond@CppReading:
+    meaning: C++ source analysis tools. Offline mode. Parse UE reflection macros from headers.
+    mutability:
+      Convert: Signal
+      value: 0.0
+    discovers: TypeSystem, ModuleSystem, BlueprintExposure, Replication
+    SpaceBond@read_cpp_header:
+      meaning: Parse a .h file for UCLASS, USTRUCT, UENUM, UPROPERTY, UFUNCTION declarations. The offline equivalent of reflect_class.
+      🪝 Concepts: /TypeSystem
+          connection: discovers
+      🪝 Traits: /BlueprintExposure
+          connection: discovers
+    SpaceBond@read_module:
+      meaning: Module structure — Build.cs deps, headers, sources.
+      🪝 Concepts: /ModuleSystem
+          connection: discovers
+    SpaceBond@list_modules:
+      meaning: All C++ modules with types, file counts, dependencies.
+      🪝 Concepts: /ModuleSystem
+          connection: discovers
+    SpaceBond@search_cpp:
+      meaning: Search C++ source for symbols, macros, or text patterns.
 
   SpaceBond@EditorMutation:
-    meaning: Tools that modify assets or editor state. Live mode only. All changes go through the editor's transaction system with undo support.
+    meaning: Tools that modify assets or editor state. Live mode only. All changes go through the editor's transaction system with undo.
     mutability:
       Convert: Signal
       value: 1.0
     🪝 RequiresLive: /McpModes/Live
         connection: requires
-        meaning: Every tool in this category throws if the editor bridge is not connected.
     SpaceBond@editor_execute:
-      meaning: Run a console command in the editor. Use for any editor automation.
+      meaning: Run a console command in the editor.
     SpaceBond@set_property:
-      meaning: Set a property value on an asset object. Changes go through the editor property system with undo.
+      meaning: Set a property value on an asset object. Undo supported.
     SpaceBond@compile_blueprint:
-      meaning: Compile a Blueprint. Returns success/failure with error details. Must be called after structural changes (add variable, add node, rewire).
+      meaning: Compile a Blueprint. Returns success/failure with errors.
+      🪝 State: /EditorStates/BlueprintCompilation
+          connection: triggers
     SpaceBond@create_blueprint:
-      meaning: Create a new Blueprint asset with a specified parent class and path.
+      meaning: Create a new Blueprint with parent class and path.
+      🪝 Workflow: /CreateBlueprint
+          connection: entry_point
     SpaceBond@add_blueprint_variable:
-      meaning: Add a variable to a Blueprint. Requires compile_blueprint afterwards to take effect.
+      meaning: Add a variable to a Blueprint. Requires compile afterwards.
     SpaceBond@add_blueprint_node:
-      meaning: Add a node to a graph. Returns node ID for use in connect_blueprint_pins.
+      meaning: Add a node to a graph. Returns node ID.
     SpaceBond@connect_blueprint_pins:
-      meaning: Wire two pins between nodes. Source and target identified by node name and pin name.
+      meaning: Wire two pins between nodes.
     SpaceBond@save_asset:
-      meaning: Save one or all modified assets to disk.
+      meaning: Save modified assets to disk.
 
   SpaceBond@PIEIntrospection:
-    meaning: Tools for controlling and inspecting Play-in-Editor sessions. Live mode only. PIE must be active for runtime value reads.
+    meaning: Play-in-Editor control and runtime inspection. Live mode only.
     mutability:
       Convert: Signal
       value: 0.5
@@ -125,8 +228,11 @@ ToolSurface:
         connection: requires
     🪝 PIEState: /EditorStates/PIE
         connection: governed_by
-        meaning: get_runtime_value only works when PIE is Playing or Paused.
     SpaceBond@play_in_editor:
-      meaning: Start, stop, or query PIE status. Actions are start, stop, status.
+      meaning: Start, stop, or query PIE status.
+      🪝 State: /EditorStates/PIE
+          connection: triggers
+      🪝 Workflow: /DebugAtRuntime
+          connection: entry_point
     SpaceBond@get_runtime_value:
-      meaning: Read a property value from a live actor during PIE. The actor is identified by name or path. Requires an active PIE session.
+      meaning: Read a property from a live actor during PIE. Requires active session.
