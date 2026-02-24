@@ -1,0 +1,172 @@
+⛩️:
+  SpaceBond@Trait:
+    meaning: A cross-cutting concern that applies to many UE concepts. Traits are orthogonal to the type hierarchy — any class, struct, or property might exhibit any combination of traits.
+    purpose: The AI must reason about traits when modifying anything. A replicated variable has different rules than a local one. An editor-only component vanishes in shipping builds.
+
+  Meaning@affects:
+    meaning: What this trait influences
+    Category: /Trait/Scope
+
+  Meaning@discover_via:
+    meaning: How to detect this trait on a given concept
+    Category: /MCP/Discovery
+
+Replication:
+  meaning: Network replication — synchronizing state across server and clients in multiplayer.
+  affects: Properties, Functions, Actors, Components
+  discover_via: reflect_class (property flags), read_cpp_header (UPROPERTY specifiers), read_blueprint (variable flags)
+
+  SpaceBond@ReplicatedProperty:
+    meaning: Property value is synchronized from server to owning client (or all clients). Marked with Replicated or ReplicatedUsing specifier.
+    constraint: Only works on properties of replicated Actors. Adding replication to a property requires the Actor to override GetLifetimeReplicatedProps.
+    specifiers: Replicated, ReplicatedUsing=OnRep_FunctionName
+
+  SpaceBond@RepNotify:
+    meaning: A replicated property that triggers a callback when the value changes on the receiving end.
+    pattern: Property has ReplicatedUsing=OnRep_X, and a UFUNCTION void OnRep_X() exists.
+
+  SpaceBond@RPCs:
+    meaning: Replicated function calls. Three kinds based on direction.
+    SpaceBond@ServerRPC:
+      meaning: Client calls, server executes. Marked Server.
+      specifiers: Server, Reliable or Unreliable, WithValidation
+    SpaceBond@ClientRPC:
+      meaning: Server calls, owning client executes. Marked Client.
+      specifiers: Client, Reliable or Unreliable
+    SpaceBond@MulticastRPC:
+      meaning: Server calls, all clients execute. Marked NetMulticast.
+      specifiers: NetMulticast, Reliable or Unreliable
+
+  SpaceBond@NetRelevancy:
+    meaning: Whether an actor is relevant to a given client. Irrelevant actors don't replicate.
+    constraint: Large open worlds use relevancy to limit bandwidth. Actors beyond NetCullDistanceSquared are culled.
+
+Serialization:
+  meaning: How UE saves and loads object state. Affects what survives between editor sessions, cooked builds, and save games.
+  affects: Properties, Objects, Assets
+  discover_via: reflect_class (property flags), read_cpp_header (UPROPERTY specifiers)
+
+  SpaceBond@SaveGame:
+    meaning: Property is included in save game serialization. Marked with SaveGame specifier.
+    discover_via: Property flags contain SaveGame
+
+  SpaceBond@Transient:
+    meaning: Property is NOT serialized. Exists only at runtime. Lost when the object is saved or the session ends.
+    specifiers: Transient, DuplicateTransient, NonPIEDuplicateTransient
+    use_for: Cached values, runtime-only state, resolved references
+
+  SpaceBond@Config:
+    meaning: Property value is read from a config INI file. Marked with Config specifier.
+    discover_via: read_cpp_header (Config specifier), search_config
+    specifiers: Config, GlobalConfig
+
+GarbageCollection:
+  meaning: UE's automatic memory management for UObjects. The AI must understand GC to avoid dangling references and ensure proper lifetime management.
+  affects: UObjects, Components, Actors
+
+  SpaceBond@GCRoots:
+    meaning: Objects that are GC roots won't be collected. Includes objects referenced by UPROPERTY on other rooted objects, actors in levels, and objects added to the root set.
+    constraint: Raw C++ pointers (not UPROPERTY) are invisible to GC. Use UPROPERTY or TWeakObjectPtr.
+
+  SpaceBond@PendingKill:
+    meaning: Object is marked for destruction but not yet collected. IsValid() returns false. Weak pointers auto-null.
+
+EditorVsRuntime:
+  meaning: The distinction between what exists in the editor and what ships in the game. Critical for understanding what the AI can see vs what players experience.
+  affects: Properties, Components, Modules, Plugins
+  discover_via: read_cpp_header (WITH_EDITOR guards), reflect_class
+
+  SpaceBond@EditorOnly:
+    meaning: Exists only in editor builds. Stripped from cooked/shipping builds.
+    markers: WITH_EDITOR, WITH_EDITORONLY_DATA preprocessor guards
+    property_flag: EditorOnly on UPROPERTY
+    constraint: Never reference editor-only types from runtime code. The build will fail.
+
+  SpaceBond@DevelopmentOnly:
+    meaning: Exists in development builds but stripped from shipping builds.
+    markers: WITH_DEV_AUTOMATION, UE_BUILD_SHIPPING == 0
+
+  SpaceBond@RuntimeOnly:
+    meaning: State that only exists during gameplay. Not serialized, not in the editor.
+    examples: Velocity, input state, animation pose, physics contacts
+
+BlueprintExposure:
+  meaning: How C++ functionality is exposed to Blueprint. Controls the visual scripting surface.
+  affects: Properties, Functions, Classes
+  discover_via: reflect_class, read_cpp_header (UPROPERTY/UFUNCTION specifiers)
+
+  SpaceBond@PropertyExposure:
+    meaning: How a C++ property appears in Blueprint.
+    SpaceBond@BlueprintReadWrite:
+      specifiers: BlueprintReadWrite
+      meaning: Readable and writable in Blueprint graphs.
+    SpaceBond@BlueprintReadOnly:
+      specifiers: BlueprintReadOnly
+      meaning: Readable but not writable in Blueprint graphs.
+    SpaceBond@NotExposed:
+      meaning: No Blueprint specifier. C++ only. Invisible in Blueprint.
+
+  SpaceBond@FunctionExposure:
+    meaning: How a C++ function appears in Blueprint.
+    SpaceBond@BlueprintCallable:
+      specifiers: BlueprintCallable
+      meaning: Can be called from Blueprint. Has exec pins.
+    SpaceBond@BlueprintPure:
+      specifiers: BlueprintPure
+      meaning: No exec pins. Pure computation. Evaluated on demand.
+    SpaceBond@BlueprintImplementableEvent:
+      specifiers: BlueprintImplementableEvent
+      meaning: Declared in C++, implemented entirely in Blueprint.
+    SpaceBond@BlueprintNativeEvent:
+      specifiers: BlueprintNativeEvent
+      meaning: Has a C++ default implementation that Blueprint can override.
+
+  SpaceBond@ClassExposure:
+    meaning: How a C++ class appears in Blueprint contexts.
+    SpaceBond@Blueprintable:
+      specifiers: Blueprintable
+      meaning: Can be used as a parent class for Blueprints.
+    SpaceBond@NotBlueprintable:
+      specifiers: NotBlueprintable
+      meaning: Cannot be subclassed in Blueprint. C++ only.
+    SpaceBond@BlueprintType:
+      specifiers: BlueprintType
+      meaning: Can be used as a variable type in Blueprint.
+    SpaceBond@Abstract:
+      specifiers: Abstract
+      meaning: Cannot be instantiated. Must be subclassed.
+
+EditConditions:
+  meaning: UPROPERTY specifiers that control when and where properties can be edited. Affects the Details panel and Blueprint defaults.
+  affects: Properties
+  discover_via: read_cpp_header, reflect_class
+
+  SpaceBond@EditAnywhere:
+    meaning: Editable on both CDO and per-instance.
+  SpaceBond@EditDefaultsOnly:
+    meaning: Editable only on CDO/archetype, not on instances.
+  SpaceBond@EditInstanceOnly:
+    meaning: Editable only on instances, not on CDO.
+  SpaceBond@VisibleAnywhere:
+    meaning: Visible in Details panel but not editable.
+  SpaceBond@EditCondition:
+    meaning: Conditionally editable based on another property's value.
+    pattern: EditCondition="bMyBool", EditCondition="MyEnum == EMyEnum::Value"
+  SpaceBond@Meta:
+    meaning: Metadata specifiers for editor behavior. ClampMin, ClampMax, UIMin, UIMax, AllowedClasses, etc.
+
+Threading:
+  meaning: UE's threading model. The game thread is primary. Other threads require explicit synchronization.
+  affects: Functions, Subsystems, Async operations
+
+  SpaceBond@GameThread:
+    meaning: The main thread. All UObject manipulation, Blueprint execution, and most gameplay code runs here.
+    constraint: Never access UObjects from other threads without proper synchronization.
+
+  SpaceBond@AsyncTasks:
+    meaning: Work that runs off the game thread. FAsyncTask, FRunnable, Async().
+    constraint: Must communicate back to game thread via delegates, task graph, or thread-safe containers.
+
+  SpaceBond@TaskGraph:
+    meaning: UE's task scheduling system. FGraphEvent, FTaskGraphInterface.
+    use_for: Parallel processing, deferred execution, dependency chains
