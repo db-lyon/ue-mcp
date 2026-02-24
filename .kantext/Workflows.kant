@@ -1,0 +1,127 @@
+⛩️:
+  SpaceBond@Workflow:
+    meaning: A common UE development workflow — a sequence of tool calls and concepts that achieve a goal. The AI should recognize these patterns and follow them.
+    purpose: Workflows encode best practices. They turn individual tool calls into coherent operations.
+
+  Meaning@precondition:
+    meaning: What must be true before starting this workflow
+    Category: /Workflow/Gate
+
+  Meaning@steps:
+    meaning: Ordered sequence of operations
+    Category: /Workflow/Sequence
+
+  Meaning@postcondition:
+    meaning: What should be true when the workflow succeeds
+    Category: /Workflow/Gate
+
+UnderstandProject:
+  meaning: First-contact workflow. Build a mental model of a UE project from scratch.
+  precondition: Project path is known.
+  steps:
+    1_load: set_project with .uproject path
+    2_status: get_status to confirm mode and capabilities
+    3_structure: list_assets in Content/ to understand content organization
+    4_config: read_config Engine and read_config Game for project settings
+    5_modules: list_modules to understand C++ structure (if Source/ exists)
+    6_tags: list_config_tags or list_gameplay_tags to understand the tagging taxonomy
+    7_key_assets: read_blueprint or read_asset on central gameplay classes
+  postcondition: AI has a working mental model of the project's structure, conventions, and key types.
+
+UnderstandClass:
+  meaning: Deeply understand a single class — its role, capabilities, and relationships.
+  precondition: Project loaded. Class name known.
+  steps:
+    1_reflect: reflect_class (live) or read_cpp_header (offline) to get properties, functions, parent chain
+    2_hierarchy: Walk parent chain via repeated reflect_class to understand inherited behavior
+    3_references: read_asset to see what this class depends on and what depends on it
+    4_instances: search_assets to find Blueprints derived from or using this class
+    5_config: search_config for any config entries that affect this class
+  postcondition: AI understands the class's complete surface — what it has, what it does, where it fits.
+  🪝 ReflectionTools: /ToolSurface/Reflection
+      connection: primary_discovery
+
+UnderstandBlueprint:
+  meaning: Comprehensive Blueprint comprehension workflow.
+  precondition: Project loaded. Asset path known.
+  steps:
+    1_overview: read_blueprint to get structure, parent, variables, functions, components
+    2_parent: reflect_class on the parent to understand inherited properties and functions
+    3_interfaces: For each interface, reflect_class to understand the contract
+    4_variables: Examine variable types — for custom structs, reflect_struct; for custom enums, reflect_enum
+    5_graphs: read_blueprint_graph for key graphs (EventGraph, ConstructionScript) to understand behavior
+    6_dependencies: read_asset for imports to understand what this Blueprint relies on
+  postcondition: AI can explain the Blueprint's purpose, modify it safely, or create similar ones.
+
+CreateBlueprint:
+  meaning: Blueprint creation workflow. Creates, populates, and verifies a new Blueprint.
+  precondition: Live mode. Know the desired parent class, variables, and initial setup.
+  steps:
+    1_verify_parent: reflect_class on the intended parent to understand inherited capabilities
+    2_create: create_blueprint with path and parent class
+    3_add_variables: add_blueprint_variable for each variable (name, type, defaults)
+    4_add_components: If Actor-based, add SCS components via add_blueprint_node
+    5_add_logic: add_blueprint_node + connect_blueprint_pins for event graph logic
+    6_compile: compile_blueprint — check for errors
+    7_fix: If errors, read the error details, fix, recompile
+    8_save: save_asset
+  postcondition: New Blueprint exists, compiles cleanly, and is saved.
+  🪝 MutationTools: /ToolSurface/EditorMutation
+      connection: requires
+
+ModifyBlueprint:
+  meaning: Safe Blueprint modification workflow. Read-before-write with compilation verification.
+  precondition: Live mode. Blueprint exists.
+  steps:
+    1_read: read_blueprint to understand current state
+    2_plan: Determine minimal changes needed
+    3_modify: Apply changes (add_blueprint_variable, add_blueprint_node, set_property, etc.)
+    4_compile: compile_blueprint
+    5_verify: read_blueprint again to confirm changes took effect
+    6_save: save_asset if satisfied
+  constraint: Never skip the initial read. Never skip compilation. Always verify.
+
+DataTableWorkflow:
+  meaning: Working with DataTables — reading, understanding, and modifying row data.
+  precondition: Project loaded.
+  steps:
+    1_discover: list_assets with type filter to find DataTables
+    2_read: read_datatable to get schema and rows
+    3_understand_schema: reflect_struct on the RowStruct to understand all columns and their types
+    4_modify: set_property to change cell values (live mode)
+    5_save: save_asset
+  postcondition: AI understands the DataTable's schema and content.
+
+DebugAtRuntime:
+  meaning: Use PIE to inspect runtime state and debug issues.
+  precondition: Live mode. Blueprint or actor in question is known.
+  steps:
+    1_start_pie: play_in_editor start
+    2_wait: Let the game reach the state being investigated
+    3_inspect: get_runtime_value on relevant actors and properties
+    4_compare: Compare runtime values against CDO defaults (from read_blueprint) to spot anomalies
+    5_stop: play_in_editor stop when done
+  postcondition: AI has runtime evidence to diagnose the issue.
+  🪝 PIETools: /ToolSurface/PIEIntrospection
+      connection: requires
+
+PerformanceAudit:
+  meaning: Identify potential performance issues via asset analysis.
+  precondition: Project loaded.
+  steps:
+    1_survey: list_assets recursively to understand content volume
+    2_large_assets: Sort assets by complexity (export count) to find bloated Blueprints
+    3_dep_chains: read_asset on critical assets to check for excessive hard references
+    4_config: read_config Engine to check rendering, streaming, and GC settings
+    5_tags: search_config for relevant performance settings (r., sg., gc.)
+  postcondition: AI has identified potential hotspots and can recommend specific optimizations.
+
+ConfigTuning:
+  meaning: Find and modify engine/game configuration for a desired behavior change.
+  precondition: Project loaded. Desired behavior known.
+  steps:
+    1_search: search_config for keywords related to the desired behavior
+    2_read: read_config on the relevant config file to understand the section structure
+    3_understand: Identify which CVar or setting controls the behavior
+    4_modify: set_property or direct edit of the INI file (outside MCP scope) with the new value
+  postcondition: AI knows exactly which config key to change and what values are valid.
