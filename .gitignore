@@ -23,11 +23,6 @@ desktop.ini
 publish/
 artifacts/
 
-## Binaries
-*.exe
-*.dll
-!lib/**
-
 ## NuGet
 *.nupkg
 packages/
