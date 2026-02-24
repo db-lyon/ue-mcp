@@ -73,13 +73,26 @@ AssetTaxonomy:
     discover_via: read_asset, reflect_class
 
   SpaceBond@Material:
-    meaning: Shader graph defining surface appearance.
+    meaning: Shader graph defining surface appearance. Materials define how surfaces look — color, roughness, metallic, normal, opacity. Material Instances override parameters without recompiling the shader.
     assetClass: UMaterial
     prefix: M_
+    discover_via: read_material, list_material_parameters
+    shape: Has shadingModel, blendMode, twoSided flag, expressions (shader graph nodes), parameters.
     SpaceBond@MaterialInstance:
-      meaning: Parameterized instance of a parent Material.
+      meaning: Parameterized instance of a parent Material. Cheap to create, parameters are overridable without shader recompilation.
       assetClass: UMaterialInstanceConstant
       prefix: MI_
+      discover_via: read_material, list_material_parameters
+      mutation: set_material_parameter, create_material_instance
+      shape: Has parent reference, scalar/vector/texture parameter overrides.
+    SpaceBond@MaterialParameters:
+      meaning: Named values exposed by the material for instancing. Three types.
+      SpaceBond@ScalarParameter:
+        meaning: Single float value. Used for roughness, metallic, opacity, tiling, etc.
+      SpaceBond@VectorParameter:
+        meaning: LinearColor (R, G, B, A). Used for base color, emissive color, tints.
+      SpaceBond@TextureParameter:
+        meaning: Texture reference. Used for diffuse, normal, mask maps.
 
   SpaceBond@Mesh:
     meaning: 3D geometry assets.
@@ -93,14 +106,108 @@ AssetTaxonomy:
       prefix: SK_
 
   SpaceBond@Animation:
-    meaning: Animation data on skeletons.
+    meaning: Animation assets on skeletons. The animation system is driven by AnimBlueprints (state machines), fed by AnimSequences, composed via AnimMontages, and blended through BlendSpaces.
+    discover_via: list_anim_assets, read_anim_blueprint, read_anim_montage, read_anim_sequence, read_blendspace
+
     SpaceBond@AnimSequence:
-      meaning: Single animation clip.
+      meaning: Single animation clip on a skeleton. Has a length, frame count, rate, optional curves, and notifies.
       assetClass: UAnimSequence
+      discover_via: read_anim_sequence
+      shape: Has sequenceLength, numberOfFrames, rateScale, skeleton reference, notifies array, curve names.
+
     SpaceBond@AnimMontage:
-      meaning: Composite animation with sections and notifies.
+      meaning: Composite animation with sections, notifies, and slot tracks. The primary asset for gameplay actions (attacks, item use, emotes, abilities). Sections can chain or branch. Notifies fire gameplay events at specific times.
       assetClass: UAnimMontage
       prefix: AM_
+      discover_via: read_anim_montage
+      shape: Has sections (name, startTime, nextSection), notifies (name, triggerTime, class), slotAnimTracks (slotName, segments with animReference), blendIn/blendOut times, rateScale.
+      SpaceBond@MontageSection:
+        meaning: Named time region within a montage. Sections can link to next sections for chaining. Default section plays first.
+      SpaceBond@AnimNotify:
+        meaning: Event triggered at a specific time during playback. Used for footstep sounds, particle effects, damage windows, combo timing.
+        discover_via: read_anim_montage (notifies), read_anim_sequence (notifies)
+        mutation: add_anim_notify
+        common_classes: AnimNotify_PlaySound, AnimNotify_PlayParticleEffect, AnimNotifyState (duration-based)
+      SpaceBond@SlotAnimTrack:
+        meaning: Named slot for animation blending. A montage can have multiple slots for layered animation (e.g. UpperBody, FullBody).
+
+    SpaceBond@AnimBlueprint:
+      meaning: Animation state machine Blueprint. Drives skeletal mesh animation by evaluating states, transitions, and blend logic each frame. Contains state machines, blend nodes, and per-bone layer blending.
+      assetClass: UAnimBlueprint
+      prefix: ABP_
+      discover_via: read_anim_blueprint
+      shape: Has targetSkeleton, parentClass, variables (drive state transitions), groups. Internal graphs define state machines.
+      SpaceBond@StateMachine:
+        meaning: A graph of states and transitions. Each state plays an animation or blend. Transitions fire when conditions on variables are met.
+      SpaceBond@AnimState:
+        meaning: A node in a state machine. Contains an animation player, blend, or sub-state machine. Has entry/exit transitions.
+      SpaceBond@AnimTransition:
+        meaning: Conditional edge between states. Evaluated each frame. Driven by AnimBP variables (speed, direction, isInAir, etc.).
+
+    SpaceBond@BlendSpace:
+      meaning: Parameterized animation blending. Maps 1D or 2D input values to blended animation output. Used for locomotion (speed × direction), aim offset, lean.
+      assetClass: UBlendSpace, UBlendSpace1D, UAimOffsetBlendSpace
+      discover_via: read_blendspace
+      shape: Has horizontal/vertical axis names, sample points (animation + coordinate), skeleton reference.
+
+  SpaceBond@Widget:
+    meaning: UMG (Unreal Motion Graphics) UI assets. Widget Blueprints define UI layout and behavior. The widget tree is a hierarchy of panels, containers, and leaf widgets.
+    discover_via: list_widget_blueprints, read_widget_tree, get_widget_details
+
+    SpaceBond@WidgetBlueprint:
+      meaning: Blueprint that defines a UI screen or component. Has a widget tree (visual hierarchy), Blueprint variables, event graph, and UMG animations.
+      assetClass: UWidgetBlueprint
+      prefix: WBP_
+      discover_via: read_widget_tree
+      shape: Has parentClass, widgetTree (recursive hierarchy), animations, variables.
+
+    SpaceBond@PanelWidgets:
+      meaning: Container widgets that hold and arrange children.
+      SpaceBond@CanvasPanel:
+        meaning: Free-form layout. Children positioned by anchors and offsets. The default root widget.
+      SpaceBond@VerticalBox:
+        meaning: Stacks children vertically. Each child gets a slot with padding, alignment, size rules.
+      SpaceBond@HorizontalBox:
+        meaning: Stacks children horizontally.
+      SpaceBond@Overlay:
+        meaning: Stacks children on top of each other. Later children render in front.
+      SpaceBond@ScrollBox:
+        meaning: Scrollable container. Content can exceed the visible area.
+      SpaceBond@GridPanel:
+        meaning: Grid layout. Children placed by row/column index.
+      SpaceBond@WidgetSwitcher:
+        meaning: Shows one child at a time. Switch by index. Used for tab interfaces, page navigation.
+
+    SpaceBond@LeafWidgets:
+      meaning: Widgets that display content or accept input.
+      SpaceBond@TextBlock:
+        meaning: Displays text. Has font, size, color, justification, wrapping.
+        discover_via: get_widget_details (text, fontSize, color)
+      SpaceBond@Image:
+        meaning: Displays a texture or material. Has brush, tint, image size.
+        discover_via: get_widget_details (texture, imageSize, tint)
+      SpaceBond@Button:
+        meaning: Clickable widget. Has style, OnClicked event. Contains one child widget.
+      SpaceBond@ProgressBar:
+        meaning: Horizontal fill bar. Has percent (0-1), fill color.
+        discover_via: get_widget_details (percent, fillColor)
+      SpaceBond@Slider:
+        meaning: Draggable value selector. Has min/max, step size, OnValueChanged event.
+      SpaceBond@EditableText:
+        meaning: Text input field. Has hint text, OnTextChanged/OnTextCommitted events.
+      SpaceBond@CheckBox:
+        meaning: Boolean toggle. Has IsChecked state, OnCheckStateChanged event.
+      SpaceBond@ComboBox:
+        meaning: Dropdown selector. Options as string array.
+
+    SpaceBond@UMGAnimations:
+      meaning: Widget animations defined in the Widget Blueprint. Animate any property (opacity, position, color, scale) over time with keyframes.
+      discover_via: read_widget_animations
+      shape: Has name, length, isLooping, bindings (widgetName + propertyName).
+
+    SpaceBond@Anchors:
+      meaning: How a widget is positioned relative to its parent. Anchors define the reference point (top-left, center, stretch, etc). Offsets are relative to the anchor.
+      constraint: Anchor choice determines how the widget responds to different screen resolutions. Stretch anchors scale; fixed anchors don't.
 
   SpaceBond@Audio:
     meaning: Sound assets.
@@ -112,9 +219,19 @@ AssetTaxonomy:
       assetClass: USoundCue
 
   SpaceBond@Level:
-    meaning: World/map asset. Contains placed actors.
+    meaning: World/map asset. Contains placed actors with transforms, components, and properties. The fundamental spatial container.
     assetClass: UWorld
     extension: .umap
+    discover_via: get_world_outliner, get_actor_details
+    mutation: place_actor, delete_actor, move_actor
+    SpaceBond@WorldOutliner:
+      meaning: The flat list of all actors in a level. Actors are organized by folders. Each has a name, label, class, and transform.
+      discover_via: get_world_outliner
+    SpaceBond@ActorTransform:
+      meaning: Every actor in a level has a world transform — location (FVector), rotation (FRotator), and scale (FVector). These define where it exists in 3D space.
+      mutation: move_actor
+    SpaceBond@OutlinerFolders:
+      meaning: Organizational folders in the world outliner. Not gameplay-relevant — purely for editor organization. Good practice to group actors by function (Lighting, Geometry, Gameplay, etc.).
 
   SpaceBond@EditorDefined:
     meaning: Types defined in the editor rather than C++. Appear as exports in .uasset.
