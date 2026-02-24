@@ -20,7 +20,7 @@ McpModes:
       Convert: Signal
       value: 1.0
     capabilities: Everything offline can do, plus authoritative type reflection, write operations, Blueprint compilation with error feedback, PIE control and runtime introspection, GameplayTag enumeration, console commands, asset saving with undo.
-    additional_tools: reflect_class, reflect_struct, reflect_enum, list_classes, list_gameplay_tags, list_node_types, search_node_types, get_world_outliner, place_actor, delete_actor, get_actor_details, move_actor, read_material, list_material_parameters, set_material_parameter, create_material_instance, undo, redo, editor_execute, set_property, compile_blueprint, create_blueprint, add_blueprint_variable, add_blueprint_node, connect_blueprint_pins, save_asset, play_in_editor, get_runtime_value
+    additional_tools: reflect_class, reflect_struct, reflect_enum, list_classes, list_gameplay_tags, list_node_types, search_node_types, get_world_outliner, place_actor, delete_actor, get_actor_details, move_actor, read_material, list_material_parameters, set_material_parameter, create_material_instance, read_anim_blueprint, read_anim_montage, read_anim_sequence, read_blendspace, list_anim_assets, add_anim_notify, read_widget_tree, get_widget_details, set_widget_property, list_widget_blueprints, read_widget_animations, undo, redo, editor_execute, set_property, compile_blueprint, create_blueprint, add_blueprint_variable, add_blueprint_node, connect_blueprint_pins, save_asset, play_in_editor, get_runtime_value
     🪝 RequiresPlugin: /McpBridge
         connection: depends_on
 
@@ -248,6 +248,73 @@ ToolSurface:
       meaning: Set scalar, vector, or texture parameter on a material instance.
     SpaceBond@create_material_instance:
       meaning: Create a new material instance from a parent material.
+
+  SpaceBond@Animation:
+    meaning: Tools for reading and modifying animation assets — montages, sequences, blendspaces, anim Blueprints, and notifies.
+    mutability:
+      Convert: Signal
+      value: 0.5
+    🪝 RequiresLive: /McpModes/Live
+        connection: requires
+    discovers: AnimMontage, AnimSequence, AnimBlueprint, BlendSpace
+    SpaceBond@read_anim_blueprint:
+      meaning: Read an Anim Blueprint's structure — skeleton, parent, state machines, variables.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@read_anim_montage:
+      meaning: Read a montage — sections, notifies, slot tracks, blend times.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@read_anim_sequence:
+      meaning: Read a sequence — length, frames, rate, notifies, curves, additive flag.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@read_blendspace:
+      meaning: Read a blendspace — axes, sample points with animations and coordinates.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@list_anim_assets:
+      meaning: List animation assets by type in a directory.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@add_anim_notify:
+      meaning: Add a notify to a montage or sequence at a specific time.
+
+  SpaceBond@WidgetUMG:
+    meaning: Tools for reading and modifying Widget Blueprints and UMG UI. Read widget trees, inspect specific widgets, modify properties, survey UI assets.
+    mutability:
+      Convert: Signal
+      value: 0.5
+    🪝 RequiresLive: /McpModes/Live
+        connection: requires
+    discovers: WidgetBlueprint, WidgetTree, UMGAnimations
+    SpaceBond@read_widget_tree:
+      meaning: Full widget hierarchy — panels, buttons, text, images with class, visibility, slots, children.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@get_widget_details:
+      meaning: Detailed widget info — type-specific properties (text content, font, color, image, progress).
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@set_widget_property:
+      meaning: Set a property on a widget — visibility, text, color, opacity, etc.
+    SpaceBond@list_widget_blueprints:
+      meaning: List Widget Blueprints in a directory.
+      mutability:
+        Convert: Signal
+        value: 0.0
+    SpaceBond@read_widget_animations:
+      meaning: Read UMG animations — names, lengths, looping, which widgets/properties they animate.
+      mutability:
+        Convert: Signal
+        value: 0.0
 
   SpaceBond@EditorMutation:
     meaning: Tools that modify assets or editor state. Live mode only. All changes go through the editor's transaction system with undo.

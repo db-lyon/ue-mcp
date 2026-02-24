@@ -41,6 +41,8 @@ class BridgeServer:
         from .handlers import nodes as nodes_h
         from .handlers import level as level_h
         from .handlers import material as material_h
+        from .handlers import animation as anim_h
+        from .handlers import umg as umg_h
 
         self._handlers.update(asset_h.HANDLERS)
         self._handlers.update(bp_h.HANDLERS)
@@ -50,6 +52,8 @@ class BridgeServer:
         self._handlers.update(nodes_h.HANDLERS)
         self._handlers.update(level_h.HANDLERS)
         self._handlers.update(material_h.HANDLERS)
+        self._handlers.update(anim_h.HANDLERS)
+        self._handlers.update(umg_h.HANDLERS)
 
     def start(self):
         if websockets is None:
