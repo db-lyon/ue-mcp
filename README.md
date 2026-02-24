@@ -2,8 +2,8 @@
 
 A hybrid MCP server that gives AI assistants deep read/write access to Unreal Engine projects. Works in two modes:
 
-- **Offline mode** — Parses raw `.uasset` / `.umap` binaries using [UAssetAPI](https://github.com/atenfyr/UAssetAPI). No Unreal Editor required.
-- **Live mode** — Connects to a running Unreal Editor via a WebSocket bridge plugin for full read/write access with undo, compilation, and PIE introspection.
+- **Offline mode** — Parses raw `.uasset` / `.umap` binaries using [UAssetAPI](https://github.com/atenfyr/UAssetAPI). Reads C++ headers, config files, and module structure. No Unreal Editor required.
+- **Live mode** — Connects to a running Unreal Editor via a WebSocket bridge plugin for full read/write access with undo, compilation, runtime reflection, and PIE introspection.
 
 ```
 ┌─────────────────────────────────────┐
@@ -122,7 +122,34 @@ This loads the project, detects the engine version, and attempts to connect to a
 |------|------|-------------|
 | `read_datatable` | Both | Read DataTable rows and column structure with optional row filter |
 
-### Editor (Live Mode Only)
+### Reflection (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `reflect_class` | Live | Reflect a UClass: parent chain, properties, functions, flags, interfaces |
+| `reflect_struct` | Live | Reflect a UScriptStruct: fields with types |
+| `reflect_enum` | Live | Reflect a UEnum: all values with display names |
+| `list_classes` | Live | List classes, optionally filtered by parent class |
+| `list_gameplay_tags` | Live | Full GameplayTag hierarchy, filterable by prefix |
+
+### Config / INI
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `read_config` | Offline | Parse a config/INI file: sections and key-value pairs |
+| `search_config` | Offline | Search all config files for keys, values, or sections |
+| `list_config_tags` | Offline | GameplayTags defined in config files (offline alternative to `list_gameplay_tags`) |
+
+### C++ Source
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `read_cpp_header` | Offline | Parse a .h file for UCLASS, USTRUCT, UENUM, UPROPERTY, UFUNCTION |
+| `read_module` | Offline | Module structure: Build.cs deps, headers, sources |
+| `list_modules` | Offline | All C++ modules with types, file counts, dependencies |
+| `search_cpp` | Offline | Search C++ source for symbols, macros, or text |
+
+### Editor (Live Mode)
 
 | Tool | Mode | Description |
 |------|------|-------------|
@@ -136,6 +163,21 @@ This loads the project, detects the engine version, and attempts to connect to a
 | `play_in_editor` | Live | Start/stop/query PIE sessions |
 | `get_runtime_value` | Live | Read actor property values during PIE |
 | `save_asset` | Live | Save one or all modified assets |
+
+## Ontology
+
+The `.kantext/` directory contains a compositional ontology that models UE concepts, the MCP's tool surface, cross-cutting traits, and development workflows:
+
+| File | Purpose |
+|------|---------|
+| `Kantext.kant` | Root config + MCP identity + signal definitions |
+| `UEConcepts.kant` | Asset taxonomy, type system, relationships, module system, config system |
+| `BlueprintOntology.kant` | Blueprint internal anatomy + editor state machines |
+| `Traits.kant` | Cross-cutting concerns: replication, serialization, GC, threading, Blueprint exposure |
+| `Workflows.kant` | Common development workflows as tool-call sequences |
+| `McpSurface.kant` | Tool surface with discovery links back to concepts and workflows |
+
+The ontology follows a reflection-first design — concepts are organized around what the tools discover, with `discover_via` links connecting concepts to the tools that reveal them.
 
 ## Live Mode Setup
 
@@ -203,7 +245,9 @@ ue-mcp/
 │   │   ├── AssetService.cs       # UAssetAPI wrapper for asset reading
 │   │   ├── BlueprintReader.cs    # Blueprint structure parsing
 │   │   ├── DataTableReader.cs    # DataTable parsing
-│   │   └── AssetSearch.cs        # Project-wide asset search
+│   │   ├── AssetSearch.cs        # Project-wide asset search
+│   │   ├── ConfigReader.cs       # Config/INI file parser
+│   │   └── CppHeaderParser.cs   # C++ header UE macro parser
 │   ├── Live/
 │   │   ├── EditorBridge.cs       # WebSocket client to UE editor
 │   │   └── BridgeMessage.cs      # Bridge protocol message types
@@ -212,6 +256,9 @@ ue-mcp/
 │       ├── AssetTools.cs         # read_asset, list_assets, search_assets
 │       ├── BlueprintTools.cs     # read_blueprint, list_variables/functions
 │       ├── DataTableTools.cs     # read_datatable
+│       ├── ReflectionTools.cs    # reflect_class, reflect_struct, reflect_enum
+│       ├── ConfigTools.cs        # read_config, search_config, list_config_tags
+│       ├── CppTools.cs           # read_cpp_header, read_module, list_modules
 │       └── EditorTools.cs        # Live editor operations
 ├── plugin/ue_mcp_bridge/         # UE Editor Python plugin
 │   ├── bridge_server.py          # WebSocket server
@@ -219,8 +266,16 @@ ue-mcp/
 │   │   ├── asset.py              # Asset reading via editor reflection
 │   │   ├── blueprint.py          # Blueprint CRUD operations
 │   │   ├── editor.py             # Console commands, property setting
-│   │   └── pie.py                # Play-in-Editor control
+│   │   ├── pie.py                # Play-in-Editor control
+│   │   └── reflection.py         # Live type reflection (classes, structs, enums, tags)
 │   └── startup_script.py         # Auto-start for editor
+├── .kantext/                     # Ontology (Kantext compositional language)
+│   ├── Kantext.kant              # Root config + signals
+│   ├── UEConcepts.kant           # Asset taxonomy + type system + modules + config
+│   ├── BlueprintOntology.kant    # Blueprint anatomy + editor states
+│   ├── Traits.kant               # Cross-cutting: replication, serialization, GC, threading
+│   ├── Workflows.kant            # Development workflow patterns
+│   └── McpSurface.kant           # Tool surface with discovery links
 └── lib/UAssetAPI/                # Git submodule
 ```
 
