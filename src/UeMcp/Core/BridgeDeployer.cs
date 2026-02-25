@@ -100,17 +100,19 @@ public class BridgeDeployer
             using var stream = assembly.GetManifestResourceStream(resourceName);
             if (stream == null) continue;
 
+            var newBytes = new byte[stream.Length];
+            stream.ReadExactly(newBytes);
+
             bool shouldWrite = true;
             if (File.Exists(targetPath))
             {
-                using var existing = File.OpenRead(targetPath);
-                shouldWrite = existing.Length != stream.Length;
+                var existingBytes = File.ReadAllBytes(targetPath);
+                shouldWrite = !existingBytes.AsSpan().SequenceEqual(newBytes);
             }
 
             if (shouldWrite)
             {
-                using var fs = File.Create(targetPath);
-                stream.CopyTo(fs);
+                File.WriteAllBytes(targetPath, newBytes);
                 anyDeployed = true;
                 _logger.LogDebug("Deployed: {Path}", relativePath);
             }

@@ -272,8 +272,14 @@ def demo_scene_from_nothing(params: dict) -> dict:
         if comp:
             comp.set_editor_property("fog_density", 0.035)
             comp.set_editor_property("fog_height_falloff", 0.5)
-            comp.set_editor_property("fog_inscattering_color", unreal.LinearColor(0.02, 0.02, 0.06, 1))
             comp.set_editor_property("fog_max_opacity", 0.85)
+            try:
+                comp.set_editor_property("fog_inscattering_color", unreal.LinearColor(0.02, 0.02, 0.06, 1))
+            except Exception:
+                try:
+                    comp.set_editor_property("inscattering_color_cubemap_angle", 0.0)
+                except Exception:
+                    pass
         log.append("Exponential height fog placed (dark blue-purple)")
     except Exception as e:
         log.append(f"Fog failed: {e}")
