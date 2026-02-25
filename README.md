@@ -282,6 +282,138 @@ import ue_mcp_bridge; ue_mcp_bridge.start()
 | `erase_foliage` | Live | Remove foliage instances in a radius |
 | `set_foliage_type_settings` | Live | Modify foliage type settings (partial update) |
 
+### Sequencer / Cinematics (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `create_level_sequence` | Live | Create a new Level Sequence for cinematics or animation |
+| `get_sequence_info` | Live | Inspect a sequence: display rate, bindings, tracks |
+| `add_sequence_track` | Live | Bind an actor or add a master track to a sequence |
+| `play_sequence` | Live | Play, stop, or pause the active sequencer |
+
+### Niagara VFX (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `list_niagara_systems` | Live | List Niagara Systems and Emitters in a directory |
+| `get_niagara_info` | Live | Inspect a Niagara System: emitters, class info |
+| `spawn_niagara_at_location` | Live | Spawn a particle system at a world location |
+| `set_niagara_parameter` | Live | Set a parameter (float, bool, vector) on an actor's NiagaraComponent |
+
+### Lighting (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `spawn_light` | Live | Place a light (point, spot, directional, rect, sky) in the level |
+| `set_light_properties` | Live | Adjust intensity, color, temperature, attenuation, shadows, cone angles |
+| `build_lighting` | Live | Rebuild lighting at a given quality (Preview/Medium/High/Production) |
+
+### Audio (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `list_sound_assets` | Live | List SoundWave, SoundCue, MetaSound, SoundMix, SoundClass assets |
+| `play_sound_at_location` | Live | Preview a sound at a world location |
+| `spawn_ambient_sound` | Live | Place an AmbientSound actor with a sound asset |
+
+### Navigation (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `rebuild_navigation` | Live | Regenerate the navmesh for the current level |
+| `get_navmesh_info` | Live | Query navigation system status and nav data |
+| `project_point_to_navigation` | Live | Find the nearest navigable point to a location |
+| `spawn_nav_modifier_volume` | Live | Place a NavModifierVolume to mark walkable/unwalkable areas |
+
+### Splines (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `get_spline_info` | Live | Read a SplineComponent: points, length, closed state |
+| `set_spline_points` | Live | Replace all points on a SplineComponent |
+
+### Volumes (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `spawn_volume` | Live | Place a volume: trigger, blocking, postProcess, audio, killZ, etc. |
+| `list_volumes` | Live | List all volume actors in the level |
+| `set_volume_properties` | Live | Set arbitrary properties on a volume actor |
+
+### Material Authoring (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `create_material` | Live | Create a new base Material asset |
+| `set_material_shading_model` | Live | Set shading model: DefaultLit, Unlit, Subsurface, ClearCoat, etc. |
+| `set_material_base_color` | Live | Set base color to a constant RGBA via a Constant4Vector expression |
+| `connect_texture_to_material` | Live | Wire a texture sample to BaseColor, Normal, Roughness, Metallic, etc. |
+
+### Textures (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `list_textures` | Live | List Texture2D, TextureCube, render targets in a directory |
+| `get_texture_info` | Live | Inspect compression, LOD group, sRGB, streaming settings |
+| `set_texture_settings` | Live | Set sRGB, compression, LOD group, never-stream |
+| `import_texture` | Live | Import a PNG/TGA/EXR/HDR file into the project |
+
+### Level Management (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `get_current_level` | Live | Current level path, name, and streaming sublevels |
+| `load_level` | Live | Open a level by asset path |
+| `save_current_level` | Live | Save the active level |
+| `list_levels` | Live | List all World assets (maps) in a directory |
+| `create_new_level` | Live | Create a new empty level |
+
+### Enhanced Input (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `create_input_action` | Live | Create an InputAction asset (Bool, Axis1D, Axis2D, Axis3D) |
+| `create_input_mapping_context` | Live | Create an InputMappingContext asset |
+| `list_input_assets` | Live | List InputAction and InputMappingContext assets in a directory |
+
+### AI / Behavior Trees (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `list_behavior_trees` | Live | List BehaviorTree and BlackboardData assets |
+| `get_behavior_tree_info` | Live | Inspect a Behavior Tree: associated Blackboard and keys |
+| `create_blackboard` | Live | Create a Blackboard Data asset |
+| `create_behavior_tree` | Live | Create a Behavior Tree, optionally linked to a Blackboard |
+
+### Skeleton / Physics Assets (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `get_skeleton_info` | Live | Skeleton or SkeletalMesh info: sockets, bone count |
+| `list_sockets` | Live | All sockets with bone names, locations, rotations |
+| `list_skeletal_meshes` | Live | List SkeletalMesh, Skeleton, PhysicsAsset assets |
+| `get_physics_asset_info` | Live | Physics Asset body setups and bone associations |
+
+### Widget Authoring (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `create_widget_blueprint` | Live | Create a new Widget Blueprint (UMG) asset |
+| `list_widget_blueprints` | Live | List Widget Blueprints in a directory |
+| `get_widget_tree` | Live | Widget hierarchy: root widget, classes, structure |
+
+### Performance & Viewport (Live Mode)
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `get_editor_performance_stats` | Live | Total actors, top actor classes by count |
+| `run_stat_command` | Live | Toggle stat overlays (stat fps, stat unit, stat memory, etc.) |
+| `set_scalability` | Live | Set rendering quality: Low, Medium, High, Epic, Cinematic |
+| `capture_screenshot` | Live | High-res screenshot from the active viewport |
+| `get_viewport_info` | Live | Current editor camera location and rotation |
+| `set_viewport_camera` | Live | Move the editor camera to a position/rotation |
+| `focus_viewport_on_actor` | Live | Focus the viewport on a specific actor |
+
 ### Editor (Live Mode)
 
 | Tool | Mode | Description |
