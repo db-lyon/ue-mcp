@@ -1,10 +1,11 @@
 """
 WebSocket server that receives JSON-RPC requests from the MCP server
-and dispatches them to the appropriate handler.
+and dispatches them to the appropriate handler on the game thread.
 """
 
 import asyncio
 import json
+import queue
 import threading
 import traceback
 from typing import Any
@@ -30,6 +31,8 @@ class BridgeServer:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._server = None
         self._handlers: dict[str, Any] = {}
+        self._game_thread_queue: queue.Queue = queue.Queue()
+        self._tick_handle = None
         self._register_handlers()
 
     def _register_handlers(self):
@@ -68,15 +71,40 @@ class BridgeServer:
                 "  <UE_INSTALL>/Engine/Binaries/ThirdParty/Python3/Win64/python.exe -m pip install websockets"
             )
 
+        if HAS_UNREAL:
+            self._tick_handle = unreal.register_slate_post_tick_callback(self._process_game_thread_queue)
+
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
 
     def stop(self):
+        if self._tick_handle is not None and HAS_UNREAL:
+            unreal.unregister_slate_post_tick_callback(self._tick_handle)
+            self._tick_handle = None
         if self._loop is not None:
             self._loop.call_soon_threadsafe(self._loop.stop)
         if self._thread is not None:
             self._thread.join(timeout=5)
             self._thread = None
+
+    def _process_game_thread_queue(self, delta_time):
+        """Called every Slate tick on the game thread. Drains pending handler calls."""
+        while not self._game_thread_queue.empty():
+            try:
+                handler, params, future, loop = self._game_thread_queue.get_nowait()
+                try:
+                    result = handler(params)
+                    loop.call_soon_threadsafe(future.set_result, result)
+                except Exception as e:
+                    loop.call_soon_threadsafe(future.set_exception, e)
+            except queue.Empty:
+                break
+
+    async def _run_on_game_thread(self, handler, params):
+        """Queue a handler for game-thread execution and await the result."""
+        future = self._loop.create_future()
+        self._game_thread_queue.put((handler, params, future, self._loop))
+        return await asyncio.wait_for(future, timeout=30.0)
 
     def _run_loop(self):
         self._loop = asyncio.new_event_loop()
@@ -132,8 +160,8 @@ class BridgeServer:
             }
 
         try:
-            if asyncio.iscoroutinefunction(handler):
-                result = await handler(params)
+            if HAS_UNREAL:
+                result = await self._run_on_game_thread(handler, params)
             else:
                 result = handler(params)
 
