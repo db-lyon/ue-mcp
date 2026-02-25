@@ -12,6 +12,7 @@ CYLINDER = "/Engine/BasicShapes/Cylinder"
 
 FOLDER = "Demo_Scene"
 MAT_DIR = "/Game/Demo"
+DEMO_LEVEL = "/Game/Demo/DemoLevel"
 
 
 def _spawn_mesh(label, mesh_path, location, rotation=(0, 0, 0), scale=(1, 1, 1)):
@@ -118,22 +119,27 @@ def demo_scene_from_nothing(params: dict) -> dict:
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
-    clean = params.get("clean", True)
     log = []
 
-    # ── Clean previous run ──────────────────────────────────────────
-    if clean:
-        removed = 0
-        for a in list(unreal.EditorLevelLibrary.get_all_level_actors()):
-            if a.get_actor_label().startswith("Demo_"):
-                unreal.EditorLevelLibrary.destroy_actor(a)
-                removed += 1
-        if removed:
-            log.append(f"Cleaned {removed} previous demo actors")
-        for p in ["M_Demo_Floor", "M_Demo_Glow", "M_Demo_Pillar"]:
-            full = f"{MAT_DIR}/{p}"
-            if unreal.EditorAssetLibrary.does_asset_exist(full):
-                unreal.EditorAssetLibrary.delete_asset(full)
+    # ── Create and open a fresh level ───────────────────────────────
+    try:
+        if hasattr(unreal, "LevelEditorSubsystem"):
+            subsys = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+            if subsys and hasattr(subsys, "new_level"):
+                subsys.new_level(DEMO_LEVEL)
+                log.append(f"New level created and opened: {DEMO_LEVEL}")
+            elif subsys and hasattr(subsys, "new_level_from_template"):
+                subsys.new_level_from_template(DEMO_LEVEL, "")
+                log.append(f"New level created and opened: {DEMO_LEVEL}")
+            else:
+                unreal.EditorLevelLibrary.new_level(DEMO_LEVEL) if hasattr(unreal.EditorLevelLibrary, "new_level") else None
+                log.append(f"New level created and opened: {DEMO_LEVEL}")
+        else:
+            world = unreal.EditorLevelLibrary.get_editor_world()
+            unreal.SystemLibrary.execute_console_command(world, "MAP NEW")
+            log.append("New level created via console command")
+    except Exception as e:
+        log.append(f"Level creation failed ({e}), building in current level")
 
     # ── Materials ───────────────────────────────────────────────────
     try:
@@ -320,13 +326,25 @@ def demo_scene_from_nothing(params: dict) -> dict:
     except Exception as e:
         log.append(f"Camera positioning failed: {e}")
 
+    # ── Save the level ─────────────────────────────────────────────
+    try:
+        if hasattr(unreal, "LevelEditorSubsystem"):
+            subsys = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+            if subsys and hasattr(subsys, "save_current_level"):
+                subsys.save_current_level()
+                log.append("Level saved")
+    except Exception:
+        pass
+
     ok_count = sum(1 for s in log if "failed" not in s.lower() and "skipped" not in s.lower())
     return {
         "scene": "Neon Shrine",
+        "level": DEMO_LEVEL,
         "description": (
-            "Dark reflective floor, central glowing sphere on a pedestal, "
+            "Fresh level with dark reflective floor, glowing sphere on a pedestal, "
             "4 pillars with accent orbs, cyan/magenta/amber/violet neon lights, "
-            "moonlight, fog, bloom. All actors in outliner folder 'Demo_Scene'."
+            "moonlight, fog, bloom. All in outliner folder 'Demo_Scene'. "
+            "Run demo_cleanup to delete everything including the level."
         ),
         "stepsCompleted": ok_count,
         "totalSteps": len(log),
@@ -337,26 +355,64 @@ def demo_scene_from_nothing(params: dict) -> dict:
 # ── Cleanup ─────────────────────────────────────────────────────────
 
 def demo_cleanup(params: dict) -> dict:
-    """Remove all Demo_ actors and demo material assets."""
+    """Remove demo level, all Demo_ actors, and demo material assets."""
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
+    log = []
+
+    # If we're currently in the demo level, load a blank level first
+    # so we can delete the demo level asset without it being locked.
+    current = unreal.EditorLevelLibrary.get_editor_world()
+    current_path = current.get_path_name() if current else ""
+    if "DemoLevel" in current_path or "Demo" in current_path:
+        try:
+            if hasattr(unreal, "LevelEditorSubsystem"):
+                subsys = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+                if subsys and hasattr(subsys, "new_level"):
+                    subsys.new_level("/Game/Maps/Untitled")
+            log.append("Switched away from demo level")
+        except Exception as e:
+            log.append(f"Could not switch level: {e}")
+
+    # Remove demo actors from whatever level is now open
     removed = 0
     for a in list(unreal.EditorLevelLibrary.get_all_level_actors()):
         if a.get_actor_label().startswith("Demo_"):
             unreal.EditorLevelLibrary.destroy_actor(a)
             removed += 1
+    if removed:
+        log.append(f"Removed {removed} demo actors")
 
+    # Delete demo material assets
     mats_removed = 0
     for name in ["M_Demo_Floor", "M_Demo_Glow", "M_Demo_Pillar"]:
         path = f"{MAT_DIR}/{name}"
         if unreal.EditorAssetLibrary.does_asset_exist(path):
             unreal.EditorAssetLibrary.delete_asset(path)
             mats_removed += 1
+    if mats_removed:
+        log.append(f"Deleted {mats_removed} demo materials")
+
+    # Delete the demo level asset
+    if unreal.EditorAssetLibrary.does_asset_exist(DEMO_LEVEL):
+        unreal.EditorAssetLibrary.delete_asset(DEMO_LEVEL)
+        log.append(f"Deleted demo level: {DEMO_LEVEL}")
+
+    # Try to remove the /Game/Demo directory if it's now empty
+    try:
+        registry = unreal.AssetRegistryHelpers.get_asset_registry()
+        remaining = registry.get_assets_by_path(MAT_DIR, recursive=True)
+        if len(remaining) == 0:
+            unreal.EditorAssetLibrary.delete_directory(MAT_DIR)
+            log.append("Deleted /Game/Demo directory")
+    except Exception:
+        pass
 
     return {
         "actorsRemoved": removed,
         "materialsRemoved": mats_removed,
+        "log": log,
     }
 
 
