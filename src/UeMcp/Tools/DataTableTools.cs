@@ -38,4 +38,25 @@ public static class DataTableTools
         var resolved = router.ResolveAssetPath(assetPath);
         return reader.ReadDataTable(resolved, rowFilter);
     }
+
+    [McpServerTool, Description(
+        "Reimport a DataTable from a JSON file or JSON string. Replaces all rows in the DataTable " +
+        "with the contents of the JSON. The JSON format must match UE's DataTable JSON schema " +
+        "(array of objects with row names as keys). Requires live editor connection. " +
+        "Automatically saves the asset after a successful import.")]
+    public static async Task<string> reimport_datatable(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the DataTable asset (e.g. '/Game/Data/DT_Items')")] string assetPath,
+        [Description("Absolute filesystem path to a JSON file to import from")] string? jsonPath = null,
+        [Description("Raw JSON string to import (alternative to jsonPath)")] string? jsonString = null)
+    {
+        router.EnsureLiveMode("reimport_datatable");
+        return await bridge.SendAndSerializeAsync("reimport_datatable", new()
+        {
+            ["path"] = assetPath,
+            ["jsonPath"] = jsonPath,
+            ["jsonString"] = jsonString
+        });
+    }
 }

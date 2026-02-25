@@ -124,7 +124,45 @@ def read_datatable(params: dict) -> dict:
     }
 
 
+def reimport_datatable(params: dict) -> dict:
+    """Reimport a DataTable from a JSON file or JSON string."""
+    asset_path = params.get("path", "")
+    json_path = params.get("jsonPath", "")
+    json_string = params.get("jsonString", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    dt = unreal.EditorAssetLibrary.load_asset(asset_path)
+    if dt is None:
+        raise ValueError(f"DataTable not found: {asset_path}")
+
+    if json_path:
+        import os
+        if not os.path.isfile(json_path):
+            raise ValueError(f"JSON file not found: {json_path}")
+        with open(json_path, "r", encoding="utf-8") as f:
+            json_string = f.read()
+
+    if not json_string:
+        raise ValueError("Provide either jsonPath or jsonString")
+
+    result = unreal.DataTableFunctionLibrary.fill_data_table_from_json_string(dt, json_string)
+
+    row_names = unreal.DataTableFunctionLibrary.get_data_table_row_names(dt)
+
+    if result:
+        unreal.EditorAssetLibrary.save_asset(asset_path)
+
+    return {
+        "path": asset_path,
+        "success": result,
+        "rowCount": len(row_names),
+    }
+
+
 HANDLERS = {
     "read_asset": read_asset,
     "read_datatable": read_datatable,
+    "reimport_datatable": reimport_datatable,
 }
