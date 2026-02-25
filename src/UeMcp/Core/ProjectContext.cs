@@ -33,16 +33,22 @@ public class ProjectContext
 
     public string ResolveContentPath(string assetPath)
     {
-        if (Path.IsPathRooted(assetPath))
-            return assetPath;
-
         if (ContentDir == null)
             throw new InvalidOperationException("No project loaded. Call set_project first.");
 
-        var normalized = assetPath
-            .Replace("/Game/", "")
-            .Replace("\\", "/");
+        if (IsGamePath(assetPath))
+        {
+            var stripped = StripGamePrefix(assetPath);
+            if (!stripped.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase) &&
+                !stripped.EndsWith(".umap", StringComparison.OrdinalIgnoreCase))
+                stripped += ".uasset";
+            return Path.Combine(ContentDir, stripped.Replace("/", Path.DirectorySeparatorChar.ToString()));
+        }
 
+        if (Path.IsPathRooted(assetPath))
+            return assetPath;
+
+        var normalized = assetPath.Replace("\\", "/");
         if (!normalized.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase) &&
             !normalized.EndsWith(".umap", StringComparison.OrdinalIgnoreCase))
         {
@@ -51,6 +57,38 @@ public class ProjectContext
 
         return Path.Combine(ContentDir, normalized.Replace("/", Path.DirectorySeparatorChar.ToString()));
     }
+
+    public string ResolveContentDir(string directoryPath)
+    {
+        if (ContentDir == null)
+            throw new InvalidOperationException("No project loaded. Call set_project first.");
+
+        if (IsGamePath(directoryPath))
+        {
+            var stripped = StripGamePrefix(directoryPath).TrimEnd('/');
+            return Path.Combine(ContentDir, stripped.Replace("/", Path.DirectorySeparatorChar.ToString()));
+        }
+
+        if (Path.IsPathRooted(directoryPath))
+            return directoryPath;
+
+        var normalized = directoryPath
+            .Replace("\\", "/")
+            .TrimEnd('/');
+
+        return Path.Combine(ContentDir, normalized.Replace("/", Path.DirectorySeparatorChar.ToString()));
+    }
+
+    private static bool IsGamePath(string path) =>
+        path.StartsWith("/Game/", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/Game", StringComparison.OrdinalIgnoreCase);
+
+    private static string StripGamePrefix(string path) =>
+        path.StartsWith("/Game/", StringComparison.OrdinalIgnoreCase)
+            ? path[6..]
+            : path.Equals("/Game", StringComparison.OrdinalIgnoreCase)
+                ? ""
+                : path;
 
     public string GetRelativeContentPath(string absolutePath)
     {
@@ -88,47 +126,49 @@ public class ProjectContext
 
 public static class EngineVersionResolver
 {
-    private static readonly Dictionary<string, EngineVersion> VersionMap = new(StringComparer.OrdinalIgnoreCase)
+    public static readonly EngineVersion LatestKnown;
+
+    static EngineVersionResolver()
     {
-        ["4.18"] = EngineVersion.VER_UE4_18,
-        ["4.19"] = EngineVersion.VER_UE4_19,
-        ["4.20"] = EngineVersion.VER_UE4_20,
-        ["4.21"] = EngineVersion.VER_UE4_21,
-        ["4.22"] = EngineVersion.VER_UE4_22,
-        ["4.23"] = EngineVersion.VER_UE4_23,
-        ["4.24"] = EngineVersion.VER_UE4_24,
-        ["4.25"] = EngineVersion.VER_UE4_25,
-        ["4.26"] = EngineVersion.VER_UE4_26,
-        ["4.27"] = EngineVersion.VER_UE4_27,
-        ["5.0"] = EngineVersion.VER_UE5_0,
-        ["5.1"] = EngineVersion.VER_UE5_1,
-        ["5.2"] = EngineVersion.VER_UE5_2,
-        ["5.3"] = EngineVersion.VER_UE5_3,
-        ["5.4"] = EngineVersion.VER_UE5_4,
-        ["5.5"] = EngineVersion.VER_UE5_5,
-    };
+        // Discover the highest non-sentinel value in UAssetAPI's EngineVersion enum
+        LatestKnown = Enum.GetValues<EngineVersion>()
+            .Where(v => v != EngineVersion.UNKNOWN
+                     && v != EngineVersion.VER_UE4_AUTOMATIC_VERSION_PLUS_ONE
+                     && v != EngineVersion.VER_UE4_AUTOMATIC_VERSION)
+            .Max();
+    }
 
     public static EngineVersion Resolve(string? engineAssociation)
     {
         if (string.IsNullOrEmpty(engineAssociation))
             return EngineVersion.UNKNOWN;
 
-        if (VersionMap.TryGetValue(engineAssociation, out var version))
+        // Try direct enum lookup: "5.7" -> "VER_UE5_7", "4.27" -> "VER_UE4_27"
+        if (TryResolveFromVersion(engineAssociation, out var version))
             return version;
+
+        // "5.7.1" -> try "5.7"
+        var parts = engineAssociation.Split('.');
+        if (parts.Length > 2 && TryResolveFromVersion($"{parts[0]}.{parts[1]}", out var partial))
+            return partial;
 
         // Custom engine builds use a GUID — default to latest known
         if (Guid.TryParse(engineAssociation, out _))
-            return EngineVersion.VER_UE5_5;
-
-        // Try partial match (e.g. "5.4.1" → "5.4")
-        var parts = engineAssociation.Split('.');
-        if (parts.Length >= 2)
-        {
-            var majorMinor = $"{parts[0]}.{parts[1]}";
-            if (VersionMap.TryGetValue(majorMinor, out var partial))
-                return partial;
-        }
+            return LatestKnown;
 
         return EngineVersion.UNKNOWN;
+    }
+
+    private static bool TryResolveFromVersion(string versionString, out EngineVersion result)
+    {
+        var parts = versionString.Split('.');
+        if (parts.Length != 2 || !int.TryParse(parts[0], out var major) || !int.TryParse(parts[1], out var minor))
+        {
+            result = EngineVersion.UNKNOWN;
+            return false;
+        }
+
+        var enumName = major >= 5 ? $"VER_UE5_{minor}" : $"VER_UE4_{minor}";
+        return Enum.TryParse(enumName, out result);
     }
 }

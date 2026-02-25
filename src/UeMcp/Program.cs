@@ -22,6 +22,7 @@ builder.Services.AddSingleton<AssetSearch>();
 builder.Services.AddSingleton<ConfigReader>();
 builder.Services.AddSingleton<CppHeaderParser>();
 builder.Services.AddSingleton<EditorBridge>();
+builder.Services.AddSingleton<BridgeDeployer>();
 
 builder.Services
     .AddMcpServer(options =>

@@ -19,4 +19,11 @@
     <ProjectReference Include="..\..\lib\UAssetAPI\UAssetAPI\UAssetAPI.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\plugin\ue_mcp_bridge\**\*">
+      <Link>BridgePlugin\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <LogicalName>bridge.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

@@ -32,16 +32,11 @@ public class AssetSearch
             throw new InvalidOperationException("No project loaded.");
 
         var searchDir = directory != null
-            ? _context.ResolveContentPath(directory)
+            ? _context.ResolveContentDir(directory)
             : _context.ContentDir;
 
         if (!Directory.Exists(searchDir))
-        {
-            if (File.Exists(searchDir))
-                searchDir = Path.GetDirectoryName(searchDir)!;
-            else
-                throw new DirectoryNotFoundException($"Directory not found: {searchDir}");
-        }
+            throw new DirectoryNotFoundException($"Directory not found: {searchDir}");
 
         var option = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
         var files = Directory.GetFiles(searchDir, "*.uasset", option)
@@ -93,7 +88,7 @@ public class AssetSearch
             throw new InvalidOperationException("No project loaded.");
 
         var searchDir = directory != null
-            ? _context.ResolveContentPath(directory)
+            ? _context.ResolveContentDir(directory)
             : _context.ContentDir;
 
         if (!Directory.Exists(searchDir))

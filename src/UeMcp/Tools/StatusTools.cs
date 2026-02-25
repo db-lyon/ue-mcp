@@ -32,13 +32,18 @@ public static class StatusTools
     [McpServerTool, Description(
         "Set the Unreal Engine project to work with. Provide the path to the .uproject file " +
         "or the directory containing it. This must be called before using any asset/blueprint tools. " +
-        "Automatically detects the engine version and attempts to connect to a running editor.")]
+        "Automatically detects the engine version, deploys the editor bridge plugin if needed, " +
+        "and attempts to connect to a running editor.")]
     public static async Task<string> set_project(
         ModeRouter router,
         ProjectContext context,
+        BridgeDeployer deployer,
         [Description("Absolute path to the .uproject file or directory containing it")] string projectPath)
     {
         context.SetProject(projectPath);
+
+        var deployResult = deployer.Deploy(context);
+
         await router.TryConnectAsync();
 
         return JsonSerializer.Serialize(new
@@ -49,7 +54,8 @@ public static class StatusTools
             engineVersion = context.EngineVersion.ToString(),
             engineAssociation = context.EngineAssociation,
             mode = router.CurrentMode.ToString().ToLower(),
-            editorConnected = router.IsEditorConnected
+            editorConnected = router.IsEditorConnected,
+            bridgeSetup = deployResult.Summary
         }, new JsonSerializerOptions { WriteIndented = true });
     }
 

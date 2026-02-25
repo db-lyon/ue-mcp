@@ -35,10 +35,43 @@ public class AssetService
 
         var version = _context.EngineVersion;
         if (version == EngineVersion.UNKNOWN)
-            version = EngineVersion.VER_UE5_4;
+            version = EngineVersionResolver.LatestKnown;
 
         _logger.LogDebug("Loading asset {Path} with engine version {Version}", resolvedPath, version);
-        return new UAsset(resolvedPath, version);
+
+        var stream = PathToSharedStream(resolvedPath);
+        var asset = new UAsset(version);
+        asset.FilePath = resolvedPath;
+        asset.UseSeparateBulkDataFiles = stream.hasSeparateUexp;
+        var reader = new AssetBinaryReader(stream.data, true, asset);
+        asset.Read(reader);
+        return asset;
+    }
+
+    /// <summary>
+    /// Replicates UAssetAPI's PathToStream but uses FileShare.ReadWrite
+    /// so assets can be read while the editor has them open.
+    /// </summary>
+    private static (MemoryStream data, bool hasSeparateUexp) PathToSharedStream(string path)
+    {
+        var ms = new MemoryStream();
+        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            fs.CopyTo(ms);
+        }
+
+        bool hasSeparateUexp = false;
+        var uexpPath = Path.ChangeExtension(path, ".uexp");
+        if (File.Exists(uexpPath))
+        {
+            ms.Seek(0, SeekOrigin.End);
+            using var uexpFs = new FileStream(uexpPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            uexpFs.CopyTo(ms);
+            hasSeparateUexp = true;
+        }
+
+        ms.Seek(0, SeekOrigin.Begin);
+        return (ms, hasSeparateUexp);
     }
 
     public string ReadAssetToJson(string resolvedPath)
