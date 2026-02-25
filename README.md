@@ -1,6 +1,6 @@
 # UE-MCP: Unreal Engine Model Context Protocol Server
 
-A hybrid MCP server that gives AI assistants deep read/write access to Unreal Engine projects. 
+A hybrid MCP server that gives AI assistants deep read/write access to Unreal Engine projects — **Windows only**.
 
 Operates in two modes, switching automatically based on whether the editor is running:
 
@@ -42,20 +42,6 @@ sequenceDiagram
 
 Grab `ue-mcp-windows-x64.zip` from [Releases](https://github.com/db-lyon/ue-mcp/releases) and extract it anywhere. No dependencies. The binary is self-contained.
 
-### 2. Configure your MCP client
-
-Add to your MCP configuration (e.g., Cursor `mcp.json` or Claude Desktop `claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "ue-mcp": {
-      "command": "C:\\path\\to\\ue-mcp.exe"
-    }
-  }
-}
-```
-
 <details>
 <summary>Building from source</summary>
 
@@ -71,6 +57,20 @@ Point your MCP config at `dist/ue-mcp.exe`.
 
 </details>
 
+### 2. Configure your MCP client
+
+Add to your MCP configuration (e.g., Cursor `mcp.json` or Claude Desktop `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "ue-mcp": {
+      "command": "C:\\path\\to\\ue-mcp.exe"
+    }
+  }
+}
+```
+
 ### 3. Point it at your UE project
 
 Once the AI assistant is connected, the first thing it should do:
@@ -79,7 +79,48 @@ Once the AI assistant is connected, the first thing it should do:
 set_project("C:/Users/you/Unreal Projects/MyGame/MyGame.uproject")
 ```
 
-This loads the project, detects the engine version, deploys the editor bridge plugin, and attempts to connect to a running editor.
+This automatically:
+- Detects the engine version from the `.uproject`
+- Enables `PythonScriptPlugin` if needed
+- Deploys the WebSocket bridge to `Content/Python/ue_mcp_bridge/`
+- Configures `DefaultEngine.ini` for auto-start on editor launch
+- Installs `websockets` in UE's bundled Python
+- Connects to the editor if it's running
+
+**After the first `set_project`, restart the editor once** so the bridge startup script runs. From then on, the bridge starts automatically with the editor.
+
+### 4. Verify the bridge (optional)
+
+In the editor, open **Window > Developer Tools > Output Log** and filter on `LogPython`. On a successful launch:
+
+```
+LogPython: [UE-MCP] Bridge server started on ws://localhost:9877
+LogPython: [UE-MCP] Bridge listening on ws://localhost:9877
+```
+
+When the MCP connects:
+
+```
+LogPython: [UE-MCP] Client connected from ('127.0.0.1', ...)
+```
+
+If nothing shows up, the startup script didn't run. You can start it manually by switching the Output Log to **Python** mode and running:
+
+```python
+import ue_mcp_bridge; ue_mcp_bridge.start()
+```
+
+## How It Works
+
+1. On startup, the MCP server begins in **offline mode**
+2. When `set_project` is called, it:
+   - Parses the `.uproject` to detect the engine version
+   - Deploys the bridge plugin (enables PythonScriptPlugin, deploys files, configures auto-start, installs websockets)
+   - Attempts a WebSocket connection to `ws://localhost:9877`
+   - If the editor bridge is running → switches to **live mode**
+   - If not → stays in **offline mode**, retries every 15 seconds
+3. In live mode, read operations first try the bridge (richer data from editor reflection), falling back to offline parsing on failure
+4. Write operations (compile, create, modify) are **only available in live mode** since they require the editor to execute safely
 
 ## Tools Reference
 
@@ -250,44 +291,6 @@ This loads the project, detects the engine version, deploys the editor bridge pl
 | `get_runtime_value` | Live | Read actor property values during PIE |
 | `save_asset` | Live | Save one or all modified assets |
 
-## Ontology
-
-The `.kantext/` directory contains a compositional ontology that models UE concepts, the MCP's tool surface, cross-cutting traits, and development workflows:
-
-| File | Purpose |
-|------|---------|
-| `Kantext.kant` | Root config + MCP identity + signal definitions |
-| `UEConcepts.kant` | Asset taxonomy, type system, relationships, module system, config system |
-| `BlueprintOntology.kant` | Blueprint internal anatomy + editor state machines |
-| `Traits.kant` | Cross-cutting concerns: replication, serialization, GC, threading, Blueprint exposure |
-| `Workflows.kant` | Common development workflows as tool-call sequences |
-| `McpSurface.kant` | Tool surface with discovery links back to concepts and workflows |
-
-The ontology follows a reflection-first design. Concepts are organized around what the tools discover, with `discover_via` links connecting concepts to the tools that reveal them.
-
-## Live Mode Setup
-
-Live mode requires a small Python plugin running inside the Unreal Editor. **`set_project` handles all of this automatically:**
-
-1. Enables `PythonScriptPlugin` in your `.uproject`
-2. Deploys the bridge Python files to `Content/Python/ue_mcp_bridge/`
-3. Configures `DefaultEngine.ini` for auto-start on editor launch
-4. Locates UE's bundled Python and runs `pip install websockets`
-
-After `set_project`, restart the editor and the bridge will connect on launch. No manual steps required.
-
-## How the Mode Router Works
-
-1. On startup, the MCP server begins in **offline mode**
-2. When `set_project` is called, it:
-   - Parses the `.uproject` to detect the engine version
-   - Deploys the bridge plugin (enables PythonScriptPlugin, deploys files, configures auto-start, installs websockets)
-   - Attempts a WebSocket connection to `ws://localhost:9877`
-   - If the editor bridge is running → switches to **live mode**
-   - If not → stays in **offline mode**, retries every 15 seconds
-3. In live mode, read operations first try the bridge (richer data from editor reflection), falling back to offline parsing on failure
-4. Write operations (compile, create, modify) are **only available in live mode** since they require the editor to execute safely
-
 ## Project Structure
 
 ```
@@ -351,6 +354,21 @@ ue-mcp/
 │   └── McpSurface.kant           # Tool surface with discovery links
 └── lib/UAssetAPI/                # Git submodule
 ```
+
+## Ontology
+
+The `.kantext/` directory contains a compositional ontology that models UE concepts, the MCP's tool surface, cross-cutting traits, and development workflows:
+
+| File | Purpose |
+|------|---------|
+| `Kantext.kant` | Root config + MCP identity + signal definitions |
+| `UEConcepts.kant` | Asset taxonomy, type system, relationships, module system, config system |
+| `BlueprintOntology.kant` | Blueprint internal anatomy + editor state machines |
+| `Traits.kant` | Cross-cutting concerns: replication, serialization, GC, threading, Blueprint exposure |
+| `Workflows.kant` | Common development workflows as tool-call sequences |
+| `McpSurface.kant` | Tool surface with discovery links back to concepts and workflows |
+
+The ontology follows a reflection-first design. Concepts are organized around what the tools discover, with `discover_via` links connecting concepts to the tools that reveal them.
 
 ## Supported Engine Versions
 

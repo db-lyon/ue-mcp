@@ -14,7 +14,7 @@ public class BridgeDeployer
     private const string BridgeDirName = "ue_mcp_bridge";
     private const string PythonPluginName = "PythonScriptPlugin";
     private const string StartupIniSection = "[/Script/PythonScriptPlugin.PythonScriptPluginSettings]";
-    private const string StartupScriptLine = "+StartupScripts=/Game/Python/ue_mcp_bridge/startup_script.py";
+    private const string StartupScriptLine = "+StartupScripts=ue_mcp_bridge/startup_script.py";
 
     public BridgeDeployer(ILogger<BridgeDeployer> logger)
     {
@@ -262,6 +262,17 @@ public class BridgeDeployer
         }
 
         var content = File.ReadAllText(iniPath);
+
+        bool hasOldEntry = content.Contains("/Game/Python/ue_mcp_bridge/startup_script.py", StringComparison.OrdinalIgnoreCase);
+        if (hasOldEntry)
+        {
+            content = content.Replace(
+                "+StartupScripts=/Game/Python/ue_mcp_bridge/startup_script.py",
+                "+StartupScripts=ue_mcp_bridge/startup_script.py");
+            File.WriteAllText(iniPath, content);
+            _logger.LogInformation("Fixed startup script path in DefaultEngine.ini");
+            return true;
+        }
 
         if (content.Contains("ue_mcp_bridge/startup_script.py", StringComparison.OrdinalIgnoreCase))
         {
