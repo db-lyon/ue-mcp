@@ -120,8 +120,33 @@ def redo(params: dict) -> dict:
     }
 
 
+def execute_python(params: dict) -> dict:
+    """Execute arbitrary Python code inside the editor's Python environment."""
+    code = params.get("code", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    if not code.strip():
+        raise ValueError("No code provided")
+
+    local_vars = {"unreal": unreal, "__result__": None}
+    exec(code, {"unreal": unreal, "__builtins__": __builtins__}, local_vars)
+
+    result = local_vars.get("__result__")
+    if result is not None:
+        if not isinstance(result, (dict, list, str, int, float, bool, type(None))):
+            result = str(result)
+
+    return {
+        "success": True,
+        "result": result,
+    }
+
+
 HANDLERS = {
     "execute_command": execute_command,
+    "execute_python": execute_python,
     "set_property": set_property,
     "save_asset": save_asset,
     "undo": undo,

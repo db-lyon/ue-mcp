@@ -1,6 +1,6 @@
 """
 Play-in-Editor (PIE) handlers.
-Control PIE sessions and read runtime values from the game world.
+Control PIE sessions, hot reload, and read runtime values from the game world.
 """
 
 try:
@@ -18,15 +18,39 @@ def pie_control(params: dict) -> dict:
         raise RuntimeError("Unreal module not available")
 
     if action == "start":
-        unreal.EditorLevelLibrary.editor_play_simulate()
+        automation = unreal.AutomationLibrary
+        if hasattr(automation, "begin_play_map_in_pie"):
+            automation.begin_play_map_in_pie()
+        elif hasattr(unreal, "LevelEditorSubsystem"):
+            subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+            if subsystem:
+                subsystem.editor_play_simulate()
+        else:
+            unreal.EditorLevelLibrary.editor_play_simulate()
         return {"action": "start", "success": True}
 
     elif action == "stop":
-        unreal.EditorLevelLibrary.editor_end_play()
+        if hasattr(unreal, "LevelEditorSubsystem"):
+            subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+            if subsystem:
+                subsystem.editor_end_play()
+            else:
+                unreal.EditorLevelLibrary.editor_end_play()
+        else:
+            unreal.EditorLevelLibrary.editor_end_play()
         return {"action": "stop", "success": True}
 
     elif action == "status":
-        is_playing = unreal.EditorLevelLibrary.is_in_play_in_editor()
+        is_playing = False
+        if hasattr(unreal, "LevelEditorSubsystem"):
+            subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+            if subsystem and hasattr(subsystem, "is_in_play_in_editor"):
+                is_playing = subsystem.is_in_play_in_editor()
+            else:
+                is_playing = unreal.EditorLevelLibrary.is_in_play_in_editor() if hasattr(unreal.EditorLevelLibrary, "is_in_play_in_editor") else False
+        else:
+            is_playing = unreal.EditorLevelLibrary.is_in_play_in_editor() if hasattr(unreal.EditorLevelLibrary, "is_in_play_in_editor") else False
+
         return {
             "action": "status",
             "isPlaying": is_playing,
@@ -34,6 +58,18 @@ def pie_control(params: dict) -> dict:
 
     else:
         raise ValueError(f"Unknown PIE action: {action}. Use 'start', 'stop', or 'status'.")
+
+
+def hot_reload(params: dict) -> dict:
+    """Trigger a live code / hot reload of C++ modules."""
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    world = unreal.EditorLevelLibrary.get_editor_world()
+    if world:
+        unreal.SystemLibrary.execute_console_command(world, "LiveCoding.Compile")
+
+    return {"success": True, "message": "Live coding compile triggered"}
 
 
 def get_runtime_value(params: dict) -> dict:
@@ -44,7 +80,11 @@ def get_runtime_value(params: dict) -> dict:
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
-    if not unreal.EditorLevelLibrary.is_in_play_in_editor():
+    is_playing = False
+    if hasattr(unreal.EditorLevelLibrary, "is_in_play_in_editor"):
+        is_playing = unreal.EditorLevelLibrary.is_in_play_in_editor()
+
+    if not is_playing:
         raise RuntimeError("PIE is not active. Start a PIE session first.")
 
     world = unreal.EditorLevelLibrary.get_game_world()
@@ -100,5 +140,6 @@ def _serialize_runtime_value(val):
 
 HANDLERS = {
     "pie_control": pie_control,
+    "hot_reload": hot_reload,
     "get_runtime_value": get_runtime_value,
 }

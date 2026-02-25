@@ -280,6 +280,7 @@ import ue_mcp_bridge; ue_mcp_bridge.start()
 | Tool | Mode | Description |
 |------|------|-------------|
 | `editor_execute` | Live | Run a console command in the editor |
+| `execute_python` | Live | Run arbitrary Python in the editor's environment (escape hatch for anything) |
 | `set_property` | Live | Set a property value with undo support |
 | `undo` | Live | Undo last editor action(s). Reverts any mutation |
 | `redo` | Live | Redo last undone action(s) |
@@ -290,6 +291,7 @@ import ue_mcp_bridge; ue_mcp_bridge.start()
 | `connect_blueprint_pins` | Live | Wire two pins between nodes |
 | `play_in_editor` | Live | Start/stop/query PIE sessions |
 | `get_runtime_value` | Live | Read actor property values during PIE |
+| `hot_reload` | Live | Trigger Live Coding compile (Ctrl+Alt+F11) without restarting the editor |
 | `save_asset` | Live | Save one or all modified assets |
 
 ## Project Structure

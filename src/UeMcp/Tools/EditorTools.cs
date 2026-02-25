@@ -22,6 +22,20 @@ public static class EditorTools
     }
 
     [McpServerTool, Description(
+        "Execute arbitrary Python code inside the Unreal Editor's Python environment. " +
+        "Has full access to the 'unreal' module. Runs on the game thread. " +
+        "Set __result__ to return data to the caller. " +
+        "Example: '__result__ = [str(a.get_actor_label()) for a in unreal.EditorLevelLibrary.get_all_level_actors()]'")]
+    public static async Task<string> execute_python(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Python code to execute. Set __result__ to a JSON-serializable value to return data.")] string code)
+    {
+        router.EnsureLiveMode("execute_python");
+        return await bridge.SendAndSerializeAsync("execute_python", new() { ["code"] = code });
+    }
+
+    [McpServerTool, Description(
         "Set a property value on an asset through the editor. Requires live editor connection. " +
         "Changes are made through the editor's property system with full undo support.")]
     public static async Task<string> set_property(
@@ -119,6 +133,17 @@ public static class EditorTools
             ["actorPath"] = actorPath,
             ["propertyName"] = propertyName
         });
+    }
+
+    [McpServerTool, Description(
+        "Trigger a Live Coding hot reload to recompile C++ changes without restarting the editor. " +
+        "Equivalent to pressing Ctrl+Alt+F11 in the editor. Requires live editor connection.")]
+    public static async Task<string> hot_reload(
+        ModeRouter router,
+        EditorBridge bridge)
+    {
+        router.EnsureLiveMode("hot_reload");
+        return await bridge.SendAndSerializeAsync("hot_reload");
     }
 
     [McpServerTool, Description(
