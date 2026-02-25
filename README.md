@@ -1,13 +1,13 @@
-# UE-MCP — Unreal Engine Model Context Protocol Server
+# UE-MCP: Unreal Engine Model Context Protocol Server
 
 A hybrid MCP server that gives AI assistants deep read/write access to Unreal Engine projects. 
 
 Operates in two modes, switching automatically based on whether the editor is running:
 
-- **Offline mode** — Parses raw `.uasset` / `.umap` binaries using [UAssetAPI](https://github.com/atenfyr/UAssetAPI). Reads C++ headers, config files, and module structure. No Unreal Editor required.
-- **Live mode** — Connects to a running Unreal Editor via a WebSocket bridge plugin for full read/write access with undo, compilation, runtime reflection, and PIE introspection.
+- **Offline mode** parses raw `.uasset` / `.umap` binaries using [UAssetAPI](https://github.com/atenfyr/UAssetAPI). Reads C++ headers, config files, and module structure. No Unreal Editor required.
+- **Live mode** connects to a running Unreal Editor via a WebSocket bridge plugin for full read/write access with undo, compilation, runtime reflection, and PIE introspection.
 
-## **Offline** — no editor required:
+## **Offline** (no editor required)
 
 ```mermaid
 sequenceDiagram
@@ -21,7 +21,7 @@ sequenceDiagram
     MCP-->>AI: Blueprint structure as JSON
 ```
 
-## **Live** — connected to a running editor:
+## **Live** (connected to a running editor)
 
 ```mermaid
 sequenceDiagram
@@ -48,7 +48,7 @@ Grab the latest release for your platform from [Releases](https://github.com/db-
 | Linux | `ue-mcp-linux-x64.tar.gz` |
 | macOS (Apple Silicon) | `ue-mcp-macos-arm64.tar.gz` |
 
-Extract it anywhere. No dependencies — the binary is self-contained.
+Extract it anywhere. No dependencies. The binary is self-contained.
 
 ### 2. Configure your MCP client
 
@@ -198,7 +198,7 @@ This loads the project, detects the engine version, and attempts to connect to a
 | `list_widget_blueprints` | Live | List Widget Blueprints in a directory |
 | `read_widget_animations` | Live | Read UMG animations: names, lengths, bindings |
 
-### PCG — Procedural Content Generation (Live Mode)
+### PCG / Procedural Content Generation (Live Mode)
 
 | Tool | Mode | Description |
 |------|------|-------------|
@@ -247,7 +247,7 @@ This loads the project, detects the engine version, and attempts to connect to a
 |------|------|-------------|
 | `editor_execute` | Live | Run a console command in the editor |
 | `set_property` | Live | Set a property value with undo support |
-| `undo` | Live | Undo last editor action(s) — reverts any mutation |
+| `undo` | Live | Undo last editor action(s). Reverts any mutation |
 | `redo` | Live | Redo last undone action(s) |
 | `compile_blueprint` | Live | Compile a Blueprint and get error feedback |
 | `create_blueprint` | Live | Create a new Blueprint with specified parent class |
@@ -271,7 +271,7 @@ The `.kantext/` directory contains a compositional ontology that models UE conce
 | `Workflows.kant` | Common development workflows as tool-call sequences |
 | `McpSurface.kant` | Tool surface with discovery links back to concepts and workflows |
 
-The ontology follows a reflection-first design — concepts are organized around what the tools discover, with `discover_via` links connecting concepts to the tools that reveal them.
+The ontology follows a reflection-first design. Concepts are organized around what the tools discover, with `discover_via` links connecting concepts to the tools that reveal them.
 
 ## Live Mode Setup
 
@@ -324,7 +324,7 @@ Or use an Editor Utility Blueprint/Widget that runs the Python command on startu
    - If the editor bridge is running → switches to **live mode**
    - If not → stays in **offline mode**, retries every 15 seconds
 3. In live mode, read operations first try the bridge (richer data from editor reflection), falling back to offline parsing on failure
-4. Write operations (compile, create, modify) are **only available in live mode** — they require the editor to execute safely
+4. Write operations (compile, create, modify) are **only available in live mode** since they require the editor to execute safely
 
 ## Project Structure
 
@@ -393,7 +393,7 @@ ue-mcp/
 
 Offline mode (via UAssetAPI) supports: **UE 4.13 through 5.5+**
 
-Live mode supports whatever version of Unreal Editor you're running — it uses the editor's own reflection system.
+Live mode supports whatever version of Unreal Editor you're running. It uses the editor's own reflection system.
 
 ## License
 
