@@ -49,6 +49,21 @@ class BridgeServer:
         from .handlers import pcg as pcg_h
         from .handlers import landscape as landscape_h
         from .handlers import foliage as foliage_h
+        from .handlers import sequencer as sequencer_h
+        from .handlers import niagara as niagara_h
+        from .handlers import lighting as lighting_h
+        from .handlers import audio as audio_h
+        from .handlers import navigation as nav_h
+        from .handlers import spline as spline_h
+        from .handlers import volume as volume_h
+        from .handlers import material_authoring as mat_auth_h
+        from .handlers import texture as texture_h
+        from .handlers import level_management as level_mgmt_h
+        from .handlers import input_system as input_h
+        from .handlers import behavior_tree as bt_h
+        from .handlers import skeleton as skeleton_h
+        from .handlers import widget as widget_h
+        from .handlers import performance as perf_h
 
         self._handlers.update(asset_h.HANDLERS)
         self._handlers.update(bp_h.HANDLERS)
@@ -63,6 +78,21 @@ class BridgeServer:
         self._handlers.update(pcg_h.HANDLERS)
         self._handlers.update(landscape_h.HANDLERS)
         self._handlers.update(foliage_h.HANDLERS)
+        self._handlers.update(sequencer_h.HANDLERS)
+        self._handlers.update(niagara_h.HANDLERS)
+        self._handlers.update(lighting_h.HANDLERS)
+        self._handlers.update(audio_h.HANDLERS)
+        self._handlers.update(nav_h.HANDLERS)
+        self._handlers.update(spline_h.HANDLERS)
+        self._handlers.update(volume_h.HANDLERS)
+        self._handlers.update(mat_auth_h.HANDLERS)
+        self._handlers.update(texture_h.HANDLERS)
+        self._handlers.update(level_mgmt_h.HANDLERS)
+        self._handlers.update(input_h.HANDLERS)
+        self._handlers.update(bt_h.HANDLERS)
+        self._handlers.update(skeleton_h.HANDLERS)
+        self._handlers.update(widget_h.HANDLERS)
+        self._handlers.update(perf_h.HANDLERS)
 
     def start(self):
         if websockets is None:
