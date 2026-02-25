@@ -64,6 +64,7 @@ class BridgeServer:
         from .handlers import skeleton as skeleton_h
         from .handlers import widget as widget_h
         from .handlers import performance as perf_h
+        from .handlers import demo as demo_h
 
         self._handlers.update(asset_h.HANDLERS)
         self._handlers.update(bp_h.HANDLERS)
@@ -93,6 +94,7 @@ class BridgeServer:
         self._handlers.update(skeleton_h.HANDLERS)
         self._handlers.update(widget_h.HANDLERS)
         self._handlers.update(perf_h.HANDLERS)
+        self._handlers.update(demo_h.HANDLERS)
 
     def start(self):
         if websockets is None:
