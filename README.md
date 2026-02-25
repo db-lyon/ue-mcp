@@ -150,6 +150,13 @@ import ue_mcp_bridge; ue_mcp_bridge.start()
 | `list_blueprint_variables` | Both | All variables with types, flags, and default values |
 | `list_blueprint_functions` | Both | All functions with parameters and bytecode size |
 | `read_blueprint_graph` | Both | Nodes and connections within a specific graph |
+| `set_blueprint_variable_properties` | Live | Set variable visibility, replication, category, tooltip |
+| `create_blueprint_function` | Live | Create a new function graph in a Blueprint |
+| `delete_blueprint_function` | Live | Delete a function graph from a Blueprint |
+| `rename_blueprint_function` | Live | Rename a function or graph in a Blueprint |
+| `delete_blueprint_node` | Live | Remove a node from a Blueprint graph |
+| `set_blueprint_node_property` | Live | Set a property on a Blueprint graph node |
+| `add_blueprint_component` | Live | Add a component (mesh, collision, audio, etc.) to a Blueprint |
 
 ### DataTables
 
