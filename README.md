@@ -40,15 +40,7 @@ sequenceDiagram
 
 ### 1. Download
 
-Grab the latest release for your platform from [Releases](https://github.com/db-lyon/ue-mcp/releases):
-
-| Platform | File |
-|----------|------|
-| Windows | `ue-mcp-windows-x64.zip` |
-| Linux | `ue-mcp-linux-x64.tar.gz` |
-| macOS (Apple Silicon) | `ue-mcp-macos-arm64.tar.gz` |
-
-Extract it anywhere. No dependencies. The binary is self-contained.
+Grab `ue-mcp-windows-x64.zip` from [Releases](https://github.com/db-lyon/ue-mcp/releases) and extract it anywhere. No dependencies. The binary is self-contained.
 
 ### 2. Configure your MCP client
 
@@ -58,7 +50,7 @@ Add to your MCP configuration (e.g., Cursor `mcp.json` or Claude Desktop `claude
 {
   "mcpServers": {
     "ue-mcp": {
-      "command": "/path/to/ue-mcp"
+      "command": "C:\\path\\to\\ue-mcp.exe"
     }
   }
 }
@@ -72,10 +64,10 @@ Requires [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) and Gi
 ```bash
 git clone --recursive https://github.com/db-lyon/ue-mcp.git
 cd ue-mcp
-dotnet publish src/UeMcp/UeMcp.csproj -c Release -o publish/ --self-contained -r win-x64 -p:PublishSingleFile=true
+dotnet publish src/UeMcp/UeMcp.csproj -c Release -o dist/ --self-contained -r win-x64 -p:PublishSingleFile=true
 ```
 
-Replace `win-x64` with `linux-x64` or `osx-arm64` as needed. Point your MCP config at `publish/ue-mcp`.
+Point your MCP config at `dist/ue-mcp.exe`.
 
 </details>
 
@@ -87,7 +79,7 @@ Once the AI assistant is connected, the first thing it should do:
 set_project("C:/Users/you/Unreal Projects/MyGame/MyGame.uproject")
 ```
 
-This loads the project, detects the engine version, and attempts to connect to a running editor.
+This loads the project, detects the engine version, deploys the editor bridge plugin, and attempts to connect to a running editor.
 
 ## Tools Reference
 
@@ -96,7 +88,7 @@ This loads the project, detects the engine version, and attempts to connect to a
 | Tool | Mode | Description |
 |------|------|-------------|
 | `get_status` | Both | Server mode, connection status, loaded project info |
-| `set_project` | Both | Point the server at a UE project directory |
+| `set_project` | Both | Point the server at a UE project, auto-deploys bridge plugin |
 | `get_project_info` | Both | Read the `.uproject` file contents |
 
 ### Asset Reading
@@ -275,51 +267,21 @@ The ontology follows a reflection-first design. Concepts are organized around wh
 
 ## Live Mode Setup
 
-Live mode requires a small Python plugin running inside the Unreal Editor.
+Live mode requires a small Python plugin running inside the Unreal Editor. **`set_project` handles all of this automatically:**
 
-### Install the bridge plugin
+1. Enables `PythonScriptPlugin` in your `.uproject`
+2. Deploys the bridge Python files to `Content/Python/ue_mcp_bridge/`
+3. Configures `DefaultEngine.ini` for auto-start on editor launch
+4. Locates UE's bundled Python and runs `pip install websockets`
 
-1. **Enable the Python Editor Script Plugin** in your UE project (Edit → Plugins → search "Python")
-
-2. **Install websockets** in UE's Python:
-
-   ```bash
-   # Windows
-   "<UE_INSTALL>/Engine/Binaries/ThirdParty/Python3/Win64/python.exe" -m pip install websockets
-
-   # macOS/Linux
-   "<UE_INSTALL>/Engine/Binaries/ThirdParty/Python3/Linux/bin/python3" -m pip install websockets
-   ```
-
-3. **Copy the plugin** to your project:
-
-   ```bash
-   cp -r plugin/ue_mcp_bridge <YOUR_PROJECT>/Content/Python/
-   ```
-
-4. **Start the bridge** in the UE Python console:
-
-   ```python
-   import ue_mcp_bridge
-   ue_mcp_bridge.start()
-   ```
-
-### Auto-start on editor launch
-
-Add to your project's `DefaultEngine.ini`:
-
-```ini
-[/Script/PythonScriptPlugin.PythonScriptPluginSettings]
-+StartupScripts=/Game/Python/ue_mcp_bridge/startup_script.py
-```
-
-Or use an Editor Utility Blueprint/Widget that runs the Python command on startup.
+After `set_project`, restart the editor and the bridge will connect on launch. No manual steps required.
 
 ## How the Mode Router Works
 
 1. On startup, the MCP server begins in **offline mode**
 2. When `set_project` is called, it:
    - Parses the `.uproject` to detect the engine version
+   - Deploys the bridge plugin (enables PythonScriptPlugin, deploys files, configures auto-start, installs websockets)
    - Attempts a WebSocket connection to `ws://localhost:9877`
    - If the editor bridge is running → switches to **live mode**
    - If not → stays in **offline mode**, retries every 15 seconds
@@ -334,7 +296,8 @@ ue-mcp/
 │   ├── Program.cs                # Entry point & DI setup
 │   ├── Core/
 │   │   ├── ModeRouter.cs         # Offline/live mode routing
-│   │   └── ProjectContext.cs     # Project state & version detection
+│   │   ├── ProjectContext.cs     # Project state & version detection
+│   │   └── BridgeDeployer.cs     # Auto-deploys bridge plugin on set_project
 │   ├── Offline/
 │   │   ├── AssetService.cs       # UAssetAPI wrapper for asset reading
 │   │   ├── BlueprintReader.cs    # Blueprint structure parsing
@@ -391,7 +354,7 @@ ue-mcp/
 
 ## Supported Engine Versions
 
-Offline mode (via UAssetAPI) supports: **UE 4.13 through 5.5+**
+Offline mode (via UAssetAPI) supports: **UE 4.13 through 5.7+**
 
 Live mode supports whatever version of Unreal Editor you're running. It uses the editor's own reflection system.
 

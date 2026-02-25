@@ -7,11 +7,6 @@ using Microsoft.Win32;
 
 namespace UeMcp.Core;
 
-/// <summary>
-/// Automatically deploys the editor bridge plugin to a UE project during set_project.
-/// Handles: PythonScriptPlugin enablement, bridge file deployment, startup config,
-/// and websockets pip install in UE's bundled Python.
-/// </summary>
 public class BridgeDeployer
 {
     private readonly ILogger<BridgeDeployer> _logger;
@@ -138,7 +133,6 @@ public class BridgeDeployer
             return false;
         }
 
-        // Check if websockets is already installed
         var checkResult = RunProcess(pythonExe, "-c \"import websockets\"");
         if (checkResult.exitCode == 0)
         {
@@ -160,71 +154,55 @@ public class BridgeDeployer
 
     private string? FindUePython(string? engineAssociation, string uprojectPath)
     {
-        var engineRoot = FindEngineInstall(engineAssociation, uprojectPath);
+        var engineRoot = FindEngineInstall(engineAssociation);
         if (engineRoot == null) return null;
 
-        // Platform-specific Python paths within the engine install
-        string[] pythonCandidates = OperatingSystem.IsWindows()
-            ? [Path.Combine(engineRoot, "Engine", "Binaries", "ThirdParty", "Python3", "Win64", "python.exe")]
-            : OperatingSystem.IsMacOS()
-                ? [Path.Combine(engineRoot, "Engine", "Binaries", "ThirdParty", "Python3", "Mac", "bin", "python3")]
-                : [Path.Combine(engineRoot, "Engine", "Binaries", "ThirdParty", "Python3", "Linux", "bin", "python3")];
-
-        foreach (var candidate in pythonCandidates)
+        var pythonExe = Path.Combine(engineRoot, @"Engine\Binaries\ThirdParty\Python3\Win64\python.exe");
+        if (File.Exists(pythonExe))
         {
-            if (File.Exists(candidate))
-            {
-                _logger.LogDebug("Found UE Python at {Path}", candidate);
-                return candidate;
-            }
+            _logger.LogDebug("Found UE Python at {Path}", pythonExe);
+            return pythonExe;
         }
 
         _logger.LogDebug("UE Python not found under {Root}", engineRoot);
         return null;
     }
 
-    private string? FindEngineInstall(string? engineAssociation, string uprojectPath)
+    private string? FindEngineInstall(string? engineAssociation)
     {
         if (string.IsNullOrEmpty(engineAssociation))
             return null;
 
-        // Source builds use a GUID — check registry (Windows)
         if (Guid.TryParse(engineAssociation, out _))
             return FindEngineByGuid(engineAssociation);
 
-        // Launcher installs — check common locations and registry
-        return FindLauncherEngine(engineAssociation, uprojectPath);
+        return FindLauncherEngine(engineAssociation);
     }
 
     private string? FindEngineByGuid(string guid)
     {
-        if (!OperatingSystem.IsWindows()) return null;
-
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Epic Games\Unreal Engine\Builds");
             var path = key?.GetValue(guid) as string;
             if (path != null && Directory.Exists(path))
-            {
-                _logger.LogDebug("Found source build engine at {Path}", path);
                 return path;
-            }
         }
         catch { }
 
         return null;
     }
 
-    private string? FindLauncherEngine(string association, string uprojectPath)
+    private string? FindLauncherEngine(string association)
     {
-        // Check ProgramData launcher manifest first
-        try
-        {
-            var launcherDat = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                "Epic", "UnrealEngineLauncher", "LauncherInstalled.dat");
+        // Epic Games Launcher manifest
+        var launcherDat = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            @"Epic\UnrealEngineLauncher\LauncherInstalled.dat");
 
-            if (File.Exists(launcherDat))
+        if (File.Exists(launcherDat))
+        {
+            try
             {
                 var json = File.ReadAllText(launcherDat);
                 var doc = JsonDocument.Parse(json);
@@ -233,72 +211,43 @@ public class BridgeDeployer
                     foreach (var entry in list.EnumerateArray())
                     {
                         var appName = entry.GetProperty("AppName").GetString() ?? "";
-                        // Launcher app names like "UE_5.7"
                         if (appName.Equals($"UE_{association}", StringComparison.OrdinalIgnoreCase))
                         {
                             var loc = entry.GetProperty("InstallLocation").GetString();
                             if (loc != null && Directory.Exists(loc))
                             {
-                                _logger.LogDebug("Found launcher engine at {Path}", loc);
+                                _logger.LogDebug("Found engine via launcher manifest at {Path}", loc);
                                 return loc;
                             }
                         }
                     }
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug("Failed to read launcher manifest: {Error}", ex.Message);
+            catch (Exception ex)
+            {
+                _logger.LogDebug("Failed to read launcher manifest: {Error}", ex.Message);
+            }
         }
 
-        // Fallback: common install paths
-        string[] commonPaths = OperatingSystem.IsWindows()
-            ? [$@"C:\Program Files\Epic Games\UE_{association}",
-               $@"D:\Program Files\Epic Games\UE_{association}",
-               $@"C:\Epic Games\UE_{association}"]
-            : [$"/Users/Shared/Epic Games/UE_{association}",
-               $"/opt/UnrealEngine/UE_{association}"];
+        // Common install paths
+        string[] candidates =
+        [
+            $@"C:\Program Files\Epic Games\UE_{association}",
+            $@"D:\Program Files\Epic Games\UE_{association}",
+            $@"C:\Epic Games\UE_{association}",
+            $@"D:\Epic Games\UE_{association}",
+        ];
 
-        foreach (var path in commonPaths)
+        foreach (var path in candidates)
         {
             if (Directory.Exists(path))
             {
-                _logger.LogDebug("Found engine at common path {Path}", path);
+                _logger.LogDebug("Found engine at {Path}", path);
                 return path;
             }
         }
 
         return null;
-    }
-
-    private static (int exitCode, string output) RunProcess(string exe, string args)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = exe,
-                Arguments = args,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc == null) return (-1, "Failed to start process");
-
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
-            proc.WaitForExit(30_000);
-
-            return (proc.ExitCode, string.IsNullOrEmpty(stderr) ? stdout : stderr);
-        }
-        catch (Exception ex)
-        {
-            return (-1, ex.Message);
-        }
     }
 
     private bool EnsureStartupConfig(string uprojectPath)
@@ -336,6 +285,35 @@ public class BridgeDeployer
         File.WriteAllText(iniPath, content);
         _logger.LogInformation("Added bridge startup script to DefaultEngine.ini");
         return true;
+    }
+
+    private static (int exitCode, string output) RunProcess(string exe, string args)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = args,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null) return (-1, "Failed to start process");
+
+            var stdout = proc.StandardOutput.ReadToEnd();
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(30_000);
+
+            return (proc.ExitCode, string.IsNullOrEmpty(stderr) ? stdout : stderr);
+        }
+        catch (Exception ex)
+        {
+            return (-1, ex.Message);
+        }
     }
 }
 
