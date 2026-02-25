@@ -156,6 +156,7 @@ import ue_mcp_bridge; ue_mcp_bridge.start()
 | Tool | Mode | Description |
 |------|------|-------------|
 | `read_datatable` | Both | Read DataTable rows and column structure with optional row filter |
+| `reimport_datatable` | Live | Reimport a DataTable from a JSON file or JSON string, auto-saves |
 
 ### Reflection (Live Mode)
 
