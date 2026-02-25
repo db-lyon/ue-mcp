@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json;
 using ModelContextProtocol.Server;
 using UeMcp.Core;
 using UeMcp.Live;
@@ -70,5 +71,144 @@ public static class BlueprintTools
         router.EnsureProjectLoaded();
         var resolved = router.ResolveAssetPath(assetPath);
         return reader.ReadGraph(resolved, graphName);
+    }
+
+    [McpServerTool, Description(
+        "Set properties on a Blueprint variable: instance editable (public/private), " +
+        "blueprint read only, category, tooltip, replication. Requires live editor connection.")]
+    public static async Task<string> set_blueprint_variable_properties(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Blueprint asset")] string assetPath,
+        [Description("Name of the variable to modify")] string name,
+        [Description("Make variable editable per-instance in the editor")] bool? instanceEditable = null,
+        [Description("Make variable read-only in Blueprint graphs")] bool? blueprintReadOnly = null,
+        [Description("Variable category in the details panel")] string? category = null,
+        [Description("Tooltip text")] string? tooltip = null,
+        [Description("Replication: 'none', 'replicated', or 'repNotify'")] string? replicationType = null)
+    {
+        router.EnsureLiveMode("set_blueprint_variable_properties");
+        var parameters = new Dictionary<string, object?>
+        {
+            ["path"] = assetPath,
+            ["name"] = name,
+        };
+        if (instanceEditable.HasValue) parameters["instanceEditable"] = instanceEditable.Value;
+        if (blueprintReadOnly.HasValue) parameters["blueprintReadOnly"] = blueprintReadOnly.Value;
+        if (category != null) parameters["category"] = category;
+        if (tooltip != null) parameters["tooltip"] = tooltip;
+        if (replicationType != null) parameters["replicationType"] = replicationType;
+
+        return await bridge.SendAndSerializeAsync("set_variable_properties", parameters);
+    }
+
+    [McpServerTool, Description(
+        "Create a new function graph in a Blueprint. After creation, use add_blueprint_node " +
+        "and connect_blueprint_pins to build the function logic. Requires live editor connection.")]
+    public static async Task<string> create_blueprint_function(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Blueprint asset")] string assetPath,
+        [Description("Name for the new function")] string functionName)
+    {
+        router.EnsureLiveMode("create_blueprint_function");
+        return await bridge.SendAndSerializeAsync("create_function", new()
+        {
+            ["path"] = assetPath,
+            ["functionName"] = functionName,
+        });
+    }
+
+    [McpServerTool, Description(
+        "Delete a function graph from a Blueprint. Requires live editor connection.")]
+    public static async Task<string> delete_blueprint_function(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Blueprint asset")] string assetPath,
+        [Description("Name of the function to delete")] string functionName)
+    {
+        router.EnsureLiveMode("delete_blueprint_function");
+        return await bridge.SendAndSerializeAsync("delete_function", new()
+        {
+            ["path"] = assetPath,
+            ["functionName"] = functionName,
+        });
+    }
+
+    [McpServerTool, Description(
+        "Rename a function or graph in a Blueprint. Requires live editor connection.")]
+    public static async Task<string> rename_blueprint_function(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Blueprint asset")] string assetPath,
+        [Description("Current name of the function")] string oldName,
+        [Description("New name for the function")] string newName)
+    {
+        router.EnsureLiveMode("rename_blueprint_function");
+        return await bridge.SendAndSerializeAsync("rename_function", new()
+        {
+            ["path"] = assetPath,
+            ["oldName"] = oldName,
+            ["newName"] = newName,
+        });
+    }
+
+    [McpServerTool, Description(
+        "Delete a node from a Blueprint graph. Requires live editor connection.")]
+    public static async Task<string> delete_blueprint_node(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Blueprint asset")] string assetPath,
+        [Description("Name of the graph containing the node")] string graphName,
+        [Description("Name of the node to delete")] string nodeName)
+    {
+        router.EnsureLiveMode("delete_blueprint_node");
+        return await bridge.SendAndSerializeAsync("delete_node", new()
+        {
+            ["path"] = assetPath,
+            ["graphName"] = graphName,
+            ["nodeName"] = nodeName,
+        });
+    }
+
+    [McpServerTool, Description(
+        "Set a property on a Blueprint graph node. Requires live editor connection.")]
+    public static async Task<string> set_blueprint_node_property(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Blueprint asset")] string assetPath,
+        [Description("Name of the graph containing the node")] string graphName,
+        [Description("Name of the node")] string nodeName,
+        [Description("Property name to set")] string propertyName,
+        [Description("New value (as JSON)")] string value)
+    {
+        router.EnsureLiveMode("set_blueprint_node_property");
+        return await bridge.SendAndSerializeAsync("set_node_property", new()
+        {
+            ["path"] = assetPath,
+            ["graphName"] = graphName,
+            ["nodeName"] = nodeName,
+            ["propertyName"] = propertyName,
+            ["value"] = JsonSerializer.Deserialize<object>(value),
+        });
+    }
+
+    [McpServerTool, Description(
+        "Add a component to a Blueprint (e.g. StaticMeshComponent, BoxCollisionComponent, " +
+        "AudioComponent). Requires live editor connection.")]
+    public static async Task<string> add_blueprint_component(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Blueprint asset")] string assetPath,
+        [Description("Component class name (e.g. 'StaticMeshComponent', 'BoxCollisionComponent')")] string componentClass,
+        [Description("Optional: name for the component")] string? componentName = null)
+    {
+        router.EnsureLiveMode("add_blueprint_component");
+        return await bridge.SendAndSerializeAsync("add_component", new()
+        {
+            ["path"] = assetPath,
+            ["componentClass"] = componentClass,
+            ["componentName"] = componentName ?? componentClass,
+        });
     }
 }
