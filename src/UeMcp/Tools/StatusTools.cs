@@ -30,10 +30,10 @@ public static class StatusTools
     }
 
     [McpServerTool, Description(
-        "Set the Unreal Engine project to work with. Provide the path to the .uproject file " +
-        "or the directory containing it. This must be called before using any asset/blueprint tools. " +
-        "Automatically detects the engine version, deploys the editor bridge plugin if needed, " +
-        "and attempts to connect to a running editor.")]
+        "Switch the Unreal Engine project. Normally the project is set automatically via the " +
+        "command-line argument in mcp.json, so you do NOT need to call this. Only use it to " +
+        "switch to a different project mid-session. Detects engine version, deploys the " +
+        "editor bridge plugin, and connects to a running editor.")]
     public static async Task<string> set_project(
         ModeRouter router,
         ProjectContext context,

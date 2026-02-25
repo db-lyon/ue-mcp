@@ -59,7 +59,9 @@ public class ModeRouter
     public void EnsureProjectLoaded()
     {
         if (!_context.IsLoaded)
-            throw new InvalidOperationException("No project loaded. Call set_project with the path to your .uproject file first.");
+            throw new InvalidOperationException(
+                "No project loaded. Pass the .uproject path as an argument in your MCP config, " +
+                "e.g. \"args\": [\"C:/path/to/MyGame.uproject\"]");
     }
 
     public void EnsureLiveMode(string operation)

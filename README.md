@@ -59,27 +59,20 @@ Point your MCP config at `dist/ue-mcp.exe`.
 
 ### 2. Configure your MCP client
 
-Add to your MCP configuration (e.g., Cursor `mcp.json` or Claude Desktop `claude_desktop_config.json`):
+Add to your MCP configuration (e.g., Cursor `mcp.json` or Claude Desktop `claude_desktop_config.json`), passing your `.uproject` path as the first argument:
 
 ```json
 {
   "mcpServers": {
     "ue-mcp": {
-      "command": "C:\\path\\to\\ue-mcp.exe"
+      "command": "C:\\path\\to\\ue-mcp.exe",
+      "args": ["C:\\Users\\you\\Unreal Projects\\MyGame\\MyGame.uproject"]
     }
   }
 }
 ```
 
-### 3. Point it at your UE project
-
-Once the AI assistant is connected, the first thing it should do:
-
-```
-set_project("C:/Users/you/Unreal Projects/MyGame/MyGame.uproject")
-```
-
-This automatically:
+The project initializes automatically on server startup — no `set_project` call needed. On first run this:
 - Detects the engine version from the `.uproject`
 - Enables `PythonScriptPlugin` if needed
 - Deploys the WebSocket bridge to `Content/Python/ue_mcp_bridge/`
@@ -87,7 +80,7 @@ This automatically:
 - Installs `websockets` in UE's bundled Python
 - Connects to the editor if it's running
 
-**After the first `set_project`, restart the editor once** so the bridge startup script runs. From then on, the bridge starts automatically with the editor.
+**After the first launch, restart the editor once** so the bridge startup script runs. From then on, the bridge starts automatically with the editor.
 
 ### 4. Verify the bridge (optional)
 
