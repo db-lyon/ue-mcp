@@ -45,4 +45,69 @@ public static class WidgetAuthoringTools
         router.EnsureLiveMode("get_widget_tree");
         return await bridge.SendAndSerializeAsync("get_widget_tree", new() { ["path"] = path });
     }
+
+    [McpServerTool, Description(
+        "Create an Editor Utility Widget — a UMG panel that runs inside the editor as a docked tab. " +
+        "Use for building custom tool windows, tuning dashboards, asset inspectors, and batch operation UIs.")]
+    public static async Task<string> create_editor_utility_widget(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Asset path (e.g. '/Game/EditorTools/EUW_TuningPanel')")] string path)
+    {
+        router.EnsureLiveMode("create_editor_utility_widget");
+        return await bridge.SendAndSerializeAsync("create_editor_utility_widget", new()
+        {
+            ["path"] = path
+        });
+    }
+
+    [McpServerTool, Description(
+        "Open an Editor Utility Widget as a docked tab in the editor. " +
+        "The widget must already exist as an EditorUtilityWidgetBlueprint asset.")]
+    public static async Task<string> run_editor_utility_widget(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Asset path to the Editor Utility Widget")] string path)
+    {
+        router.EnsureLiveMode("run_editor_utility_widget");
+        return await bridge.SendAndSerializeAsync("run_editor_utility_widget", new()
+        {
+            ["path"] = path
+        });
+    }
+
+    [McpServerTool, Description(
+        "Create an Editor Utility Blueprint — a headless editor automation script. " +
+        "Unlike EUWs, these have no UI and run logic directly. " +
+        "Common parent classes: 'EditorUtilityObject', 'ActorActionUtility', 'AssetActionUtility'.")]
+    public static async Task<string> create_editor_utility_blueprint(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Asset path (e.g. '/Game/EditorTools/EUB_BatchRenamer')")] string path,
+        [Description("Parent class. Default: 'EditorUtilityObject'. Also: 'ActorActionUtility', 'AssetActionUtility'")] string parentClass = "EditorUtilityObject")
+    {
+        router.EnsureLiveMode("create_editor_utility_blueprint");
+        return await bridge.SendAndSerializeAsync("create_editor_utility_blueprint", new()
+        {
+            ["path"] = path,
+            ["parentClass"] = parentClass
+        });
+    }
+
+    [McpServerTool, Description(
+        "Execute an Editor Utility Blueprint (headless editor script). " +
+        "Optionally call a specific function by name.")]
+    public static async Task<string> run_editor_utility_blueprint(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Asset path to the Editor Utility Blueprint")] string path,
+        [Description("Optional: specific function to call")] string? functionName = null)
+    {
+        router.EnsureLiveMode("run_editor_utility_blueprint");
+        return await bridge.SendAndSerializeAsync("run_editor_utility_blueprint", new()
+        {
+            ["path"] = path,
+            ["functionName"] = functionName ?? ""
+        });
+    }
 }
