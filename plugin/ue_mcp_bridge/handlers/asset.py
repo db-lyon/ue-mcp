@@ -161,8 +161,57 @@ def reimport_datatable(params: dict) -> dict:
     }
 
 
+def create_datatable(params: dict) -> dict:
+    """Create a new DataTable asset with a given row struct."""
+    asset_name = params.get("name", "DT_New")
+    package_path = params.get("packagePath", "/Game/Data")
+    row_struct = params.get("rowStruct", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    if not row_struct:
+        raise ValueError("rowStruct is required (e.g. 'InventoryItem', '/Script/MyGame.FMyRowStruct')")
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+
+    factory = None
+    if hasattr(unreal, "DataTableFactory"):
+        factory = unreal.DataTableFactory()
+        struct_obj = unreal.EditorAssetLibrary.load_asset(row_struct)
+        if struct_obj is None and hasattr(unreal, "find_object"):
+            struct_obj = unreal.find_object(None, row_struct)
+        if struct_obj is None:
+            try:
+                struct_obj = unreal.EditorAssetLibrary.load_asset(f"/Script/Engine.{row_struct}")
+            except Exception:
+                pass
+        if struct_obj is not None:
+            try:
+                factory.set_editor_property("struct", struct_obj)
+            except Exception:
+                pass
+
+    if factory:
+        asset = tools.create_asset(asset_name, package_path, None, factory)
+    else:
+        asset = tools.create_asset(asset_name, package_path, unreal.DataTable, None)
+
+    if asset is None:
+        raise RuntimeError(f"Failed to create DataTable at {package_path}/{asset_name}")
+
+    unreal.EditorAssetLibrary.save_asset(f"{package_path}/{asset_name}")
+    return {
+        "path": f"{package_path}/{asset_name}",
+        "name": asset.get_name(),
+        "class": asset.get_class().get_name(),
+        "rowStruct": row_struct,
+    }
+
+
 HANDLERS = {
     "read_asset": read_asset,
     "read_datatable": read_datatable,
     "reimport_datatable": reimport_datatable,
+    "create_datatable": create_datatable,
 }
