@@ -119,6 +119,16 @@ def _load_demo_mat(name):
     return None
 
 
+def _set_movable(actor):
+    """Set an actor's root component mobility to Movable so movement components work."""
+    try:
+        smc = actor.get_component_by_class(unreal.StaticMeshComponent)
+        if smc:
+            smc.set_editor_property("mobility", unreal.ComponentMobility.MOVABLE)
+    except Exception:
+        pass
+
+
 # ── Step handlers ────────────────────────────────────────────────────
 # Each step is a separate RPC call so UE renders between them.
 
@@ -203,7 +213,8 @@ def _step_pedestal():
 def _step_hero_sphere():
     hero = _spawn_mesh("Demo_HeroSphere", SPHERE, (0, 0, 260), scale=(1.8, 1.8, 1.8))
     _apply_mat(hero, _load_demo_mat("M_Demo_Glow"))
-    return {"step": "hero_sphere", "ok": True, "message": "Glowing golden sphere"}
+    _set_movable(hero)
+    return {"step": "hero_sphere", "ok": True, "message": "Glowing golden sphere (movable)"}
 
 
 def _step_pillars():
@@ -307,7 +318,7 @@ def _step_post_process():
 
 
 def _step_niagara_vfx():
-    """Create a Niagara VFX system and place it above the hero sphere."""
+    """Create a Niagara VFX system and place a persistent actor with NiagaraComponent."""
     try:
         ns_path = f"{MAT_DIR}/NS_Demo_Aura"
         ns = None
@@ -332,21 +343,28 @@ def _step_niagara_vfx():
                     "message": "Niagara plugin not available — skipped"}
 
         placed = False
-        if hasattr(unreal, "NiagaraFunctionLibrary"):
-            world = unreal.EditorLevelLibrary.get_editor_world()
-            comp = unreal.NiagaraFunctionLibrary.spawn_system_at_location(
-                world, ns, unreal.Vector(0, 0, 380), auto_destroy=False
+        niag_cls = getattr(unreal, "NiagaraComponent", None)
+        actor = unreal.EditorLevelLibrary.spawn_actor_from_class(
+            unreal.Actor, unreal.Vector(0, 0, 380)
+        )
+        if actor and niag_cls:
+            actor.set_actor_label("Demo_NiagaraVFX")
+            actor.set_folder_path(FOLDER)
+            comp = actor.add_component_by_class(
+                niag_cls, False, unreal.Transform(), False
             )
             if comp:
-                owner = comp.get_owner()
-                if owner:
-                    owner.set_actor_label("Demo_NiagaraVFX")
-                    owner.set_folder_path(FOLDER)
-                    placed = True
+                comp.set_editor_property("asset", ns)
+                comp.set_editor_property("auto_activate", True)
+                try:
+                    comp.activate(True)
+                except Exception:
+                    pass
+                placed = True
 
-        msg = "Niagara VFX system created"
+        msg = "Niagara system created"
         if placed:
-            msg += " & spawned above hero sphere"
+            msg += " & persistent actor placed above hero sphere"
         return {"step": "niagara_vfx", "ok": True, "message": msg}
     except Exception as e:
         return {"step": "niagara_vfx", "ok": False, "error": str(e)}
@@ -408,12 +426,14 @@ def _step_pcg_scatter():
 
 
 def _step_orbit_rings():
-    """Spawn an orbit ring of emissive spheres + add rotation for animation."""
+    """Spawn an orbit ring of emissive spheres with per-orb rotation."""
     try:
         mat = _load_demo_mat("M_Demo_Glow")
         count = 8
         radius = 220
         height = 280
+        rot_cls = getattr(unreal, "RotatingMovementComponent", None)
+        orb_animated = 0
 
         for i in range(count):
             angle = i * (2 * math.pi / count)
@@ -424,9 +444,21 @@ def _step_orbit_rings():
                 (x, y, height), scale=(0.22, 0.22, 0.22)
             )
             _apply_mat(orb, mat)
+            _set_movable(orb)
 
-        animated = False
-        rot_cls = getattr(unreal, "RotatingMovementComponent", None)
+            if rot_cls:
+                comp = orb.add_component_by_class(
+                    rot_cls, False, unreal.Transform(), False
+                )
+                if comp:
+                    yaw = 60 + i * 15
+                    pitch = 10 + (i % 3) * 5
+                    comp.set_editor_property(
+                        "rotation_rate", unreal.Rotator(pitch, yaw, 0)
+                    )
+                    orb_animated += 1
+
+        hero_animated = False
         if rot_cls:
             for a in unreal.EditorLevelLibrary.get_all_level_actors():
                 if a.get_actor_label() == "Demo_HeroSphere":
@@ -435,21 +467,21 @@ def _step_orbit_rings():
                     )
                     if comp:
                         comp.set_editor_property(
-                            "rotation_rate", unreal.Rotator(0, 90, 15)
+                            "rotation_rate", unreal.Rotator(0, 45, 10)
                         )
-                        animated = True
+                        hero_animated = True
                     break
 
         msg = f"{count} glowing ring orbs encircling hero sphere"
-        if animated:
-            msg += " + RotatingMovementComponent (hit Play to see it spin)"
+        if orb_animated or hero_animated:
+            msg += f" — {orb_animated + (1 if hero_animated else 0)} actors animated (Play to see)"
         return {"step": "orbit_rings", "ok": True, "message": msg}
     except Exception as e:
         return {"step": "orbit_rings", "ok": False, "error": str(e)}
 
 
 def _step_level_sequence():
-    """Create a Level Sequence and bind the hero sphere for cinematic playback."""
+    """Create a Level Sequence with a rotation track on the hero sphere."""
     try:
         seq_path = f"{MAT_DIR}/SEQ_Demo_Showcase"
         seq = None
@@ -467,13 +499,31 @@ def _step_level_sequence():
             return {"step": "level_sequence", "ok": False,
                     "error": "Failed to create Level Sequence"}
 
+        fps = 30
+        total_frames = fps * 10
+
+        movie_scene = seq.get_movie_scene() if hasattr(seq, "get_movie_scene") else None
+        if movie_scene:
+            try:
+                movie_scene.set_display_rate(unreal.FrameRate(fps, 1))
+            except Exception:
+                pass
+            try:
+                movie_scene.set_playback_range(
+                    unreal.FrameNumber(0), unreal.FrameNumber(total_frames)
+                )
+            except Exception:
+                pass
+
         bound = False
+        has_track = False
         for a in unreal.EditorLevelLibrary.get_all_level_actors():
             if a.get_actor_label() == "Demo_HeroSphere":
                 if hasattr(seq, "add_possessable"):
                     binding = seq.add_possessable(a)
                     if binding:
                         bound = True
+                        has_track = _add_transform_track(binding, total_frames)
                 break
 
         unreal.EditorAssetLibrary.save_asset(seq_path)
@@ -496,20 +546,94 @@ def _step_level_sequence():
                         lsa.set_editor_property("level_sequence_asset", seq)
                     except Exception:
                         pass
+                try:
+                    ps = lsa.get_editor_property("playback_settings")
+                    ps.set_editor_property("auto_play", True)
+                    ps.set_editor_property("loop_count", -1)
+                    lsa.set_editor_property("playback_settings", ps)
+                except Exception:
+                    pass
                 seq_actor_placed = True
 
         parts = ["Level Sequence created"]
         if bound:
             parts.append("hero sphere bound")
+        if has_track:
+            parts.append("rotation track with keyframes")
         if seq_actor_placed:
-            parts.append("SequenceActor placed in scene")
+            parts.append("auto-play actor placed")
         return {"step": "level_sequence", "ok": True, "message": " — ".join(parts)}
     except Exception as e:
         return {"step": "level_sequence", "ok": False, "error": str(e)}
 
 
+def _add_transform_track(binding, total_frames):
+    """Add a 3D transform track with a full-rotation yaw animation."""
+    try:
+        track_cls = getattr(unreal, "MovieScene3DTransformTrack", None)
+        if track_cls is None or not hasattr(binding, "add_track"):
+            return False
+
+        track = binding.add_track(track_cls)
+        if track is None:
+            return False
+
+        if not hasattr(track, "add_section"):
+            return False
+        section = track.add_section()
+        if section is None:
+            return False
+
+        try:
+            section.set_range(0, total_frames)
+        except Exception:
+            try:
+                section.set_start_frame(0)
+                section.set_end_frame(total_frames)
+            except Exception:
+                pass
+
+        channels = None
+        if hasattr(section, "get_all_channels"):
+            channels = section.get_all_channels()
+        elif hasattr(section, "get_channels"):
+            channels = section.get_channels()
+
+        if channels:
+            for idx, ch in enumerate(channels):
+                if not hasattr(ch, "add_key"):
+                    continue
+                name = ch.get_name() if hasattr(ch, "get_name") else ""
+                is_yaw = (
+                    "yaw" in name.lower()
+                    or "rotation.z" in name.lower()
+                    or idx == 5
+                )
+                if is_yaw:
+                    try:
+                        ch.add_key(unreal.FrameNumber(0), 0.0)
+                        ch.add_key(unreal.FrameNumber(total_frames), 360.0)
+                    except Exception:
+                        try:
+                            ch.add_key(
+                                unreal.FrameNumber(0), 0.0,
+                                unreal.MovieSceneKeyInterpolation.LINEAR
+                            )
+                            ch.add_key(
+                                unreal.FrameNumber(total_frames), 360.0,
+                                unreal.MovieSceneKeyInterpolation.LINEAR
+                            )
+                        except Exception:
+                            pass
+                    break
+
+        return True
+    except Exception:
+        return False
+
+
 def _step_tuning_panel():
-    """Create and open an Editor Utility Widget tuning panel."""
+    """Create an Editor Utility Widget tuning panel with controls and open it."""
     try:
         euw_path = f"{MAT_DIR}/EUW_DemoTuning"
 
@@ -528,20 +652,85 @@ def _step_tuning_panel():
                         "error": "Failed to create Editor Utility Widget"}
             unreal.EditorAssetLibrary.save_asset(euw_path)
 
+        wb = unreal.EditorAssetLibrary.load_asset(euw_path)
+        populated = _populate_tuning_ui(wb)
+        if populated:
+            unreal.EditorAssetLibrary.save_asset(euw_path)
+
         opened = False
         if hasattr(unreal, "EditorUtilitySubsystem"):
             subsys = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
-            asset = unreal.EditorAssetLibrary.load_asset(euw_path)
-            if subsys and asset and hasattr(subsys, "spawn_and_register_tab"):
-                subsys.spawn_and_register_tab(asset)
+            if subsys and wb and hasattr(subsys, "spawn_and_register_tab"):
+                subsys.spawn_and_register_tab(wb)
                 opened = True
 
         msg = "Editor Utility Widget tuning panel created"
+        if populated:
+            msg += " with controls"
         if opened:
             msg += " & opened as editor tab"
         return {"step": "tuning_panel", "ok": True, "message": msg}
     except Exception as e:
         return {"step": "tuning_panel", "ok": False, "error": str(e)}
+
+
+def _populate_tuning_ui(wb):
+    """Build tuning UI inside the EUW widget tree."""
+    try:
+        wt = wb.get_editor_property("widget_tree")
+        if not wt or not hasattr(wt, "construct_widget"):
+            return False
+
+        root = wt.get_editor_property("root_widget")
+        if not root:
+            return False
+
+        vbox = wt.construct_widget(unreal.VerticalBox)
+        if not vbox:
+            return False
+
+        add_child = getattr(root, "add_child", None) or getattr(root, "add_child_to_canvas", None)
+        if add_child is None:
+            return False
+        add_child(vbox)
+
+        _add_tuning_label(wt, vbox, "NEON SHRINE TUNING", 20)
+        _add_tuning_label(wt, vbox, " ")
+
+        for label in ["Hero Light Intensity", "Fog Density", "Glow Brightness",
+                       "Bloom Intensity", "Neon Saturation"]:
+            _add_tuning_label(wt, vbox, label, 12)
+            slider = wt.construct_widget(unreal.Slider)
+            if slider:
+                try:
+                    slider.set_editor_property("value", 0.5)
+                    slider.set_editor_property("is_focusable", False)
+                except Exception:
+                    pass
+                vbox.add_child(slider)
+            _add_tuning_label(wt, vbox, " ")
+
+        return True
+    except Exception:
+        return False
+
+
+def _add_tuning_label(wt, parent, text, size=10):
+    """Add a TextBlock to a parent panel widget."""
+    try:
+        tb = wt.construct_widget(unreal.TextBlock)
+        if tb is None:
+            return
+        tb.set_editor_property("text", text)
+        try:
+            font = tb.get_editor_property("font")
+            font.set_editor_property("size", size)
+            tb.set_editor_property("font", font)
+        except Exception:
+            pass
+        parent.add_child(tb)
+    except Exception:
+        pass
 
 
 def _step_save():
