@@ -89,4 +89,21 @@ public static class ReflectionTools
             ["filter"] = filter ?? ""
         });
     }
+
+    [McpServerTool, Description(
+        "Add a new gameplay tag to the project. Tags are hierarchical " +
+        "(e.g. 'Combat.Damage.Fire'). May require editor restart to take effect.")]
+    public static async Task<string> create_gameplay_tag(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Tag to add (e.g. 'Combat.Damage.Fire')")] string tag,
+        [Description("Optional: developer comment for this tag")] string comment = "")
+    {
+        router.EnsureLiveMode("create_gameplay_tag");
+        return await bridge.SendAndSerializeAsync("create_gameplay_tag", new()
+        {
+            ["tag"] = tag,
+            ["comment"] = comment
+        });
+    }
 }

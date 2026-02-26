@@ -305,10 +305,57 @@ def _serialize_value(val):
     return str(val)
 
 
+def create_gameplay_tag(params: dict) -> dict:
+    """Add a new gameplay tag to the project's tag list."""
+    tag = params.get("tag", "")
+    comment = params.get("comment", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+    if not tag:
+        raise ValueError("tag is required (e.g. 'Combat.Damage.Fire')")
+
+    if hasattr(unreal, "GameplayTagsManager"):
+        mgr = unreal.GameplayTagsManager.get()
+        if hasattr(mgr, "add_native_gameplay_tag"):
+            mgr.add_native_gameplay_tag(tag, comment)
+            return {"tag": tag, "comment": comment, "success": True, "method": "add_native_gameplay_tag"}
+
+    settings = None
+    if hasattr(unreal, "GameplayTagsSettings"):
+        settings = unreal.get_default_object(unreal.GameplayTagsSettings)
+    if settings is None:
+        try:
+            settings = unreal.EditorAssetLibrary.load_asset("/Script/GameplayTags.GameplayTagsSettings")
+        except Exception:
+            pass
+
+    if settings is not None and hasattr(settings, "get_editor_property"):
+        try:
+            tag_list = settings.get_editor_property("gameplay_tag_list")
+            if hasattr(tag_list, "append"):
+                tag_list.append(tag)
+                settings.set_editor_property("gameplay_tag_list", tag_list)
+                return {"tag": tag, "success": True, "method": "GameplayTagsSettings"}
+        except Exception:
+            pass
+
+    import os
+    project_dir = os.environ.get("UE_PROJECT_DIR", "")
+    if project_dir:
+        tag_file = os.path.join(project_dir, "Config", "DefaultGameplayTags.ini")
+        with open(tag_file, "a", encoding="utf-8") as f:
+            f.write(f"\n+GameplayTagList=(Tag=\"{tag}\",DevComment=\"{comment}\")")
+        return {"tag": tag, "success": True, "method": "ini_append", "note": "Restart editor to pick up new tag"}
+
+    raise RuntimeError("Could not add gameplay tag via available APIs")
+
+
 HANDLERS = {
     "reflect_class": reflect_class,
     "reflect_struct": reflect_struct,
     "reflect_enum": reflect_enum,
     "list_classes": list_classes,
     "list_gameplay_tags": list_gameplay_tags,
+    "create_gameplay_tag": create_gameplay_tag,
 }
