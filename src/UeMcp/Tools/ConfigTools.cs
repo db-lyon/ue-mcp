@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
 using UeMcp.Core;
+using UeMcp.Live;
 using UeMcp.Offline;
 
 namespace UeMcp.Tools;
@@ -43,5 +44,27 @@ public static class ConfigTools
     {
         router.EnsureProjectLoaded();
         return reader.ListGameplayTags();
+    }
+
+    [McpServerTool, Description(
+        "Write a value to a project config/INI file (e.g. DefaultEngine.ini, DefaultGame.ini). " +
+        "Creates the section if it doesn't exist. Use for changing project settings like " +
+        "physics, rendering, packaging, etc.")]
+    public static async Task<string> set_config(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("INI section name (e.g. '/Script/Engine.PhysicsSettings', '/Script/Engine.RendererSettings')")] string section,
+        [Description("Key name")] string key,
+        [Description("Value to set")] string value,
+        [Description("Config file name (e.g. 'DefaultEngine.ini', 'DefaultGame.ini'). Default: 'DefaultEngine.ini'")] string configFile = "DefaultEngine.ini")
+    {
+        router.EnsureLiveMode("set_config");
+        return await bridge.SendAndSerializeAsync("set_config", new()
+        {
+            ["configFile"] = configFile,
+            ["section"] = section,
+            ["key"] = key,
+            ["value"] = value
+        });
     }
 }
