@@ -40,6 +40,25 @@ public static class DataTableTools
     }
 
     [McpServerTool, Description(
+        "Create a new DataTable asset with a given row struct. " +
+        "After creation, use reimport_datatable to populate it with row data.")]
+    public static async Task<string> create_datatable(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Row struct name or path (e.g. 'InventoryItem', '/Script/MyGame.FMyRowStruct')")] string rowStruct,
+        [Description("Asset name (e.g. 'DT_Items')")] string name = "DT_New",
+        [Description("Package path (e.g. '/Game/Data')")] string packagePath = "/Game/Data")
+    {
+        router.EnsureLiveMode("create_datatable");
+        return await bridge.SendAndSerializeAsync("create_datatable", new()
+        {
+            ["rowStruct"] = rowStruct,
+            ["name"] = name,
+            ["packagePath"] = packagePath
+        });
+    }
+
+    [McpServerTool, Description(
         "Reimport a DataTable from a JSON file or JSON string. Replaces all rows in the DataTable " +
         "with the contents of the JSON. The JSON format must match UE's DataTable JSON schema " +
         "(array of objects with row names as keys). Requires live editor connection. " +
