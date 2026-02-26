@@ -94,6 +94,15 @@ You have access to 185+ Unreal Engine MCP tools. This guide helps you pick the r
 ### "Create / manage gameplay tags"
 → `list_gameplay_tags` to see existing, `create_gameplay_tag` to add new ones
 
+### "Build a custom editor tool / tuning panel"
+→ `create_editor_utility_widget` to create a dockable UI panel
+→ Then use blueprint tools to add variables, functions, and UI widgets
+→ `run_editor_utility_widget` to open it as a tab in the editor
+
+### "Run an editor automation script"
+→ `create_editor_utility_blueprint` to create a headless script (no UI)
+→ `run_editor_utility_blueprint` to execute it
+
 ### "Understand a C++ class"
 → `reflect_class` for UE reflection data, `read_cpp_header` for source
 

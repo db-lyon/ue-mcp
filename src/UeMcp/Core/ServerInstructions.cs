@@ -89,6 +89,10 @@ WIDGETS / UMG:
   Read: read_widget_tree, get_widget_details, read_widget_animations, list_widget_blueprints
   Edit: set_widget_property, get_widget_tree
 
+EDITOR UTILITIES (custom editor tools):
+  Create: create_editor_utility_widget (dockable UI panel), create_editor_utility_blueprint (headless script)
+  Run: run_editor_utility_widget (open as tab), run_editor_utility_blueprint (execute script)
+
 NAVIGATION:
   rebuild_navigation, get_navmesh_info, project_point_to_navigation, spawn_nav_modifier_volume
 
