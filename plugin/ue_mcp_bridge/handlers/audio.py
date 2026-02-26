@@ -80,8 +80,82 @@ def spawn_ambient_sound(params: dict) -> dict:
     return {"soundPath": sound_path, "label": label or actor.get_actor_label(), "success": True}
 
 
+def create_sound_cue(params: dict) -> dict:
+    """Create a new SoundCue asset, optionally wiring in a SoundWave."""
+    asset_name = params.get("name", "SC_NewCue")
+    package_path = params.get("packagePath", "/Game/Audio")
+    sound_wave_path = params.get("soundWavePath", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+
+    factory = None
+    if hasattr(unreal, "SoundCueFactoryNew"):
+        factory = unreal.SoundCueFactoryNew()
+    elif hasattr(unreal, "SoundCueFactory"):
+        factory = unreal.SoundCueFactory()
+
+    if factory and sound_wave_path:
+        wave = unreal.EditorAssetLibrary.load_asset(sound_wave_path)
+        if wave and hasattr(factory, "set_editor_property"):
+            try:
+                factory.set_editor_property("initial_sound_wave", wave)
+            except Exception:
+                pass
+
+    if factory:
+        asset = tools.create_asset(asset_name, package_path, None, factory)
+    else:
+        asset = tools.create_asset(asset_name, package_path, unreal.SoundCue, None)
+
+    if asset is None:
+        raise RuntimeError(f"Failed to create SoundCue at {package_path}/{asset_name}")
+
+    unreal.EditorAssetLibrary.save_asset(f"{package_path}/{asset_name}")
+    return {
+        "path": f"{package_path}/{asset_name}",
+        "name": asset.get_name(),
+        "class": asset.get_class().get_name(),
+    }
+
+
+def create_metasound_source(params: dict) -> dict:
+    """Create a new MetaSoundSource asset."""
+    asset_name = params.get("name", "MS_NewSource")
+    package_path = params.get("packagePath", "/Game/Audio")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+
+    factory = None
+    if hasattr(unreal, "MetaSoundSourceFactory"):
+        factory = unreal.MetaSoundSourceFactory()
+    elif hasattr(unreal, "MetaSoundFactory"):
+        factory = unreal.MetaSoundFactory()
+
+    if factory is None:
+        raise RuntimeError("MetaSound factory not available in this UE version")
+
+    asset = tools.create_asset(asset_name, package_path, None, factory)
+    if asset is None:
+        raise RuntimeError(f"Failed to create MetaSoundSource at {package_path}/{asset_name}")
+
+    unreal.EditorAssetLibrary.save_asset(f"{package_path}/{asset_name}")
+    return {
+        "path": f"{package_path}/{asset_name}",
+        "name": asset.get_name(),
+        "class": asset.get_class().get_name(),
+    }
+
+
 HANDLERS = {
     "list_sound_assets": list_sound_assets,
     "play_sound_at_location": play_sound_at_location,
     "spawn_ambient_sound": spawn_ambient_sound,
+    "create_sound_cue": create_sound_cue,
+    "create_metasound_source": create_metasound_source,
 }

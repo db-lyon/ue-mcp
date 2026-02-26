@@ -60,6 +60,40 @@ public static class AudioTools
         });
     }
 
+    [McpServerTool, Description(
+        "Create a new SoundCue asset. Optionally wire in an existing SoundWave as the initial sound.")]
+    public static async Task<string> create_sound_cue(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Asset name (e.g. 'SC_Footstep')")] string name = "SC_NewCue",
+        [Description("Package path (e.g. '/Game/Audio')")] string packagePath = "/Game/Audio",
+        [Description("Optional: path to a SoundWave to wire in")] string? soundWavePath = null)
+    {
+        router.EnsureLiveMode("create_sound_cue");
+        return await bridge.SendAndSerializeAsync("create_sound_cue", new()
+        {
+            ["name"] = name,
+            ["packagePath"] = packagePath,
+            ["soundWavePath"] = soundWavePath ?? ""
+        });
+    }
+
+    [McpServerTool, Description(
+        "Create a new MetaSoundSource asset. MetaSounds are UE5's node-based audio synthesis system.")]
+    public static async Task<string> create_metasound_source(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Asset name (e.g. 'MS_Ambient')")] string name = "MS_NewSource",
+        [Description("Package path (e.g. '/Game/Audio')")] string packagePath = "/Game/Audio")
+    {
+        router.EnsureLiveMode("create_metasound_source");
+        return await bridge.SendAndSerializeAsync("create_metasound_source", new()
+        {
+            ["name"] = name,
+            ["packagePath"] = packagePath
+        });
+    }
+
     private static double[] ParseArray(string? json, double[] fallback)
     {
         if (string.IsNullOrWhiteSpace(json)) return fallback;
