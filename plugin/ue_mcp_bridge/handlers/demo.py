@@ -110,6 +110,18 @@ def _apply_mat(actor, mat):
         comp.set_material(0, mat)
 
 
+def _set_viewport_camera(location, rotation):
+    if hasattr(unreal, "UnrealEditorSubsystem"):
+        subsys = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
+        if subsys and hasattr(subsys, "set_level_viewport_camera_info"):
+            subsys.set_level_viewport_camera_info(location, rotation)
+            return True
+    if hasattr(unreal.EditorLevelLibrary, "set_level_viewport_camera_info"):
+        unreal.EditorLevelLibrary.set_level_viewport_camera_info(location, rotation)
+        return True
+    return False
+
+
 # ── Scene: Neon Shrine ──────────────────────────────────────────────
 
 def demo_scene_from_nothing(params: dict) -> dict:
@@ -140,6 +152,15 @@ def demo_scene_from_nothing(params: dict) -> dict:
             log.append("New level created via console command")
     except Exception as e:
         log.append(f"Level creation failed ({e}), building in current level")
+
+    # ── Aim viewport at the build site FIRST so user watches it happen ─
+    try:
+        cam_loc = unreal.Vector(1100, -700, 380)
+        cam_rot = unreal.Rotator(-12, 150, 0)
+        _set_viewport_camera(cam_loc, cam_rot)
+        log.append("Viewport camera aimed at build site")
+    except Exception as e:
+        log.append(f"Initial camera aim failed: {e}")
 
     # ── Materials ───────────────────────────────────────────────────
     try:
@@ -313,24 +334,14 @@ def demo_scene_from_nothing(params: dict) -> dict:
     except Exception as e:
         log.append(f"Post-process failed: {e}")
 
-    # ── Viewport camera ─────────────────────────────────────────────
+    # ── Final camera nudge (slightly tighter now that the scene exists) ─
     try:
-        cam_loc = unreal.Vector(1100, -700, 380)
-        cam_rot = unreal.Rotator(-12, 150, 0)
-        if hasattr(unreal, "UnrealEditorSubsystem"):
-            subsys = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
-            if subsys and hasattr(subsys, "set_level_viewport_camera_info"):
-                subsys.set_level_viewport_camera_info(cam_loc, cam_rot)
-                log.append("Viewport camera positioned")
-            else:
-                log.append("Camera API not available on this subsystem")
-        elif hasattr(unreal.EditorLevelLibrary, "set_level_viewport_camera_info"):
-            unreal.EditorLevelLibrary.set_level_viewport_camera_info(cam_loc, cam_rot)
-            log.append("Viewport camera positioned")
-        else:
-            log.append("Camera positioning API not found")
-    except Exception as e:
-        log.append(f"Camera positioning failed: {e}")
+        cam_loc = unreal.Vector(1000, -650, 350)
+        cam_rot = unreal.Rotator(-10, 148, 0)
+        if _set_viewport_camera(cam_loc, cam_rot):
+            log.append("Final camera positioned")
+    except Exception:
+        pass
 
     # ── Save the level ─────────────────────────────────────────────
     try:
