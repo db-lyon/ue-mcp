@@ -98,6 +98,25 @@ public static class FoliageTools
     }
 
     [McpServerTool, Description(
+        "Create a new FoliageType asset from a StaticMesh. " +
+        "After creation, use paint_foliage to scatter instances in the level.")]
+    public static async Task<string> create_foliage_type(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Asset name (e.g. 'FT_TreeOak')")] string name = "FT_New",
+        [Description("Package path (e.g. '/Game/Foliage')")] string packagePath = "/Game/Foliage",
+        [Description("Optional: path to the StaticMesh to use")] string? meshPath = null)
+    {
+        router.EnsureLiveMode("create_foliage_type");
+        return await bridge.SendAndSerializeAsync("create_foliage_type", new()
+        {
+            ["name"] = name,
+            ["packagePath"] = packagePath,
+            ["meshPath"] = meshPath ?? ""
+        });
+    }
+
+    [McpServerTool, Description(
         "Modify settings on a foliage type: density, scale range, alignment, cull distance, etc. " +
         "Partial update — only specified keys change.")]
     public static async Task<string> set_foliage_type_settings(

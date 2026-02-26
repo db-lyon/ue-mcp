@@ -311,6 +311,57 @@ def _read_foliage_type_basic(ft) -> dict | None:
         return None
 
 
+def create_foliage_type(params: dict) -> dict:
+    """Create a new FoliageType asset from a StaticMesh."""
+    asset_name = params.get("name", "FT_New")
+    package_path = params.get("packagePath", "/Game/Foliage")
+    mesh_path = params.get("meshPath", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+
+    ft_class = None
+    if hasattr(unreal, "FoliageType_InstancedStaticMesh"):
+        ft_class = unreal.FoliageType_InstancedStaticMesh
+    elif hasattr(unreal, "FoliageType"):
+        ft_class = unreal.FoliageType
+
+    if ft_class is None:
+        raise RuntimeError("FoliageType class not available")
+
+    factory = None
+    for name in ("FoliageType_InstancedStaticMeshFactory", "FoliageTypeFactory"):
+        if hasattr(unreal, name):
+            factory = getattr(unreal, name)()
+            break
+
+    if factory:
+        asset = tools.create_asset(asset_name, package_path, None, factory)
+    else:
+        asset = tools.create_asset(asset_name, package_path, ft_class, None)
+
+    if asset is None:
+        raise RuntimeError(f"Failed to create FoliageType at {package_path}/{asset_name}")
+
+    if mesh_path:
+        mesh = unreal.EditorAssetLibrary.load_asset(mesh_path)
+        if mesh:
+            try:
+                asset.set_editor_property("mesh", mesh)
+            except Exception:
+                pass
+
+    unreal.EditorAssetLibrary.save_asset(f"{package_path}/{asset_name}")
+    return {
+        "path": f"{package_path}/{asset_name}",
+        "name": asset.get_name(),
+        "class": asset.get_class().get_name(),
+        "meshPath": mesh_path,
+    }
+
+
 HANDLERS = {
     "list_foliage_types": list_foliage_types,
     "get_foliage_type_settings": get_foliage_type_settings,
@@ -318,4 +369,5 @@ HANDLERS = {
     "paint_foliage": paint_foliage,
     "erase_foliage": erase_foliage,
     "set_foliage_type_settings": set_foliage_type_settings,
+    "create_foliage_type": create_foliage_type,
 }
