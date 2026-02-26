@@ -3,7 +3,7 @@ namespace UeMcp.Core;
 public static class ServerInstructions
 {
     public const string Text = """
-UE-MCP: Unreal Engine editor bridge with 155+ tools. Tools operate in two modes:
+UE-MCP: Unreal Engine editor bridge with 165+ tools. Tools operate in two modes:
 
 OFFLINE (read-only, no editor needed): read/inspect assets, configs, C++ headers, blueprints.
 LIVE (editor connected via Python bridge): create/modify actors, blueprints, materials, run commands.
@@ -27,8 +27,8 @@ LEVELS & WORLD:
 
 MATERIALS:
   Read: read_material, list_material_parameters
-  Author: create_material, create_material_instance, set_material_parameter
-  Shading: set_material_shading_model, set_material_base_color, connect_texture_to_material
+  Create: create_material, create_material_instance
+  Edit: set_material_parameter, set_material_shading_model, set_material_base_color, connect_texture_to_material
 
 LANDSCAPE & TERRAIN:
   Info: get_landscape_info, list_landscape_layers, get_landscape_component
@@ -42,8 +42,9 @@ PCG (Procedural Content Generation):
   Execute: execute_pcg_graph, add_pcg_volume, get_pcg_components, get_pcg_component_details
 
 FOLIAGE:
-  list_foliage_types, get_foliage_type_settings, set_foliage_type_settings
-  paint_foliage, erase_foliage, sample_foliage
+  Create: create_foliage_type (from a StaticMesh)
+  Read: list_foliage_types, get_foliage_type_settings, sample_foliage
+  Edit: set_foliage_type_settings, paint_foliage, erase_foliage
 
 LIGHTING:
   spawn_light, set_light_properties, build_lighting
@@ -52,21 +53,27 @@ SEQUENCER / CINEMATICS:
   create_level_sequence, get_sequence_info, add_sequence_track, play_sequence
 
 NIAGARA (VFX):
-  list_niagara_systems, get_niagara_info, spawn_niagara_at_location, set_niagara_parameter
+  Create: create_niagara_system (empty system asset)
+  Read: list_niagara_systems, get_niagara_info
+  Use: spawn_niagara_at_location, set_niagara_parameter
 
 AUDIO:
-  list_sound_assets, play_sound_at_location, spawn_ambient_sound
+  Create: create_sound_cue (optionally from a SoundWave), create_metasound_source
+  Read: list_sound_assets
+  Use: play_sound_at_location, spawn_ambient_sound
 
 ANIMATION:
-  read_anim_blueprint, read_anim_montage, read_anim_sequence, read_blendspace
-  list_anim_assets, add_anim_notify
+  Create: create_anim_montage (from AnimSequence), create_anim_blueprint (needs skeleton), create_blendspace (needs skeleton)
+  Read: read_anim_blueprint, read_anim_montage, read_anim_sequence, read_blendspace, list_anim_assets
+  Edit: add_anim_notify
 
-SKELETON & PHYSICS:
+SKELETON & PHYSICS (read-only — skeletons come from mesh imports):
   get_skeleton_info, list_sockets, list_skeletal_meshes, get_physics_asset_info
 
 WIDGETS / UMG:
+  Create: create_widget_blueprint
   Read: read_widget_tree, get_widget_details, read_widget_animations, list_widget_blueprints
-  Author: create_widget_blueprint, get_widget_tree, set_widget_property
+  Edit: set_widget_property, get_widget_tree
 
 NAVIGATION:
   rebuild_navigation, get_navmesh_info, project_point_to_navigation, spawn_nav_modifier_volume
@@ -81,16 +88,20 @@ INPUT (Enhanced Input):
   create_input_action, create_input_mapping_context, list_input_assets
 
 BEHAVIOR TREES (AI):
-  list_behavior_trees, get_behavior_tree_info, create_blackboard, create_behavior_tree
+  create_behavior_tree, create_blackboard, list_behavior_trees, get_behavior_tree_info
 
 TEXTURES:
-  list_textures, get_texture_info, set_texture_settings, import_texture
+  Import: import_texture
+  Read: list_textures, get_texture_info
+  Edit: set_texture_settings
 
 ASSETS (general):
   read_asset, read_asset_properties, list_assets, search_assets, asset_to_json
 
 DATA TABLES:
-  read_datatable, reimport_datatable
+  Create: create_datatable (needs row struct name)
+  Read: read_datatable
+  Import: reimport_datatable (from JSON)
 
 CONFIG / INI:
   read_config, search_config, list_config_tags
@@ -120,5 +131,8 @@ DEMO:
 • search_assets accepts wildcards: search_assets(query="/Game/Characters/*")
 • For blueprint scripting: search_node_types to find the right node, add_blueprint_node to place it, connect_blueprint_pins to wire it up.
 • execute_python is the escape hatch — any Unreal Python API call that doesn't have a dedicated tool.
+• Most "create_*" tools need a package path and asset name. They auto-save the new asset.
+• Animation tools (create_anim_blueprint, create_blendspace) require a skeleton path — use list_skeletal_meshes or get_skeleton_info to find it.
+• create_datatable requires a row struct — use reflect_struct or list_classes to find the right one.
 """;
 }

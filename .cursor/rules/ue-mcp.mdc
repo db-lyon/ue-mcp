@@ -6,7 +6,7 @@ alwaysApply: true
 
 # UE-MCP Tool Selection Guide
 
-You have access to 155+ Unreal Engine MCP tools. This guide helps you pick the right ones.
+You have access to 165+ Unreal Engine MCP tools. This guide helps you pick the right ones.
 
 ## Before You Start
 
@@ -51,7 +51,21 @@ You have access to 155+ Unreal Engine MCP tools. This guide helps you pick the r
 → `create_pcg_graph`, `add_pcg_node`, `connect_pcg_nodes`, `set_pcg_node_settings`, `execute_pcg_graph`
 
 ### "Work with foliage"
-→ `list_foliage_types`, `paint_foliage`, `erase_foliage`, `sample_foliage`
+→ `create_foliage_type` (from a mesh) → `paint_foliage` to scatter → `set_foliage_type_settings` to tune
+
+### "Create VFX / Niagara"
+→ `create_niagara_system` to create an asset → `spawn_niagara_at_location` to place it → `set_niagara_parameter` to tweak
+
+### "Set up audio"
+→ `create_sound_cue` or `create_metasound_source` → `spawn_ambient_sound` to place in level
+
+### "Create animation assets"
+→ `create_anim_montage` (needs an AnimSequence), `create_anim_blueprint` (needs a skeleton), `create_blendspace` (needs a skeleton)
+→ Use `list_skeletal_meshes` or `get_skeleton_info` to find the skeleton path first
+
+### "Create a DataTable"
+→ `create_datatable` (needs a row struct) → `reimport_datatable` to fill with JSON data
+→ Use `reflect_struct` or `list_classes` to find the row struct
 
 ### "Understand a C++ class"
 → `reflect_class` for UE reflection data, `read_cpp_header` for source
