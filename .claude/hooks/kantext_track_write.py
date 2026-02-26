@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """
-PostToolUse hook: Mark the Kantext ontological foundation as resolved after
-a successful Kantext MCP tool call.
-
-Fires only on tools matching '.*kantext.*' (configured in settings.json).
-Writes a state file that the gate hook checks on subsequent tool calls.
+PostToolUse hook: Track write operations so the Stop hook can verify
+that Kantext validation happened AFTER the last mutation.
 """
 
 import json
@@ -29,7 +26,7 @@ def main():
 
     state_dir = get_state_dir()
     os.makedirs(state_dir, exist_ok=True)
-    state_file = os.path.join(state_dir, f"resolved-{session_id}")
+    state_file = os.path.join(state_dir, f"writes-{session_id}")
 
     existing = {}
     if os.path.exists(state_file):
@@ -39,23 +36,15 @@ def main():
         except (json.JSONDecodeError, OSError):
             existing = {}
 
-    calls = existing.get("calls", [])
-    now = time.time()
-    calls.append({
+    writes = existing.get("writes", [])
+    writes.append({
         "tool": tool_name,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "epoch": now,
+        "epoch": time.time(),
     })
 
-    state = {
-        "resolved_at": existing.get("resolved_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
-        "last_kantext_epoch": now,
-        "session_id": session_id,
-        "calls": calls,
-    }
-
     with open(state_file, "w") as f:
-        json.dump(state, f, indent=2)
+        json.dump({"writes": writes}, f, indent=2)
 
     sys.exit(0)
 

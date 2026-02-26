@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 Stop hook: Validate that the Kantext ontological foundation was resolved
-during this session before allowing the agent to finish.
+during this session AND that post-write validation occurred.
 
-If the foundation was never consulted, blocks the stop and instructs the
-agent to validate its work against the ontology before completing.
-
-Respects stop_hook_active to prevent infinite loops — if the stop hook
-already fired once and we're in a retry, allow the stop.
+Three checks:
+  1. Kantext was consulted at all (2+ calls for foundation resolution)
+  2. If writes happened, a Kantext call occurred AFTER the last write
+     (proving the agent validated its work against the ontology)
+  3. Respects stop_hook_active to prevent infinite loops
 """
 
 import json
@@ -22,11 +22,27 @@ def get_state_dir():
 
 def cleanup_state(session_id):
     state_dir = get_state_dir()
-    state_file = os.path.join(state_dir, f"resolved-{session_id}")
+    for prefix in ("resolved-", "writes-"):
+        path = os.path.join(state_dir, f"{prefix}{session_id}")
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def read_json(path):
+    if not os.path.exists(path):
+        return None
     try:
-        os.remove(state_file)
-    except OSError:
-        pass
+        with open(path, "r") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def block(reason):
+    json.dump({"decision": "block", "reason": reason}, sys.stdout)
+    sys.exit(2)
 
 
 def main():
@@ -37,57 +53,52 @@ def main():
 
     session_id = input_data.get("session_id", "default")
 
-    # Prevent infinite loops: if this hook already blocked once, let it through
     if input_data.get("stop_hook_active", False):
         cleanup_state(session_id)
         sys.exit(0)
 
     state_dir = get_state_dir()
-    state_file = os.path.join(state_dir, f"resolved-{session_id}")
+    resolved = read_json(os.path.join(state_dir, f"resolved-{session_id}"))
+    writes = read_json(os.path.join(state_dir, f"writes-{session_id}"))
 
-    if not os.path.exists(state_file):
-        output = {
-            "decision": "block",
-            "reason": "\n".join([
-                "The Kantext ontological foundation was never resolved during this session.",
-                "",
-                "Before completing, you must:",
-                "1. Call Kantext MCP server_status() to check workspace state",
-                "2. Load and render the workspace contexts to understand the ontological foundation",
-                "3. Validate that your work is consistent with the project's knowledge structure",
-                "",
-                "This ensures all actions are grounded in the project's ontology.",
-            ]),
-        }
-        json.dump(output, sys.stdout)
-        sys.exit(2)
+    # Check 1: Kantext was consulted at all
+    if resolved is None:
+        block(
+            "The Kantext ontological foundation was never resolved during this session.\n\n"
+            "Before completing, you must:\n"
+            "1. Call Kantext MCP server_status() to check workspace state\n"
+            "2. Load and render the workspace contexts to understand the ontological foundation\n"
+            "3. Validate that your work is consistent with the project's knowledge structure"
+        )
 
-    # Foundation was resolved — read the state for logging, then clean up
-    try:
-        with open(state_file, "r") as f:
-            state = json.load(f)
-        call_count = len(state.get("calls", []))
-        if call_count < 2:
-            # Only one Kantext call was made — likely just server_status without
-            # actually rendering/querying the foundation. Warn but allow.
-            print(
-                json.dumps({
-                    "decision": "block",
-                    "reason": "\n".join([
-                        f"Only {call_count} Kantext tool call(s) were made this session.",
-                        "A thorough ontological resolution requires at minimum:",
-                        "  - server_status() to check workspace state",
-                        "  - render() or query() to actually read the ontological foundation",
-                        "",
-                        "Please call render() or query() on the loaded contexts to validate",
-                        "your work against the project's ontology before completing.",
-                    ]),
-                }),
-                file=sys.stdout,
-            )
-            sys.exit(2)
-    except (json.JSONDecodeError, OSError):
-        pass
+    kantext_calls = resolved.get("calls", [])
+    if len(kantext_calls) < 2:
+        block(
+            f"Only {len(kantext_calls)} Kantext tool call(s) were made this session.\n"
+            "A thorough ontological resolution requires at minimum:\n"
+            "  - server_status() to check workspace state\n"
+            "  - render() or query() to actually read the ontological foundation\n\n"
+            "Please call render() or query() on the loaded contexts to validate\n"
+            "your work against the project's ontology before completing."
+        )
+
+    # Check 2: If writes happened, Kantext must have been called AFTER the last write
+    if writes is not None:
+        write_list = writes.get("writes", [])
+        if write_list:
+            last_write_epoch = max(w.get("epoch", 0) for w in write_list)
+            last_kantext_epoch = resolved.get("last_kantext_epoch", 0)
+
+            if last_kantext_epoch < last_write_epoch:
+                last_write_tool = max(write_list, key=lambda w: w.get("epoch", 0)).get("tool", "unknown")
+                block(
+                    f"Write operations occurred (last: {last_write_tool}) but Kantext was not "
+                    "consulted afterwards to validate the changes.\n\n"
+                    "Before completing, you must validate your work against the ontology:\n"
+                    "1. Call render() or query() on the relevant Kantext contexts\n"
+                    "2. Verify your changes are consistent with the project's ontological foundation\n"
+                    "3. If changes conflict with the ontology, explain why or correct them"
+                )
 
     cleanup_state(session_id)
     sys.exit(0)

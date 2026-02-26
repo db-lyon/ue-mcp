@@ -26,6 +26,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/kantext_track_write.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [
@@ -33,10 +43,10 @@
         "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "python .claude/hooks/kantext_validate_stop.py",
-            "timeout": 15,
-            "statusMessage": "Validating Kantext grounding..."
+            "type": "agent",
+            "prompt": "You are a validation agent for the ue-mcp project. Your job is to verify that the work done in this session is consistent with the project's ontological foundation defined in Kantext.\n\nSteps:\n1. Call server_status(include_contexts=true) on the Kantext MCP to see loaded contexts\n2. Call render() or query() on the relevant contexts to retrieve the ontological structure\n3. Review the session transcript to understand what changes were made\n4. Evaluate: Are the changes consistent with the ontology? Do they follow the declared workflows, respect the type system, use correct tool patterns, and align with the project's domain model?\n\nIf the work is consistent: return ok=true\nIf the work conflicts with the ontology: return ok=false with a specific reason explaining which part of the ontology was violated and what should be corrected.",
+            "timeout": 120,
+            "statusMessage": "Validating work against Kantext ontology..."
           }
         ]
       }
