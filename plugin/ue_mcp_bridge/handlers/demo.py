@@ -153,15 +153,6 @@ def demo_scene_from_nothing(params: dict) -> dict:
     except Exception as e:
         log.append(f"Level creation failed ({e}), building in current level")
 
-    # ── Aim viewport at the build site FIRST so user watches it happen ─
-    try:
-        cam_loc = unreal.Vector(1100, -700, 380)
-        cam_rot = unreal.Rotator(-12, 150, 0)
-        _set_viewport_camera(cam_loc, cam_rot)
-        log.append("Viewport camera aimed at build site")
-    except Exception as e:
-        log.append(f"Initial camera aim failed: {e}")
-
     # ── Materials ───────────────────────────────────────────────────
     try:
         floor_mat = _make_material(
@@ -193,6 +184,16 @@ def demo_scene_from_nothing(params: dict) -> dict:
         log.append("Floor placed (60m x 60m reflective dark)")
     except Exception as e:
         log.append(f"Floor failed: {e}")
+
+    # ── Aim camera now that the level is initialized and has geometry ─
+    try:
+        _set_viewport_camera(
+            unreal.Vector(1100, -700, 380),
+            unreal.Rotator(-12, 150, 0),
+        )
+        log.append("Viewport camera aimed at build site")
+    except Exception:
+        pass
 
     # ── Central pedestal ────────────────────────────────────────────
     try:
