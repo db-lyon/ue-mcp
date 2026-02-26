@@ -24,13 +24,20 @@ public static class DemoTools
         "sky_light",
         "fog",
         "post_process",
+        "niagara_vfx",
+        "pcg_scatter",
+        "orbit_rings",
+        "level_sequence",
+        "tuning_panel",
         "save",
     ];
 
     [McpServerTool, Description(
         "Build a complete 'Neon Shrine' demo scene step by step. Creates a new level, " +
-        "then spawns each element one at a time with pauses between so you can watch " +
-        "the scene materialize in the viewport. Takes about 8 seconds total.")]
+        "spawns geometry/lights/atmosphere, then layers on Niagara VFX, PCG procedural scatter, " +
+        "an animated orbit ring (RotatingMovementComponent — hit Play to see it spin), " +
+        "a Level Sequence with actor bindings, and an Editor Utility Widget tuning panel. " +
+        "Each element appears one at a time so you can watch the scene materialize.")]
     public static async Task<string> demo_scene_from_nothing(
         ModeRouter router,
         EditorBridge bridge,

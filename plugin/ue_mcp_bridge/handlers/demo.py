@@ -1,5 +1,7 @@
 """Demo scene builders — step-by-step so the viewport renders between spawns."""
 
+import math
+
 try:
     import unreal
     HAS_UNREAL = True
@@ -134,6 +136,11 @@ STEP_ORDER = [
     "sky_light",
     "fog",
     "post_process",
+    "niagara_vfx",
+    "pcg_scatter",
+    "orbit_rings",
+    "level_sequence",
+    "tuning_panel",
     "save",
 ]
 
@@ -299,6 +306,244 @@ def _step_post_process():
     return {"step": "post_process", "ok": True, "message": "Bloom + vignette + exposure"}
 
 
+def _step_niagara_vfx():
+    """Create a Niagara VFX system and place it above the hero sphere."""
+    try:
+        ns_path = f"{MAT_DIR}/NS_Demo_Aura"
+        ns = None
+
+        if unreal.EditorAssetLibrary.does_asset_exist(ns_path):
+            ns = unreal.EditorAssetLibrary.load_asset(ns_path)
+        else:
+            tools = unreal.AssetToolsHelpers.get_asset_tools()
+            factory = None
+            for cls_name in ("NiagaraSystemFactoryNew", "NiagaraSystemFactory"):
+                cls = getattr(unreal, cls_name, None)
+                if cls:
+                    factory = cls()
+                    break
+            if factory:
+                ns = tools.create_asset("NS_Demo_Aura", MAT_DIR, None, factory)
+                if ns:
+                    unreal.EditorAssetLibrary.save_asset(ns_path)
+
+        if ns is None:
+            return {"step": "niagara_vfx", "ok": True,
+                    "message": "Niagara plugin not available — skipped"}
+
+        placed = False
+        if hasattr(unreal, "NiagaraFunctionLibrary"):
+            world = unreal.EditorLevelLibrary.get_editor_world()
+            comp = unreal.NiagaraFunctionLibrary.spawn_system_at_location(
+                world, ns, unreal.Vector(0, 0, 380), auto_destroy=False
+            )
+            if comp:
+                owner = comp.get_owner()
+                if owner:
+                    owner.set_actor_label("Demo_NiagaraVFX")
+                    owner.set_folder_path(FOLDER)
+                    placed = True
+
+        msg = "Niagara VFX system created"
+        if placed:
+            msg += " & spawned above hero sphere"
+        return {"step": "niagara_vfx", "ok": True, "message": msg}
+    except Exception as e:
+        return {"step": "niagara_vfx", "ok": False, "error": str(e)}
+
+
+def _step_pcg_scatter():
+    """Create a PCG graph and place a PCG scatter volume on the floor."""
+    try:
+        graph_path = f"{MAT_DIR}/PCG_Demo_Scatter"
+        graph = None
+
+        if unreal.EditorAssetLibrary.does_asset_exist(graph_path):
+            graph = unreal.EditorAssetLibrary.load_asset(graph_path)
+        else:
+            tools = unreal.AssetToolsHelpers.get_asset_tools()
+            factory = None
+            for cls_name in ("PCGGraphFactory", "PCGGraphAssetFactory"):
+                cls = getattr(unreal, cls_name, None)
+                if cls:
+                    factory = cls()
+                    break
+            if factory:
+                graph = tools.create_asset("PCG_Demo_Scatter", MAT_DIR, None, factory)
+            else:
+                pcg_cls = getattr(unreal, "PCGGraphInterface", None) or getattr(unreal, "PCGGraph", None)
+                if pcg_cls:
+                    graph = tools.create_asset("PCG_Demo_Scatter", MAT_DIR, pcg_cls, None)
+
+            if graph:
+                unreal.EditorAssetLibrary.save_asset(graph_path)
+
+        if graph is None:
+            return {"step": "pcg_scatter", "ok": True,
+                    "message": "PCG plugin not available — skipped"}
+
+        volume_class = getattr(unreal, "PCGVolume", None) or getattr(unreal, "APCGVolume", None)
+        placed = False
+        if volume_class:
+            vol = unreal.EditorLevelLibrary.spawn_actor_from_class(
+                volume_class, unreal.Vector(0, 0, 0)
+            )
+            if vol:
+                vol.set_actor_label("Demo_PCGScatter")
+                vol.set_folder_path(FOLDER)
+                vol.set_actor_scale3d(unreal.Vector(30, 30, 3))
+                if hasattr(unreal, "PCGComponent"):
+                    pcg_comps = vol.get_components_by_class(unreal.PCGComponent)
+                    if pcg_comps:
+                        pcg_comps[0].set_editor_property("graph", graph)
+                        pcg_comps[0].set_editor_property("seed", 42)
+                placed = True
+
+        msg = "PCG scatter graph created"
+        if placed:
+            msg += " & volume placed on floor (30m x 30m)"
+        return {"step": "pcg_scatter", "ok": True, "message": msg}
+    except Exception as e:
+        return {"step": "pcg_scatter", "ok": False, "error": str(e)}
+
+
+def _step_orbit_rings():
+    """Spawn an orbit ring of emissive spheres + add rotation for animation."""
+    try:
+        mat = _load_demo_mat("M_Demo_Glow")
+        count = 8
+        radius = 220
+        height = 280
+
+        for i in range(count):
+            angle = i * (2 * math.pi / count)
+            x = radius * math.cos(angle)
+            y = radius * math.sin(angle)
+            orb = _spawn_mesh(
+                f"Demo_Ring_{i+1}", SPHERE,
+                (x, y, height), scale=(0.22, 0.22, 0.22)
+            )
+            _apply_mat(orb, mat)
+
+        animated = False
+        rot_cls = getattr(unreal, "RotatingMovementComponent", None)
+        if rot_cls:
+            for a in unreal.EditorLevelLibrary.get_all_level_actors():
+                if a.get_actor_label() == "Demo_HeroSphere":
+                    comp = a.add_component_by_class(
+                        rot_cls, False, unreal.Transform(), False
+                    )
+                    if comp:
+                        comp.set_editor_property(
+                            "rotation_rate", unreal.Rotator(0, 90, 15)
+                        )
+                        animated = True
+                    break
+
+        msg = f"{count} glowing ring orbs encircling hero sphere"
+        if animated:
+            msg += " + RotatingMovementComponent (hit Play to see it spin)"
+        return {"step": "orbit_rings", "ok": True, "message": msg}
+    except Exception as e:
+        return {"step": "orbit_rings", "ok": False, "error": str(e)}
+
+
+def _step_level_sequence():
+    """Create a Level Sequence and bind the hero sphere for cinematic playback."""
+    try:
+        seq_path = f"{MAT_DIR}/SEQ_Demo_Showcase"
+        seq = None
+
+        if unreal.EditorAssetLibrary.does_asset_exist(seq_path):
+            seq = unreal.EditorAssetLibrary.load_asset(seq_path)
+        else:
+            factory = unreal.LevelSequenceFactoryNew()
+            tools = unreal.AssetToolsHelpers.get_asset_tools()
+            seq = tools.create_asset(
+                "SEQ_Demo_Showcase", MAT_DIR, unreal.LevelSequence, factory
+            )
+
+        if seq is None:
+            return {"step": "level_sequence", "ok": False,
+                    "error": "Failed to create Level Sequence"}
+
+        bound = False
+        for a in unreal.EditorLevelLibrary.get_all_level_actors():
+            if a.get_actor_label() == "Demo_HeroSphere":
+                if hasattr(seq, "add_possessable"):
+                    binding = seq.add_possessable(a)
+                    if binding:
+                        bound = True
+                break
+
+        unreal.EditorAssetLibrary.save_asset(seq_path)
+
+        seq_actor_placed = False
+        lsa_class = getattr(unreal, "LevelSequenceActor", None)
+        if lsa_class:
+            lsa = unreal.EditorLevelLibrary.spawn_actor_from_class(
+                lsa_class, unreal.Vector(0, 0, 100)
+            )
+            if lsa:
+                lsa.set_actor_label("Demo_SequencePlayer")
+                lsa.set_folder_path(FOLDER)
+                try:
+                    lsa.set_editor_property(
+                        "level_sequence", unreal.SoftObjectPath(seq_path)
+                    )
+                except Exception:
+                    try:
+                        lsa.set_editor_property("level_sequence_asset", seq)
+                    except Exception:
+                        pass
+                seq_actor_placed = True
+
+        parts = ["Level Sequence created"]
+        if bound:
+            parts.append("hero sphere bound")
+        if seq_actor_placed:
+            parts.append("SequenceActor placed in scene")
+        return {"step": "level_sequence", "ok": True, "message": " — ".join(parts)}
+    except Exception as e:
+        return {"step": "level_sequence", "ok": False, "error": str(e)}
+
+
+def _step_tuning_panel():
+    """Create and open an Editor Utility Widget tuning panel."""
+    try:
+        euw_path = f"{MAT_DIR}/EUW_DemoTuning"
+
+        if not unreal.EditorAssetLibrary.does_asset_exist(euw_path):
+            tools = unreal.AssetToolsHelpers.get_asset_tools()
+            factory = None
+            if hasattr(unreal, "EditorUtilityWidgetBlueprintFactory"):
+                factory = unreal.EditorUtilityWidgetBlueprintFactory()
+            if factory is None:
+                return {"step": "tuning_panel", "ok": True,
+                        "message": "EditorUtilityWidget factory not available — skipped"}
+
+            asset = tools.create_asset("EUW_DemoTuning", MAT_DIR, None, factory)
+            if asset is None:
+                return {"step": "tuning_panel", "ok": False,
+                        "error": "Failed to create Editor Utility Widget"}
+            unreal.EditorAssetLibrary.save_asset(euw_path)
+
+        opened = False
+        if hasattr(unreal, "EditorUtilitySubsystem"):
+            subsys = unreal.get_editor_subsystem(unreal.EditorUtilitySubsystem)
+            asset = unreal.EditorAssetLibrary.load_asset(euw_path)
+            if subsys and asset and hasattr(subsys, "spawn_and_register_tab"):
+                subsys.spawn_and_register_tab(asset)
+                opened = True
+
+        msg = "Editor Utility Widget tuning panel created"
+        if opened:
+            msg += " & opened as editor tab"
+        return {"step": "tuning_panel", "ok": True, "message": msg}
+    except Exception as e:
+        return {"step": "tuning_panel", "ok": False, "error": str(e)}
+
+
 def _step_save():
     try:
         if hasattr(unreal, "LevelEditorSubsystem"):
@@ -324,6 +569,11 @@ _STEPS = {
     "sky_light": _step_sky_light,
     "fog": _step_fog,
     "post_process": _step_post_process,
+    "niagara_vfx": _step_niagara_vfx,
+    "pcg_scatter": _step_pcg_scatter,
+    "orbit_rings": _step_orbit_rings,
+    "level_sequence": _step_level_sequence,
+    "tuning_panel": _step_tuning_panel,
     "save": _step_save,
 }
 
@@ -357,14 +607,19 @@ def demo_cleanup(params: dict) -> dict:
     if removed:
         log.append(f"Removed {removed} demo actors")
 
-    mats_removed = 0
-    for name in ["M_Demo_Floor", "M_Demo_Glow", "M_Demo_Pillar"]:
+    assets_removed = 0
+    demo_assets = [
+        "M_Demo_Floor", "M_Demo_Glow", "M_Demo_Pillar",
+        "NS_Demo_Aura", "PCG_Demo_Scatter",
+        "SEQ_Demo_Showcase", "EUW_DemoTuning",
+    ]
+    for name in demo_assets:
         path = f"{MAT_DIR}/{name}"
         if unreal.EditorAssetLibrary.does_asset_exist(path):
             unreal.EditorAssetLibrary.delete_asset(path)
-            mats_removed += 1
-    if mats_removed:
-        log.append(f"Deleted {mats_removed} demo materials")
+            assets_removed += 1
+    if assets_removed:
+        log.append(f"Deleted {assets_removed} demo assets")
 
     if unreal.EditorAssetLibrary.does_asset_exist(DEMO_LEVEL):
         unreal.EditorAssetLibrary.delete_asset(DEMO_LEVEL)
@@ -379,7 +634,7 @@ def demo_cleanup(params: dict) -> dict:
     except Exception:
         pass
 
-    return {"actorsRemoved": removed, "materialsRemoved": mats_removed, "log": log}
+    return {"actorsRemoved": removed, "assetsRemoved": assets_removed, "log": log}
 
 
 HANDLERS = {
