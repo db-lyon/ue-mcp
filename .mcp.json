@@ -2,7 +2,7 @@
   "mcpServers": {
     "kantext": {
       "command": "c:\\Users\\david\\Projects\\UE\\Vale\\kantext-mcp-windows-x86_64.exe",
-      "args": []
+      "args": ["--workspace", "C:\\Users\\david\\Projects\\UE\\ue-mcp"]
     }
   }
 }
