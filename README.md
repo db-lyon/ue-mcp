@@ -115,7 +115,7 @@ import ue_mcp_bridge; ue_mcp_bridge.start()
 3. In live mode, read operations first try the bridge (richer data from editor reflection), falling back to offline parsing on failure
 4. Write operations (compile, create, modify) are **only available in live mode** since they require the editor to execute safely
 
-## Tools Reference (~190 tools)
+## Tools Reference (187 tools)
 
 ### Status & Project
 
