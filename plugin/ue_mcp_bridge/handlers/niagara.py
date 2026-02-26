@@ -111,9 +111,41 @@ def set_niagara_parameter(params: dict) -> dict:
     return {"actorLabel": actor_label, "parameterName": parameter_name, "success": True}
 
 
+def create_niagara_system(params: dict) -> dict:
+    """Create a new empty Niagara System asset."""
+    asset_name = params.get("name", "NS_NewSystem")
+    package_path = params.get("packagePath", "/Game/VFX")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+
+    factory = None
+    if hasattr(unreal, "NiagaraSystemFactoryNew"):
+        factory = unreal.NiagaraSystemFactoryNew()
+    elif hasattr(unreal, "NiagaraSystemFactory"):
+        factory = unreal.NiagaraSystemFactory()
+    else:
+        raise RuntimeError("No Niagara system factory available in this UE version")
+
+    asset = tools.create_asset(asset_name, package_path, None, factory)
+    if asset is None:
+        raise RuntimeError(f"Failed to create Niagara system at {package_path}/{asset_name}")
+
+    unreal.EditorAssetLibrary.save_asset(f"{package_path}/{asset_name}")
+
+    return {
+        "path": f"{package_path}/{asset_name}",
+        "name": asset.get_name(),
+        "class": asset.get_class().get_name(),
+    }
+
+
 HANDLERS = {
     "list_niagara_systems": list_niagara_systems,
     "get_niagara_info": get_niagara_info,
     "spawn_niagara_at_location": spawn_niagara_at_location,
     "set_niagara_parameter": set_niagara_parameter,
+    "create_niagara_system": create_niagara_system,
 }

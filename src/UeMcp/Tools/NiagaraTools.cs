@@ -80,6 +80,22 @@ public static class NiagaraTools
         catch { return fallback; }
     }
 
+    [McpServerTool, Description(
+        "Create a new empty Niagara System asset. Use this to start building VFX from scratch.")]
+    public static async Task<string> create_niagara_system(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Asset name (e.g. 'NS_Fire')")] string name = "NS_NewSystem",
+        [Description("Package path (e.g. '/Game/VFX')")] string packagePath = "/Game/VFX")
+    {
+        router.EnsureLiveMode("create_niagara_system");
+        return await bridge.SendAndSerializeAsync("create_niagara_system", new()
+        {
+            ["name"] = name,
+            ["packagePath"] = packagePath
+        });
+    }
+
     private static object ParseValue(string value)
     {
         if (bool.TryParse(value, out var b)) return b;
