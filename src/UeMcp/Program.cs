@@ -36,6 +36,7 @@ builder.Services
             Name = "ue-mcp",
             Version = "0.1.0"
         };
+        options.ServerInstructions = ServerInstructions.Text;
     })
     .WithStdioServerTransport()
     .WithToolsFromAssembly();

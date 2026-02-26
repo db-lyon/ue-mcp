@@ -1,0 +1,75 @@
+---
+description: Guidance for using the UE-MCP Unreal Engine tools
+globs:
+alwaysApply: true
+---
+
+# UE-MCP Tool Selection Guide
+
+You have access to 155+ Unreal Engine MCP tools. This guide helps you pick the right ones.
+
+## Before You Start
+
+- Call `get_status` to check if the editor is connected (live mode) or if only offline tools are available.
+- Offline tools can read/inspect assets without the editor running.
+- Live tools (create, modify, execute) require the editor to be connected.
+
+## Common Tasks → Tools
+
+### "What's in the level?"
+→ `get_world_outliner` then `get_actor_details` for specifics
+
+### "What's in the project?"
+→ `list_assets` or `search_assets` with wildcard paths
+
+### "Create/place something in the level"
+→ `place_actor` for meshes/actors, `spawn_light` for lights, `spawn_volume` for volumes
+
+### "Edit a Blueprint"
+1. `read_blueprint` to understand current state
+2. `search_node_types` to find the right node class
+3. `add_blueprint_node` to place nodes
+4. `connect_blueprint_pins` to wire them together
+5. `compile_blueprint` when done
+
+### "Create a Blueprint from scratch"
+1. `create_blueprint` with parent class
+2. `add_blueprint_variable` for variables
+3. `create_blueprint_function` for functions
+4. `add_blueprint_component` for components
+5. Then add nodes and connect pins as above
+
+### "Work with materials"
+→ Read: `read_material`, `list_material_parameters`
+→ Create: `create_material`, `create_material_instance`
+→ Edit: `set_material_parameter`, `set_material_base_color`, `connect_texture_to_material`
+
+### "Modify landscape/terrain"
+→ `get_landscape_info` first, then `sculpt_landscape`, `paint_landscape_layer`, etc.
+
+### "Set up PCG (procedural generation)"
+→ `create_pcg_graph`, `add_pcg_node`, `connect_pcg_nodes`, `set_pcg_node_settings`, `execute_pcg_graph`
+
+### "Work with foliage"
+→ `list_foliage_types`, `paint_foliage`, `erase_foliage`, `sample_foliage`
+
+### "Understand a C++ class"
+→ `reflect_class` for UE reflection data, `read_cpp_header` for source
+
+### "I need something not covered by a specific tool"
+→ `execute_python` — runs arbitrary Python in the editor. This is your escape hatch.
+
+### "What does this class/struct/enum look like?"
+→ `reflect_class`, `reflect_struct`, `reflect_enum`
+
+## Tool Naming Conventions
+
+Tools follow a `verb_noun` pattern within their domain:
+- `read_*` / `get_*` — inspect/query (often offline-capable)
+- `list_*` — enumerate assets or items
+- `search_*` — filtered search with wildcards
+- `create_*` / `spawn_*` — create new things
+- `set_*` — modify properties
+- `delete_*` / `erase_*` — remove things
+- `add_*` — add sub-elements (nodes, variables, tracks, etc.)
+- `connect_*` — wire things together (pins, PCG nodes)
