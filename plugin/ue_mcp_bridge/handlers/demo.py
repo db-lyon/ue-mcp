@@ -117,18 +117,6 @@ def _load_demo_mat(name):
     return None
 
 
-def _set_viewport_camera(location, rotation):
-    if hasattr(unreal, "UnrealEditorSubsystem"):
-        subsys = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
-        if subsys and hasattr(subsys, "set_level_viewport_camera_info"):
-            subsys.set_level_viewport_camera_info(location, rotation)
-            return True
-    if hasattr(unreal.EditorLevelLibrary, "set_level_viewport_camera_info"):
-        unreal.EditorLevelLibrary.set_level_viewport_camera_info(location, rotation)
-        return True
-    return False
-
-
 # ── Step handlers ────────────────────────────────────────────────────
 # Each step is a separate RPC call so UE renders between them.
 
@@ -136,7 +124,6 @@ STEP_ORDER = [
     "create_level",
     "materials",
     "floor",
-    "camera",
     "pedestal",
     "hero_sphere",
     "pillars",
@@ -147,7 +134,6 @@ STEP_ORDER = [
     "sky_light",
     "fog",
     "post_process",
-    "final_camera",
     "save",
 ]
 
@@ -199,11 +185,6 @@ def _step_floor():
     floor = _spawn_mesh("Demo_Floor", CUBE, (0, 0, -5), scale=(60, 60, 0.1))
     _apply_mat(floor, _load_demo_mat("M_Demo_Floor"))
     return {"step": "floor", "ok": True, "message": "60m x 60m dark reflective floor"}
-
-
-def _step_camera():
-    _set_viewport_camera(unreal.Vector(1100, -700, 380), unreal.Rotator(-12, 150, 0))
-    return {"step": "camera", "ok": True, "message": "Viewport aimed at build site"}
 
 
 def _step_pedestal():
@@ -318,11 +299,6 @@ def _step_post_process():
     return {"step": "post_process", "ok": True, "message": "Bloom + vignette + exposure"}
 
 
-def _step_final_camera():
-    _set_viewport_camera(unreal.Vector(1000, -650, 350), unreal.Rotator(-10, 148, 0))
-    return {"step": "final_camera", "ok": True, "message": "Final camera framing"}
-
-
 def _step_save():
     try:
         if hasattr(unreal, "LevelEditorSubsystem"):
@@ -338,7 +314,6 @@ _STEPS = {
     "create_level": _step_create_level,
     "materials": _step_materials,
     "floor": _step_floor,
-    "camera": _step_camera,
     "pedestal": _step_pedestal,
     "hero_sphere": _step_hero_sphere,
     "pillars": _step_pillars,
@@ -349,7 +324,6 @@ _STEPS = {
     "sky_light": _step_sky_light,
     "fog": _step_fog,
     "post_process": _step_post_process,
-    "final_camera": _step_final_camera,
     "save": _step_save,
 }
 

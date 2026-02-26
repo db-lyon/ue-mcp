@@ -14,7 +14,6 @@ public static class DemoTools
         "create_level",
         "materials",
         "floor",
-        "camera",
         "pedestal",
         "hero_sphere",
         "pillars",
@@ -25,7 +24,6 @@ public static class DemoTools
         "sky_light",
         "fog",
         "post_process",
-        "final_camera",
         "save",
     ];
 
