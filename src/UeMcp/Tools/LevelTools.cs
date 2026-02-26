@@ -103,6 +103,72 @@ public static class LevelTools
         });
     }
 
+    [McpServerTool, Description(
+        "Select actors in the editor by label. Use to highlight actors or prepare for bulk operations.")]
+    public static async Task<string> select_actors(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Array of actor labels to select (JSON array, e.g. '[\"Light1\", \"Wall2\"]')")] string labels,
+        [Description("Add to existing selection instead of replacing it. Default: false")] bool addToSelection = false)
+    {
+        router.EnsureLiveMode("select_actors");
+        var labelArray = System.Text.Json.JsonSerializer.Deserialize<string[]>(labels) ?? [];
+        return await bridge.SendAndSerializeAsync("select_actors", new()
+        {
+            ["labels"] = labelArray,
+            ["addToSelection"] = addToSelection
+        });
+    }
+
+    [McpServerTool, Description(
+        "Get the currently selected actors in the editor. Returns label, class, and location for each.")]
+    public static async Task<string> get_selected_actors(
+        ModeRouter router,
+        EditorBridge bridge)
+    {
+        router.EnsureLiveMode("get_selected_actors");
+        return await bridge.SendAndSerializeAsync("get_selected_actors", new());
+    }
+
+    [McpServerTool, Description(
+        "Add a component to an actor already placed in the level. " +
+        "For example, add a PointLightComponent, AudioComponent, or BoxCollisionComponent to any actor.")]
+    public static async Task<string> add_component_to_actor(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Actor label in the level")] string actorLabel,
+        [Description("Component class name (e.g. 'PointLightComponent', 'AudioComponent', 'BoxComponent')")] string componentClass,
+        [Description("Optional: name for the new component")] string? componentName = null)
+    {
+        router.EnsureLiveMode("add_component_to_actor");
+        return await bridge.SendAndSerializeAsync("add_component_to_actor", new()
+        {
+            ["actorLabel"] = actorLabel,
+            ["componentClass"] = componentClass,
+            ["componentName"] = componentName ?? ""
+        });
+    }
+
+    [McpServerTool, Description(
+        "Set a property on a specific component of an actor in the level.")]
+    public static async Task<string> set_component_property(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Actor label in the level")] string actorLabel,
+        [Description("Property name to set")] string propertyName,
+        [Description("New value (JSON)")] string value,
+        [Description("Optional: component class to target (e.g. 'StaticMeshComponent'). If omitted, uses first component.")] string? componentClass = null)
+    {
+        router.EnsureLiveMode("set_component_property");
+        return await bridge.SendAndSerializeAsync("set_component_property", new()
+        {
+            ["actorLabel"] = actorLabel,
+            ["componentClass"] = componentClass ?? "",
+            ["propertyName"] = propertyName,
+            ["value"] = System.Text.Json.JsonSerializer.Deserialize<object>(value)
+        });
+    }
+
     private static Dictionary<string, object?>? ParseJsonOrDefault(string? json, Dictionary<string, object?>? defaultValue)
     {
         if (string.IsNullOrWhiteSpace(json)) return defaultValue;

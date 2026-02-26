@@ -262,10 +262,148 @@ def move_actor(params: dict) -> dict:
     }
 
 
+def select_actors(params: dict) -> dict:
+    """Select actors in the editor by label."""
+    labels = params.get("labels", [])
+    add_to_selection = params.get("addToSelection", False)
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    if not add_to_selection:
+        unreal.EditorLevelLibrary.set_selected_level_actors([])
+
+    all_actors = unreal.EditorLevelLibrary.get_all_level_actors()
+    label_set = set(labels)
+    matched = []
+    for a in all_actors:
+        if a.get_actor_label() in label_set:
+            matched.append(a)
+
+    if matched:
+        current = list(unreal.EditorLevelLibrary.get_selected_level_actors()) if add_to_selection else []
+        unreal.EditorLevelLibrary.set_selected_level_actors(current + matched)
+
+    return {
+        "selected": [a.get_actor_label() for a in matched],
+        "count": len(matched),
+        "requested": len(labels),
+    }
+
+
+def get_selected_actors(params: dict) -> dict:
+    """Get the currently selected actors in the editor."""
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    selected = unreal.EditorLevelLibrary.get_selected_level_actors()
+    actors = []
+    for a in selected:
+        actors.append({
+            "label": a.get_actor_label(),
+            "class": a.get_class().get_name(),
+            "location": {
+                "x": a.get_actor_location().x,
+                "y": a.get_actor_location().y,
+                "z": a.get_actor_location().z,
+            },
+        })
+
+    return {"count": len(actors), "actors": actors}
+
+
+def add_component_to_actor(params: dict) -> dict:
+    """Add a component to an existing actor in the level."""
+    actor_label = params.get("actorLabel", "")
+    component_class = params.get("componentClass", "")
+    component_name = params.get("componentName", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+    if not actor_label or not component_class:
+        raise ValueError("actorLabel and componentClass are required")
+
+    target = None
+    for a in unreal.EditorLevelLibrary.get_all_level_actors():
+        if a.get_actor_label() == actor_label:
+            target = a
+            break
+
+    if target is None:
+        raise ValueError(f"Actor not found: {actor_label}")
+
+    cls = getattr(unreal, component_class, None)
+    if cls is None:
+        raise ValueError(f"Component class not found: {component_class}")
+
+    comp = target.add_component_by_class(cls, False, unreal.Transform(), False)
+    if comp is None:
+        raise RuntimeError(f"Failed to add {component_class} to {actor_label}")
+
+    if component_name:
+        try:
+            comp.rename(component_name)
+        except Exception:
+            pass
+
+    return {
+        "actorLabel": actor_label,
+        "componentClass": component_class,
+        "componentName": comp.get_name(),
+        "success": True,
+    }
+
+
+def set_component_property(params: dict) -> dict:
+    """Set a property on a component of an actor in the level."""
+    actor_label = params.get("actorLabel", "")
+    component_class = params.get("componentClass", "")
+    property_name = params.get("propertyName", "")
+    value = params.get("value")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    target = None
+    for a in unreal.EditorLevelLibrary.get_all_level_actors():
+        if a.get_actor_label() == actor_label:
+            target = a
+            break
+
+    if target is None:
+        raise ValueError(f"Actor not found: {actor_label}")
+
+    cls = getattr(unreal, component_class, None) if component_class else None
+    comp = None
+
+    if cls:
+        comp = target.get_component_by_class(cls)
+    else:
+        comps = target.get_components_by_class(unreal.ActorComponent)
+        if comps:
+            comp = comps[0]
+
+    if comp is None:
+        raise ValueError(f"Component {component_class or 'any'} not found on {actor_label}")
+
+    comp.set_editor_property(property_name, value)
+
+    return {
+        "actorLabel": actor_label,
+        "componentClass": comp.get_class().get_name(),
+        "propertyName": property_name,
+        "success": True,
+    }
+
+
 HANDLERS = {
     "get_world_outliner": get_world_outliner,
     "place_actor": place_actor,
     "delete_actor": delete_actor,
     "get_actor_details": get_actor_details,
     "move_actor": move_actor,
+    "select_actors": select_actors,
+    "get_selected_actors": get_selected_actors,
+    "add_component_to_actor": add_component_to_actor,
+    "set_component_property": set_component_property,
 }
