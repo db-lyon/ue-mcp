@@ -1,4 +1,4 @@
-"""Demo scene builders — show off the MCP's capabilities in one shot."""
+"""Demo scene builders — step-by-step so the viewport renders between spawns."""
 
 try:
     import unreal
@@ -110,6 +110,13 @@ def _apply_mat(actor, mat):
         comp.set_material(0, mat)
 
 
+def _load_demo_mat(name):
+    path = f"{MAT_DIR}/{name}"
+    if unreal.EditorAssetLibrary.does_asset_exist(path):
+        return unreal.EditorAssetLibrary.load_asset(path)
+    return None
+
+
 def _set_viewport_camera(location, rotation):
     if hasattr(unreal, "UnrealEditorSubsystem"):
         subsys = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
@@ -122,252 +129,229 @@ def _set_viewport_camera(location, rotation):
     return False
 
 
-# ── Scene: Neon Shrine ──────────────────────────────────────────────
+# ── Step handlers ────────────────────────────────────────────────────
+# Each step is a separate RPC call so UE renders between them.
 
-def demo_scene_from_nothing(params: dict) -> dict:
-    """Build a 'Neon Shrine' from an empty level: floor, pillars, glowing
-    sphere, colored lights, fog, post-process, and camera — one call."""
+STEP_ORDER = [
+    "create_level",
+    "materials",
+    "floor",
+    "camera",
+    "pedestal",
+    "hero_sphere",
+    "pillars",
+    "orbs",
+    "neon_lights",
+    "hero_light",
+    "moonlight",
+    "sky_light",
+    "fog",
+    "post_process",
+    "final_camera",
+    "save",
+]
 
+
+def demo_step(params: dict) -> dict:
+    """Execute a single step of the Neon Shrine demo."""
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
-    log = []
+    step = params.get("step", "")
+    fn = _STEPS.get(step)
+    if fn is None:
+        raise ValueError(f"Unknown demo step: {step}. Valid: {STEP_ORDER}")
+    return fn()
 
-    # ── Create and open a fresh level ───────────────────────────────
+
+def demo_get_steps(params: dict) -> dict:
+    """Return the ordered list of steps for the demo."""
+    return {"steps": STEP_ORDER, "count": len(STEP_ORDER)}
+
+
+def _step_create_level():
     try:
         if hasattr(unreal, "LevelEditorSubsystem"):
             subsys = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
             if subsys and hasattr(subsys, "new_level"):
                 subsys.new_level(DEMO_LEVEL)
-                log.append(f"New level created and opened: {DEMO_LEVEL}")
             elif subsys and hasattr(subsys, "new_level_from_template"):
                 subsys.new_level_from_template(DEMO_LEVEL, "")
-                log.append(f"New level created and opened: {DEMO_LEVEL}")
-            else:
-                unreal.EditorLevelLibrary.new_level(DEMO_LEVEL) if hasattr(unreal.EditorLevelLibrary, "new_level") else None
-                log.append(f"New level created and opened: {DEMO_LEVEL}")
         else:
             world = unreal.EditorLevelLibrary.get_editor_world()
             unreal.SystemLibrary.execute_console_command(world, "MAP NEW")
-            log.append("New level created via console command")
     except Exception as e:
-        log.append(f"Level creation failed ({e}), building in current level")
+        return {"step": "create_level", "ok": False, "error": str(e)}
+    return {"step": "create_level", "ok": True, "message": f"Level created: {DEMO_LEVEL}"}
 
-    # ── Materials ───────────────────────────────────────────────────
+
+def _step_materials():
     try:
-        floor_mat = _make_material(
-            "M_Demo_Floor",
-            base_color=(0.015, 0.015, 0.025, 1),
-            roughness=0.12,
-            metallic=0.9,
-        )
-        glow_mat = _make_material(
-            "M_Demo_Glow",
-            base_color=(0, 0, 0, 1),
-            emissive=(5.0, 3.0, 0.4, 1),
-        )
-        pillar_mat = _make_material(
-            "M_Demo_Pillar",
-            base_color=(0.06, 0.06, 0.08, 1),
-            roughness=0.35,
-            metallic=0.4,
-        )
-        log.append("Materials created (floor, glow, pillar)")
+        _make_material("M_Demo_Floor", base_color=(0.015, 0.015, 0.025, 1), roughness=0.12, metallic=0.9)
+        _make_material("M_Demo_Glow", base_color=(0, 0, 0, 1), emissive=(5.0, 3.0, 0.4, 1))
+        _make_material("M_Demo_Pillar", base_color=(0.06, 0.06, 0.08, 1), roughness=0.35, metallic=0.4)
+        return {"step": "materials", "ok": True, "message": "3 materials created (floor, glow, pillar)"}
     except Exception as e:
-        floor_mat = glow_mat = pillar_mat = None
-        log.append(f"Materials skipped: {e}")
+        return {"step": "materials", "ok": False, "error": str(e)}
 
-    # ── Floor ───────────────────────────────────────────────────────
-    try:
-        floor = _spawn_mesh("Demo_Floor", CUBE, (0, 0, -5), scale=(60, 60, 0.1))
-        _apply_mat(floor, floor_mat)
-        log.append("Floor placed (60m x 60m reflective dark)")
-    except Exception as e:
-        log.append(f"Floor failed: {e}")
 
-    # ── Aim camera now that the level is initialized and has geometry ─
-    try:
-        _set_viewport_camera(
-            unreal.Vector(1100, -700, 380),
-            unreal.Rotator(-12, 150, 0),
-        )
-        log.append("Viewport camera aimed at build site")
-    except Exception:
-        pass
+def _step_floor():
+    floor = _spawn_mesh("Demo_Floor", CUBE, (0, 0, -5), scale=(60, 60, 0.1))
+    _apply_mat(floor, _load_demo_mat("M_Demo_Floor"))
+    return {"step": "floor", "ok": True, "message": "60m x 60m dark reflective floor"}
 
-    # ── Central pedestal ────────────────────────────────────────────
-    try:
-        ped = _spawn_mesh("Demo_Pedestal", CYLINDER, (0, 0, 75), scale=(2.5, 2.5, 1.5))
-        _apply_mat(ped, pillar_mat)
-        log.append("Pedestal placed")
-    except Exception as e:
-        log.append(f"Pedestal failed: {e}")
 
-    # ── Hero sphere (glowing) ───────────────────────────────────────
-    try:
-        hero = _spawn_mesh("Demo_HeroSphere", SPHERE, (0, 0, 260), scale=(1.8, 1.8, 1.8))
-        _apply_mat(hero, glow_mat)
-        log.append("Hero sphere placed (emissive gold)")
-    except Exception as e:
-        log.append(f"Hero sphere failed: {e}")
+def _step_camera():
+    _set_viewport_camera(unreal.Vector(1100, -700, 380), unreal.Rotator(-12, 150, 0))
+    return {"step": "camera", "ok": True, "message": "Viewport aimed at build site"}
 
-    # ── Four pillars ────────────────────────────────────────────────
-    pillar_xy = [(600, 600), (-600, 600), (-600, -600), (600, -600)]
-    for i, (x, y) in enumerate(pillar_xy):
-        try:
-            p = _spawn_mesh(f"Demo_Pillar_{i+1}", CYLINDER, (x, y, 200), scale=(0.6, 0.6, 4))
-            _apply_mat(p, pillar_mat)
-        except Exception:
-            pass
-    log.append("4 pillars placed")
 
-    # ── Accent orbs at pillar bases ─────────────────────────────────
-    for i, (x, y) in enumerate(pillar_xy):
-        try:
-            orb = _spawn_mesh(f"Demo_Orb_{i+1}", SPHERE, (x, y, 30), scale=(0.4, 0.4, 0.4))
-            _apply_mat(orb, glow_mat)
-        except Exception:
-            pass
-    log.append("4 accent orbs placed")
+def _step_pedestal():
+    ped = _spawn_mesh("Demo_Pedestal", CYLINDER, (0, 0, 75), scale=(2.5, 2.5, 1.5))
+    _apply_mat(ped, _load_demo_mat("M_Demo_Pillar"))
+    return {"step": "pedestal", "ok": True, "message": "Central pedestal"}
 
-    # ── Colored point lights ────────────────────────────────────────
-    neon_lights = [
+
+def _step_hero_sphere():
+    hero = _spawn_mesh("Demo_HeroSphere", SPHERE, (0, 0, 260), scale=(1.8, 1.8, 1.8))
+    _apply_mat(hero, _load_demo_mat("M_Demo_Glow"))
+    return {"step": "hero_sphere", "ok": True, "message": "Glowing golden sphere"}
+
+
+def _step_pillars():
+    mat = _load_demo_mat("M_Demo_Pillar")
+    for i, (x, y) in enumerate([(600, 600), (-600, 600), (-600, -600), (600, -600)]):
+        p = _spawn_mesh(f"Demo_Pillar_{i+1}", CYLINDER, (x, y, 200), scale=(0.6, 0.6, 4))
+        _apply_mat(p, mat)
+    return {"step": "pillars", "ok": True, "message": "4 pillars placed"}
+
+
+def _step_orbs():
+    mat = _load_demo_mat("M_Demo_Glow")
+    for i, (x, y) in enumerate([(600, 600), (-600, 600), (-600, -600), (600, -600)]):
+        orb = _spawn_mesh(f"Demo_Orb_{i+1}", SPHERE, (x, y, 30), scale=(0.4, 0.4, 0.4))
+        _apply_mat(orb, mat)
+    return {"step": "orbs", "ok": True, "message": "4 accent orbs at pillar bases"}
+
+
+def _step_neon_lights():
+    lights = [
         ("Demo_Light_Cyan",    (420, 420, 300),  (0, 220, 255),  80000),
         ("Demo_Light_Magenta", (-420, 420, 300),  (255, 0, 180),  80000),
         ("Demo_Light_Amber",   (-420, -420, 300), (255, 170, 0),  80000),
         ("Demo_Light_Violet",  (420, -420, 300),  (130, 0, 255),  80000),
     ]
-    for label, pos, color, intensity in neon_lights:
+    for label, pos, color, intensity in lights:
+        _spawn_point_light(label, pos, color, intensity)
+    return {"step": "neon_lights", "ok": True, "message": "Cyan, magenta, amber, violet neon lights"}
+
+
+def _step_hero_light():
+    _spawn_point_light("Demo_HeroLight", (80, -80, 500), (255, 225, 190), 120000)
+    return {"step": "hero_light", "ok": True, "message": "Warm hero key light"}
+
+
+def _step_moonlight():
+    moon = unreal.EditorLevelLibrary.spawn_actor_from_class(
+        unreal.DirectionalLight,
+        unreal.Vector(0, 0, 500),
+        unreal.Rotator(-30, 210, 0),
+    )
+    moon.set_actor_label("Demo_Moonlight")
+    moon.set_folder_path(FOLDER)
+    comp = moon.get_component_by_class(unreal.LightComponent)
+    if comp:
+        comp.set_editor_property("intensity", 3.0)
+        comp.set_editor_property("light_color", unreal.Color(100, 120, 200))
+    return {"step": "moonlight", "ok": True, "message": "Cool directional moonlight"}
+
+
+def _step_sky_light():
+    sky = unreal.EditorLevelLibrary.spawn_actor_from_class(
+        unreal.SkyLight, unreal.Vector(0, 0, 500)
+    )
+    sky.set_actor_label("Demo_SkyLight")
+    sky.set_folder_path(FOLDER)
+    comp = sky.get_component_by_class(unreal.SkyLightComponent)
+    if comp:
+        comp.set_editor_property("intensity", 0.3)
         try:
-            _spawn_point_light(label, pos, color, intensity)
-        except Exception:
-            pass
-    log.append("4 neon point lights placed (cyan / magenta / amber / violet)")
-
-    # ── Hero key light (warm, above sphere) ─────────────────────────
-    try:
-        _spawn_point_light("Demo_HeroLight", (80, -80, 500), (255, 225, 190), 120000)
-        log.append("Hero key light placed")
-    except Exception as e:
-        log.append(f"Hero key light failed: {e}")
-
-    # ── Directional moonlight ───────────────────────────────────────
-    try:
-        moon = unreal.EditorLevelLibrary.spawn_actor_from_class(
-            unreal.DirectionalLight,
-            unreal.Vector(0, 0, 500),
-            unreal.Rotator(-30, 210, 0),
-        )
-        moon.set_actor_label("Demo_Moonlight")
-        moon.set_folder_path(FOLDER)
-        comp = moon.get_component_by_class(unreal.LightComponent)
-        if comp:
-            comp.set_editor_property("intensity", 3.0)
-            comp.set_editor_property("light_color", unreal.Color(100, 120, 200))
-        log.append("Directional moonlight placed")
-    except Exception as e:
-        log.append(f"Moonlight failed: {e}")
-
-    # ── Sky light (dim ambient fill) ────────────────────────────────
-    try:
-        sky = unreal.EditorLevelLibrary.spawn_actor_from_class(
-            unreal.SkyLight, unreal.Vector(0, 0, 500)
-        )
-        sky.set_actor_label("Demo_SkyLight")
-        sky.set_folder_path(FOLDER)
-        comp = sky.get_component_by_class(unreal.SkyLightComponent)
-        if comp:
-            comp.set_editor_property("intensity", 0.3)
             comp.set_editor_property("source_type", unreal.SkyLightSourceType.SLS_SPECIFIED_CUBEMAP)
-        log.append("Sky light placed (dim ambient)")
-    except Exception as e:
-        log.append(f"Sky light failed: {e}")
-
-    # ── Exponential height fog ──────────────────────────────────────
-    try:
-        fog = unreal.EditorLevelLibrary.spawn_actor_from_class(
-            unreal.ExponentialHeightFog, unreal.Vector(0, 0, 50)
-        )
-        fog.set_actor_label("Demo_Fog")
-        fog.set_folder_path(FOLDER)
-        comp = fog.get_component_by_class(unreal.ExponentialHeightFogComponent)
-        if comp:
-            comp.set_editor_property("fog_density", 0.035)
-            comp.set_editor_property("fog_height_falloff", 0.5)
-            comp.set_editor_property("fog_max_opacity", 0.85)
-            try:
-                comp.set_editor_property("fog_inscattering_color", unreal.LinearColor(0.02, 0.02, 0.06, 1))
-            except Exception:
-                try:
-                    comp.set_editor_property("inscattering_color_cubemap_angle", 0.0)
-                except Exception:
-                    pass
-        log.append("Exponential height fog placed (dark blue-purple)")
-    except Exception as e:
-        log.append(f"Fog failed: {e}")
-
-    # ── Post-process volume (bloom + vignette) ──────────────────────
-    try:
-        ppv = unreal.EditorLevelLibrary.spawn_actor_from_class(
-            unreal.PostProcessVolume, unreal.Vector(0, 0, 0)
-        )
-        ppv.set_actor_label("Demo_PostProcess")
-        ppv.set_folder_path(FOLDER)
-        ppv.set_editor_property("unbound", True)
-        settings = ppv.get_editor_property("settings")
-        try:
-            settings.set_editor_property("bloom_intensity", 2.0)
-            settings.set_editor_property("override_bloom_intensity", True)
         except Exception:
             pass
+    return {"step": "sky_light", "ok": True, "message": "Dim ambient sky light"}
+
+
+def _step_fog():
+    fog = unreal.EditorLevelLibrary.spawn_actor_from_class(
+        unreal.ExponentialHeightFog, unreal.Vector(0, 0, 50)
+    )
+    fog.set_actor_label("Demo_Fog")
+    fog.set_folder_path(FOLDER)
+    comp = fog.get_component_by_class(unreal.ExponentialHeightFogComponent)
+    if comp:
+        comp.set_editor_property("fog_density", 0.035)
+        comp.set_editor_property("fog_height_falloff", 0.5)
+        comp.set_editor_property("fog_max_opacity", 0.85)
         try:
-            settings.set_editor_property("vignette_intensity", 0.6)
-            settings.set_editor_property("override_vignette_intensity", True)
+            comp.set_editor_property("fog_inscattering_color", unreal.LinearColor(0.02, 0.02, 0.06, 1))
         except Exception:
             pass
+    return {"step": "fog", "ok": True, "message": "Dark blue-purple fog"}
+
+
+def _step_post_process():
+    ppv = unreal.EditorLevelLibrary.spawn_actor_from_class(
+        unreal.PostProcessVolume, unreal.Vector(0, 0, 0)
+    )
+    ppv.set_actor_label("Demo_PostProcess")
+    ppv.set_folder_path(FOLDER)
+    ppv.set_editor_property("unbound", True)
+    settings = ppv.get_editor_property("settings")
+    for prop, val in [("bloom_intensity", 2.0), ("vignette_intensity", 0.6), ("auto_exposure_bias", -1.0)]:
         try:
-            settings.set_editor_property("auto_exposure_bias", -1.0)
-            settings.set_editor_property("override_auto_exposure_bias", True)
+            settings.set_editor_property(prop, val)
+            settings.set_editor_property(f"override_{prop}", True)
         except Exception:
             pass
-        ppv.set_editor_property("settings", settings)
-        log.append("Post-process volume placed (bloom + vignette)")
-    except Exception as e:
-        log.append(f"Post-process failed: {e}")
+    ppv.set_editor_property("settings", settings)
+    return {"step": "post_process", "ok": True, "message": "Bloom + vignette + exposure"}
 
-    # ── Final camera nudge (slightly tighter now that the scene exists) ─
-    try:
-        cam_loc = unreal.Vector(1000, -650, 350)
-        cam_rot = unreal.Rotator(-10, 148, 0)
-        if _set_viewport_camera(cam_loc, cam_rot):
-            log.append("Final camera positioned")
-    except Exception:
-        pass
 
-    # ── Save the level ─────────────────────────────────────────────
+def _step_final_camera():
+    _set_viewport_camera(unreal.Vector(1000, -650, 350), unreal.Rotator(-10, 148, 0))
+    return {"step": "final_camera", "ok": True, "message": "Final camera framing"}
+
+
+def _step_save():
     try:
         if hasattr(unreal, "LevelEditorSubsystem"):
             subsys = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
             if subsys and hasattr(subsys, "save_current_level"):
                 subsys.save_current_level()
-                log.append("Level saved")
     except Exception:
         pass
+    return {"step": "save", "ok": True, "message": "Level saved"}
 
-    ok_count = sum(1 for s in log if "failed" not in s.lower() and "skipped" not in s.lower())
-    return {
-        "scene": "Neon Shrine",
-        "level": DEMO_LEVEL,
-        "description": (
-            "Fresh level with dark reflective floor, glowing sphere on a pedestal, "
-            "4 pillars with accent orbs, cyan/magenta/amber/violet neon lights, "
-            "moonlight, fog, bloom. All in outliner folder 'Demo_Scene'. "
-            "Run demo_cleanup to delete everything including the level."
-        ),
-        "stepsCompleted": ok_count,
-        "totalSteps": len(log),
-        "log": log,
-    }
+
+_STEPS = {
+    "create_level": _step_create_level,
+    "materials": _step_materials,
+    "floor": _step_floor,
+    "camera": _step_camera,
+    "pedestal": _step_pedestal,
+    "hero_sphere": _step_hero_sphere,
+    "pillars": _step_pillars,
+    "orbs": _step_orbs,
+    "neon_lights": _step_neon_lights,
+    "hero_light": _step_hero_light,
+    "moonlight": _step_moonlight,
+    "sky_light": _step_sky_light,
+    "fog": _step_fog,
+    "post_process": _step_post_process,
+    "final_camera": _step_final_camera,
+    "save": _step_save,
+}
 
 
 # ── Cleanup ─────────────────────────────────────────────────────────
@@ -379,8 +363,6 @@ def demo_cleanup(params: dict) -> dict:
 
     log = []
 
-    # If we're currently in the demo level, load a blank level first
-    # so we can delete the demo level asset without it being locked.
     current = unreal.EditorLevelLibrary.get_editor_world()
     current_path = current.get_path_name() if current else ""
     if "DemoLevel" in current_path or "Demo" in current_path:
@@ -393,7 +375,6 @@ def demo_cleanup(params: dict) -> dict:
         except Exception as e:
             log.append(f"Could not switch level: {e}")
 
-    # Remove demo actors from whatever level is now open
     removed = 0
     for a in list(unreal.EditorLevelLibrary.get_all_level_actors()):
         if a.get_actor_label().startswith("Demo_"):
@@ -402,7 +383,6 @@ def demo_cleanup(params: dict) -> dict:
     if removed:
         log.append(f"Removed {removed} demo actors")
 
-    # Delete demo material assets
     mats_removed = 0
     for name in ["M_Demo_Floor", "M_Demo_Glow", "M_Demo_Pillar"]:
         path = f"{MAT_DIR}/{name}"
@@ -412,12 +392,10 @@ def demo_cleanup(params: dict) -> dict:
     if mats_removed:
         log.append(f"Deleted {mats_removed} demo materials")
 
-    # Delete the demo level asset
     if unreal.EditorAssetLibrary.does_asset_exist(DEMO_LEVEL):
         unreal.EditorAssetLibrary.delete_asset(DEMO_LEVEL)
         log.append(f"Deleted demo level: {DEMO_LEVEL}")
 
-    # Try to remove the /Game/Demo directory if it's now empty
     try:
         registry = unreal.AssetRegistryHelpers.get_asset_registry()
         remaining = registry.get_assets_by_path(MAT_DIR, recursive=True)
@@ -427,14 +405,11 @@ def demo_cleanup(params: dict) -> dict:
     except Exception:
         pass
 
-    return {
-        "actorsRemoved": removed,
-        "materialsRemoved": mats_removed,
-        "log": log,
-    }
+    return {"actorsRemoved": removed, "materialsRemoved": mats_removed, "log": log}
 
 
 HANDLERS = {
-    "demo_scene_from_nothing": demo_scene_from_nothing,
+    "demo_step": demo_step,
+    "demo_get_steps": demo_get_steps,
     "demo_cleanup": demo_cleanup,
 }
