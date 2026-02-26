@@ -144,6 +144,81 @@ def execute_python(params: dict) -> dict:
     }
 
 
+def set_config(params: dict) -> dict:
+    """Write a value to an INI config file (DefaultEngine.ini, DefaultGame.ini, etc.)."""
+    config_file = params.get("configFile", "")
+    section = params.get("section", "")
+    key = params.get("key", "")
+    value = params.get("value", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+    if not section or not key:
+        raise ValueError("section and key are required")
+
+    import os
+
+    if config_file and os.path.isabs(config_file):
+        ini_path = config_file
+    else:
+        project_dir = os.environ.get("UE_PROJECT_DIR", "")
+        if not project_dir:
+            paths = unreal.Paths
+            if hasattr(paths, "project_config_dir"):
+                config_dir = paths.project_config_dir()
+            else:
+                raise RuntimeError("Cannot determine project config directory")
+        else:
+            config_dir = os.path.join(project_dir, "Config")
+
+        if not config_file:
+            config_file = "DefaultEngine.ini"
+        ini_path = os.path.join(config_dir, config_file)
+
+    lines = []
+    if os.path.exists(ini_path):
+        with open(ini_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+    section_header = f"[{section}]"
+    section_idx = -1
+    key_idx = -1
+    next_section_idx = len(lines)
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == section_header:
+            section_idx = i
+        elif section_idx >= 0 and stripped.startswith("[") and stripped.endswith("]"):
+            next_section_idx = i
+            break
+        elif section_idx >= 0 and stripped.startswith(f"{key}="):
+            key_idx = i
+
+    new_line = f"{key}={value}\n"
+
+    if key_idx >= 0:
+        lines[key_idx] = new_line
+    elif section_idx >= 0:
+        lines.insert(section_idx + 1, new_line)
+    else:
+        if lines and not lines[-1].endswith("\n"):
+            lines.append("\n")
+        lines.append(f"\n{section_header}\n")
+        lines.append(new_line)
+
+    with open(ini_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    return {
+        "configFile": os.path.basename(ini_path),
+        "section": section,
+        "key": key,
+        "value": value,
+        "success": True,
+    }
+
+
 HANDLERS = {
     "execute_command": execute_command,
     "execute_python": execute_python,
@@ -151,4 +226,5 @@ HANDLERS = {
     "save_asset": save_asset,
     "undo": undo,
     "redo": redo,
+    "set_config": set_config,
 }
