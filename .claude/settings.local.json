@@ -1,0 +1,11 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "kantext"
+  ],
+  "permissions": {
+    "allow": [
+      "mcp__kantext__server_status"
+    ]
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "allowedTools": [
+    "mcp__kantext__*"
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/kantext_gate.py",
+            "timeout": 10,
+            "statusMessage": "Checking Kantext ontological foundation..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*kantext.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/kantext_resolved.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/kantext_validate_stop.py",
+            "timeout": 15,
+            "statusMessage": "Validating Kantext grounding..."
+          }
+        ]
+      }
+    ]
+  }
+}
