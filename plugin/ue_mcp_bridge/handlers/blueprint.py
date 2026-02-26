@@ -403,6 +403,108 @@ def connect_pins(params: dict) -> dict:
     }
 
 
+def create_blueprint_interface(params: dict) -> dict:
+    """Create a Blueprint Interface asset."""
+    asset_path = params.get("path", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+    if not asset_path:
+        raise ValueError("path is required (e.g. '/Game/Interfaces/BPI_Interactable')")
+
+    parts = asset_path.rsplit("/", 1)
+    package_path = parts[0] if len(parts) > 1 else "/Game"
+    asset_name = parts[-1]
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+
+    factory = None
+    if hasattr(unreal, "BlueprintInterfaceFactory"):
+        factory = unreal.BlueprintInterfaceFactory()
+
+    if factory:
+        asset = tools.create_asset(asset_name, package_path, None, factory)
+    else:
+        raise RuntimeError("BlueprintInterfaceFactory not available")
+
+    if asset is None:
+        raise RuntimeError(f"Failed to create Blueprint Interface at {asset_path}")
+
+    unreal.EditorAssetLibrary.save_asset(asset_path)
+
+    return {
+        "path": asset_path,
+        "name": asset.get_name(),
+        "class": asset.get_class().get_name(),
+    }
+
+
+def add_blueprint_interface(params: dict) -> dict:
+    """Add a Blueprint Interface to a Blueprint's implemented interfaces list."""
+    bp_path = params.get("blueprintPath", "")
+    interface_path = params.get("interfacePath", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+    if not bp_path or not interface_path:
+        raise ValueError("blueprintPath and interfacePath are required")
+
+    bp = unreal.EditorAssetLibrary.load_asset(bp_path)
+    if bp is None:
+        raise ValueError(f"Blueprint not found: {bp_path}")
+
+    interface = unreal.EditorAssetLibrary.load_asset(interface_path)
+    if interface is None:
+        raise ValueError(f"Interface not found: {interface_path}")
+
+    if hasattr(unreal, "KismetEditorUtilities"):
+        try:
+            unreal.KismetEditorUtilities.add_interface(bp, interface)
+            unreal.EditorAssetLibrary.save_asset(bp_path)
+            return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
+        except Exception as e:
+            raise RuntimeError(f"Failed to add interface: {e}")
+
+    raise RuntimeError("KismetEditorUtilities not available")
+
+
+def add_event_dispatcher(params: dict) -> dict:
+    """Add an event dispatcher (multicast delegate) variable to a Blueprint."""
+    bp_path = params.get("blueprintPath", "")
+    name = params.get("name", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+    if not bp_path or not name:
+        raise ValueError("blueprintPath and name are required")
+
+    bp = unreal.EditorAssetLibrary.load_asset(bp_path)
+    if bp is None:
+        raise ValueError(f"Blueprint not found: {bp_path}")
+
+    if hasattr(unreal, "KismetEditorUtilities") and hasattr(unreal.KismetEditorUtilities, "add_event_dispatcher"):
+        try:
+            unreal.KismetEditorUtilities.add_event_dispatcher(bp, name)
+            unreal.EditorAssetLibrary.save_asset(bp_path)
+            return {"blueprintPath": bp_path, "name": name, "success": True}
+        except Exception as e:
+            raise RuntimeError(f"KismetEditorUtilities approach failed: {e}")
+
+    try:
+        gen_class = bp.get_editor_property("generated_class")
+        if gen_class and hasattr(gen_class, "add_multicast_delegate_property"):
+            gen_class.add_multicast_delegate_property(name)
+            unreal.EditorAssetLibrary.save_asset(bp_path)
+            return {"blueprintPath": bp_path, "name": name, "success": True}
+    except Exception:
+        pass
+
+    raise RuntimeError(
+        "Could not add event dispatcher via available APIs. "
+        "Use execute_python with direct FBlueprintEditorUtils calls as fallback."
+    )
+
+
 HANDLERS = {
     "read_blueprint": read_blueprint,
     "compile_blueprint": compile_blueprint,
@@ -417,4 +519,7 @@ HANDLERS = {
     "add_component": add_component,
     "add_node": add_node,
     "connect_pins": connect_pins,
+    "create_blueprint_interface": create_blueprint_interface,
+    "add_blueprint_interface": add_blueprint_interface,
+    "add_event_dispatcher": add_event_dispatcher,
 }

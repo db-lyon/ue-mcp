@@ -211,4 +211,53 @@ public static class BlueprintTools
             ["componentName"] = componentName ?? componentClass,
         });
     }
+
+    [McpServerTool, Description(
+        "Create a Blueprint Interface asset. Blueprint Interfaces define function signatures " +
+        "that multiple Blueprints can implement, enabling polymorphic communication.")]
+    public static async Task<string> create_blueprint_interface(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Asset path for the interface (e.g. '/Game/Interfaces/BPI_Interactable')")] string path)
+    {
+        router.EnsureLiveMode("create_blueprint_interface");
+        return await bridge.SendAndSerializeAsync("create_blueprint_interface", new()
+        {
+            ["path"] = path
+        });
+    }
+
+    [McpServerTool, Description(
+        "Add a Blueprint Interface to a Blueprint's implemented interfaces list. " +
+        "After adding, the Blueprint can implement the interface's functions.")]
+    public static async Task<string> add_blueprint_interface(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Blueprint")] string blueprintPath,
+        [Description("Path to the Blueprint Interface to implement")] string interfacePath)
+    {
+        router.EnsureLiveMode("add_blueprint_interface");
+        return await bridge.SendAndSerializeAsync("add_blueprint_interface", new()
+        {
+            ["blueprintPath"] = blueprintPath,
+            ["interfacePath"] = interfacePath
+        });
+    }
+
+    [McpServerTool, Description(
+        "Add an event dispatcher (multicast delegate) to a Blueprint. " +
+        "Event dispatchers allow Blueprints to broadcast events that other objects can subscribe to.")]
+    public static async Task<string> add_event_dispatcher(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Blueprint")] string blueprintPath,
+        [Description("Name for the event dispatcher")] string name)
+    {
+        router.EnsureLiveMode("add_event_dispatcher");
+        return await bridge.SendAndSerializeAsync("add_event_dispatcher", new()
+        {
+            ["blueprintPath"] = blueprintPath,
+            ["name"] = name
+        });
+    }
 }
