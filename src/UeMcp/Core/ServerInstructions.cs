@@ -3,7 +3,7 @@ namespace UeMcp.Core;
 public static class ServerInstructions
 {
     public const string Text = """
-UE-MCP: Unreal Engine editor bridge with 165+ tools. Tools operate in two modes:
+UE-MCP: Unreal Engine editor bridge with 185+ tools. Tools operate in two modes:
 
 OFFLINE (read-only, no editor needed): read/inspect assets, configs, C++ headers, blueprints.
 LIVE (editor connected via Python bridge): create/modify actors, blueprints, materials, run commands.
@@ -12,22 +12,33 @@ Call get_status first if unsure whether the editor is connected.
 
 ═══ TOOL DIRECTORY ═══
 
+ASSET MANAGEMENT:
+  Read: read_asset, read_asset_properties, list_assets, search_assets, asset_to_json
+  Manage: duplicate_asset, rename_asset, move_asset, delete_asset
+
+IMPORT:
+  import_static_mesh (FBX/OBJ), import_skeletal_mesh (FBX), import_animation (FBX), import_texture
+
 BLUEPRINTS (read & author):
   Read: read_blueprint, list_blueprint_variables, list_blueprint_functions, read_blueprint_graph
   Create: create_blueprint, add_blueprint_variable, create_blueprint_function, add_blueprint_component
   Edit: set_blueprint_variable_properties, delete_blueprint_function, rename_blueprint_function
   Nodes: add_blueprint_node, delete_blueprint_node, set_blueprint_node_property, connect_blueprint_pins
   Search: list_node_types, search_node_types
+  Interfaces: create_blueprint_interface, add_blueprint_interface
+  Events: add_event_dispatcher
   Compile: compile_blueprint
 
 LEVELS & WORLD:
   Outliner: get_world_outliner, get_actor_details
   Actors: place_actor, move_actor, delete_actor
+  Selection: select_actors, get_selected_actors
+  Components: add_component_to_actor, set_component_property
   Levels: get_current_level, load_level, save_current_level, list_levels, create_new_level
 
 MATERIALS:
-  Read: read_material, list_material_parameters
   Create: create_material, create_material_instance
+  Read: read_material, list_material_parameters
   Edit: set_material_parameter, set_material_shading_model, set_material_base_color, connect_texture_to_material
 
 LANDSCAPE & TERRAIN:
@@ -53,12 +64,12 @@ SEQUENCER / CINEMATICS:
   create_level_sequence, get_sequence_info, add_sequence_track, play_sequence
 
 NIAGARA (VFX):
-  Create: create_niagara_system (empty system asset)
+  Create: create_niagara_system
   Read: list_niagara_systems, get_niagara_info
   Use: spawn_niagara_at_location, set_niagara_parameter
 
 AUDIO:
-  Create: create_sound_cue (optionally from a SoundWave), create_metasound_source
+  Create: create_sound_cue, create_metasound_source
   Read: list_sound_assets
   Use: play_sound_at_location, spawn_ambient_sound
 
@@ -67,8 +78,11 @@ ANIMATION:
   Read: read_anim_blueprint, read_anim_montage, read_anim_sequence, read_blendspace, list_anim_assets
   Edit: add_anim_notify
 
-SKELETON & PHYSICS (read-only — skeletons come from mesh imports):
+SKELETON & PHYSICS ASSETS (read-only — skeletons come from mesh imports):
   get_skeleton_info, list_sockets, list_skeletal_meshes, get_physics_asset_info
+
+PHYSICS & COLLISION:
+  set_collision_profile, set_simulate_physics, set_collision_enabled, set_physics_properties
 
 WIDGETS / UMG:
   Create: create_widget_blueprint
@@ -95,20 +109,19 @@ TEXTURES:
   Read: list_textures, get_texture_info
   Edit: set_texture_settings
 
-ASSETS (general):
-  read_asset, read_asset_properties, list_assets, search_assets, asset_to_json
-
 DATA TABLES:
   Create: create_datatable (needs row struct name)
   Read: read_datatable
   Import: reimport_datatable (from JSON)
 
 CONFIG / INI:
-  read_config, search_config, list_config_tags
+  Read: read_config, search_config, list_config_tags
+  Write: set_config (modify DefaultEngine.ini, DefaultGame.ini, etc.)
 
 C++ / REFLECTION:
   Headers: read_cpp_header, read_module, list_modules, search_cpp
-  Reflect: reflect_class, reflect_struct, reflect_enum, list_classes, list_gameplay_tags
+  Reflect: reflect_class, reflect_struct, reflect_enum, list_classes
+  Tags: list_gameplay_tags, create_gameplay_tag
 
 EDITOR COMMANDS:
   General: editor_execute, execute_python, hot_reload, undo, redo, save_asset
@@ -130,9 +143,13 @@ DEMO:
 • Use reflect_class to understand any UE class's properties before using set_property.
 • search_assets accepts wildcards: search_assets(query="/Game/Characters/*")
 • For blueprint scripting: search_node_types to find the right node, add_blueprint_node to place it, connect_blueprint_pins to wire it up.
+• For blueprint interfaces: create_blueprint_interface, then add_blueprint_interface to a BP.
 • execute_python is the escape hatch — any Unreal Python API call that doesn't have a dedicated tool.
 • Most "create_*" tools need a package path and asset name. They auto-save the new asset.
-• Animation tools (create_anim_blueprint, create_blendspace) require a skeleton path — use list_skeletal_meshes or get_skeleton_info to find it.
-• create_datatable requires a row struct — use reflect_struct or list_classes to find the right one.
+• import_static_mesh / import_skeletal_mesh / import_animation take absolute filesystem paths to FBX/OBJ files.
+• duplicate_asset / rename_asset / move_asset take content paths (e.g. '/Game/Meshes/SM_Rock').
+• Animation tools (create_anim_blueprint, create_blendspace) require a skeleton path — use list_skeletal_meshes to find it.
+• select_actors takes an array of labels — use get_world_outliner to find actor labels first.
+• set_config writes to INI files. Changes to rendering/physics settings may need editor restart.
 """;
 }

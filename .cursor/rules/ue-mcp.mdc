@@ -6,7 +6,7 @@ alwaysApply: true
 
 # UE-MCP Tool Selection Guide
 
-You have access to 165+ Unreal Engine MCP tools. This guide helps you pick the right ones.
+You have access to 185+ Unreal Engine MCP tools. This guide helps you pick the right ones.
 
 ## Before You Start
 
@@ -25,6 +25,12 @@ You have access to 165+ Unreal Engine MCP tools. This guide helps you pick the r
 ### "Create/place something in the level"
 → `place_actor` for meshes/actors, `spawn_light` for lights, `spawn_volume` for volumes
 
+### "Import a mesh from FBX/OBJ"
+→ `import_static_mesh` for static meshes, `import_skeletal_mesh` for skeletal, `import_animation` for anims
+
+### "Duplicate / rename / move / delete an asset"
+→ `duplicate_asset`, `rename_asset`, `move_asset`, `delete_asset`
+
 ### "Edit a Blueprint"
 1. `read_blueprint` to understand current state
 2. `search_node_types` to find the right node class
@@ -39,8 +45,13 @@ You have access to 165+ Unreal Engine MCP tools. This guide helps you pick the r
 4. `add_blueprint_component` for components
 5. Then add nodes and connect pins as above
 
+### "Set up Blueprint Interfaces"
+→ `create_blueprint_interface` to create, `add_blueprint_interface` to implement on a BP
+
+### "Add event dispatcher to a Blueprint"
+→ `add_event_dispatcher`
+
 ### "Work with materials"
-→ Read: `read_material`, `list_material_parameters`
 → Create: `create_material`, `create_material_instance`
 → Edit: `set_material_parameter`, `set_material_base_color`, `connect_texture_to_material`
 
@@ -54,27 +65,40 @@ You have access to 165+ Unreal Engine MCP tools. This guide helps you pick the r
 → `create_foliage_type` (from a mesh) → `paint_foliage` to scatter → `set_foliage_type_settings` to tune
 
 ### "Create VFX / Niagara"
-→ `create_niagara_system` to create an asset → `spawn_niagara_at_location` to place it → `set_niagara_parameter` to tweak
+→ `create_niagara_system` → `spawn_niagara_at_location` → `set_niagara_parameter`
 
 ### "Set up audio"
 → `create_sound_cue` or `create_metasound_source` → `spawn_ambient_sound` to place in level
 
 ### "Create animation assets"
-→ `create_anim_montage` (needs an AnimSequence), `create_anim_blueprint` (needs a skeleton), `create_blendspace` (needs a skeleton)
+→ `create_anim_montage` (needs AnimSequence), `create_anim_blueprint` (needs skeleton), `create_blendspace` (needs skeleton)
 → Use `list_skeletal_meshes` or `get_skeleton_info` to find the skeleton path first
 
 ### "Create a DataTable"
 → `create_datatable` (needs a row struct) → `reimport_datatable` to fill with JSON data
-→ Use `reflect_struct` or `list_classes` to find the row struct
+
+### "Set up physics/collision on an actor"
+→ `set_collision_profile` for presets, `set_simulate_physics` to enable simulation
+→ `set_collision_enabled` for collision mode, `set_physics_properties` for mass/damping
+
+### "Add a component to an existing level actor"
+→ `add_component_to_actor` then `set_component_property` to configure it
+
+### "Select actors in the editor"
+→ `select_actors` with an array of labels, `get_selected_actors` to see current selection
+
+### "Change project settings (INI)"
+→ `set_config` to write to DefaultEngine.ini, DefaultGame.ini, etc.
+→ `read_config` and `search_config` to inspect current settings
+
+### "Create / manage gameplay tags"
+→ `list_gameplay_tags` to see existing, `create_gameplay_tag` to add new ones
 
 ### "Understand a C++ class"
 → `reflect_class` for UE reflection data, `read_cpp_header` for source
 
 ### "I need something not covered by a specific tool"
 → `execute_python` — runs arbitrary Python in the editor. This is your escape hatch.
-
-### "What does this class/struct/enum look like?"
-→ `reflect_class`, `reflect_struct`, `reflect_enum`
 
 ## Tool Naming Conventions
 
@@ -83,7 +107,9 @@ Tools follow a `verb_noun` pattern within their domain:
 - `list_*` — enumerate assets or items
 - `search_*` — filtered search with wildcards
 - `create_*` / `spawn_*` — create new things
+- `import_*` — import from external files (FBX, OBJ, PNG, etc.)
 - `set_*` — modify properties
 - `delete_*` / `erase_*` — remove things
-- `add_*` — add sub-elements (nodes, variables, tracks, etc.)
+- `add_*` — add sub-elements (nodes, variables, tracks, components, etc.)
 - `connect_*` — wire things together (pins, PCG nodes)
+- `duplicate_*` / `rename_*` / `move_*` — asset management operations
