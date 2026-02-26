@@ -434,6 +434,152 @@ def add_anim_notify(params: dict) -> dict:
         raise RuntimeError(f"Failed to add notify: {e}")
 
 
+def create_anim_montage(params: dict) -> dict:
+    """Create an Animation Montage from an existing AnimSequence."""
+    asset_name = params.get("name", "AM_NewMontage")
+    package_path = params.get("packagePath", "/Game/Animations")
+    anim_sequence_path = params.get("animSequencePath", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+
+    if not anim_sequence_path:
+        raise ValueError("animSequencePath is required — montages are built from an AnimSequence")
+
+    source = unreal.EditorAssetLibrary.load_asset(anim_sequence_path)
+    if source is None:
+        raise ValueError(f"AnimSequence not found: {anim_sequence_path}")
+
+    factory = None
+    if hasattr(unreal, "AnimMontageFactory"):
+        factory = unreal.AnimMontageFactory()
+        try:
+            factory.set_editor_property("target_skeleton", source.get_editor_property("skeleton"))
+        except Exception:
+            pass
+        try:
+            factory.set_editor_property("source_animation", source)
+        except Exception:
+            pass
+
+    if factory:
+        asset = tools.create_asset(asset_name, package_path, None, factory)
+    else:
+        asset = tools.create_asset(asset_name, package_path, unreal.AnimMontage, None)
+
+    if asset is None:
+        raise RuntimeError(f"Failed to create AnimMontage at {package_path}/{asset_name}")
+
+    unreal.EditorAssetLibrary.save_asset(f"{package_path}/{asset_name}")
+    return {
+        "path": f"{package_path}/{asset_name}",
+        "name": asset.get_name(),
+        "class": asset.get_class().get_name(),
+    }
+
+
+def create_anim_blueprint(params: dict) -> dict:
+    """Create an Animation Blueprint for a given skeleton."""
+    asset_name = params.get("name", "ABP_New")
+    package_path = params.get("packagePath", "/Game/Animations")
+    skeleton_path = params.get("skeletonPath", "")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    if not skeleton_path:
+        raise ValueError("skeletonPath is required")
+
+    skeleton = unreal.EditorAssetLibrary.load_asset(skeleton_path)
+    if skeleton is None:
+        raise ValueError(f"Skeleton not found: {skeleton_path}")
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+
+    factory = None
+    if hasattr(unreal, "AnimBlueprintFactory"):
+        factory = unreal.AnimBlueprintFactory()
+        try:
+            factory.set_editor_property("target_skeleton", skeleton)
+        except Exception:
+            pass
+
+    if factory:
+        asset = tools.create_asset(asset_name, package_path, None, factory)
+    else:
+        raise RuntimeError("AnimBlueprintFactory not available in this UE version")
+
+    if asset is None:
+        raise RuntimeError(f"Failed to create AnimBlueprint at {package_path}/{asset_name}")
+
+    unreal.EditorAssetLibrary.save_asset(f"{package_path}/{asset_name}")
+    return {
+        "path": f"{package_path}/{asset_name}",
+        "name": asset.get_name(),
+        "class": asset.get_class().get_name(),
+    }
+
+
+def create_blendspace(params: dict) -> dict:
+    """Create a BlendSpace asset for a given skeleton."""
+    asset_name = params.get("name", "BS_New")
+    package_path = params.get("packagePath", "/Game/Animations")
+    skeleton_path = params.get("skeletonPath", "")
+    axis_horizontal = params.get("axisHorizontal", "Speed")
+    axis_vertical = params.get("axisVertical", "Direction")
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    if not skeleton_path:
+        raise ValueError("skeletonPath is required")
+
+    skeleton = unreal.EditorAssetLibrary.load_asset(skeleton_path)
+    if skeleton is None:
+        raise ValueError(f"Skeleton not found: {skeleton_path}")
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+
+    factory = None
+    if hasattr(unreal, "BlendSpaceFactoryNew"):
+        factory = unreal.BlendSpaceFactoryNew()
+        try:
+            factory.set_editor_property("target_skeleton", skeleton)
+        except Exception:
+            pass
+    elif hasattr(unreal, "BlendSpaceFactory"):
+        factory = unreal.BlendSpaceFactory()
+        try:
+            factory.set_editor_property("target_skeleton", skeleton)
+        except Exception:
+            pass
+
+    if factory:
+        asset = tools.create_asset(asset_name, package_path, None, factory)
+    else:
+        raise RuntimeError("BlendSpaceFactory not available in this UE version")
+
+    if asset is None:
+        raise RuntimeError(f"Failed to create BlendSpace at {package_path}/{asset_name}")
+
+    try:
+        asset.set_editor_property("horizontal_axis_name", axis_horizontal)
+        asset.set_editor_property("vertical_axis_name", axis_vertical)
+    except Exception:
+        pass
+
+    unreal.EditorAssetLibrary.save_asset(f"{package_path}/{asset_name}")
+    return {
+        "path": f"{package_path}/{asset_name}",
+        "name": asset.get_name(),
+        "class": asset.get_class().get_name(),
+        "axisHorizontal": axis_horizontal,
+        "axisVertical": axis_vertical,
+    }
+
+
 HANDLERS = {
     "read_anim_blueprint": read_anim_blueprint,
     "read_anim_montage": read_anim_montage,
@@ -441,4 +587,7 @@ HANDLERS = {
     "read_blendspace": read_blendspace,
     "list_anim_assets": list_anim_assets,
     "add_anim_notify": add_anim_notify,
+    "create_anim_montage": create_anim_montage,
+    "create_anim_blueprint": create_anim_blueprint,
+    "create_blendspace": create_blendspace,
 }

@@ -85,6 +85,67 @@ public static class AnimationTools
     }
 
     [McpServerTool, Description(
+        "Create an Animation Montage from an existing AnimSequence. " +
+        "Montages are used for gameplay-driven animation playback (attacks, reloads, abilities).")]
+    public static async Task<string> create_anim_montage(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the source AnimSequence")] string animSequencePath,
+        [Description("Asset name (e.g. 'AM_Attack')")] string name = "AM_NewMontage",
+        [Description("Package path (e.g. '/Game/Animations')")] string packagePath = "/Game/Animations")
+    {
+        router.EnsureLiveMode("create_anim_montage");
+        return await bridge.SendAndSerializeAsync("create_anim_montage", new()
+        {
+            ["animSequencePath"] = animSequencePath,
+            ["name"] = name,
+            ["packagePath"] = packagePath
+        });
+    }
+
+    [McpServerTool, Description(
+        "Create an Animation Blueprint for a given skeleton. " +
+        "Anim Blueprints control how a skeletal mesh animates (state machines, blending, IK).")]
+    public static async Task<string> create_anim_blueprint(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Skeleton asset")] string skeletonPath,
+        [Description("Asset name (e.g. 'ABP_Hero')")] string name = "ABP_New",
+        [Description("Package path (e.g. '/Game/Animations')")] string packagePath = "/Game/Animations")
+    {
+        router.EnsureLiveMode("create_anim_blueprint");
+        return await bridge.SendAndSerializeAsync("create_anim_blueprint", new()
+        {
+            ["skeletonPath"] = skeletonPath,
+            ["name"] = name,
+            ["packagePath"] = packagePath
+        });
+    }
+
+    [McpServerTool, Description(
+        "Create a BlendSpace for a given skeleton. " +
+        "BlendSpaces blend between animations based on two axes (e.g. Speed + Direction for locomotion).")]
+    public static async Task<string> create_blendspace(
+        ModeRouter router,
+        EditorBridge bridge,
+        [Description("Path to the Skeleton asset")] string skeletonPath,
+        [Description("Asset name (e.g. 'BS_Locomotion')")] string name = "BS_New",
+        [Description("Package path (e.g. '/Game/Animations')")] string packagePath = "/Game/Animations",
+        [Description("Horizontal axis name. Default: 'Speed'")] string axisHorizontal = "Speed",
+        [Description("Vertical axis name. Default: 'Direction'")] string axisVertical = "Direction")
+    {
+        router.EnsureLiveMode("create_blendspace");
+        return await bridge.SendAndSerializeAsync("create_blendspace", new()
+        {
+            ["skeletonPath"] = skeletonPath,
+            ["name"] = name,
+            ["packagePath"] = packagePath,
+            ["axisHorizontal"] = axisHorizontal,
+            ["axisVertical"] = axisVertical
+        });
+    }
+
+    [McpServerTool, Description(
         "Add a notify event to an animation montage or sequence at a specific time. " +
         "Notifies trigger gameplay events during animation playback (footsteps, VFX, damage windows).")]
     public static async Task<string> add_anim_notify(
