@@ -9,36 +9,31 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-node@v4
         with:
-          dotnet-version: "8.0.x"
+          node-version: "22"
+          cache: "npm"
 
-      - name: Publish
-        run: >
-          dotnet publish src/UeMcp/UeMcp.csproj
-          -c Release
-          -r win-x64
-          --self-contained
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -o dist/
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
 
       - name: Package
-        shell: pwsh
-        run: Compress-Archive -Path dist/* -DestinationPath ue-mcp-windows-x64.zip
+        run: |
+          tar czf ue-mcp.tar.gz dist/ plugin/ package.json package-lock.json README.md LICENSE
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: win-x64
-          path: ue-mcp-windows-x64.zip
+          name: ue-mcp
+          path: ue-mcp.tar.gz
 
   release:
     needs: build

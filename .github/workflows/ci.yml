@@ -6,70 +6,54 @@ on:
     paths-ignore:
       - '**.md'
       - 'LICENSE'
-      - '.github/**'
       - '.cursor/**'
       - '.gitignore'
       - 'docs/**'
       - '.vscode/**'
+      - '.kantext/**'
   pull_request:
     branches: [main]
     paths-ignore:
       - '**.md'
       - 'LICENSE'
-      - '.github/**'
       - '.cursor/**'
       - '.gitignore'
       - 'docs/**'
       - '.vscode/**'
+      - '.kantext/**'
 
 permissions:
   contents: write
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-node@v4
         with:
-          dotnet-version: "8.0.x"
+          node-version: "22"
+          cache: "npm"
 
-      - name: Restore
-        run: dotnet restore
+      - name: Install
+        run: npm ci
 
       - name: Build
-        run: dotnet build --no-restore -c Release
-
-      - name: Test
-        run: dotnet test --no-build -c Release --verbosity normal
-        continue-on-error: true
-
-      - name: Publish
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: >
-          dotnet publish src/UeMcp/UeMcp.csproj
-          -c Release
-          -r win-x64
-          --self-contained
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -o dist/
+        run: npm run build
 
       - name: Package
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: pwsh
-        run: Compress-Archive -Path dist/* -DestinationPath ue-mcp-windows-x64.zip
+        run: |
+          tar czf ue-mcp.tar.gz dist/ plugin/ package.json package-lock.json README.md LICENSE
 
       - name: Upload artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
-          name: win-x64
-          path: ue-mcp-windows-x64.zip
+          name: ue-mcp
+          path: ue-mcp.tar.gz
 
   pre-release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
