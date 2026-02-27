@@ -1,4 +1,10 @@
-## .NET
+## Node
+node_modules/
+
+## TypeScript build output
+dist/
+
+## .NET (legacy)
 bin/
 obj/
 *.user
@@ -32,7 +38,6 @@ __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
-dist/
 build/
 .env
 venv/

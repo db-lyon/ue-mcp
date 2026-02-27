@@ -505,6 +505,127 @@ def add_event_dispatcher(params: dict) -> dict:
     )
 
 
+def list_blueprint_variables(params: dict) -> dict:
+    """List all variables defined in a Blueprint with types, categories, and flags."""
+    bp = _load_bp(params.get("path", ""))
+    variables = []
+
+    if hasattr(bp, "new_variables"):
+        for var in bp.new_variables:
+            info = {
+                "name": str(var.var_name),
+                "type": str(var.var_type),
+            }
+            if hasattr(var, "category"):
+                info["category"] = str(var.category) if var.category else None
+            if hasattr(var, "property_flags"):
+                info["flags"] = str(var.property_flags)
+            if hasattr(var, "friendly_name") and var.friendly_name:
+                info["tooltip"] = str(var.friendly_name)
+            try:
+                info["defaultValue"] = str(var.default_value) if hasattr(var, "default_value") else None
+            except Exception:
+                pass
+            variables.append(info)
+
+    return {"path": params.get("path", ""), "variableCount": len(variables), "variables": variables}
+
+
+def list_blueprint_functions(params: dict) -> dict:
+    """List all functions in a Blueprint with their graph nodes."""
+    bp = _load_bp(params.get("path", ""))
+    functions = []
+
+    if hasattr(bp, "function_graphs"):
+        for graph in bp.function_graphs:
+            func_info = {"name": graph.get_name(), "type": "Function"}
+            nodes = []
+            if hasattr(graph, "nodes"):
+                for node in graph.nodes:
+                    node_info = {
+                        "name": node.get_name(),
+                        "class": node.get_class().get_name(),
+                    }
+                    nodes.append(node_info)
+            func_info["nodeCount"] = len(nodes)
+            func_info["nodes"] = nodes
+            functions.append(func_info)
+
+    event_graphs = []
+    if hasattr(bp, "ubergraph_pages"):
+        for graph in bp.ubergraph_pages:
+            event_graphs.append({"name": graph.get_name(), "type": "EventGraph"})
+
+    return {
+        "path": params.get("path", ""),
+        "functionCount": len(functions),
+        "functions": functions,
+        "eventGraphs": event_graphs,
+    }
+
+
+def read_blueprint_graph(params: dict) -> dict:
+    """Read nodes from a specific Blueprint graph."""
+    bp = _load_bp(params.get("path", ""))
+    graph_name = params.get("graphName", "EventGraph")
+
+    target_graph = None
+    for graphs_attr in ["ubergraph_pages", "function_graphs"]:
+        if hasattr(bp, graphs_attr):
+            for g in getattr(bp, graphs_attr):
+                if g.get_name() == graph_name:
+                    target_graph = g
+                    break
+        if target_graph:
+            break
+
+    if target_graph is None:
+        available = []
+        for attr in ["ubergraph_pages", "function_graphs"]:
+            if hasattr(bp, attr):
+                for g in getattr(bp, attr):
+                    available.append(g.get_name())
+        raise ValueError(f"Graph '{graph_name}' not found. Available: {available}")
+
+    nodes = []
+    if hasattr(target_graph, "nodes"):
+        for node in target_graph.nodes:
+            node_info = {
+                "name": node.get_name(),
+                "class": node.get_class().get_name(),
+            }
+            try:
+                title = node.get_editor_property("node_comment") if hasattr(node, "get_editor_property") else None
+                if title:
+                    node_info["comment"] = str(title)
+            except Exception:
+                pass
+
+            pins = []
+            try:
+                if hasattr(node, "pins"):
+                    for pin in node.pins:
+                        pin_info = {"name": str(pin.pin_name) if hasattr(pin, "pin_name") else str(pin.get_name())}
+                        if hasattr(pin, "direction"):
+                            pin_info["direction"] = "input" if "input" in str(pin.direction).lower() else "output"
+                        if hasattr(pin, "pin_type"):
+                            pin_info["type"] = str(pin.pin_type)
+                        pins.append(pin_info)
+            except Exception:
+                pass
+            if pins:
+                node_info["pins"] = pins
+
+            nodes.append(node_info)
+
+    return {
+        "path": params.get("path", ""),
+        "graphName": graph_name,
+        "nodeCount": len(nodes),
+        "nodes": nodes,
+    }
+
+
 HANDLERS = {
     "read_blueprint": read_blueprint,
     "compile_blueprint": compile_blueprint,
@@ -522,4 +643,7 @@ HANDLERS = {
     "create_blueprint_interface": create_blueprint_interface,
     "add_blueprint_interface": add_blueprint_interface,
     "add_event_dispatcher": add_event_dispatcher,
+    "list_blueprint_variables": list_blueprint_variables,
+    "list_blueprint_functions": list_blueprint_functions,
+    "read_blueprint_graph": read_blueprint_graph,
 }

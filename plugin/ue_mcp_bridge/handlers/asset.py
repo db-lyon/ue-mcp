@@ -209,9 +209,88 @@ def create_datatable(params: dict) -> dict:
     }
 
 
+def search_assets(params: dict) -> dict:
+    """Search for assets by name, class, or path using the Asset Registry."""
+    query = params.get("query", "")
+    directory = params.get("directory", "/Game/")
+    max_results = params.get("maxResults", 50)
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    registry = unreal.AssetRegistryHelpers.get_asset_registry()
+    results = []
+
+    try:
+        assets = unreal.EditorAssetLibrary.list_assets(directory, recursive=True)
+        query_lower = query.lower()
+
+        for asset_path in assets:
+            if len(results) >= max_results:
+                break
+            path_str = str(asset_path)
+            if query_lower not in path_str.lower():
+                continue
+
+            info = {"path": path_str, "name": path_str.split("/")[-1].split(".")[0]}
+
+            try:
+                asset_data = registry.get_asset_by_object_path(asset_path)
+                if asset_data and asset_data.is_valid():
+                    try:
+                        class_path = asset_data.get_editor_property("asset_class_path")
+                        info["className"] = str(class_path.get_editor_property("asset_name"))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            results.append(info)
+    except Exception as e:
+        return {"error": str(e), "query": query, "results": []}
+
+    return {"query": query, "directory": directory, "resultCount": len(results), "results": results}
+
+
+def read_asset_properties(params: dict) -> dict:
+    """Read specific properties from an asset, optionally filtered by export or property name."""
+    asset_path = params.get("assetPath", params.get("path", ""))
+    export_name = params.get("exportName", None)
+    property_name = params.get("propertyName", None)
+
+    if not HAS_UNREAL:
+        raise RuntimeError("Unreal module not available")
+
+    asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+    if asset is None:
+        raise ValueError(f"Asset not found: {asset_path}")
+
+    if property_name:
+        try:
+            val = asset.get_editor_property(property_name)
+            return {
+                "path": asset_path,
+                "propertyName": property_name,
+                "type": type(val).__name__,
+                "value": _serialize_value(val),
+            }
+        except Exception as e:
+            raise ValueError(f"Property '{property_name}' not found on asset: {e}")
+
+    props = _get_object_properties(asset)
+    return {
+        "path": asset_path,
+        "className": asset.get_class().get_name(),
+        "propertyCount": len(props),
+        "properties": props,
+    }
+
+
 HANDLERS = {
     "read_asset": read_asset,
     "read_datatable": read_datatable,
     "reimport_datatable": reimport_datatable,
     "create_datatable": create_datatable,
+    "search_assets": search_assets,
+    "read_asset_properties": read_asset_properties,
 }
