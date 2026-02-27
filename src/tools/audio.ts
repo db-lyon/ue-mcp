@@ -1,24 +1,30 @@
 import { z } from "zod";
-import { bt, type ToolDef } from "../types.js";
+import { categoryTool, bp, type ToolDef } from "../types.js";
 
-export const audioTools: ToolDef[] = [
-  bt("list_sound_assets", "List sound assets in a directory.", {
+export const audioTool: ToolDef = categoryTool(
+  "audio",
+  "Audio: sound assets, playback, ambient sounds, SoundCues, MetaSounds.",
+  {
+    list:              bp("list_sound_assets"),
+    play_at_location:  bp("play_sound_at_location"),
+    spawn_ambient:     bp("spawn_ambient_sound"),
+    create_cue:        bp("create_sound_cue"),
+    create_metasound:  bp("create_metasound_source"),
+  },
+  `- list: List sound assets. Params: directory?, recursive?
+- play_at_location: Play sound. Params: soundPath, location {x,y,z}, volumeMultiplier?, pitchMultiplier?
+- spawn_ambient: Place ambient sound. Params: soundPath, location {x,y,z}, label?
+- create_cue: Create SoundCue. Params: name, packagePath?, soundWavePath?
+- create_metasound: Create MetaSoundSource. Params: name, packagePath?`,
+  {
     directory: z.string().optional(), recursive: z.boolean().optional(),
-  }),
-  bt("play_sound_at_location", "Play a sound at a world location.", {
-    soundPath: z.string(), location: z.object({ x: z.number(), y: z.number(), z: z.number() }),
-    volumeMultiplier: z.number().optional(), pitchMultiplier: z.number().optional(),
-  }),
-  bt("spawn_ambient_sound", "Place an AmbientSound actor with a sound asset.", {
-    soundPath: z.string(),
-    location: z.object({ x: z.number(), y: z.number(), z: z.number() }),
+    soundPath: z.string().optional(),
+    location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+    volumeMultiplier: z.number().optional(),
+    pitchMultiplier: z.number().optional(),
     label: z.string().optional(),
-  }),
-  bt("create_sound_cue", "Create a new SoundCue asset, optionally wiring in a SoundWave.", {
-    name: z.string(), packagePath: z.string().optional(),
+    name: z.string().optional(),
+    packagePath: z.string().optional(),
     soundWavePath: z.string().optional(),
-  }),
-  bt("create_metasound_source", "Create a new MetaSoundSource asset.", {
-    name: z.string(), packagePath: z.string().optional(),
-  }),
-];
+  },
+);

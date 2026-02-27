@@ -14,30 +14,54 @@ export interface ToolDef {
   handler: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
 }
 
-export function bridgeTool(
+export interface ActionSpec {
+  bridge?: string;
+  mapParams?: (p: Record<string, unknown>) => Record<string, unknown>;
+  handler?: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
+}
+
+export function categoryTool(
   name: string,
-  description: string,
-  schema: Record<string, z.ZodType>,
-  bridgeMethod?: string,
-  mapParams?: (params: Record<string, unknown>) => Record<string, unknown>,
+  summary: string,
+  actions: Record<string, ActionSpec>,
+  actionDocs: string,
+  extraSchema?: Record<string, z.ZodType>,
 ): ToolDef {
+  const actionNames = Object.keys(actions) as [string, ...string[]];
   return {
     name,
-    description,
-    schema,
+    description: `${summary}\n\nActions:\n${actionDocs}`,
+    schema: {
+      action: z.enum(actionNames).describe("Action to perform"),
+      ...extraSchema,
+    },
     handler: async (ctx, params) => {
-      const mapped = mapParams ? mapParams(params) : params;
-      return ctx.bridge.call(bridgeMethod ?? name, mapped);
+      const action = params.action as string;
+      const spec = actions[action];
+      if (!spec) {
+        throw new Error(`Unknown action '${action}'. Available: ${actionNames.join(", ")}`);
+      }
+      if (spec.handler) {
+        return spec.handler(ctx, params);
+      }
+      if (spec.bridge) {
+        const mapped = spec.mapParams ? spec.mapParams(params) : stripAction(params);
+        return ctx.bridge.call(spec.bridge, mapped);
+      }
+      throw new Error(`Action '${action}' has no handler or bridge method`);
     },
   };
 }
 
-export function bt(
-  name: string,
-  description: string,
-  schema: Record<string, z.ZodType>,
-  bridgeMethod?: string,
-  mapParams?: (params: Record<string, unknown>) => Record<string, unknown>,
-): ToolDef {
-  return bridgeTool(name, description, schema, bridgeMethod, mapParams);
+function stripAction(params: Record<string, unknown>): Record<string, unknown> {
+  const { action: _, ...rest } = params;
+  return rest;
+}
+
+export function bp(bridge: string, mapParams?: (p: Record<string, unknown>) => Record<string, unknown>): ActionSpec {
+  return { bridge, mapParams };
+}
+
+export function bpSame(): ActionSpec {
+  return {};
 }

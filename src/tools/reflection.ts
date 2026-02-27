@@ -1,38 +1,32 @@
 import { z } from "zod";
-import { bt, type ToolDef } from "../types.js";
+import { categoryTool, bp, type ToolDef } from "../types.js";
 
-export const reflectionTools: ToolDef[] = [
-  bt("reflect_class",
-    "Reflect a UClass from the running editor: parent chain, properties with types and defaults, " +
-    "functions with signatures, class flags, and implemented interfaces.",
-    {
-      className: z.string().describe("Class name (e.g. 'Character', 'Actor', 'PlayerController')"),
-      includeInherited: z.boolean().optional().describe("Include inherited properties/functions. Default: false"),
-    }),
-
-  bt("reflect_struct",
-    "Reflect a UScriptStruct from the running editor: fields with types.",
-    { structName: z.string().describe("Struct name (e.g. 'Vector', 'HitResult', or full path)") }),
-
-  bt("reflect_enum",
-    "Reflect a UEnum from the running editor: all values with display names.",
-    { enumName: z.string().describe("Enum name (e.g. 'ECollisionChannel', 'EMovementMode')") }),
-
-  bt("list_classes",
-    "List classes known to the editor, optionally filtered by parent class.",
-    {
-      parentFilter: z.string().optional().describe("Parent class to filter by (e.g. 'Actor', 'ActorComponent')"),
-      limit: z.number().optional().describe("Maximum results. Default: 100"),
-    }),
-
-  bt("list_gameplay_tags",
-    "Get the full GameplayTag hierarchy from the running editor.",
-    { filter: z.string().optional().describe("Filter tags by prefix") }),
-
-  bt("create_gameplay_tag",
-    "Add a new gameplay tag to the project.",
-    {
-      tag: z.string().describe("Tag to add (e.g. 'Combat.Damage.Fire')"),
-      comment: z.string().optional().describe("Developer comment"),
-    }),
-];
+export const reflectionTool: ToolDef = categoryTool(
+  "reflection",
+  "UE reflection: classes, structs, enums, gameplay tags.",
+  {
+    reflect_class:  bp("reflect_class"),
+    reflect_struct: bp("reflect_struct"),
+    reflect_enum:   bp("reflect_enum"),
+    list_classes:   bp("list_classes"),
+    list_tags:      bp("list_gameplay_tags"),
+    create_tag:     bp("create_gameplay_tag"),
+  },
+  `- reflect_class: Reflect UClass. Params: className, includeInherited?
+- reflect_struct: Reflect UScriptStruct. Params: structName
+- reflect_enum: Reflect UEnum. Params: enumName
+- list_classes: List classes. Params: parentFilter?, limit?
+- list_tags: List gameplay tags. Params: filter?
+- create_tag: Create gameplay tag. Params: tag, comment?`,
+  {
+    className: z.string().optional(),
+    includeInherited: z.boolean().optional(),
+    structName: z.string().optional(),
+    enumName: z.string().optional(),
+    parentFilter: z.string().optional(),
+    limit: z.number().optional(),
+    filter: z.string().optional(),
+    tag: z.string().optional(),
+    comment: z.string().optional(),
+  },
+);

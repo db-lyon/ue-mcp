@@ -1,25 +1,32 @@
 import { z } from "zod";
-import { bt, type ToolDef } from "../types.js";
+import { categoryTool, bp, type ToolDef } from "../types.js";
 
-export const niagaraTools: ToolDef[] = [
-  bt("list_niagara_systems", "List Niagara System and Emitter assets in a directory.", {
+export const niagaraTool: ToolDef = categoryTool(
+  "niagara",
+  "Niagara VFX: systems, emitters, spawning, parameters.",
+  {
+    list:           bp("list_niagara_systems"),
+    get_info:       bp("get_niagara_info"),
+    spawn:          bp("spawn_niagara_at_location"),
+    set_parameter:  bp("set_niagara_parameter"),
+    create:         bp("create_niagara_system"),
+  },
+  `- list: List Niagara assets. Params: directory?, recursive?
+- get_info: Inspect system. Params: assetPath
+- spawn: Spawn VFX. Params: systemPath, location {x,y,z}, rotation?, label?
+- set_parameter: Set parameter. Params: actorLabel, parameterName, value, parameterType?
+- create: Create system. Params: name, packagePath?`,
+  {
+    assetPath: z.string().optional(), actorLabel: z.string().optional(),
     directory: z.string().optional(), recursive: z.boolean().optional(),
-  }),
-  bt("get_niagara_info", "Get information about a Niagara System: emitters, structure.", {
-    assetPath: z.string(),
-  }),
-  bt("spawn_niagara_at_location", "Spawn a Niagara VFX system at a world location.", {
-    systemPath: z.string().describe("Path to the Niagara System asset"),
-    location: z.object({ x: z.number(), y: z.number(), z: z.number() }),
+    systemPath: z.string().optional(),
+    location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
     rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional(),
     label: z.string().optional(),
-  }),
-  bt("set_niagara_parameter", "Set a parameter on a Niagara component.", {
-    actorLabel: z.string(), parameterName: z.string(),
-    value: z.unknown().describe("Parameter value"),
-    parameterType: z.string().optional().describe("Type: 'float', 'vector', 'bool'"),
-  }),
-  bt("create_niagara_system", "Create a new empty Niagara System asset.", {
-    name: z.string(), packagePath: z.string().optional(),
-  }),
-];
+    parameterName: z.string().optional(),
+    value: z.unknown().optional(),
+    parameterType: z.string().optional(),
+    name: z.string().optional(),
+    packagePath: z.string().optional(),
+  },
+);

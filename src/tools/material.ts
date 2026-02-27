@@ -1,38 +1,38 @@
 import { z } from "zod";
-import { bt, type ToolDef } from "../types.js";
+import { categoryTool, bp, type ToolDef } from "../types.js";
 
-export const materialTools: ToolDef[] = [
-  bt("read_material", "Read a material or material instance's parameters and structure.", {
-    assetPath: z.string().describe("Path to the material asset"),
-  }),
-  bt("list_material_parameters", "List all overridable parameters on a material or material instance.", {
-    assetPath: z.string().describe("Path to the material asset"),
-  }),
-  bt("set_material_parameter", "Set a scalar, vector, or texture parameter on a material instance.", {
-    assetPath: z.string().describe("Path to the material instance"),
-    parameterName: z.string().describe("Parameter name"),
-    value: z.unknown().describe("Parameter value (number, {r,g,b,a}, or texture path)"),
-  }),
-  bt("create_material_instance", "Create a new material instance from a parent material.", {
-    parentPath: z.string().describe("Path to the parent material"),
-    name: z.string().optional().describe("Asset name"),
-    packagePath: z.string().optional().describe("Package path"),
-  }),
-  bt("create_material", "Create a new Material asset from scratch.", {
-    name: z.string().describe("Asset name"),
-    packagePath: z.string().optional().describe("Package path (e.g. '/Game/Materials')"),
-  }),
-  bt("set_material_shading_model", "Set the shading model on a material.", {
-    assetPath: z.string().describe("Path to the material"),
-    shadingModel: z.string().describe("Shading model (e.g. 'DefaultLit', 'Unlit', 'Subsurface')"),
-  }),
-  bt("set_material_base_color", "Set the base color of a material to a constant value.", {
-    assetPath: z.string().describe("Path to the material"),
-    color: z.object({ r: z.number(), g: z.number(), b: z.number(), a: z.number().optional() }).describe("Color value"),
-  }),
-  bt("connect_texture_to_material", "Connect a texture to a material property.", {
-    materialPath: z.string().describe("Path to the material"),
-    texturePath: z.string().describe("Path to the texture"),
-    property: z.string().describe("Material property (e.g. 'BaseColor', 'Normal', 'Roughness')"),
-  }),
-];
+export const materialTool: ToolDef = categoryTool(
+  "material",
+  "Materials: create, read, set parameters, shading model, base color, textures.",
+  {
+    read:              bp("read_material", (p) => ({ assetPath: p.assetPath })),
+    list_parameters:   bp("list_material_parameters", (p) => ({ assetPath: p.assetPath })),
+    set_parameter:     bp("set_material_parameter"),
+    create_instance:   bp("create_material_instance"),
+    create:            bp("create_material"),
+    set_shading_model: bp("set_material_shading_model"),
+    set_base_color:    bp("set_material_base_color"),
+    connect_texture:   bp("connect_texture_to_material"),
+  },
+  `- read: Read material structure. Params: assetPath
+- list_parameters: List overridable parameters. Params: assetPath
+- set_parameter: Set parameter value. Params: assetPath, parameterName, value
+- create_instance: Create material instance. Params: parentPath, name?, packagePath?
+- create: Create material. Params: name, packagePath?
+- set_shading_model: Set shading model. Params: assetPath, shadingModel
+- set_base_color: Set base color. Params: assetPath, color {r,g,b,a?}
+- connect_texture: Connect texture to property. Params: materialPath, texturePath, property`,
+  {
+    assetPath: z.string().optional(),
+    parameterName: z.string().optional(),
+    value: z.unknown().optional(),
+    parentPath: z.string().optional(),
+    name: z.string().optional(),
+    packagePath: z.string().optional(),
+    shadingModel: z.string().optional(),
+    color: z.object({ r: z.number(), g: z.number(), b: z.number(), a: z.number().optional() }).optional(),
+    materialPath: z.string().optional(),
+    texturePath: z.string().optional(),
+    property: z.string().optional().describe("Material property: BaseColor, Normal, Roughness, etc."),
+  },
+);

@@ -1,42 +1,45 @@
 import { z } from "zod";
-import { bt, type ToolDef } from "../types.js";
+import { categoryTool, bp, type ToolDef } from "../types.js";
 
-export const pcgTools: ToolDef[] = [
-  bt("list_pcg_graphs", "List PCG graph assets in a directory.", {
+export const pcgTool: ToolDef = categoryTool(
+  "pcg",
+  "Procedural Content Generation: graphs, nodes, connections, execution, volumes.",
+  {
+    list_graphs:          bp("list_pcg_graphs"),
+    read_graph:           bp("read_pcg_graph"),
+    read_node_settings:   bp("read_pcg_node_settings"),
+    get_components:       bp("get_pcg_components"),
+    get_component_details: bp("get_pcg_component_details"),
+    create_graph:         bp("create_pcg_graph"),
+    add_node:             bp("add_pcg_node"),
+    connect_nodes:        bp("connect_pcg_nodes"),
+    set_node_settings:    bp("set_pcg_node_settings"),
+    remove_node:          bp("remove_pcg_node"),
+    execute:              bp("execute_pcg_graph"),
+    add_volume:           bp("add_pcg_volume"),
+  },
+  `- list_graphs: List PCG graphs. Params: directory?, recursive?
+- read_graph: Read graph structure. Params: assetPath
+- read_node_settings: Read node settings. Params: assetPath, nodeName
+- get_components: List PCG components in level
+- get_component_details: Inspect component. Params: actorLabel
+- create_graph: Create graph. Params: name, packagePath?
+- add_node: Add node. Params: assetPath, nodeType, nodeName?
+- connect_nodes: Wire nodes. Params: assetPath, sourceNode, sourcePin, targetNode, targetPin
+- set_node_settings: Set node params. Params: assetPath, nodeName, settings
+- remove_node: Remove node. Params: assetPath, nodeName
+- execute: Regenerate PCG. Params: actorLabel
+- add_volume: Place PCG volume. Params: graphPath, location?, extent?`,
+  {
+    assetPath: z.string().optional(), actorLabel: z.string().optional(),
     directory: z.string().optional(), recursive: z.boolean().optional(),
-  }),
-  bt("read_pcg_graph", "Read a PCG graph's full structure: nodes, edges, parameters.", {
-    assetPath: z.string().describe("Path to the PCG graph asset"),
-  }),
-  bt("read_pcg_node_settings", "Read detailed settings of a specific PCG node.", {
-    assetPath: z.string(), nodeName: z.string(),
-  }),
-  bt("get_pcg_components", "List all PCG components in the current level.", {}),
-  bt("get_pcg_component_details", "Deep inspect a specific PCG component.", {
-    actorLabel: z.string(),
-  }),
-  bt("create_pcg_graph", "Create a new PCG graph asset.", {
-    name: z.string(), packagePath: z.string().optional(),
-  }),
-  bt("add_pcg_node", "Add a node to a PCG graph.", {
-    assetPath: z.string(), nodeType: z.string(), nodeName: z.string().optional(),
-  }),
-  bt("connect_pcg_nodes", "Connect two PCG nodes via their pins.", {
-    assetPath: z.string(), sourceNode: z.string(), sourcePin: z.string(),
-    targetNode: z.string(), targetPin: z.string(),
-  }),
-  bt("set_pcg_node_settings", "Set parameters on an existing PCG node (partial update).", {
-    assetPath: z.string(), nodeName: z.string(), settings: z.record(z.unknown()),
-  }),
-  bt("remove_pcg_node", "Remove a node from a PCG graph.", {
-    assetPath: z.string(), nodeName: z.string(),
-  }),
-  bt("execute_pcg_graph", "Trigger regeneration of a PCG component in the level.", {
-    actorLabel: z.string(),
-  }),
-  bt("add_pcg_volume", "Place a PCG volume in the level with a graph and bounds.", {
-    graphPath: z.string(),
+    name: z.string().optional(), packagePath: z.string().optional(),
+    nodeType: z.string().optional(), nodeName: z.string().optional(),
+    sourceNode: z.string().optional(), sourcePin: z.string().optional(),
+    targetNode: z.string().optional(), targetPin: z.string().optional(),
+    settings: z.record(z.unknown()).optional(),
+    graphPath: z.string().optional(),
     location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
     extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
-  }),
-];
+  },
+);

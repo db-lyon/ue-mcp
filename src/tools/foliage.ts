@@ -1,27 +1,35 @@
 import { z } from "zod";
-import { bt, type ToolDef } from "../types.js";
+import { categoryTool, bp, type ToolDef } from "../types.js";
 
-export const foliageTools: ToolDef[] = [
-  bt("list_foliage_types", "List all foliage types used in the level.", {}),
-  bt("get_foliage_type_settings", "Read full settings for a foliage type.", { foliageTypeName: z.string() }),
-  bt("sample_foliage", "Query foliage instances in a region.", {
-    center: z.object({ x: z.number(), y: z.number(), z: z.number() }),
-    radius: z.number(),
+export const foliageTool: ToolDef = categoryTool(
+  "foliage",
+  "Foliage painting, types, sampling, and settings.",
+  {
+    list_types:    bp("list_foliage_types"),
+    get_settings:  bp("get_foliage_type_settings"),
+    sample:        bp("sample_foliage"),
+    paint:         bp("paint_foliage"),
+    erase:         bp("erase_foliage"),
+    create_type:   bp("create_foliage_type"),
+    set_settings:  bp("set_foliage_type_settings"),
+  },
+  `- list_types: List foliage types in level
+- get_settings: Read foliage type settings. Params: foliageTypeName
+- sample: Query instances in region. Params: center {x,y,z}, radius, foliageType?
+- paint: Add foliage. Params: foliageType, center {x,y,z}, radius, count?, density?
+- erase: Remove foliage. Params: center {x,y,z}, radius, foliageType?
+- create_type: Create from mesh. Params: meshPath, name?, packagePath?
+- set_settings: Modify type settings. Params: foliageTypeName, settings`,
+  {
+    foliageTypeName: z.string().optional(),
     foliageType: z.string().optional(),
-  }),
-  bt("paint_foliage", "Add foliage instances in a radius.", {
-    foliageType: z.string(), center: z.object({ x: z.number(), y: z.number(), z: z.number() }),
-    radius: z.number(), count: z.number().optional(), density: z.number().optional(),
-  }),
-  bt("erase_foliage", "Remove foliage instances in a radius.", {
-    center: z.object({ x: z.number(), y: z.number(), z: z.number() }),
-    radius: z.number(), foliageType: z.string().optional(),
-  }),
-  bt("create_foliage_type", "Create a new FoliageType asset from a StaticMesh.", {
-    meshPath: z.string().describe("Path to the StaticMesh"),
-    name: z.string().optional(), packagePath: z.string().optional(),
-  }),
-  bt("set_foliage_type_settings", "Modify settings on a foliage type (partial update).", {
-    foliageTypeName: z.string(), settings: z.record(z.unknown()),
-  }),
-];
+    center: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+    radius: z.number().optional(),
+    count: z.number().optional(),
+    density: z.number().optional(),
+    meshPath: z.string().optional(),
+    name: z.string().optional(),
+    packagePath: z.string().optional(),
+    settings: z.record(z.unknown()).optional(),
+  },
+);

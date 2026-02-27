@@ -6,119 +6,91 @@ alwaysApply: true
 
 # UE-MCP Tool Selection Guide
 
-You have access to 185+ Unreal Engine MCP tools. This guide helps you pick the right ones.
-
-## Before You Start
-
-- Call `get_status` to check if the editor is connected (live mode) or if only offline tools are available.
-- Offline tools can read/inspect assets without the editor running.
-- Live tools (create, modify, execute) require the editor to be connected.
+16 category tools, each with an `action` parameter. Call `project(action="get_status")` first.
 
 ## Common Tasks → Tools
 
 ### "What's in the level?"
-→ `get_world_outliner` then `get_actor_details` for specifics
+→ `level(action="get_outliner")` then `level(action="get_actor_details", actorLabel="...")`
 
 ### "What's in the project?"
-→ `list_assets` or `search_assets` with wildcard paths
+→ `asset(action="list")` or `asset(action="search", query="*")`
 
 ### "Create/place something in the level"
-→ `place_actor` for meshes/actors, `spawn_light` for lights, `spawn_volume` for volumes
+→ `level(action="place_actor")` for meshes/actors
+→ `level(action="spawn_light")` for lights
+→ `level(action="spawn_volume")` for volumes
 
 ### "Import a mesh from FBX/OBJ"
-→ `import_static_mesh` for static meshes, `import_skeletal_mesh` for skeletal, `import_animation` for anims
+→ `asset(action="import_static_mesh")`, `asset(action="import_skeletal_mesh")`, `asset(action="import_animation")`
 
 ### "Duplicate / rename / move / delete an asset"
-→ `duplicate_asset`, `rename_asset`, `move_asset`, `delete_asset`
+→ `asset(action="duplicate")`, `asset(action="rename")`, `asset(action="move")`, `asset(action="delete")`
 
 ### "Edit a Blueprint"
-1. `read_blueprint` to understand current state
-2. `search_node_types` to find the right node class
-3. `add_blueprint_node` to place nodes
-4. `connect_blueprint_pins` to wire them together
-5. `compile_blueprint` when done
+1. `blueprint(action="read")` to understand current state
+2. `blueprint(action="search_node_types")` to find the right node class
+3. `blueprint(action="add_node")` to place nodes
+4. `blueprint(action="connect_pins")` to wire them together
+5. `blueprint(action="compile")` when done
 
 ### "Create a Blueprint from scratch"
-1. `create_blueprint` with parent class
-2. `add_blueprint_variable` for variables
-3. `create_blueprint_function` for functions
-4. `add_blueprint_component` for components
+1. `blueprint(action="create")` with parentClass
+2. `blueprint(action="add_variable")` for variables
+3. `blueprint(action="create_function")` for functions
+4. `blueprint(action="add_component")` for components
 5. Then add nodes and connect pins as above
 
 ### "Set up Blueprint Interfaces"
-→ `create_blueprint_interface` to create, `add_blueprint_interface` to implement on a BP
-
-### "Add event dispatcher to a Blueprint"
-→ `add_event_dispatcher`
+→ `blueprint(action="create_interface")` to create, `blueprint(action="add_interface")` to implement
 
 ### "Work with materials"
-→ Create: `create_material`, `create_material_instance`
-→ Edit: `set_material_parameter`, `set_material_base_color`, `connect_texture_to_material`
+→ `material(action="create")`, `material(action="create_instance")`
+→ `material(action="set_parameter")`, `material(action="set_base_color")`, `material(action="connect_texture")`
 
 ### "Modify landscape/terrain"
-→ `get_landscape_info` first, then `sculpt_landscape`, `paint_landscape_layer`, etc.
+→ `landscape(action="get_info")` first, then `landscape(action="sculpt")`, `landscape(action="paint_layer")`
 
 ### "Set up PCG (procedural generation)"
-→ `create_pcg_graph`, `add_pcg_node`, `connect_pcg_nodes`, `set_pcg_node_settings`, `execute_pcg_graph`
+→ `pcg(action="create_graph")` → `pcg(action="add_node")` → `pcg(action="connect_nodes")` → `pcg(action="execute")`
 
 ### "Work with foliage"
-→ `create_foliage_type` (from a mesh) → `paint_foliage` to scatter → `set_foliage_type_settings` to tune
+→ `foliage(action="create_type")` → `foliage(action="paint")` → `foliage(action="set_settings")`
 
 ### "Create VFX / Niagara"
-→ `create_niagara_system` → `spawn_niagara_at_location` → `set_niagara_parameter`
+→ `niagara(action="create")` → `niagara(action="spawn")` → `niagara(action="set_parameter")`
 
 ### "Set up audio"
-→ `create_sound_cue` or `create_metasound_source` → `spawn_ambient_sound` to place in level
+→ `audio(action="create_cue")` or `audio(action="create_metasound")` → `audio(action="spawn_ambient")`
 
 ### "Create animation assets"
-→ `create_anim_montage` (needs AnimSequence), `create_anim_blueprint` (needs skeleton), `create_blendspace` (needs skeleton)
-→ Use `list_skeletal_meshes` or `get_skeleton_info` to find the skeleton path first
+→ `animation(action="create_montage")`, `animation(action="create_anim_blueprint")`, `animation(action="create_blendspace")`
+→ Use `animation(action="list_skeletal_meshes")` to find skeleton paths first
 
 ### "Create a DataTable"
-→ `create_datatable` (needs a row struct) → `reimport_datatable` to fill with JSON data
+→ `asset(action="create_datatable")` → `asset(action="reimport_datatable")` to fill with JSON
 
-### "Set up physics/collision on an actor"
-→ `set_collision_profile` for presets, `set_simulate_physics` to enable simulation
-→ `set_collision_enabled` for collision mode, `set_physics_properties` for mass/damping
+### "Set up physics/collision"
+→ `gameplay(action="set_collision_profile")`, `gameplay(action="set_simulate_physics")`
+→ `gameplay(action="set_physics_properties")` for mass/damping
 
-### "Add a component to an existing level actor"
-→ `add_component_to_actor` then `set_component_property` to configure it
-
-### "Select actors in the editor"
-→ `select_actors` with an array of labels, `get_selected_actors` to see current selection
+### "Add a component to a level actor"
+→ `level(action="add_component")` then `level(action="set_component_property")`
 
 ### "Change project settings (INI)"
-→ `set_config` to write to DefaultEngine.ini, DefaultGame.ini, etc.
-→ `read_config` and `search_config` to inspect current settings
+→ `project(action="set_config")`, `project(action="read_config")`, `project(action="search_config")`
 
 ### "Create / manage gameplay tags"
-→ `list_gameplay_tags` to see existing, `create_gameplay_tag` to add new ones
+→ `reflection(action="list_tags")`, `reflection(action="create_tag")`
 
 ### "Build a custom editor tool / tuning panel"
-→ `create_editor_utility_widget` to create a dockable UI panel
-→ Then use blueprint tools to add variables, functions, and UI widgets
-→ `run_editor_utility_widget` to open it as a tab in the editor
+→ `widget(action="create_utility_widget")` → `widget(action="run_utility_widget")`
 
 ### "Run an editor automation script"
-→ `create_editor_utility_blueprint` to create a headless script (no UI)
-→ `run_editor_utility_blueprint` to execute it
+→ `widget(action="create_utility_blueprint")` → `widget(action="run_utility_blueprint")`
 
 ### "Understand a C++ class"
-→ `reflect_class` for UE reflection data, `read_cpp_header` for source
+→ `reflection(action="reflect_class")` for UE reflection, `project(action="read_cpp_header")` for source
 
-### "I need something not covered by a specific tool"
-→ `execute_python` — runs arbitrary Python in the editor. This is your escape hatch.
-
-## Tool Naming Conventions
-
-Tools follow a `verb_noun` pattern within their domain:
-- `read_*` / `get_*` — inspect/query (often offline-capable)
-- `list_*` — enumerate assets or items
-- `search_*` — filtered search with wildcards
-- `create_*` / `spawn_*` — create new things
-- `import_*` — import from external files (FBX, OBJ, PNG, etc.)
-- `set_*` — modify properties
-- `delete_*` / `erase_*` — remove things
-- `add_*` — add sub-elements (nodes, variables, tracks, components, etc.)
-- `connect_*` — wire things together (pins, PCG nodes)
-- `duplicate_*` / `rename_*` / `move_*` — asset management operations
+### "I need something not covered"
+→ `editor(action="execute_python")` — runs arbitrary Python in the editor

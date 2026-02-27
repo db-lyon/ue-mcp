@@ -7,68 +7,40 @@ import { deploy, deploySummary } from "./deployer.js";
 import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import type { ToolDef, ToolContext } from "./types.js";
 
-import { statusTools } from "./tools/status.js";
-import { configTools } from "./tools/config.js";
-import { cppTools } from "./tools/cpp.js";
-import { assetTools } from "./tools/assets.js";
-import { blueprintTools } from "./tools/blueprint.js";
-import { levelTools } from "./tools/level.js";
-import { editorTools } from "./tools/editor.js";
-import { materialTools } from "./tools/material.js";
-import { animationTools } from "./tools/animation.js";
-import { reflectionTools } from "./tools/reflection.js";
-import { landscapeTools } from "./tools/landscape.js";
-import { pcgTools } from "./tools/pcg.js";
-import { foliageTools } from "./tools/foliage.js";
-import { lightingTools } from "./tools/lighting.js";
-import { niagaraTools } from "./tools/niagara.js";
-import { audioTools } from "./tools/audio.js";
-import { sequencerTools } from "./tools/sequencer.js";
-import { navigationTools } from "./tools/navigation.js";
-import { physicsTools } from "./tools/physics.js";
-import { skeletonTools } from "./tools/skeleton.js";
-import { widgetTools } from "./tools/widget.js";
-import { volumeTools } from "./tools/volume.js";
-import { splineTools } from "./tools/spline.js";
-import { textureTools } from "./tools/texture.js";
-import { importTools } from "./tools/import.js";
-import { inputTools } from "./tools/input.js";
-import { behaviorTreeTools } from "./tools/behaviortree.js";
-import { performanceTools } from "./tools/performance.js";
-import { dataTableTools } from "./tools/datatable.js";
-import { demoTools } from "./tools/demo.js";
+import { projectTool } from "./tools/project.js";
+import { assetTool } from "./tools/asset.js";
+import { blueprintTool } from "./tools/blueprint.js";
+import { levelTool } from "./tools/level.js";
+import { materialTool } from "./tools/material.js";
+import { animationTool } from "./tools/animation.js";
+import { landscapeTool } from "./tools/landscape.js";
+import { pcgTool } from "./tools/pcg.js";
+import { foliageTool } from "./tools/foliage.js";
+import { niagaraTool } from "./tools/niagara.js";
+import { audioTool } from "./tools/audio.js";
+import { widgetTool } from "./tools/widget.js";
+import { editorTool } from "./tools/editor.js";
+import { reflectionTool } from "./tools/reflection.js";
+import { gameplayTool } from "./tools/gameplay.js";
+import { demoTool } from "./tools/demo.js";
 
 const ALL_TOOLS: ToolDef[] = [
-  ...statusTools,
-  ...configTools,
-  ...cppTools,
-  ...assetTools,
-  ...blueprintTools,
-  ...levelTools,
-  ...editorTools,
-  ...materialTools,
-  ...animationTools,
-  ...reflectionTools,
-  ...landscapeTools,
-  ...pcgTools,
-  ...foliageTools,
-  ...lightingTools,
-  ...niagaraTools,
-  ...audioTools,
-  ...sequencerTools,
-  ...navigationTools,
-  ...physicsTools,
-  ...skeletonTools,
-  ...widgetTools,
-  ...volumeTools,
-  ...splineTools,
-  ...textureTools,
-  ...importTools,
-  ...inputTools,
-  ...behaviorTreeTools,
-  ...performanceTools,
-  ...dataTableTools,
-  ...demoTools,
+  projectTool,
+  assetTool,
+  blueprintTool,
+  levelTool,
+  materialTool,
+  animationTool,
+  landscapeTool,
+  pcgTool,
+  foliageTool,
+  niagaraTool,
+  audioTool,
+  widgetTool,
+  editorTool,
+  reflectionTool,
+  gameplayTool,
+  demoTool,
 ];
 
 async function main() {
@@ -78,7 +50,7 @@ async function main() {
 
   const server = new McpServer({
     name: "ue-mcp",
-    version: "0.2.0",
+    version: "0.3.0",
   }, {
     instructions: SERVER_INSTRUCTIONS,
   });
@@ -133,7 +105,7 @@ async function main() {
     }
   }
 
-  console.error(`[ue-mcp] Registered ${ALL_TOOLS.length} tools`);
+  console.error(`[ue-mcp] Registered ${ALL_TOOLS.length} tools (category mega-tools)`);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
