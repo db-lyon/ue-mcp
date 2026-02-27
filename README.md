@@ -87,12 +87,12 @@ flowchart LR
 - **Python Bridge** (runs inside Unreal Editor): WebSocket server using the `unreal` Python module. Handles all editor-specific operations -- blueprints, actors, materials, compilation, PIE, etc.
 - **Filesystem tools**: Config INI parsing, C++ header analysis, asset directory listing -- these work without the editor.
 
-## Tools Reference (16 tools, 185+ actions)
+## Tools Reference (18 tools, 220+ actions)
 
 Every tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 <details>
-<summary><strong>project</strong> -- Status, config INI, C++ source inspection</summary>
+<summary><code>project</code> -- Status, config INI, C++ source inspection</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -111,7 +111,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>asset</strong> -- Asset management, import, datatables, textures</summary>
+<summary><code>asset</code> -- Asset management, import, datatables, textures</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -138,7 +138,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>blueprint</strong> -- Reading, authoring, and compilation</summary>
+<summary><code>blueprint</code> -- Reading, authoring, and compilation</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -167,7 +167,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>level</strong> -- Actors, selection, components, volumes, lights, splines</summary>
+<summary><code>level</code> -- Actors, selection, components, volumes, lights, splines</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -197,7 +197,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>material</strong> -- Materials, instances, shading</summary>
+<summary><code>material</code> -- Materials, instances, shading, graph authoring</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -213,7 +213,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>animation</strong> -- Anim assets, skeletons, montages, blendspaces</summary>
+<summary><code>animation</code> -- Anim assets, skeletons, montages, blendspaces</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -234,7 +234,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>landscape</strong> -- Terrain sculpting, painting, layers</summary>
+<summary><code>landscape</code> -- Terrain sculpting, painting, layers</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -252,7 +252,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>pcg</strong> -- Procedural Content Generation</summary>
+<summary><code>pcg</code> -- Procedural Content Generation</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -272,7 +272,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>foliage</strong> -- Foliage painting, types, settings</summary>
+<summary><code>foliage</code> -- Foliage painting, types, settings</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -287,7 +287,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>niagara</strong> -- VFX systems</summary>
+<summary><code>niagara</code> -- VFX systems and graph authoring</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -300,7 +300,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>audio</strong> -- Sound assets and playback</summary>
+<summary><code>audio</code> -- Sound assets and playback</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -313,7 +313,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>widget</strong> -- UMG widgets and editor utilities</summary>
+<summary><code>widget</code> -- UMG widgets and editor utilities</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -331,7 +331,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>editor</strong> -- Console, Python, PIE, viewport, sequencer, performance</summary>
+<summary><code>editor</code> -- Console, Python, PIE, viewport, sequencer, performance, pipeline, logs</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -358,7 +358,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>reflection</strong> -- UE class/struct/enum reflection, gameplay tags</summary>
+<summary><code>reflection</code> -- UE class/struct/enum reflection, gameplay tags</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -372,7 +372,7 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>gameplay</strong> -- Physics, collision, navigation, input, behavior trees</summary>
+<summary><code>gameplay</code> -- Physics, collision, navigation, input, behavior trees, AI, game framework</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
@@ -395,7 +395,43 @@ Every tool takes an `action` parameter that selects the operation, plus action-s
 </details>
 
 <details>
-<summary><strong>demo</strong> -- Neon Shrine demo scene</summary>
+<summary><code>gas</code> -- Gameplay Ability System</summary>
+
+| Action | Description | Key Params |
+|--------|-------------|------------|
+| `add_asc` | Add AbilitySystemComponent | `blueprintPath` |
+| `create_attribute_set` | Create AttributeSet BP | `name`, `packagePath?` |
+| `add_attribute` | Add attribute to set | `attributeSetPath`, `attributeName` |
+| `create_ability` | Create GameplayAbility BP | `name`, `parentClass?` |
+| `set_ability_tags` | Set activation/cancel/block tags | `abilityPath`, `ability_tags?`, `activation_required_tags?` |
+| `create_effect` | Create GameplayEffect BP | `name`, `durationPolicy?` |
+| `set_effect_modifier` | Add modifier to effect | `effectPath`, `attribute`, `operation?`, `magnitude?` |
+| `create_cue` | Create GameplayCue notify | `name`, `cueType?` (Static/Actor) |
+| `get_info` | Inspect GAS setup on BP | `blueprintPath` |
+
+</details>
+
+<details>
+<summary><code>networking</code> -- Replication and networking</summary>
+
+| Action | Description | Key Params |
+|--------|-------------|------------|
+| `set_replicates` | Enable actor replication | `blueprintPath`, `replicates?` |
+| `set_property_replicated` | Mark variable as replicated | `blueprintPath`, `propertyName` |
+| `configure_net_frequency` | Set net update frequency | `blueprintPath`, `netUpdateFrequency?` |
+| `set_dormancy` | Set net dormancy mode | `blueprintPath`, `dormancy` |
+| `set_net_load_on_client` | Control client loading | `blueprintPath`, `loadOnClient?` |
+| `set_always_relevant` | Always network relevant | `blueprintPath`, `alwaysRelevant?` |
+| `set_only_relevant_to_owner` | Only relevant to owner | `blueprintPath`, `onlyRelevantToOwner?` |
+| `configure_cull_distance` | Net cull distance | `blueprintPath`, `netCullDistanceSquared?` |
+| `set_priority` | Net priority | `blueprintPath`, `netPriority?` |
+| `set_replicate_movement` | Replicate movement | `blueprintPath`, `replicateMovement?` |
+| `get_info` | Get networking config | `blueprintPath` |
+
+</details>
+
+<details>
+<summary><code>demo</code> -- Neon Shrine demo scene</summary>
 
 | Action | Description | Key Params |
 |--------|-------------|------------|
