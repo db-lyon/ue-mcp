@@ -68,6 +68,14 @@ class BridgeServer:
         from .handlers import asset_management as asset_mgmt_h
         from .handlers import mesh_import as mesh_import_h
         from .handlers import physics as physics_h
+        from .handlers import gas as gas_h
+        from .handlers import networking as networking_h
+        from .handlers import ai_systems as ai_h
+        from .handlers import material_graph as mat_graph_h
+        from .handlers import niagara_authoring as niagara_auth_h
+        from .handlers import game_framework as framework_h
+        from .handlers import pipeline as pipeline_h
+        from .handlers import logs as logs_h
 
         self._handlers.update(asset_h.HANDLERS)
         self._handlers.update(bp_h.HANDLERS)
@@ -101,6 +109,14 @@ class BridgeServer:
         self._handlers.update(asset_mgmt_h.HANDLERS)
         self._handlers.update(mesh_import_h.HANDLERS)
         self._handlers.update(physics_h.HANDLERS)
+        self._handlers.update(gas_h.HANDLERS)
+        self._handlers.update(networking_h.HANDLERS)
+        self._handlers.update(ai_h.HANDLERS)
+        self._handlers.update(mat_graph_h.HANDLERS)
+        self._handlers.update(niagara_auth_h.HANDLERS)
+        self._handlers.update(framework_h.HANDLERS)
+        self._handlers.update(pipeline_h.HANDLERS)
+        self._handlers.update(logs_h.HANDLERS)
 
     def start(self):
         if websockets is None:

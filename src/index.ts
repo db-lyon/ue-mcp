@@ -22,6 +22,8 @@ import { widgetTool } from "./tools/widget.js";
 import { editorTool } from "./tools/editor.js";
 import { reflectionTool } from "./tools/reflection.js";
 import { gameplayTool } from "./tools/gameplay.js";
+import { gasTool } from "./tools/gas.js";
+import { networkingTool } from "./tools/networking.js";
 import { demoTool } from "./tools/demo.js";
 
 const ALL_TOOLS: ToolDef[] = [
@@ -40,6 +42,8 @@ const ALL_TOOLS: ToolDef[] = [
   editorTool,
   reflectionTool,
   gameplayTool,
+  gasTool,
+  networkingTool,
   demoTool,
 ];
 

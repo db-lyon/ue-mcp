@@ -1,4 +1,4 @@
-export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge — 16 category tools covering 185+ actions.
+export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge — 18 category tools covering 220+ actions.
 
 Every tool takes an "action" parameter that selects the operation. Call project(action="get_status") first.
 
@@ -29,9 +29,11 @@ level — Level actors, selection, components, volumes, lights, splines
   spawn_light, set_light_properties, build_lighting,
   get_spline_info, set_spline_points
 
-material — Materials and shading
+material — Materials, shading, and graph authoring
   read, list_parameters, set_parameter, create_instance, create,
-  set_shading_model, set_base_color, connect_texture
+  set_shading_model, set_base_color, connect_texture,
+  add_expression, connect_expressions, connect_to_property,
+  list_expressions, delete_expression, list_expression_types, recompile
 
 animation — Anim assets, skeletons, montages, blendspaces
   read_anim_blueprint, read_montage, read_sequence, read_blendspace, list,
@@ -50,8 +52,10 @@ pcg — Procedural Content Generation graphs
 foliage — Foliage painting and types
   list_types, get_settings, sample, paint, erase, create_type, set_settings
 
-niagara — VFX systems
-  list, get_info, spawn, set_parameter, create
+niagara — VFX systems and graph authoring
+  list, get_info, spawn, set_parameter, create,
+  create_emitter, add_emitter, list_emitters, set_emitter_property,
+  list_modules, get_emitter_info
 
 audio — Sound assets and playback
   list, play_at_location, spawn_ambient, create_cue, create_metasound
@@ -61,24 +65,45 @@ widget — UMG widgets and editor utilities
   create_utility_widget, run_utility_widget,
   create_utility_blueprint, run_utility_blueprint
 
-editor — Console, Python, PIE, viewport, sequencer, perf
+editor — Console, Python, PIE, viewport, sequencer, perf, build pipeline, logs
   execute_command, execute_python, set_property, play_in_editor,
   get_runtime_value, hot_reload, undo, redo,
   get_perf_stats, run_stat, set_scalability, capture_screenshot,
   get_viewport, set_viewport, focus_on_actor,
-  create_sequence, get_sequence_info, add_sequence_track, play_sequence
+  create_sequence, get_sequence_info, add_sequence_track, play_sequence,
+  build_all, build_geometry, build_hlod, validate_assets,
+  get_build_status, cook_content,
+  get_log, search_log, get_message_log
 
 reflection — UE class/struct/enum reflection, gameplay tags
   reflect_class, reflect_struct, reflect_enum, list_classes,
   list_tags, create_tag
 
-gameplay — Physics, collision, navigation, input, behavior trees
+gameplay — Physics, collision, navigation, input, behavior trees, AI, game framework
   set_collision_profile, set_simulate_physics, set_collision_enabled,
   set_physics_properties, rebuild_navigation, get_navmesh_info,
   project_to_nav, spawn_nav_modifier,
   create_input_action, create_input_mapping, list_input_assets,
   list_behavior_trees, get_behavior_tree_info,
-  create_blackboard, create_behavior_tree
+  create_blackboard, create_behavior_tree,
+  create_eqs_query, list_eqs_queries,
+  add_perception, configure_sense,
+  create_state_tree, list_state_trees, add_state_tree_component,
+  create_smart_object_def, add_smart_object_component,
+  create_game_mode, create_game_state, create_player_controller,
+  create_player_state, create_hud, set_world_game_mode, get_framework_info
+
+gas — Gameplay Ability System
+  add_asc, create_attribute_set, add_attribute,
+  create_ability, set_ability_tags,
+  create_effect, set_effect_modifier,
+  create_cue, get_info
+
+networking — Replication and networking
+  set_replicates, set_property_replicated, configure_net_frequency,
+  set_dormancy, set_net_load_on_client, set_always_relevant,
+  set_only_relevant_to_owner, configure_cull_distance,
+  set_priority, set_replicate_movement, get_info
 
 demo — Neon Shrine demo scene
   step, cleanup
