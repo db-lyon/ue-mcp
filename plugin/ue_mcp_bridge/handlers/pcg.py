@@ -56,7 +56,7 @@ def list_pcg_graphs(params: dict) -> dict:
 
 def read_pcg_graph(params: dict) -> dict:
     """Read a PCG graph's full structure: nodes, edges, parameters."""
-    graph_path = params.get("graphPath", "")
+    graph_path = params.get("graphPath", "") or params.get("assetPath", "")
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
@@ -300,14 +300,24 @@ def get_pcg_component_details(params: dict) -> dict:
 
 def create_pcg_graph(params: dict) -> dict:
     """Create a new PCG graph asset."""
-    graph_path = params.get("graphPath", "")
+    from ._util import resolve_asset_path, ensure_asset_cleared
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
+    graph_path = params.get("graphPath", "")
+    if graph_path and "/" in graph_path:
+        package_path = "/".join(graph_path.split("/")[:-1])
+        asset_name = graph_path.split("/")[-1]
+        full_path = graph_path
+    else:
+        asset_name, package_path, full_path = resolve_asset_path(params, "/Game/PCG")
+        if not asset_name:
+            raise ValueError("graphPath or name+packagePath is required")
+        graph_path = full_path
+
+    ensure_asset_cleared(full_path)
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
-    package_path = "/".join(graph_path.split("/")[:-1])
-    asset_name = graph_path.split("/")[-1]
 
     factory = None
     if hasattr(unreal, "PCGGraphFactory"):

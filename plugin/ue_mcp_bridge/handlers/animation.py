@@ -436,13 +436,18 @@ def add_anim_notify(params: dict) -> dict:
 
 def create_anim_montage(params: dict) -> dict:
     """Create an Animation Montage from an existing AnimSequence."""
-    asset_name = params.get("name", "AM_NewMontage")
-    package_path = params.get("packagePath", "/Game/Animations")
+    from ._util import resolve_asset_path, ensure_asset_cleared
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/Animations")
+    if not asset_name:
+        asset_name = params.get("name", "AM_NewMontage")
+        package_path = params.get("packagePath", "/Game/Animations")
+        full_path = f"{package_path}/{asset_name}"
     anim_sequence_path = params.get("animSequencePath", "")
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
+    ensure_asset_cleared(full_path)
     tools = unreal.AssetToolsHelpers.get_asset_tools()
 
     if not anim_sequence_path:
@@ -482,8 +487,12 @@ def create_anim_montage(params: dict) -> dict:
 
 def create_anim_blueprint(params: dict) -> dict:
     """Create an Animation Blueprint for a given skeleton."""
-    asset_name = params.get("name", "ABP_New")
-    package_path = params.get("packagePath", "/Game/Animations")
+    from ._util import resolve_asset_path, ensure_asset_cleared
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/Animations")
+    if not asset_name:
+        asset_name = params.get("name", "ABP_New")
+        package_path = params.get("packagePath", "/Game/Animations")
+        full_path = f"{package_path}/{asset_name}"
     skeleton_path = params.get("skeletonPath", "")
 
     if not HAS_UNREAL:
@@ -496,6 +505,7 @@ def create_anim_blueprint(params: dict) -> dict:
     if skeleton is None:
         raise ValueError(f"Skeleton not found: {skeleton_path}")
 
+    ensure_asset_cleared(full_path)
     tools = unreal.AssetToolsHelpers.get_asset_tools()
 
     factory = None
@@ -524,8 +534,12 @@ def create_anim_blueprint(params: dict) -> dict:
 
 def create_blendspace(params: dict) -> dict:
     """Create a BlendSpace asset for a given skeleton."""
-    asset_name = params.get("name", "BS_New")
-    package_path = params.get("packagePath", "/Game/Animations")
+    from ._util import resolve_asset_path, ensure_asset_cleared
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/Animations")
+    if not asset_name:
+        asset_name = params.get("name", "BS_New")
+        package_path = params.get("packagePath", "/Game/Animations")
+        full_path = f"{package_path}/{asset_name}"
     skeleton_path = params.get("skeletonPath", "")
     axis_horizontal = params.get("axisHorizontal", "Speed")
     axis_vertical = params.get("axisVertical", "Direction")
@@ -540,6 +554,7 @@ def create_blendspace(params: dict) -> dict:
     if skeleton is None:
         raise ValueError(f"Skeleton not found: {skeleton_path}")
 
+    ensure_asset_cleared(full_path)
     tools = unreal.AssetToolsHelpers.get_asset_tools()
 
     factory = None

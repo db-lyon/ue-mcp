@@ -23,12 +23,12 @@ def reflect_class(params: dict) -> dict:
     if cls is None:
         raise ValueError(f"Class not found: {class_name}")
 
-    parent = cls.get_super_class()
+    parent = cls.get_super_class() if hasattr(cls, "get_super_class") else None
     parent_chain = []
     p = parent
     while p is not None:
         parent_chain.append(p.get_name())
-        p = p.get_super_class()
+        p = p.get_super_class() if hasattr(p, "get_super_class") else None
 
     properties = _get_class_properties(cls, include_inherited)
     functions = _get_class_functions(cls, include_inherited)
@@ -54,24 +54,42 @@ def reflect_struct(params: dict) -> dict:
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
-    struct = unreal.find_struct(struct_name) if hasattr(unreal, "find_struct") else None
+    struct = None
+    if hasattr(unreal, "find_struct"):
+        struct = unreal.find_struct(struct_name)
+
     if struct is None:
-        raise ValueError(f"Struct not found: {struct_name}. Try the full path e.g. '/Script/Engine.HitResult'")
+        short_name = struct_name.split(".")[-1] if "." in struct_name else struct_name
+        for prefix in ["", "F"]:
+            candidate = getattr(unreal, f"{prefix}{short_name}", None)
+            if candidate is not None:
+                struct = candidate
+                break
+
+    if struct is None:
+        raise ValueError(f"Struct not found: {struct_name}. Try the full path e.g. '/Script/Engine.HitResult' or short name like 'Vector'")
 
     fields = []
-    for prop_name in dir(struct):
+    target = struct
+    if hasattr(struct, "static_struct"):
+        target = struct.static_struct()
+    for prop_name in dir(target):
         if prop_name.startswith("_"):
             continue
         try:
+            attr = getattr(target, prop_name, None)
+            if callable(attr):
+                continue
             fields.append({
                 "name": prop_name,
-                "type": "unknown",
+                "type": type(attr).__name__ if attr is not None else "unknown",
             })
         except Exception:
             continue
 
     return {
         "structName": struct_name,
+        "fieldCount": len(fields),
         "fields": fields,
     }
 
@@ -84,9 +102,12 @@ def reflect_enum(params: dict) -> dict:
         raise RuntimeError("Unreal module not available")
 
     try:
-        enum_class = getattr(unreal, enum_name, None)
+        enum_class = _find_enum(enum_name)
         if enum_class is None:
-            raise ValueError(f"Enum not found: {enum_name}")
+            raise ValueError(
+                f"Enum not found: {enum_name}. "
+                "Try the Python name e.g. 'CollisionChannel' or 'ECollisionChannel'"
+            )
 
         values = []
         for attr_name in dir(enum_class):
@@ -107,6 +128,38 @@ def reflect_enum(params: dict) -> dict:
         }
     except Exception as e:
         raise RuntimeError(f"Failed to reflect enum '{enum_name}': {e}")
+
+
+def _find_enum(enum_name: str):
+    """Find a UEnum by name, trying multiple resolution strategies."""
+    direct = getattr(unreal, enum_name, None)
+    if direct is not None and _looks_like_enum(direct):
+        return direct
+
+    short = enum_name.split(".")[-1] if "." in enum_name else enum_name
+    for prefix in ["", "E"]:
+        candidate = getattr(unreal, f"{prefix}{short}", None)
+        if candidate is not None and _looks_like_enum(candidate):
+            return candidate
+
+    without_e = short[1:] if short.startswith("E") and len(short) > 1 and short[1].isupper() else short
+    if without_e != short:
+        candidate = getattr(unreal, without_e, None)
+        if candidate is not None and _looks_like_enum(candidate):
+            return candidate
+
+    return None
+
+
+def _looks_like_enum(obj):
+    """Heuristic check if an object is a UE enum type."""
+    if isinstance(obj, type):
+        for attr_name in dir(obj):
+            if not attr_name.startswith("_"):
+                attr = getattr(obj, attr_name, None)
+                if isinstance(attr, obj):
+                    return True
+    return False
 
 
 def list_classes(params: dict) -> dict:
@@ -340,13 +393,30 @@ def create_gameplay_tag(params: dict) -> dict:
         except Exception:
             pass
 
-    import os
-    project_dir = os.environ.get("UE_PROJECT_DIR", "")
-    if project_dir:
-        tag_file = os.path.join(project_dir, "Config", "DefaultGameplayTags.ini")
-        with open(tag_file, "a", encoding="utf-8") as f:
-            f.write(f"\n+GameplayTagList=(Tag=\"{tag}\",DevComment=\"{comment}\")")
-        return {"tag": tag, "success": True, "method": "ini_append", "note": "Restart editor to pick up new tag"}
+    try:
+        import os
+        project_dir = os.environ.get("UE_PROJECT_DIR", "")
+        if not project_dir:
+            project_dir = str(unreal.Paths.project_dir()) if hasattr(unreal, "Paths") else ""
+        if project_dir:
+            tag_file = os.path.join(project_dir, "Config", "DefaultGameplayTags.ini")
+            section = "[/Script/GameplayTags.GameplayTagsSettings]"
+            entry = f'+GameplayTagList=(Tag="{tag}",DevComment="{comment}")'
+            if os.path.exists(tag_file):
+                with open(tag_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                if section not in content:
+                    content += f"\n\n{section}\n{entry}\n"
+                elif entry not in content:
+                    content = content.replace(section, f"{section}\n{entry}")
+                with open(tag_file, "w", encoding="utf-8") as f:
+                    f.write(content)
+            else:
+                with open(tag_file, "w", encoding="utf-8") as f:
+                    f.write(f"{section}\n{entry}\n")
+            return {"tag": tag, "success": True, "method": "ini_append", "note": "Restart editor to pick up new tag"}
+    except Exception:
+        pass
 
     raise RuntimeError("Could not add gameplay tag via available APIs")
 

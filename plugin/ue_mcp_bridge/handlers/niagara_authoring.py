@@ -21,14 +21,19 @@ def _load_or_fail(path, label="Asset"):
 
 def create_niagara_emitter(params: dict) -> dict:
     """Create a new Niagara Emitter asset."""
+    from ._util import resolve_asset_path, ensure_asset_cleared
     _require_unreal()
-    name = params["name"]
-    pkg = params.get("packagePath", "/Game/VFX")
+    name, pkg, full_path = resolve_asset_path(params, "/Game/VFX")
+    if not name:
+        name = params.get("name", "NE_New")
+        pkg = params.get("packagePath", "/Game/VFX")
+        full_path = f"{pkg}/{name}"
     template = params.get("templatePath")
 
     if not hasattr(unreal, "NiagaraEmitter"):
         raise RuntimeError("NiagaraEmitter not available. Enable Niagara plugin.")
 
+    ensure_asset_cleared(full_path)
     at = unreal.AssetToolsHelpers.get_asset_tools()
 
     if template:
@@ -123,13 +128,15 @@ def list_niagara_modules(params: dict) -> dict:
     directory = params.get("directory", "/Niagara/")
 
     registry = unreal.AssetRegistryHelpers.get_asset_registry()
-    ar_filter = unreal.ARFilter()
-    ar_filter.class_names = ["NiagaraScript"]
-    ar_filter.package_paths = [directory]
-    ar_filter.recursive_paths = True
-
-    assets = registry.get_assets(ar_filter)
-    results = [{"path": str(a.package_name) + "." + str(a.asset_name), "name": str(a.asset_name)} for a in assets]
+    results = []
+    try:
+        assets = registry.get_assets_by_path(directory, recursive=True)
+        for a in assets:
+            class_name = str(a.asset_class_path.asset_name) if hasattr(a, "asset_class_path") else ""
+            if "NiagaraScript" in class_name:
+                results.append({"path": str(a.package_name), "name": str(a.asset_name)})
+    except Exception:
+        pass
 
     return {"directory": directory, "count": len(results), "modules": results[:200]}
 

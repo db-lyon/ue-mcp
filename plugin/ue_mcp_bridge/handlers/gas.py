@@ -20,24 +20,26 @@ def _load_or_fail(path, label="Asset"):
 
 
 def _create_bp(parent_class_name, name, package_path, fallback="Object"):
+    from ._util import ensure_asset_cleared
     _require_unreal()
-    parent = unreal.EditorAssetLibrary.load_asset(parent_class_name) if "/" in parent_class_name else None
-    if parent is None:
-        parent = getattr(unreal, parent_class_name, None)
+    pkg = package_path or "/Game/GAS"
+    ensure_asset_cleared(f"{pkg}/{name}")
+
+    parent = getattr(unreal, parent_class_name, None)
     if parent is None:
         parent = getattr(unreal, fallback, unreal.Object)
 
     factory = unreal.BlueprintFactory()
-    if isinstance(parent, unreal.Class):
-        factory.set_editor_property("parent_class", parent)
-    elif hasattr(parent, "get_class"):
-        factory.set_editor_property("parent_class", parent.get_class())
+    factory.set_editor_property("parent_class", parent)
 
     at = unreal.AssetToolsHelpers.get_asset_tools()
-    bp = at.create_asset(name, package_path or "/Game/GAS", unreal.Blueprint, factory)
+    bp = at.create_asset(name, pkg, unreal.Blueprint, factory)
     if bp is None:
         raise RuntimeError(f"Failed to create blueprint: {name}")
-    unreal.EditorAssetLibrary.save_asset(bp.get_path_name())
+    try:
+        unreal.EditorAssetLibrary.save_asset(bp.get_path_name())
+    except Exception:
+        pass
     return bp
 
 

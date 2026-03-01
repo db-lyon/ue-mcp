@@ -21,10 +21,13 @@ def _load_or_fail(path, label="Asset"):
 
 def _create_framework_bp(parent_class_name, name, package_path):
     """Create a Blueprint with a UE framework parent class."""
+    from ._util import ensure_asset_cleared
     _require_unreal()
     parent = getattr(unreal, parent_class_name, None)
     if parent is None:
         raise RuntimeError(f"Class {parent_class_name} not available")
+
+    ensure_asset_cleared(f"{package_path}/{name}")
 
     factory = unreal.BlueprintFactory()
     factory.set_editor_property("parent_class", parent)
@@ -47,7 +50,20 @@ def create_game_mode(params: dict) -> dict:
     bp = _create_framework_bp(parent, name, pkg)
 
     defaults = params.get("defaults", {})
-    cdo = bp.get_editor_property("generated_class").get_default_object() if hasattr(bp, "generated_class") else None
+    cdo = None
+    try:
+        gen = bp.generated_class()
+        if gen and hasattr(gen, "get_default_object"):
+            cdo = gen.get_default_object()
+    except (TypeError, AttributeError):
+        pass
+    if cdo is None:
+        try:
+            gen = getattr(bp, "generated_class", None)
+            if gen and hasattr(gen, "get_default_object"):
+                cdo = gen.get_default_object()
+        except Exception:
+            pass
 
     set_classes = {}
     if cdo:

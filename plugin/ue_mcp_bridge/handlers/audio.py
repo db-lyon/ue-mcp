@@ -30,8 +30,9 @@ def list_sound_assets(params: dict) -> dict:
 
 
 def play_sound_at_location(params: dict) -> dict:
+    from ._util import to_vec3
     sound_path = params.get("soundPath", "")
-    location = params.get("location", [0, 0, 0])
+    location = to_vec3(params.get("location", [0, 0, 0]))
     volume = params.get("volume", 1.0)
     pitch = params.get("pitch", 1.0)
 
@@ -53,8 +54,9 @@ def play_sound_at_location(params: dict) -> dict:
 
 
 def spawn_ambient_sound(params: dict) -> dict:
+    from ._util import to_vec3
     sound_path = params.get("soundPath", "")
-    location = params.get("location", [0, 0, 0])
+    location = to_vec3(params.get("location", [0, 0, 0]))
     label = params.get("label", "")
     volume = params.get("volume", 1.0)
 
@@ -82,13 +84,18 @@ def spawn_ambient_sound(params: dict) -> dict:
 
 def create_sound_cue(params: dict) -> dict:
     """Create a new SoundCue asset, optionally wiring in a SoundWave."""
-    asset_name = params.get("name", "SC_NewCue")
-    package_path = params.get("packagePath", "/Game/Audio")
+    from ._util import resolve_asset_path, ensure_asset_cleared
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/Audio")
+    if not asset_name:
+        asset_name = params.get("name", "SC_NewCue")
+        package_path = params.get("packagePath", "/Game/Audio")
+        full_path = f"{package_path}/{asset_name}"
     sound_wave_path = params.get("soundWavePath", "")
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
+    ensure_asset_cleared(full_path)
     tools = unreal.AssetToolsHelpers.get_asset_tools()
 
     factory = None
@@ -123,12 +130,17 @@ def create_sound_cue(params: dict) -> dict:
 
 def create_metasound_source(params: dict) -> dict:
     """Create a new MetaSoundSource asset."""
-    asset_name = params.get("name", "MS_NewSource")
-    package_path = params.get("packagePath", "/Game/Audio")
+    from ._util import resolve_asset_path, ensure_asset_cleared
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/Audio")
+    if not asset_name:
+        asset_name = params.get("name", "MS_NewSource")
+        package_path = params.get("packagePath", "/Game/Audio")
+        full_path = f"{package_path}/{asset_name}"
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
+    ensure_asset_cleared(full_path)
     tools = unreal.AssetToolsHelpers.get_asset_tools()
 
     factory = None

@@ -8,14 +8,15 @@ except ImportError:
 
 
 def create_widget_blueprint(params: dict) -> dict:
-    asset_path = params.get("path", "")
-    parent_class = params.get("parentClass", "UserWidget")
+    from ._util import resolve_asset_path, ensure_asset_cleared
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
-    package_path = "/".join(asset_path.split("/")[:-1])
-    asset_name = asset_path.split("/")[-1]
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/UI")
+    if not asset_name:
+        raise ValueError("path or name+packagePath is required")
+    ensure_asset_cleared(full_path)
 
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 
@@ -26,9 +27,9 @@ def create_widget_blueprint(params: dict) -> dict:
         wb = asset_tools.create_asset(asset_name, package_path, unreal.WidgetBlueprint, None)
 
     if wb is None:
-        raise RuntimeError(f"Failed to create WidgetBlueprint at {asset_path}")
+        raise RuntimeError(f"Failed to create WidgetBlueprint at {full_path}")
 
-    return {"path": asset_path, "success": True}
+    return {"path": full_path, "success": True}
 
 
 def list_widget_blueprints(params: dict) -> dict:
@@ -53,7 +54,7 @@ def list_widget_blueprints(params: dict) -> dict:
 
 def get_widget_tree(params: dict) -> dict:
     """Get the widget hierarchy of a widget blueprint."""
-    asset_path = params.get("path", "")
+    asset_path = params.get("path", "") or params.get("assetPath", "")
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
@@ -81,15 +82,15 @@ def get_widget_tree(params: dict) -> dict:
 
 def create_editor_utility_widget(params: dict) -> dict:
     """Create an Editor Utility Widget Blueprint — a UMG panel that runs inside the editor."""
-    asset_path = params.get("path", "")
+    from ._util import resolve_asset_path, ensure_asset_cleared
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
-    if not asset_path:
-        raise ValueError("path is required (e.g. '/Game/EditorTools/EUW_TuningPanel')")
 
-    package_path = "/".join(asset_path.split("/")[:-1])
-    asset_name = asset_path.split("/")[-1]
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/EditorTools")
+    if not asset_name:
+        raise ValueError("path is required (e.g. '/Game/EditorTools/EUW_TuningPanel')")
+    ensure_asset_cleared(full_path)
 
     tools = unreal.AssetToolsHelpers.get_asset_tools()
 
@@ -111,12 +112,12 @@ def create_editor_utility_widget(params: dict) -> dict:
         raise RuntimeError("EditorUtilityWidgetBlueprintFactory not available")
 
     if asset is None:
-        raise RuntimeError(f"Failed to create Editor Utility Widget at {asset_path}")
+        raise RuntimeError(f"Failed to create Editor Utility Widget at {full_path}")
 
-    unreal.EditorAssetLibrary.save_asset(asset_path)
+    unreal.EditorAssetLibrary.save_asset(full_path)
 
     return {
-        "path": asset_path,
+        "path": full_path,
         "name": asset.get_name(),
         "class": asset.get_class().get_name(),
     }
@@ -124,7 +125,7 @@ def create_editor_utility_widget(params: dict) -> dict:
 
 def run_editor_utility_widget(params: dict) -> dict:
     """Open an Editor Utility Widget as a docked tab in the editor."""
-    asset_path = params.get("path", "")
+    asset_path = params.get("path", "") or params.get("assetPath", "")
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
@@ -200,16 +201,17 @@ def run_editor_utility_blueprint(params: dict) -> dict:
 
 def create_editor_utility_blueprint(params: dict) -> dict:
     """Create an Editor Utility Blueprint — a headless editor automation script."""
-    asset_path = params.get("path", "")
+    from ._util import resolve_asset_path, ensure_asset_cleared
+
     parent_class = params.get("parentClass", "EditorUtilityObject")
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
-    if not asset_path:
-        raise ValueError("path is required (e.g. '/Game/EditorTools/EUB_BatchRenamer')")
 
-    package_path = "/".join(asset_path.split("/")[:-1])
-    asset_name = asset_path.split("/")[-1]
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/EditorTools")
+    if not asset_name:
+        raise ValueError("path is required (e.g. '/Game/EditorTools/EUB_BatchRenamer')")
+    ensure_asset_cleared(full_path)
 
     parent = getattr(unreal, parent_class, None)
     if parent is None:
@@ -239,12 +241,12 @@ def create_editor_utility_blueprint(params: dict) -> dict:
         raise RuntimeError("EditorUtilityBlueprintFactory not available")
 
     if asset is None:
-        raise RuntimeError(f"Failed to create Editor Utility Blueprint at {asset_path}")
+        raise RuntimeError(f"Failed to create Editor Utility Blueprint at {full_path}")
 
-    unreal.EditorAssetLibrary.save_asset(asset_path)
+    unreal.EditorAssetLibrary.save_asset(full_path)
 
     return {
-        "path": asset_path,
+        "path": full_path,
         "name": asset.get_name(),
         "class": asset.get_class().get_name(),
         "parentClass": parent_class,

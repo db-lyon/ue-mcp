@@ -10,6 +10,33 @@ except ImportError:
     HAS_UNREAL = False
 
 
+def _discover_plugin_mount_points() -> list[str]:
+    """Find plugin content mount points by scanning the Plugins directory."""
+    import os
+    if not HAS_UNREAL:
+        return []
+    try:
+        project_dir = str(unreal.Paths.project_dir())
+        plugins_dir = os.path.join(project_dir, "Plugins")
+        if not os.path.isdir(plugins_dir):
+            return []
+        mount_points = []
+        def scan(d):
+            for entry in os.scandir(d):
+                if not entry.is_dir():
+                    continue
+                has_uplugin = any(f.endswith(".uplugin") for f in os.listdir(entry.path))
+                content_dir = os.path.join(entry.path, "Content")
+                if has_uplugin and os.path.isdir(content_dir):
+                    mount_points.append(f"/{entry.name}/")
+                elif not has_uplugin:
+                    scan(entry.path)
+        scan(plugins_dir)
+        return sorted(mount_points)
+    except Exception:
+        return []
+
+
 def read_asset(params: dict) -> dict:
     """Read an asset via the editor's asset registry and reflection."""
     asset_path = params.get("path", "")
@@ -249,7 +276,18 @@ def search_assets(params: dict) -> dict:
     except Exception as e:
         return {"error": str(e), "query": query, "results": []}
 
-    return {"query": query, "directory": directory, "resultCount": len(results), "results": results}
+    response = {"query": query, "directory": directory, "resultCount": len(results), "results": results}
+
+    if len(results) == 0 and directory == "/Game/":
+        plugin_dirs = _discover_plugin_mount_points()
+        if plugin_dirs:
+            response["suggestion"] = (
+                f"No results in /Game/. This project has plugin content — "
+                f"try searching in: {', '.join(plugin_dirs)}"
+            )
+            response["availablePlugins"] = plugin_dirs
+
+    return response
 
 
 def read_asset_properties(params: dict) -> dict:

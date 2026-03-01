@@ -313,13 +313,18 @@ def _read_foliage_type_basic(ft) -> dict | None:
 
 def create_foliage_type(params: dict) -> dict:
     """Create a new FoliageType asset from a StaticMesh."""
-    asset_name = params.get("name", "FT_New")
-    package_path = params.get("packagePath", "/Game/Foliage")
+    from ._util import resolve_asset_path, ensure_asset_cleared
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/Foliage")
+    if not asset_name:
+        asset_name = params.get("name", "FT_New")
+        package_path = params.get("packagePath", "/Game/Foliage")
+        full_path = f"{package_path}/{asset_name}"
     mesh_path = params.get("meshPath", "")
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
+    ensure_asset_cleared(full_path)
     tools = unreal.AssetToolsHelpers.get_asset_tools()
 
     ft_class = None
