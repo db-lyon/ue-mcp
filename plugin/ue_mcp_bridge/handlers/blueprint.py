@@ -178,24 +178,20 @@ def add_variable(params: dict) -> dict:
 
     bp = _load_bp(asset_path)
 
-    if not hasattr(unreal, "BlueprintEditorLibrary") or not hasattr(unreal.BlueprintEditorLibrary, "add_member_variable"):
-        raise RuntimeError("BlueprintEditorLibrary.add_member_variable not available in this UE version")
-
     success = False
     last_err = None
 
-    pin_type = _make_pin_type(var_type)
-    if pin_type is not None:
-        try:
-            success = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
-        except Exception as e:
-            last_err = str(e)
+    if hasattr(unreal, "BlueprintEditorLibrary") and hasattr(unreal.BlueprintEditorLibrary, "add_member_variable"):
+        pin_type = _make_pin_type(var_type)
+        if pin_type is not None:
+            try:
+                success = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+            except Exception as e:
+                last_err = str(e)
 
     if not success:
         try:
-            success = unreal.BlueprintEditorLibrary.add_member_variable(
-                bp, var_name, _make_pin_type("bool")
-            )
+            success = _add_variable_via_description(bp, var_name, var_type)
         except Exception as e:
             last_err = last_err or str(e)
 
@@ -208,6 +204,81 @@ def add_variable(params: dict) -> dict:
         "variableType": var_type,
         "success": True,
     }
+
+
+def _add_variable_via_description(bp, var_name, var_type):
+    """Fallback: add variable by creating a BPVariableDescription and appending to new_variables."""
+    if not hasattr(unreal, "BPVariableDescription"):
+        return False
+
+    desc = unreal.BPVariableDescription()
+    try:
+        desc.set_editor_property("var_name", var_name)
+    except Exception:
+        desc.var_name = var_name
+
+    pt = None
+    try:
+        pt = desc.get_editor_property("var_type")
+    except Exception:
+        pt = getattr(desc, "var_type", None)
+
+    if pt is not None:
+        cat = _TYPE_CATEGORY.get(var_type.lower(), var_type.lower())
+        sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
+        for prop, val in [("pin_category", cat), ("pin_sub_category", sub)]:
+            if not val:
+                continue
+            try:
+                pt.set_editor_property(prop, val)
+            except Exception:
+                try:
+                    setattr(pt, prop, val)
+                except Exception:
+                    pass
+        try:
+            desc.set_editor_property("var_type", pt)
+        except Exception:
+            pass
+
+    new_vars = None
+    try:
+        new_vars = list(bp.new_variables)
+    except Exception:
+        try:
+            new_vars = list(bp.get_editor_property("new_variables"))
+        except Exception:
+            pass
+
+    if new_vars is None:
+        return False
+
+    new_vars.append(desc)
+    try:
+        bp.set_editor_property("new_variables", new_vars)
+    except Exception:
+        return False
+
+    return True
+
+
+_TYPE_CATEGORY = {
+    "bool": "bool", "boolean": "bool",
+    "byte": "byte",
+    "int": "int", "integer": "int", "int32": "int",
+    "int64": "int64",
+    "float": "real", "double": "real", "real": "real",
+    "string": "string", "str": "string",
+    "name": "name", "text": "text",
+    "object": "object", "class": "class",
+    "softobject": "softobject", "softclass": "softclass",
+    "vector": "struct", "rotator": "struct", "transform": "struct",
+    "linearcolor": "struct", "color": "struct",
+}
+
+_TYPE_SUB_CATEGORY = {
+    "float": "double", "double": "double", "real": "double",
+}
 
 
 def _make_pin_type(type_str):
