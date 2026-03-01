@@ -25,6 +25,7 @@ def _load_or_fail(path, label="Asset"):
 
 def create_eqs_query(params: dict) -> dict:
     """Create an Environment Query asset."""
+    from ._util import ensure_asset_cleared
     _require_unreal()
     name = params["name"]
     pkg = params.get("packagePath", "/Game/AI/EQS")
@@ -32,6 +33,7 @@ def create_eqs_query(params: dict) -> dict:
     if not hasattr(unreal, "EnvironmentQuery"):
         raise RuntimeError("EnvironmentQuery not available. Enable EnvironmentQueryEditor plugin.")
 
+    ensure_asset_cleared(f"{pkg}/{name}")
     at = unreal.AssetToolsHelpers.get_asset_tools()
     factory = None
     for factory_class_name in ["EnvQueryFactory", "EnvironmentQueryFactory"]:
@@ -57,13 +59,15 @@ def list_eqs_queries(params: dict) -> dict:
     recursive = params.get("recursive", True)
 
     registry = unreal.AssetRegistryHelpers.get_asset_registry()
-    ar_filter = unreal.ARFilter()
-    ar_filter.class_names = ["EnvironmentQuery"]
-    ar_filter.package_paths = [directory]
-    ar_filter.recursive_paths = recursive
-
-    assets = registry.get_assets(ar_filter)
-    results = [{"path": str(a.package_name) + "." + str(a.asset_name), "name": str(a.asset_name)} for a in assets]
+    results = []
+    try:
+        assets = registry.get_assets_by_path(directory, recursive=recursive)
+        for a in assets:
+            class_name = str(a.asset_class_path.asset_name) if hasattr(a, "asset_class_path") else ""
+            if "EnvironmentQuery" in class_name:
+                results.append({"path": str(a.package_name), "name": str(a.asset_name)})
+    except Exception:
+        pass
 
     return {"directory": directory, "count": len(results), "queries": results}
 
@@ -133,6 +137,7 @@ def configure_ai_perception_sense(params: dict) -> dict:
 
 def create_state_tree(params: dict) -> dict:
     """Create a State Tree asset."""
+    from ._util import ensure_asset_cleared
     _require_unreal()
     name = params["name"]
     pkg = params.get("packagePath", "/Game/AI/StateTrees")
@@ -140,6 +145,7 @@ def create_state_tree(params: dict) -> dict:
     if not hasattr(unreal, "StateTree"):
         raise RuntimeError("StateTree not available. Enable StateTreeModule plugin.")
 
+    ensure_asset_cleared(f"{pkg}/{name}")
     at = unreal.AssetToolsHelpers.get_asset_tools()
     factory = None
     for fn in ["StateTreeFactory"]:
@@ -150,6 +156,8 @@ def create_state_tree(params: dict) -> dict:
         raise RuntimeError("StateTree factory not available. Enable StateTreeEditorModule.")
 
     asset = at.create_asset(name, pkg, unreal.StateTree, factory)
+    if asset is None:
+        asset = at.create_asset(name, pkg, None, factory)
     if asset is None:
         raise RuntimeError(f"Failed to create StateTree: {name}")
 
@@ -163,13 +171,15 @@ def list_state_trees(params: dict) -> dict:
     directory = params.get("directory", "/Game/")
 
     registry = unreal.AssetRegistryHelpers.get_asset_registry()
-    ar_filter = unreal.ARFilter()
-    ar_filter.class_names = ["StateTree"]
-    ar_filter.package_paths = [directory]
-    ar_filter.recursive_paths = True
-
-    assets = registry.get_assets(ar_filter)
-    results = [{"path": str(a.package_name) + "." + str(a.asset_name), "name": str(a.asset_name)} for a in assets]
+    results = []
+    try:
+        assets = registry.get_assets_by_path(directory, recursive=True)
+        for a in assets:
+            class_name = str(a.asset_class_path.asset_name) if hasattr(a, "asset_class_path") else ""
+            if "StateTree" in class_name:
+                results.append({"path": str(a.package_name), "name": str(a.asset_name)})
+    except Exception:
+        pass
 
     return {"directory": directory, "count": len(results), "stateTrees": results}
 
@@ -195,6 +205,7 @@ def add_state_tree_component(params: dict) -> dict:
 
 def create_smart_object_definition(params: dict) -> dict:
     """Create a SmartObjectDefinition data asset."""
+    from ._util import ensure_asset_cleared
     _require_unreal()
     name = params["name"]
     pkg = params.get("packagePath", "/Game/AI/SmartObjects")
@@ -202,6 +213,7 @@ def create_smart_object_definition(params: dict) -> dict:
     if not hasattr(unreal, "SmartObjectDefinition"):
         raise RuntimeError("SmartObjectDefinition not available. Enable SmartObjects plugin.")
 
+    ensure_asset_cleared(f"{pkg}/{name}")
     at = unreal.AssetToolsHelpers.get_asset_tools()
     factory = None
     for fn in ["SmartObjectDefinitionFactory"]:

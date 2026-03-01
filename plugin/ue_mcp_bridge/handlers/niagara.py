@@ -28,7 +28,7 @@ def list_niagara_systems(params: dict) -> dict:
 
 
 def get_niagara_info(params: dict) -> dict:
-    asset_path = params.get("path", "")
+    asset_path = params.get("path", "") or params.get("assetPath", "")
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
@@ -54,9 +54,10 @@ def get_niagara_info(params: dict) -> dict:
 
 
 def spawn_niagara_at_location(params: dict) -> dict:
+    from ._util import to_vec3, to_rot3
     system_path = params.get("systemPath", "")
-    location = params.get("location", [0, 0, 0])
-    rotation = params.get("rotation", [0, 0, 0])
+    location = to_vec3(params.get("location", [0, 0, 0]))
+    rotation = to_rot3(params.get("rotation", [0, 0, 0]))
     auto_destroy = params.get("autoDestroy", True)
 
     if not HAS_UNREAL:
@@ -113,12 +114,18 @@ def set_niagara_parameter(params: dict) -> dict:
 
 def create_niagara_system(params: dict) -> dict:
     """Create a new empty Niagara System asset."""
-    asset_name = params.get("name", "NS_NewSystem")
-    package_path = params.get("packagePath", "/Game/VFX")
+    from ._util import resolve_asset_path, ensure_asset_cleared
+
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/VFX")
+    if not asset_name:
+        asset_name = params.get("name", "NS_NewSystem")
+        package_path = params.get("packagePath", "/Game/VFX")
+        full_path = f"{package_path}/{asset_name}"
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
+    ensure_asset_cleared(full_path)
     tools = unreal.AssetToolsHelpers.get_asset_tools()
 
     factory = None

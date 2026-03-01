@@ -20,8 +20,25 @@ def _load_bp(path):
 
 
 def _get_cdo(bp):
-    gen = bp.get_editor_property("generated_class") if hasattr(bp, "generated_class") else None
-    return gen.get_default_object() if gen else None
+    gen = None
+    try:
+        gen = bp.generated_class()
+    except (TypeError, AttributeError):
+        pass
+    if gen is None:
+        try:
+            gen = bp.get_editor_property("generated_class")
+        except Exception:
+            pass
+    if gen is None:
+        gen = getattr(bp, "generated_class", None)
+    if gen is None:
+        return None
+    if hasattr(gen, "get_default_object"):
+        return gen.get_default_object()
+    if hasattr(unreal, "get_default_object"):
+        return unreal.get_default_object(gen)
+    return None
 
 
 def set_replicates(params: dict) -> dict:
@@ -31,10 +48,33 @@ def set_replicates(params: dict) -> dict:
     cdo = _get_cdo(bp)
     replicate = params.get("replicates", True)
 
-    if cdo and hasattr(cdo, "set_replicates"):
-        cdo.set_replicates(replicate)
-    elif cdo:
-        cdo.set_editor_property("b_replicates", replicate)
+    if cdo is None:
+        raise RuntimeError("Cannot access CDO for replication settings")
+
+    done = False
+    if hasattr(cdo, "set_replicates"):
+        try:
+            cdo.set_replicates(replicate)
+            done = True
+        except Exception:
+            pass
+
+    if not done:
+        for prop in ["b_replicates", "bReplicates", "replicates"]:
+            if hasattr(cdo, prop):
+                try:
+                    cdo.set_editor_property(prop, replicate)
+                    done = True
+                    break
+                except Exception:
+                    continue
+
+    if not done:
+        try:
+            cdo.set_is_replicated(replicate)
+            done = True
+        except Exception:
+            pass
 
     return {"blueprintPath": params["blueprintPath"], "replicates": replicate, "success": True}
 

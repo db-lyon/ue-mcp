@@ -16,9 +16,10 @@ LIGHT_CLASSES = {
 
 
 def spawn_light(params: dict) -> dict:
+    from ._util import to_vec3, to_rot3
     light_type = params.get("lightType", "point").lower()
-    location = params.get("location", [0, 0, 0])
-    rotation = params.get("rotation", [0, 0, 0])
+    location = to_vec3(params.get("location", [0, 0, 0]))
+    rotation = to_rot3(params.get("rotation", [0, 0, 0]))
     intensity = params.get("intensity")
     color = params.get("color")
     label = params.get("label", "")
@@ -47,8 +48,12 @@ def spawn_light(params: dict) -> dict:
     if comp:
         if intensity is not None:
             comp.set_editor_property("intensity", float(intensity))
-        if color and len(color) >= 3:
-            comp.set_editor_property("light_color", unreal.Color(int(color[0]), int(color[1]), int(color[2])))
+        if color:
+            if isinstance(color, dict):
+                r, g, b = int(color.get("r", 255)), int(color.get("g", 255)), int(color.get("b", 255))
+            else:
+                r, g, b = int(color[0]), int(color[1]), int(color[2])
+            comp.set_editor_property("light_color", unreal.Color(r, g, b))
 
     return {
         "lightType": light_type,
@@ -82,7 +87,11 @@ def set_light_properties(params: dict) -> dict:
         changes.append("intensity")
     if "color" in params:
         c = params["color"]
-        comp.set_editor_property("light_color", unreal.Color(int(c[0]), int(c[1]), int(c[2])))
+        if isinstance(c, dict):
+            r, g, b = int(c.get("r", 255)), int(c.get("g", 255)), int(c.get("b", 255))
+        else:
+            r, g, b = int(c[0]), int(c[1]), int(c[2])
+        comp.set_editor_property("light_color", unreal.Color(r, g, b))
         changes.append("color")
     if "temperature" in params:
         comp.set_editor_property("temperature", float(params["temperature"]))

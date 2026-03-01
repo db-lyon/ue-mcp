@@ -35,6 +35,8 @@ export const editorTool: ToolDef = categoryTool(
     get_log:             bp("get_output_log"),
     search_log:          bp("search_log"),
     get_message_log:     bp("get_message_log"),
+    // Dev
+    reload_bridge:       bp("reload_handlers"),
   },
   `- execute_command: Run console command. Params: command
 - execute_python: Run Python in editor. Params: code
@@ -62,7 +64,8 @@ export const editorTool: ToolDef = categoryTool(
 - cook_content: Cook content. Params: platform?
 - get_log: Read output log. Params: maxLines?, filter?, category?
 - search_log: Search log. Params: query
-- get_message_log: Read message log. Params: logName?`,
+- get_message_log: Read message log. Params: logName?
+- reload_bridge: Hot-reload all Python bridge handlers from disk (no editor restart needed)`,
   {
     command: z.string().optional(),
     code: z.string().optional(),

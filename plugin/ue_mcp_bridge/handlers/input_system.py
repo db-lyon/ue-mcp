@@ -8,14 +8,16 @@ except ImportError:
 
 
 def create_input_action(params: dict) -> dict:
-    asset_path = params.get("path", "")
+    from ._util import resolve_asset_path, ensure_asset_cleared
     value_type = params.get("valueType", "Bool")
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
-    package_path = "/".join(asset_path.split("/")[:-1])
-    asset_name = asset_path.split("/")[-1]
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/Input")
+    if not asset_name:
+        raise ValueError("name or path is required")
+    ensure_asset_cleared(full_path)
 
     if not hasattr(unreal, "InputAction"):
         raise RuntimeError("Enhanced Input not available")
@@ -32,7 +34,7 @@ def create_input_action(params: dict) -> dict:
         action = asset_tools.create_asset(asset_name, package_path, unreal.InputAction, None)
 
     if action is None:
-        raise RuntimeError(f"Failed to create InputAction at {asset_path}")
+        raise RuntimeError(f"Failed to create InputAction at {full_path}")
 
     type_map = {
         "Bool": unreal.InputActionValueType.BOOLEAN if hasattr(unreal, "InputActionValueType") else None,
@@ -45,17 +47,19 @@ def create_input_action(params: dict) -> dict:
     if vt and hasattr(action, "value_type"):
         action.set_editor_property("value_type", vt)
 
-    return {"path": asset_path, "valueType": value_type, "success": True}
+    return {"path": full_path, "valueType": value_type, "success": True}
 
 
 def create_input_mapping_context(params: dict) -> dict:
-    asset_path = params.get("path", "")
+    from ._util import resolve_asset_path, ensure_asset_cleared
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
-    package_path = "/".join(asset_path.split("/")[:-1])
-    asset_name = asset_path.split("/")[-1]
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/Input")
+    if not asset_name:
+        raise ValueError("name or path is required")
+    ensure_asset_cleared(full_path)
 
     if not hasattr(unreal, "InputMappingContext"):
         raise RuntimeError("Enhanced Input not available")
@@ -64,9 +68,9 @@ def create_input_mapping_context(params: dict) -> dict:
     ctx = asset_tools.create_asset(asset_name, package_path, unreal.InputMappingContext, None)
 
     if ctx is None:
-        raise RuntimeError(f"Failed to create InputMappingContext at {asset_path}")
+        raise RuntimeError(f"Failed to create InputMappingContext at {full_path}")
 
-    return {"path": asset_path, "success": True}
+    return {"path": full_path, "success": True}
 
 
 def list_input_assets(params: dict) -> dict:

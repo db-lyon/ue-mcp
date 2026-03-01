@@ -28,7 +28,15 @@ export const assetTool: ToolDef = categoryTool(
           }
         }
         scan(dir);
-        return { directory: p.directory ?? "/Game/", recursive, assetCount: assets.length, assets: assets.slice(0, 2000) };
+        const result: Record<string, unknown> = { directory: p.directory ?? "/Game/", recursive, assetCount: assets.length, assets: assets.slice(0, 2000) };
+        if (assets.length === 0) {
+          const plugins = ctx.project.discoverPlugins();
+          if (plugins.length > 0) {
+            result.suggestion = `No assets found in ${p.directory ?? "/Game/"}. This project has plugin content — try listing one of these: ${plugins.map((pl) => pl.mountPoint).join(", ")}`;
+            result.availablePlugins = plugins.map((pl) => ({ name: pl.name, mountPoint: pl.mountPoint }));
+          }
+        }
+        return result;
       },
     },
     search:         bp("search_assets"),

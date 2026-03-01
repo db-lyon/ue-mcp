@@ -21,9 +21,10 @@ VOLUME_CLASSES = {
 
 
 def spawn_volume(params: dict) -> dict:
+    from ._util import to_vec3
     volume_type = params.get("volumeType", "trigger")
-    location = params.get("location", [0, 0, 0])
-    scale = params.get("scale", [1, 1, 1])
+    loc_raw = params.get("location", [0, 0, 0])
+    scale_raw = params.get("scale") or params.get("extent") or [1, 1, 1]
     label = params.get("label", "")
 
     if not HAS_UNREAL:
@@ -34,12 +35,16 @@ def spawn_volume(params: dict) -> dict:
     if vol_class is None:
         raise ValueError(f"Volume class not found: {class_name}. Available: {list(VOLUME_CLASSES.keys())}")
 
-    loc = unreal.Vector(location[0], location[1], location[2])
+    lx, ly, lz = to_vec3(loc_raw)
+    loc = unreal.Vector(lx, ly, lz)
     actor = unreal.EditorLevelLibrary.spawn_actor_from_class(vol_class, loc)
     if actor is None:
         raise RuntimeError(f"Failed to spawn {class_name}")
 
-    actor.set_actor_scale3d(unreal.Vector(scale[0], scale[1], scale[2]))
+    sx, sy, sz = to_vec3(scale_raw, (1, 1, 1))
+    actor.set_actor_scale3d(unreal.Vector(sx / 100 if sx > 10 else sx,
+                                           sy / 100 if sy > 10 else sy,
+                                           sz / 100 if sz > 10 else sz))
     if label:
         actor.set_actor_label(label)
 

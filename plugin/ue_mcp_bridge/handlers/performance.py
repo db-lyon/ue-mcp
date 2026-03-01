@@ -113,6 +113,7 @@ def get_viewport_info(params: dict) -> dict:
 
 
 def set_viewport_camera(params: dict) -> dict:
+    from ._util import to_vec3, to_rot3
     location = params.get("location")
     rotation = params.get("rotation")
 
@@ -120,8 +121,10 @@ def set_viewport_camera(params: dict) -> dict:
         raise RuntimeError("Unreal module not available")
 
     if location and rotation:
-        loc = unreal.Vector(location[0], location[1], location[2])
-        rot = unreal.Rotator(rotation[0], rotation[1], rotation[2])
+        lx, ly, lz = to_vec3(location)
+        rp, ry, rr = to_rot3(rotation)
+        loc = unreal.Vector(lx, ly, lz)
+        rot = unreal.Rotator(rp, ry, rr)
 
         if hasattr(unreal, "UnrealEditorSubsystem"):
             subsys = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)

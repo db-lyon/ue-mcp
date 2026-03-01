@@ -59,8 +59,11 @@ def save_asset(params: dict) -> dict:
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
-    if asset_path == "all":
-        unreal.EditorAssetLibrary.save_loaded_assets()
+    if asset_path == "all" or not asset_path:
+        try:
+            unreal.EditorAssetLibrary.save_loaded_assets()
+        except TypeError:
+            unreal.EditorAssetLibrary.save_loaded_assets(True)
         return {"success": True, "message": "All modified assets saved"}
 
     success = unreal.EditorAssetLibrary.save_asset(asset_path)
@@ -122,6 +125,9 @@ def redo(params: dict) -> dict:
 
 def execute_python(params: dict) -> dict:
     """Execute arbitrary Python code inside the editor's Python environment."""
+    import io
+    import sys
+
     code = params.get("code", "")
 
     if not HAS_UNREAL:
@@ -130,18 +136,25 @@ def execute_python(params: dict) -> dict:
     if not code.strip():
         raise ValueError("No code provided")
 
-    local_vars = {"unreal": unreal, "__result__": None}
-    exec(code, {"unreal": unreal, "__builtins__": __builtins__}, local_vars)
+    capture = io.StringIO()
+    old_stdout = sys.stdout
+    sys.stdout = capture
+    try:
+        local_vars = {"unreal": unreal, "__result__": None}
+        exec(code, {"unreal": unreal, "__builtins__": __builtins__}, local_vars)
+    finally:
+        sys.stdout = old_stdout
 
     result = local_vars.get("__result__")
     if result is not None:
         if not isinstance(result, (dict, list, str, int, float, bool, type(None))):
             result = str(result)
 
-    return {
-        "success": True,
-        "result": result,
-    }
+    output = capture.getvalue()
+    response = {"success": True, "result": result}
+    if output:
+        response["output"] = output
+    return response
 
 
 def set_config(params: dict) -> dict:

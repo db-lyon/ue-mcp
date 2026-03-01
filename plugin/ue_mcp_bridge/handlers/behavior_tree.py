@@ -60,7 +60,7 @@ def get_behavior_tree_info(params: dict) -> dict:
 
 
 def create_blackboard(params: dict) -> dict:
-    asset_path = params.get("path", "")
+    from ._util import resolve_asset_path, ensure_asset_cleared
     keys = params.get("keys", [])
 
     if not HAS_UNREAL:
@@ -69,20 +69,22 @@ def create_blackboard(params: dict) -> dict:
     if not hasattr(unreal, "BlackboardData"):
         raise RuntimeError("BlackboardData class not available")
 
-    package_path = "/".join(asset_path.split("/")[:-1])
-    asset_name = asset_path.split("/")[-1]
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/AI")
+    if not asset_name:
+        raise ValueError("path or name+packagePath is required")
+    ensure_asset_cleared(full_path)
 
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
     bb = asset_tools.create_asset(asset_name, package_path, unreal.BlackboardData, None)
 
     if bb is None:
-        raise RuntimeError(f"Failed to create BlackboardData at {asset_path}")
+        raise RuntimeError(f"Failed to create BlackboardData at {full_path}")
 
-    return {"path": asset_path, "success": True}
+    return {"path": full_path, "success": True}
 
 
 def create_behavior_tree(params: dict) -> dict:
-    asset_path = params.get("path", "")
+    from ._util import resolve_asset_path, ensure_asset_cleared
     blackboard_path = params.get("blackboardPath", "")
 
     if not HAS_UNREAL:
@@ -91,21 +93,23 @@ def create_behavior_tree(params: dict) -> dict:
     if not hasattr(unreal, "BehaviorTree"):
         raise RuntimeError("BehaviorTree class not available")
 
-    package_path = "/".join(asset_path.split("/")[:-1])
-    asset_name = asset_path.split("/")[-1]
+    asset_name, package_path, full_path = resolve_asset_path(params, "/Game/AI")
+    if not asset_name:
+        raise ValueError("path or name+packagePath is required")
+    ensure_asset_cleared(full_path)
 
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
     bt = asset_tools.create_asset(asset_name, package_path, unreal.BehaviorTree, None)
 
     if bt is None:
-        raise RuntimeError(f"Failed to create BehaviorTree at {asset_path}")
+        raise RuntimeError(f"Failed to create BehaviorTree at {full_path}")
 
     if blackboard_path:
         bb = unreal.EditorAssetLibrary.load_asset(blackboard_path)
         if bb:
             bt.set_editor_property("blackboard_asset", bb)
 
-    return {"path": asset_path, "blackboardPath": blackboard_path, "success": True}
+    return {"path": full_path, "blackboardPath": blackboard_path, "success": True}
 
 
 HANDLERS = {

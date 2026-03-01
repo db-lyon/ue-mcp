@@ -39,8 +39,9 @@ def get_navmesh_info(params: dict) -> dict:
 
 
 def project_point_to_navigation(params: dict) -> dict:
+    from ._util import to_vec3
     location = params.get("location", [0, 0, 0])
-    query_extent = params.get("queryExtent", [100, 100, 100])
+    query_extent = params.get("queryExtent") or params.get("extent") or [100, 100, 100]
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
@@ -51,19 +52,32 @@ def project_point_to_navigation(params: dict) -> dict:
     if nav_sys is None:
         raise RuntimeError("NavigationSystem not available")
 
-    loc = unreal.Vector(location[0], location[1], location[2])
-    extent = unreal.Vector(query_extent[0], query_extent[1], query_extent[2])
+    lx, ly, lz = to_vec3(location)
+    ex, ey, ez = to_vec3(query_extent, (100, 100, 100))
+    loc = unreal.Vector(lx, ly, lz)
+    extent = unreal.Vector(ex, ey, ez)
 
-    result = nav_sys.project_point_to_navigation(loc, nav_data=None, query_extent=extent)
+    projected = None
+    try:
+        projected = nav_sys.project_point_to_navigation(world, loc, nav_data=None, query_extent=extent)
+    except TypeError:
+        try:
+            projected = nav_sys.project_point_to_navigation(loc, nav_data=None, query_extent=extent)
+        except TypeError:
+            try:
+                projected = nav_sys.project_point_to_navigation(loc, extent)
+            except Exception:
+                pass
 
     return {
         "inputLocation": location,
-        "projectedLocation": {"x": result.x, "y": result.y, "z": result.z} if result else None,
-        "success": result is not None,
+        "projectedLocation": {"x": projected.x, "y": projected.y, "z": projected.z} if projected else None,
+        "success": projected is not None,
     }
 
 
 def spawn_nav_modifier_volume(params: dict) -> dict:
+    from ._util import to_vec3
     location = params.get("location", [0, 0, 0])
     extent = params.get("extent", [200, 200, 200])
     label = params.get("label", "")
@@ -71,7 +85,8 @@ def spawn_nav_modifier_volume(params: dict) -> dict:
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
 
-    loc = unreal.Vector(location[0], location[1], location[2])
+    lx, ly, lz = to_vec3(location)
+    loc = unreal.Vector(lx, ly, lz)
 
     if hasattr(unreal, "NavModifierVolume"):
         actor = unreal.EditorLevelLibrary.spawn_actor_from_class(unreal.NavModifierVolume, loc)
@@ -84,7 +99,8 @@ def spawn_nav_modifier_volume(params: dict) -> dict:
     if label:
         actor.set_actor_label(label)
 
-    actor.set_actor_scale3d(unreal.Vector(extent[0] / 100, extent[1] / 100, extent[2] / 100))
+    ex, ey, ez = to_vec3(extent, (200, 200, 200))
+    actor.set_actor_scale3d(unreal.Vector(ex / 100, ey / 100, ez / 100))
 
     return {"label": label or actor.get_actor_label(), "success": True}
 

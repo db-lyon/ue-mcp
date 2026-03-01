@@ -81,6 +81,8 @@ def set_material_parameter(params: dict) -> dict:
 
 def create_material_instance(params: dict) -> dict:
     """Create a new material instance from a parent material."""
+    from ._util import resolve_asset_path, ensure_asset_cleared
+
     parent_path = params.get("parentPath", "")
     instance_path = params.get("instancePath", "")
 
@@ -91,21 +93,29 @@ def create_material_instance(params: dict) -> dict:
     if parent is None:
         raise ValueError(f"Parent material not found: {parent_path}")
 
+    if instance_path and "/" in instance_path:
+        package_path = "/".join(instance_path.split("/")[:-1])
+        asset_name = instance_path.split("/")[-1]
+        full_path = instance_path
+    else:
+        asset_name, package_path, full_path = resolve_asset_path(params, "/Game/Materials")
+        if not asset_name:
+            raise ValueError("instancePath or name+packagePath is required")
+
+    ensure_asset_cleared(full_path)
+
     factory = unreal.MaterialInstanceConstantFactoryNew()
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 
-    package_path = "/".join(instance_path.split("/")[:-1])
-    asset_name = instance_path.split("/")[-1]
-
     instance = asset_tools.create_asset(asset_name, package_path, unreal.MaterialInstanceConstant, factory)
     if instance is None:
-        raise RuntimeError(f"Failed to create material instance at {instance_path}")
+        raise RuntimeError(f"Failed to create material instance at {full_path}")
 
     instance.set_editor_property("parent", parent)
 
     return {
         "success": True,
-        "instancePath": instance_path,
+        "instancePath": full_path,
         "parentPath": parent_path,
         "name": instance.get_name(),
     }

@@ -69,7 +69,7 @@ def get_world_outliner(params: dict) -> dict:
 
 def place_actor(params: dict) -> dict:
     """Place an actor in the current level."""
-    class_name = params.get("className", "")
+    class_name = params.get("className", "") or params.get("actorClass", "")
     location = params.get("location", {"x": 0, "y": 0, "z": 0})
     rotation = params.get("rotation", {"pitch": 0, "yaw": 0, "roll": 0})
     label = params.get("label", None)
@@ -118,7 +118,7 @@ def place_actor(params: dict) -> dict:
 
 def delete_actor(params: dict) -> dict:
     """Delete an actor from the current level by name or label."""
-    actor_name = params.get("actorName", "")
+    actor_name = params.get("actorName", "") or params.get("actorLabel", "")
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
@@ -147,7 +147,7 @@ def delete_actor(params: dict) -> dict:
 
 def get_actor_details(params: dict) -> dict:
     """Get detailed information about a specific actor: components, properties, tags."""
-    actor_name = params.get("actorName", "")
+    actor_name = params.get("actorName", "") or params.get("actorLabel", "")
 
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
@@ -218,7 +218,7 @@ def get_actor_details(params: dict) -> dict:
 
 def move_actor(params: dict) -> dict:
     """Move/rotate/scale an actor in the level."""
-    actor_name = params.get("actorName", "")
+    actor_name = params.get("actorName", "") or params.get("actorLabel", "")
     location = params.get("location", None)
     rotation = params.get("rotation", None)
     scale = params.get("scale", None)
@@ -264,7 +264,7 @@ def move_actor(params: dict) -> dict:
 
 def select_actors(params: dict) -> dict:
     """Select actors in the editor by label."""
-    labels = params.get("labels", [])
+    labels = params.get("labels", []) or params.get("actorLabels", [])
     add_to_selection = params.get("addToSelection", False)
 
     if not HAS_UNREAL:
@@ -336,9 +336,44 @@ def add_component_to_actor(params: dict) -> dict:
     if cls is None:
         raise ValueError(f"Component class not found: {component_class}")
 
-    comp = target.add_component_by_class(cls, False, unreal.Transform(), False)
+    comp = None
+
+    if hasattr(target, "add_component_by_class"):
+        comp = target.add_component_by_class(cls, False, unreal.Transform(), False)
+
+    if comp is None and hasattr(unreal, "EditorLevelLibrary"):
+        try:
+            new_comp = cls()
+            if hasattr(target, "add_component"):
+                target.add_component(new_comp)
+                comp = new_comp
+        except Exception:
+            pass
+
     if comp is None:
-        raise RuntimeError(f"Failed to add {component_class} to {actor_label}")
+        try:
+            code = f"""
+import unreal
+actor = None
+for a in unreal.EditorLevelLibrary.get_all_level_actors():
+    if a.get_actor_label() == '{actor_label}':
+        actor = a
+        break
+if actor:
+    comp = actor.add_component_by_class(unreal.{component_class}, False, unreal.Transform(), False)
+"""
+            pass
+        except Exception:
+            pass
+
+    if comp is None:
+        return {
+            "actorLabel": actor_label,
+            "componentClass": component_class,
+            "componentName": component_name,
+            "success": False,
+            "note": "add_component_by_class not available on this actor type. Use blueprint(action='add_component') for Blueprint-based actors.",
+        }
 
     if component_name:
         try:
