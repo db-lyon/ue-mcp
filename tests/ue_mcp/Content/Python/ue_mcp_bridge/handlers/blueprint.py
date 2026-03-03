@@ -227,34 +227,61 @@ def _add_variable_via_description(bp, var_name, var_type):
     # Create pin type using _make_pin_type helper
     pt = _make_pin_type(var_type)
     if pt is None:
-        # Fallback: create basic pin type
-        pt = unreal.EdGraphPinType()
-        cat = _TYPE_CATEGORY.get(var_type.lower(), var_type.lower())
-        sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
+        # Fallback: create basic pin type manually
         try:
-            pt.set_editor_property("pin_category", cat)
-        except Exception:
+            pt = unreal.EdGraphPinType()
+            cat = _TYPE_CATEGORY.get(var_type.lower(), var_type.lower())
+            sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
+            
+            # Set pin category
             try:
-                pt.pin_category = cat
-            except Exception:
-                pass
-        if sub:
-            try:
-                pt.set_editor_property("pin_sub_category", sub)
+                pt.set_editor_property("pin_category", cat)
             except Exception:
                 try:
-                    pt.pin_sub_category = sub
+                    pt.pin_category = cat
                 except Exception:
-                    pass
-
-    if pt is not None:
-        try:
-            desc.set_editor_property("var_type", pt)
+                    # Try creating a new pin type if direct assignment fails
+                    pt = unreal.EdGraphPinType()
+                    if hasattr(pt, "pin_category"):
+                        pt.pin_category = cat
+            
+            # Set pin sub category if needed
+            if sub:
+                try:
+                    pt.set_editor_property("pin_sub_category", sub)
+                except Exception:
+                    try:
+                        pt.pin_sub_category = sub
+                    except Exception:
+                        pass
         except Exception:
-            try:
+            pt = None
+
+    if pt is None:
+        return False
+
+    # Set the pin type on the description
+    try:
+        desc.set_editor_property("var_type", pt)
+    except Exception:
+        try:
+            desc.var_type = pt
+        except Exception:
+            # Last resort: try to set it directly
+            if hasattr(desc, "var_type"):
                 desc.var_type = pt
-            except Exception:
-                pass
+            else:
+                return False
+
+    # Ensure pin type is set
+    if pt is None:
+        return False
+
+    # Mark blueprint as modified before adding variable
+    try:
+        bp.modify(True)
+    except Exception:
+        pass
 
     new_vars = None
     try:
@@ -266,13 +293,23 @@ def _add_variable_via_description(bp, var_name, var_type):
             pass
 
     if new_vars is None:
-        return False
+        # Try to initialize new_variables if it doesn't exist
+        try:
+            if hasattr(bp, "new_variables"):
+                new_vars = []
+            else:
+                return False
+        except Exception:
+            return False
 
     new_vars.append(desc)
     try:
         bp.set_editor_property("new_variables", new_vars)
     except Exception:
-        return False
+        try:
+            bp.new_variables = new_vars
+        except Exception:
+            return False
 
     return True
 
