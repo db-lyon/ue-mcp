@@ -196,6 +196,41 @@ def add_variable(params: dict) -> dict:
             last_err = last_err or str(e)
 
     if not success:
+        # Final fallback: use direct Python manipulation
+        try:
+            bp.modify(True)
+            new_vars = None
+            try:
+                new_vars = list(bp.get_editor_property("new_variables"))
+            except Exception:
+                try:
+                    new_vars = list(bp.new_variables) if hasattr(bp, 'new_variables') else []
+                except Exception:
+                    new_vars = []
+            
+            desc = unreal.BPVariableDescription()
+            desc.var_name = var_name
+            pt = unreal.EdGraphPinType()
+            cat = _TYPE_CATEGORY.get(var_type.lower(), "real")
+            sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
+            try:
+                pt.pin_category = cat
+            except Exception:
+                pt.set_editor_property("pin_category", cat)
+            if sub:
+                try:
+                    pt.pin_sub_category = sub
+                except Exception:
+                    pt.set_editor_property("pin_sub_category", sub)
+            desc.var_type = pt
+            new_vars.append(desc)
+            bp.set_editor_property("new_variables", new_vars)
+            unreal.EditorAssetLibrary.save_asset(asset_path)
+            success = True
+        except Exception as e:
+            last_err = last_err or str(e)
+
+    if not success:
         raise RuntimeError(f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}")
 
     # Mark blueprint as modified and save
@@ -734,6 +769,26 @@ def add_component(params: dict) -> dict:
             except Exception:
                 pass
 
+    # Final fallback: use direct Python manipulation with SCS
+    try:
+        bp.modify(True)
+        scs = None
+        try:
+            scs = bp.get_editor_property("simple_construction_script")
+        except Exception:
+            try:
+                scs = bp.simple_construction_script
+            except Exception:
+                pass
+        if scs:
+            node = scs.create_node(comp_class, component_name or component_class_name)
+            if node:
+                scs.add_node(node)
+                unreal.EditorAssetLibrary.save_asset(asset_path)
+                return result_info
+    except Exception as e:
+        pass
+
     raise RuntimeError(
         f"Could not add component via available APIs. "
         f"Use execute_python as fallback with SimpleConstructionScript."
@@ -878,6 +933,33 @@ def add_blueprint_interface(params: dict) -> dict:
             bp.modify(True)
             unreal.EditorAssetLibrary.save_asset(bp_path)
             return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
+    except Exception as e:
+        pass
+
+    # Final fallback: use direct Python manipulation
+    try:
+        bp.modify(True)
+        interfaces = None
+        try:
+            interfaces = list(bp.get_editor_property("implemented_interfaces"))
+        except Exception:
+            try:
+                interfaces = list(bp.implemented_interfaces) if hasattr(bp, 'implemented_interfaces') and bp.implemented_interfaces else []
+            except Exception:
+                interfaces = []
+        
+        entry = unreal.BlueprintInterface()
+        if hasattr(interface, 'generated_class'):
+            if callable(interface.generated_class):
+                entry.interface = interface.generated_class()
+            else:
+                entry.interface = interface.generated_class
+        else:
+            entry.interface = interface
+        interfaces.append(entry)
+        bp.set_editor_property("implemented_interfaces", interfaces)
+        unreal.EditorAssetLibrary.save_asset(bp_path)
+        return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
     except Exception as e:
         pass
 
