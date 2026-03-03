@@ -793,17 +793,30 @@ def add_component(params: dict) -> dict:
     if hasattr(unreal, "SubobjectDataSubsystem"):
         try:
             subsystem = unreal.get_editor_subsystem(unreal.SubobjectDataSubsystem)
-            if subsystem and hasattr(subsystem, "add_new_subobject"):
-                handle = subsystem.add_new_subobject(
-                    unreal.AddNewSubobjectParams(
-                        parent_handle=unreal.SubobjectDataHandle(),
-                        new_class=comp_class,
-                        blueprint_context=bp,
-                    )
-                )
-                if handle.is_valid():
-                    return result_info
-        except Exception:
+            if subsystem and hasattr(subsystem, "k2_gather_subobject_data_for_blueprint"):
+                # Get root data handle first (required!)
+                blueprint_handles = subsystem.k2_gather_subobject_data_for_blueprint(bp)
+                if blueprint_handles and len(blueprint_handles) > 0:
+                    root_handle = blueprint_handles[0]
+                    if subsystem and hasattr(subsystem, "add_new_subobject"):
+                        handle, fail_reason = subsystem.add_new_subobject(
+                            unreal.AddNewSubobjectParams(
+                                parent_handle=root_handle,
+                                new_class=comp_class,
+                                blueprint_context=bp,
+                            )
+                        )
+                        if handle and handle.is_valid():
+                            # Rename if component_name provided
+                            if component_name and component_name != component_class_name:
+                                try:
+                                    subsystem.rename_subobject(handle, component_name)
+                                except Exception:
+                                    pass
+                            bp.modify(True)
+                            unreal.EditorAssetLibrary.save_asset(asset_path)
+                            return result_info
+        except Exception as e:
             pass
 
     if hasattr(unreal, "BlueprintEditorLibrary"):
