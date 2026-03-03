@@ -229,34 +229,38 @@ def add_variable(params: dict) -> dict:
         if pin_type is not None:
             try:
                 bp.modify(True)
-                # Ensure blueprint is saved before adding variable
-                unreal.EditorAssetLibrary.save_asset(asset_path)
-                # Convert var_name to Name type if needed
-                var_name_obj = var_name
-                if hasattr(unreal, "Name") and not isinstance(var_name, unreal.Name):
-                    try:
-                        var_name_obj = unreal.Name(var_name)
-                    except Exception:
-                        var_name_obj = var_name
-                # Try without converting to Name first
+                # Don't save before adding - might interfere
+                # unreal.EditorAssetLibrary.save_asset(asset_path)
+                
+                # Try calling add_member_variable - it should accept string or Name
                 result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
-                if not result:
-                    # Try with Name type
-                    try:
-                        var_name_obj = unreal.Name(var_name)
-                        result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name_obj, pin_type)
-                    except Exception:
-                        pass
                 
                 if result:
                     success = True
                     bp.modify(True)
                     unreal.EditorAssetLibrary.save_asset(asset_path)
                 else:
-                    if last_err == "All methods failed":
-                        last_err = "BlueprintEditorLibrary.add_member_variable returned False"
-                    else:
-                        last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False"
+                    # Maybe the blueprint needs to be compiled first, or the pin type is wrong
+                    # Try recompiling and retrying
+                    try:
+                        unreal.BlueprintEditorLibrary.compile_blueprint(bp)
+                        import time
+                        time.sleep(0.2)
+                        result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                        if result:
+                            success = True
+                            bp.modify(True)
+                            unreal.EditorAssetLibrary.save_asset(asset_path)
+                        else:
+                            if last_err == "All methods failed":
+                                last_err = "BlueprintEditorLibrary.add_member_variable returned False even after recompile"
+                            else:
+                                last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False even after recompile"
+                    except Exception:
+                        if last_err == "All methods failed":
+                            last_err = "BlueprintEditorLibrary.add_member_variable returned False"
+                        else:
+                            last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False"
             except Exception as e:
                 last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable raised: {str(e)}"
 
