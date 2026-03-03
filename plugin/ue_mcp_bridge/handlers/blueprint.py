@@ -893,6 +893,39 @@ def add_blueprint_interface(params: dict) -> dict:
     if interface is None:
         raise ValueError(f"Interface not found: {interface_path}")
 
+    # Check if interface already exists - if so, remove it first for idempotency
+    try:
+        interfaces = bp.get_editor_property("implemented_interfaces")
+        if interfaces:
+            interface_class = None
+            try:
+                if hasattr(interface, "generated_class"):
+                    interface_class = interface.generated_class() if callable(interface.generated_class) else interface.generated_class
+            except Exception:
+                pass
+            
+            if interface_class:
+                interfaces_list = list(interfaces) if hasattr(interfaces, "__iter__") else []
+                for entry in list(interfaces_list):
+                    entry_interface = None
+                    try:
+                        entry_interface = entry.get_editor_property("interface") if hasattr(entry, "get_editor_property") else getattr(entry, "interface", None)
+                    except Exception:
+                        pass
+                    
+                    if entry_interface == interface_class:
+                        # Interface already exists, remove it first
+                        try:
+                            interfaces_list.remove(entry)
+                            bp.set_editor_property("implemented_interfaces", interfaces_list)
+                            bp.modify(True)
+                            unreal.EditorAssetLibrary.save_asset(bp_path)
+                        except Exception:
+                            pass
+                        break
+    except Exception:
+        pass
+
     if hasattr(unreal, "BlueprintEditorLibrary"):
         lib = unreal.BlueprintEditorLibrary
         if hasattr(lib, "add_interface"):
