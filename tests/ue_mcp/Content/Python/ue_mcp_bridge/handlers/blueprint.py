@@ -178,6 +178,24 @@ def add_variable(params: dict) -> dict:
 
     bp = _load_bp(asset_path)
 
+    # Check if variable already exists - if so, delete it first for idempotency
+    try:
+        if hasattr(bp, "new_variables") and bp.new_variables:
+            for var in list(bp.new_variables):
+                if hasattr(var, "var_name") and var.var_name == var_name:
+                    # Variable exists, remove it first
+                    try:
+                        vars_list = list(bp.new_variables)
+                        vars_list.remove(var)
+                        bp.set_editor_property("new_variables", vars_list)
+                        bp.modify(True)
+                        unreal.EditorAssetLibrary.save_asset(asset_path)
+                    except Exception:
+                        pass
+                    break
+    except Exception:
+        pass
+
     success = False
     last_err = "All methods failed"
 
@@ -747,7 +765,7 @@ def add_component(params: dict) -> dict:
     """Add a component to a Blueprint."""
     asset_path = params.get("path", "")
     component_class_name = params.get("componentClass", "StaticMeshComponent")
-    component_name = params.get("componentName", "")
+    component_name = params.get("componentName", "") or component_class_name
 
     bp = _load_bp(asset_path)
 
@@ -757,6 +775,24 @@ def add_component(params: dict) -> dict:
             asset_editor = unreal.get_editor_subsystem(unreal.AssetEditorSubsystem)
             if asset_editor:
                 asset_editor.open_editor_for_assets([bp])
+    except Exception:
+        pass
+
+    # Check if component already exists - if so, try to remove it first for idempotency
+    try:
+        scs = bp.get_editor_property("simple_construction_script")
+        if scs and hasattr(scs, "nodes"):
+            for node in list(scs.nodes):
+                if node.get_name() == component_name:
+                    # Component exists, try to remove it
+                    try:
+                        if hasattr(scs, "remove_node"):
+                            scs.remove_node(node)
+                            bp.modify(True)
+                            unreal.EditorAssetLibrary.save_asset(asset_path)
+                    except Exception:
+                        pass
+                    break
     except Exception:
         pass
 
@@ -963,6 +999,39 @@ def add_blueprint_interface(params: dict) -> dict:
     interface = unreal.EditorAssetLibrary.load_asset(interface_path)
     if interface is None:
         raise ValueError(f"Interface not found: {interface_path}")
+
+    # Check if interface already exists - if so, remove it first for idempotency
+    try:
+        interfaces = bp.get_editor_property("implemented_interfaces")
+        if interfaces:
+            interface_class = None
+            try:
+                if hasattr(interface, "generated_class"):
+                    interface_class = interface.generated_class() if callable(interface.generated_class) else interface.generated_class
+            except Exception:
+                pass
+            
+            if interface_class:
+                interfaces_list = list(interfaces) if hasattr(interfaces, "__iter__") else []
+                for entry in list(interfaces_list):
+                    entry_interface = None
+                    try:
+                        entry_interface = entry.get_editor_property("interface") if hasattr(entry, "get_editor_property") else getattr(entry, "interface", None)
+                    except Exception:
+                        pass
+                    
+                    if entry_interface == interface_class:
+                        # Interface already exists, remove it first
+                        try:
+                            interfaces_list.remove(entry)
+                            bp.set_editor_property("implemented_interfaces", interfaces_list)
+                            bp.modify(True)
+                            unreal.EditorAssetLibrary.save_asset(bp_path)
+                        except Exception:
+                            pass
+                        break
+    except Exception:
+        pass
 
     if hasattr(unreal, "BlueprintEditorLibrary"):
         lib = unreal.BlueprintEditorLibrary
