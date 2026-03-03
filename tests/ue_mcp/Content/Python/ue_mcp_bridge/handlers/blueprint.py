@@ -226,41 +226,41 @@ def add_variable(params: dict) -> dict:
 
     if hasattr(unreal, "BlueprintEditorLibrary") and hasattr(unreal.BlueprintEditorLibrary, "add_member_variable"):
         pin_type = _make_pin_type(var_type)
-        if pin_type is not None:
+        if pin_type is None:
+            last_err = f"Failed to create pin type for '{var_type}'"
+        else:
             try:
                 bp.modify(True)
-                # Don't save before adding - might interfere
-                # unreal.EditorAssetLibrary.save_asset(asset_path)
-                
-                # Try calling add_member_variable - it should accept string or Name
-                result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
-                
-                if result:
-                    success = True
-                    bp.modify(True)
-                    unreal.EditorAssetLibrary.save_asset(asset_path)
+                # Verify pin_type is valid
+                if not hasattr(pin_type, "pin_category"):
+                    last_err = f"Pin type missing pin_category attribute"
                 else:
-                    # Maybe the blueprint needs to be compiled first, or the pin type is wrong
-                    # Try recompiling and retrying
-                    try:
-                        unreal.BlueprintEditorLibrary.compile_blueprint(bp)
-                        import time
-                        time.sleep(0.2)
-                        result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
-                        if result:
-                            success = True
-                            bp.modify(True)
-                            unreal.EditorAssetLibrary.save_asset(asset_path)
-                        else:
-                            if last_err == "All methods failed":
-                                last_err = "BlueprintEditorLibrary.add_member_variable returned False even after recompile"
+                    # Try calling add_member_variable
+                    result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                    
+                    if result:
+                        success = True
+                        bp.modify(True)
+                        unreal.EditorAssetLibrary.save_asset(asset_path)
+                    else:
+                        # Try with Name type for variable name
+                        try:
+                            var_name_obj = unreal.Name(var_name)
+                            result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name_obj, pin_type)
+                            if result:
+                                success = True
+                                bp.modify(True)
+                                unreal.EditorAssetLibrary.save_asset(asset_path)
                             else:
-                                last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False even after recompile"
-                    except Exception:
-                        if last_err == "All methods failed":
-                            last_err = "BlueprintEditorLibrary.add_member_variable returned False"
-                        else:
-                            last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False"
+                                if last_err == "All methods failed":
+                                    last_err = "BlueprintEditorLibrary.add_member_variable returned False"
+                                else:
+                                    last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False"
+                        except Exception:
+                            if last_err == "All methods failed":
+                                last_err = "BlueprintEditorLibrary.add_member_variable returned False"
+                            else:
+                                last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False"
             except Exception as e:
                 last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable raised: {str(e)}"
 
