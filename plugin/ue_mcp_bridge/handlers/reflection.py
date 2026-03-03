@@ -377,11 +377,7 @@ def create_gameplay_tag(params: dict) -> dict:
     settings = None
     if hasattr(unreal, "GameplayTagsSettings"):
         settings = unreal.get_default_object(unreal.GameplayTagsSettings)
-    if settings is None:
-        try:
-            settings = unreal.EditorAssetLibrary.load_asset("/Script/GameplayTags.GameplayTagsSettings")
-        except Exception:
-            pass
+    # Don't try to load /Script/ paths as assets - they're native C++ classes, not assets
 
     if settings is not None and hasattr(settings, "get_editor_property"):
         try:
