@@ -224,43 +224,23 @@ def add_variable(params: dict) -> dict:
     except Exception:
         pass
 
-    if hasattr(unreal, "BlueprintEditorLibrary") and hasattr(unreal.BlueprintEditorLibrary, "add_member_variable"):
+    
+    # Fallback to BlueprintEditorLibrary
+    if not success and hasattr(unreal, "BlueprintEditorLibrary") and hasattr(unreal.BlueprintEditorLibrary, "add_member_variable"):
         pin_type = _make_pin_type(var_type)
-        if pin_type is None:
-            last_err = f"Failed to create pin type for '{var_type}'"
-        else:
+        if pin_type is not None:
             try:
                 bp.modify(True)
-                # Verify pin_type is valid
-                if not hasattr(pin_type, "pin_category"):
-                    last_err = f"Pin type missing pin_category attribute"
+                result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                if result:
+                    success = True
+                    bp.modify(True)
+                    unreal.EditorAssetLibrary.save_asset(asset_path)
                 else:
-                    # Try calling add_member_variable
-                    result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
-                    
-                    if result:
-                        success = True
-                        bp.modify(True)
-                        unreal.EditorAssetLibrary.save_asset(asset_path)
+                    if last_err == "All methods failed":
+                        last_err = "BlueprintEditorLibrary.add_member_variable returned False"
                     else:
-                        # Try with Name type for variable name
-                        try:
-                            var_name_obj = unreal.Name(var_name)
-                            result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name_obj, pin_type)
-                            if result:
-                                success = True
-                                bp.modify(True)
-                                unreal.EditorAssetLibrary.save_asset(asset_path)
-                            else:
-                                if last_err == "All methods failed":
-                                    last_err = "BlueprintEditorLibrary.add_member_variable returned False"
-                                else:
-                                    last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False"
-                        except Exception:
-                            if last_err == "All methods failed":
-                                last_err = "BlueprintEditorLibrary.add_member_variable returned False"
-                            else:
-                                last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False"
+                        last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False"
             except Exception as e:
                 last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable raised: {str(e)}"
 
@@ -318,41 +298,58 @@ def add_variable(params: dict) -> dict:
                     pass
             
             # Last resort: try direct new_variables manipulation
-            # Check what type the existing variables are and try to create one
+            # Use execute_python to inspect and create variable objects
             if not success:
                 try:
-                    existing_vars = []
-                    var_type_class = None
-                    if hasattr(bp, "new_variables") and bp.new_variables:
-                        existing_vars = list(bp.new_variables)
-                        # Try to get the type of existing variables
-                        if len(existing_vars) > 0:
-                            var_type_class = type(existing_vars[0])
-                    
-                    # Try to create a new variable description using the same type as existing ones
-                    if var_type_class:
+                    pin_type_code = f"""
+import unreal
+bp = unreal.EditorAssetLibrary.load_asset('{asset_path}')
+pin_type = unreal.EdGraphPinType()
+pin_type.pin_category = '{_TYPE_CATEGORY.get(var_type.lower(), "real")}'
+if '{var_type.lower()}' in ['float', 'double', 'real']:
+    pin_type.pin_sub_category = 'double'
+__result__ = pin_type
+"""
+                    # Actually, let's try to duplicate an existing variable and modify it
+                    if hasattr(bp, "new_variables") and bp.new_variables and len(bp.new_variables) > 0:
                         try:
-                            desc = var_type_class()
-                            desc.var_name = var_name
-                            cat = _TYPE_CATEGORY.get(var_type.lower(), "real")
-                            sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
-                            pt = unreal.EdGraphPinType()
-                            pt.pin_category = cat
-                            if sub:
-                                pt.pin_sub_category = sub
-                            desc.var_type = pt
+                            # Get an existing variable to use as a template
+                            existing_var = bp.new_variables[0]
+                            # Try to create a copy using the same class
+                            var_class = type(existing_var)
                             
-                            existing_vars.append(desc)
-                            
+                            # Try using copy.deepcopy or creating new instance
+                            import copy
                             try:
-                                bp.set_editor_property("new_variables", existing_vars)
-                                unreal.EditorAssetLibrary.save_asset(asset_path)
-                                success = True
-                            except Exception:
-                                try:
-                                    bp.new_variables = existing_vars
+                                new_var = copy.deepcopy(existing_var)
+                                new_var.var_name = var_name
+                                pt = _make_pin_type(var_type)
+                                if pt:
+                                    new_var.var_type = pt
+                                    
+                                    existing_vars = list(bp.new_variables)
+                                    existing_vars.append(new_var)
+                                    
+                                    bp.set_editor_property("new_variables", existing_vars)
+                                    bp.modify(True)
                                     unreal.EditorAssetLibrary.save_asset(asset_path)
                                     success = True
+                            except Exception:
+                                # Try creating new instance
+                                try:
+                                    new_var = var_class()
+                                    new_var.var_name = var_name
+                                    pt = _make_pin_type(var_type)
+                                    if pt:
+                                        new_var.var_type = pt
+                                        
+                                        existing_vars = list(bp.new_variables)
+                                        existing_vars.append(new_var)
+                                        
+                                        bp.set_editor_property("new_variables", existing_vars)
+                                        bp.modify(True)
+                                        unreal.EditorAssetLibrary.save_asset(asset_path)
+                                        success = True
                                 except Exception:
                                     pass
                         except Exception:
