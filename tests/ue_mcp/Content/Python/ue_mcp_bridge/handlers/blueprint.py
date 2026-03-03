@@ -260,57 +260,82 @@ def add_variable(params: dict) -> dict:
         except Exception as e:
             last_err = f"{last_err}; _add_variable_via_description raised: {str(e)}"
 
-    # Final fallback: try direct new_variables access (read_blueprint confirms this exists and is readable)
+    # Final fallback: try using Blueprint Graph API directly
     if not success:
         try:
             bp.modify(True)
-            # Create desc and pt - skip if BPVariableDescription doesn't exist
-            desc = None
-            if hasattr(unreal, "BPVariableDescription"):
-                desc = unreal.BPVariableDescription()
-            elif hasattr(unreal, "EdGraphVariable"):
-                desc = unreal.EdGraphVariable()
-            else:
-                # Can't create description, skip this fallback
-                raise Exception("BPVariableDescription not available in this UE version")
-            
-            desc.var_name = var_name
-            cat = _TYPE_CATEGORY.get(var_type.lower(), "real")
-            sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
-            pt = unreal.EdGraphPinType()
-            pt.pin_category = cat
-            if sub:
-                pt.pin_sub_category = sub
-            desc.var_type = pt
-            
-            # Read existing variables
-            existing_vars = []
+            # Try accessing the blueprint's function graph and adding a variable node
+            # First, get the blueprint's graph
+            graph = None
             try:
-                if hasattr(bp, "new_variables") and bp.new_variables:
-                    existing_vars = list(bp.new_variables)
+                if hasattr(bp, "function_graphs") and bp.function_graphs:
+                    # Use the first function graph (usually the construction script or main graph)
+                    graph = bp.function_graphs[0] if len(bp.function_graphs) > 0 else None
             except Exception:
                 pass
             
-            # Append new variable
-            existing_vars.append(desc)
-            
-            # Try to set it back via set_editor_property first
-            try:
-                bp.set_editor_property("new_variables", existing_vars)
-                unreal.EditorAssetLibrary.save_asset(asset_path)
-                success = True
-            except Exception:
-                # Try direct assignment
+            # Alternative: try accessing via BlueprintGraph property
+            if graph is None:
                 try:
-                    bp.new_variables = existing_vars
-                    unreal.EditorAssetLibrary.save_asset(asset_path)
-                    success = True
+                    if hasattr(bp, "blueprint_graph"):
+                        graph = bp.blueprint_graph
+                except Exception:
+                    pass
+            
+            # If we have a graph, try adding a variable node
+            if graph is not None:
+                try:
+                    pin_type = _make_pin_type(var_type)
+                    if pin_type is not None:
+                        # Try to create a variable node
+                        if hasattr(unreal, "BlueprintEditorLibrary"):
+                            # Try using add_member_variable again but with graph context
+                            result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                            if result:
+                                success = True
+                                bp.modify(True)
+                                unreal.EditorAssetLibrary.save_asset(asset_path)
+                except Exception:
+                    pass
+            
+            # Last resort: try direct new_variables manipulation if BPVariableDescription exists
+            if not success:
+                try:
+                    if hasattr(unreal, "BPVariableDescription"):
+                        desc = unreal.BPVariableDescription()
+                        desc.var_name = var_name
+                        cat = _TYPE_CATEGORY.get(var_type.lower(), "real")
+                        sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
+                        pt = unreal.EdGraphPinType()
+                        pt.pin_category = cat
+                        if sub:
+                            pt.pin_sub_category = sub
+                        desc.var_type = pt
+                        
+                        existing_vars = []
+                        try:
+                            if hasattr(bp, "new_variables") and bp.new_variables:
+                                existing_vars = list(bp.new_variables)
+                        except Exception:
+                            pass
+                        
+                        existing_vars.append(desc)
+                        
+                        try:
+                            bp.set_editor_property("new_variables", existing_vars)
+                            unreal.EditorAssetLibrary.save_asset(asset_path)
+                            success = True
+                        except Exception:
+                            try:
+                                bp.new_variables = existing_vars
+                                unreal.EditorAssetLibrary.save_asset(asset_path)
+                                success = True
+                            except Exception:
+                                pass
                 except Exception:
                     pass
         except Exception as e:
-            # Only update error if we haven't tried this fallback yet
-            if "BPVariableDescription not available" not in str(e):
-                last_err = f"{last_err}; final fallback raised: {str(e)}"
+            last_err = f"{last_err}; final fallback raised: {str(e)}"
 
     if not success:
         raise RuntimeError(f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}")
