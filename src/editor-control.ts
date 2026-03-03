@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn, execSync } from "child_process";
+import * as net from "net";
 import type { ProjectContext } from "./project.js";
 
 let editorProcess: ReturnType<typeof spawn> | null = null;
@@ -48,6 +49,54 @@ function isEditorRunning(): boolean {
   }
 }
 
+async function isBridgeAvailable(host = "localhost", port = 9877, timeoutMs = 1000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let resolved = false;
+
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        socket.destroy();
+        resolve(false);
+      }
+    }, timeoutMs);
+
+    socket.once("connect", () => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        socket.destroy();
+        resolve(true);
+      }
+    });
+
+    socket.once("error", () => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        resolve(false);
+      }
+    });
+
+    socket.connect(port, host);
+  });
+}
+
+async function waitForBridge(maxWaitSeconds = 120, checkIntervalMs = 2000): Promise<boolean> {
+  const startTime = Date.now();
+  const maxWaitMs = maxWaitSeconds * 1000;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    if (await isBridgeAvailable()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, checkIntervalMs));
+  }
+
+  return false;
+}
+
 export async function startEditor(project: ProjectContext): Promise<{ success: boolean; message: string }> {
   if (isEditorRunning()) {
     return { success: false, message: "Editor is already running" };
@@ -72,7 +121,17 @@ export async function startEditor(project: ProjectContext): Promise<{ success: b
     });
 
     editorProcess.unref();
-    return { success: true, message: `Editor launched: ${editorExe}` };
+
+    // Wait for bridge to become available (editor fully started)
+    const bridgeAvailable = await waitForBridge(120, 2000);
+    if (!bridgeAvailable) {
+      return {
+        success: false,
+        message: "Editor launched but bridge did not become available within 120 seconds. Editor may still be starting up.",
+      };
+    }
+
+    return { success: true, message: `Editor launched and bridge available: ${editorExe}` };
   } catch (error) {
     return {
       success: false,
