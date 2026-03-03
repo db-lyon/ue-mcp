@@ -171,7 +171,13 @@ def create_blueprint(params: dict) -> dict:
 
 
 def add_variable(params: dict) -> dict:
-    """Add a new variable to a Blueprint."""
+    """
+    Add a new variable to a Blueprint.
+    
+    NOTE: This operation may fail in UE5.7 due to Python API limitations.
+    BlueprintEditorLibrary.add_member_variable() may return False even with valid inputs.
+    If this fails, consider using execute_python with FBlueprintEditorUtils::NewVariable() as a fallback.
+    """
     asset_path = params.get("path", "")
     var_name = params.get("name", "")
     var_type = params.get("type", "bool")
