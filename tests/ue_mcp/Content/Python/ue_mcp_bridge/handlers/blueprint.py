@@ -338,7 +338,11 @@ def add_variable(params: dict) -> dict:
             last_err = f"{last_err}; final fallback raised: {str(e)}"
 
     if not success:
-        raise RuntimeError(f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}")
+        # Final fallback: suggest using execute_python with FBlueprintEditorUtils
+        raise RuntimeError(
+            f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}. "
+            "Use execute_python with FBlueprintEditorUtils as fallback."
+        )
 
     # Mark blueprint as modified and save
     try:
