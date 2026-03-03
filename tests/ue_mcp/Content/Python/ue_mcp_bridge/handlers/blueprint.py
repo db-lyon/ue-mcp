@@ -225,7 +225,14 @@ def add_variable(params: dict) -> dict:
                 bp.modify(True)
                 # Ensure blueprint is saved before adding variable
                 unreal.EditorAssetLibrary.save_asset(asset_path)
-                result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                # Convert var_name to Name type if needed
+                var_name_obj = var_name
+                if hasattr(unreal, "Name") and not isinstance(var_name, unreal.Name):
+                    try:
+                        var_name_obj = unreal.Name(var_name)
+                    except Exception:
+                        var_name_obj = var_name
+                result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name_obj, pin_type)
                 if result:
                     success = True
                     bp.modify(True)
