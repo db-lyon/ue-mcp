@@ -319,7 +319,21 @@ def add_variable(params: dict) -> dict:
 
 def _add_variable_via_description(bp, var_name, var_type):
     """Fallback: add variable by creating a BPVariableDescription and appending to new_variables."""
+    # BPVariableDescription doesn't exist in UE5.7 - try alternative approaches
     if not hasattr(unreal, "BPVariableDescription"):
+        # Try using EdGraphVariable or direct manipulation instead
+        try:
+            # Try to add via Blueprint's variable list directly
+            bp.modify(True)
+            # Access new_variables directly on blueprint
+            if hasattr(bp, "new_variables"):
+                existing_vars = list(bp.new_variables) if bp.new_variables else []
+                # Create a minimal variable entry - we'll use a dict-like approach
+                # In UE5.7, we might need to use a different API
+                # For now, return False to fall through to other methods
+                pass
+        except Exception:
+            pass
         return False
 
     desc = unreal.BPVariableDescription()
@@ -829,6 +843,10 @@ def add_component(params: dict) -> dict:
                                 blueprint_context=bp,
                             )
                         )
+                        # Check fail_reason to see why it might have failed
+                        if fail_reason and fail_reason != "":
+                            # Log but continue to next method
+                            pass
                         if handle and handle.is_valid():
                             # Rename if component_name provided
                             if component_name and component_name != component_class_name:
