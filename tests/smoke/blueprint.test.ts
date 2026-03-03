@@ -4,11 +4,19 @@ import type { EditorBridge } from "../../src/bridge.js";
 
 let bridge: EditorBridge;
 const bpPath = `${TEST_PREFIX}/BP_SmokeTest`;
+const testAssets = [bpPath, `${TEST_PREFIX}/BPI_SmokeTest`];
 
-beforeAll(async () => { bridge = await getBridge(); });
+beforeAll(async () => {
+  bridge = await getBridge();
+  // Clean up any leftover test assets from previous runs (idempotency)
+  for (const assetPath of testAssets) {
+    await callBridge(bridge, "delete_asset", { assetPath }).catch(() => {});
+  }
+});
 afterAll(async () => {
-  await callBridge(bridge, "delete_asset", { assetPath: bpPath });
-  await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/BPI_SmokeTest` });
+  for (const assetPath of testAssets) {
+    await callBridge(bridge, "delete_asset", { assetPath }).catch(() => {});
+  }
   disconnectBridge();
 });
 

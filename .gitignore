@@ -115,10 +115,18 @@ venv/
 !**/*.xcworkspace/contents.xcworkspacedata
 **/*.xcuserdata
 
+# Test-generated assets (should not be tracked - tests create/cleanup these)
+tests/**/Content/MCPTest/**/*.uasset
+tests/**/Content/MCPTest/**/*.umap
+tests/**/Content/*SmokeTest*.uasset
+tests/**/Content/*SmokeTest*.umap
+tests/**/Content/*Test*.uasset
+tests/**/Content/*Test*.umap
+
 # Note: The following WILL be tracked (as they should be):
 # - *.uproject (project files)
 # - Source/**/*.cpp, *.h, *.Build.cs, *.Target.cs (source code)
 # - Config/*.ini (except *User*.ini - project configs are tracked)
-# - Content/**/*.uasset, *.umap (content assets)
+# - Content/**/*.uasset, *.umap (content assets) - EXCEPT test-generated ones above
 # - Plugins/**/*.uplugin (plugin files)
 # - Any other project source files
