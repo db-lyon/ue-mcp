@@ -181,6 +181,15 @@ def add_variable(params: dict) -> dict:
     success = False
     last_err = "All methods failed"
 
+    # Open blueprint in editor first - this makes BlueprintEditorLibrary operations more reliable
+    try:
+        if hasattr(unreal, "AssetEditorSubsystem"):
+            asset_editor = unreal.get_editor_subsystem(unreal.AssetEditorSubsystem)
+            if asset_editor:
+                asset_editor.open_editor_for_assets([bp])
+    except Exception:
+        pass
+
     # Compile blueprint first to ensure it's in a valid state
     try:
         if hasattr(unreal, "BlueprintEditorLibrary"):
@@ -732,6 +741,15 @@ def add_component(params: dict) -> dict:
 
     bp = _load_bp(asset_path)
 
+    # Open blueprint in editor first - this makes BlueprintEditorLibrary operations more reliable
+    try:
+        if hasattr(unreal, "AssetEditorSubsystem"):
+            asset_editor = unreal.get_editor_subsystem(unreal.AssetEditorSubsystem)
+            if asset_editor:
+                asset_editor.open_editor_for_assets([bp])
+    except Exception:
+        pass
+
     comp_class = getattr(unreal, component_class_name, None)
     if comp_class is None:
         for prefix in ["U"]:
@@ -922,6 +940,15 @@ def add_blueprint_interface(params: dict) -> dict:
     bp = unreal.EditorAssetLibrary.load_asset(bp_path)
     if bp is None:
         raise ValueError(f"Blueprint not found: {bp_path}")
+
+    # Open blueprint in editor first - this makes BlueprintEditorLibrary operations more reliable
+    try:
+        if hasattr(unreal, "AssetEditorSubsystem"):
+            asset_editor = unreal.get_editor_subsystem(unreal.AssetEditorSubsystem)
+            if asset_editor:
+                asset_editor.open_editor_for_assets([bp])
+    except Exception:
+        pass
 
     interface = unreal.EditorAssetLibrary.load_asset(interface_path)
     if interface is None:
