@@ -1,44 +1,65 @@
 import { z } from "zod";
-import { categoryTool, bp, type ToolDef } from "../types.js";
+import { categoryTool, bp, type ToolDef, type ToolContext } from "../types.js";
+import { startEditor, stopEditor, restartEditor } from "../editor-control.js";
 
 export const editorTool: ToolDef = categoryTool(
   "editor",
-  "Editor commands, Python execution, PIE, undo/redo, hot reload, viewport, performance, sequencer, build pipeline, logs.",
+  "Editor commands, Python execution, PIE, undo/redo, hot reload, viewport, performance, sequencer, build pipeline, logs, editor control.",
   {
-    execute_command:     bp("execute_command"),
-    execute_python:      bp("execute_python"),
-    set_property:        bp("set_property"),
-    play_in_editor:      bp("pie_control", (p) => ({ action: p.pieAction ?? "status" })),
-    get_runtime_value:   bp("get_runtime_value"),
-    hot_reload:          bp("hot_reload"),
-    undo:                bp("undo"),
-    redo:                bp("redo"),
-    get_perf_stats:      bp("get_editor_performance_stats"),
-    run_stat:            bp("run_stat_command"),
-    set_scalability:     bp("set_scalability"),
-    capture_screenshot:  bp("capture_screenshot"),
-    get_viewport:        bp("get_viewport_info"),
-    set_viewport:        bp("set_viewport_camera"),
-    focus_on_actor:      bp("focus_viewport_on_actor"),
-    create_sequence:     bp("create_level_sequence"),
-    get_sequence_info:   bp("get_sequence_info"),
-    add_sequence_track:  bp("add_sequence_track"),
-    play_sequence:       bp("play_sequence", (p) => ({ assetPath: p.assetPath, action: p.sequenceAction ?? "play" })),
+    // Editor Control
+    start_editor: {
+      handler: async (ctx: ToolContext) => {
+        return startEditor(ctx.project);
+      },
+    },
+    stop_editor: {
+      handler: async () => {
+        return stopEditor();
+      },
+    },
+    restart_editor: {
+      handler: async (ctx: ToolContext) => {
+        return restartEditor(ctx.project);
+      },
+    },
+    // Editor Commands
+    execute_command: bp("execute_command"),
+    execute_python: bp("execute_python"),
+    set_property: bp("set_property"),
+    play_in_editor: bp("pie_control", (p) => ({ action: p.pieAction ?? "status" })),
+    get_runtime_value: bp("get_runtime_value"),
+    hot_reload: bp("hot_reload"),
+    undo: bp("undo"),
+    redo: bp("redo"),
+    get_perf_stats: bp("get_editor_performance_stats"),
+    run_stat: bp("run_stat_command"),
+    set_scalability: bp("set_scalability"),
+    capture_screenshot: bp("capture_screenshot"),
+    get_viewport: bp("get_viewport_info"),
+    set_viewport: bp("set_viewport_camera"),
+    focus_on_actor: bp("focus_viewport_on_actor"),
+    create_sequence: bp("create_level_sequence"),
+    get_sequence_info: bp("get_sequence_info"),
+    add_sequence_track: bp("add_sequence_track"),
+    play_sequence: bp("play_sequence", (p) => ({ assetPath: p.assetPath, action: p.sequenceAction ?? "play" })),
     // Build Pipeline
-    build_all:           bp("build_all"),
-    build_geometry:      bp("build_geometry"),
-    build_hlod:          bp("build_hlod"),
-    validate_assets:     bp("validate_assets"),
-    get_build_status:    bp("get_build_status"),
-    cook_content:        bp("cook_content"),
+    build_all: bp("build_all"),
+    build_geometry: bp("build_geometry"),
+    build_hlod: bp("build_hlod"),
+    validate_assets: bp("validate_assets"),
+    get_build_status: bp("get_build_status"),
+    cook_content: bp("cook_content"),
     // Logs
-    get_log:             bp("get_output_log"),
-    search_log:          bp("search_log"),
-    get_message_log:     bp("get_message_log"),
+    get_log: bp("get_output_log"),
+    search_log: bp("search_log"),
+    get_message_log: bp("get_message_log"),
     // Dev
-    reload_bridge:       bp("reload_handlers"),
+    reload_bridge: bp("reload_handlers"),
   },
-  `- execute_command: Run console command. Params: command
+  `- start_editor: Launch Unreal Editor with the current project. No params.
+- stop_editor: Close Unreal Editor gracefully (allows save dialogs). No params.
+- restart_editor: Stop then start the editor. No params.
+- execute_command: Run console command. Params: command
 - execute_python: Run Python in editor. Params: code
 - set_property: Set UObject property. Params: objectPath, propertyName, value
 - play_in_editor: PIE control. Params: pieAction ('start'|'stop'|'status')
