@@ -212,6 +212,9 @@ def add_variable(params: dict) -> dict:
     try:
         if hasattr(unreal, "BlueprintEditorLibrary"):
             unreal.BlueprintEditorLibrary.compile_blueprint(bp)
+            # Wait a moment for compilation to finish
+            import time
+            time.sleep(0.1)
     except Exception:
         pass
 
@@ -220,9 +223,12 @@ def add_variable(params: dict) -> dict:
         if pin_type is not None:
             try:
                 bp.modify(True)
+                # Ensure blueprint is saved before adding variable
+                unreal.EditorAssetLibrary.save_asset(asset_path)
                 result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
                 if result:
                     success = True
+                    bp.modify(True)
                     unreal.EditorAssetLibrary.save_asset(asset_path)
                 else:
                     if last_err == "All methods failed":
