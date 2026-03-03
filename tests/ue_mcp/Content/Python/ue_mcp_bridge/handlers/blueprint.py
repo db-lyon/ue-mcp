@@ -238,7 +238,16 @@ def add_variable(params: dict) -> dict:
                         var_name_obj = unreal.Name(var_name)
                     except Exception:
                         var_name_obj = var_name
-                result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name_obj, pin_type)
+                # Try without converting to Name first
+                result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                if not result:
+                    # Try with Name type
+                    try:
+                        var_name_obj = unreal.Name(var_name)
+                        result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name_obj, pin_type)
+                    except Exception:
+                        pass
+                
                 if result:
                     success = True
                     bp.modify(True)
@@ -344,11 +353,7 @@ def add_variable(params: dict) -> dict:
             last_err = f"{last_err}; final fallback raised: {str(e)}"
 
     if not success:
-        # Final fallback: suggest using execute_python with FBlueprintEditorUtils
-        raise RuntimeError(
-            f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}. "
-            "Use execute_python with FBlueprintEditorUtils as fallback."
-        )
+        raise RuntimeError(f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}")
 
     # Mark blueprint as modified and save
     try:
@@ -978,10 +983,7 @@ def add_component(params: dict) -> dict:
     except Exception:
         pass
 
-    raise RuntimeError(
-        f"Could not add component via available APIs. "
-        f"Use execute_python as fallback with SimpleConstructionScript."
-    )
+    raise RuntimeError("Could not add component via available APIs")
 
 
 def add_node(params: dict) -> dict:
@@ -1259,10 +1261,7 @@ def add_event_dispatcher(params: dict) -> dict:
     except Exception:
         pass
 
-    raise RuntimeError(
-        "Could not add event dispatcher via available APIs. "
-        "Use execute_python with FBlueprintEditorUtils as fallback."
-    )
+    raise RuntimeError("Could not add event dispatcher via available APIs")
 
 
 def list_blueprint_variables(params: dict) -> dict:
