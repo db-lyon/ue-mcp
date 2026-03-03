@@ -7,6 +7,21 @@ let hasEQS = false;
 let hasStateTree = false;
 let hasSmartObjects = false;
 
+const testAssets = [
+  `${TEST_PREFIX}/IA_SmokeTest`,
+  `${TEST_PREFIX}/IMC_SmokeTest`,
+  `${TEST_PREFIX}/BB_SmokeTest`,
+  `${TEST_PREFIX}/BT_SmokeTest`,
+  `${TEST_PREFIX}/EQS_SmokeTest`,
+  `${TEST_PREFIX}/ST_SmokeTest`,
+  `${TEST_PREFIX}/SOD_SmokeTest`,
+  `${TEST_PREFIX}/GM_SmokeTest`,
+  `${TEST_PREFIX}/GS_SmokeTest`,
+  `${TEST_PREFIX}/PC_SmokeTest`,
+  `${TEST_PREFIX}/PS_SmokeTest`,
+  `${TEST_PREFIX}/HUD_SmokeTest`,
+];
+
 beforeAll(async () => {
   bridge = await getBridge();
   [hasEQS, hasStateTree, hasSmartObjects] = await Promise.all([
@@ -14,20 +29,18 @@ beforeAll(async () => {
     checkFeature(bridge, "StateTree"),
     checkFeature(bridge, "SmartObjects"),
   ]);
+  // Clean up any leftover test assets from previous runs (idempotency)
+  for (const assetPath of testAssets) {
+    await callBridge(bridge, "delete_asset", { assetPath }).catch(() => {});
+  }
 });
 afterAll(async () => {
-  await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/IA_SmokeTest` });
-  await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/IMC_SmokeTest` });
-  await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/BB_SmokeTest` });
-  await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/BT_SmokeTest` });
-  if (hasEQS) await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/EQS_SmokeTest` });
-  if (hasStateTree) await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/ST_SmokeTest` });
-  if (hasSmartObjects) await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/SOD_SmokeTest` });
-  await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/GM_SmokeTest` });
-  await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/GS_SmokeTest` });
-  await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/PC_SmokeTest` });
-  await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/PS_SmokeTest` });
-  await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/HUD_SmokeTest` });
+  for (const assetPath of testAssets) {
+    if (assetPath.includes("EQS") && !hasEQS) continue;
+    if (assetPath.includes("ST") && !hasStateTree) continue;
+    if (assetPath.includes("SOD") && !hasSmartObjects) continue;
+    await callBridge(bridge, "delete_asset", { assetPath }).catch(() => {});
+  }
   disconnectBridge();
 });
 
