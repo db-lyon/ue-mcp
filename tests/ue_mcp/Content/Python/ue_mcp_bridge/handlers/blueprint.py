@@ -313,40 +313,46 @@ def add_variable(params: dict) -> dict:
                 except Exception:
                     pass
             
-            # Last resort: try direct new_variables manipulation if BPVariableDescription exists
+            # Last resort: try direct new_variables manipulation
+            # Check what type the existing variables are and try to create one
             if not success:
                 try:
-                    if hasattr(unreal, "BPVariableDescription"):
-                        desc = unreal.BPVariableDescription()
-                        desc.var_name = var_name
-                        cat = _TYPE_CATEGORY.get(var_type.lower(), "real")
-                        sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
-                        pt = unreal.EdGraphPinType()
-                        pt.pin_category = cat
-                        if sub:
-                            pt.pin_sub_category = sub
-                        desc.var_type = pt
-                        
-                        existing_vars = []
+                    existing_vars = []
+                    var_type_class = None
+                    if hasattr(bp, "new_variables") and bp.new_variables:
+                        existing_vars = list(bp.new_variables)
+                        # Try to get the type of existing variables
+                        if len(existing_vars) > 0:
+                            var_type_class = type(existing_vars[0])
+                    
+                    # Try to create a new variable description using the same type as existing ones
+                    if var_type_class:
                         try:
-                            if hasattr(bp, "new_variables") and bp.new_variables:
-                                existing_vars = list(bp.new_variables)
-                        except Exception:
-                            pass
-                        
-                        existing_vars.append(desc)
-                        
-                        try:
-                            bp.set_editor_property("new_variables", existing_vars)
-                            unreal.EditorAssetLibrary.save_asset(asset_path)
-                            success = True
-                        except Exception:
+                            desc = var_type_class()
+                            desc.var_name = var_name
+                            cat = _TYPE_CATEGORY.get(var_type.lower(), "real")
+                            sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
+                            pt = unreal.EdGraphPinType()
+                            pt.pin_category = cat
+                            if sub:
+                                pt.pin_sub_category = sub
+                            desc.var_type = pt
+                            
+                            existing_vars.append(desc)
+                            
                             try:
-                                bp.new_variables = existing_vars
+                                bp.set_editor_property("new_variables", existing_vars)
                                 unreal.EditorAssetLibrary.save_asset(asset_path)
                                 success = True
                             except Exception:
-                                pass
+                                try:
+                                    bp.new_variables = existing_vars
+                                    unreal.EditorAssetLibrary.save_asset(asset_path)
+                                    success = True
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
                 except Exception:
                     pass
         except Exception as e:
