@@ -5,6 +5,8 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
+    "up": "node scripts/run.js",
+    "up:build": "node scripts/build-and-run.js",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",

@@ -41,3 +41,84 @@ __pycache__/
 build/
 .env
 venv/
+
+## Unreal Engine 5
+# Binaries (compiled executables and libraries)
+**/Binaries/
+*.dll
+*.exe
+*.pdb
+*.lib
+*.exp
+*.obj
+
+# Intermediate files (build artifacts, generated code)
+**/Intermediate/
+**/DerivedDataCache/
+
+# Saved files (runtime data, logs, cache)
+**/Saved/
+**/Saved/**/*
+
+# Build files (Visual Studio solution/project files - these are generated)
+**/Build/
+**/*.sln
+**/*.vcxproj
+**/*.vcxproj.filters
+**/*.vcxproj.user
+
+# Visual Studio files
+**/.vs/
+**/*.suo
+**/*.user
+**/*.userosscache
+**/*.sln.docstates
+
+# Content Browser cache
+**/Content/**/*.tmp
+**/Content/**/*.tmp.*
+
+# Crash reports
+**/CrashReports/
+
+# Config (keep Config/ directory and non-user .ini files, ignore user-specific configs)
+**/Config/*User*.ini
+**/Config/*User*.ini.backup
+
+# Logs
+*.log
+**/Logs/
+
+# Web cache (CEF browser cache)
+**/webcache_*/
+
+# Autosave
+**/Autosaves/
+
+# Asset metadata (keep .uasset/.umap but ignore temp metadata)
+**/*.uasset.tmp
+**/*.umap.tmp
+
+# Perforce (if used)
+**/.p4ignore
+
+# Rider
+**/.idea/
+**/*.iml
+
+# XCode (if building on Mac)
+**/DerivedData/
+**/*.xcodeproj/*
+!**/*.xcodeproj/project.pbxproj
+!**/*.xcodeproj/xcshareddata/
+**/*.xcworkspace/*
+!**/*.xcworkspace/contents.xcworkspacedata
+**/*.xcuserdata
+
+# Note: The following WILL be tracked (as they should be):
+# - *.uproject (project files)
+# - Source/**/*.cpp, *.h, *.Build.cs, *.Target.cs (source code)
+# - Config/*.ini (except *User*.ini - project configs are tracked)
+# - Content/**/*.uasset, *.umap (content assets)
+# - Plugins/**/*.uplugin (plugin files)
+# - Any other project source files
