@@ -233,8 +233,16 @@ def add_variable(params: dict) -> dict:
     if not success:
         try:
             bp.modify(True)
-            # Create desc and pt
-            desc = unreal.BPVariableDescription()
+            # Create desc and pt - skip if BPVariableDescription doesn't exist
+            desc = None
+            if hasattr(unreal, "BPVariableDescription"):
+                desc = unreal.BPVariableDescription()
+            elif hasattr(unreal, "EdGraphVariable"):
+                desc = unreal.EdGraphVariable()
+            else:
+                # Can't create description, skip this fallback
+                raise Exception("BPVariableDescription not available in this UE version")
+            
             desc.var_name = var_name
             cat = _TYPE_CATEGORY.get(var_type.lower(), "real")
             sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
@@ -269,7 +277,9 @@ def add_variable(params: dict) -> dict:
                 except Exception:
                     pass
         except Exception as e:
-            last_err = f"{last_err}; final fallback raised: {str(e)}"
+            # Only update error if we haven't tried this fallback yet
+            if "BPVariableDescription not available" not in str(e):
+                last_err = f"{last_err}; final fallback raised: {str(e)}"
 
     if not success:
         raise RuntimeError(f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}")
