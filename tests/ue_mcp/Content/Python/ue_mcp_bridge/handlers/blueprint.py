@@ -297,63 +297,32 @@ def add_variable(params: dict) -> dict:
                 except Exception:
                     pass
             
-            # Last resort: try direct new_variables manipulation
-            # Use execute_python to inspect and create variable objects
+                    # Last resort: try to add a temporary variable first, then modify it
+            # This might initialize the variable system
             if not success:
                 try:
-                    pin_type_code = f"""
-import unreal
-bp = unreal.EditorAssetLibrary.load_asset('{asset_path}')
-pin_type = unreal.EdGraphPinType()
-pin_type.pin_category = '{_TYPE_CATEGORY.get(var_type.lower(), "real")}'
-if '{var_type.lower()}' in ['float', 'double', 'real']:
-    pin_type.pin_sub_category = 'double'
-__result__ = pin_type
-"""
-                    # Actually, let's try to duplicate an existing variable and modify it
-                    if hasattr(bp, "new_variables") and bp.new_variables and len(bp.new_variables) > 0:
-                        try:
-                            # Get an existing variable to use as a template
-                            existing_var = bp.new_variables[0]
-                            # Try to create a copy using the same class
-                            var_class = type(existing_var)
-                            
-                            # Try using copy.deepcopy or creating new instance
-                            import copy
-                            try:
-                                new_var = copy.deepcopy(existing_var)
-                                new_var.var_name = var_name
-                                pt = _make_pin_type(var_type)
-                                if pt:
-                                    new_var.var_type = pt
-                                    
-                                    existing_vars = list(bp.new_variables)
-                                    existing_vars.append(new_var)
-                                    
-                                    bp.set_editor_property("new_variables", existing_vars)
+                    # Try adding a simple bool variable first to see if that works
+                    temp_pin_type = _make_pin_type("bool")
+                    if temp_pin_type:
+                        temp_result = unreal.BlueprintEditorLibrary.add_member_variable(bp, "TempVar", temp_pin_type)
+                        if temp_result:
+                            # Now try adding the real variable
+                            pin_type = _make_pin_type(var_type)
+                            if pin_type:
+                                result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                                if result:
+                                    success = True
                                     bp.modify(True)
                                     unreal.EditorAssetLibrary.save_asset(asset_path)
-                                    success = True
-                            except Exception:
-                                # Try creating new instance
-                                try:
-                                    new_var = var_class()
-                                    new_var.var_name = var_name
-                                    pt = _make_pin_type(var_type)
-                                    if pt:
-                                        new_var.var_type = pt
-                                        
-                                        existing_vars = list(bp.new_variables)
-                                        existing_vars.append(new_var)
-                                        
-                                        bp.set_editor_property("new_variables", existing_vars)
-                                        bp.modify(True)
-                                        unreal.EditorAssetLibrary.save_asset(asset_path)
-                                        success = True
-                                except Exception:
-                                    pass
-                        except Exception:
-                            pass
+                                    # Clean up temp variable
+                                    try:
+                                        if hasattr(bp, "new_variables") and bp.new_variables:
+                                            vars_list = [v for v in bp.new_variables if hasattr(v, "var_name") and v.var_name != "TempVar"]
+                                            bp.set_editor_property("new_variables", vars_list)
+                                            bp.modify(True)
+                                            unreal.EditorAssetLibrary.save_asset(asset_path)
+                                    except Exception:
+                                        pass
                 except Exception:
                     pass
         except Exception as e:
