@@ -68,13 +68,36 @@ def ensure_asset_cleared(full_path):
 
         asset = unreal.EditorAssetLibrary.load_asset(full_path)
         if asset is not None:
+            # Close all editors for this asset first
             try:
                 subsystem = unreal.get_editor_subsystem(unreal.AssetEditorSubsystem)
                 if subsystem is not None:
                     subsystem.close_all_editors_for_asset(asset)
+                    # Give it a moment to close
+                    import time
+                    time.sleep(0.1)
             except Exception:
                 pass
 
-        unreal.EditorAssetLibrary.delete_asset(full_path)
+        # Force delete - try multiple times if needed
+        for attempt in range(3):
+            try:
+                result = unreal.EditorAssetLibrary.delete_asset(full_path)
+                if result:
+                    break
+                # If delete returned False, wait and try again
+                if attempt < 2:
+                    import time
+                    time.sleep(0.2)
+            except Exception as e:
+                if attempt < 2:
+                    import time
+                    time.sleep(0.2)
+                else:
+                    # Last attempt failed, try force delete
+                    try:
+                        unreal.EditorAssetLibrary.delete_loaded_asset(asset) if asset else None
+                    except Exception:
+                        pass
     except Exception:
         pass

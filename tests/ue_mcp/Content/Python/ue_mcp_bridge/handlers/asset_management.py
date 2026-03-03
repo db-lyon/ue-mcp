@@ -73,9 +73,35 @@ def delete_asset(params: dict) -> dict:
         return {"success": False, "message": "path is required"}
 
     if not unreal.EditorAssetLibrary.does_asset_exist(asset_path):
-        raise ValueError(f"Asset not found: {asset_path}")
+        return {"success": True, "message": "Asset does not exist"}
 
-    result = unreal.EditorAssetLibrary.delete_asset(asset_path)
+    # Close editors first to prevent blocking dialogs
+    try:
+        asset = unreal.EditorAssetLibrary.load_asset(asset_path)
+        if asset is not None:
+            subsystem = unreal.get_editor_subsystem(unreal.AssetEditorSubsystem)
+            if subsystem is not None:
+                subsystem.close_all_editors_for_asset(asset)
+                import time
+                time.sleep(0.1)
+    except Exception:
+        pass
+
+    # Try multiple times
+    result = False
+    for attempt in range(3):
+        try:
+            result = unreal.EditorAssetLibrary.delete_asset(asset_path)
+            if result:
+                break
+            if attempt < 2:
+                import time
+                time.sleep(0.2)
+        except Exception:
+            if attempt < 2:
+                import time
+                time.sleep(0.2)
+    
     if not result:
         raise RuntimeError(f"Failed to delete {asset_path} (may have references)")
 
