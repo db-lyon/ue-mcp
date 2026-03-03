@@ -179,21 +179,80 @@ def add_variable(params: dict) -> dict:
     bp = _load_bp(asset_path)
 
     success = False
-    last_err = None
+    last_err = "All methods failed"
+
+    # Compile blueprint first to ensure it's in a valid state
+    try:
+        if hasattr(unreal, "BlueprintEditorLibrary"):
+            unreal.BlueprintEditorLibrary.compile_blueprint(bp)
+    except Exception:
+        pass
 
     if hasattr(unreal, "BlueprintEditorLibrary") and hasattr(unreal.BlueprintEditorLibrary, "add_member_variable"):
         pin_type = _make_pin_type(var_type)
         if pin_type is not None:
             try:
-                success = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                bp.modify(True)
+                result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                if result:
+                    success = True
+                    unreal.EditorAssetLibrary.save_asset(asset_path)
+                else:
+                    last_err = "BlueprintEditorLibrary.add_member_variable returned False"
             except Exception as e:
-                last_err = str(e)
+                last_err = f"BlueprintEditorLibrary.add_member_variable raised: {str(e)}"
 
     if not success:
         try:
-            success = _add_variable_via_description(bp, var_name, var_type)
+            result = _add_variable_via_description(bp, var_name, var_type)
+            if result:
+                success = True
+                bp.modify(True)
+                unreal.EditorAssetLibrary.save_asset(asset_path)
+            else:
+                if last_err == "All methods failed":
+                    last_err = "_add_variable_via_description returned False"
+                else:
+                    last_err = f"{last_err}; _add_variable_via_description returned False"
         except Exception as e:
-            last_err = last_err or str(e)
+            last_err = f"{last_err}; _add_variable_via_description raised: {str(e)}"
+
+    # Final fallback: try direct new_variables access
+    if not success:
+        try:
+            bp.modify(True)
+            desc = unreal.BPVariableDescription()
+            desc.var_name = var_name
+            cat = _TYPE_CATEGORY.get(var_type.lower(), "real")
+            sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
+            pt = unreal.EdGraphPinType()
+            pt.pin_category = cat
+            if sub:
+                pt.pin_sub_category = sub
+            desc.var_type = pt
+            
+            existing_vars = []
+            try:
+                if hasattr(bp, "new_variables") and bp.new_variables:
+                    existing_vars = list(bp.new_variables)
+            except Exception:
+                pass
+            
+            existing_vars.append(desc)
+            
+            try:
+                bp.set_editor_property("new_variables", existing_vars)
+                unreal.EditorAssetLibrary.save_asset(asset_path)
+                success = True
+            except Exception:
+                try:
+                    bp.new_variables = existing_vars
+                    unreal.EditorAssetLibrary.save_asset(asset_path)
+                    success = True
+                except Exception:
+                    pass
+        except Exception as e:
+            last_err = f"{last_err}; final fallback raised: {str(e)}"
 
     if not success:
         raise RuntimeError(f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}")
@@ -272,37 +331,50 @@ def _add_variable_via_description(bp, var_name, var_type):
     except Exception:
         pass
 
-    # Try to access new_variables directly on the Blueprint asset
-    # In UE5, variables are stored in the Blueprint's new_variables list
+    # Try to access new_variables through Blueprint's BlueprintGraph
+    # Variables in UE5 are stored in the Blueprint's variable list
     try:
-        # Get the new_variables list
-        new_vars = None
+        # Compile blueprint to ensure generated_class exists
         try:
-            new_vars = bp.get_editor_property("new_variables")
+            if hasattr(unreal, "BlueprintEditorLibrary"):
+                unreal.BlueprintEditorLibrary.compile_blueprint(bp)
         except Exception:
+            pass
+        
+        # Try accessing through generated_class
+        gen_class = None
+        try:
+            gen_class = bp.get_editor_property("generated_class")
+        except Exception:
+            gen_class = getattr(bp, "generated_class", None)
+        
+        if gen_class:
             try:
-                new_vars = getattr(bp, "new_variables", None)
+                new_vars = list(gen_class.get_editor_property("new_variables")) if gen_class.get_editor_property("new_variables") else []
+                new_vars.append(desc)
+                gen_class.set_editor_property("new_variables", new_vars)
+                return True
             except Exception:
-                pass
+                try:
+                    if hasattr(gen_class, 'new_variables'):
+                        new_vars = list(gen_class.new_variables) if gen_class.new_variables else []
+                        new_vars.append(desc)
+                        gen_class.new_variables = new_vars
+                        return True
+                except Exception:
+                    pass
         
-        if new_vars is None:
-            # Initialize if it doesn't exist
-            try:
-                bp.set_editor_property("new_variables", [])
-                new_vars = bp.get_editor_property("new_variables")
-            except Exception:
-                return False
+        # Last resort: try direct access on blueprint
+        try:
+            if hasattr(bp, "new_variables"):
+                new_vars = list(bp.new_variables) if bp.new_variables else []
+                new_vars.append(desc)
+                bp.new_variables = new_vars
+                return True
+        except Exception:
+            pass
         
-        # Convert to list if needed
-        if not isinstance(new_vars, list):
-            new_vars = list(new_vars) if new_vars else []
-        
-        # Append the new variable description
-        new_vars.append(desc)
-        
-        # Set it back
-        bp.set_editor_property("new_variables", new_vars)
-        return True
+        return False
     except Exception:
         return False
 

@@ -70,7 +70,7 @@ def delete_asset(params: dict) -> dict:
     if not HAS_UNREAL:
         raise RuntimeError("Unreal module not available")
     if not asset_path:
-        raise ValueError("path is required")
+        return {"success": False, "message": "path is required"}
 
     if not unreal.EditorAssetLibrary.does_asset_exist(asset_path):
         raise ValueError(f"Asset not found: {asset_path}")
