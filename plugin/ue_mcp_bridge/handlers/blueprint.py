@@ -178,6 +178,24 @@ def add_variable(params: dict) -> dict:
 
     bp = _load_bp(asset_path)
 
+    # Check if variable already exists - if so, delete it first for idempotency
+    try:
+        if hasattr(bp, "new_variables") and bp.new_variables:
+            for var in list(bp.new_variables):
+                if hasattr(var, "var_name") and var.var_name == var_name:
+                    # Variable exists, remove it first
+                    try:
+                        vars_list = list(bp.new_variables)
+                        vars_list.remove(var)
+                        bp.set_editor_property("new_variables", vars_list)
+                        bp.modify(True)
+                        unreal.EditorAssetLibrary.save_asset(asset_path)
+                    except Exception:
+                        pass
+                    break
+    except Exception:
+        pass
+
     success = False
     last_err = "All methods failed"
 
@@ -732,6 +750,26 @@ def add_component(params: dict) -> dict:
             asset_editor = unreal.get_editor_subsystem(unreal.AssetEditorSubsystem)
             if asset_editor:
                 asset_editor.open_editor_for_assets([bp])
+    except Exception:
+        pass
+
+    component_name = component_name or component_class_name
+
+    # Check if component already exists - if so, try to remove it first for idempotency
+    try:
+        scs = bp.get_editor_property("simple_construction_script")
+        if scs and hasattr(scs, "nodes"):
+            for node in list(scs.nodes):
+                if node.get_name() == component_name:
+                    # Component exists, try to remove it
+                    try:
+                        if hasattr(scs, "remove_node"):
+                            scs.remove_node(node)
+                            bp.modify(True)
+                            unreal.EditorAssetLibrary.save_asset(asset_path)
+                    except Exception:
+                        pass
+                    break
     except Exception:
         pass
 
