@@ -61,9 +61,12 @@ def save_asset(params: dict) -> dict:
 
     if asset_path == "all" or not asset_path:
         try:
-            unreal.EditorAssetLibrary.save_loaded_assets()
+            unreal.EditorAssetLibrary.save_loaded_assets([])
         except TypeError:
-            unreal.EditorAssetLibrary.save_loaded_assets(True)
+            try:
+                unreal.EditorAssetLibrary.save_loaded_assets(True)
+            except TypeError:
+                unreal.EditorAssetLibrary.save_all_dirty()
         return {"success": True, "message": "All modified assets saved"}
 
     success = unreal.EditorAssetLibrary.save_asset(asset_path)

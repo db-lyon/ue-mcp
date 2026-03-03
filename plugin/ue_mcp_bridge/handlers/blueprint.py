@@ -272,35 +272,39 @@ def _add_variable_via_description(bp, var_name, var_type):
     except Exception:
         pass
 
-    new_vars = None
+    # Try to access new_variables directly on the Blueprint asset
+    # In UE5, variables are stored in the Blueprint's new_variables list
     try:
-        new_vars = list(bp.new_variables)
-    except Exception:
+        # Get the new_variables list
+        new_vars = None
         try:
-            new_vars = list(bp.get_editor_property("new_variables"))
+            new_vars = bp.get_editor_property("new_variables")
         except Exception:
-            pass
-
-    if new_vars is None:
-        # Try to initialize new_variables if it doesn't exist
-        try:
-            if hasattr(bp, "new_variables"):
-                new_vars = []
-            else:
+            try:
+                new_vars = getattr(bp, "new_variables", None)
+            except Exception:
+                pass
+        
+        if new_vars is None:
+            # Initialize if it doesn't exist
+            try:
+                bp.set_editor_property("new_variables", [])
+                new_vars = bp.get_editor_property("new_variables")
+            except Exception:
                 return False
-        except Exception:
-            return False
-
-    new_vars.append(desc)
-    try:
+        
+        # Convert to list if needed
+        if not isinstance(new_vars, list):
+            new_vars = list(new_vars) if new_vars else []
+        
+        # Append the new variable description
+        new_vars.append(desc)
+        
+        # Set it back
         bp.set_editor_property("new_variables", new_vars)
+        return True
     except Exception:
-        try:
-            bp.new_variables = new_vars
-        except Exception:
-            return False
-
-    return True
+        return False
 
 
 _TYPE_CATEGORY = {

@@ -179,56 +179,39 @@ def add_variable(params: dict) -> dict:
     bp = _load_bp(asset_path)
 
     success = False
-    last_err = None
+    last_err = "All methods failed"
 
     if hasattr(unreal, "BlueprintEditorLibrary") and hasattr(unreal.BlueprintEditorLibrary, "add_member_variable"):
         pin_type = _make_pin_type(var_type)
         if pin_type is not None:
             try:
-                success = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
+                if result:
+                    success = True
+                    bp.modify(True)
+                    unreal.EditorAssetLibrary.save_asset(asset_path)
+                else:
+                    if last_err == "All methods failed":
+                        last_err = "BlueprintEditorLibrary.add_member_variable returned False"
+                    else:
+                        last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False"
             except Exception as e:
-                last_err = str(e)
+                last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable raised: {str(e)}"
 
     if not success:
         try:
-            success = _add_variable_via_description(bp, var_name, var_type)
+            result = _add_variable_via_description(bp, var_name, var_type)
+            if result:
+                success = True
+                bp.modify(True)
+                unreal.EditorAssetLibrary.save_asset(asset_path)
+            else:
+                if last_err == "All methods failed":
+                    last_err = "_add_variable_via_description returned False"
+                else:
+                    last_err = f"{last_err}; _add_variable_via_description returned False"
         except Exception as e:
-            last_err = last_err or str(e)
-
-    if not success:
-        # Final fallback: use direct Python manipulation
-        try:
-            bp.modify(True)
-            new_vars = None
-            try:
-                new_vars = list(bp.get_editor_property("new_variables"))
-            except Exception:
-                try:
-                    new_vars = list(bp.new_variables) if hasattr(bp, 'new_variables') else []
-                except Exception:
-                    new_vars = []
-            
-            desc = unreal.BPVariableDescription()
-            desc.var_name = var_name
-            pt = unreal.EdGraphPinType()
-            cat = _TYPE_CATEGORY.get(var_type.lower(), "real")
-            sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
-            try:
-                pt.pin_category = cat
-            except Exception:
-                pt.set_editor_property("pin_category", cat)
-            if sub:
-                try:
-                    pt.pin_sub_category = sub
-                except Exception:
-                    pt.set_editor_property("pin_sub_category", sub)
-            desc.var_type = pt
-            new_vars.append(desc)
-            bp.set_editor_property("new_variables", new_vars)
-            unreal.EditorAssetLibrary.save_asset(asset_path)
-            success = True
-        except Exception as e:
-            last_err = last_err or str(e)
+            last_err = f"{last_err}; _add_variable_via_description raised: {str(e)}"
 
     if not success:
         raise RuntimeError(f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}")
@@ -308,45 +291,45 @@ def _add_variable_via_description(bp, var_name, var_type):
             else:
                 return False
 
-    # Ensure pin type is set
-    if pt is None:
-        return False
-
     # Mark blueprint as modified before adding variable
     try:
         bp.modify(True)
     except Exception:
         pass
 
-    new_vars = None
+    # Try to access new_variables directly on the Blueprint asset
+    # In UE5, variables are stored in the Blueprint's new_variables list
     try:
-        new_vars = list(bp.new_variables)
-    except Exception:
+        # Get the new_variables list
+        new_vars = None
         try:
-            new_vars = list(bp.get_editor_property("new_variables"))
+            new_vars = bp.get_editor_property("new_variables")
         except Exception:
-            pass
-
-    if new_vars is None:
-        # Try to initialize new_variables if it doesn't exist
-        try:
-            if hasattr(bp, "new_variables"):
-                new_vars = []
-            else:
+            try:
+                new_vars = getattr(bp, "new_variables", None)
+            except Exception:
+                pass
+        
+        if new_vars is None:
+            # Initialize if it doesn't exist
+            try:
+                bp.set_editor_property("new_variables", [])
+                new_vars = bp.get_editor_property("new_variables")
+            except Exception:
                 return False
-        except Exception:
-            return False
-
-    new_vars.append(desc)
-    try:
+        
+        # Convert to list if needed
+        if not isinstance(new_vars, list):
+            new_vars = list(new_vars) if new_vars else []
+        
+        # Append the new variable description
+        new_vars.append(desc)
+        
+        # Set it back
         bp.set_editor_property("new_variables", new_vars)
+        return True
     except Exception:
-        try:
-            bp.new_variables = new_vars
-        except Exception:
-            return False
-
-    return True
+        return False
 
 
 _TYPE_CATEGORY = {
@@ -777,16 +760,19 @@ def add_component(params: dict) -> dict:
             scs = bp.get_editor_property("simple_construction_script")
         except Exception:
             try:
-                scs = bp.simple_construction_script
+                scs = getattr(bp, "simple_construction_script", None)
             except Exception:
                 pass
-        if scs:
-            node = scs.create_node(comp_class, component_name or component_class_name)
-            if node:
-                scs.add_node(node)
-                unreal.EditorAssetLibrary.save_asset(asset_path)
-                return result_info
-    except Exception as e:
+        if scs and hasattr(scs, "create_node") and hasattr(scs, "add_node"):
+            try:
+                node = scs.create_node(comp_class, component_name or component_class_name)
+                if node:
+                    scs.add_node(node)
+                    unreal.EditorAssetLibrary.save_asset(asset_path)
+                    return result_info
+            except Exception:
+                pass
+    except Exception:
         pass
 
     raise RuntimeError(
@@ -944,23 +930,33 @@ def add_blueprint_interface(params: dict) -> dict:
             interfaces = list(bp.get_editor_property("implemented_interfaces"))
         except Exception:
             try:
-                interfaces = list(bp.implemented_interfaces) if hasattr(bp, 'implemented_interfaces') and bp.implemented_interfaces else []
+                if hasattr(bp, 'implemented_interfaces') and bp.implemented_interfaces:
+                    interfaces = list(bp.implemented_interfaces)
+                else:
+                    interfaces = []
             except Exception:
                 interfaces = []
         
+        if interfaces is None:
+            interfaces = []
+        
         entry = unreal.BlueprintInterface()
-        if hasattr(interface, 'generated_class'):
-            if callable(interface.generated_class):
-                entry.interface = interface.generated_class()
+        try:
+            if hasattr(interface, 'generated_class'):
+                if callable(interface.generated_class):
+                    entry.interface = interface.generated_class()
+                else:
+                    entry.interface = interface.generated_class
             else:
-                entry.interface = interface.generated_class
-        else:
+                entry.interface = interface
+        except Exception:
             entry.interface = interface
+        
         interfaces.append(entry)
         bp.set_editor_property("implemented_interfaces", interfaces)
         unreal.EditorAssetLibrary.save_asset(bp_path)
         return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
-    except Exception as e:
+    except Exception:
         pass
 
     raise RuntimeError("Could not add interface via available APIs")
