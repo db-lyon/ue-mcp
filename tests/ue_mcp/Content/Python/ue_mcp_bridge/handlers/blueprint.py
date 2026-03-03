@@ -198,6 +198,13 @@ def add_variable(params: dict) -> dict:
     if not success:
         raise RuntimeError(f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}")
 
+    # Mark blueprint as modified and save
+    try:
+        bp.modify(True)
+        unreal.EditorAssetLibrary.save_asset(asset_path)
+    except Exception:
+        pass
+
     return {
         "path": asset_path,
         "variableName": var_name,
@@ -217,29 +224,37 @@ def _add_variable_via_description(bp, var_name, var_type):
     except Exception:
         desc.var_name = var_name
 
-    pt = None
-    try:
-        pt = desc.get_editor_property("var_type")
-    except Exception:
-        pt = getattr(desc, "var_type", None)
-
-    if pt is not None:
+    # Create pin type using _make_pin_type helper
+    pt = _make_pin_type(var_type)
+    if pt is None:
+        # Fallback: create basic pin type
+        pt = unreal.EdGraphPinType()
         cat = _TYPE_CATEGORY.get(var_type.lower(), var_type.lower())
         sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
-        for prop, val in [("pin_category", cat), ("pin_sub_category", sub)]:
-            if not val:
-                continue
+        try:
+            pt.set_editor_property("pin_category", cat)
+        except Exception:
             try:
-                pt.set_editor_property(prop, val)
+                pt.pin_category = cat
+            except Exception:
+                pass
+        if sub:
+            try:
+                pt.set_editor_property("pin_sub_category", sub)
             except Exception:
                 try:
-                    setattr(pt, prop, val)
+                    pt.pin_sub_category = sub
                 except Exception:
                     pass
+
+    if pt is not None:
         try:
             desc.set_editor_property("var_type", pt)
         except Exception:
-            pass
+            try:
+                desc.var_type = pt
+            except Exception:
+                pass
 
     new_vars = None
     try:
@@ -629,6 +644,8 @@ def add_component(params: dict) -> dict:
                     )
                 )
                 if handle.is_valid():
+                    bp.modify(True)
+                    unreal.EditorAssetLibrary.save_asset(asset_path)
                     return result_info
         except Exception:
             pass
@@ -639,8 +656,10 @@ def add_component(params: dict) -> dict:
             try:
                 r = lib.add_component(bp, comp_class, component_name or component_class_name)
                 if r:
+                    bp.modify(True)
+                    unreal.EditorAssetLibrary.save_asset(asset_path)
                     return result_info
-            except Exception:
+            except Exception as e:
                 pass
 
     scs = None
@@ -655,9 +674,28 @@ def add_component(params: dict) -> dict:
             if node is not None:
                 if hasattr(scs, "add_node"):
                     scs.add_node(node)
+                # Mark blueprint as modified and save
+                try:
+                    bp.modify(True)
+                    unreal.EditorAssetLibrary.save_asset(asset_path)
+                except Exception:
+                    pass
                 return result_info
-        except Exception:
-            pass
+        except Exception as e:
+            # Try alternative SCS approach
+            try:
+                if hasattr(scs, "add_node"):
+                    # Create node using different method
+                    node_class = getattr(unreal, f"{component_class_name.replace('Component', '')}Node", None)
+                    if node_class:
+                        node = node_class()
+                        node.set_editor_property("variable_name", component_name or component_class_name)
+                        scs.add_node(node)
+                        bp.modify(True)
+                        unreal.EditorAssetLibrary.save_asset(asset_path)
+                        return result_info
+            except Exception:
+                pass
 
     raise RuntimeError(
         f"Could not add component via available APIs. "
@@ -754,29 +792,56 @@ def add_blueprint_interface(params: dict) -> dict:
         if hasattr(lib, "add_interface"):
             try:
                 lib.add_interface(bp, interface)
+                bp.modify(True)
                 unreal.EditorAssetLibrary.save_asset(bp_path)
                 return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
-            except Exception:
+            except Exception as e:
                 pass
 
     if hasattr(unreal, "KismetEditorUtilities"):
         try:
             unreal.KismetEditorUtilities.add_interface(bp, interface)
+            bp.modify(True)
             unreal.EditorAssetLibrary.save_asset(bp_path)
             return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
-        except Exception:
+        except Exception as e:
             pass
 
     try:
         interfaces = bp.get_editor_property("implemented_interfaces")
-        if hasattr(interfaces, "append"):
+        if interfaces is None:
+            interfaces = []
+        if not hasattr(interfaces, "append"):
+            interfaces = list(interfaces)
+        
+        # Get the interface class
+        interface_class = None
+        try:
+            if hasattr(interface, "generated_class"):
+                if callable(interface.generated_class):
+                    interface_class = interface.generated_class()
+                else:
+                    interface_class = interface.generated_class
+            elif hasattr(interface, "get_editor_property"):
+                interface_class = interface.get_editor_property("generated_class")
+        except Exception:
+            interface_class = interface
+        
+        if interface_class:
             entry = unreal.BlueprintInterface()
-            entry.set_editor_property("interface", interface.generated_class() if hasattr(interface, "generated_class") else interface)
+            try:
+                entry.set_editor_property("interface", interface_class)
+            except Exception:
+                try:
+                    entry.interface = interface_class
+                except Exception:
+                    pass
             interfaces.append(entry)
             bp.set_editor_property("implemented_interfaces", interfaces)
+            bp.modify(True)
             unreal.EditorAssetLibrary.save_asset(bp_path)
             return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
-    except Exception:
+    except Exception as e:
         pass
 
     raise RuntimeError("Could not add interface via available APIs")

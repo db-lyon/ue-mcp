@@ -100,8 +100,158 @@ def search_log(params: dict) -> dict:
     return {"query": query, "matchCount": len(matches), "matches": matches}
 
 
+def list_crashes(params: dict) -> dict:
+    """List all crash reports in Saved/Crashes."""
+    _require_unreal()
+
+    project_dir = str(unreal.Paths.project_dir()) if hasattr(unreal.Paths, "project_dir") else ""
+    crashes_dir = os.path.join(project_dir, "Saved", "Crashes")
+
+    crashes = []
+    if os.path.isdir(crashes_dir):
+        for crash_folder in os.listdir(crashes_dir):
+            crash_path = os.path.join(crashes_dir, crash_folder)
+            if os.path.isdir(crash_path):
+                crash_info = {
+                    "folder": crash_folder,
+                    "path": crash_path,
+                    "files": [],
+                }
+                try:
+                    stat = os.stat(crash_path)
+                    crash_info["modified"] = stat.st_mtime
+                except Exception:
+                    pass
+
+                # List files in crash folder
+                try:
+                    for file in os.listdir(crash_path):
+                        file_path = os.path.join(crash_path, file)
+                        if os.path.isfile(file_path):
+                            crash_info["files"].append(file)
+                except Exception:
+                    pass
+
+                crashes.append(crash_info)
+
+    # Sort by modification time (newest first)
+    crashes.sort(key=lambda x: x.get("modified", 0), reverse=True)
+
+    return {
+        "crashesDir": crashes_dir,
+        "crashCount": len(crashes),
+        "crashes": crashes,
+    }
+
+
+def get_crash_info(params: dict) -> dict:
+    """Get detailed information about a specific crash report."""
+    _require_unreal()
+
+    crash_folder = params.get("crashFolder", "")
+    if not crash_folder:
+        raise ValueError("crashFolder parameter required")
+
+    project_dir = str(unreal.Paths.project_dir()) if hasattr(unreal.Paths, "project_dir") else ""
+    crash_path = os.path.join(project_dir, "Saved", "Crashes", crash_folder)
+
+    if not os.path.isdir(crash_path):
+        return {"available": False, "note": f"Crash folder not found: {crash_folder}"}
+
+    crash_info = {
+        "folder": crash_folder,
+        "path": crash_path,
+        "files": {},
+    }
+
+    # Read all files in crash folder
+    for file in os.listdir(crash_path):
+        file_path = os.path.join(crash_path, file)
+        if os.path.isfile(file_path):
+            try:
+                stat = os.stat(file_path)
+                file_info = {
+                    "size": stat.st_size,
+                    "modified": stat.st_mtime,
+                }
+
+                # Try to read text files
+                if file.endswith((".log", ".txt", ".ini", ".xml", ".json")):
+                    try:
+                        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                            content = f.read()
+                            file_info["content"] = content
+                            file_info["lineCount"] = len(content.splitlines())
+                    except Exception:
+                        pass
+
+                crash_info["files"][file] = file_info
+            except Exception:
+                pass
+
+    return crash_info
+
+
+def check_for_crashes(params: dict) -> dict:
+    """Check if editor has crashed recently (detects if editor process died unexpectedly)."""
+    _require_unreal()
+
+    project_dir = str(unreal.Paths.project_dir()) if hasattr(unreal.Paths, "project_dir") else ""
+    crashes_dir = os.path.join(project_dir, "Saved", "Crashes")
+    log_dir = os.path.join(project_dir, "Saved", "Logs")
+
+    recent_crashes = []
+    if os.path.isdir(crashes_dir):
+        import time
+        now = time.time()
+        # Check crashes from last 24 hours
+        recent_threshold = now - (24 * 60 * 60)
+
+        for crash_folder in os.listdir(crashes_dir):
+            crash_path = os.path.join(crashes_dir, crash_folder)
+            if os.path.isdir(crash_path):
+                try:
+                    stat = os.stat(crash_path)
+                    if stat.st_mtime > recent_threshold:
+                        recent_crashes.append({
+                            "folder": crash_folder,
+                            "path": crash_path,
+                            "timestamp": stat.st_mtime,
+                        })
+                except Exception:
+                    pass
+
+    # Check log for crash indicators
+    log_file = os.path.join(log_dir, "Editor.log")
+    crash_indicators = []
+    if os.path.exists(log_file):
+        try:
+            with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+                # Look for crash-related keywords in last 1000 lines
+                for i, line in enumerate(lines[-1000:], len(lines) - 1000):
+                    line_lower = line.lower()
+                    if any(keyword in line_lower for keyword in ["crash", "fatal error", "assertion failed", "access violation", "exception"]):
+                        crash_indicators.append({
+                            "line": i + 1,
+                            "content": line.rstrip(),
+                        })
+        except Exception:
+            pass
+
+    return {
+        "recentCrashCount": len(recent_crashes),
+        "recentCrashes": recent_crashes,
+        "crashIndicatorsInLog": len(crash_indicators),
+        "logIndicators": crash_indicators[-20:] if crash_indicators else [],  # Last 20 indicators
+    }
+
+
 HANDLERS = {
     "get_output_log": get_output_log,
     "get_message_log": get_message_log,
     "search_log": search_log,
+    "list_crashes": list_crashes,
+    "get_crash_info": get_crash_info,
+    "check_for_crashes": check_for_crashes,
 }

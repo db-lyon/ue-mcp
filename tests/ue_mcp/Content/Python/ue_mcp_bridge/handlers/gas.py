@@ -142,9 +142,20 @@ def create_gameplay_effect(params: dict) -> dict:
     bp = _create_bp("GameplayEffect", name, pkg)
 
     policy_map = {"Instant": 0, "HasDuration": 1, "Infinite": 2}
-    cdo = bp.get_editor_property("generated_class").get_default_object() if hasattr(bp, "generated_class") else None
+    cdo = None
+    try:
+        if hasattr(bp, "generated_class"):
+            gen_class = bp.get_editor_property("generated_class")
+            if gen_class:
+                cdo = gen_class.get_default_object()
+    except Exception:
+        pass
+    
     if cdo and hasattr(cdo, "duration_policy"):
-        cdo.set_editor_property("duration_policy", policy_map.get(duration_policy, 0))
+        try:
+            cdo.set_editor_property("duration_policy", policy_map.get(duration_policy, 0))
+        except Exception:
+            pass
 
     return {"path": bp.get_path_name(), "name": name, "durationPolicy": duration_policy, "success": True}
 

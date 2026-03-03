@@ -53,6 +53,10 @@ export const editorTool: ToolDef = categoryTool(
     get_log: bp("get_output_log"),
     search_log: bp("search_log"),
     get_message_log: bp("get_message_log"),
+    // Crash Handling
+    list_crashes: bp("list_crashes"),
+    get_crash_info: bp("get_crash_info"),
+    check_for_crashes: bp("check_for_crashes"),
     // Dev
     reload_bridge: bp("reload_handlers"),
   },
@@ -112,5 +116,6 @@ export const editorTool: ToolDef = categoryTool(
     category: z.string().optional(),
     query: z.string().optional(),
     logName: z.string().optional(),
+    crashFolder: z.string().optional(),
   },
 );
