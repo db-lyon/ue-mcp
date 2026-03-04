@@ -25,14 +25,14 @@ public:
 	// Start the server
 	bool Start();
 
-	// Stop the server
-	void Stop();
-
 	// FRunnable interface
 	virtual bool Init() override;
 	virtual uint32 Run() override;
-	virtual void StopRunnable() override;
+	virtual void Stop() override;
 	virtual void Exit() override;
+	
+	// Public stop method (calls FRunnable::Stop)
+	void Shutdown();
 
 	// Get handler registry
 	FMCPHandlerRegistry& GetHandlerRegistry() { return HandlerRegistry; }

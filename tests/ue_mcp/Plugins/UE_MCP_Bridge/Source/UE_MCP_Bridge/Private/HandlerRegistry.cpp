@@ -2,7 +2,6 @@
 #include "HAL/PlatformFilemanager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
-#include "PythonScriptPlugin.h"
 
 FMCPHandlerRegistry::FMCPHandlerRegistry()
 {

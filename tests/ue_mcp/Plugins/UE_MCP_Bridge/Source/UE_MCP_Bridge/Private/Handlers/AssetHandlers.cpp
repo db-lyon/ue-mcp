@@ -4,7 +4,11 @@
 #include "AssetRegistry/IAssetRegistry.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
-#include "EditorAssetLibrary.h"
+#include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "UObject/Package.h"
+#include "UObject/UObjectGlobals.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "JsonSerializer.h"
@@ -112,7 +116,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SaveAsset(const TSharedPtr<FJsonObject>& 
 	else
 	{
 		// Save all dirty assets
-		UEditorAssetLibrary::SaveDirectory(TEXT("/Game"), true, true);
+		UEditorAssetLibrary::SaveDirectory(TEXT("/Game"));
 		Result->SetStringField(TEXT("message"), TEXT("All modified assets saved"));
 		Result->SetBoolField(TEXT("success"), true);
 	}

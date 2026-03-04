@@ -28,7 +28,7 @@ public class UE_MCP_Bridge : ModuleRules
 			}
 		);
 
-		PrivateDependencyModuleNames.AddRange(
+			PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
 				"BlueprintGraph",
@@ -46,7 +46,8 @@ public class UE_MCP_Bridge : ModuleRules
 				"AssetRegistry",
 				"ContentBrowser",
 				"EditorSubsystem",
-				"EditorWidgets",
+				"EditorScriptingUtilities",
+				"SubobjectDataInterface",
 				"PropertyEditor",
 				"Kismet",
 				"KismetCompiler",

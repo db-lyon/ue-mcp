@@ -35,9 +35,12 @@ TSharedPtr<FJsonValue> FMCPJsonSerializer::SerializeRotator(const FRotator& Rota
 TSharedPtr<FJsonValue> FMCPJsonSerializer::SerializeTransform(const FTransform& Transform)
 {
 	TSharedPtr<FJsonObject> JsonObject = MakeShared<FJsonObject>();
-	JsonObject->SetObjectField(TEXT("translation"), SerializeVector(Transform.GetTranslation()).AsObject());
-	JsonObject->SetObjectField(TEXT("rotation"), SerializeRotator(Transform.GetRotation().Rotator()).AsObject());
-	JsonObject->SetObjectField(TEXT("scale"), SerializeVector(Transform.GetScale3D()).AsObject());
+	TSharedPtr<FJsonValue> TranslationValue = SerializeVector(Transform.GetTranslation());
+	TSharedPtr<FJsonValue> RotationValue = SerializeRotator(Transform.GetRotation().Rotator());
+	TSharedPtr<FJsonValue> ScaleValue = SerializeVector(Transform.GetScale3D());
+	JsonObject->SetObjectField(TEXT("translation"), TranslationValue->AsObject());
+	JsonObject->SetObjectField(TEXT("rotation"), RotationValue->AsObject());
+	JsonObject->SetObjectField(TEXT("scale"), ScaleValue->AsObject());
 	return MakeShared<FJsonValueObject>(JsonObject);
 }
 
@@ -172,6 +175,7 @@ TSharedPtr<FJsonValue> FMCPJsonSerializer::SerializePropertyValue(const void* Va
 		return MakeShared<FJsonValueArray>(JsonArray);
 	}
 
-	// Fallback: convert to string
-	return MakeShared<FJsonValueString>(Property->GetValueAsString(Value));
+	// Fallback: convert to string - use property name as fallback
+	FString StringValue = FString::Printf(TEXT("(%s)"), *Property->GetName());
+	return MakeShared<FJsonValueString>(StringValue);
 }

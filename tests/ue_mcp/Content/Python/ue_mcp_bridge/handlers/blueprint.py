@@ -171,13 +171,7 @@ def create_blueprint(params: dict) -> dict:
 
 
 def add_variable(params: dict) -> dict:
-    """
-    Add a new variable to a Blueprint.
-    
-    NOTE: This operation may fail in UE5.7 due to Python API limitations.
-    BlueprintEditorLibrary.add_member_variable() may return False even with valid inputs.
-    If this fails, consider using execute_python with FBlueprintEditorUtils::NewVariable() as a fallback.
-    """
+    """Add a new variable to a Blueprint."""
     asset_path = params.get("path", "")
     var_name = params.get("name", "")
     var_type = params.get("type", "bool")
@@ -218,15 +212,10 @@ def add_variable(params: dict) -> dict:
     try:
         if hasattr(unreal, "BlueprintEditorLibrary"):
             unreal.BlueprintEditorLibrary.compile_blueprint(bp)
-            # Wait a moment for compilation to finish
-            import time
-            time.sleep(0.1)
     except Exception:
         pass
 
-    
-    # Fallback to BlueprintEditorLibrary
-    if not success and hasattr(unreal, "BlueprintEditorLibrary") and hasattr(unreal.BlueprintEditorLibrary, "add_member_variable"):
+    if hasattr(unreal, "BlueprintEditorLibrary") and hasattr(unreal.BlueprintEditorLibrary, "add_member_variable"):
         pin_type = _make_pin_type(var_type)
         if pin_type is not None:
             try:
@@ -234,15 +223,11 @@ def add_variable(params: dict) -> dict:
                 result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
                 if result:
                     success = True
-                    bp.modify(True)
                     unreal.EditorAssetLibrary.save_asset(asset_path)
                 else:
-                    if last_err == "All methods failed":
-                        last_err = "BlueprintEditorLibrary.add_member_variable returned False"
-                    else:
-                        last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable returned False"
+                    last_err = "BlueprintEditorLibrary.add_member_variable returned False"
             except Exception as e:
-                last_err = f"{last_err}; BlueprintEditorLibrary.add_member_variable raised: {str(e)}"
+                last_err = f"BlueprintEditorLibrary.add_member_variable raised: {str(e)}"
 
     if not success:
         try:
@@ -259,70 +244,38 @@ def add_variable(params: dict) -> dict:
         except Exception as e:
             last_err = f"{last_err}; _add_variable_via_description raised: {str(e)}"
 
-    # Final fallback: try using Blueprint Graph API directly
+    # Final fallback: try direct new_variables access
     if not success:
         try:
             bp.modify(True)
-            # Try accessing the blueprint's function graph and adding a variable node
-            # First, get the blueprint's graph
-            graph = None
+            desc = unreal.BPVariableDescription()
+            desc.var_name = var_name
+            cat = _TYPE_CATEGORY.get(var_type.lower(), "real")
+            sub = _TYPE_SUB_CATEGORY.get(var_type.lower(), "")
+            pt = unreal.EdGraphPinType()
+            pt.pin_category = cat
+            if sub:
+                pt.pin_sub_category = sub
+            desc.var_type = pt
+            
+            existing_vars = []
             try:
-                if hasattr(bp, "function_graphs") and bp.function_graphs:
-                    # Use the first function graph (usually the construction script or main graph)
-                    graph = bp.function_graphs[0] if len(bp.function_graphs) > 0 else None
+                if hasattr(bp, "new_variables") and bp.new_variables:
+                    existing_vars = list(bp.new_variables)
             except Exception:
                 pass
             
-            # Alternative: try accessing via BlueprintGraph property
-            if graph is None:
-                try:
-                    if hasattr(bp, "blueprint_graph"):
-                        graph = bp.blueprint_graph
-                except Exception:
-                    pass
+            existing_vars.append(desc)
             
-            # If we have a graph, try adding a variable node
-            if graph is not None:
+            try:
+                bp.set_editor_property("new_variables", existing_vars)
+                unreal.EditorAssetLibrary.save_asset(asset_path)
+                success = True
+            except Exception:
                 try:
-                    pin_type = _make_pin_type(var_type)
-                    if pin_type is not None:
-                        # Try to create a variable node
-                        if hasattr(unreal, "BlueprintEditorLibrary"):
-                            # Try using add_member_variable again but with graph context
-                            result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
-                            if result:
-                                success = True
-                                bp.modify(True)
-                                unreal.EditorAssetLibrary.save_asset(asset_path)
-                except Exception:
-                    pass
-            
-                    # Last resort: try to add a temporary variable first, then modify it
-            # This might initialize the variable system
-            if not success:
-                try:
-                    # Try adding a simple bool variable first to see if that works
-                    temp_pin_type = _make_pin_type("bool")
-                    if temp_pin_type:
-                        temp_result = unreal.BlueprintEditorLibrary.add_member_variable(bp, "TempVar", temp_pin_type)
-                        if temp_result:
-                            # Now try adding the real variable
-                            pin_type = _make_pin_type(var_type)
-                            if pin_type:
-                                result = unreal.BlueprintEditorLibrary.add_member_variable(bp, var_name, pin_type)
-                                if result:
-                                    success = True
-                                    bp.modify(True)
-                                    unreal.EditorAssetLibrary.save_asset(asset_path)
-                                    # Clean up temp variable
-                                    try:
-                                        if hasattr(bp, "new_variables") and bp.new_variables:
-                                            vars_list = [v for v in bp.new_variables if hasattr(v, "var_name") and v.var_name != "TempVar"]
-                                            bp.set_editor_property("new_variables", vars_list)
-                                            bp.modify(True)
-                                            unreal.EditorAssetLibrary.save_asset(asset_path)
-                                    except Exception:
-                                        pass
+                    bp.new_variables = existing_vars
+                    unreal.EditorAssetLibrary.save_asset(asset_path)
+                    success = True
                 except Exception:
                     pass
         except Exception as e:
@@ -330,13 +283,6 @@ def add_variable(params: dict) -> dict:
 
     if not success:
         raise RuntimeError(f"Failed to add variable '{var_name}' of type '{var_type}': {last_err}")
-
-    # Mark blueprint as modified and save
-    try:
-        bp.modify(True)
-        unreal.EditorAssetLibrary.save_asset(asset_path)
-    except Exception:
-        pass
 
     return {
         "path": asset_path,
@@ -348,21 +294,7 @@ def add_variable(params: dict) -> dict:
 
 def _add_variable_via_description(bp, var_name, var_type):
     """Fallback: add variable by creating a BPVariableDescription and appending to new_variables."""
-    # BPVariableDescription doesn't exist in UE5.7 - try alternative approaches
     if not hasattr(unreal, "BPVariableDescription"):
-        # Try using EdGraphVariable or direct manipulation instead
-        try:
-            # Try to add via Blueprint's variable list directly
-            bp.modify(True)
-            # Access new_variables directly on blueprint
-            if hasattr(bp, "new_variables"):
-                existing_vars = list(bp.new_variables) if bp.new_variables else []
-                # Create a minimal variable entry - we'll use a dict-like approach
-                # In UE5.7, we might need to use a different API
-                # For now, return False to fall through to other methods
-                pass
-        except Exception:
-            pass
         return False
 
     desc = unreal.BPVariableDescription()
@@ -459,7 +391,7 @@ def _add_variable_via_description(bp, var_name, var_type):
                 except Exception:
                     pass
         
-        # Last resort: try direct access on blueprint (may not work but worth trying)
+        # Last resort: try direct access on blueprint
         try:
             if hasattr(bp, "new_variables"):
                 new_vars = list(bp.new_variables) if bp.new_variables else []
@@ -808,7 +740,7 @@ def add_component(params: dict) -> dict:
     """Add a component to a Blueprint."""
     asset_path = params.get("path", "")
     component_class_name = params.get("componentClass", "StaticMeshComponent")
-    component_name = params.get("componentName", "") or component_class_name
+    component_name = params.get("componentName", "")
 
     bp = _load_bp(asset_path)
 
@@ -820,6 +752,8 @@ def add_component(params: dict) -> dict:
                 asset_editor.open_editor_for_assets([bp])
     except Exception:
         pass
+
+    component_name = component_name or component_class_name
 
     # Check if component already exists - if so, try to remove it first for idempotency
     try:
@@ -872,10 +806,6 @@ def add_component(params: dict) -> dict:
                                 blueprint_context=bp,
                             )
                         )
-                        # Check fail_reason to see why it might have failed
-                        if fail_reason and fail_reason != "":
-                            # Log but continue to next method
-                            pass
                         if handle and handle.is_valid():
                             # Rename if component_name provided
                             if component_name and component_name != component_class_name:
@@ -895,10 +825,8 @@ def add_component(params: dict) -> dict:
             try:
                 r = lib.add_component(bp, comp_class, component_name or component_class_name)
                 if r:
-                    bp.modify(True)
-                    unreal.EditorAssetLibrary.save_asset(asset_path)
                     return result_info
-            except Exception as e:
+            except Exception:
                 pass
 
     scs = None
@@ -913,53 +841,14 @@ def add_component(params: dict) -> dict:
             if node is not None:
                 if hasattr(scs, "add_node"):
                     scs.add_node(node)
-                # Mark blueprint as modified and save
-                try:
-                    bp.modify(True)
-                    unreal.EditorAssetLibrary.save_asset(asset_path)
-                except Exception:
-                    pass
                 return result_info
-        except Exception as e:
-            # Try alternative SCS approach
-            try:
-                if hasattr(scs, "add_node"):
-                    # Create node using different method
-                    node_class = getattr(unreal, f"{component_class_name.replace('Component', '')}Node", None)
-                    if node_class:
-                        node = node_class()
-                        node.set_editor_property("variable_name", component_name or component_class_name)
-                        scs.add_node(node)
-                        bp.modify(True)
-                        unreal.EditorAssetLibrary.save_asset(asset_path)
-                        return result_info
-            except Exception:
-                pass
-
-    # Final fallback: use direct Python manipulation with SCS
-    try:
-        bp.modify(True)
-        scs = None
-        try:
-            scs = bp.get_editor_property("simple_construction_script")
         except Exception:
-            try:
-                scs = getattr(bp, "simple_construction_script", None)
-            except Exception:
-                pass
-        if scs and hasattr(scs, "create_node") and hasattr(scs, "add_node"):
-            try:
-                node = scs.create_node(comp_class, component_name or component_class_name)
-                if node:
-                    scs.add_node(node)
-                    unreal.EditorAssetLibrary.save_asset(asset_path)
-                    return result_info
-            except Exception:
-                pass
-    except Exception:
-        pass
+            pass
 
-    raise RuntimeError("Could not add component via available APIs")
+    raise RuntimeError(
+        f"Could not add component via available APIs. "
+        f"Use execute_python as fallback with SimpleConstructionScript."
+    )
 
 
 def add_node(params: dict) -> dict:
@@ -1093,92 +982,28 @@ def add_blueprint_interface(params: dict) -> dict:
         if hasattr(lib, "add_interface"):
             try:
                 lib.add_interface(bp, interface)
-                bp.modify(True)
                 unreal.EditorAssetLibrary.save_asset(bp_path)
                 return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
-            except Exception as e:
+            except Exception:
                 pass
 
     if hasattr(unreal, "KismetEditorUtilities"):
         try:
             unreal.KismetEditorUtilities.add_interface(bp, interface)
-            bp.modify(True)
             unreal.EditorAssetLibrary.save_asset(bp_path)
             return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
-        except Exception as e:
+        except Exception:
             pass
 
     try:
         interfaces = bp.get_editor_property("implemented_interfaces")
-        if interfaces is None:
-            interfaces = []
-        if not hasattr(interfaces, "append"):
-            interfaces = list(interfaces)
-        
-        # Get the interface class
-        interface_class = None
-        try:
-            if hasattr(interface, "generated_class"):
-                if callable(interface.generated_class):
-                    interface_class = interface.generated_class()
-                else:
-                    interface_class = interface.generated_class
-            elif hasattr(interface, "get_editor_property"):
-                interface_class = interface.get_editor_property("generated_class")
-        except Exception:
-            interface_class = interface
-        
-        if interface_class:
+        if hasattr(interfaces, "append"):
             entry = unreal.BlueprintInterface()
-            try:
-                entry.set_editor_property("interface", interface_class)
-            except Exception:
-                try:
-                    entry.interface = interface_class
-                except Exception:
-                    pass
+            entry.set_editor_property("interface", interface.generated_class() if hasattr(interface, "generated_class") else interface)
             interfaces.append(entry)
             bp.set_editor_property("implemented_interfaces", interfaces)
-            bp.modify(True)
             unreal.EditorAssetLibrary.save_asset(bp_path)
             return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
-    except Exception as e:
-        pass
-
-    # Final fallback: use direct Python manipulation
-    try:
-        bp.modify(True)
-        interfaces = None
-        try:
-            interfaces = list(bp.get_editor_property("implemented_interfaces"))
-        except Exception:
-            try:
-                if hasattr(bp, 'implemented_interfaces') and bp.implemented_interfaces:
-                    interfaces = list(bp.implemented_interfaces)
-                else:
-                    interfaces = []
-            except Exception:
-                interfaces = []
-        
-        if interfaces is None:
-            interfaces = []
-        
-        entry = unreal.BlueprintInterface()
-        try:
-            if hasattr(interface, 'generated_class'):
-                if callable(interface.generated_class):
-                    entry.interface = interface.generated_class()
-                else:
-                    entry.interface = interface.generated_class
-            else:
-                entry.interface = interface
-        except Exception:
-            entry.interface = interface
-        
-        interfaces.append(entry)
-        bp.set_editor_property("implemented_interfaces", interfaces)
-        unreal.EditorAssetLibrary.save_asset(bp_path)
-        return {"blueprintPath": bp_path, "interfacePath": interface_path, "success": True}
     except Exception:
         pass
 
@@ -1237,7 +1062,10 @@ def add_event_dispatcher(params: dict) -> dict:
     except Exception:
         pass
 
-    raise RuntimeError("Could not add event dispatcher via available APIs")
+    raise RuntimeError(
+        "Could not add event dispatcher via available APIs. "
+        "Use execute_python with FBlueprintEditorUtils as fallback."
+    )
 
 
 def list_blueprint_variables(params: dict) -> dict:

@@ -8,7 +8,8 @@
 #include "Editor.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "AssetRegistry/AssetRegistryModule.h"
-#include "EditorAssetLibrary.h"
+#include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -108,43 +109,44 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	}
 
 	// Get value from params
-	const TSharedPtr<FJsonValue>* ValueJson = nullptr;
-	if (!Params->TryGetField(TEXT("value"), ValueJson) || !ValueJson->IsValid())
+	TSharedPtr<FJsonValue> ValueJsonRef = Params->TryGetField(TEXT("value"));
+	if (!ValueJsonRef.IsValid())
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Missing 'value' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
-
+	
 	// Set property value based on type
 	// TODO: Implement proper type conversion from JSON to property value
 	// For now, basic implementation
+	void* PropertyValue = Property->ContainerPtrToValuePtr<void>(Asset);
 	if (FStrProperty* StrProp = CastField<FStrProperty>(Property))
 	{
-		if ((*ValueJson)->Type == EJson::String)
+		if (ValueJsonRef->Type == EJson::String)
 		{
-			StrProp->SetPropertyValue_InContainer(Asset, (*ValueJson)->AsString());
+			StrProp->SetPropertyValue(PropertyValue, ValueJsonRef->AsString());
 		}
 	}
 	else if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Property))
 	{
-		if ((*ValueJson)->Type == EJson::Boolean)
+		if (ValueJsonRef->Type == EJson::Boolean)
 		{
-			BoolProp->SetPropertyValue_InContainer(Asset, (*ValueJson)->AsBool());
+			BoolProp->SetPropertyValue(PropertyValue, ValueJsonRef->AsBool());
 		}
 	}
 	else if (FIntProperty* IntProp = CastField<FIntProperty>(Property))
 	{
-		if ((*ValueJson)->Type == EJson::Number)
+		if (ValueJsonRef->Type == EJson::Number)
 		{
-			IntProp->SetPropertyValue_InContainer(Asset, (*ValueJson)->AsNumber());
+			IntProp->SetPropertyValue(PropertyValue, (int32)ValueJsonRef->AsNumber());
 		}
 	}
 	else if (FFloatProperty* FloatProp = CastField<FFloatProperty>(Property))
 	{
-		if ((*ValueJson)->Type == EJson::Number)
+		if (ValueJsonRef->Type == EJson::Number)
 		{
-			FloatProp->SetPropertyValue_InContainer(Asset, (*ValueJson)->AsNumber());
+			FloatProp->SetPropertyValue(PropertyValue, (float)ValueJsonRef->AsNumber());
 		}
 	}
 

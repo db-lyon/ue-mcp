@@ -7,7 +7,7 @@
 #include "Engine/Engine.h"
 #include "GameplayTagsManager.h"
 #include "GameplayTagsSettings.h"
-#include "GameplayTag.h"
+#include "GameplayTagContainer.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -260,7 +260,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListGameplayTags(const TSharedPtr<FJ
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	UGameplayTagsManager& TagsManager = UGameplayTagsManager::Get();
-	TArray<FGameplayTag> AllTags;
+	FGameplayTagContainer AllTags;
 	TagsManager.RequestAllGameplayTags(AllTags, false);
 
 	TArray<TSharedPtr<FJsonValue>> TagsArray;
@@ -302,8 +302,11 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateGameplayTag(const TSharedPtr<F
 
 	// Try to add via GameplayTagsManager
 	UGameplayTagsManager& TagsManager = UGameplayTagsManager::Get();
-	FGameplayTag NewTag = TagsManager.AddNativeGameplayTag(FName(*Tag), Comment);
-	if (NewTag.IsValid())
+	FName TagName(*Tag);
+	TagsManager.AddNativeGameplayTag(TagName, Comment);
+	FGameplayTag NewTag = TagsManager.RequestGameplayTag(TagName, false);
+	bool bSuccess = NewTag.IsValid();
+	if (bSuccess)
 	{
 		Result->SetBoolField(TEXT("success"), true);
 		Result->SetStringField(TEXT("method"), TEXT("add_native_gameplay_tag"));

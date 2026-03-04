@@ -1,10 +1,14 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
-#include "EditorLevelLibrary.h"
+#include "EditorScriptingUtilities/Public/EditorLevelLibrary.h"
+#include "Editor.h"
+#include "Editor/EditorEngine.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "GameFramework/Actor.h"
 #include "UObject/UObjectGlobals.h"
+#include "UObject/UObjectIterator.h"
+#include "EngineUtils.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "Dom/JsonObject.h"
@@ -81,10 +85,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 	}
 
 	// Find actor class
-	UClass* Class = FindObject<UClass>(ANY_PACKAGE, *ActorClass);
+	UClass* Class = FindObject<UClass>(nullptr, *ActorClass);
 	if (!Class)
 	{
-		Class = FindObject<UClass>(ANY_PACKAGE, *(TEXT("A") + ActorClass));
+		Class = FindObject<UClass>(nullptr, *(TEXT("A") + ActorClass));
 	}
 
 	if (!Class)

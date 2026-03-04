@@ -1,19 +1,28 @@
 #include "BlueprintHandlers.h"
 #include "HandlerRegistry.h"
-#include "BlueprintEditorUtils.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Engine/Blueprint.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphSchema_K2.h"
-#include "BlueprintGraph/Classes/K2Node.h"
+#include "K2Node.h"
 #include "SubobjectDataSubsystem.h"
+#include "SubobjectDataHandle.h"
+#include "SubobjectData.h"
+#include "SubobjectDataBlueprintFunctionLibrary.h"
+#include "Editor.h"
+#include "Editor/EditorEngine.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
-#include "EditorAssetLibrary.h"
+#include "UObject/Package.h"
+#include "Misc/PackageName.h"
+#include "UObject/SavePackage.h"
+#include "Internationalization/Text.h"
+#include "UObject/TopLevelAssetPath.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
-#include "BlueprintGraph/Classes/BlueprintGraphDefinitions.h"
+#include "Factories/BlueprintFactory.h"
+#include "BlueprintGraphDefinitions.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Misc/MessageDialog.h"
@@ -106,14 +115,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 
 	// Find parent class
 	UClass* ParentClass = nullptr;
-	ParentClass = FindObject<UClass>(ANY_PACKAGE, *ParentClassName);
+	ParentClass = FindObject<UClass>(nullptr, *ParentClassName);
 	if (!ParentClass)
 	{
-		ParentClass = FindObject<UClass>(ANY_PACKAGE, *(TEXT("A") + ParentClassName));
+		ParentClass = FindObject<UClass>(nullptr, *(TEXT("A") + ParentClassName));
 	}
 	if (!ParentClass)
 	{
-		ParentClass = FindObject<UClass>(ANY_PACKAGE, *(TEXT("U") + ParentClassName));
+		ParentClass = FindObject<UClass>(nullptr, *(TEXT("U") + ParentClassName));
 	}
 
 	if (!ParentClass)
@@ -132,7 +141,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 	AssetPath.Split(TEXT("/"), &PackageName, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
 	PackageName = PackageName.LeftChop(1); // Remove trailing /
 
-	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(AssetName, PackageName, UBlueprint::StaticClass(), FKismetEditorUtilities::GetBlueprintFactoryClass()));
+	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
+	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(AssetName, PackageName, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Failed to create Blueprint"));
@@ -223,7 +233,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 	{
 		// Compile and save
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		UEditorAssetLibrary::SaveAsset(AssetPath);
+		// Save asset
+		UPackage* Package = Blueprint->GetOutermost();
+		if (Package)
+		{
+			Package->MarkPackageDirty();
+			FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+			FSavePackageArgs SaveArgs;
+			SaveArgs.TopLevelFlags = RF_Standalone;
+			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+		}
 
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("variableName"), VarName);
@@ -271,10 +290,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	}
 
 	// Find component class
-	UClass* CompClass = FindObject<UClass>(ANY_PACKAGE, *ComponentClass);
+	UClass* CompClass = FindObject<UClass>(nullptr, *ComponentClass);
 	if (!CompClass)
 	{
-		CompClass = FindObject<UClass>(ANY_PACKAGE, *(TEXT("U") + ComponentClass));
+		CompClass = FindObject<UClass>(nullptr, *(TEXT("U") + ComponentClass));
 	}
 
 	if (!CompClass)
@@ -286,31 +305,30 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 
 	// Try using SubobjectDataSubsystem (UE5 method)
 	bool bSuccess = false;
-	if (USubobjectDataSubsystem* Subsystem = GEditor->GetEditorSubsystem<USubobjectDataSubsystem>())
+	if (USubobjectDataSubsystem* Subsystem = GEngine->GetEngineSubsystem<USubobjectDataSubsystem>())
 	{
-		// Get blueprint handles
-		TArray<FSubobjectDataHandle> Handles = Subsystem->GatherSubobjectDataForBlueprint(Blueprint);
+		// Get blueprint handles using K2 function
+		TArray<FSubobjectDataHandle> Handles;
+		Subsystem->K2_GatherSubobjectDataForBlueprint(Blueprint, Handles);
 		if (Handles.Num() > 0)
 		{
 			FSubobjectDataHandle RootHandle = Handles[0];
+			
 			FAddNewSubobjectParams AddParams;
 			AddParams.ParentHandle = RootHandle;
 			AddParams.NewClass = CompClass;
 			AddParams.BlueprintContext = Blueprint;
-
-			FSubobjectDataHandle NewHandle;
+			
 			FText FailReason;
-			if (Subsystem->AddNewSubobject(AddParams, NewHandle, FailReason))
+			FSubobjectDataHandle NewHandle = Subsystem->AddNewSubobject(AddParams, FailReason);
+			if (NewHandle.IsValid())
 			{
-				if (NewHandle.IsValid())
+				// Rename if needed
+				if (ComponentName != ComponentClass)
 				{
-					// Rename if needed
-					if (ComponentName != ComponentClass)
-					{
-						Subsystem->RenameSubobject(NewHandle, *ComponentName);
-					}
-					bSuccess = true;
+					Subsystem->RenameSubobject(NewHandle, FText::FromString(ComponentName));
 				}
+				bSuccess = true;
 			}
 		}
 	}
@@ -318,7 +336,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	if (bSuccess)
 	{
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		UEditorAssetLibrary::SaveAsset(AssetPath);
+		// Save asset
+		UPackage* Package = Blueprint->GetOutermost();
+		if (Package)
+		{
+			Package->MarkPackageDirty();
+			FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+			FSavePackageArgs SaveArgs;
+			SaveArgs.TopLevelFlags = RF_Standalone;
+			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+		}
 
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentClass"), ComponentClass);
@@ -346,8 +373,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPt
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	FString InterfacePath;
-	if (!Params->TryGetStringField(TEXT("interfacePath"), InterfacePath))
+	FString InterfacePathStr;
+	if (!Params->TryGetStringField(TEXT("interfacePath"), InterfacePathStr))
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Missing 'interfacePath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
@@ -362,24 +389,35 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPt
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	UClass* InterfaceClass = LoadObject<UClass>(nullptr, *InterfacePath);
+	UClass* InterfaceClass = LoadObject<UClass>(nullptr, *InterfacePathStr);
 	if (!InterfaceClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Interface not found: %s"), *InterfacePath));
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Interface not found: %s"), *InterfacePathStr));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	// Use FBlueprintEditorUtils to add interface
-	bool bSuccess = FBlueprintEditorUtils::AddInterfaceToBlueprint(Blueprint, InterfaceClass);
+	FTopLevelAssetPath InterfaceAssetPath(InterfaceClass->GetPathName());
+	FBlueprintEditorUtils::ImplementNewInterface(Blueprint, InterfaceAssetPath);
+	bool bSuccess = true;
 
 	if (bSuccess)
 	{
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		UEditorAssetLibrary::SaveAsset(BlueprintPath);
+		// Save asset
+		UPackage* Package = Blueprint->GetOutermost();
+		if (Package)
+		{
+			Package->MarkPackageDirty();
+			FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+			FSavePackageArgs SaveArgs;
+			SaveArgs.TopLevelFlags = RF_Standalone;
+			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+		}
 
 		Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-		Result->SetStringField(TEXT("interfacePath"), InterfacePath);
+		Result->SetStringField(TEXT("interfacePath"), InterfacePathStr);
 		Result->SetBoolField(TEXT("success"), true);
 	}
 	else

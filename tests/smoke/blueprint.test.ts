@@ -43,9 +43,7 @@ describe("blueprint — full lifecycle", () => {
     expect(r.ok, r.error).toBe(true);
   });
 
-  it.skip("add_variable", async () => {
-    // NOTE: add_variable fails in UE5.7 - BlueprintEditorLibrary.add_member_variable returns False
-    // This appears to be a limitation of the UE5.7 Python API
+  it("add_variable", async () => {
     const r = await callBridge(bridge, "add_variable", { path: bpPath, name: "Health", type: "Float" });
     expect(r.ok, r.error).toBe(true);
   });
@@ -87,9 +85,7 @@ describe("blueprint — full lifecycle", () => {
     expect(r.ok, r.error).toBe(true);
   });
 
-  it.skip("add_component (SceneComponent)", async () => {
-    // NOTE: add_component fails in UE5.7 - SubobjectDataSubsystem and BlueprintEditorLibrary methods don't work
-    // This appears to be a limitation of the UE5.7 Python API
+  it("add_component (SceneComponent)", async () => {
     const r = await callBridge(bridge, "add_component", {
       path: bpPath, componentClass: "SceneComponent", componentName: "MyScene",
     });
@@ -125,9 +121,7 @@ describe("blueprint — interface", () => {
     expect(r.ok, r.error).toBe(true);
   });
 
-  it.skip("add_blueprint_interface", async () => {
-    // NOTE: add_blueprint_interface fails in UE5.7 - BlueprintEditorLibrary and KismetEditorUtilities methods don't work
-    // This appears to be a limitation of the UE5.7 Python API
+  it("add_blueprint_interface", async () => {
     const r = await callBridge(bridge, "add_blueprint_interface", {
       blueprintPath: bpPath,
       interfacePath: `${TEST_PREFIX}/BPI_SmokeTest`,

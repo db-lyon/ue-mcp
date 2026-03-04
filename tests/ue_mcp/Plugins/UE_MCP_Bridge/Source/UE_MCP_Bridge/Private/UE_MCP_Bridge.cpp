@@ -26,7 +26,7 @@ void FUE_MCP_BridgeModule::ShutdownModule()
 	// Stop bridge server
 	if (G_BridgeServer.IsValid())
 	{
-		G_BridgeServer->Stop();
+		G_BridgeServer->Shutdown();
 		G_BridgeServer.Reset();
 		UE_LOG(LogTemp, Log, TEXT("[UE-MCP] Bridge server stopped"));
 	}
