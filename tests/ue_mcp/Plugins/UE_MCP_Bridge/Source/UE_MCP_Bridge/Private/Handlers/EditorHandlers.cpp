@@ -9,9 +9,9 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
-#include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "IPythonScriptPlugin.h"
 
 void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -63,10 +63,42 @@ TSharedPtr<FJsonValue> FEditorHandlers::ExecutePython(const TSharedPtr<FJsonObje
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	// TODO: Implement Python execution via PythonScriptPlugin
-	// For now, return not implemented
-	Result->SetStringField(TEXT("error"), TEXT("Python execution not yet implemented"));
-	Result->SetBoolField(TEXT("success"), false);
+	IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get();
+	if (!PythonPlugin || !PythonPlugin->IsPythonAvailable())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Python scripting is not available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FPythonCommandEx PythonCommand;
+	PythonCommand.Command = Code;
+	PythonCommand.ExecutionMode = EPythonCommandExecutionMode::ExecuteFile;
+	PythonCommand.FileExecutionScope = EPythonFileExecutionScope::Public;
+
+	bool bSuccess = PythonPlugin->ExecPythonCommandEx(PythonCommand);
+
+	Result->SetBoolField(TEXT("success"), bSuccess);
+	Result->SetStringField(TEXT("result"), PythonCommand.CommandResult);
+
+	TArray<TSharedPtr<FJsonValue>> LogArray;
+	for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
+	{
+		TSharedPtr<FJsonObject> LogEntry = MakeShared<FJsonObject>();
+		LogEntry->SetStringField(TEXT("type"), LexToString(Entry.Type));
+		LogEntry->SetStringField(TEXT("output"), Entry.Output);
+		LogArray.Add(MakeShared<FJsonValueObject>(LogEntry));
+	}
+	Result->SetArrayField(TEXT("log_output"), LogArray);
+
+	FString CombinedOutput;
+	for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
+	{
+		if (!CombinedOutput.IsEmpty()) CombinedOutput += TEXT("\n");
+		CombinedOutput += Entry.Output;
+	}
+	Result->SetStringField(TEXT("output"), CombinedOutput);
+
 	return MakeShared<FJsonValueObject>(Result);
 }
 
