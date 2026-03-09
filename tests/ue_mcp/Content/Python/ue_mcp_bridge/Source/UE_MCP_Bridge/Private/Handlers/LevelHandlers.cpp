@@ -166,7 +166,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 	}
 
 	// Spawn actor
-	AActor* NewActor = World->SpawnActor<AActor>(Class, Location, FRotator::ZeroRotator);
+	FTransform SpawnTransform(FRotator::ZeroRotator, Location);
+	AActor* NewActor = World->SpawnActor<AActor>(Class, SpawnTransform);
 	if (!NewActor)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn actor"));
@@ -635,7 +636,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	AActor* NewLight = World->SpawnActor<AActor>(LightClass, &Location, &FRotator::ZeroRotator);
+	FTransform LightTransform(FRotator::ZeroRotator, Location);
+	AActor* NewLight = World->SpawnActor<AActor>(LightClass, LightTransform);
 	if (!NewLight)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn light actor"));
@@ -811,7 +813,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	AActor* NewVolume = World->SpawnActor<AActor>(VolumeClass, &Location, &FRotator::ZeroRotator);
+	FTransform VolumeTransform(FRotator::ZeroRotator, Location);
+	AActor* NewVolume = World->SpawnActor<AActor>(VolumeClass, VolumeTransform);
 	if (!NewVolume)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn volume actor"));

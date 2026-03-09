@@ -4,6 +4,8 @@
 #include "Engine/SkeletalMesh.h"
 #include "Animation/Skeleton.h"
 #include "PhysicsEngine/PhysicsAsset.h"
+#include "Engine/SkeletalMeshSocket.h"
+#include "PhysicsEngine/SkeletalBodySetup.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"

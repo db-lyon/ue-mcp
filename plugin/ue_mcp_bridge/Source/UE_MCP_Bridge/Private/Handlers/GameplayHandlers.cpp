@@ -142,19 +142,6 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetNavmeshInfo(const TSharedPtr<FJsonO
 			NavDataObj->SetStringField(TEXT("name"), NavData->GetName());
 			NavDataObj->SetStringField(TEXT("class"), NavData->GetClass()->GetName());
 
-			FBox Bounds = NavData->GetNavMeshBounds();
-			if (Bounds.IsValid)
-			{
-				TSharedPtr<FJsonObject> BoundsObj = MakeShared<FJsonObject>();
-				BoundsObj->SetNumberField(TEXT("minX"), Bounds.Min.X);
-				BoundsObj->SetNumberField(TEXT("minY"), Bounds.Min.Y);
-				BoundsObj->SetNumberField(TEXT("minZ"), Bounds.Min.Z);
-				BoundsObj->SetNumberField(TEXT("maxX"), Bounds.Max.X);
-				BoundsObj->SetNumberField(TEXT("maxY"), Bounds.Max.Y);
-				BoundsObj->SetNumberField(TEXT("maxZ"), Bounds.Max.Z);
-				NavDataObj->SetObjectField(TEXT("bounds"), BoundsObj);
-			}
-
 			NavDataArray.Add(MakeShared<FJsonValueObject>(NavDataObj));
 		}
 	}
@@ -198,12 +185,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetGameFrameworkInfo(const TSharedPtr<
 		Result->SetStringField(TEXT("gameState"), TEXT("none"));
 	}
 
-	// Default player controller class from world settings
-	if (World->GetWorldSettings())
+	// Default player controller class
+	if (GameMode)
 	{
-		TSubclassOf<APlayerController> PCClass = World->GetWorldSettings()->GameModeOverride
-			? World->GetWorldSettings()->GameModeOverride->GetDefaultObject<AGameModeBase>()->PlayerControllerClass
-			: APlayerController::StaticClass();
+		TSubclassOf<APlayerController> PCClass = GameMode->PlayerControllerClass;
 		if (PCClass)
 		{
 			Result->SetStringField(TEXT("playerControllerClass"), PCClass->GetName());

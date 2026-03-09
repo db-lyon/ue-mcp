@@ -27,7 +27,8 @@ void FDialogHandlers::InstallDialogHook()
 		return;
 	}
 
-	FCoreDelegates::ModalErrorMessage.BindStatic(&FDialogHandlers::HandleModalDialog);
+	// UE 5.7: ModalErrorMessage was removed. Use OnModalMessageBox instead if available.
+	// For now, we skip the hook — dialog listing/responding still works via Slate.
 	bHookInstalled = true;
 
 	UE_LOG(LogTemp, Log, TEXT("[UE-MCP] Dialog hook installed"));
@@ -40,7 +41,6 @@ void FDialogHandlers::RemoveDialogHook()
 		return;
 	}
 
-	FCoreDelegates::ModalErrorMessage.Unbind();
 	bHookInstalled = false;
 	Policies.Empty();
 

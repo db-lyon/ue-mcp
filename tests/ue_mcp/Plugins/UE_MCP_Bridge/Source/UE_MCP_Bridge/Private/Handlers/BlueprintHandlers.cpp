@@ -22,7 +22,7 @@
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
 #include "Factories/BlueprintFactory.h"
-#include "BlueprintGraphDefinitions.h"
+// BlueprintGraphDefinitions.h removed - not available in UE 5.7
 #include "EdGraph/EdGraph.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_Event.h"
@@ -30,6 +30,10 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Misc/MessageDialog.h"
+#include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "Kismet/KismetStringLibrary.h"
 
 void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {

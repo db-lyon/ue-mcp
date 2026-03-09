@@ -33,11 +33,11 @@ TSharedPtr<FJsonValue> FFoliageHandlers::ListFoliageTypes(const TSharedPtr<FJson
 		AInstancedFoliageActor* FoliageActor = *It;
 		if (!FoliageActor) continue;
 
-		const TMap<UFoliageType*, FFoliageInfo>& FoliageInfoMap = FoliageActor->GetFoliageInfos();
+		const auto& FoliageInfoMap = FoliageActor->GetFoliageInfos();
 		for (const auto& Pair : FoliageInfoMap)
 		{
 			UFoliageType* FoliageType = Pair.Key;
-			const FFoliageInfo& FoliageInfo = Pair.Value;
+			const FFoliageInfo& FoliageInfo = *Pair.Value;
 
 			if (!FoliageType) continue;
 
@@ -103,11 +103,11 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SampleFoliage(const TSharedPtr<FJsonObj
 		AInstancedFoliageActor* FoliageActor = *It;
 		if (!FoliageActor) continue;
 
-		const TMap<UFoliageType*, FFoliageInfo>& FoliageInfoMap = FoliageActor->GetFoliageInfos();
+		const auto& FoliageInfoMap = FoliageActor->GetFoliageInfos();
 		for (const auto& Pair : FoliageInfoMap)
 		{
 			UFoliageType* FoliageType = Pair.Key;
-			const FFoliageInfo& FoliageInfo = Pair.Value;
+			const FFoliageInfo& FoliageInfo = *Pair.Value;
 
 			if (!FoliageType) continue;
 

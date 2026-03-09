@@ -9,7 +9,8 @@
 #include "UObject/SavePackage.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "WidgetBlueprint.h"
-#include "UMGEditor/Public/WidgetBlueprintFactory.h"
+// WidgetBlueprintFactory.h - use Factories module instead
+#include "Factories/Factory.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Widget.h"
 #include "Components/PanelWidget.h"
