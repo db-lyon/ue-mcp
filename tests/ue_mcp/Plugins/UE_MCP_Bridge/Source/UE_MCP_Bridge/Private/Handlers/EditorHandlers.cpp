@@ -779,7 +779,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ReadEditorLog(const TSharedPtr<FJsonObje
 	// If Editor.log doesn't exist, try the current log file
 	if (!FPaths::FileExists(LogFilePath))
 	{
-		LogFilePath = FPaths::Combine(LogDir, FApp::GetProjectName() + TEXT(".log"));
+		LogFilePath = FPaths::Combine(LogDir, FString(FApp::GetProjectName()) + TEXT(".log"));
 	}
 
 	if (!FPaths::FileExists(LogFilePath))

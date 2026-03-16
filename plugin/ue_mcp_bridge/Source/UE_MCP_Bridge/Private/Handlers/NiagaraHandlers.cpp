@@ -499,7 +499,9 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromEmitter(const TS
 	}
 
 	// Add the emitter to the system
-	FNiagaraEmitterHandle EmitterHandle = NewSystem->AddEmitterHandle(*Emitter, Emitter->GetFName());
+	// UE 5.7: AddEmitterHandle() was removed; use AddEmitterHandleWithoutCopying() instead
+	NewSystem->MarkPackageDirty();
+	FNiagaraEmitterHandle EmitterHandle = NewSystem->AddEmitterHandleWithoutCopying(*Emitter);
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 

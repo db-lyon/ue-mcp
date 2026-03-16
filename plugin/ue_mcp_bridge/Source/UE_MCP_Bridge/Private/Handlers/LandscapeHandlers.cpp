@@ -121,14 +121,18 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ListLandscapeLayers(const TSharedPtr<
 		ALandscapeProxy* Landscape = *It;
 		if (!Landscape) continue;
 
-		for (const FLandscapeInfoLayerSettings& LayerSettings : Landscape->EditorLayerSettings)
+		ULandscapeInfo* LandscapeInfo = Landscape->GetLandscapeInfo();
+		if (LandscapeInfo)
 		{
-			if (LayerSettings.LayerInfoObj)
+			for (const FLandscapeInfoLayerSettings& LayerSettings : LandscapeInfo->Layers)
 			{
-				TSharedPtr<FJsonObject> LayerObj = MakeShared<FJsonObject>();
-				LayerObj->SetStringField(TEXT("name"), LayerSettings.LayerInfoObj->LayerName.ToString());
-				LayerObj->SetStringField(TEXT("landscapeName"), Landscape->GetName());
-				LayerArray.Add(MakeShared<FJsonValueObject>(LayerObj));
+				if (LayerSettings.LayerInfoObj)
+				{
+					TSharedPtr<FJsonObject> LayerObj = MakeShared<FJsonObject>();
+					LayerObj->SetStringField(TEXT("name"), LayerSettings.GetLayerName().ToString());
+					LayerObj->SetStringField(TEXT("landscapeName"), Landscape->GetName());
+					LayerArray.Add(MakeShared<FJsonValueObject>(LayerObj));
+				}
 			}
 		}
 	}

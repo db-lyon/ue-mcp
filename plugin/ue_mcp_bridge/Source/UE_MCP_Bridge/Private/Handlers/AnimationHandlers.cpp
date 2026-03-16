@@ -759,13 +759,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 	UBlendSpace* BlendSpace = Cast<UBlendSpace>(NewAsset);
 	if (BlendSpace)
 	{
-		BlendSpace->GetBlendParameter(0).DisplayName = AxisHorizontal;
-		BlendSpace->GetBlendParameter(0).Min = HorizontalMin;
-		BlendSpace->GetBlendParameter(0).Max = HorizontalMax;
+		FBlendParameter BlendParam0 = BlendSpace->GetBlendParameter(0);
+		BlendParam0.DisplayName = AxisHorizontal;
+		BlendParam0.Min = HorizontalMin;
+		BlendParam0.Max = HorizontalMax;
+		BlendSpace->SetBlendParameter(0, BlendParam0);
 
-		BlendSpace->GetBlendParameter(1).DisplayName = AxisVertical;
-		BlendSpace->GetBlendParameter(1).Min = VerticalMin;
-		BlendSpace->GetBlendParameter(1).Max = VerticalMax;
+		FBlendParameter BlendParam1 = BlendSpace->GetBlendParameter(1);
+		BlendParam1.DisplayName = AxisVertical;
+		BlendParam1.Min = VerticalMin;
+		BlendParam1.Max = VerticalMax;
+		BlendSpace->SetBlendParameter(1, BlendParam1);
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());

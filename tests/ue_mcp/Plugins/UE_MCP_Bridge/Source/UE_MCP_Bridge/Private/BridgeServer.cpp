@@ -24,6 +24,9 @@
 #include "Handlers/NetworkingHandlers.h"
 #include "Handlers/NiagaraHandlers.h"
 #include "Handlers/PCGHandlers.h"
+#include "Handlers/SequencerHandlers.h"
+#include "Handlers/SplineHandlers.h"
+#include "Handlers/PhysicsHandlers.h"
 
 // Platform-specific socket includes
 #if PLATFORM_WINDOWS
@@ -73,6 +76,9 @@ FMCPBridgeServer::FMCPBridgeServer(int32 Port)
 	FNetworkingHandlers::RegisterHandlers(HandlerRegistry);
 	FNiagaraHandlers::RegisterHandlers(HandlerRegistry);
 	FPCGHandlers::RegisterHandlers(HandlerRegistry);
+	FSequencerHandlers::RegisterHandlers(HandlerRegistry);
+	FSplineHandlers::RegisterHandlers(HandlerRegistry);
+	FPhysicsHandlers::RegisterHandlers(HandlerRegistry);
 }
 
 FMCPBridgeServer::~FMCPBridgeServer()

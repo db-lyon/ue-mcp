@@ -12,6 +12,8 @@
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "GameplayTagContainer.h"
+#include "GameplayTagsManager.h"
 
 void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -20,6 +22,8 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_gameplay_ability"), &CreateGameplayAbility);
 	Registry.RegisterHandler(TEXT("create_attribute_set"), &CreateAttributeSet);
 	Registry.RegisterHandler(TEXT("create_gameplay_cue"), &CreateGameplayCue);
+	Registry.RegisterHandler(TEXT("add_ability_tag"), &AddAbilityTag);
+	Registry.RegisterHandler(TEXT("create_gameplay_cue_notify"), &CreateGameplayCueNotify);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJsonObject>& Params)
@@ -379,6 +383,188 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("cueType"), CueType);
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FGasHandlers::AddAbilityTag(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString BlueprintPath;
+	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString TagString;
+	if (!Params->TryGetStringField(TEXT("tag"), TagString))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'tag' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Load the ability blueprint
+	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
+	if (!Blueprint || !Blueprint->GeneratedClass)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Verify it is a GameplayAbility subclass
+	UClass* GAClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayAbility"));
+	if (!GAClass || !Blueprint->GeneratedClass->IsChildOf(GAClass))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Blueprint is not a GameplayAbility subclass"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Get CDO
+	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
+	if (!CDO)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Could not get CDO for ability blueprint"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Request the gameplay tag (this will create it if it does not exist)
+	FGameplayTag Tag = UGameplayTagsManager::Get().RequestGameplayTag(FName(*TagString), false);
+	if (!Tag.IsValid())
+	{
+		// If the tag doesn't exist yet, add it
+		Tag = UGameplayTagsManager::Get().AddNativeGameplayTag(FName(*TagString));
+	}
+
+	if (!Tag.IsValid())
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Could not resolve gameplay tag: %s"), *TagString));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the AbilityTags property on the CDO and add the tag
+	FProperty* AbilityTagsProp = GAClass->FindPropertyByName(TEXT("AbilityTags"));
+	if (!AbilityTagsProp)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Could not find AbilityTags property on GameplayAbility"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FGameplayTagContainer* TagContainer = AbilityTagsProp->ContainerPtrToValuePtr<FGameplayTagContainer>(CDO);
+	if (!TagContainer)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Could not access AbilityTags container on CDO"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	TagContainer->AddTag(Tag);
+
+	// Compile and save
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+
+	UPackage* Package = Blueprint->GetOutermost();
+	if (Package)
+	{
+		Package->MarkPackageDirty();
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+	}
+
+	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Result->SetStringField(TEXT("tag"), TagString);
+	Result->SetNumberField(TEXT("totalTags"), TagContainer->Num());
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString Name;
+	if (!Params->TryGetStringField(TEXT("name"), Name))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString PackagePath = TEXT("/Game/GAS/CueNotifies");
+	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+
+	FString NotifyType = TEXT("Actor");
+	Params->TryGetStringField(TEXT("notifyType"), NotifyType);
+
+	// Determine parent class based on notify type
+	FString ParentClassPath;
+	FString FriendlyName;
+	if (NotifyType == TEXT("Static"))
+	{
+		ParentClassPath = TEXT("/Script/GameplayAbilities.GameplayCueNotify_Static");
+		FriendlyName = TEXT("GameplayCueNotify_Static");
+	}
+	else
+	{
+		// Default to Actor variant
+		ParentClassPath = TEXT("/Script/GameplayAbilities.GameplayCueNotify_Actor");
+		FriendlyName = TEXT("GameplayCueNotify_Actor");
+	}
+
+	UClass* ParentClass = FindObject<UClass>(nullptr, *ParentClassPath);
+	if (!ParentClass)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("%s class not found: %s. Enable GameplayAbilities plugin."), *FriendlyName, *ParentClassPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	IAssetTools& AssetTools = AssetToolsModule.Get();
+
+	// Delete existing asset if it exists
+	FString FullAssetPath = PackagePath + TEXT("/") + Name;
+	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
+
+	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
+	BlueprintFactory->ParentClass = ParentClass;
+
+	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
+	if (!NewBlueprint)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create %s Blueprint"), *FriendlyName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	NewBlueprint->ParentClass = ParentClass;
+	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
+
+	// Save
+	UPackage* Package = NewBlueprint->GetOutermost();
+	if (Package)
+	{
+		Package->MarkPackageDirty();
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+	}
+
+	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
+	Result->SetStringField(TEXT("name"), Name);
+	Result->SetStringField(TEXT("notifyType"), NotifyType);
+	Result->SetStringField(TEXT("parentClass"), FriendlyName);
 	Result->SetBoolField(TEXT("success"), true);
 	return MakeShared<FJsonValueObject>(Result);
 }

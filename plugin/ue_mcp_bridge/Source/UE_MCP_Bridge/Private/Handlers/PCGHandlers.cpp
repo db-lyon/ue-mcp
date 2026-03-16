@@ -12,10 +12,12 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "PCGGraph.h"
+#include "PCGGraphInterface.h"
 #include "PCGComponent.h"
 #include "PCGNode.h"
 #include "PCGSettings.h"
 #include "PCGPin.h"
+#include "PCGEdge.h"
 #include "PCGVolume.h"
 #include "UObject/Package.h"
 #include "Misc/PackageName.h"
@@ -159,14 +161,14 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGGraph(const TSharedPtr<FJsonObject>&
 	Result->SetStringField(TEXT("name"), Graph->GetName());
 	Result->SetStringField(TEXT("path"), AssetPath);
 
-	const TArray<UPCGNode*>& Nodes = Graph->GetNodes();
+	const auto& Nodes = Graph->GetNodes();
 	TArray<TSharedPtr<FJsonValue>> NodeArray;
 	for (const UPCGNode* Node : Nodes)
 	{
 		if (!Node) continue;
 		TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
 		NodeObj->SetStringField(TEXT("name"), Node->GetName());
-		NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle(EPCGNodeTitleType::ListView).ToString());
+		NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle().ToString());
 		NodeArray.Add(MakeShared<FJsonValueObject>(NodeObj));
 	}
 
@@ -246,11 +248,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	}
 
 	// Set position if provided
+	// UE 5.7: PositionX/PositionY are no longer public; use SetPosition() instead
 	double PosX = 0, PosY = 0;
 	if (Params->TryGetNumberField(TEXT("posX"), PosX) || Params->TryGetNumberField(TEXT("posY"), PosY))
 	{
-		NewNode->PositionX = (int32)PosX;
-		NewNode->PositionY = (int32)PosY;
+		NewNode->SetPosition(PosX, PosY);
 	}
 
 	// Save the graph asset
@@ -259,7 +261,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
 	Result->SetStringField(TEXT("nodeType"), NodeType);
-	Result->SetStringField(TEXT("nodeTitle"), NewNode->GetNodeTitle(EPCGNodeTitleType::ListView).ToString());
+	Result->SetStringField(TEXT("nodeTitle"), NewNode->GetNodeTitle().ToString());
 	Result->SetBoolField(TEXT("success"), true);
 	return MakeShared<FJsonValueObject>(Result);
 }
@@ -303,7 +305,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	// Find source and target nodes
 	UPCGNode* SourceNode = nullptr;
 	UPCGNode* TargetNode = nullptr;
-	const TArray<UPCGNode*>& Nodes = Graph->GetNodes();
+	const auto& Nodes = Graph->GetNodes();
 	for (UPCGNode* Node : Nodes)
 	{
 		if (!Node) continue;
@@ -346,65 +348,54 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	FString TargetPinLabel;
 	Params->TryGetStringField(TEXT("targetPinLabel"), TargetPinLabel);
 
-	// Find output pin on source node
-	UPCGPin* SourcePin = nullptr;
+	// UE 5.7: Pin and edge APIs refactored; use Graph->AddEdge() with node+label
+	// Resolve the pin labels to use for the connection
+	FName ResolvedSourcePinLabel = NAME_None;
+	FName ResolvedTargetPinLabel = NAME_None;
+
 	if (SourcePinLabel.IsEmpty())
 	{
-		// Use the first output pin
-		if (SourceNode->GetOutputPins().Num() > 0)
+		// Use the first output pin's label
+		const TArray<TObjectPtr<UPCGPin>>& OutPins = SourceNode->GetOutputPins();
+		if (OutPins.Num() > 0 && OutPins[0])
 		{
-			SourcePin = SourceNode->GetOutputPins()[0];
+			ResolvedSourcePinLabel = OutPins[0]->Properties.Label;
 		}
 	}
 	else
 	{
-		for (UPCGPin* Pin : SourceNode->GetOutputPins())
-		{
-			if (Pin && Pin->Properties.Label.ToString() == SourcePinLabel)
-			{
-				SourcePin = Pin;
-				break;
-			}
-		}
+		ResolvedSourcePinLabel = FName(*SourcePinLabel);
 	}
 
-	// Find input pin on target node
-	UPCGPin* TargetPin = nullptr;
 	if (TargetPinLabel.IsEmpty())
 	{
-		// Use the first input pin
-		if (TargetNode->GetInputPins().Num() > 0)
+		// Use the first input pin's label
+		const TArray<TObjectPtr<UPCGPin>>& InPins = TargetNode->GetInputPins();
+		if (InPins.Num() > 0 && InPins[0])
 		{
-			TargetPin = TargetNode->GetInputPins()[0];
+			ResolvedTargetPinLabel = InPins[0]->Properties.Label;
 		}
 	}
 	else
 	{
-		for (UPCGPin* Pin : TargetNode->GetInputPins())
-		{
-			if (Pin && Pin->Properties.Label.ToString() == TargetPinLabel)
-			{
-				TargetPin = Pin;
-				break;
-			}
-		}
+		ResolvedTargetPinLabel = FName(*TargetPinLabel);
 	}
 
-	if (!SourcePin)
+	if (ResolvedSourcePinLabel == NAME_None)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("No suitable output pin found on source node"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
-	if (!TargetPin)
+	if (ResolvedTargetPinLabel == NAME_None)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("No suitable input pin found on target node"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	// Connect the pins
-	bool bConnected = SourcePin->AddEdgeTo(TargetPin);
+	// UE 5.7: AddEdgeTo() was removed from UPCGPin; use Graph->AddEdge() instead
+	bool bConnected = Graph->AddEdge(SourceNode, ResolvedSourcePinLabel, TargetNode, ResolvedTargetPinLabel);
 	if (!bConnected)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Failed to connect pins - connection may already exist or be incompatible"));
@@ -418,8 +409,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("sourceNodeName"), SourceNodeName);
 	Result->SetStringField(TEXT("targetNodeName"), TargetNodeName);
-	Result->SetStringField(TEXT("sourcePinLabel"), SourcePin->Properties.Label.ToString());
-	Result->SetStringField(TEXT("targetPinLabel"), TargetPin->Properties.Label.ToString());
+	Result->SetStringField(TEXT("sourcePinLabel"), ResolvedSourcePinLabel.ToString());
+	Result->SetStringField(TEXT("targetPinLabel"), ResolvedTargetPinLabel.ToString());
 	Result->SetBoolField(TEXT("success"), true);
 	return MakeShared<FJsonValueObject>(Result);
 }
@@ -454,7 +445,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 
 	// Find the node by name
 	UPCGNode* FoundNode = nullptr;
-	const TArray<UPCGNode*>& Nodes = Graph->GetNodes();
+	const auto& Nodes = Graph->GetNodes();
 	for (UPCGNode* Node : Nodes)
 	{
 		if (Node && Node->GetName() == NodeName)
@@ -529,7 +520,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 
 	// Find the node by name
 	UPCGNode* FoundNode = nullptr;
-	const TArray<UPCGNode*>& Nodes = Graph->GetNodes();
+	const auto& Nodes = Graph->GetNodes();
 	for (UPCGNode* Node : Nodes)
 	{
 		if (Node && Node->GetName() == NodeName)
@@ -547,7 +538,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 	}
 
 	// Get the settings object from the node
-	UPCGSettings* Settings = FoundNode->GetSettings();
+	// UE 5.7: GetSettings() returns const; use GetMutableSettings() for write access
+	UPCGSettings* Settings = FoundNode->GetMutableSettings();
 	if (!Settings)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Node has no settings object"));

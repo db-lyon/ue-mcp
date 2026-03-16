@@ -6,8 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "up": "node scripts/run.js",
+    "build": "node scripts/build.js",
     "up:build": "node scripts/build-and-run.js",
-    "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "vitest run",

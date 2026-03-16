@@ -2,16 +2,31 @@
 #include "HandlerRegistry.h"
 #include "InstancedFoliageActor.h"
 #include "FoliageType.h"
+#include "FoliageType_InstancedStaticMesh.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "UObject/Package.h"
+#include "UObject/UObjectGlobals.h"
+#include "Misc/PackageName.h"
+#include "LandscapeGrassType.h"
+#include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("list_foliage_types"), &ListFoliageTypes);
 	Registry.RegisterHandler(TEXT("sample_foliage"), &SampleFoliage);
+	Registry.RegisterHandler(TEXT("get_foliage_settings"), &GetFoliageSettings);
+	Registry.RegisterHandler(TEXT("paint_foliage"), &PaintFoliage);
+	Registry.RegisterHandler(TEXT("erase_foliage"), &EraseFoliage);
+	Registry.RegisterHandler(TEXT("sample_foliage_instances"), &SampleFoliageInstances);
+	Registry.RegisterHandler(TEXT("create_foliage_layer"), &CreateFoliageLayer);
 }
 
 TSharedPtr<FJsonValue> FFoliageHandlers::ListFoliageTypes(const TSharedPtr<FJsonObject>& Params)
@@ -44,7 +59,15 @@ TSharedPtr<FJsonValue> FFoliageHandlers::ListFoliageTypes(const TSharedPtr<FJson
 			TSharedPtr<FJsonObject> TypeObj = MakeShared<FJsonObject>();
 			TypeObj->SetStringField(TEXT("name"), FoliageType->GetName());
 			TypeObj->SetStringField(TEXT("path"), FoliageType->GetPathName());
-			TypeObj->SetNumberField(TEXT("instanceCount"), FoliageInfo.Instances.Num());
+
+			// UE 5.7: Instances array is private; use the HISM component for instance count
+			int32 InstanceCount = 0;
+			UHierarchicalInstancedStaticMeshComponent* HISMComp = FoliageInfo.GetComponent();
+			if (HISMComp)
+			{
+				InstanceCount = HISMComp->GetInstanceCount();
+			}
+			TypeObj->SetNumberField(TEXT("instanceCount"), InstanceCount);
 
 			// Get source info
 			TypeObj->SetStringField(TEXT("className"), FoliageType->GetClass()->GetName());
@@ -110,13 +133,21 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SampleFoliage(const TSharedPtr<FJsonObj
 			FString TypeName = FoliageType->GetName();
 			int32 MatchCount = 0;
 
-			for (const FFoliageInstance& Instance : FoliageInfo.Instances)
+			// UE 5.7: Instances array is private; use the HISM component for transforms
+			UHierarchicalInstancedStaticMeshComponent* HISMComp = FoliageInfo.GetComponent();
+			if (HISMComp)
 			{
-				FVector InstanceLocation = Instance.Location;
-				double DistSq = FVector::DistSquared(Center, InstanceLocation);
-				if (DistSq <= RadiusSq)
+				int32 NumInstances = HISMComp->GetInstanceCount();
+				for (int32 i = 0; i < NumInstances; ++i)
 				{
-					MatchCount++;
+					FTransform InstanceTransform;
+					HISMComp->GetInstanceTransform(i, InstanceTransform, /*bWorldSpace=*/ true);
+					FVector InstanceLocation = InstanceTransform.GetLocation();
+					double DistSq = FVector::DistSquared(Center, InstanceLocation);
+					if (DistSq <= RadiusSq)
+					{
+						MatchCount++;
+					}
 				}
 			}
 
@@ -147,6 +178,454 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SampleFoliage(const TSharedPtr<FJsonObj
 	Result->SetNumberField(TEXT("totalCount"), TotalCount);
 	Result->SetArrayField(TEXT("types"), TypesArray);
 	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FFoliageHandlers::GetFoliageSettings(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString FoliageTypePath;
+	if (!Params->TryGetStringField(TEXT("foliageTypePath"), FoliageTypePath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'foliageTypePath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UFoliageType* FoliageType = LoadObject<UFoliageType>(nullptr, *FoliageTypePath);
+	if (!FoliageType)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Foliage type not found: %s"), *FoliageTypePath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Result->SetStringField(TEXT("path"), FoliageTypePath);
+	Result->SetStringField(TEXT("name"), FoliageType->GetName());
+	Result->SetStringField(TEXT("className"), FoliageType->GetClass()->GetName());
+
+	// Density settings
+	Result->SetNumberField(TEXT("density"), FoliageType->Density);
+	Result->SetNumberField(TEXT("densityAdjustmentFactor"), FoliageType->DensityAdjustmentFactor);
+	Result->SetNumberField(TEXT("radius"), FoliageType->Radius);
+
+	// Scaling settings
+	TSharedPtr<FJsonObject> ScalingObj = MakeShared<FJsonObject>();
+	ScalingObj->SetNumberField(TEXT("scaleMinX"), FoliageType->ScaleX.Min);
+	ScalingObj->SetNumberField(TEXT("scaleMaxX"), FoliageType->ScaleX.Max);
+	ScalingObj->SetNumberField(TEXT("scaleMinY"), FoliageType->ScaleY.Min);
+	ScalingObj->SetNumberField(TEXT("scaleMaxY"), FoliageType->ScaleY.Max);
+	ScalingObj->SetNumberField(TEXT("scaleMinZ"), FoliageType->ScaleZ.Min);
+	ScalingObj->SetNumberField(TEXT("scaleMaxZ"), FoliageType->ScaleZ.Max);
+	Result->SetObjectField(TEXT("scaling"), ScalingObj);
+
+	// Placement settings
+	Result->SetBoolField(TEXT("alignToNormal"), FoliageType->AlignToNormal);
+	Result->SetNumberField(TEXT("alignMaxAngle"), FoliageType->AlignMaxAngle);
+	Result->SetBoolField(TEXT("randomYaw"), FoliageType->RandomYaw);
+	Result->SetNumberField(TEXT("randomPitchAngle"), FoliageType->RandomPitchAngle);
+	Result->SetNumberField(TEXT("groundSlopeAngle"), FoliageType->GroundSlopeAngle.Max);
+
+	// Height range
+	Result->SetNumberField(TEXT("heightMin"), FoliageType->Height.Min);
+	Result->SetNumberField(TEXT("heightMax"), FoliageType->Height.Max);
+
+	// Collision settings
+	TSharedPtr<FJsonObject> CollisionObj = MakeShared<FJsonObject>();
+	CollisionObj->SetBoolField(TEXT("collisionWithWorld"), FoliageType->CollisionWithWorld);
+	CollisionObj->SetNumberField(TEXT("collisionRadius"), FoliageType->CollisionRadius);
+	CollisionObj->SetNumberField(TEXT("collisionScale"), FoliageType->CollisionScale.X);
+	Result->SetObjectField(TEXT("collision"), CollisionObj);
+
+	// LOD settings
+	TSharedPtr<FJsonObject> LodObj = MakeShared<FJsonObject>();
+	LodObj->SetNumberField(TEXT("cullDistanceMin"), FoliageType->CullDistance.Min);
+	LodObj->SetNumberField(TEXT("cullDistanceMax"), FoliageType->CullDistance.Max);
+	Result->SetObjectField(TEXT("lod"), LodObj);
+
+	// Rendering settings
+	Result->SetBoolField(TEXT("castShadow"), FoliageType->CastShadow);
+	Result->SetBoolField(TEXT("receivesDecals"), FoliageType->bReceivesDecals);
+
+	// Mesh reference (for InstancedStaticMesh types)
+	UFoliageType_InstancedStaticMesh* ISMType = Cast<UFoliageType_InstancedStaticMesh>(FoliageType);
+	if (ISMType && ISMType->Mesh)
+	{
+		Result->SetStringField(TEXT("meshPath"), ISMType->Mesh->GetPathName());
+		Result->SetStringField(TEXT("meshName"), ISMType->Mesh->GetName());
+	}
+
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FFoliageHandlers::PaintFoliage(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString FoliageTypePath;
+	if (!Params->TryGetStringField(TEXT("foliageType"), FoliageTypePath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'foliageType' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
+	if (!Params->TryGetObjectField(TEXT("location"), LocationObj) || !LocationObj || !(*LocationObj).IsValid())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'location' parameter (object with x, y, z)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	double LocX = 0, LocY = 0, LocZ = 0;
+	(*LocationObj)->TryGetNumberField(TEXT("x"), LocX);
+	(*LocationObj)->TryGetNumberField(TEXT("y"), LocY);
+	(*LocationObj)->TryGetNumberField(TEXT("z"), LocZ);
+
+	double PaintRadius = 500.0;
+	Params->TryGetNumberField(TEXT("radius"), PaintRadius);
+
+	double PaintDensity = 100.0;
+	Params->TryGetNumberField(TEXT("density"), PaintDensity);
+
+	// Foliage painting is not directly exposed as a C++ editor API.
+	// The FoliageEdMode / FoliageEditorLibrary is internal to the foliage editor mode
+	// and cannot be easily called programmatically from a plugin.
+	// Use execute_python as a fallback to invoke the Python FoliageEditorLibrary if available.
+	Result->SetStringField(TEXT("foliageType"), FoliageTypePath);
+
+	TSharedPtr<FJsonObject> LocationResult = MakeShared<FJsonObject>();
+	LocationResult->SetNumberField(TEXT("x"), LocX);
+	LocationResult->SetNumberField(TEXT("y"), LocY);
+	LocationResult->SetNumberField(TEXT("z"), LocZ);
+	Result->SetObjectField(TEXT("location"), LocationResult);
+	Result->SetNumberField(TEXT("radius"), PaintRadius);
+	Result->SetNumberField(TEXT("density"), PaintDensity);
+
+	Result->SetBoolField(TEXT("success"), false);
+	Result->SetStringField(TEXT("note"),
+		TEXT("Foliage painting requires FoliageEdMode which is not accessible from C++ plugins. ")
+		TEXT("Use the execute_python handler with unreal.FoliageEditorLibrary.paint_foliage() if available, ")
+		TEXT("or manually paint in the editor foliage tool."));
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FFoliageHandlers::EraseFoliage(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
+	if (!Params->TryGetObjectField(TEXT("location"), LocationObj) || !LocationObj || !(*LocationObj).IsValid())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'location' parameter (object with x, y, z)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	double LocX = 0, LocY = 0, LocZ = 0;
+	(*LocationObj)->TryGetNumberField(TEXT("x"), LocX);
+	(*LocationObj)->TryGetNumberField(TEXT("y"), LocY);
+	(*LocationObj)->TryGetNumberField(TEXT("z"), LocZ);
+
+	double EraseRadius = 500.0;
+	Params->TryGetNumberField(TEXT("radius"), EraseRadius);
+
+	FString FoliageTypeFilter;
+	Params->TryGetStringField(TEXT("foliageType"), FoliageTypeFilter);
+
+	// Foliage erasure, like painting, is internal to FoliageEdMode.
+	// Provide the same execute_python fallback note.
+	TSharedPtr<FJsonObject> LocationResult = MakeShared<FJsonObject>();
+	LocationResult->SetNumberField(TEXT("x"), LocX);
+	LocationResult->SetNumberField(TEXT("y"), LocY);
+	LocationResult->SetNumberField(TEXT("z"), LocZ);
+	Result->SetObjectField(TEXT("location"), LocationResult);
+	Result->SetNumberField(TEXT("radius"), EraseRadius);
+
+	if (!FoliageTypeFilter.IsEmpty())
+	{
+		Result->SetStringField(TEXT("foliageTypeFilter"), FoliageTypeFilter);
+	}
+
+	Result->SetBoolField(TEXT("success"), false);
+	Result->SetStringField(TEXT("note"),
+		TEXT("Foliage erasure requires FoliageEdMode which is not accessible from C++ plugins. ")
+		TEXT("Use the execute_python handler with unreal.FoliageEditorLibrary.erase_foliage() if available, ")
+		TEXT("or manually erase in the editor foliage tool."));
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FFoliageHandlers::SampleFoliageInstances(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	// Parse center location
+	const TSharedPtr<FJsonObject>* CenterObj = nullptr;
+	if (!Params->TryGetObjectField(TEXT("center"), CenterObj) || !CenterObj || !(*CenterObj).IsValid())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'center' parameter (object with x, y, z)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	double CenterX = 0, CenterY = 0, CenterZ = 0;
+	(*CenterObj)->TryGetNumberField(TEXT("x"), CenterX);
+	(*CenterObj)->TryGetNumberField(TEXT("y"), CenterY);
+	(*CenterObj)->TryGetNumberField(TEXT("z"), CenterZ);
+	FVector Center(CenterX, CenterY, CenterZ);
+
+	double Radius = 1000.0;
+	Params->TryGetNumberField(TEXT("radius"), Radius);
+	double RadiusSq = Radius * Radius;
+
+	int32 Limit = 100;
+	if (Params->HasField(TEXT("limit")))
+	{
+		Limit = static_cast<int32>(Params->GetNumberField(TEXT("limit")));
+	}
+
+	FString FoliageTypeFilter;
+	Params->TryGetStringField(TEXT("foliageType"), FoliageTypeFilter);
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> InstancesArray;
+
+	for (TActorIterator<AInstancedFoliageActor> It(World); It; ++It)
+	{
+		AInstancedFoliageActor* FoliageActor = *It;
+		if (!FoliageActor) continue;
+		if (InstancesArray.Num() >= Limit) break;
+
+		const auto& FoliageInfoMap = FoliageActor->GetFoliageInfos();
+		for (const auto& Pair : FoliageInfoMap)
+		{
+			if (InstancesArray.Num() >= Limit) break;
+
+			UFoliageType* FoliageType = Pair.Key;
+			const FFoliageInfo& FoliageInfo = *Pair.Value;
+
+			if (!FoliageType) continue;
+
+			FString TypeName = FoliageType->GetName();
+
+			// Apply foliage type filter if specified
+			if (!FoliageTypeFilter.IsEmpty() && !TypeName.Contains(FoliageTypeFilter))
+			{
+				continue;
+			}
+
+			// Get the instanced static mesh component for mesh info
+			FString MeshName = TEXT("Unknown");
+			UFoliageType_InstancedStaticMesh* ISMType = Cast<UFoliageType_InstancedStaticMesh>(FoliageType);
+			if (ISMType && ISMType->Mesh)
+			{
+				MeshName = ISMType->Mesh->GetName();
+			}
+
+			// UE 5.7: Instances array is private; use the HISM component for transforms
+			UHierarchicalInstancedStaticMeshComponent* HISMComp = FoliageInfo.GetComponent();
+			if (!HISMComp) continue;
+
+			int32 NumInstances = HISMComp->GetInstanceCount();
+			for (int32 i = 0; i < NumInstances; ++i)
+			{
+				if (InstancesArray.Num() >= Limit) break;
+
+				FTransform InstanceTransform;
+				HISMComp->GetInstanceTransform(i, InstanceTransform, /*bWorldSpace=*/ true);
+				FVector InstanceLocation = InstanceTransform.GetLocation();
+				double DistSq = FVector::DistSquared(Center, InstanceLocation);
+
+				if (DistSq <= RadiusSq)
+				{
+					double Distance = FMath::Sqrt(DistSq);
+
+					TSharedPtr<FJsonObject> InstanceObj = MakeShared<FJsonObject>();
+					InstanceObj->SetStringField(TEXT("foliageType"), TypeName);
+					InstanceObj->SetStringField(TEXT("mesh"), MeshName);
+
+					TSharedPtr<FJsonObject> LocObj = MakeShared<FJsonObject>();
+					LocObj->SetNumberField(TEXT("x"), InstanceLocation.X);
+					LocObj->SetNumberField(TEXT("y"), InstanceLocation.Y);
+					LocObj->SetNumberField(TEXT("z"), InstanceLocation.Z);
+					InstanceObj->SetObjectField(TEXT("location"), LocObj);
+
+					InstanceObj->SetNumberField(TEXT("distance"), FMath::RoundToFloat(Distance * 10.0f) / 10.0f);
+
+					// Extract rotation and scale from the instance transform
+					FRotator InstanceRotation = InstanceTransform.Rotator();
+					TSharedPtr<FJsonObject> RotObj = MakeShared<FJsonObject>();
+					RotObj->SetNumberField(TEXT("pitch"), InstanceRotation.Pitch);
+					RotObj->SetNumberField(TEXT("yaw"), InstanceRotation.Yaw);
+					RotObj->SetNumberField(TEXT("roll"), InstanceRotation.Roll);
+					InstanceObj->SetObjectField(TEXT("rotation"), RotObj);
+
+					FVector InstanceScale = InstanceTransform.GetScale3D();
+					TSharedPtr<FJsonObject> ScaleObj = MakeShared<FJsonObject>();
+					ScaleObj->SetNumberField(TEXT("x"), InstanceScale.X);
+					ScaleObj->SetNumberField(TEXT("y"), InstanceScale.Y);
+					ScaleObj->SetNumberField(TEXT("z"), InstanceScale.Z);
+					InstanceObj->SetObjectField(TEXT("scale"), ScaleObj);
+
+					InstancesArray.Add(MakeShared<FJsonValueObject>(InstanceObj));
+				}
+			}
+		}
+	}
+
+	TSharedPtr<FJsonObject> CenterResult = MakeShared<FJsonObject>();
+	CenterResult->SetNumberField(TEXT("x"), CenterX);
+	CenterResult->SetNumberField(TEXT("y"), CenterY);
+	CenterResult->SetNumberField(TEXT("z"), CenterZ);
+
+	Result->SetObjectField(TEXT("center"), CenterResult);
+	Result->SetNumberField(TEXT("radius"), Radius);
+	Result->SetNumberField(TEXT("instanceCount"), InstancesArray.Num());
+	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetArrayField(TEXT("instances"), InstancesArray);
+
+	if (!FoliageTypeFilter.IsEmpty())
+	{
+		Result->SetStringField(TEXT("foliageTypeFilter"), FoliageTypeFilter);
+	}
+
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageLayer(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetName;
+	if (!Params->TryGetStringField(TEXT("name"), AssetName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString PackagePath = TEXT("/Game/Foliage");
+	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+
+	FString MeshPath;
+	Params->TryGetStringField(TEXT("meshPath"), MeshPath);
+
+	FString AssetType = TEXT("FoliageType");
+	Params->TryGetStringField(TEXT("assetType"), AssetType);
+
+	FString FullPath = PackagePath / AssetName;
+
+	if (AssetType == TEXT("LandscapeGrassType"))
+	{
+		// Create a LandscapeGrassType asset
+		FString PackageFullPath = PackagePath / AssetName;
+		UPackage* Package = CreatePackage(*PackageFullPath);
+		if (!Package)
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create package: %s"), *PackageFullPath));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		ULandscapeGrassType* GrassType = NewObject<ULandscapeGrassType>(Package, *AssetName, RF_Public | RF_Standalone);
+		if (!GrassType)
+		{
+			Result->SetStringField(TEXT("error"), TEXT("Failed to create LandscapeGrassType object"));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		// If a mesh path is provided, add it as a grass variety
+		if (!MeshPath.IsEmpty())
+		{
+			UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+			if (Mesh)
+			{
+				FGrassVariety Variety;
+				Variety.GrassMesh = Mesh;
+				GrassType->GrassVarieties.Add(Variety);
+			}
+		}
+
+		// Notify asset registry
+		FAssetRegistryModule::AssetCreated(GrassType);
+		Package->MarkPackageDirty();
+
+		// Save the asset
+		UEditorAssetLibrary::SaveAsset(PackageFullPath, false);
+
+		Result->SetStringField(TEXT("path"), PackageFullPath);
+		Result->SetStringField(TEXT("name"), GrassType->GetName());
+		Result->SetStringField(TEXT("className"), GrassType->GetClass()->GetName());
+		Result->SetStringField(TEXT("assetType"), TEXT("LandscapeGrassType"));
+		if (!MeshPath.IsEmpty())
+		{
+			Result->SetStringField(TEXT("meshPath"), MeshPath);
+		}
+		Result->SetBoolField(TEXT("success"), true);
+	}
+	else
+	{
+		// Create a FoliageType_InstancedStaticMesh asset (default)
+		FString PackageFullPath = PackagePath / AssetName;
+		UPackage* Package = CreatePackage(*PackageFullPath);
+		if (!Package)
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create package: %s"), *PackageFullPath));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		UFoliageType_InstancedStaticMesh* FoliageType = NewObject<UFoliageType_InstancedStaticMesh>(
+			Package, *AssetName, RF_Public | RF_Standalone);
+		if (!FoliageType)
+		{
+			Result->SetStringField(TEXT("error"), TEXT("Failed to create FoliageType object"));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		// Set mesh if provided
+		if (!MeshPath.IsEmpty())
+		{
+			UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+			if (Mesh)
+			{
+				FoliageType->Mesh = Mesh;
+			}
+		}
+
+		// Notify asset registry
+		FAssetRegistryModule::AssetCreated(FoliageType);
+		Package->MarkPackageDirty();
+
+		// Save the asset
+		UEditorAssetLibrary::SaveAsset(PackageFullPath, false);
+
+		Result->SetStringField(TEXT("path"), PackageFullPath);
+		Result->SetStringField(TEXT("name"), FoliageType->GetName());
+		Result->SetStringField(TEXT("className"), FoliageType->GetClass()->GetName());
+		Result->SetStringField(TEXT("assetType"), TEXT("FoliageType"));
+		if (!MeshPath.IsEmpty())
+		{
+			Result->SetStringField(TEXT("meshPath"), MeshPath);
+		}
+		Result->SetBoolField(TEXT("success"), true);
+	}
 
 	return MakeShared<FJsonValueObject>(Result);
 }

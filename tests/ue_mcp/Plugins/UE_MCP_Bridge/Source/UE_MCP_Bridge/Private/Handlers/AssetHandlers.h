@@ -22,4 +22,18 @@ private:
 	static TSharedPtr<FJsonValue> DeleteAsset(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SaveAsset(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListTextures(const TSharedPtr<FJsonObject>& Params);
+
+	// DataTable handlers
+	static TSharedPtr<FJsonValue> ImportDataTableJson(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ExportDataTableJson(const TSharedPtr<FJsonObject>& Params);
+
+	// FBX import handlers
+	static TSharedPtr<FJsonValue> ImportStaticMesh(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ImportSkeletalMesh(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ImportAnimation(const TSharedPtr<FJsonObject>& Params);
+
+	// Texture handlers
+	static TSharedPtr<FJsonValue> ListTextureProperties(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetTextureProperties(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ImportTexture(const TSharedPtr<FJsonObject>& Params);
 };

@@ -30,8 +30,15 @@ private:
 	static TSharedPtr<FJsonValue> RenameFunction(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DeleteFunction(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateBlueprintInterface(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListNodeTypesDetailed(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SearchCallableFunctions(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ConnectPins(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DeleteNode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetNodeProperty(const TSharedPtr<FJsonObject>& Params);
 
 	// Helper functions
 	static class UBlueprint* LoadBlueprint(const FString& AssetPath);
 	static struct FEdGraphPinType MakePinType(const FString& TypeStr);
+	static class UEdGraph* FindGraph(class UBlueprint* Blueprint, const FString& GraphName);
+	static class UEdGraphNode* FindNodeByGuidOrName(class UEdGraph* Graph, const FString& NodeId);
 };

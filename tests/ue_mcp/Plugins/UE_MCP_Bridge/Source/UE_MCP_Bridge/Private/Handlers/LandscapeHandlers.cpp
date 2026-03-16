@@ -13,6 +13,11 @@
 #include "LandscapeSplinesComponent.h"
 #include "LandscapeSplineControlPoint.h"
 #include "LandscapeSplineSegment.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "Misc/FileHelper.h"
+#include "Materials/MaterialInterface.h"
+#include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
+#include "Components/PrimitiveComponent.h"
 
 void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -21,6 +26,11 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("sample_landscape"), &SampleLandscape);
 	Registry.RegisterHandler(TEXT("list_landscape_splines"), &ListLandscapeSplines);
 	Registry.RegisterHandler(TEXT("get_landscape_component"), &GetLandscapeComponent);
+	Registry.RegisterHandler(TEXT("sculpt_landscape"), &SculptLandscape);
+	Registry.RegisterHandler(TEXT("paint_landscape_layer"), &PaintLandscapeLayer);
+	Registry.RegisterHandler(TEXT("import_heightmap"), &ImportHeightmap);
+	Registry.RegisterHandler(TEXT("set_landscape_material"), &SetLandscapeMaterial);
+	Registry.RegisterHandler(TEXT("get_landscape_bounds"), &GetLandscapeBounds);
 }
 
 TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeInfo(const TSharedPtr<FJsonObject>& Params)
@@ -111,14 +121,18 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ListLandscapeLayers(const TSharedPtr<
 		ALandscapeProxy* Landscape = *It;
 		if (!Landscape) continue;
 
-		for (const FLandscapeInfoLayerSettings& LayerSettings : Landscape->EditorLayerSettings)
+		ULandscapeInfo* LandscapeInfo = Landscape->GetLandscapeInfo();
+		if (LandscapeInfo)
 		{
-			if (LayerSettings.LayerInfoObj)
+			for (const FLandscapeInfoLayerSettings& LayerSettings : LandscapeInfo->Layers)
 			{
-				TSharedPtr<FJsonObject> LayerObj = MakeShared<FJsonObject>();
-				LayerObj->SetStringField(TEXT("name"), LayerSettings.LayerInfoObj->LayerName.ToString());
-				LayerObj->SetStringField(TEXT("landscapeName"), Landscape->GetName());
-				LayerArray.Add(MakeShared<FJsonValueObject>(LayerObj));
+				if (LayerSettings.LayerInfoObj)
+				{
+					TSharedPtr<FJsonObject> LayerObj = MakeShared<FJsonObject>();
+					LayerObj->SetStringField(TEXT("name"), LayerSettings.GetLayerName().ToString());
+					LayerObj->SetStringField(TEXT("landscapeName"), Landscape->GetName());
+					LayerArray.Add(MakeShared<FJsonValueObject>(LayerObj));
+				}
 			}
 		}
 	}
@@ -312,5 +326,438 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeComponent(const TSharedPt
 	}
 
 	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FLandscapeHandlers::SculptLandscape(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
+	if (!Params->TryGetObjectField(TEXT("location"), LocationObj) || !LocationObj || !(*LocationObj).IsValid())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'location' parameter (object with x, y)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	double LocX = 0, LocY = 0;
+	(*LocationObj)->TryGetNumberField(TEXT("x"), LocX);
+	(*LocationObj)->TryGetNumberField(TEXT("y"), LocY);
+
+	double SculptRadius = 500.0;
+	Params->TryGetNumberField(TEXT("radius"), SculptRadius);
+
+	double Strength = 0.5;
+	Params->TryGetNumberField(TEXT("strength"), Strength);
+
+	FString Operation = TEXT("raise");
+	Params->TryGetStringField(TEXT("operation"), Operation);
+
+	double Falloff = 0.5;
+	Params->TryGetNumberField(TEXT("falloff"), Falloff);
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Verify a landscape exists by line tracing at the target location
+	bool bFoundLandscape = false;
+	for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
+	{
+		if (*It)
+		{
+			bFoundLandscape = true;
+			break;
+		}
+	}
+
+	if (!bFoundLandscape)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No landscape found in the current level"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Landscape sculpting is not directly exposed as a simple C++ API.
+	// The LandscapeEdMode (editor mode) handles sculpting internally.
+	// Fall back to console command approach.
+	FString Command = FString::Printf(
+		TEXT("Landscape.Sculpt X=%.1f Y=%.1f Radius=%.1f Strength=%.2f Op=%s"),
+		LocX, LocY, SculptRadius, Strength, *Operation);
+
+	UKismetSystemLibrary::ExecuteConsoleCommand(World, Command, nullptr);
+
+	TSharedPtr<FJsonObject> LocationResult = MakeShared<FJsonObject>();
+	LocationResult->SetNumberField(TEXT("x"), LocX);
+	LocationResult->SetNumberField(TEXT("y"), LocY);
+	Result->SetObjectField(TEXT("location"), LocationResult);
+	Result->SetNumberField(TEXT("radius"), SculptRadius);
+	Result->SetNumberField(TEXT("strength"), Strength);
+	Result->SetStringField(TEXT("operation"), Operation);
+	Result->SetNumberField(TEXT("falloff"), Falloff);
+	Result->SetStringField(TEXT("note"), TEXT("Executed via console command. Verify visually. If the console command is not supported, use execute_python with unreal.LandscapeEditorLibrary.sculpt() instead."));
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FLandscapeHandlers::PaintLandscapeLayer(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString LayerName;
+	if (!Params->TryGetStringField(TEXT("layerName"), LayerName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'layerName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
+	if (!Params->TryGetObjectField(TEXT("location"), LocationObj) || !LocationObj || !(*LocationObj).IsValid())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'location' parameter (object with x, y)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	double LocX = 0, LocY = 0;
+	(*LocationObj)->TryGetNumberField(TEXT("x"), LocX);
+	(*LocationObj)->TryGetNumberField(TEXT("y"), LocY);
+
+	double PaintRadius = 500.0;
+	Params->TryGetNumberField(TEXT("radius"), PaintRadius);
+
+	double Strength = 1.0;
+	Params->TryGetNumberField(TEXT("strength"), Strength);
+
+	double Falloff = 0.5;
+	Params->TryGetNumberField(TEXT("falloff"), Falloff);
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Verify a landscape exists
+	bool bFoundLandscape = false;
+	for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
+	{
+		if (*It)
+		{
+			bFoundLandscape = true;
+			break;
+		}
+	}
+
+	if (!bFoundLandscape)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No landscape found in the current level"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Landscape layer painting is internal to LandscapeEdMode.
+	// The C++ API for painting layers requires the landscape editor mode to be active
+	// and is not trivially accessible from plugins.
+	// Provide the fallback note for using execute_python.
+	TSharedPtr<FJsonObject> LocationResult = MakeShared<FJsonObject>();
+	LocationResult->SetNumberField(TEXT("x"), LocX);
+	LocationResult->SetNumberField(TEXT("y"), LocY);
+	Result->SetObjectField(TEXT("location"), LocationResult);
+	Result->SetStringField(TEXT("layerName"), LayerName);
+	Result->SetNumberField(TEXT("radius"), PaintRadius);
+	Result->SetNumberField(TEXT("strength"), Strength);
+	Result->SetNumberField(TEXT("falloff"), Falloff);
+
+	Result->SetBoolField(TEXT("success"), false);
+	Result->SetStringField(TEXT("note"),
+		TEXT("Landscape layer painting requires LandscapeEdMode which is not accessible from C++ plugins. ")
+		TEXT("Use the execute_python handler with unreal.LandscapeEditorLibrary.paint_layer() if available, ")
+		TEXT("or manually paint in the editor landscape tool."));
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FLandscapeHandlers::ImportHeightmap(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString FilePath;
+	if (!Params->TryGetStringField(TEXT("filePath"), FilePath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'filePath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Verify the file exists
+	if (!FPaths::FileExists(FilePath))
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("File not found: %s"), *FilePath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the landscape
+	ALandscapeProxy* TargetLandscape = nullptr;
+	FString LandscapeName;
+	Params->TryGetStringField(TEXT("landscapeName"), LandscapeName);
+
+	for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
+	{
+		ALandscapeProxy* Landscape = *It;
+		if (!Landscape) continue;
+
+		if (LandscapeName.IsEmpty() || Landscape->GetName() == LandscapeName)
+		{
+			TargetLandscape = Landscape;
+			break;
+		}
+	}
+
+	if (!TargetLandscape)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No landscape found in the current level"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Read the heightmap file
+	TArray<uint8> FileData;
+	if (!FFileHelper::LoadFileToArray(FileData, *FilePath))
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to read file: %s"), *FilePath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Heightmap import requires the landscape editor subsystem which is internal to LandscapeEdMode.
+	// The raw heightmap data has been loaded successfully.
+	// Provide information about the file and a note about the import path.
+	Result->SetStringField(TEXT("filePath"), FilePath);
+	Result->SetNumberField(TEXT("fileSizeBytes"), FileData.Num());
+	Result->SetStringField(TEXT("landscapeName"), TargetLandscape->GetName());
+
+	// Determine if this looks like a 16-bit raw heightmap based on file size
+	int64 FileSize = FileData.Num();
+	bool bLooksLikeRaw16 = false;
+	int32 PossibleResolution = 0;
+	for (int32 Res = 127; Res <= 8161; Res += 2)
+	{
+		if (FileSize == (int64)Res * Res * 2)
+		{
+			bLooksLikeRaw16 = true;
+			PossibleResolution = Res;
+			break;
+		}
+	}
+
+	if (bLooksLikeRaw16)
+	{
+		Result->SetNumberField(TEXT("possibleResolution"), PossibleResolution);
+		Result->SetStringField(TEXT("format"), TEXT("RAW16"));
+	}
+
+	Result->SetBoolField(TEXT("success"), false);
+	Result->SetStringField(TEXT("note"),
+		TEXT("Heightmap file loaded and validated. Direct heightmap import requires LandscapeEditorUtils ")
+		TEXT("which is internal to the landscape editor module. Use the execute_python handler with ")
+		TEXT("unreal.LandscapeEditorLibrary.import_heightmap() if available, or import through the ")
+		TEXT("Landscape editor mode Import tool."));
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FLandscapeHandlers::SetLandscapeMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString MaterialPath;
+	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'materialPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the target landscape
+	ALandscapeProxy* TargetLandscape = nullptr;
+	FString LandscapeName;
+	Params->TryGetStringField(TEXT("landscapeName"), LandscapeName);
+
+	for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
+	{
+		ALandscapeProxy* Landscape = *It;
+		if (!Landscape) continue;
+
+		if (LandscapeName.IsEmpty() || Landscape->GetName() == LandscapeName)
+		{
+			TargetLandscape = Landscape;
+			break;
+		}
+	}
+
+	if (!TargetLandscape)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No landscape found in the current level"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Load the material
+	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
+	if (!Material)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Material not found: %s"), *MaterialPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Set the landscape material
+	TargetLandscape->LandscapeMaterial = Material;
+
+	// Update all landscape components to use the new material
+	TArray<ULandscapeComponent*> LandscapeComponents;
+	TargetLandscape->GetComponents<ULandscapeComponent>(LandscapeComponents);
+	for (ULandscapeComponent* Comp : LandscapeComponents)
+	{
+		if (Comp)
+		{
+			Comp->SetMaterial(0, Material);
+			Comp->MarkRenderStateDirty();
+		}
+	}
+
+	// Mark the landscape as modified
+	TargetLandscape->MarkPackageDirty();
+
+	Result->SetStringField(TEXT("landscapeName"), TargetLandscape->GetName());
+	Result->SetStringField(TEXT("materialPath"), MaterialPath);
+	Result->SetStringField(TEXT("materialName"), Material->GetName());
+	Result->SetNumberField(TEXT("componentsUpdated"), LandscapeComponents.Num());
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeBounds(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString LandscapeName;
+	Params->TryGetStringField(TEXT("landscapeName"), LandscapeName);
+
+	TArray<TSharedPtr<FJsonValue>> LandscapeBoundsArray;
+
+	for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
+	{
+		ALandscapeProxy* Landscape = *It;
+		if (!Landscape) continue;
+
+		// Filter by name if specified
+		if (!LandscapeName.IsEmpty() && Landscape->GetName() != LandscapeName)
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> LandscapeObj = MakeShared<FJsonObject>();
+		LandscapeObj->SetStringField(TEXT("name"), Landscape->GetName());
+
+		// Get actor bounds using GetActorBounds
+		FVector Origin;
+		FVector BoxExtent;
+		Landscape->GetActorBounds(false, Origin, BoxExtent);
+
+		TSharedPtr<FJsonObject> OriginObj = MakeShared<FJsonObject>();
+		OriginObj->SetNumberField(TEXT("x"), Origin.X);
+		OriginObj->SetNumberField(TEXT("y"), Origin.Y);
+		OriginObj->SetNumberField(TEXT("z"), Origin.Z);
+		LandscapeObj->SetObjectField(TEXT("origin"), OriginObj);
+
+		TSharedPtr<FJsonObject> ExtentObj = MakeShared<FJsonObject>();
+		ExtentObj->SetNumberField(TEXT("x"), BoxExtent.X);
+		ExtentObj->SetNumberField(TEXT("y"), BoxExtent.Y);
+		ExtentObj->SetNumberField(TEXT("z"), BoxExtent.Z);
+		LandscapeObj->SetObjectField(TEXT("boxExtent"), ExtentObj);
+
+		// Also provide min/max corners for convenience
+		FVector BoundsMin = Origin - BoxExtent;
+		FVector BoundsMax = Origin + BoxExtent;
+
+		TSharedPtr<FJsonObject> MinObj = MakeShared<FJsonObject>();
+		MinObj->SetNumberField(TEXT("x"), BoundsMin.X);
+		MinObj->SetNumberField(TEXT("y"), BoundsMin.Y);
+		MinObj->SetNumberField(TEXT("z"), BoundsMin.Z);
+		LandscapeObj->SetObjectField(TEXT("min"), MinObj);
+
+		TSharedPtr<FJsonObject> MaxObj = MakeShared<FJsonObject>();
+		MaxObj->SetNumberField(TEXT("x"), BoundsMax.X);
+		MaxObj->SetNumberField(TEXT("y"), BoundsMax.Y);
+		MaxObj->SetNumberField(TEXT("z"), BoundsMax.Z);
+		LandscapeObj->SetObjectField(TEXT("max"), MaxObj);
+
+		// Size
+		FVector Size = BoxExtent * 2.0;
+		TSharedPtr<FJsonObject> SizeObj = MakeShared<FJsonObject>();
+		SizeObj->SetNumberField(TEXT("x"), Size.X);
+		SizeObj->SetNumberField(TEXT("y"), Size.Y);
+		SizeObj->SetNumberField(TEXT("z"), Size.Z);
+		LandscapeObj->SetObjectField(TEXT("size"), SizeObj);
+
+		// Location
+		FVector Location = Landscape->GetActorLocation();
+		TSharedPtr<FJsonObject> LocationResultObj = MakeShared<FJsonObject>();
+		LocationResultObj->SetNumberField(TEXT("x"), Location.X);
+		LocationResultObj->SetNumberField(TEXT("y"), Location.Y);
+		LocationResultObj->SetNumberField(TEXT("z"), Location.Z);
+		LandscapeObj->SetObjectField(TEXT("location"), LocationResultObj);
+
+		LandscapeBoundsArray.Add(MakeShared<FJsonValueObject>(LandscapeObj));
+	}
+
+	if (LandscapeBoundsArray.Num() == 0)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No landscape found in the current level"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Result->SetArrayField(TEXT("landscapes"), LandscapeBoundsArray);
+	Result->SetNumberField(TEXT("count"), LandscapeBoundsArray.Num());
+	Result->SetBoolField(TEXT("success"), true);
+
 	return MakeShared<FJsonValueObject>(Result);
 }

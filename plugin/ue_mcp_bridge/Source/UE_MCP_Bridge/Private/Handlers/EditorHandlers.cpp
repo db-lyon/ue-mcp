@@ -32,6 +32,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "EditorValidatorSubsystem.h"
+#include "GenericPlatform/GenericPlatformCrashContext.h"
 
 void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -558,7 +559,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		Filename += TEXT(".png");
 	}
 
-	FScreenshotRequest::RequestScreenshot(Filename, false, false);
+	FScreenshotRequest::RequestScreenshot(*Filename, false, false);
 
 	Result->SetStringField(TEXT("filename"), Filename);
 	Result->SetBoolField(TEXT("success"), true);
@@ -779,7 +780,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ReadEditorLog(const TSharedPtr<FJsonObje
 	// If Editor.log doesn't exist, try the current log file
 	if (!FPaths::FileExists(LogFilePath))
 	{
-		LogFilePath = FPaths::Combine(LogDir, FApp::GetProjectName() + TEXT(".log"));
+		LogFilePath = FPaths::Combine(LogDir, FString(FApp::GetProjectName()) + TEXT(".log"));
 	}
 
 	if (!FPaths::FileExists(LogFilePath))

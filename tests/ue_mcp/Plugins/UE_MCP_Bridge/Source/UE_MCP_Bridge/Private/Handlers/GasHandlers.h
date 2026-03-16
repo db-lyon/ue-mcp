@@ -15,4 +15,6 @@ private:
 	static TSharedPtr<FJsonValue> CreateGameplayAbility(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateAttributeSet(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateGameplayCue(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddAbilityTag(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CreateGameplayCueNotify(const TSharedPtr<FJsonObject>& Params);
 };

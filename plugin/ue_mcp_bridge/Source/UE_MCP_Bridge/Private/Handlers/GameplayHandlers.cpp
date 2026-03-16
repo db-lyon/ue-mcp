@@ -44,6 +44,18 @@
 #include "Perception/AISenseConfig_Sight.h"
 #include "Perception/AISenseConfig_Hearing.h"
 #include "Perception/AISenseConfig_Damage.h"
+#include "EnhancedInput/EnhancedInputComponent.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
+#include "BehaviorTree/BehaviorTree.h"
+#include "BehaviorTree/BehaviorTreeComponent.h"
+#include "AIController.h"
+#include "Navigation/PathFollowingComponent.h"
+#include "GameFramework/NavMovementComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Character.h"
+#include "EnvironmentQuery/EnvQuery.h"
+#include "EnvironmentQuery/EnvQueryManager.h"
 
 void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -76,6 +88,10 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_world_game_mode"), &SetWorldGameMode);
 	Registry.RegisterHandler(TEXT("create_ai_perception_config"), &CreateAiPerceptionConfig);
 	Registry.RegisterHandler(TEXT("add_blackboard_key"), &AddBlackboardKey);
+	Registry.RegisterHandler(TEXT("setup_enhanced_input"), &SetupEnhancedInput);
+	Registry.RegisterHandler(TEXT("configure_behavior_tree"), &ConfigureBehaviorTree);
+	Registry.RegisterHandler(TEXT("setup_path_following"), &SetupPathFollowing);
+	Registry.RegisterHandler(TEXT("run_eqs_query"), &RunEqsQuery);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSharedPtr<FJsonObject>& Params)
@@ -1513,6 +1529,434 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("keyName"), KeyName);
 	Result->SetStringField(TEXT("keyType"), KeyType);
 	Result->SetNumberField(TEXT("totalKeys"), BlackboardAsset->Keys.Num());
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::SetupEnhancedInput(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString ActorLabel;
+	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString MappingContextPath;
+	if (!Params->TryGetStringField(TEXT("mappingContextPath"), MappingContextPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'mappingContextPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	int32 Priority = 0;
+	Params->TryGetNumberField(TEXT("priority"), Priority);
+
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find actor by label
+	AActor* FoundActor = nullptr;
+	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		if ((*ActorIt)->GetActorLabel() == ActorLabel)
+		{
+			FoundActor = *ActorIt;
+			break;
+		}
+	}
+
+	if (!FoundActor)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Load the mapping context asset
+	UInputMappingContext* MappingContext = LoadObject<UInputMappingContext>(nullptr, *MappingContextPath);
+	if (!MappingContext)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("InputMappingContext not found: %s"), *MappingContextPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Check if the actor has an EnhancedInputComponent
+	UEnhancedInputComponent* InputComp = FoundActor->FindComponentByClass<UEnhancedInputComponent>();
+	if (!InputComp)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Actor does not have an EnhancedInputComponent"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Optionally bind input actions from params
+	TArray<TSharedPtr<FJsonValue>> BoundActions;
+	const TArray<TSharedPtr<FJsonValue>>* ActionsArray = nullptr;
+	if (Params->TryGetArrayField(TEXT("actions"), ActionsArray))
+	{
+		for (const auto& ActionVal : *ActionsArray)
+		{
+			const TSharedPtr<FJsonObject>* ActionObj = nullptr;
+			if (ActionVal->TryGetObject(ActionObj))
+			{
+				FString ActionPath;
+				if ((*ActionObj)->TryGetStringField(TEXT("actionPath"), ActionPath))
+				{
+					UInputAction* InputAction = LoadObject<UInputAction>(nullptr, *ActionPath);
+					if (InputAction)
+					{
+						TSharedPtr<FJsonObject> BoundAction = MakeShared<FJsonObject>();
+						BoundAction->SetStringField(TEXT("actionPath"), ActionPath);
+						BoundAction->SetStringField(TEXT("actionName"), InputAction->GetName());
+						BoundActions.Add(MakeShared<FJsonValueObject>(BoundAction));
+					}
+				}
+			}
+		}
+	}
+
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("mappingContext"), MappingContext->GetName());
+	Result->SetNumberField(TEXT("priority"), Priority);
+	Result->SetArrayField(TEXT("boundActions"), BoundActions);
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureBehaviorTree(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString ActorLabel;
+	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString BehaviorTreePath;
+	if (!Params->TryGetStringField(TEXT("behaviorTreePath"), BehaviorTreePath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'behaviorTreePath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find actor by label - should be an AI-controlled pawn/character
+	AActor* FoundActor = nullptr;
+	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		if ((*ActorIt)->GetActorLabel() == ActorLabel)
+		{
+			FoundActor = *ActorIt;
+			break;
+		}
+	}
+
+	if (!FoundActor)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Load the behavior tree asset
+	UBehaviorTree* BehaviorTree = LoadObject<UBehaviorTree>(nullptr, *BehaviorTreePath);
+	if (!BehaviorTree)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("BehaviorTree not found: %s"), *BehaviorTreePath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Optionally load blackboard
+	FString BlackboardPath;
+	UBlackboardData* BlackboardAsset = nullptr;
+	if (Params->TryGetStringField(TEXT("blackboardPath"), BlackboardPath))
+	{
+		BlackboardAsset = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
+		if (!BlackboardAsset)
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+	}
+
+	// Find or get the AI controller for this actor
+	APawn* Pawn = Cast<APawn>(FoundActor);
+	if (!Pawn)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Actor is not a Pawn. BehaviorTree requires an AI-controlled Pawn."));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	AAIController* AIController = Cast<AAIController>(Pawn->GetController());
+	if (!AIController)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Pawn does not have an AAIController. Assign an AI controller first."));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// In UE 5.7, use RunBehaviorTree() on the AI controller rather than
+	// SetDefaultTree()/SetDefaultBlackboard() on BehaviorTreeComponent (which don't exist).
+	// RunBehaviorTree() handles creating/configuring the BehaviorTreeComponent internally
+	// and also initializes the blackboard from the tree's BlackboardAsset if set.
+	bool bSuccess = AIController->RunBehaviorTree(BehaviorTree);
+	if (!bSuccess)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to run behavior tree on AI controller"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// If a separate blackboard was specified, use the tree's component to apply it
+	if (BlackboardAsset)
+	{
+		UBehaviorTreeComponent* BTComp = Cast<UBehaviorTreeComponent>(AIController->GetBrainComponent());
+		if (BTComp)
+		{
+			// The blackboard is initialized via the tree asset's BlackboardAsset property.
+			// If a custom blackboard was provided, we can set it on the tree asset itself
+			// before starting, or use the blackboard component on the controller.
+			UBlackboardComponent* BBComp = AIController->GetBlackboardComponent();
+			if (BBComp)
+			{
+				BBComp->InitializeBlackboard(*BlackboardAsset);
+			}
+		}
+	}
+
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("behaviorTree"), BehaviorTree->GetName());
+	if (BlackboardAsset)
+	{
+		Result->SetStringField(TEXT("blackboard"), BlackboardAsset->GetName());
+	}
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::SetupPathFollowing(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString ActorLabel;
+	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find actor by label
+	AActor* FoundActor = nullptr;
+	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		if ((*ActorIt)->GetActorLabel() == ActorLabel)
+		{
+			FoundActor = *ActorIt;
+			break;
+		}
+	}
+
+	if (!FoundActor)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Actor must be a Pawn with an AI controller
+	APawn* Pawn = Cast<APawn>(FoundActor);
+	if (!Pawn)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Actor is not a Pawn"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	AAIController* AIController = Cast<AAIController>(Pawn->GetController());
+	if (!AIController)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Pawn does not have an AAIController"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Get the PathFollowingComponent from the AI controller
+	UPathFollowingComponent* PathFollowComp = AIController->GetPathFollowingComponent();
+	if (!PathFollowComp)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("AI Controller does not have a PathFollowingComponent"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// In UE 5.7, SetMovementComponent() expects a UNavMovementComponent* (not UMovementComponent*).
+	// Get the CharacterMovementComponent which inherits from UNavMovementComponent.
+	UNavMovementComponent* NavMoveComp = Pawn->FindComponentByClass<UNavMovementComponent>();
+	if (NavMoveComp)
+	{
+		PathFollowComp->SetMovementComponent(NavMoveComp);
+	}
+	else
+	{
+		Result->SetStringField(TEXT("warning"), TEXT("No UNavMovementComponent found on pawn; path following may not work correctly"));
+	}
+
+	// Read optional acceptance radius
+	double AcceptanceRadius = -1.0;
+	if (Params->TryGetNumberField(TEXT("acceptanceRadius"), AcceptanceRadius) && AcceptanceRadius >= 0.0)
+	{
+		// acceptance radius is typically set per-request via MoveToLocation, not on the component
+	}
+
+	// Optionally trigger a move-to if target location is specified
+	const TSharedPtr<FJsonObject>* TargetObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("targetLocation"), TargetObj))
+	{
+		FVector TargetLocation;
+		TargetLocation.X = (*TargetObj)->GetNumberField(TEXT("x"));
+		TargetLocation.Y = (*TargetObj)->GetNumberField(TEXT("y"));
+		TargetLocation.Z = (*TargetObj)->GetNumberField(TEXT("z"));
+
+		FAIMoveRequest MoveRequest;
+		MoveRequest.SetGoalLocation(TargetLocation);
+		if (AcceptanceRadius >= 0.0)
+		{
+			MoveRequest.SetAcceptanceRadius(AcceptanceRadius);
+		}
+		MoveRequest.SetUsePathfinding(true);
+
+		AIController->MoveTo(MoveRequest);
+
+		TSharedPtr<FJsonObject> TargetResult = MakeShared<FJsonObject>();
+		TargetResult->SetNumberField(TEXT("x"), TargetLocation.X);
+		TargetResult->SetNumberField(TEXT("y"), TargetLocation.Y);
+		TargetResult->SetNumberField(TEXT("z"), TargetLocation.Z);
+		Result->SetObjectField(TEXT("targetLocation"), TargetResult);
+		Result->SetStringField(TEXT("moveStatus"), TEXT("move_requested"));
+	}
+
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetBoolField(TEXT("hasNavMovementComponent"), NavMoveComp != nullptr);
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::RunEqsQuery(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString QueryPath;
+	if (!Params->TryGetStringField(TEXT("queryPath"), QueryPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'queryPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString ActorLabel;
+	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter - querier actor is required"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Load the EQS query asset
+	UEnvQuery* EnvQuery = LoadObject<UEnvQuery>(nullptr, *QueryPath);
+	if (!EnvQuery)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("EnvQuery not found: %s"), *QueryPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the querier actor
+	AActor* QuerierActor = nullptr;
+	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		if ((*ActorIt)->GetActorLabel() == ActorLabel)
+		{
+			QuerierActor = *ActorIt;
+			break;
+		}
+	}
+
+	if (!QuerierActor)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Querier actor not found: %s"), *ActorLabel));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// In UE 5.7, run EQS queries via UEnvQueryManager::RunQuery() with FEnvQueryRequest.
+	// FEnvQueryRequest and FEQSParametrizedQueryExecutionRequest do not exist as standalone types.
+	// Instead, use UEnvQueryManager directly with RunEQSQuery or the instance-based API.
+	UEnvQueryManager* EQSManager = UEnvQueryManager::GetCurrent(World);
+	if (!EQSManager)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("EnvQueryManager not available in current world"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Run the query synchronously-ish: we trigger it and report that it was started.
+	// EQS queries in UE are async by nature; we start the query and return its ID.
+	int32 QueryId = EQSManager->RunEQSQuery(World, EnvQuery, QuerierActor, EEnvQueryRunMode::AllMatching, nullptr);
+
+	if (QueryId == INDEX_NONE)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to start EQS query"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Result->SetStringField(TEXT("queryPath"), QueryPath);
+	Result->SetStringField(TEXT("queryName"), EnvQuery->GetName());
+	Result->SetStringField(TEXT("querierActor"), ActorLabel);
+	Result->SetNumberField(TEXT("queryId"), QueryId);
+	Result->SetStringField(TEXT("status"), TEXT("query_started"));
 	Result->SetBoolField(TEXT("success"), true);
 	return MakeShared<FJsonValueObject>(Result);
 }

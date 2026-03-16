@@ -29,6 +29,9 @@
 #include "Engine/TriggerVolume.h"
 #include "Selection.h"
 #include "Engine/LevelStreaming.h"
+#include "LevelEditorSubsystem.h"
+#include "EditorLevelUtils.h"
+#include "FileHelpers.h"
 
 void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -46,6 +49,9 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_light_properties"), &SetLightProperties);
 	Registry.RegisterHandler(TEXT("spawn_volume"), &SpawnVolume);
 	Registry.RegisterHandler(TEXT("add_component_to_actor"), &AddComponentToActor);
+	Registry.RegisterHandler(TEXT("load_level"), &LoadLevel);
+	Registry.RegisterHandler(TEXT("save_level"), &SaveLevel);
+	Registry.RegisterHandler(TEXT("list_sublevels"), &ListSublevels);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>& Params)
@@ -937,6 +943,137 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetStringField(TEXT("componentClass"), NewComponent->GetClass()->GetName());
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString LevelPath;
+	if (!Params->TryGetStringField(TEXT("levelPath"), LevelPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'levelPath' parameter (e.g. /Game/Maps/MyMap)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Use the LevelEditorSubsystem to load the level
+	ULevelEditorSubsystem* LevelEditorSubsystem = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
+	if (!LevelEditorSubsystem)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("LevelEditorSubsystem not available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	bool bSuccess = LevelEditorSubsystem->LoadLevel(LevelPath);
+	if (!bSuccess)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load level: %s"), *LevelPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Get info about the newly loaded world
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (World)
+	{
+		Result->SetStringField(TEXT("worldName"), World->GetName());
+		Result->SetStringField(TEXT("worldPath"), World->GetPathName());
+	}
+
+	Result->SetStringField(TEXT("levelPath"), LevelPath);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::SaveLevel(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Use the LevelEditorSubsystem to save the current level
+	ULevelEditorSubsystem* LevelEditorSubsystem = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
+	if (!LevelEditorSubsystem)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("LevelEditorSubsystem not available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	bool bSuccess = LevelEditorSubsystem->SaveCurrentLevel();
+
+	Result->SetStringField(TEXT("levelName"), World->GetName());
+	Result->SetStringField(TEXT("levelPath"), World->GetPathName());
+	Result->SetBoolField(TEXT("success"), bSuccess);
+
+	if (!bSuccess)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to save current level"));
+	}
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::ListSublevels(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> SublevelsArray;
+
+	// Iterate streaming/sublevels
+	const TArray<ULevelStreaming*>& StreamingLevels = World->GetStreamingLevels();
+	for (ULevelStreaming* StreamingLevel : StreamingLevels)
+	{
+		if (!StreamingLevel) continue;
+
+		TSharedPtr<FJsonObject> LevelObj = MakeShared<FJsonObject>();
+		LevelObj->SetStringField(TEXT("packageName"), StreamingLevel->GetWorldAssetPackageFName().ToString());
+		LevelObj->SetStringField(TEXT("class"), StreamingLevel->GetClass()->GetName());
+		LevelObj->SetBoolField(TEXT("isLoaded"), StreamingLevel->IsLevelLoaded());
+		LevelObj->SetBoolField(TEXT("isVisible"), StreamingLevel->IsLevelVisible());
+		LevelObj->SetBoolField(TEXT("shouldBeLoaded"), StreamingLevel->HasLoadRequestPending() || StreamingLevel->IsLevelLoaded());
+
+		// Get streaming level transform
+		FTransform LevelTransform = StreamingLevel->LevelTransform;
+		TSharedPtr<FJsonObject> TransformObj = MakeShared<FJsonObject>();
+		FVector Location = LevelTransform.GetLocation();
+		TransformObj->SetNumberField(TEXT("x"), Location.X);
+		TransformObj->SetNumberField(TEXT("y"), Location.Y);
+		TransformObj->SetNumberField(TEXT("z"), Location.Z);
+		LevelObj->SetObjectField(TEXT("location"), TransformObj);
+
+		// Actor count if loaded
+		if (StreamingLevel->IsLevelLoaded() && StreamingLevel->GetLoadedLevel())
+		{
+			LevelObj->SetNumberField(TEXT("actorCount"), StreamingLevel->GetLoadedLevel()->Actors.Num());
+		}
+
+		SublevelsArray.Add(MakeShared<FJsonValueObject>(LevelObj));
+	}
+
+	Result->SetStringField(TEXT("persistentLevel"), World->GetName());
+	Result->SetArrayField(TEXT("sublevels"), SublevelsArray);
+	Result->SetNumberField(TEXT("count"), SublevelsArray.Num());
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

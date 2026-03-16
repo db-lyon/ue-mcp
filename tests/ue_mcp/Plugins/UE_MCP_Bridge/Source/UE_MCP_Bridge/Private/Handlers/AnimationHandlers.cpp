@@ -1,12 +1,26 @@
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetToolsModule.h"
+#include "IAssetTools.h"
 #include "Engine/SkeletalMesh.h"
 #include "Animation/Skeleton.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/AnimBlueprint.h"
+#include "Animation/BlendSpace.h"
+#include "Animation/AnimBlueprintGeneratedClass.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
+#include "Factories/AnimBlueprintFactory.h"
+#include "Factories/AnimMontageFactory.h"
+#include "Factories/BlendSpaceFactoryNew.h"
+#include "UObject/UObjectGlobals.h"
+#include "UObject/Package.h"
+#include "Misc/PackageName.h"
+#include "UObject/SavePackage.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -17,6 +31,12 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_skeleton_info"), &GetSkeletonInfo);
 	Registry.RegisterHandler(TEXT("list_sockets"), &ListSockets);
 	Registry.RegisterHandler(TEXT("get_physics_asset_info"), &GetPhysicsAssetInfo);
+	Registry.RegisterHandler(TEXT("read_anim_blueprint"), &ReadAnimBlueprint);
+	Registry.RegisterHandler(TEXT("read_anim_montage"), &ReadAnimMontage);
+	Registry.RegisterHandler(TEXT("read_anim_sequence"), &ReadAnimSequence);
+	Registry.RegisterHandler(TEXT("create_anim_blueprint"), &CreateAnimBlueprint);
+	Registry.RegisterHandler(TEXT("create_montage"), &CreateMontage);
+	Registry.RegisterHandler(TEXT("create_blendspace"), &CreateBlendspace);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimAssets(const TSharedPtr<FJsonObject>& Params)
@@ -248,6 +268,517 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetPhysicsAssetInfo(const TSharedPtr<
 	}
 
 	Result->SetArrayField(TEXT("bodies"), BodiesArray);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// read_anim_blueprint
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(LoadedAsset);
+	if (!AnimBP)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimBlueprint at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("name"), AnimBP->GetName());
+	Result->SetStringField(TEXT("class"), AnimBP->GetClass()->GetName());
+
+	// Target skeleton
+	USkeleton* TargetSkeleton = AnimBP->TargetSkeleton.Get();
+	if (TargetSkeleton)
+	{
+		Result->SetStringField(TEXT("targetSkeleton"), TargetSkeleton->GetPathName());
+	}
+	else
+	{
+		Result->SetField(TEXT("targetSkeleton"), MakeShared<FJsonValueNull>());
+	}
+
+	// Parent class
+	UClass* ParentClass = AnimBP->ParentClass;
+	if (ParentClass)
+	{
+		Result->SetStringField(TEXT("parentClass"), ParentClass->GetName());
+	}
+	else
+	{
+		Result->SetField(TEXT("parentClass"), MakeShared<FJsonValueNull>());
+	}
+
+	// Groups
+	TArray<TSharedPtr<FJsonValue>> GroupsArray;
+	for (const FAnimGroupInfo& Group : AnimBP->Groups)
+	{
+		GroupsArray.Add(MakeShared<FJsonValueString>(Group.Name.ToString()));
+	}
+	Result->SetArrayField(TEXT("groups"), GroupsArray);
+
+	// Variables from the generated class
+	TArray<TSharedPtr<FJsonValue>> VariablesArray;
+	UAnimBlueprintGeneratedClass* GenClass = Cast<UAnimBlueprintGeneratedClass>(AnimBP->GeneratedClass);
+	if (GenClass)
+	{
+		for (TFieldIterator<FProperty> PropIt(GenClass, EFieldIteratorFlags::ExcludeSuper); PropIt; ++PropIt)
+		{
+			FProperty* Prop = *PropIt;
+			if (!Prop) continue;
+
+			TSharedPtr<FJsonObject> VarObj = MakeShared<FJsonObject>();
+			VarObj->SetStringField(TEXT("name"), Prop->GetName());
+			VarObj->SetStringField(TEXT("type"), Prop->GetCPPType());
+			VariablesArray.Add(MakeShared<FJsonValueObject>(VarObj));
+		}
+	}
+	Result->SetArrayField(TEXT("variables"), VariablesArray);
+
+	// State machine names from the anim graph
+	TArray<TSharedPtr<FJsonValue>> StateMachinesArray;
+	if (GenClass)
+	{
+		for (const FBakedAnimationStateMachine& SM : GenClass->BakedStateMachines)
+		{
+			StateMachinesArray.Add(MakeShared<FJsonValueString>(SM.MachineName.ToString()));
+		}
+	}
+	Result->SetArrayField(TEXT("stateMachines"), StateMachinesArray);
+
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// read_anim_montage
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimMontage(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UAnimMontage* Montage = Cast<UAnimMontage>(LoadedAsset);
+	if (!Montage)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("name"), Montage->GetName());
+	Result->SetStringField(TEXT("class"), Montage->GetClass()->GetName());
+
+	// Blend in / blend out times
+	Result->SetNumberField(TEXT("blendIn"), Montage->BlendIn.GetBlendTime());
+	Result->SetNumberField(TEXT("blendOut"), Montage->BlendOut.GetBlendTime());
+
+	// Sequence length and rate scale
+	Result->SetNumberField(TEXT("sequenceLength"), Montage->GetPlayLength());
+	Result->SetNumberField(TEXT("rateScale"), Montage->RateScale);
+
+	// Composite sections
+	TArray<TSharedPtr<FJsonValue>> SectionsArray;
+	for (const FCompositeSection& Section : Montage->CompositeSections)
+	{
+		TSharedPtr<FJsonObject> SecObj = MakeShared<FJsonObject>();
+		SecObj->SetStringField(TEXT("name"), Section.SectionName.ToString());
+		SecObj->SetNumberField(TEXT("startTime"), Section.GetTime());
+		SecObj->SetStringField(TEXT("nextSection"), Section.NextSectionName.ToString());
+		SectionsArray.Add(MakeShared<FJsonValueObject>(SecObj));
+	}
+	Result->SetArrayField(TEXT("sections"), SectionsArray);
+
+	// Notifies
+	TArray<TSharedPtr<FJsonValue>> NotifiesArray;
+	for (const FAnimNotifyEvent& NotifyEvent : Montage->Notifies)
+	{
+		TSharedPtr<FJsonObject> NotifyObj = MakeShared<FJsonObject>();
+		NotifyObj->SetStringField(TEXT("name"), NotifyEvent.NotifyName.ToString());
+		NotifyObj->SetNumberField(TEXT("triggerTime"), NotifyEvent.GetTriggerTime());
+		NotifyObj->SetNumberField(TEXT("duration"), NotifyEvent.GetDuration());
+		if (NotifyEvent.Notify)
+		{
+			NotifyObj->SetStringField(TEXT("class"), NotifyEvent.Notify->GetClass()->GetName());
+		}
+		NotifiesArray.Add(MakeShared<FJsonValueObject>(NotifyObj));
+	}
+	Result->SetArrayField(TEXT("notifies"), NotifiesArray);
+
+	// Slot anim tracks
+	TArray<TSharedPtr<FJsonValue>> SlotTracksArray;
+	for (const FSlotAnimationTrack& SlotTrack : Montage->SlotAnimTracks)
+	{
+		TSharedPtr<FJsonObject> TrackObj = MakeShared<FJsonObject>();
+		TrackObj->SetStringField(TEXT("slotName"), SlotTrack.SlotName.ToString());
+
+		TArray<TSharedPtr<FJsonValue>> SegmentsArray;
+		for (const FAnimSegment& Segment : SlotTrack.AnimTrack.AnimSegments)
+		{
+			TSharedPtr<FJsonObject> SegObj = MakeShared<FJsonObject>();
+			if (Segment.GetAnimReference())
+			{
+				SegObj->SetStringField(TEXT("animation"), Segment.GetAnimReference()->GetPathName());
+			}
+			else
+			{
+				SegObj->SetField(TEXT("animation"), MakeShared<FJsonValueNull>());
+			}
+			SegObj->SetNumberField(TEXT("startPos"), Segment.AnimStartTime);
+			SegObj->SetNumberField(TEXT("endPos"), Segment.AnimEndTime);
+			SegmentsArray.Add(MakeShared<FJsonValueObject>(SegObj));
+		}
+		TrackObj->SetArrayField(TEXT("segments"), SegmentsArray);
+		SlotTracksArray.Add(MakeShared<FJsonValueObject>(TrackObj));
+	}
+	Result->SetArrayField(TEXT("slotAnimTracks"), SlotTracksArray);
+
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// read_anim_sequence
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimSequence(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UAnimSequence* AnimSeq = Cast<UAnimSequence>(LoadedAsset);
+	if (!AnimSeq)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("name"), AnimSeq->GetName());
+	Result->SetStringField(TEXT("class"), AnimSeq->GetClass()->GetName());
+
+	// Sequence length
+	Result->SetNumberField(TEXT("sequenceLength"), AnimSeq->GetPlayLength());
+
+	// Rate scale
+	Result->SetNumberField(TEXT("rateScale"), AnimSeq->RateScale);
+
+	// Number of frames and sampling frame rate
+	Result->SetNumberField(TEXT("numberOfFrames"), AnimSeq->GetNumberOfSampledKeys());
+	double SamplingRate = AnimSeq->GetSamplingFrameRate().AsDecimal();
+	Result->SetNumberField(TEXT("samplingFrameRate"), SamplingRate);
+
+	// Skeleton
+	USkeleton* Skeleton = AnimSeq->GetSkeleton();
+	if (Skeleton)
+	{
+		Result->SetStringField(TEXT("skeleton"), Skeleton->GetPathName());
+	}
+	else
+	{
+		Result->SetField(TEXT("skeleton"), MakeShared<FJsonValueNull>());
+	}
+
+	// Additive animation type
+	Result->SetBoolField(TEXT("isAdditive"), AnimSeq->AdditiveAnimType != EAdditiveAnimationType::AAT_None);
+
+	// Notifies
+	TArray<TSharedPtr<FJsonValue>> NotifiesArray;
+	for (const FAnimNotifyEvent& NotifyEvent : AnimSeq->Notifies)
+	{
+		TSharedPtr<FJsonObject> NotifyObj = MakeShared<FJsonObject>();
+		NotifyObj->SetStringField(TEXT("name"), NotifyEvent.NotifyName.ToString());
+		NotifyObj->SetNumberField(TEXT("triggerTime"), NotifyEvent.GetTriggerTime());
+		if (NotifyEvent.Notify)
+		{
+			NotifyObj->SetStringField(TEXT("class"), NotifyEvent.Notify->GetClass()->GetName());
+		}
+		NotifiesArray.Add(MakeShared<FJsonValueObject>(NotifyObj));
+	}
+	Result->SetArrayField(TEXT("notifies"), NotifiesArray);
+
+	// Curve names
+	TArray<TSharedPtr<FJsonValue>> CurvesArray;
+	const TArray<FFloatCurve>& Curves = AnimSeq->GetCurveData().FloatCurves;
+	for (const FFloatCurve& Curve : Curves)
+	{
+		CurvesArray.Add(MakeShared<FJsonValueString>(Curve.GetName().ToString()));
+	}
+	Result->SetArrayField(TEXT("curveNames"), CurvesArray);
+
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// create_anim_blueprint
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString Name;
+	if (!Params->TryGetStringField(TEXT("name"), Name))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString SkeletonPath;
+	if (!Params->TryGetStringField(TEXT("skeletonPath"), SkeletonPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'skeletonPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString PackagePath = TEXT("/Game/Animations");
+	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+
+	FString ParentClassName;
+	Params->TryGetStringField(TEXT("parentClass"), ParentClassName);
+
+	// Load the skeleton
+	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
+	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
+	if (!Skeleton)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Delete existing asset if present
+	FString FullAssetPath = PackagePath + TEXT("/") + Name;
+	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
+
+	// Create the AnimBlueprint via factory
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	IAssetTools& AssetTools = AssetToolsModule.Get();
+
+	UAnimBlueprintFactory* Factory = NewObject<UAnimBlueprintFactory>();
+	Factory->TargetSkeleton = Skeleton;
+
+	// Resolve parent class if specified, default to UAnimInstance
+	if (!ParentClassName.IsEmpty())
+	{
+		UClass* FoundClass = FindObject<UClass>(ANY_PACKAGE, *ParentClassName);
+		if (FoundClass && FoundClass->IsChildOf(UAnimInstance::StaticClass()))
+		{
+			Factory->ParentClass = FoundClass;
+		}
+	}
+
+	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UAnimBlueprint::StaticClass(), Factory);
+	if (!NewAsset)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to create AnimBlueprint"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+
+	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("name"), NewAsset->GetName());
+	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// create_montage
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString Name;
+	if (!Params->TryGetStringField(TEXT("name"), Name))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString AnimSequencePath;
+	if (!Params->TryGetStringField(TEXT("animSequencePath"), AnimSequencePath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'animSequencePath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString PackagePath = TEXT("/Game/Animations");
+	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+
+	// Load the source anim sequence
+	UObject* SourceAsset = UEditorAssetLibrary::LoadAsset(AnimSequencePath);
+	UAnimSequence* SourceSequence = Cast<UAnimSequence>(SourceAsset);
+	if (!SourceSequence)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimSequencePath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Delete existing asset if present
+	FString FullAssetPath = PackagePath + TEXT("/") + Name;
+	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
+
+	// Create the montage via factory
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	IAssetTools& AssetTools = AssetToolsModule.Get();
+
+	UAnimMontageFactory* Factory = NewObject<UAnimMontageFactory>();
+	Factory->TargetSkeleton = SourceSequence->GetSkeleton();
+	Factory->SourceAnimation = SourceSequence;
+
+	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UAnimMontage::StaticClass(), Factory);
+	if (!NewAsset)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to create AnimMontage"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+
+	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("name"), NewAsset->GetName());
+	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// create_blendspace
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString Name;
+	if (!Params->TryGetStringField(TEXT("name"), Name))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString SkeletonPath;
+	if (!Params->TryGetStringField(TEXT("skeletonPath"), SkeletonPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'skeletonPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString PackagePath = TEXT("/Game/Animations");
+	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+
+	FString AxisHorizontal = TEXT("Speed");
+	Params->TryGetStringField(TEXT("axisHorizontal"), AxisHorizontal);
+
+	FString AxisVertical = TEXT("Direction");
+	Params->TryGetStringField(TEXT("axisVertical"), AxisVertical);
+
+	double HorizontalMin = 0.0;
+	double HorizontalMax = 500.0;
+	double VerticalMin = -180.0;
+	double VerticalMax = 180.0;
+	Params->TryGetNumberField(TEXT("horizontalMin"), HorizontalMin);
+	Params->TryGetNumberField(TEXT("horizontalMax"), HorizontalMax);
+	Params->TryGetNumberField(TEXT("verticalMin"), VerticalMin);
+	Params->TryGetNumberField(TEXT("verticalMax"), VerticalMax);
+
+	// Load the skeleton
+	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
+	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
+	if (!Skeleton)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Delete existing asset if present
+	FString FullAssetPath = PackagePath + TEXT("/") + Name;
+	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
+
+	// Create the BlendSpace via factory
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	IAssetTools& AssetTools = AssetToolsModule.Get();
+
+	UBlendSpaceFactoryNew* Factory = NewObject<UBlendSpaceFactoryNew>();
+	Factory->TargetSkeleton = Skeleton;
+
+	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UBlendSpace::StaticClass(), Factory);
+	if (!NewAsset)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to create BlendSpace"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Configure axis settings on the newly created BlendSpace
+	UBlendSpace* BlendSpace = Cast<UBlendSpace>(NewAsset);
+	if (BlendSpace)
+	{
+		FBlendParameter BlendParam0 = BlendSpace->GetBlendParameter(0);
+		BlendParam0.DisplayName = AxisHorizontal;
+		BlendParam0.Min = HorizontalMin;
+		BlendParam0.Max = HorizontalMax;
+		BlendSpace->SetBlendParameter(0, BlendParam0);
+
+		FBlendParameter BlendParam1 = BlendSpace->GetBlendParameter(1);
+		BlendParam1.DisplayName = AxisVertical;
+		BlendParam1.Min = VerticalMin;
+		BlendParam1.Max = VerticalMax;
+		BlendSpace->SetBlendParameter(1, BlendParam1);
+	}
+
+	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+
+	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("name"), NewAsset->GetName());
+	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
+	Result->SetStringField(TEXT("axisHorizontal"), AxisHorizontal);
+	Result->SetStringField(TEXT("axisVertical"), AxisVertical);
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

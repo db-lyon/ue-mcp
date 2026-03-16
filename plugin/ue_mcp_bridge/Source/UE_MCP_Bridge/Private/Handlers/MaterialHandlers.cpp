@@ -851,7 +851,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectExpression(const TSharedPtr<FJs
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	const TArray<TObjectPtr<UMaterialExpression>>& Expressions = Material->GetExpressions();
+	auto Expressions = Material->GetExpressions();
 
 	if (SourceIndex < 0 || SourceIndex >= Expressions.Num())
 	{
@@ -877,18 +877,18 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectExpression(const TSharedPtr<FJs
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	// Get the target expression's inputs
-	TArray<FExpressionInput*> TargetInputs = TargetExpression->GetInputs();
-	if (TargetInputIndex < 0 || TargetInputIndex >= TargetInputs.Num())
+	// Get the target expression's input count
+	int32 NumInputs = TargetExpression->GetNumInputs();
+	if (TargetInputIndex < 0 || TargetInputIndex >= NumInputs)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Target input index %d out of range (0-%d)"), TargetInputIndex, TargetInputs.Num() - 1));
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Target input index %d out of range (0-%d)"), TargetInputIndex, NumInputs - 1));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	Material->PreEditChange(nullptr);
 
-	FExpressionInput* TargetInput = TargetInputs[TargetInputIndex];
+	FExpressionInput* TargetInput = TargetExpression->GetInput(TargetInputIndex);
 	TargetInput->Connect(SourceOutputIndex, SourceExpression);
 
 	Material->PostEditChange();
@@ -945,7 +945,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialProperty(const TSharedP
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	const TArray<TObjectPtr<UMaterialExpression>>& Expressions = Material->GetExpressions();
+	auto Expressions = Material->GetExpressions();
 
 	if (ExpressionIndex < 0 || ExpressionIndex >= Expressions.Num())
 	{
@@ -1043,7 +1043,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteExpression(const TSharedPtr<FJso
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	const TArray<TObjectPtr<UMaterialExpression>>& Expressions = Material->GetExpressions();
+	auto Expressions = Material->GetExpressions();
 
 	if (ExpressionIndex < 0 || ExpressionIndex >= Expressions.Num())
 	{
@@ -1106,7 +1106,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	const TArray<TObjectPtr<UMaterialExpression>>& Expressions = Material->GetExpressions();
+	auto Expressions = Material->GetExpressions();
 
 	if (ExpressionIndex < 0 || ExpressionIndex >= Expressions.Num())
 	{

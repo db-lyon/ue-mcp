@@ -837,7 +837,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 
 	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
 		Blueprint,
-		FunctionName,
+		FName(*FunctionName),
 		UEdGraph::StaticClass(),
 		UEdGraphSchema_K2::StaticClass()
 	);

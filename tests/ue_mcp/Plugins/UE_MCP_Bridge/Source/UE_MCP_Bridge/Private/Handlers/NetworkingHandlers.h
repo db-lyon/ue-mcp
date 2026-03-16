@@ -17,6 +17,9 @@ private:
 	static TSharedPtr<FJsonValue> SetAlwaysRelevant(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetNetPriority(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetReplicateMovement(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetVariableReplication(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetReplicationInfo(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetOwnerOnlyRelevant(const TSharedPtr<FJsonObject>& Params);
 
 	// Helper to load blueprint CDO as AActor
 	static AActor* LoadBlueprintCDO(const FString& BlueprintPath, TSharedPtr<FJsonObject>& OutResult);

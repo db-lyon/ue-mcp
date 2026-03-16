@@ -8,6 +8,7 @@
 #include "EngineUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/Package.h"
@@ -58,7 +59,15 @@ TSharedPtr<FJsonValue> FFoliageHandlers::ListFoliageTypes(const TSharedPtr<FJson
 			TSharedPtr<FJsonObject> TypeObj = MakeShared<FJsonObject>();
 			TypeObj->SetStringField(TEXT("name"), FoliageType->GetName());
 			TypeObj->SetStringField(TEXT("path"), FoliageType->GetPathName());
-			TypeObj->SetNumberField(TEXT("instanceCount"), FoliageInfo.Instances.Num());
+
+			// UE 5.7: Instances array is private; use the HISM component for instance count
+			int32 InstanceCount = 0;
+			UHierarchicalInstancedStaticMeshComponent* HISMComp = FoliageInfo.GetComponent();
+			if (HISMComp)
+			{
+				InstanceCount = HISMComp->GetInstanceCount();
+			}
+			TypeObj->SetNumberField(TEXT("instanceCount"), InstanceCount);
 
 			// Get source info
 			TypeObj->SetStringField(TEXT("className"), FoliageType->GetClass()->GetName());
@@ -124,13 +133,21 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SampleFoliage(const TSharedPtr<FJsonObj
 			FString TypeName = FoliageType->GetName();
 			int32 MatchCount = 0;
 
-			for (const FFoliageInstance& Instance : FoliageInfo.Instances)
+			// UE 5.7: Instances array is private; use the HISM component for transforms
+			UHierarchicalInstancedStaticMeshComponent* HISMComp = FoliageInfo.GetComponent();
+			if (HISMComp)
 			{
-				FVector InstanceLocation = Instance.Location;
-				double DistSq = FVector::DistSquared(Center, InstanceLocation);
-				if (DistSq <= RadiusSq)
+				int32 NumInstances = HISMComp->GetInstanceCount();
+				for (int32 i = 0; i < NumInstances; ++i)
 				{
-					MatchCount++;
+					FTransform InstanceTransform;
+					HISMComp->GetInstanceTransform(i, InstanceTransform, /*bWorldSpace=*/ true);
+					FVector InstanceLocation = InstanceTransform.GetLocation();
+					double DistSq = FVector::DistSquared(Center, InstanceLocation);
+					if (DistSq <= RadiusSq)
+					{
+						MatchCount++;
+					}
 				}
 			}
 
@@ -418,12 +435,18 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SampleFoliageInstances(const TSharedPtr
 				MeshName = ISMType->Mesh->GetName();
 			}
 
-			// Iterate through instances and check distance
-			for (const FFoliageInstance& Instance : FoliageInfo.Instances)
+			// UE 5.7: Instances array is private; use the HISM component for transforms
+			UHierarchicalInstancedStaticMeshComponent* HISMComp = FoliageInfo.GetComponent();
+			if (!HISMComp) continue;
+
+			int32 NumInstances = HISMComp->GetInstanceCount();
+			for (int32 i = 0; i < NumInstances; ++i)
 			{
 				if (InstancesArray.Num() >= Limit) break;
 
-				FVector InstanceLocation = Instance.Location;
+				FTransform InstanceTransform;
+				HISMComp->GetInstanceTransform(i, InstanceTransform, /*bWorldSpace=*/ true);
+				FVector InstanceLocation = InstanceTransform.GetLocation();
 				double DistSq = FVector::DistSquared(Center, InstanceLocation);
 
 				if (DistSq <= RadiusSq)
@@ -442,17 +465,19 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SampleFoliageInstances(const TSharedPtr
 
 					InstanceObj->SetNumberField(TEXT("distance"), FMath::RoundToFloat(Distance * 10.0f) / 10.0f);
 
-					// Include rotation and scale from the instance
+					// Extract rotation and scale from the instance transform
+					FRotator InstanceRotation = InstanceTransform.Rotator();
 					TSharedPtr<FJsonObject> RotObj = MakeShared<FJsonObject>();
-					RotObj->SetNumberField(TEXT("pitch"), Instance.Rotation.Pitch);
-					RotObj->SetNumberField(TEXT("yaw"), Instance.Rotation.Yaw);
-					RotObj->SetNumberField(TEXT("roll"), Instance.Rotation.Roll);
+					RotObj->SetNumberField(TEXT("pitch"), InstanceRotation.Pitch);
+					RotObj->SetNumberField(TEXT("yaw"), InstanceRotation.Yaw);
+					RotObj->SetNumberField(TEXT("roll"), InstanceRotation.Roll);
 					InstanceObj->SetObjectField(TEXT("rotation"), RotObj);
 
+					FVector InstanceScale = InstanceTransform.GetScale3D();
 					TSharedPtr<FJsonObject> ScaleObj = MakeShared<FJsonObject>();
-					ScaleObj->SetNumberField(TEXT("x"), Instance.DrawScale3D.X);
-					ScaleObj->SetNumberField(TEXT("y"), Instance.DrawScale3D.Y);
-					ScaleObj->SetNumberField(TEXT("z"), Instance.DrawScale3D.Z);
+					ScaleObj->SetNumberField(TEXT("x"), InstanceScale.X);
+					ScaleObj->SetNumberField(TEXT("y"), InstanceScale.Y);
+					ScaleObj->SetNumberField(TEXT("z"), InstanceScale.Z);
 					InstanceObj->SetObjectField(TEXT("scale"), ScaleObj);
 
 					InstancesArray.Add(MakeShared<FJsonValueObject>(InstanceObj));

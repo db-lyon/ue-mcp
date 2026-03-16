@@ -10,9 +10,20 @@ public:
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 
 private:
+	// Existing read-only queries
 	static TSharedPtr<FJsonValue> ListAnimAssets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListSkeletalMeshes(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetSkeletonInfo(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListSockets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetPhysicsAssetInfo(const TSharedPtr<FJsonObject>& Params);
+
+	// Read handlers for animation asset types
+	static TSharedPtr<FJsonValue> ReadAnimBlueprint(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadAnimMontage(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadAnimSequence(const TSharedPtr<FJsonObject>& Params);
+
+	// Create handlers for animation asset types
+	static TSharedPtr<FJsonValue> CreateAnimBlueprint(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CreateMontage(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CreateBlendspace(const TSharedPtr<FJsonObject>& Params);
 };
