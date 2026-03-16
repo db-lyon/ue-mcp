@@ -18,6 +18,11 @@
 #include "Materials/MaterialInterface.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "Components/PrimitiveComponent.h"
+#include "LandscapeLayerInfoObject.h"
+#include "UObject/Package.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetToolsModule.h"
+#include "IAssetTools.h"
 
 void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -31,6 +36,8 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("import_heightmap"), &ImportHeightmap);
 	Registry.RegisterHandler(TEXT("set_landscape_material"), &SetLandscapeMaterial);
 	Registry.RegisterHandler(TEXT("get_landscape_bounds"), &GetLandscapeBounds);
+	Registry.RegisterHandler(TEXT("add_landscape_layer_info"), &AddLandscapeLayerInfo);
+	Registry.RegisterHandler(TEXT("import_landscape_heightmap"), &ImportHeightmap);
 }
 
 TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeInfo(const TSharedPtr<FJsonObject>& Params)
@@ -757,6 +764,132 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeBounds(const TSharedPtr<F
 
 	Result->SetArrayField(TEXT("landscapes"), LandscapeBoundsArray);
 	Result->SetNumberField(TEXT("count"), LandscapeBoundsArray.Num());
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FLandscapeHandlers::AddLandscapeLayerInfo(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString LayerName;
+	if (!Params->TryGetStringField(TEXT("layerName"), LayerName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'layerName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the target landscape
+	ALandscapeProxy* TargetLandscape = nullptr;
+	FString LandscapeName;
+	Params->TryGetStringField(TEXT("landscapeName"), LandscapeName);
+
+	for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
+	{
+		ALandscapeProxy* Landscape = *It;
+		if (!Landscape) continue;
+
+		if (LandscapeName.IsEmpty() || Landscape->GetName() == LandscapeName)
+		{
+			TargetLandscape = Landscape;
+			break;
+		}
+	}
+
+	if (!TargetLandscape)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No landscape found in the current level"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	ULandscapeInfo* LandscapeInfo = TargetLandscape->GetLandscapeInfo();
+	if (!LandscapeInfo)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to get landscape info"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Check if a layer with this name already exists
+	for (const FLandscapeInfoLayerSettings& ExistingLayer : LandscapeInfo->Layers)
+	{
+		if (ExistingLayer.LayerInfoObj && ExistingLayer.GetLayerName().ToString() == LayerName)
+		{
+			Result->SetStringField(TEXT("layerName"), LayerName);
+			Result->SetStringField(TEXT("path"), ExistingLayer.LayerInfoObj->GetPathName());
+			Result->SetStringField(TEXT("note"), TEXT("Layer already exists on this landscape"));
+			Result->SetBoolField(TEXT("success"), true);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+	}
+
+	// Create a new ULandscapeLayerInfoObject asset
+	FString PackagePath = TEXT("/Game/Landscape/LayerInfos");
+	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+
+	FString AssetName = FString::Printf(TEXT("LI_%s"), *LayerName);
+	FString PackageFullPath = PackagePath / AssetName;
+
+	// Check if the asset already exists
+	ULandscapeLayerInfoObject* LayerInfoObj = LoadObject<ULandscapeLayerInfoObject>(nullptr, *(PackageFullPath + TEXT(".") + AssetName));
+	if (!LayerInfoObj)
+	{
+		UPackage* Package = CreatePackage(*PackageFullPath);
+		if (!Package)
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create package: %s"), *PackageFullPath));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		LayerInfoObj = NewObject<ULandscapeLayerInfoObject>(Package, *AssetName, RF_Public | RF_Standalone);
+		if (!LayerInfoObj)
+		{
+			Result->SetStringField(TEXT("error"), TEXT("Failed to create LandscapeLayerInfoObject"));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		LayerInfoObj->LayerName = FName(*LayerName);
+
+		// Set optional properties
+		bool bIsWeightBlended = true;
+		if (Params->HasField(TEXT("weightBlended")))
+		{
+			bIsWeightBlended = Params->GetBoolField(TEXT("weightBlended"));
+		}
+		// bNoWeightBlend removed in UE 5.7 — weight blending is now controlled per-layer via landscape settings
+
+		// Notify asset registry and save
+		FAssetRegistryModule::AssetCreated(LayerInfoObj);
+		Package->MarkPackageDirty();
+		UEditorAssetLibrary::SaveAsset(PackageFullPath, false);
+	}
+
+	// Register the layer info with the landscape
+	int32 LayerIndex = LandscapeInfo->Layers.Num();
+	FLandscapeInfoLayerSettings NewLayerSettings(LayerInfoObj, TargetLandscape);
+	LandscapeInfo->Layers.Add(NewLayerSettings);
+
+	// Mark the landscape as dirty
+	TargetLandscape->MarkPackageDirty();
+
+	Result->SetStringField(TEXT("layerName"), LayerName);
+	Result->SetStringField(TEXT("path"), LayerInfoObj->GetPathName());
+	Result->SetStringField(TEXT("landscapeName"), TargetLandscape->GetName());
+	Result->SetNumberField(TEXT("layerIndex"), LayerIndex);
+	Result->SetBoolField(TEXT("weightBlended"), true);
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

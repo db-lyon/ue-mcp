@@ -17,4 +17,6 @@ private:
 	static TSharedPtr<FJsonValue> EraseFoliage(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SampleFoliageInstances(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateFoliageLayer(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetFoliageTypeSettings(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CreateFoliageType(const TSharedPtr<FJsonObject>& Params);
 };

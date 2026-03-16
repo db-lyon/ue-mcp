@@ -39,4 +39,7 @@ private:
 	static TSharedPtr<FJsonValue> ValidateAssets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CookContent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> FocusViewportOnActor(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> HotReload(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CreateNewLevel(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SaveCurrentLevel(const TSharedPtr<FJsonObject>& Params);
 };

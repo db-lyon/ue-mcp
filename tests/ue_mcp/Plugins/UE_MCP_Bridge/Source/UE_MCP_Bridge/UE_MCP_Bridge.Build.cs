@@ -76,6 +76,7 @@ public class UE_MCP_Bridge : ModuleRules
 				"Blutility",
 				"GameplayTasks",
 				"AudioEditor",
+				"LiveCoding",
 			}
 		);
 

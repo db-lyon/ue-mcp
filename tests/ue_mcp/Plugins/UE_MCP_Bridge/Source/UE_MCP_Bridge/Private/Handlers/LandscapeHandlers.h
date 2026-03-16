@@ -20,4 +20,5 @@ private:
 	static TSharedPtr<FJsonValue> ImportHeightmap(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetLandscapeMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetLandscapeBounds(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddLandscapeLayerInfo(const TSharedPtr<FJsonObject>& Params);
 };

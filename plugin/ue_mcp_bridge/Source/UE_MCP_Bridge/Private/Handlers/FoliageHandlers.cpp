@@ -27,6 +27,9 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("erase_foliage"), &EraseFoliage);
 	Registry.RegisterHandler(TEXT("sample_foliage_instances"), &SampleFoliageInstances);
 	Registry.RegisterHandler(TEXT("create_foliage_layer"), &CreateFoliageLayer);
+	Registry.RegisterHandler(TEXT("get_foliage_type_settings"), &GetFoliageSettings);
+	Registry.RegisterHandler(TEXT("set_foliage_type_settings"), &SetFoliageTypeSettings);
+	Registry.RegisterHandler(TEXT("create_foliage_type"), &CreateFoliageType);
 }
 
 TSharedPtr<FJsonValue> FFoliageHandlers::ListFoliageTypes(const TSharedPtr<FJsonObject>& Params)
@@ -626,6 +629,248 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageLayer(const TSharedPtr<FJs
 		}
 		Result->SetBoolField(TEXT("success"), true);
 	}
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FFoliageHandlers::SetFoliageTypeSettings(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	// Accept either foliageTypePath or foliageTypeName for lookup
+	FString FoliageTypePath;
+	if (!Params->TryGetStringField(TEXT("foliageTypePath"), FoliageTypePath))
+	{
+		Params->TryGetStringField(TEXT("foliageTypeName"), FoliageTypePath);
+	}
+	if (FoliageTypePath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'foliageTypePath' or 'foliageTypeName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
+	if (!Params->TryGetObjectField(TEXT("settings"), SettingsObj) || !SettingsObj || !(*SettingsObj).IsValid())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'settings' parameter (object with property name/value pairs)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Try to load by path first; if not found, search by name in the world
+	UFoliageType* FoliageType = LoadObject<UFoliageType>(nullptr, *FoliageTypePath);
+
+	if (!FoliageType)
+	{
+		// Search by name in world foliage actors
+		UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+		if (World)
+		{
+			for (TActorIterator<AInstancedFoliageActor> It(World); It; ++It)
+			{
+				AInstancedFoliageActor* FoliageActor = *It;
+				if (!FoliageActor) continue;
+
+				const auto& FoliageInfoMap = FoliageActor->GetFoliageInfos();
+				for (const auto& Pair : FoliageInfoMap)
+				{
+					if (Pair.Key && (Pair.Key->GetName() == FoliageTypePath || Pair.Key->GetPathName() == FoliageTypePath))
+					{
+						FoliageType = Pair.Key;
+						break;
+					}
+				}
+				if (FoliageType) break;
+			}
+		}
+	}
+
+	if (!FoliageType)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Foliage type not found: %s"), *FoliageTypePath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Apply settings via property reflection
+	TArray<FString> AppliedSettings;
+	TArray<FString> FailedSettings;
+
+	for (const auto& KV : (*SettingsObj)->Values)
+	{
+		FString PropertyName = KV.Key;
+		FString PropertyValue;
+
+		// Convert the JSON value to a string for ImportText
+		if (KV.Value->Type == EJson::String)
+		{
+			PropertyValue = KV.Value->AsString();
+		}
+		else if (KV.Value->Type == EJson::Number)
+		{
+			PropertyValue = FString::SanitizeFloat(KV.Value->AsNumber());
+		}
+		else if (KV.Value->Type == EJson::Boolean)
+		{
+			PropertyValue = KV.Value->AsBool() ? TEXT("True") : TEXT("False");
+		}
+		else
+		{
+			// For complex types, try serializing as string
+			TSharedPtr<FJsonValue> Val = KV.Value;
+			if (Val.IsValid())
+			{
+				PropertyValue = KV.Value->AsString();
+			}
+		}
+
+		FProperty* Property = FoliageType->GetClass()->FindPropertyByName(FName(*PropertyName));
+		if (!Property)
+		{
+			FailedSettings.Add(FString::Printf(TEXT("%s: property not found"), *PropertyName));
+			continue;
+		}
+
+		void* PropertyAddr = Property->ContainerPtrToValuePtr<void>(FoliageType);
+		const TCHAR* ImportResult = Property->ImportText_Direct(*PropertyValue, PropertyAddr, FoliageType, PPF_None);
+		if (ImportResult == nullptr)
+		{
+			FailedSettings.Add(FString::Printf(TEXT("%s: failed to set value '%s'"), *PropertyName, *PropertyValue));
+		}
+		else
+		{
+			AppliedSettings.Add(PropertyName);
+		}
+	}
+
+	// Mark the foliage type as dirty
+	FoliageType->MarkPackageDirty();
+
+	// Save the asset if it has a valid package path
+	FString PackagePath = FoliageType->GetPathName();
+	if (PackagePath.Contains(TEXT("/Game/")))
+	{
+		UEditorAssetLibrary::SaveAsset(FoliageType->GetOutermost()->GetName(), false);
+	}
+
+	Result->SetStringField(TEXT("foliageType"), FoliageType->GetName());
+	Result->SetStringField(TEXT("path"), FoliageType->GetPathName());
+
+	TArray<TSharedPtr<FJsonValue>> AppliedArray;
+	for (const FString& S : AppliedSettings)
+	{
+		AppliedArray.Add(MakeShared<FJsonValueString>(S));
+	}
+	Result->SetArrayField(TEXT("appliedSettings"), AppliedArray);
+
+	if (FailedSettings.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> FailedArray;
+		for (const FString& S : FailedSettings)
+		{
+			FailedArray.Add(MakeShared<FJsonValueString>(S));
+		}
+		Result->SetArrayField(TEXT("failedSettings"), FailedArray);
+	}
+
+	Result->SetBoolField(TEXT("success"), FailedSettings.Num() == 0);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageType(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString MeshPath;
+	if (!Params->TryGetStringField(TEXT("meshPath"), MeshPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'meshPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Load the mesh first to verify it exists
+	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+	if (!Mesh)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Static mesh not found: %s"), *MeshPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Determine asset name - use provided name or derive from mesh name
+	FString AssetName;
+	if (!Params->TryGetStringField(TEXT("name"), AssetName))
+	{
+		AssetName = FString::Printf(TEXT("FT_%s"), *Mesh->GetName());
+	}
+
+	FString PackagePath = TEXT("/Game/Foliage");
+	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+
+	FString PackageFullPath = PackagePath / AssetName;
+	UPackage* Package = CreatePackage(*PackageFullPath);
+	if (!Package)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create package: %s"), *PackageFullPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UFoliageType_InstancedStaticMesh* FoliageType = NewObject<UFoliageType_InstancedStaticMesh>(
+		Package, *AssetName, RF_Public | RF_Standalone);
+	if (!FoliageType)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to create FoliageType object"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FoliageType->Mesh = Mesh;
+
+	// Apply optional settings if provided
+	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && (*SettingsObj).IsValid())
+	{
+		for (const auto& KV : (*SettingsObj)->Values)
+		{
+			FString PropertyName = KV.Key;
+			FString PropertyValue;
+
+			if (KV.Value->Type == EJson::String)
+			{
+				PropertyValue = KV.Value->AsString();
+			}
+			else if (KV.Value->Type == EJson::Number)
+			{
+				PropertyValue = FString::SanitizeFloat(KV.Value->AsNumber());
+			}
+			else if (KV.Value->Type == EJson::Boolean)
+			{
+				PropertyValue = KV.Value->AsBool() ? TEXT("True") : TEXT("False");
+			}
+
+			FProperty* Property = FoliageType->GetClass()->FindPropertyByName(FName(*PropertyName));
+			if (Property)
+			{
+				void* PropertyAddr = Property->ContainerPtrToValuePtr<void>(FoliageType);
+				Property->ImportText_Direct(*PropertyValue, PropertyAddr, FoliageType, PPF_None);
+			}
+		}
+	}
+
+	// Notify asset registry and save
+	FAssetRegistryModule::AssetCreated(FoliageType);
+	Package->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(PackageFullPath, false);
+
+	Result->SetStringField(TEXT("path"), PackageFullPath);
+	Result->SetStringField(TEXT("name"), FoliageType->GetName());
+	Result->SetStringField(TEXT("className"), FoliageType->GetClass()->GetName());
+	Result->SetStringField(TEXT("meshPath"), MeshPath);
+	Result->SetStringField(TEXT("meshName"), Mesh->GetName());
+	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);
 }

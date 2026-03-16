@@ -22,8 +22,14 @@ private:
 	static TSharedPtr<FJsonValue> ReadAnimMontage(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadAnimSequence(const TSharedPtr<FJsonObject>& Params);
 
+	// Read handlers for blendspace
+	static TSharedPtr<FJsonValue> ReadBlendspace(const TSharedPtr<FJsonObject>& Params);
+
 	// Create handlers for animation asset types
 	static TSharedPtr<FJsonValue> CreateAnimBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateMontage(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateBlendspace(const TSharedPtr<FJsonObject>& Params);
+
+	// Notify handlers
+	static TSharedPtr<FJsonValue> AddAnimNotify(const TSharedPtr<FJsonObject>& Params);
 };

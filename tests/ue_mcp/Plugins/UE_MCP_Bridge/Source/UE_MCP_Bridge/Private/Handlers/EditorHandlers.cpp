@@ -33,6 +33,8 @@
 #include "GameFramework/Actor.h"
 #include "EditorValidatorSubsystem.h"
 #include "GenericPlatform/GenericPlatformCrashContext.h"
+#include "ILiveCodingModule.h"
+#include "LevelEditorSubsystem.h"
 
 void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -63,6 +65,9 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("validate_assets"), &ValidateAssets);
 	Registry.RegisterHandler(TEXT("cook_content"), &CookContent);
 	Registry.RegisterHandler(TEXT("focus_viewport_on_actor"), &FocusViewportOnActor);
+	Registry.RegisterHandler(TEXT("hot_reload"), &HotReload);
+	Registry.RegisterHandler(TEXT("create_new_level"), &CreateNewLevel);
+	Registry.RegisterHandler(TEXT("save_current_level"), &SaveCurrentLevel);
 }
 
 TSharedPtr<FJsonValue> FEditorHandlers::ExecuteCommand(const TSharedPtr<FJsonObject>& Params)
@@ -1270,6 +1275,139 @@ TSharedPtr<FJsonValue> FEditorHandlers::FocusViewportOnActor(const TSharedPtr<FJ
 	Result->SetObjectField(TEXT("viewLocation"), LocObj);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::HotReload(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	ILiveCodingModule* LiveCoding = FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME);
+	if (LiveCoding && LiveCoding->IsEnabledForSession())
+	{
+		if (LiveCoding->IsCompiling())
+		{
+			Result->SetStringField(TEXT("message"), TEXT("Live Coding compile already in progress"));
+			Result->SetBoolField(TEXT("success"), true);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		LiveCoding->EnableByDefault(true);
+		LiveCoding->Compile();
+		Result->SetStringField(TEXT("message"), TEXT("Live Coding compile triggered"));
+		Result->SetBoolField(TEXT("success"), true);
+	}
+	else
+	{
+		// Live Coding not available - fall back to console command
+		if (GEditor && GEditor->GetEditorWorldContext().World())
+		{
+			UKismetSystemLibrary::ExecuteConsoleCommand(
+				GEditor->GetEditorWorldContext().World(),
+				TEXT("LiveCoding.Compile"),
+				nullptr
+			);
+			Result->SetStringField(TEXT("message"), TEXT("Hot reload triggered via console command (Live Coding module not active in session)"));
+			Result->SetBoolField(TEXT("success"), true);
+		}
+		else
+		{
+			Result->SetStringField(TEXT("error"), TEXT("Neither Live Coding module nor editor world available for hot reload"));
+			Result->SetBoolField(TEXT("success"), false);
+		}
+	}
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString LevelPath;
+	if (!Params->TryGetStringField(TEXT("levelPath"), LevelPath))
+	{
+		LevelPath = TEXT("");
+	}
+
+	FString TemplateLevel;
+	Params->TryGetStringField(TEXT("templateLevel"), TemplateLevel);
+
+	ULevelEditorSubsystem* LevelEditorSubsystem = GEditor ? GEditor->GetEditorSubsystem<ULevelEditorSubsystem>() : nullptr;
+	if (!LevelEditorSubsystem)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("LevelEditorSubsystem not available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	bool bSuccess = false;
+	if (TemplateLevel.IsEmpty())
+	{
+		bSuccess = LevelEditorSubsystem->NewLevel(LevelPath);
+	}
+	else
+	{
+		bSuccess = LevelEditorSubsystem->NewLevelFromTemplate(LevelPath, TemplateLevel);
+	}
+
+	if (!bSuccess)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create new level at: %s"), *LevelPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Get info about the new world
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (World)
+	{
+		Result->SetStringField(TEXT("worldName"), World->GetName());
+		Result->SetStringField(TEXT("worldPath"), World->GetPathName());
+	}
+
+	Result->SetStringField(TEXT("levelPath"), LevelPath);
+	Result->SetStringField(TEXT("message"), TEXT("New level created"));
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::SaveCurrentLevel(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	ULevelEditorSubsystem* LevelEditorSubsystem = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
+	if (!LevelEditorSubsystem)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("LevelEditorSubsystem not available"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	bool bSuccess = LevelEditorSubsystem->SaveCurrentLevel();
+
+	Result->SetStringField(TEXT("levelName"), World->GetName());
+	Result->SetStringField(TEXT("levelPath"), World->GetPathName());
+	Result->SetBoolField(TEXT("success"), bSuccess);
+
+	if (!bSuccess)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to save current level"));
+	}
+	else
+	{
+		Result->SetStringField(TEXT("message"), TEXT("Current level saved"));
+	}
 
 	return MakeShared<FJsonValueObject>(Result);
 }

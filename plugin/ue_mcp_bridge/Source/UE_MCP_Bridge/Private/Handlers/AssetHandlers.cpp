@@ -14,9 +14,11 @@
 
 // DataTable
 #include "Engine/DataTable.h"
+#include "Factories/DataTableFactory.h"
 #include "Kismet/DataTableFunctionLibrary.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Misc/FileHelper.h"
 
 // Import tasks
 #include "AssetImportTask.h"
@@ -60,6 +62,15 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_texture_properties"), &ListTextureProperties);
 	Registry.RegisterHandler(TEXT("set_texture_properties"), &SetTextureProperties);
 	Registry.RegisterHandler(TEXT("import_texture"), &ImportTexture);
+
+	// Aliases for TS tool compatibility
+	Registry.RegisterHandler(TEXT("get_texture_info"), &ListTextureProperties);
+	Registry.RegisterHandler(TEXT("set_texture_settings"), &SetTextureProperties);
+
+	// Additional DataTable handlers
+	Registry.RegisterHandler(TEXT("create_datatable"), &CreateDataTable);
+	Registry.RegisterHandler(TEXT("read_datatable"), &ReadDataTable);
+	Registry.RegisterHandler(TEXT("reimport_datatable"), &ReimportDataTable);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ListAssets(const TSharedPtr<FJsonObject>& Params)
@@ -159,12 +170,21 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAsset(const TSharedPtr<FJsonObject>& 
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Params->TryGetStringField(TEXT("assetPath"), AssetPath);
+	}
+	if (AssetPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	if (!Asset)
+	{
+		// Fallback to LoadObject for full object paths
+		Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	}
 	if (!Asset)
 	{
 		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
@@ -175,6 +195,113 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAsset(const TSharedPtr<FJsonObject>& 
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("className"), Asset->GetClass()->GetName());
 	Result->SetStringField(TEXT("objectName"), Asset->GetName());
+
+	// Read properties via reflection
+	TSharedPtr<FJsonObject> PropertiesObj = MakeShared<FJsonObject>();
+	for (TFieldIterator<FProperty> It(Asset->GetClass()); It; ++It)
+	{
+		FProperty* Prop = *It;
+		if (!Prop) continue;
+
+		// Skip editor-only internal properties that aren't useful
+		if (Prop->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient)) continue;
+
+		const FString PropName = Prop->GetName();
+		const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Asset);
+
+		if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
+		{
+			PropertiesObj->SetBoolField(PropName, BoolProp->GetPropertyValue(ValuePtr));
+		}
+		else if (FIntProperty* IntProp = CastField<FIntProperty>(Prop))
+		{
+			PropertiesObj->SetNumberField(PropName, IntProp->GetPropertyValue(ValuePtr));
+		}
+		else if (FInt64Property* Int64Prop = CastField<FInt64Property>(Prop))
+		{
+			PropertiesObj->SetNumberField(PropName, static_cast<double>(Int64Prop->GetPropertyValue(ValuePtr)));
+		}
+		else if (FFloatProperty* FloatProp = CastField<FFloatProperty>(Prop))
+		{
+			PropertiesObj->SetNumberField(PropName, FloatProp->GetPropertyValue(ValuePtr));
+		}
+		else if (FDoubleProperty* DoubleProp = CastField<FDoubleProperty>(Prop))
+		{
+			PropertiesObj->SetNumberField(PropName, DoubleProp->GetPropertyValue(ValuePtr));
+		}
+		else if (FStrProperty* StrProp = CastField<FStrProperty>(Prop))
+		{
+			PropertiesObj->SetStringField(PropName, StrProp->GetPropertyValue(ValuePtr));
+		}
+		else if (FNameProperty* NameProp = CastField<FNameProperty>(Prop))
+		{
+			PropertiesObj->SetStringField(PropName, NameProp->GetPropertyValue(ValuePtr).ToString());
+		}
+		else if (FTextProperty* TextProp = CastField<FTextProperty>(Prop))
+		{
+			PropertiesObj->SetStringField(PropName, TextProp->GetPropertyValue(ValuePtr).ToString());
+		}
+		else if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
+		{
+			FNumericProperty* UnderlyingProp = EnumProp->GetUnderlyingProperty();
+			int64 EnumValue = UnderlyingProp->GetSignedIntPropertyValue(ValuePtr);
+			if (UEnum* Enum = EnumProp->GetEnum())
+			{
+				FString EnumName = Enum->GetNameStringByValue(EnumValue);
+				PropertiesObj->SetStringField(PropName, EnumName);
+			}
+			else
+			{
+				PropertiesObj->SetNumberField(PropName, static_cast<double>(EnumValue));
+			}
+		}
+		else if (FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
+		{
+			if (ByteProp->Enum)
+			{
+				uint8 ByteVal = ByteProp->GetPropertyValue(ValuePtr);
+				FString EnumName = ByteProp->Enum->GetNameStringByValue(ByteVal);
+				PropertiesObj->SetStringField(PropName, EnumName);
+			}
+			else
+			{
+				PropertiesObj->SetNumberField(PropName, ByteProp->GetPropertyValue(ValuePtr));
+			}
+		}
+		else if (FObjectProperty* ObjProp = CastField<FObjectProperty>(Prop))
+		{
+			UObject* RefObj = ObjProp->GetPropertyValue(ValuePtr);
+			if (RefObj)
+			{
+				PropertiesObj->SetStringField(PropName, RefObj->GetPathName());
+			}
+			else
+			{
+				PropertiesObj->SetField(PropName, MakeShared<FJsonValueNull>());
+			}
+		}
+		else if (FSoftObjectProperty* SoftObjProp = CastField<FSoftObjectProperty>(Prop))
+		{
+			FSoftObjectPtr SoftPtr = SoftObjProp->GetPropertyValue(ValuePtr);
+			PropertiesObj->SetStringField(PropName, SoftPtr.ToString());
+		}
+		else
+		{
+			// For complex types, export as string
+			FString ValueStr;
+			Prop->ExportTextItem_Direct(ValueStr, ValuePtr, nullptr, nullptr, PPF_None);
+			if (!ValueStr.IsEmpty())
+			{
+				PropertiesObj->SetStringField(PropName, ValueStr);
+			}
+			else
+			{
+				PropertiesObj->SetStringField(PropName, FString::Printf(TEXT("<%s>"), *Prop->GetCPPType()));
+			}
+		}
+	}
+
+	Result->SetObjectField(TEXT("properties"), PropertiesObj);
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);
@@ -1143,6 +1270,270 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 
 	Task->RemoveFromRoot();
 	TextureFactory->RemoveFromRoot();
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ============================================================================
+// Additional DataTable handlers
+// ============================================================================
+
+TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString Name;
+	if (!Params->TryGetStringField(TEXT("name"), Name))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString RowStruct;
+	if (!Params->TryGetStringField(TEXT("rowStruct"), RowStruct))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'rowStruct' parameter (e.g. '/Script/Engine.DataTableRowHandle' or a struct name)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString PackagePath = TEXT("/Game/DataTables");
+	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+
+	// Find the row struct type
+	UScriptStruct* ScriptStruct = nullptr;
+
+	// First try as a full path
+	ScriptStruct = LoadObject<UScriptStruct>(nullptr, *RowStruct);
+
+	// If not found, try finding by short name
+	if (!ScriptStruct)
+	{
+		// Try common patterns: search for the struct by name in all packages
+		for (TObjectIterator<UScriptStruct> It; It; ++It)
+		{
+			if (It->GetName() == RowStruct)
+			{
+				ScriptStruct = *It;
+				break;
+			}
+		}
+	}
+
+	if (!ScriptStruct)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Row struct not found: %s"), *RowStruct));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Create the DataTable asset
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	IAssetTools& AssetTools = AssetToolsModule.Get();
+
+	UDataTableFactory* Factory = NewObject<UDataTableFactory>();
+	Factory->Struct = ScriptStruct;
+
+	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UDataTable::StaticClass(), Factory);
+	if (!NewAsset)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create DataTable: %s/%s"), *PackagePath, *Name));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UDataTable* DataTable = Cast<UDataTable>(NewAsset);
+
+	Result->SetStringField(TEXT("name"), Name);
+	Result->SetStringField(TEXT("packagePath"), PackagePath);
+	Result->SetStringField(TEXT("assetPath"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("rowStruct"), ScriptStruct->GetName());
+	Result->SetNumberField(TEXT("rowCount"), DataTable ? DataTable->GetRowMap().Num() : 0);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Params->TryGetStringField(TEXT("assetPath"), AssetPath);
+	}
+	if (AssetPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	if (!Asset)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UDataTable* DataTable = Cast<UDataTable>(Asset);
+	if (!DataTable)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString RowFilter;
+	Params->TryGetStringField(TEXT("rowFilter"), RowFilter);
+
+	// Get the row struct for property iteration
+	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	if (!RowStruct)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("DataTable has no row struct"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Export the table as JSON for reliable serialization, then parse it
+	FString JsonString = DataTable->GetTableAsJSON(EDataTableExportFlags::UseJsonObjectsForStructs);
+
+	TArray<TSharedPtr<FJsonValue>> ParsedRows;
+	TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(JsonString);
+	if (FJsonSerializer::Deserialize(JsonReader, ParsedRows))
+	{
+		// Apply row filter if specified
+		if (!RowFilter.IsEmpty())
+		{
+			FString FilterLower = RowFilter.ToLower();
+			TArray<TSharedPtr<FJsonValue>> FilteredRows;
+			for (const TSharedPtr<FJsonValue>& RowValue : ParsedRows)
+			{
+				if (RowValue.IsValid() && RowValue->Type == EJson::Object)
+				{
+					const TSharedPtr<FJsonObject>& RowObj = RowValue->AsObject();
+					FString RowName;
+					if (RowObj->TryGetStringField(TEXT("Name"), RowName) && RowName.ToLower().Contains(FilterLower))
+					{
+						FilteredRows.Add(RowValue);
+					}
+				}
+			}
+			Result->SetArrayField(TEXT("rows"), FilteredRows);
+			Result->SetNumberField(TEXT("filteredCount"), FilteredRows.Num());
+		}
+		else
+		{
+			Result->SetArrayField(TEXT("rows"), ParsedRows);
+		}
+	}
+	else
+	{
+		// Fallback: return the raw JSON string
+		Result->SetStringField(TEXT("rawJson"), JsonString);
+	}
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("rowStruct"), RowStruct->GetName());
+	Result->SetNumberField(TEXT("totalRowCount"), DataTable->GetRowMap().Num());
+
+	// Also list the row names
+	TArray<TSharedPtr<FJsonValue>> RowNames;
+	for (const auto& Pair : DataTable->GetRowMap())
+	{
+		RowNames.Add(MakeShared<FJsonValueString>(Pair.Key.ToString()));
+	}
+	Result->SetArrayField(TEXT("rowNames"), RowNames);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Params->TryGetStringField(TEXT("assetPath"), AssetPath);
+	}
+	if (AssetPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	if (!Asset)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UDataTable* DataTable = Cast<UDataTable>(Asset);
+	if (!DataTable)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Get JSON string from either inline jsonString or from a file path
+	FString JsonString;
+	if (!Params->TryGetStringField(TEXT("jsonString"), JsonString) || JsonString.IsEmpty())
+	{
+		FString JsonPath;
+		if (Params->TryGetStringField(TEXT("jsonPath"), JsonPath) && !JsonPath.IsEmpty())
+		{
+			if (!FPaths::FileExists(JsonPath))
+			{
+				Result->SetStringField(TEXT("error"), FString::Printf(TEXT("JSON file not found: %s"), *JsonPath));
+				Result->SetBoolField(TEXT("success"), false);
+				return MakeShared<FJsonValueObject>(Result);
+			}
+			if (!FFileHelper::LoadFileToString(JsonString, *JsonPath))
+			{
+				Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to read JSON file: %s"), *JsonPath));
+				Result->SetBoolField(TEXT("success"), false);
+				return MakeShared<FJsonValueObject>(Result);
+			}
+		}
+		else
+		{
+			Result->SetStringField(TEXT("error"), TEXT("Missing 'jsonString' or 'jsonPath' parameter"));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+	}
+
+	TArray<FString> Errors = DataTable->CreateTableFromJSONString(JsonString);
+
+	if (Errors.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> ErrorsArray;
+		for (const FString& Error : Errors)
+		{
+			ErrorsArray.Add(MakeShared<FJsonValueString>(Error));
+		}
+		Result->SetArrayField(TEXT("errors"), ErrorsArray);
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Reimport completed with %d error(s)"), Errors.Num()));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	DataTable->MarkPackageDirty();
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
+	Result->SetStringField(TEXT("message"), TEXT("DataTable reimported successfully from JSON"));
+	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);
 }

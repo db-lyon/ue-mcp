@@ -26,6 +26,9 @@ private:
 	// DataTable handlers
 	static TSharedPtr<FJsonValue> ImportDataTableJson(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ExportDataTableJson(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CreateDataTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadDataTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReimportDataTable(const TSharedPtr<FJsonObject>& Params);
 
 	// FBX import handlers
 	static TSharedPtr<FJsonValue> ImportStaticMesh(const TSharedPtr<FJsonObject>& Params);

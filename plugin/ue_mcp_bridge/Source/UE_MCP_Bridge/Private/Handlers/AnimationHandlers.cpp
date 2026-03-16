@@ -10,6 +10,7 @@
 #include "Animation/AnimBlueprint.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/AnimBlueprintGeneratedClass.h"
+#include "Animation/AnimNotifies/AnimNotify.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "Engine/SkeletalMeshSocket.h"
 #include "PhysicsEngine/SkeletalBodySetup.h"
@@ -36,7 +37,10 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_anim_sequence"), &ReadAnimSequence);
 	Registry.RegisterHandler(TEXT("create_anim_blueprint"), &CreateAnimBlueprint);
 	Registry.RegisterHandler(TEXT("create_montage"), &CreateMontage);
+	Registry.RegisterHandler(TEXT("create_anim_montage"), &CreateMontage);  // alias used by TS tools
 	Registry.RegisterHandler(TEXT("create_blendspace"), &CreateBlendspace);
+	Registry.RegisterHandler(TEXT("read_blendspace"), &ReadBlendspace);
+	Registry.RegisterHandler(TEXT("add_anim_notify"), &AddAnimNotify);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimAssets(const TSharedPtr<FJsonObject>& Params)
@@ -680,6 +684,183 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), NewAsset->GetName());
 	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// read_blendspace
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadBlendspace(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UBlendSpace* BlendSpace = Cast<UBlendSpace>(LoadedAsset);
+	if (!BlendSpace)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load BlendSpace at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("name"), BlendSpace->GetName());
+	Result->SetStringField(TEXT("class"), BlendSpace->GetClass()->GetName());
+
+	// Skeleton
+	USkeleton* Skeleton = BlendSpace->GetSkeleton();
+	if (Skeleton)
+	{
+		Result->SetStringField(TEXT("skeleton"), Skeleton->GetPathName());
+	}
+	else
+	{
+		Result->SetField(TEXT("skeleton"), MakeShared<FJsonValueNull>());
+	}
+
+	// Axis parameters
+	TArray<TSharedPtr<FJsonValue>> AxesArray;
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const FBlendParameter& Param = BlendSpace->GetBlendParameter(i);
+		TSharedPtr<FJsonObject> AxisObj = MakeShared<FJsonObject>();
+		AxisObj->SetStringField(TEXT("displayName"), Param.DisplayName);
+		AxisObj->SetNumberField(TEXT("min"), Param.Min);
+		AxisObj->SetNumberField(TEXT("max"), Param.Max);
+		AxisObj->SetNumberField(TEXT("gridNum"), Param.GridNum);
+		AxesArray.Add(MakeShared<FJsonValueObject>(AxisObj));
+	}
+	Result->SetArrayField(TEXT("axes"), AxesArray);
+
+	// Sample points
+	TArray<TSharedPtr<FJsonValue>> SamplesArray;
+	const TArray<FBlendSample>& Samples = BlendSpace->GetBlendSamples();
+	for (const FBlendSample& Sample : Samples)
+	{
+		TSharedPtr<FJsonObject> SampleObj = MakeShared<FJsonObject>();
+		if (Sample.Animation)
+		{
+			SampleObj->SetStringField(TEXT("animation"), Sample.Animation->GetPathName());
+		}
+		else
+		{
+			SampleObj->SetField(TEXT("animation"), MakeShared<FJsonValueNull>());
+		}
+
+		TSharedPtr<FJsonObject> ValueObj = MakeShared<FJsonObject>();
+		ValueObj->SetNumberField(TEXT("x"), Sample.SampleValue.X);
+		ValueObj->SetNumberField(TEXT("y"), Sample.SampleValue.Y);
+		SampleObj->SetObjectField(TEXT("sampleValue"), ValueObj);
+
+		SamplesArray.Add(MakeShared<FJsonValueObject>(SampleObj));
+	}
+	Result->SetArrayField(TEXT("samples"), SamplesArray);
+	Result->SetNumberField(TEXT("sampleCount"), SamplesArray.Num());
+
+	Result->SetBoolField(TEXT("success"), true);
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// add_anim_notify
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString NotifyName;
+	if (!Params->TryGetStringField(TEXT("notifyName"), NotifyName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'notifyName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	double TriggerTime = 0.0;
+	if (!Params->TryGetNumberField(TEXT("triggerTime"), TriggerTime))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'triggerTime' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString NotifyClassName;
+	Params->TryGetStringField(TEXT("notifyClass"), NotifyClassName);
+
+	// Load the animation asset — could be a montage or a sequence
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UAnimSequenceBase* AnimAsset = Cast<UAnimSequenceBase>(LoadedAsset);
+	if (!AnimAsset)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimSequenceBase at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Clamp trigger time to valid range
+	float PlayLength = AnimAsset->GetPlayLength();
+	float ClampedTime = FMath::Clamp(static_cast<float>(TriggerTime), 0.0f, PlayLength);
+
+	// If a notify class is specified, try to find and instantiate it
+	UAnimNotify* NewNotify = nullptr;
+	if (!NotifyClassName.IsEmpty())
+	{
+		UClass* NotifyClass = FindFirstObject<UClass>(*NotifyClassName);
+		if (!NotifyClass)
+		{
+			// Try with full path prefix
+			NotifyClass = FindFirstObject<UClass>(*(TEXT("AnimNotify_") + NotifyClassName));
+		}
+		if (NotifyClass && NotifyClass->IsChildOf(UAnimNotify::StaticClass()))
+		{
+			NewNotify = NewObject<UAnimNotify>(AnimAsset, NotifyClass);
+		}
+	}
+
+	// Create the notify event
+	FAnimNotifyEvent& NewEvent = AnimAsset->Notifies.AddDefaulted_GetRef();
+	NewEvent.NotifyName = FName(*NotifyName);
+	NewEvent.Link(AnimAsset, ClampedTime);
+	NewEvent.TriggerTimeOffset = GetTriggerTimeOffsetForType(AnimAsset->CalculateOffsetForNotify(ClampedTime));
+	NewEvent.TrackIndex = 0;
+
+	if (NewNotify)
+	{
+		NewEvent.Notify = NewNotify;
+	}
+
+	AnimAsset->SortNotifies();
+	AnimAsset->PostEditChange();
+	AnimAsset->MarkPackageDirty();
+
+	// Save the asset
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("notifyName"), NotifyName);
+	Result->SetNumberField(TEXT("triggerTime"), ClampedTime);
+	if (NewNotify)
+	{
+		Result->SetStringField(TEXT("notifyClass"), NewNotify->GetClass()->GetName());
+	}
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

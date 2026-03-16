@@ -28,6 +28,12 @@ private:
 	static TSharedPtr<FJsonValue> CreateMaterialFromTexture(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadMaterialInstance(const TSharedPtr<FJsonObject>& Params);
 
+	// Name-based handlers matching TS tool expectations
+	static TSharedPtr<FJsonValue> ConnectTextureToMaterial(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ConnectMaterialExpressions(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ConnectToMaterialProperty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DeleteMaterialExpression(const TSharedPtr<FJsonObject>& Params);
+
 	// Helper to load a UMaterial from an asset path
 	static UMaterial* LoadMaterialFromPath(const FString& AssetPath);
 
@@ -40,4 +46,7 @@ private:
 
 	// Helper to map material property name string to EMaterialProperty enum
 	static bool ParseMaterialProperty(const FString& PropertyName, EMaterialProperty& OutProperty);
+
+	// Helper to find an expression by name (description or class) within a material
+	static UMaterialExpression* FindExpressionByName(UMaterial* Material, const FString& ExpressionName);
 };
