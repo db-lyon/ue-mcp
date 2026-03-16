@@ -95,19 +95,19 @@ async function main() {
 
       const result = deploy(project);
       console.error(`[ue-mcp] ${deploySummary(result)}`);
-
-      try {
-        await bridge.connect();
-        console.error("[ue-mcp] Editor bridge connected — live mode active");
-      } catch {
-        console.error("[ue-mcp] Editor not reachable — will retry in background");
-      }
-
-      bridge.startReconnecting();
     } catch (e) {
       console.error(`[ue-mcp] Failed to initialize project: ${e instanceof Error ? e.message : e}`);
     }
   }
+
+  // Always try to connect to the editor bridge
+  try {
+    await bridge.connect();
+    console.error("[ue-mcp] Editor bridge connected — live mode active");
+  } catch {
+    console.error("[ue-mcp] Editor not reachable — will retry in background");
+  }
+  bridge.startReconnecting();
 
   console.error(`[ue-mcp] Registered ${ALL_TOOLS.length} tools (category mega-tools)`);
 

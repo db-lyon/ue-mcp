@@ -57,6 +57,7 @@ public class UE_MCP_Bridge : ModuleRules
 				"Landscape",
 				"PCG",
 				"Niagara",
+				"NiagaraEditor",
 				"UMG",
 				"Sequencer",
 				"LevelEditor",

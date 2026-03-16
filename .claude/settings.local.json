@@ -14,7 +14,11 @@
       "Bash(node:*)",
       "Bash(rm:*)",
       "Bash(npx wscat:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "mcp__ue-mcp__demo",
+      "mcp__ue-mcp__asset",
+      "mcp__ue-mcp__niagara",
+      "Bash(find:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -51,6 +51,8 @@
 #include "NiagaraSystem.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystemFactoryNew.h"
+#include "NiagaraEmitter.h"
 
 // PCG
 #include "PCGGraph.h"
@@ -575,6 +577,12 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepHeroSphere()
 
 	ApplyMat(Hero, LoadDemoMat(TEXT("M_Demo_Glow")));
 
+	// Must be Movable for RotatingMovementComponent (added in orbit_rings step)
+	if (Hero->GetRootComponent())
+	{
+		Hero->GetRootComponent()->SetMobility(EComponentMobility::Movable);
+	}
+
 	Result->SetStringField(TEXT("actorLabel"), Hero->GetActorLabel());
 	Result->SetBoolField(TEXT("success"), true);
 	return Result;
@@ -871,32 +879,49 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 		return Result;
 	}
 
-	// Spawn an actor with a NiagaraComponent - use an engine-provided system if available
-	FTransform SpawnTransform(FRotator::ZeroRotator, FVector(0.0, 0.0, 380.0));
-	AActor* NiagaraActor = World->SpawnActor<AActor>(AActor::StaticClass(), SpawnTransform);
-	if (!NiagaraActor)
+	// Create a NiagaraSystem asset using the proper factory
+	FString NiagaraAssetPath = DemoConstants::MAT_DIR / TEXT("NS_Demo_Aura");
+	if (UEditorAssetLibrary::DoesAssetExist(NiagaraAssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn Niagara actor"));
+		UEditorAssetLibrary::DeleteAsset(NiagaraAssetPath);
+	}
+
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	IAssetTools& AssetTools = AssetToolsModule.Get();
+
+	UNiagaraSystemFactoryNew* NiagaraFactory = NewObject<UNiagaraSystemFactoryNew>();
+	UObject* NSAsset = AssetTools.CreateAsset(
+		TEXT("NS_Demo_Aura"), DemoConstants::MAT_DIR,
+		UNiagaraSystem::StaticClass(), NiagaraFactory);
+
+	UNiagaraSystem* NiagaraSys = Cast<UNiagaraSystem>(NSAsset);
+	if (!NiagaraSys)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to create Niagara system asset"));
 		Result->SetBoolField(TEXT("success"), false);
 		return Result;
 	}
 
-	NiagaraActor->SetActorLabel(TEXT("Demo_NiagaraVFX"));
-	NiagaraActor->SetFolderPath(*DemoConstants::FOLDER);
+	UEditorAssetLibrary::SaveAsset(NiagaraSys->GetPathName());
 
-	// Add a Niagara component as a placeholder
-	UNiagaraComponent* NiagaraComp = NewObject<UNiagaraComponent>(NiagaraActor, TEXT("DemoNiagaraComp"));
-	if (NiagaraComp)
+	// Spawn the system in the world above the hero sphere
+	UNiagaraComponent* SpawnedComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		World, NiagaraSys,
+		FVector(0.0, 0.0, 380.0),
+		FRotator::ZeroRotator,
+		FVector::OneVector,
+		false // do not auto-destroy
+	);
+
+	if (SpawnedComp && SpawnedComp->GetOwner())
 	{
-		NiagaraComp->RegisterComponent();
-		NiagaraActor->AddInstanceComponent(NiagaraComp);
-		Result->SetBoolField(TEXT("componentAdded"), true);
+		SpawnedComp->GetOwner()->SetActorLabel(TEXT("Demo_NiagaraVFX"));
+		SpawnedComp->GetOwner()->SetFolderPath(*DemoConstants::FOLDER);
+		Result->SetStringField(TEXT("actorLabel"), SpawnedComp->GetOwner()->GetActorLabel());
 	}
 
-	Result->SetStringField(TEXT("actorLabel"), NiagaraActor->GetActorLabel());
-	Result->SetStringField(TEXT("note"), TEXT("Placeholder Niagara actor spawned. Assign a NiagaraSystem asset to the component for particles."));
+	Result->SetStringField(TEXT("assetPath"), NiagaraSys->GetPathName());
 	Result->SetBoolField(TEXT("success"), true);
-
 	return Result;
 }
 
