@@ -27,6 +27,7 @@
 #include "Handlers/SequencerHandlers.h"
 #include "Handlers/SplineHandlers.h"
 #include "Handlers/PhysicsHandlers.h"
+#include "Handlers/DemoHandlers.h"
 
 // Platform-specific socket includes
 #if PLATFORM_WINDOWS
@@ -79,6 +80,7 @@ FMCPBridgeServer::FMCPBridgeServer(int32 Port)
 	FSequencerHandlers::RegisterHandlers(HandlerRegistry);
 	FSplineHandlers::RegisterHandlers(HandlerRegistry);
 	FPhysicsHandlers::RegisterHandlers(HandlerRegistry);
+	FDemoHandlers::RegisterHandlers(HandlerRegistry);
 }
 
 FMCPBridgeServer::~FMCPBridgeServer()

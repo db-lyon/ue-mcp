@@ -12,7 +12,8 @@
       "Bash(taskkill:*)",
       "Bash(git:*)",
       "Bash(node:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(npx wscat:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
