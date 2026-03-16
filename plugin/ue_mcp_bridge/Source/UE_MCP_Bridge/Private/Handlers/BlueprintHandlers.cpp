@@ -189,9 +189,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -251,9 +251,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprint(const TSharedPtr<FJsonO
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -282,9 +282,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -349,9 +349,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -520,9 +520,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprint(const TSharedPtr<FJs
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -662,9 +662,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintVariables(const TSharedP
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -718,9 +718,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -812,9 +812,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -874,9 +874,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintFunctions(const TSharedP
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -912,9 +912,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1065,9 +1065,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1200,9 +1200,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJson
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1276,9 +1276,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1343,9 +1343,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprintInterface(const TShare
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1634,9 +1634,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1791,9 +1791,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1865,9 +1865,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
