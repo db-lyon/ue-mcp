@@ -597,9 +597,9 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetLandscapeMaterial(const TSharedPtr
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath))
+	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}

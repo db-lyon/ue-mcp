@@ -146,9 +146,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGGraph(const TSharedPtr<FJsonObject>&
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -186,9 +186,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -274,9 +274,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -422,9 +422,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -481,9 +481,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -742,9 +742,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGNodeSettings(const TSharedPtr<FJsonO
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}

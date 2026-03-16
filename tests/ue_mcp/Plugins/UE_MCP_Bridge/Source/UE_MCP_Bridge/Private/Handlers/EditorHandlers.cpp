@@ -157,9 +157,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -677,9 +677,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveAsset(const TSharedPtr<FJsonObject>&
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}

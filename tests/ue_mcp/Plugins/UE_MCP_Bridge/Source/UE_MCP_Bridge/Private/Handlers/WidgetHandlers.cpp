@@ -152,9 +152,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetTree(const TSharedPtr<FJsonObj
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -220,9 +220,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString Path;
-	if (!Params->TryGetStringField(TEXT("path"), Path))
+	if (!Params->TryGetStringField(TEXT("path"), Path) && !Params->TryGetStringField(TEXT("assetPath"), Path))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -279,9 +279,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString Path;
-	if (!Params->TryGetStringField(TEXT("path"), Path))
+	if (!Params->TryGetStringField(TEXT("path"), Path) && !Params->TryGetStringField(TEXT("assetPath"), Path))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -334,9 +334,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SearchWidgetByName(const TSharedPtr<FJso
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -419,9 +419,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetProperties(const TSharedPtr<FJs
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -608,9 +608,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -795,9 +795,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetAnimations(const TSharedPtr<FJ
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -912,9 +912,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityWidget(const TSharedPtr<
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -950,9 +950,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityBlueprint(const TSharedP
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}

@@ -256,9 +256,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterial(const TSharedPtr<FJsonObj
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -403,9 +403,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialShadingModel(const TSharedP
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -447,9 +447,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBaseColor(const TSharedPtr<
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -508,9 +508,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -576,9 +576,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialExpressions(const TSharedP
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -618,9 +618,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialParameters(const TSharedPt
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -688,9 +688,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RecompileMaterial(const TSharedPtr<FJs
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -803,9 +803,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -933,9 +933,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectExpression(const TSharedPtr<FJs
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1028,9 +1028,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialProperty(const TSharedP
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1137,9 +1137,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteExpression(const TSharedPtr<FJso
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1200,9 +1200,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1576,9 +1576,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterialInstance(const TSharedPtr<
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) || AssetPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1728,9 +1728,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1833,9 +1833,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TShar
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1962,9 +1962,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectToMaterialProperty(const TShare
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -2083,9 +2083,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TShared
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}

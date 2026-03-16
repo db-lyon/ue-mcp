@@ -158,9 +158,9 @@ TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJso
 
 	// Get required sound asset path
 	FString SoundPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), SoundPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), SoundPath) && !Params->TryGetStringField(TEXT("path"), SoundPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -214,9 +214,9 @@ TSharedPtr<FJsonValue> FAudioHandlers::SpawnAmbientSound(const TSharedPtr<FJsonO
 
 	// Get required sound asset path
 	FString SoundPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), SoundPath))
+	if (!Params->TryGetStringField(TEXT("assetPath"), SoundPath) && !Params->TryGetStringField(TEXT("path"), SoundPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
