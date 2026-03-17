@@ -632,9 +632,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	}
 
 	FString PropertyValue;
-	if (!Params->TryGetStringField(TEXT("propertyValue"), PropertyValue))
+	if (!Params->TryGetStringField(TEXT("propertyValue"), PropertyValue) && !Params->TryGetStringField(TEXT("value"), PropertyValue))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyValue' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyValue' or 'value' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}

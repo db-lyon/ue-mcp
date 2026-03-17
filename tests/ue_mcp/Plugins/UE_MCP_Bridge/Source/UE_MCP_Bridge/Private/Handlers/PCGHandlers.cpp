@@ -282,17 +282,17 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	}
 
 	FString SourceNodeName;
-	if (!Params->TryGetStringField(TEXT("sourceNodeName"), SourceNodeName))
+	if (!Params->TryGetStringField(TEXT("sourceNodeName"), SourceNodeName) && !Params->TryGetStringField(TEXT("sourceNode"), SourceNodeName))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'sourceNodeName' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'sourceNodeName' or 'sourceNode' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	FString TargetNodeName;
-	if (!Params->TryGetStringField(TEXT("targetNodeName"), TargetNodeName))
+	if (!Params->TryGetStringField(TEXT("targetNodeName"), TargetNodeName) && !Params->TryGetStringField(TEXT("targetNode"), TargetNodeName))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'targetNodeName' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'targetNodeName' or 'targetNode' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -347,9 +347,15 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 
 	// Get pin labels if specified, otherwise use the first available pins
 	FString SourcePinLabel;
-	Params->TryGetStringField(TEXT("sourcePinLabel"), SourcePinLabel);
+	if (!Params->TryGetStringField(TEXT("sourcePinLabel"), SourcePinLabel))
+	{
+		Params->TryGetStringField(TEXT("sourcePin"), SourcePinLabel);
+	}
 	FString TargetPinLabel;
-	Params->TryGetStringField(TEXT("targetPinLabel"), TargetPinLabel);
+	if (!Params->TryGetStringField(TEXT("targetPinLabel"), TargetPinLabel))
+	{
+		Params->TryGetStringField(TEXT("targetPin"), TargetPinLabel);
+	}
 
 	// UE 5.7: Pin and edge APIs refactored; use Graph->AddEdge() with node+label
 	// Resolve the pin labels to use for the connection
@@ -496,16 +502,21 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
+	// Accept either a 'settings' object (key-value pairs) or individual 'propertyName'/'propertyValue'
+	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
 	FString PropertyName;
-	if (!Params->TryGetStringField(TEXT("propertyName"), PropertyName))
+	FString PropertyValue;
+	bool bUseSettingsObject = Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && (*SettingsObj).IsValid();
+	bool bUseSingleProperty = !bUseSettingsObject && Params->TryGetStringField(TEXT("propertyName"), PropertyName);
+
+	if (!bUseSettingsObject && !bUseSingleProperty)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyName' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'settings' object or 'propertyName'/'propertyValue' parameters"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	FString PropertyValue;
-	if (!Params->TryGetStringField(TEXT("propertyValue"), PropertyValue))
+	if (bUseSingleProperty && !Params->TryGetStringField(TEXT("propertyValue"), PropertyValue))
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyValue' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
@@ -548,23 +559,62 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	// Find the property on the settings object
-	FProperty* Property = Settings->GetClass()->FindPropertyByName(FName(*PropertyName));
-	if (!Property)
+	// Build a list of property name/value pairs to set
+	TArray<TPair<FString, FString>> PropertiesToSet;
+	if (bUseSettingsObject)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Property '%s' not found on settings"), *PropertyName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		for (const auto& Pair : (*SettingsObj)->Values)
+		{
+			FString ValStr;
+			if (Pair.Value->TryGetString(ValStr))
+			{
+				PropertiesToSet.Add(TPair<FString, FString>(Pair.Key, ValStr));
+			}
+			else if (Pair.Value->Type == EJson::Number)
+			{
+				ValStr = FString::SanitizeFloat(Pair.Value->AsNumber());
+				PropertiesToSet.Add(TPair<FString, FString>(Pair.Key, ValStr));
+			}
+			else if (Pair.Value->Type == EJson::Boolean)
+			{
+				ValStr = Pair.Value->AsBool() ? TEXT("true") : TEXT("false");
+				PropertiesToSet.Add(TPair<FString, FString>(Pair.Key, ValStr));
+			}
+			else
+			{
+				// For complex types, serialize to string
+				ValStr = Pair.Value->AsString();
+				PropertiesToSet.Add(TPair<FString, FString>(Pair.Key, ValStr));
+			}
+		}
+	}
+	else
+	{
+		PropertiesToSet.Add(TPair<FString, FString>(PropertyName, PropertyValue));
 	}
 
-	// Set the property value from string
-	void* PropertyAddr = Property->ContainerPtrToValuePtr<void>(Settings);
-	const TCHAR* ImportResult = Property->ImportText_Direct(*PropertyValue, PropertyAddr, Settings, PPF_None);
-	if (ImportResult == nullptr)
+	TSharedPtr<FJsonObject> SetResults = MakeShared<FJsonObject>();
+	TArray<FString> Errors;
+
+	for (const auto& Prop : PropertiesToSet)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to set property '%s' to value '%s'"), *PropertyName, *PropertyValue));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		FProperty* Property = Settings->GetClass()->FindPropertyByName(FName(*Prop.Key));
+		if (!Property)
+		{
+			Errors.Add(FString::Printf(TEXT("Property '%s' not found on settings"), *Prop.Key));
+			continue;
+		}
+
+		void* PropertyAddr = Property->ContainerPtrToValuePtr<void>(Settings);
+		const TCHAR* ImportResult = Property->ImportText_Direct(*Prop.Value, PropertyAddr, Settings, PPF_None);
+		if (ImportResult == nullptr)
+		{
+			Errors.Add(FString::Printf(TEXT("Failed to set property '%s' to value '%s'"), *Prop.Key, *Prop.Value));
+		}
+		else
+		{
+			SetResults->SetStringField(Prop.Key, Prop.Value);
+		}
 	}
 
 	// Save the graph asset
@@ -572,9 +622,17 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("nodeName"), NodeName);
-	Result->SetStringField(TEXT("propertyName"), PropertyName);
-	Result->SetStringField(TEXT("propertyValue"), PropertyValue);
-	Result->SetBoolField(TEXT("success"), true);
+	Result->SetObjectField(TEXT("setProperties"), SetResults);
+	if (Errors.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> ErrorArray;
+		for (const FString& Err : Errors)
+		{
+			ErrorArray.Add(MakeShared<FJsonValueString>(Err));
+		}
+		Result->SetArrayField(TEXT("errors"), ErrorArray);
+	}
+	Result->SetBoolField(TEXT("success"), Errors.Num() == 0);
 	return MakeShared<FJsonValueObject>(Result);
 }
 

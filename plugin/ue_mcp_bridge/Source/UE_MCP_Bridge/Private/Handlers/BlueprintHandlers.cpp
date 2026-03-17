@@ -1802,9 +1802,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	Params->TryGetStringField(TEXT("graphName"), GraphName);
 
 	FString NodeId;
-	if (!Params->TryGetStringField(TEXT("nodeId"), NodeId))
+	if (!Params->TryGetStringField(TEXT("nodeId"), NodeId) && !Params->TryGetStringField(TEXT("nodeName"), NodeId))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeId' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeId' or 'nodeName' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -1876,25 +1876,25 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 	Params->TryGetStringField(TEXT("graphName"), GraphName);
 
 	FString NodeId;
-	if (!Params->TryGetStringField(TEXT("nodeId"), NodeId))
+	if (!Params->TryGetStringField(TEXT("nodeId"), NodeId) && !Params->TryGetStringField(TEXT("nodeName"), NodeId))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeId' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeId' or 'nodeName' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	FString PinName;
-	if (!Params->TryGetStringField(TEXT("pinName"), PinName))
+	if (!Params->TryGetStringField(TEXT("pinName"), PinName) && !Params->TryGetStringField(TEXT("propertyName"), PinName))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'pinName' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'pinName' or 'propertyName' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	FString DefaultValue;
-	if (!Params->TryGetStringField(TEXT("defaultValue"), DefaultValue))
+	if (!Params->TryGetStringField(TEXT("defaultValue"), DefaultValue) && !Params->TryGetStringField(TEXT("value"), DefaultValue))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'defaultValue' parameter"));
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'defaultValue' or 'value' parameter"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}

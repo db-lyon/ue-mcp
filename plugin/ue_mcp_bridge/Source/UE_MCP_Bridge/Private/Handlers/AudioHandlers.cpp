@@ -193,11 +193,17 @@ TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJso
 		(*LocationObj)->TryGetNumberField(TEXT("z"), Location.Z);
 	}
 
-	// Parse optional volume and pitch multipliers
+	// Parse optional volume and pitch multipliers (accept both short and long names)
 	double Volume = 1.0;
 	double Pitch = 1.0;
-	Params->TryGetNumberField(TEXT("volume"), Volume);
-	Params->TryGetNumberField(TEXT("pitch"), Pitch);
+	if (!Params->TryGetNumberField(TEXT("volume"), Volume))
+	{
+		Params->TryGetNumberField(TEXT("volumeMultiplier"), Volume);
+	}
+	if (!Params->TryGetNumberField(TEXT("pitch"), Pitch))
+	{
+		Params->TryGetNumberField(TEXT("pitchMultiplier"), Pitch);
+	}
 
 	// Play the sound at the specified location
 	UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, static_cast<float>(Volume), static_cast<float>(Pitch));

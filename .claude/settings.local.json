@@ -23,7 +23,9 @@
       "mcp__ue-mcp__editor",
       "Bash(cd:*)",
       "Bash(sleep:*)",
-      "mcp__ue-mcp__project"
+      "mcp__ue-mcp__project",
+      "Bash(grep:*)",
+      "Bash(for file:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
