@@ -25,7 +25,8 @@
       "Bash(sleep:*)",
       "mcp__ue-mcp__project",
       "Bash(grep:*)",
-      "Bash(for file:*)"
+      "Bash(for file:*)",
+      "Bash(npx tsup:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

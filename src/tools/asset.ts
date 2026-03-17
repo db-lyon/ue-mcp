@@ -39,7 +39,18 @@ export const assetTool: ToolDef = categoryTool(
         return result;
       },
     },
-    search:         bp("search_assets"),
+    search: {
+      handler: async (ctx, p) => {
+        const params: Record<string, unknown> = { ...p };
+        delete params.action;
+        // If no directory specified and contentRoots configured, search all roots
+        const roots = ctx.project.config.contentRoots;
+        if (!p.directory && roots && roots.length > 0) {
+          params.searchAll = true;
+        }
+        return ctx.bridge.call("search_assets", params);
+      },
+    },
     read:           bp("read_asset", (p) => ({ path: p.assetPath })),
     read_properties: bp("read_asset_properties"),
     duplicate:      bp("duplicate_asset"),
@@ -59,7 +70,7 @@ export const assetTool: ToolDef = categoryTool(
     set_texture_settings: bp("set_texture_settings"),
   },
   `- list: List assets in directory. Params: directory?, typeFilter?, recursive?
-- search: Search by name/class/path. Params: query, directory?, maxResults?
+- search: Search by name/class/path. Params: query, directory?, maxResults?, searchAll? (set searchAll=true to search all content roots including plugin paths like /GASP/, not just /Game/)
 - read: Read asset via reflection. Params: assetPath
 - read_properties: Read specific properties. Params: assetPath, exportName?, propertyName?
 - duplicate: Duplicate asset. Params: sourcePath, destinationPath
@@ -81,6 +92,7 @@ export const assetTool: ToolDef = categoryTool(
     assetPath: z.string().optional().describe("Asset path"),
     directory: z.string().optional(), query: z.string().optional(),
     maxResults: z.number().optional(), typeFilter: z.string().optional(),
+    searchAll: z.boolean().optional().describe("Search all content roots (plugins, engine content) not just /Game/"),
     recursive: z.boolean().optional(),
     sourcePath: z.string().optional(), destinationPath: z.string().optional(),
     newName: z.string().optional(),

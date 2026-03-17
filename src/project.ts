@@ -7,11 +7,17 @@ export interface PluginInfo {
   mountPoint: string;
 }
 
+export interface UeMcpConfig {
+  /** Content roots to search by default (e.g. ["/Game/", "/GASP/", "/MyPlugin/"]) */
+  contentRoots?: string[];
+}
+
 export class ProjectContext {
   projectPath: string | null = null;
   projectName: string | null = null;
   contentDir: string | null = null;
   engineAssociation: string | null = null;
+  config: UeMcpConfig = {};
 
   get isLoaded(): boolean {
     return this.projectPath !== null;
@@ -33,6 +39,7 @@ export class ProjectContext {
     this.projectName = path.basename(this.projectPath, ".uproject");
     this.contentDir = path.join(path.dirname(this.projectPath), "Content");
     this.parseUProject();
+    this.loadConfig();
   }
 
   ensureLoaded(): void {
@@ -155,6 +162,18 @@ export class ProjectContext {
       this.engineAssociation = json.EngineAssociation ?? null;
     } catch {
       this.engineAssociation = null;
+    }
+  }
+
+  private loadConfig(): void {
+    if (!this.projectDir) return;
+    const configPath = path.join(this.projectDir, ".ue-mcp.json");
+    if (!fs.existsSync(configPath)) return;
+    try {
+      this.config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      console.error(`[ue-mcp] Loaded config from ${configPath}`);
+    } catch (e) {
+      console.error(`[ue-mcp] Failed to parse .ue-mcp.json: ${e instanceof Error ? e.message : e}`);
     }
   }
 }

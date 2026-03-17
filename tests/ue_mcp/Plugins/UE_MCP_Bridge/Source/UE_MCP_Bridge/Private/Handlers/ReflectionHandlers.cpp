@@ -391,7 +391,7 @@ UClass* FReflectionHandlers::FindClass(const FString& ClassName)
 
 UScriptStruct* FReflectionHandlers::FindStruct(const FString& StructName)
 {
-	// Try direct lookup
+	// Try direct lookup (handles full paths like /Script/ModuleName.StructName)
 	UScriptStruct* Struct = FindObject<UScriptStruct>(nullptr, *StructName);
 	if (Struct)
 	{
@@ -419,6 +419,23 @@ UScriptStruct* FReflectionHandlers::FindStruct(const FString& StructName)
 	if (Struct)
 	{
 		return Struct;
+	}
+
+	// Iterate all loaded UScriptStruct objects to find by short name
+	// This catches project-defined structs in any module (e.g. /Script/MyModule.FMyStruct)
+	FString NameToFind = StructName;
+	FString FNameToFind = FName;
+	for (TObjectIterator<UScriptStruct> It; It; ++It)
+	{
+		UScriptStruct* Current = *It;
+		if (Current)
+		{
+			FString CurrentName = Current->GetName();
+			if (CurrentName == NameToFind || CurrentName == FNameToFind)
+			{
+				return Current;
+			}
+		}
 	}
 
 	return nullptr;

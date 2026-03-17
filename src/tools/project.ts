@@ -101,7 +101,7 @@ export const projectTool: ToolDef = categoryTool(
       handler: async (ctx) => ({
         mode: ctx.bridge.isConnected ? "live" : "disconnected",
         editorConnected: ctx.bridge.isConnected,
-        project: ctx.project.isLoaded ? { name: ctx.project.projectName, path: ctx.project.projectPath, contentDir: ctx.project.contentDir, engineAssociation: ctx.project.engineAssociation } : null,
+        project: ctx.project.isLoaded ? { name: ctx.project.projectName, path: ctx.project.projectPath, contentDir: ctx.project.contentDir, engineAssociation: ctx.project.engineAssociation, config: Object.keys(ctx.project.config).length > 0 ? ctx.project.config : undefined } : null,
       }),
     },
     set_project: {
