@@ -29,7 +29,9 @@
       "Bash(npx tsup:*)",
       "mcp__ue-mcp__reflection",
       "Read(//c/Users/david/Projects/UE/**)",
-      "Bash(gh repo:*)"
+      "Bash(gh repo:*)",
+      "Bash(gh api:*)",
+      "Bash(gh run:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
