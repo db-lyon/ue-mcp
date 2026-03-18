@@ -18,6 +18,10 @@ export const animationTool: ToolDef = categoryTool(
     list_sockets:         bp("list_sockets"),
     list_skeletal_meshes: bp("list_skeletal_meshes"),
     get_physics_asset:    bp("get_physics_asset_info"),
+    create_sequence:      bp("create_sequence"),
+    set_bone_keyframes:   bp("set_bone_keyframes"),
+    get_bone_transforms:  bp("get_bone_transforms"),
+    set_montage_sequence: bp("set_montage_sequence"),
   },
   `- read_anim_blueprint: Read AnimBP structure. Params: assetPath
 - read_montage: Read montage. Params: assetPath
@@ -31,7 +35,11 @@ export const animationTool: ToolDef = categoryTool(
 - get_skeleton_info: Read skeleton. Params: assetPath
 - list_sockets: List sockets. Params: assetPath
 - list_skeletal_meshes: List skeletal meshes. Params: directory?, recursive?
-- get_physics_asset: Read physics asset. Params: assetPath`,
+- get_physics_asset: Read physics asset. Params: assetPath
+- create_sequence: Create blank AnimSequence. Params: name, skeletonPath, packagePath?, numFrames?, frameRate?
+- set_bone_keyframes: Set bone transform keyframes. Params: assetPath, boneName, keyframes (array of {frame, location?, rotation?, scale?})
+- get_bone_transforms: Read reference pose transforms. Params: skeletonPath, boneNames? (array filter)
+- set_montage_sequence: Replace animation sequence in a montage. Params: assetPath, animSequencePath, slotIndex?`,
   {
     assetPath: z.string().optional(),
     directory: z.string().optional(),
@@ -45,5 +53,16 @@ export const animationTool: ToolDef = categoryTool(
     notifyName: z.string().optional(),
     triggerTime: z.number().optional(),
     notifyClass: z.string().optional(),
+    slotIndex: z.number().optional(),
+    numFrames: z.number().optional(),
+    frameRate: z.number().optional(),
+    boneName: z.string().optional(),
+    boneNames: z.array(z.string()).optional(),
+    keyframes: z.array(z.object({
+      frame: z.number(),
+      location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+      rotation: z.object({ x: z.number(), y: z.number(), z: z.number(), w: z.number() }).optional(),
+      scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+    })).optional(),
   },
 );
