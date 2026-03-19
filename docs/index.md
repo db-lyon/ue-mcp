@@ -1,6 +1,6 @@
 # UE-MCP
 
-**Unreal Engine Model Context Protocol Server** — gives AI assistants deep read/write access to the Unreal Editor through 18 category tools covering 260+ actions.
+**Unreal Engine Model Context Protocol Server** — gives AI assistants deep read/write access to the Unreal Editor through 19 category tools covering 300+ actions.
 
 A TypeScript MCP server connects to a C++ WebSocket bridge plugin running inside the editor. Full read/write access with undo, compilation, runtime reflection, PIE introspection, and build pipeline control. Filesystem-based operations (config INI, C++ headers, asset listing) work without the editor.
 
@@ -39,7 +39,7 @@ See **[Getting Started](getting-started.md)** for installation and setup.
 
 - **[Getting Started](getting-started.md)** — Install, configure, verify
 - **[Architecture](architecture.md)** — How the pieces fit together
-- **[Tool Reference](tool-reference.md)** — All 18 tools with every action
+- **[Tool Reference](tool-reference.md)** — All 19 tools with every action
 - **[Configuration](configuration.md)** — `.ue-mcp.json` and MCP client config
 - **[Neon Shrine Demo](neon-shrine-demo.md)** — Interactive demo walkthrough
 - **[Feedback](feedback.md)** — Agent feedback system for improving UE-MCP

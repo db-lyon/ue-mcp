@@ -1,4 +1,4 @@
-export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) — 18 category tools covering 260+ actions.
+export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) — 19 category tools covering 300+ actions.
 
 Every tool takes an "action" parameter that selects the operation. Call project(action="get_status") first.
 
@@ -118,6 +118,9 @@ networking — Replication and networking
 
 demo — Neon Shrine demo scene
   step, cleanup
+
+feedback — Agent feedback submission
+  submit
 
 ═══ TIPS ═══
 • Start with level(action="get_outliner") or asset(action="list") to discover what's in the project.

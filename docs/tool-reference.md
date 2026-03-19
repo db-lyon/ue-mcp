@@ -1,6 +1,6 @@
 # Tool Reference
 
-UE-MCP exposes **18 category tools** covering **260+ actions**. Every tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **19 category tools** covering **300+ actions**. Every tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.

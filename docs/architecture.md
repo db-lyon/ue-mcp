@@ -14,7 +14,7 @@ flowchart LR
 
 **Entry point:** `src/index.ts`
 
-The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), registers 18 category tools, and communicates with the AI client over stdio.
+The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), registers 19 category tools, and communicates with the AI client over stdio.
 
 ### Key Modules
 
