@@ -25,13 +25,5 @@ jobs:
       - name: Install mkdocs-material
         run: pip install mkdocs-material
 
-      - name: Build docs
-        run: mkdocs build
-
-      - name: Deploy to ue-mcp-docs repo
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          personal_token: ${{ secrets.DOCS_DEPLOY_TOKEN }}
-          external_repository: db-lyon/ue-mcp-docs
-          publish_branch: gh-pages
-          publish_dir: ./site
+      - name: Deploy to GitHub Pages
+        run: mkdocs gh-deploy --force
