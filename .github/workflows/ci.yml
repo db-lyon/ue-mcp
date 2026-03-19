@@ -9,6 +9,8 @@ on:
       - '.cursor/**'
       - '.gitignore'
       - '.kantext/**'
+      - 'docs/**'
+      - 'mkdocs.yml'
   pull_request:
     branches: [main]
     paths-ignore:
@@ -17,6 +19,8 @@ on:
       - '.cursor/**'
       - '.gitignore'
       - '.kantext/**'
+      - 'docs/**'
+      - 'mkdocs.yml'
 
 jobs:
   build:
