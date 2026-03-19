@@ -67,6 +67,10 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_texture_info"), &ListTextureProperties);
 	Registry.RegisterHandler(TEXT("set_texture_settings"), &SetTextureProperties);
 
+	// Mesh handlers
+	Registry.RegisterHandler(TEXT("set_mesh_material"), &SetMeshMaterial);
+	Registry.RegisterHandler(TEXT("recenter_pivot"), &RecenterPivot);
+
 	// Additional DataTable handlers
 	Registry.RegisterHandler(TEXT("create_datatable"), &CreateDataTable);
 	Registry.RegisterHandler(TEXT("read_datatable"), &ReadDataTable);
@@ -1249,6 +1253,63 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 	return MakeShared<FJsonValueObject>(Result);
 }
 
+TSharedPtr<FJsonValue> FAssetHandlers::SetMeshMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'assetPath' parameter (static mesh path)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString MaterialPath;
+	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	int32 SlotIndex = 0;
+	Params->TryGetNumberField(TEXT("slotIndex"), SlotIndex);
+
+	UStaticMesh* Mesh = Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(), nullptr, *AssetPath));
+	if (!Mesh)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load static mesh at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UMaterialInterface* Material = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, *MaterialPath));
+	if (!Material)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	if (SlotIndex < 0 || SlotIndex >= Mesh->GetStaticMaterials().Num())
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Slot index %d out of range (mesh has %d slots)"), SlotIndex, Mesh->GetStaticMaterials().Num()));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Mesh->SetMaterial(SlotIndex, Material);
+	UEditorAssetLibrary::SaveAsset(AssetPath, false);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("materialPath"), MaterialPath);
+	Result->SetNumberField(TEXT("slotIndex"), SlotIndex);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObject>& Params)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
@@ -1332,6 +1393,117 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 
 	Task->RemoveFromRoot();
 	TextureFactory->RemoveFromRoot();
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	// Support single assetPath or array of assetPaths
+	TArray<FString> AssetPaths;
+	const TArray<TSharedPtr<FJsonValue>>* PathsArray = nullptr;
+	FString SinglePath;
+
+	if (Params->TryGetArrayField(TEXT("assetPaths"), PathsArray))
+	{
+		for (const auto& Val : *PathsArray)
+		{
+			FString P;
+			if (Val->TryGetString(P) && !P.IsEmpty())
+			{
+				AssetPaths.Add(P);
+			}
+		}
+	}
+	else if (Params->TryGetStringField(TEXT("assetPath"), SinglePath) || Params->TryGetStringField(TEXT("path"), SinglePath))
+	{
+		if (!SinglePath.IsEmpty())
+		{
+			AssetPaths.Add(SinglePath);
+		}
+	}
+
+	if (AssetPaths.Num() == 0)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' (string) or 'assetPaths' (array of strings)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Load all meshes
+	TArray<UStaticMesh*> Meshes;
+	for (const FString& Path : AssetPaths)
+	{
+		UStaticMesh* Mesh = Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(), nullptr, *Path));
+		if (!Mesh)
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load static mesh at '%s'"), *Path));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+		Meshes.Add(Mesh);
+	}
+
+	// Compute the center from the FIRST mesh (reference mesh)
+	FMeshDescription* RefDesc = Meshes[0]->GetMeshDescription(0);
+	if (!RefDesc)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to get mesh description for reference mesh LOD 0"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FVertexArray& RefVerts = RefDesc->Vertices();
+	TVertexAttributesRef<FVector3f> RefPositions = RefDesc->GetVertexPositions();
+
+	FVector3f Center = FVector3f::ZeroVector;
+	int32 RefVertCount = RefVerts.Num();
+	if (RefVertCount == 0)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Reference mesh has no vertices"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	for (FVertexID VertID : RefVerts.GetElementIDs())
+	{
+		Center += RefPositions[VertID];
+	}
+	Center /= (float)RefVertCount;
+
+	// Apply the SAME offset to ALL meshes
+	TArray<TSharedPtr<FJsonValue>> ResultArray;
+	for (int32 i = 0; i < Meshes.Num(); i++)
+	{
+		FMeshDescription* MeshDesc = Meshes[i]->GetMeshDescription(0);
+		if (!MeshDesc) continue;
+
+		FVertexArray& Verts = MeshDesc->Vertices();
+		TVertexAttributesRef<FVector3f> Positions = MeshDesc->GetVertexPositions();
+
+		for (FVertexID VertID : Verts.GetElementIDs())
+		{
+			Positions[VertID] -= Center;
+		}
+
+		Meshes[i]->CommitMeshDescription(0);
+		Meshes[i]->Build(false);
+		Meshes[i]->PostEditChange();
+		Meshes[i]->MarkPackageDirty();
+		UEditorAssetLibrary::SaveAsset(AssetPaths[i], false);
+
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("assetPath"), AssetPaths[i]);
+		Entry->SetNumberField(TEXT("vertexCount"), Verts.Num());
+		ResultArray.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	Result->SetArrayField(TEXT("meshes"), ResultArray);
+	Result->SetStringField(TEXT("offsetApplied"), FString::Printf(TEXT("(%.2f, %.2f, %.2f)"), Center.X, Center.Y, Center.Z));
+	Result->SetNumberField(TEXT("meshCount"), Meshes.Num());
+	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);
 }

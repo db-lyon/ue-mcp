@@ -1401,66 +1401,108 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	FString AssetPath;
-	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
+	// Support single assetPath or array of assetPaths
+	TArray<FString> AssetPaths;
+	const TArray<TSharedPtr<FJsonValue>>* PathsArray = nullptr;
+	FString SinglePath;
+
+	if (Params->TryGetArrayField(TEXT("assetPaths"), PathsArray))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'assetPath' parameter"));
+		for (const auto& Val : *PathsArray)
+		{
+			FString P;
+			if (Val->TryGetString(P) && !P.IsEmpty())
+			{
+				AssetPaths.Add(P);
+			}
+		}
+	}
+	else if (Params->TryGetStringField(TEXT("assetPath"), SinglePath) || Params->TryGetStringField(TEXT("path"), SinglePath))
+	{
+		if (!SinglePath.IsEmpty())
+		{
+			AssetPaths.Add(SinglePath);
+		}
+	}
+
+	if (AssetPaths.Num() == 0)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' (string) or 'assetPaths' (array of strings)"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	UStaticMesh* Mesh = Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(), nullptr, *AssetPath));
-	if (!Mesh)
+	// Load all meshes
+	TArray<UStaticMesh*> Meshes;
+	for (const FString& Path : AssetPaths)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load static mesh at '%s'"), *AssetPath));
+		UStaticMesh* Mesh = Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(), nullptr, *Path));
+		if (!Mesh)
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load static mesh at '%s'"), *Path));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+		Meshes.Add(Mesh);
+	}
+
+	// Compute the center from the FIRST mesh (reference mesh)
+	FMeshDescription* RefDesc = Meshes[0]->GetMeshDescription(0);
+	if (!RefDesc)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to get mesh description for reference mesh LOD 0"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	FMeshDescription* MeshDesc = Mesh->GetMeshDescription(0);
-	if (!MeshDesc)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to get mesh description for LOD 0"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
-
-	// Calculate the center of all vertices
-	FVertexArray& Vertices = MeshDesc->Vertices();
-	TVertexAttributesRef<FVector3f> VertexPositions = MeshDesc->GetVertexPositions();
+	FVertexArray& RefVerts = RefDesc->Vertices();
+	TVertexAttributesRef<FVector3f> RefPositions = RefDesc->GetVertexPositions();
 
 	FVector3f Center = FVector3f::ZeroVector;
-	int32 VertCount = Vertices.Num();
-	if (VertCount == 0)
+	int32 RefVertCount = RefVerts.Num();
+	if (RefVertCount == 0)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Mesh has no vertices"));
+		Result->SetStringField(TEXT("error"), TEXT("Reference mesh has no vertices"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	for (FVertexID VertID : Vertices.GetElementIDs())
+	for (FVertexID VertID : RefVerts.GetElementIDs())
 	{
-		Center += VertexPositions[VertID];
+		Center += RefPositions[VertID];
 	}
-	Center /= (float)VertCount;
+	Center /= (float)RefVertCount;
 
-	// Shift all vertices so center becomes origin
-	for (FVertexID VertID : Vertices.GetElementIDs())
+	// Apply the SAME offset to ALL meshes
+	TArray<TSharedPtr<FJsonValue>> ResultArray;
+	for (int32 i = 0; i < Meshes.Num(); i++)
 	{
-		VertexPositions[VertID] -= Center;
+		FMeshDescription* MeshDesc = Meshes[i]->GetMeshDescription(0);
+		if (!MeshDesc) continue;
+
+		FVertexArray& Verts = MeshDesc->Vertices();
+		TVertexAttributesRef<FVector3f> Positions = MeshDesc->GetVertexPositions();
+
+		for (FVertexID VertID : Verts.GetElementIDs())
+		{
+			Positions[VertID] -= Center;
+		}
+
+		Meshes[i]->CommitMeshDescription(0);
+		Meshes[i]->Build(false);
+		Meshes[i]->PostEditChange();
+		Meshes[i]->MarkPackageDirty();
+		UEditorAssetLibrary::SaveAsset(AssetPaths[i], false);
+
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("assetPath"), AssetPaths[i]);
+		Entry->SetNumberField(TEXT("vertexCount"), Verts.Num());
+		ResultArray.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 
-	// Commit and rebuild
-	Mesh->CommitMeshDescription(0);
-	Mesh->Build(false);
-	Mesh->PostEditChange();
-	Mesh->MarkPackageDirty();
-
-	UEditorAssetLibrary::SaveAsset(AssetPath, false);
-
-	Result->SetStringField(TEXT("assetPath"), AssetPath);
-	Result->SetNumberField(TEXT("vertexCount"), VertCount);
+	Result->SetArrayField(TEXT("meshes"), ResultArray);
 	Result->SetStringField(TEXT("offsetApplied"), FString::Printf(TEXT("(%.2f, %.2f, %.2f)"), Center.X, Center.Y, Center.Z));
+	Result->SetNumberField(TEXT("meshCount"), Meshes.Num());
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

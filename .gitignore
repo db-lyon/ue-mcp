@@ -40,6 +40,7 @@ __pycache__/
 *.egg-info/
 build/
 .env
+*.pem
 venv/
 
 ## Unreal Engine 5

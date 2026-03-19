@@ -14,6 +14,7 @@ private:
 	static TSharedPtr<FJsonValue> CreateMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialShadingModel(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetMaterialBlendMode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialBaseColor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddMaterialExpression(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListMaterialExpressions(const TSharedPtr<FJsonObject>& Params);

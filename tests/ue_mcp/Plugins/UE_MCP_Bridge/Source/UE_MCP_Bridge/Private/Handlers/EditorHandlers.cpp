@@ -35,6 +35,7 @@
 #include "GenericPlatform/GenericPlatformCrashContext.h"
 #include "ILiveCodingModule.h"
 #include "LevelEditorSubsystem.h"
+#include "Subsystems/AssetEditorSubsystem.h"
 
 void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -68,6 +69,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("hot_reload"), &HotReload);
 	Registry.RegisterHandler(TEXT("create_new_level"), &CreateNewLevel);
 	Registry.RegisterHandler(TEXT("save_current_level"), &SaveCurrentLevel);
+	Registry.RegisterHandler(TEXT("open_asset"), &OpenAsset);
 }
 
 TSharedPtr<FJsonValue> FEditorHandlers::ExecuteCommand(const TSharedPtr<FJsonObject>& Params)
@@ -1408,6 +1410,35 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveCurrentLevel(const TSharedPtr<FJsonO
 	{
 		Result->SetStringField(TEXT("message"), TEXT("Current level saved"));
 	}
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* Asset = StaticLoadObject(UObject::StaticClass(), nullptr, *AssetPath);
+	if (!Asset)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(Asset);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
+	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);
 }

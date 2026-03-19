@@ -36,6 +36,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_material"), &CreateMaterial);
 	Registry.RegisterHandler(TEXT("read_material"), &ReadMaterial);
 	Registry.RegisterHandler(TEXT("set_material_shading_model"), &SetMaterialShadingModel);
+	Registry.RegisterHandler(TEXT("set_material_blend_mode"), &SetMaterialBlendMode);
 	Registry.RegisterHandler(TEXT("set_material_base_color"), &SetMaterialBaseColor);
 	Registry.RegisterHandler(TEXT("add_material_expression"), &AddMaterialExpression);
 	Registry.RegisterHandler(TEXT("list_material_expressions"), &ListMaterialExpressions);
@@ -437,6 +438,61 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialShadingModel(const TSharedP
 
 	Result->SetStringField(TEXT("path"), Material->GetPathName());
 	Result->SetStringField(TEXT("shadingModel"), ShadingModelToString(NewShadingModel));
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBlendMode(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString BlendModeStr;
+	if (!Params->TryGetStringField(TEXT("blendMode"), BlendModeStr) || BlendModeStr.IsEmpty())
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'blendMode' parameter (Opaque, Masked, Translucent, Additive, Modulate, AlphaComposite, AlphaHoldout)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UMaterial* Material = LoadMaterialFromPath(AssetPath);
+	if (!Material)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	EBlendMode NewBlendMode = BLEND_Opaque;
+	if (BlendModeStr.Equals(TEXT("Opaque"), ESearchCase::IgnoreCase)) NewBlendMode = BLEND_Opaque;
+	else if (BlendModeStr.Equals(TEXT("Masked"), ESearchCase::IgnoreCase)) NewBlendMode = BLEND_Masked;
+	else if (BlendModeStr.Equals(TEXT("Translucent"), ESearchCase::IgnoreCase)) NewBlendMode = BLEND_Translucent;
+	else if (BlendModeStr.Equals(TEXT("Additive"), ESearchCase::IgnoreCase)) NewBlendMode = BLEND_Additive;
+	else if (BlendModeStr.Equals(TEXT("Modulate"), ESearchCase::IgnoreCase)) NewBlendMode = BLEND_Modulate;
+	else if (BlendModeStr.Equals(TEXT("AlphaComposite"), ESearchCase::IgnoreCase)) NewBlendMode = BLEND_AlphaComposite;
+	else if (BlendModeStr.Equals(TEXT("AlphaHoldout"), ESearchCase::IgnoreCase)) NewBlendMode = BLEND_AlphaHoldout;
+	else
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown blend mode: '%s'. Use Opaque, Masked, Translucent, Additive, Modulate, AlphaComposite, or AlphaHoldout"), *BlendModeStr));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Material->PreEditChange(nullptr);
+	Material->BlendMode = NewBlendMode;
+	Material->PostEditChange();
+	Material->MarkPackageDirty();
+
+	Result->SetStringField(TEXT("path"), Material->GetPathName());
+	Result->SetStringField(TEXT("blendMode"), BlendModeStr);
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);
@@ -1744,7 +1800,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 	}
 
 	FString PropertyName = TEXT("BaseColor");
-	Params->TryGetStringField(TEXT("property"), PropertyName);
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
+	{
+		Params->TryGetStringField(TEXT("materialProperty"), PropertyName);
+	}
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)

@@ -130,4 +130,17 @@ demo — Neon Shrine demo scene
 • editor(action="hot_reload") triggers Live Coding compilation without restarting the editor.
 • editor(action="focus_on_actor", actorLabel="MyActor") snaps the viewport to any actor.
 • Log output: editor(action="get_log", category="LogMCPBridge") to see bridge-specific logs.
+
+═══ FEEDBACK ═══
+If you had to use editor(action="execute_python") as a workaround because a native tool
+couldn't handle the task, keep a mental note of what you did and why. When your task is
+complete, tell the user:
+  "I had to use custom Python scripts to [describe what]. Would you like to submit
+   feedback to help improve ue-mcp?"
+If the user agrees, call feedback(action="submit") with:
+  • title — short, generic description of the gap (no project-specific details)
+  • summary — what was attempted and why the native tool fell short
+  • pythonWorkaround — the Python code that was used
+  • idealTool — what tool/action should handle this natively
+This creates a GitHub issue so the maintainers can add proper support.
 `;

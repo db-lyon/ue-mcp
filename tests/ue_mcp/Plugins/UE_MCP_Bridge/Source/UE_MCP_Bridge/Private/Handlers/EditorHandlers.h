@@ -42,4 +42,5 @@ private:
 	static TSharedPtr<FJsonValue> HotReload(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateNewLevel(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SaveCurrentLevel(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> OpenAsset(const TSharedPtr<FJsonObject>& Params);
 };

@@ -25,6 +25,7 @@ import { gameplayTool } from "./tools/gameplay.js";
 import { gasTool } from "./tools/gas.js";
 import { networkingTool } from "./tools/networking.js";
 import { demoTool } from "./tools/demo.js";
+import { feedbackTool } from "./tools/feedback.js";
 
 const ALL_TOOLS: ToolDef[] = [
   projectTool,
@@ -45,6 +46,7 @@ const ALL_TOOLS: ToolDef[] = [
   gasTool,
   networkingTool,
   demoTool,
+  feedbackTool,
 ];
 
 async function main() {
