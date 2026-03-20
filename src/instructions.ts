@@ -47,7 +47,9 @@ material — Materials, shading, and graph authoring
 animation — Anim assets, skeletons, montages, blendspaces
   read_anim_blueprint, read_montage, read_sequence, read_blendspace, list,
   create_montage, create_anim_blueprint, create_blendspace, add_notify,
-  get_skeleton_info, list_sockets, list_skeletal_meshes, get_physics_asset
+  get_skeleton_info, list_sockets, list_skeletal_meshes, get_physics_asset,
+  create_sequence, set_bone_keyframes, get_bone_transforms,
+  set_montage_sequence, set_montage_properties
 
 landscape — Terrain sculpting, painting, layers
   get_info, list_layers, sample, list_splines, get_component,

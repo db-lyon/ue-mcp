@@ -22,6 +22,7 @@ export const animationTool: ToolDef = categoryTool(
     set_bone_keyframes:   bp("set_bone_keyframes"),
     get_bone_transforms:  bp("get_bone_transforms"),
     set_montage_sequence: bp("set_montage_sequence"),
+    set_montage_properties: bp("set_montage_properties"),
   },
   `- read_anim_blueprint: Read AnimBP structure. Params: assetPath
 - read_montage: Read montage. Params: assetPath
@@ -39,7 +40,8 @@ export const animationTool: ToolDef = categoryTool(
 - create_sequence: Create blank AnimSequence. Params: name, skeletonPath, packagePath?, numFrames?, frameRate?
 - set_bone_keyframes: Set bone transform keyframes. Params: assetPath, boneName, keyframes (array of {frame, location?, rotation?, scale?})
 - get_bone_transforms: Read reference pose transforms. Params: skeletonPath, boneNames? (array filter)
-- set_montage_sequence: Replace animation sequence in a montage. Params: assetPath, animSequencePath, slotIndex?`,
+- set_montage_sequence: Replace animation sequence in a montage (auto-updates montage duration). Params: assetPath, animSequencePath, slotIndex?
+- set_montage_properties: Set montage properties directly. Params: assetPath, sequenceLength?, rateScale?, blendIn?, blendOut?`,
   {
     assetPath: z.string().optional(),
     directory: z.string().optional(),
@@ -54,6 +56,10 @@ export const animationTool: ToolDef = categoryTool(
     triggerTime: z.number().optional(),
     notifyClass: z.string().optional(),
     slotIndex: z.number().optional(),
+    sequenceLength: z.number().optional(),
+    rateScale: z.number().optional(),
+    blendIn: z.number().optional(),
+    blendOut: z.number().optional(),
     numFrames: z.number().optional(),
     frameRate: z.number().optional(),
     boneName: z.string().optional(),

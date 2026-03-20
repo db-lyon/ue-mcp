@@ -50,6 +50,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_bone_keyframes"), &SetBoneKeyframes);
 	Registry.RegisterHandler(TEXT("get_bone_transforms"), &GetBoneTransforms);
 	Registry.RegisterHandler(TEXT("set_montage_sequence"), &SetMontageSequence);
+	Registry.RegisterHandler(TEXT("set_montage_properties"), &SetMontageProperties);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimAssets(const TSharedPtr<FJsonObject>& Params)
@@ -1325,6 +1326,25 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetBoneTransforms(const TSharedPtr<FJ
 }
 
 // ---------------------------------------------------------------------------
+// Helper: Set the protected SequenceLength property on a montage via reflection.
+// Handles both float (UE 5.3 and earlier) and double (UE 5.4+) property types.
+// ---------------------------------------------------------------------------
+static void SetMontageSequenceLength(UAnimMontage* Montage, float NewLength)
+{
+	FProperty* Prop = UAnimSequenceBase::StaticClass()->FindPropertyByName(TEXT("SequenceLength"));
+	if (!Prop) return;
+
+	if (FFloatProperty* FloatProp = CastField<FFloatProperty>(Prop))
+	{
+		FloatProp->SetPropertyValue_InContainer(Montage, NewLength);
+	}
+	else if (FDoubleProperty* DoubleProp = CastField<FDoubleProperty>(Prop))
+	{
+		DoubleProp->SetPropertyValue_InContainer(Montage, static_cast<double>(NewLength));
+	}
+}
+
+// ---------------------------------------------------------------------------
 // set_montage_sequence — Replace the animation sequence in a montage's slot track
 // Params: assetPath, animSequencePath, slotIndex? (default 0)
 // ---------------------------------------------------------------------------
@@ -1403,6 +1423,22 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 		SegmentsUpdated = 1;
 	}
 
+	// Recalculate total montage length from all slot tracks
+	float NewTotalLength = 0.0f;
+	for (const FSlotAnimationTrack& Track : Montage->SlotAnimTracks)
+	{
+		NewTotalLength = FMath::Max(NewTotalLength, Track.AnimTrack.GetLength());
+	}
+
+	// Update SequenceLength (protected on UAnimSequenceBase) via property reflection
+	SetMontageSequenceLength(Montage, NewTotalLength);
+
+	// Update composite sections' segment lengths to match new duration
+	for (FCompositeSection& Section : Montage->CompositeSections)
+	{
+		Section.SegmentLength = NewTotalLength;
+	}
+
 	Montage->PostEditChange();
 	Montage->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(AssetPath);
@@ -1412,6 +1448,101 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 	Result->SetStringField(TEXT("slotName"), SlotTrack.SlotName.ToString());
 	Result->SetNumberField(TEXT("segmentsUpdated"), SegmentsUpdated);
 	Result->SetNumberField(TEXT("sequenceLength"), NewSequence->GetPlayLength());
+	Result->SetNumberField(TEXT("montageLength"), NewTotalLength);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_montage_properties — Set montage properties (duration, rate, blending)
+// Params: assetPath, sequenceLength?, rateScale?, blendIn?, blendOut?
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* MontageAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UAnimMontage* Montage = Cast<UAnimMontage>(MontageAsset);
+	if (!Montage)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	TArray<FString> Modified;
+
+	// sequenceLength — update via property reflection (SequenceLength is protected)
+	double SeqLen;
+	if (Params->TryGetNumberField(TEXT("sequenceLength"), SeqLen))
+	{
+		float NewLength = static_cast<float>(SeqLen);
+		SetMontageSequenceLength(Montage, NewLength);
+
+		// Also update composite sections' segment lengths to match
+		for (FCompositeSection& Section : Montage->CompositeSections)
+		{
+			Section.SegmentLength = NewLength;
+		}
+		Modified.Add(TEXT("sequenceLength"));
+	}
+
+	// rateScale
+	double RateScale;
+	if (Params->TryGetNumberField(TEXT("rateScale"), RateScale))
+	{
+		Montage->RateScale = static_cast<float>(RateScale);
+		Modified.Add(TEXT("rateScale"));
+	}
+
+	// blendIn
+	double BlendIn;
+	if (Params->TryGetNumberField(TEXT("blendIn"), BlendIn))
+	{
+		Montage->BlendIn.SetBlendTime(static_cast<float>(BlendIn));
+		Modified.Add(TEXT("blendIn"));
+	}
+
+	// blendOut
+	double BlendOut;
+	if (Params->TryGetNumberField(TEXT("blendOut"), BlendOut))
+	{
+		Montage->BlendOut.SetBlendTime(static_cast<float>(BlendOut));
+		Modified.Add(TEXT("blendOut"));
+	}
+
+	if (Modified.Num() == 0)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("No properties to set. Provide at least one of: sequenceLength, rateScale, blendIn, blendOut"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Montage->PostEditChange();
+	Montage->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+
+	// Return current state
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	TArray<TSharedPtr<FJsonValue>> ModifiedArray;
+	for (const FString& M : Modified)
+	{
+		ModifiedArray.Add(MakeShared<FJsonValueString>(M));
+	}
+	Result->SetArrayField(TEXT("modified"), ModifiedArray);
+	Result->SetNumberField(TEXT("sequenceLength"), Montage->GetPlayLength());
+	Result->SetNumberField(TEXT("rateScale"), Montage->RateScale);
+	Result->SetNumberField(TEXT("blendIn"), Montage->BlendIn.GetBlendTime());
+	Result->SetNumberField(TEXT("blendOut"), Montage->BlendOut.GetBlendTime());
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

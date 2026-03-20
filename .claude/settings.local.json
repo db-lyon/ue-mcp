@@ -42,7 +42,8 @@
       "Bash(printf '\\\\n\\\\n')",
       "Bash(rm -rf \"C:\\\\Users\\\\david\\\\Projects\\\\UE\\\\Vale\\\\Plugins\\\\UE_MCP_Bridge\")",
       "Bash(rm -f \"C:\\\\Users\\\\david\\\\Projects\\\\UE\\\\Vale\\\\.ue-mcp.json\")",
-      "Bash(gh issue:*)"
+      "Bash(gh issue:*)",
+      "Bash(grep -r \"TSharedPtr<FJsonValue>.*Set\" /c/Users/david/Projects/UE/ue-mcp/plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/*.h)"
     ]
   },
   "enableAllProjectMcpServers": true,

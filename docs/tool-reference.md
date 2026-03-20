@@ -156,6 +156,11 @@ UE-MCP exposes **19 category tools** covering **300+ actions**. Every tool takes
 | `list_sockets` | List skeleton sockets | `assetPath` |
 | `list_skeletal_meshes` | List skeletal meshes in project | `directory?` |
 | `get_physics_asset` | Read physics asset bodies | `assetPath` |
+| `create_sequence` | Create blank AnimSequence | `name`, `skeletonPath`, `packagePath?`, `numFrames?`, `frameRate?` |
+| `set_bone_keyframes` | Set bone transform keyframes | `assetPath`, `boneName`, `keyframes` |
+| `get_bone_transforms` | Read reference pose transforms | `skeletonPath`, `boneNames?` |
+| `set_montage_sequence` | Replace animation in a montage (auto-updates duration) | `assetPath`, `animSequencePath`, `slotIndex?` |
+| `set_montage_properties` | Set montage duration, rate, and blending | `assetPath`, `sequenceLength?`, `rateScale?`, `blendIn?`, `blendOut?` |
 
 !!! note
     Most animation tools need a skeleton path — use `list_skeletal_meshes` to find it.
