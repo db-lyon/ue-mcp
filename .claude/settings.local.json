@@ -39,7 +39,9 @@
       "Bash(npm pack:*)",
       "Bash(rm -f dist/*.dll dist/*.exe dist/*.pdb dist/*.json dist/createdump*)",
       "Bash(rm -rf dist/runtimes dist/so)",
-      "Bash(printf '\\\\n\\\\n')"
+      "Bash(printf '\\\\n\\\\n')",
+      "Bash(rm -rf \"C:\\\\Users\\\\david\\\\Projects\\\\UE\\\\Vale\\\\Plugins\\\\UE_MCP_Bridge\")",
+      "Bash(rm -f \"C:\\\\Users\\\\david\\\\Projects\\\\UE\\\\Vale\\\\.ue-mcp.json\")"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { ProjectContext } from "./project.js";
-import { deploy, deploySummary } from "./deployer.js";
+import { deploy } from "./deployer.js";
 
 /* ------------------------------------------------------------------ */
 /*  Terminal helpers                                                    */
@@ -22,15 +22,234 @@ const warn = (msg: string) => console.log(`  ${YELLOW}!${RESET} ${msg}`);
 const fail = (msg: string) => console.log(`  ${RED}✗${RESET} ${msg}`);
 const info = (msg: string) => console.log(`  ${DIM}${msg}${RESET}`);
 
-function createRL(): readline.Interface {
-  return readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+const HIDE_CURSOR = "\x1b[?25l";
+const SHOW_CURSOR = "\x1b[?25h";
+const CLEAR_LINE = "\x1b[2K";
+const MOVE_UP = (n: number) => `\x1b[${n}A`;
+
+/* ------------------------------------------------------------------ */
+/*  Interactive checkbox selector                                      */
+/* ------------------------------------------------------------------ */
+
+interface CheckboxItem {
+  label: string;
+  checked: boolean;
+  suffix?: string;
+}
+
+function checkboxSelect(
+  title: string,
+  items: CheckboxItem[],
+): Promise<boolean[]> {
+  return new Promise((resolve) => {
+    let cursor = 0;
+    const states = items.map((i) => i.checked);
+
+    process.stdout.write(HIDE_CURSOR);
+
+    function render(firstRender = false) {
+      if (!firstRender) {
+        // Move cursor back up to redraw
+        process.stdout.write(MOVE_UP(items.length + 1));
+      }
+
+      console.log(
+        `  ${BOLD}?${RESET} ${title} ${DIM}(↑↓ move, space toggle, enter confirm)${RESET}`,
+      );
+
+      for (let i = 0; i < items.length; i++) {
+        process.stdout.write(CLEAR_LINE);
+        const pointer = i === cursor ? `${CYAN}❯${RESET}` : " ";
+        const check = states[i]
+          ? `${GREEN}◉${RESET}`
+          : `${DIM}○${RESET}`;
+        const label =
+          i === cursor ? `${BOLD}${items[i].label}${RESET}` : items[i].label;
+        const suffix = items[i].suffix
+          ? ` ${DIM}${items[i].suffix}${RESET}`
+          : "";
+        console.log(`   ${pointer} ${check} ${label}${suffix}`);
+      }
+    }
+
+    render(true);
+
+    const stdin = process.stdin;
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding("utf-8");
+
+    function onData(key: string) {
+      // Ctrl+C
+      if (key === "\x03") {
+        process.stdout.write(SHOW_CURSOR);
+        stdin.setRawMode(false);
+        stdin.removeListener("data", onData);
+        process.exit(0);
+      }
+
+      // Enter
+      if (key === "\r" || key === "\n") {
+        process.stdout.write(SHOW_CURSOR);
+        stdin.setRawMode(false);
+        stdin.pause();
+        stdin.removeListener("data", onData);
+
+        // Show final state
+        process.stdout.write(MOVE_UP(items.length + 1));
+        const enabled = items
+          .filter((_, i) => states[i])
+          .map((i) => i.label);
+        const disabled = items
+          .filter((_, i) => !states[i])
+          .map((i) => i.label);
+        process.stdout.write(CLEAR_LINE);
+
+        if (disabled.length === 0) {
+          console.log(`  ${GREEN}✓${RESET} All ${items.length} categories enabled`);
+        } else {
+          console.log(
+            `  ${GREEN}✓${RESET} ${enabled.length} enabled, ${disabled.length} disabled: ${DIM}${disabled.join(", ")}${RESET}`,
+          );
+        }
+
+        // Clear the item lines
+        for (let i = 0; i < items.length; i++) {
+          process.stdout.write(CLEAR_LINE + "\n");
+        }
+        process.stdout.write(MOVE_UP(items.length));
+
+        resolve(states);
+        return;
+      }
+
+      // Space — toggle
+      if (key === " ") {
+        states[cursor] = !states[cursor];
+        render();
+        return;
+      }
+
+      // Arrow up / k
+      if (key === "\x1b[A" || key === "k") {
+        cursor = (cursor - 1 + items.length) % items.length;
+        render();
+        return;
+      }
+
+      // Arrow down / j
+      if (key === "\x1b[B" || key === "j") {
+        cursor = (cursor + 1) % items.length;
+        render();
+        return;
+      }
+
+      // 'a' — toggle all
+      if (key === "a") {
+        const allChecked = states.every(Boolean);
+        for (let i = 0; i < states.length; i++) states[i] = !allChecked;
+        render();
+        return;
+      }
+    }
+
+    stdin.on("data", onData);
   });
 }
 
-function ask(rl: readline.Interface, question: string): Promise<string> {
-  return new Promise((resolve) => rl.question(question, resolve));
+/* ------------------------------------------------------------------ */
+/*  Interactive single-select                                          */
+/* ------------------------------------------------------------------ */
+
+function singleSelect(
+  title: string,
+  items: string[],
+): Promise<number> {
+  return new Promise((resolve) => {
+    let cursor = 0;
+
+    process.stdout.write(HIDE_CURSOR);
+
+    function render(firstRender = false) {
+      if (!firstRender) {
+        process.stdout.write(MOVE_UP(items.length + 1));
+      }
+
+      console.log(
+        `  ${BOLD}?${RESET} ${title} ${DIM}(↑↓ move, enter select)${RESET}`,
+      );
+
+      for (let i = 0; i < items.length; i++) {
+        process.stdout.write(CLEAR_LINE);
+        const pointer = i === cursor ? `${CYAN}❯${RESET}` : " ";
+        const label =
+          i === cursor ? `${BOLD}${items[i]}${RESET}` : items[i];
+        console.log(`   ${pointer} ${label}`);
+      }
+    }
+
+    render(true);
+
+    const stdin = process.stdin;
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding("utf-8");
+
+    function onData(key: string) {
+      if (key === "\x03") {
+        process.stdout.write(SHOW_CURSOR);
+        stdin.setRawMode(false);
+        stdin.removeListener("data", onData);
+        process.exit(0);
+      }
+
+      if (key === "\r" || key === "\n") {
+        process.stdout.write(SHOW_CURSOR);
+        stdin.setRawMode(false);
+        stdin.pause();
+        stdin.removeListener("data", onData);
+
+        process.stdout.write(MOVE_UP(items.length + 1));
+        process.stdout.write(CLEAR_LINE);
+        console.log(
+          `  ${GREEN}✓${RESET} ${title}: ${BOLD}${items[cursor]}${RESET}`,
+        );
+        for (let i = 0; i < items.length; i++) {
+          process.stdout.write(CLEAR_LINE + "\n");
+        }
+        process.stdout.write(MOVE_UP(items.length));
+
+        resolve(cursor);
+        return;
+      }
+
+      if (key === "\x1b[A" || key === "k") {
+        cursor = (cursor - 1 + items.length) % items.length;
+        render();
+      }
+      if (key === "\x1b[B" || key === "j") {
+        cursor = (cursor + 1) % items.length;
+        render();
+      }
+    }
+
+    stdin.on("data", onData);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Multi-select (for MCP clients)                                     */
+/* ------------------------------------------------------------------ */
+
+function multiSelect(
+  title: string,
+  items: string[],
+): Promise<boolean[]> {
+  const checkItems = items.map((label) => ({
+    label,
+    checked: true,
+  }));
+  return checkboxSelect(title, checkItems);
 }
 
 /* ------------------------------------------------------------------ */
@@ -80,7 +299,6 @@ function detectMcpClients(projectDir: string): McpClient[] {
   const home = process.env.HOME || process.env.USERPROFILE || "";
   const clients: McpClient[] = [];
 
-  // Claude Code — .mcp.json in project root or ~/.claude/
   const claudeProjectMcp = path.join(projectDir, ".mcp.json");
   const claudeGlobalMcp = path.join(home, ".claude", ".mcp.json");
   clients.push({
@@ -94,16 +312,19 @@ function detectMcpClients(projectDir: string): McpClient[] {
     detected: fs.existsSync(path.dirname(claudeGlobalMcp)),
   });
 
-  // Claude Desktop
-  const appData = process.env.APPDATA || path.join(home, "AppData", "Roaming");
-  const claudeDesktop = path.join(appData, "Claude", "claude_desktop_config.json");
+  const appData =
+    process.env.APPDATA || path.join(home, "AppData", "Roaming");
+  const claudeDesktop = path.join(
+    appData,
+    "Claude",
+    "claude_desktop_config.json",
+  );
   clients.push({
     name: "Claude Desktop",
     configPath: claudeDesktop,
     detected: fs.existsSync(path.dirname(claudeDesktop)),
   });
 
-  // Cursor — .cursor/mcp.json in project root
   const cursorMcp = path.join(projectDir, ".cursor", "mcp.json");
   clients.push({
     name: "Cursor",
@@ -173,7 +394,10 @@ function writeProjectConfig(projectDir: string, disabled: string[]): void {
 /*  Plugin enablement                                                  */
 /* ------------------------------------------------------------------ */
 
-function ensurePluginsEnabled(uprojectPath: string, pluginNames: string[]): string[] {
+function ensurePluginsEnabled(
+  uprojectPath: string,
+  pluginNames: string[],
+): string[] {
   const raw = fs.readFileSync(uprojectPath, "utf-8");
   const root = JSON.parse(raw);
   if (!root.Plugins) root.Plugins = [];
@@ -200,6 +424,26 @@ function ensurePluginsEnabled(uprojectPath: string, pluginNames: string[]): stri
 }
 
 /* ------------------------------------------------------------------ */
+/*  Ask for project path with readline                                 */
+/* ------------------------------------------------------------------ */
+
+function askPath(): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise((resolve) => {
+    rl.question(
+      `  ${BOLD}?${RESET} UE project path (.uproject or directory): `,
+      (answer) => {
+        rl.close();
+        resolve(answer.trim().replace(/^["']|["']$/g, ""));
+      },
+    );
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main init flow                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -208,60 +452,43 @@ async function init() {
   console.log(`  ${BOLD}${CYAN}UE-MCP Setup${RESET}`);
   console.log("");
 
-  const rl = createRL();
-
   // 1. Get project path
   let uprojectPath = process.argv[2] || "";
 
   if (!uprojectPath) {
-    uprojectPath = await ask(rl, `  ${BOLD}?${RESET} UE project path (.uproject or directory): `);
-    uprojectPath = uprojectPath.trim().replace(/^["']|["']$/g, "");
+    uprojectPath = await askPath();
   }
 
-  // Resolve to .uproject file
   const project = new ProjectContext();
   try {
     project.setProject(uprojectPath);
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));
-    rl.close();
     process.exit(1);
   }
 
-  ok(`Found UE ${project.engineAssociation ?? "?"} project "${project.projectName}"`);
+  ok(
+    `Found UE ${project.engineAssociation ?? "?"} project "${project.projectName}"`,
+  );
   console.log("");
 
-  // 2. Tool category selection
-  console.log(`  ${BOLD}?${RESET} Which tool categories do you need?`);
-  console.log(`    ${DIM}(enter comma-separated numbers to disable, or press Enter for all)${RESET}`);
-  console.log("");
-
+  // 2. Tool category selection — interactive checkboxes
   const optional = CATEGORIES.filter((c) => !c.alwaysOn);
-  for (let i = 0; i < optional.length; i++) {
-    const c = optional[i];
-    const plugins = c.requiredPlugins ? ` ${DIM}(requires ${c.requiredPlugins.join(", ")})${RESET}` : "";
-    console.log(`    ${DIM}${String(i + 1).padStart(2)}.${RESET} ${c.label}${plugins}`);
-  }
+  const checkboxItems: CheckboxItem[] = optional.map((c) => ({
+    label: c.label,
+    checked: true,
+    suffix: c.requiredPlugins
+      ? `requires ${c.requiredPlugins.join(", ")}`
+      : undefined,
+  }));
 
-  console.log("");
-  const disableInput = await ask(rl, `  ${BOLD}?${RESET} Disable (e.g. "6,8" or press Enter for none): `);
+  const states = await checkboxSelect("Tool categories", checkboxItems);
 
   const disabled: string[] = [];
-  if (disableInput.trim()) {
-    const indices = disableInput
-      .split(",")
-      .map((s) => parseInt(s.trim(), 10) - 1)
-      .filter((i) => i >= 0 && i < optional.length);
-    for (const i of indices) {
-      disabled.push(optional[i].name);
-    }
+  for (let i = 0; i < optional.length; i++) {
+    if (!states[i]) disabled.push(optional[i].name);
   }
 
-  if (disabled.length > 0) {
-    info(`Disabled: ${disabled.join(", ")}`);
-  } else {
-    info("All categories enabled");
-  }
   console.log("");
 
   // 3. Determine required plugins
@@ -277,16 +504,18 @@ async function init() {
   const deployResult = deploy(project);
   if (deployResult.error) {
     fail(`Plugin deployment failed: ${deployResult.error}`);
+  } else if (deployResult.cppPluginDeployed) {
+    ok(
+      `Plugin deployed to ${project.projectName}/Plugins/UE_MCP_Bridge/`,
+    );
   } else {
-    if (deployResult.cppPluginDeployed) {
-      ok(`Plugin deployed to ${project.projectName}/Plugins/UE_MCP_Bridge/`);
-    } else {
-      ok("Plugin already deployed");
-    }
+    ok("Plugin already deployed");
   }
 
   // 5. Enable required plugins
-  const enabled = ensurePluginsEnabled(project.projectPath!, [...requiredPlugins]);
+  const enabled = ensurePluginsEnabled(project.projectPath!, [
+    ...requiredPlugins,
+  ]);
   if (enabled.length > 0) {
     ok(`Enabled: ${enabled.join(", ")}`);
   } else {
@@ -299,29 +528,26 @@ async function init() {
 
   console.log("");
 
-  // 7. MCP client configuration
+  // 7. MCP client configuration — interactive
   const clients = detectMcpClients(project.projectDir!);
   const detected = clients.filter((c) => c.detected);
 
   if (detected.length > 0) {
-    console.log(`  ${BOLD}?${RESET} MCP clients detected:`);
+    const clientItems: CheckboxItem[] = detected.map((c) => ({
+      label: c.name,
+      checked: true,
+      suffix: c.configPath,
+    }));
+
+    const clientStates = await checkboxSelect(
+      "Configure MCP clients",
+      clientItems,
+    );
+
     for (let i = 0; i < detected.length; i++) {
-      console.log(`    ${DIM}${i + 1}.${RESET} ${detected[i].name} ${DIM}(${detected[i].configPath})${RESET}`);
-    }
-    console.log(`    ${DIM}${detected.length + 1}.${RESET} Skip`);
-    console.log("");
-
-    const clientInput = await ask(rl, `  ${BOLD}?${RESET} Configure which? (e.g. "1" or "1,2" or Enter to skip): `);
-
-    if (clientInput.trim()) {
-      const indices = clientInput
-        .split(",")
-        .map((s) => parseInt(s.trim(), 10) - 1)
-        .filter((i) => i >= 0 && i < detected.length);
-
-      for (const i of indices) {
+      if (clientStates[i]) {
         writeMcpConfig(detected[i].configPath, project.projectPath!);
-        ok(`${detected[i].name} config written`);
+        ok(`${detected[i].name} configured`);
       }
     }
   } else {
@@ -331,25 +557,31 @@ async function init() {
     console.log(`      "mcpServers": {`);
     console.log(`        "ue-mcp": {`);
     console.log(`          "command": "npx",`);
-    console.log(`          "args": ["ue-mcp", "${project.projectPath!.replace(/\\/g, "/")}"]`);
+    console.log(
+      `          "args": ["ue-mcp", "${project.projectPath!.replace(/\\/g, "/")}"]`,
+    );
     console.log(`        }`);
     console.log(`      }`);
     console.log(`    }${RESET}`);
     console.log("");
   }
 
-  rl.close();
-
   // 8. Done
   console.log("");
   console.log(`  ${BOLD}${GREEN}Setup complete!${RESET}`);
   console.log("");
-  console.log(`  ${DIM}Restart the editor to load the bridge plugin.`);
-  console.log(`  Then ask your AI: project(action="get_status")${RESET}`);
+  console.log(
+    `  ${DIM}Restart the editor to load the bridge plugin.`,
+  );
+  console.log(
+    `  Then ask your AI: project(action="get_status")${RESET}`,
+  );
   console.log("");
 }
 
 init().catch((e) => {
-  console.error(`\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`);
+  console.error(
+    `\n  ${RED}Fatal error: ${e instanceof Error ? e.message : e}${RESET}\n`,
+  );
   process.exit(1);
 });
