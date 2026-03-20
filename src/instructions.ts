@@ -28,7 +28,7 @@ blueprint — Blueprint reading, authoring, compilation
   set_variable_properties, create_function, delete_function, rename_function,
   add_node, delete_node, set_node_property, connect_pins, add_component,
   compile, list_node_types, search_node_types, create_interface, add_interface,
-  add_event_dispatcher
+  add_event_dispatcher, list_graphs
 
 level — Level actors, selection, components, volumes, lights, splines
   get_outliner, place_actor, delete_actor, get_actor_details, move_actor,

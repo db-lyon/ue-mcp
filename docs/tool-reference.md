@@ -64,6 +64,7 @@ UE-MCP exposes **19 category tools** covering **300+ actions**. Every tool takes
 | `read` | Read full Blueprint structure | `assetPath` |
 | `list_variables` | List variables with types and flags | `assetPath` |
 | `list_functions` | List functions and graphs | `assetPath` |
+| `list_graphs` | List all graphs in a blueprint (EventGraph, AnimGraph, etc.) | `assetPath` |
 | `read_graph` | Read graph nodes and connections | `assetPath`, `graphName` |
 | `create` | Create a new Blueprint | `assetPath`, `parentClass?` |
 | `add_variable` | Add a variable | `assetPath`, `name`, `varType` |
@@ -71,7 +72,7 @@ UE-MCP exposes **19 category tools** covering **300+ actions**. Every tool takes
 | `create_function` | Create a function graph | `assetPath`, `functionName` |
 | `delete_function` | Delete a function | `assetPath`, `functionName` |
 | `rename_function` | Rename a function | `assetPath`, `oldName`, `newName` |
-| `add_node` | Add a graph node | `assetPath`, `nodeClass`, `graphName?` |
+| `add_node` | Add a graph node (K2, AnimGraph, any UEdGraphNode subclass) | `assetPath`, `nodeClass`, `graphName?` |
 | `delete_node` | Remove a node | `assetPath`, `graphName`, `nodeName` |
 | `set_node_property` | Set a node property | `assetPath`, `graphName`, `nodeName`, `propertyName`, `value` |
 | `connect_pins` | Wire two node pins together | `assetPath`, `sourceNode`, `sourcePin`, `targetNode`, `targetPin` |
@@ -85,6 +86,7 @@ UE-MCP exposes **19 category tools** covering **300+ actions**. Every tool takes
 
 !!! tip "Graph Scripting Workflow"
     `search_node_types` → `add_node` → `connect_pins` is the standard flow for graph scripting.
+    For AnimBPs: `list_graphs` → `read_graph` (with `graphName: "AnimGraph"`) → `add_node` (with `nodeClass: "AnimGraphNode_TwoBoneIK"`, etc.) → `connect_pins`.
 
 ---
 

@@ -66,11 +66,56 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("connect_pins"), &ConnectPins);
 	Registry.RegisterHandler(TEXT("delete_node"), &DeleteNode);
 	Registry.RegisterHandler(TEXT("set_node_property"), &SetNodeProperty);
+	Registry.RegisterHandler(TEXT("list_blueprint_graphs"), &ListGraphs);
 }
 
 UBlueprint* FBlueprintHandlers::LoadBlueprint(const FString& AssetPath)
 {
 	return LoadObject<UBlueprint>(nullptr, *AssetPath);
+}
+
+// ---------------------------------------------------------------------------
+// list_blueprint_graphs — List all graphs in a blueprint (EventGraph, AnimGraph, functions, etc.)
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::ListGraphs(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	TArray<UEdGraph*> AllGraphs;
+	Blueprint->GetAllGraphs(AllGraphs);
+
+	TArray<TSharedPtr<FJsonValue>> GraphsArray;
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		if (!Graph) continue;
+		TSharedPtr<FJsonObject> GraphObj = MakeShared<FJsonObject>();
+		GraphObj->SetStringField(TEXT("name"), Graph->GetName());
+		GraphObj->SetStringField(TEXT("class"), Graph->GetClass()->GetName());
+		GraphObj->SetNumberField(TEXT("nodeCount"), Graph->Nodes.Num());
+		GraphsArray.Add(MakeShared<FJsonValueObject>(GraphObj));
+	}
+
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetArrayField(TEXT("graphs"), GraphsArray);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
 }
 
 FEdGraphPinType FBlueprintHandlers::MakePinType(const FString& TypeStr)
@@ -133,14 +178,11 @@ UEdGraph* FBlueprintHandlers::FindGraph(UBlueprint* Blueprint, const FString& Gr
 {
 	if (!Blueprint) return nullptr;
 
-	for (UEdGraph* Graph : Blueprint->UbergraphPages)
-	{
-		if (Graph && Graph->GetName() == GraphName)
-		{
-			return Graph;
-		}
-	}
-	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+	// Search ALL graphs (UbergraphPages, FunctionGraphs, AnimGraphs, etc.)
+	TArray<UEdGraph*> AllGraphs;
+	Blueprint->GetAllGraphs(AllGraphs);
+
+	for (UEdGraph* Graph : AllGraphs)
 	{
 		if (Graph && Graph->GetName() == GraphName)
 		{
@@ -952,92 +994,91 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	const TSharedPtr<FJsonObject>* NodeParams = nullptr;
 	Params->TryGetObjectField(TEXT("nodeParams"), NodeParams);
 
-	UK2Node* NewNode = nullptr;
+	// Resolve short aliases to full class names
+	FString ResolvedClass = NodeClass;
+	if (NodeClass == TEXT("CallFunction")) ResolvedClass = TEXT("K2Node_CallFunction");
+	else if (NodeClass == TEXT("Event"))   ResolvedClass = TEXT("K2Node_Event");
 
-	if (NodeClass == TEXT("K2Node_CallFunction") || NodeClass == TEXT("CallFunction"))
+	// Find the UEdGraphNode subclass by name (works for K2, AnimGraph, and any other graph node types)
+	UClass* NodeUClass = nullptr;
+	for (TObjectIterator<UClass> It; It; ++It)
 	{
-		UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(TargetGraph);
-		if (CallNode)
+		if (It->GetName() == ResolvedClass && It->IsChildOf(UEdGraphNode::StaticClass()))
 		{
-			// Set function reference from nodeParams
-			if (NodeParams)
-			{
-				FString FunctionName;
-				if ((*NodeParams)->TryGetStringField(TEXT("functionName"), FunctionName))
-				{
-					FString TargetClassName;
-					if ((*NodeParams)->TryGetStringField(TEXT("targetClass"), TargetClassName))
-					{
-						UClass* TargetClass = FindObject<UClass>(nullptr, *TargetClassName);
-						if (!TargetClass)
-						{
-							TargetClass = FindObject<UClass>(nullptr, *(TEXT("U") + TargetClassName));
-						}
-						if (TargetClass)
-						{
-							UFunction* Func = TargetClass->FindFunctionByName(FName(*FunctionName));
-							if (Func)
-							{
-								CallNode->SetFromFunction(Func);
-							}
-						}
-					}
-					else
-					{
-						// Try finding function by name on the blueprint's parent class
-						if (Blueprint->ParentClass)
-						{
-							UFunction* Func = Blueprint->ParentClass->FindFunctionByName(FName(*FunctionName));
-							if (Func)
-							{
-								CallNode->SetFromFunction(Func);
-							}
-						}
-					}
-				}
-			}
-
-			TargetGraph->AddNode(CallNode, false, false);
-			CallNode->CreateNewGuid();
-			CallNode->PostPlacedNewNode();
-			CallNode->AllocateDefaultPins();
-			NewNode = CallNode;
+			NodeUClass = *It;
+			break;
 		}
 	}
-	else if (NodeClass == TEXT("K2Node_Event") || NodeClass == TEXT("Event"))
-	{
-		UK2Node_Event* EventNode = NewObject<UK2Node_Event>(TargetGraph);
-		if (EventNode)
-		{
-			if (NodeParams)
-			{
-				FString EventName;
-				if ((*NodeParams)->TryGetStringField(TEXT("eventName"), EventName))
-				{
-					EventNode->CustomFunctionName = FName(*EventName);
-				}
-			}
 
-			TargetGraph->AddNode(EventNode, false, false);
-			EventNode->CreateNewGuid();
-			EventNode->PostPlacedNewNode();
-			EventNode->AllocateDefaultPins();
-			NewNode = EventNode;
-		}
-	}
-	else
+	if (!NodeUClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unsupported node class: %s. Supported: K2Node_CallFunction, K2Node_Event"), *NodeClass));
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Node class not found: %s (must be a UEdGraphNode subclass)"), *NodeClass));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
+	// Create node instance
+	UEdGraphNode* NewNode = NewObject<UEdGraphNode>(TargetGraph, NodeUClass);
 	if (!NewNode)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Failed to create node"));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
+
+	// Special-case initialization for known types
+	if (UK2Node_CallFunction* CallNode = Cast<UK2Node_CallFunction>(NewNode))
+	{
+		if (NodeParams)
+		{
+			FString FunctionName;
+			if ((*NodeParams)->TryGetStringField(TEXT("functionName"), FunctionName))
+			{
+				FString TargetClassName;
+				if ((*NodeParams)->TryGetStringField(TEXT("targetClass"), TargetClassName))
+				{
+					UClass* TargetClass = FindObject<UClass>(nullptr, *TargetClassName);
+					if (!TargetClass)
+					{
+						TargetClass = FindObject<UClass>(nullptr, *(TEXT("U") + TargetClassName));
+					}
+					if (TargetClass)
+					{
+						UFunction* Func = TargetClass->FindFunctionByName(FName(*FunctionName));
+						if (Func)
+						{
+							CallNode->SetFromFunction(Func);
+						}
+					}
+				}
+				else if (Blueprint->ParentClass)
+				{
+					UFunction* Func = Blueprint->ParentClass->FindFunctionByName(FName(*FunctionName));
+					if (Func)
+					{
+						CallNode->SetFromFunction(Func);
+					}
+				}
+			}
+		}
+	}
+	else if (UK2Node_Event* EventNode = Cast<UK2Node_Event>(NewNode))
+	{
+		if (NodeParams)
+		{
+			FString EventName;
+			if ((*NodeParams)->TryGetStringField(TEXT("eventName"), EventName))
+			{
+				EventNode->CustomFunctionName = FName(*EventName);
+			}
+		}
+	}
+
+	// Common initialization (works for all UEdGraphNode subclasses — K2, AnimGraph, etc.)
+	TargetGraph->AddNode(NewNode, false, false);
+	NewNode->CreateNewGuid();
+	NewNode->PostPlacedNewNode();
+	NewNode->AllocateDefaultPins();
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
@@ -1053,8 +1094,22 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
-	Result->SetStringField(TEXT("nodeClass"), NodeClass);
+	Result->SetStringField(TEXT("nodeClass"), NewNode->GetClass()->GetName());
 	Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
+	Result->SetStringField(TEXT("title"), NewNode->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+
+	// Return pin info so the caller knows what to connect
+	TArray<TSharedPtr<FJsonValue>> PinsArray;
+	for (UEdGraphPin* Pin : NewNode->Pins)
+	{
+		if (!Pin) continue;
+		TSharedPtr<FJsonObject> PinObj = MakeShared<FJsonObject>();
+		PinObj->SetStringField(TEXT("name"), Pin->PinName.ToString());
+		PinObj->SetStringField(TEXT("type"), Pin->PinType.PinCategory.ToString());
+		PinObj->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("Input") : TEXT("Output"));
+		PinsArray.Add(MakeShared<FJsonValueObject>(PinObj));
+	}
+	Result->SetArrayField(TEXT("pins"), PinsArray);
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);
@@ -1744,8 +1799,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	// Try to create connection
-	const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+	// Use the graph's own schema (K2 for EventGraphs, AnimationGraph schema for AnimGraphs, etc.)
+	const UEdGraphSchema* Schema = TargetGraph->GetSchema();
+	if (!Schema)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Graph has no schema"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
 	bool bConnected = Schema->TryCreateConnection(SourcePin, TargetPin);
 
 	if (bConnected)

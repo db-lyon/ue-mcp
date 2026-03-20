@@ -25,11 +25,13 @@ export const blueprintTool: ToolDef = categoryTool(
     search_node_types: bp("search_node_types"),
     create_interface:  bp("create_blueprint_interface", (p) => ({ path: p.assetPath })),
     add_interface:     bp("add_blueprint_interface"),
+    list_graphs:           bp("list_blueprint_graphs", (p) => ({ path: p.assetPath })),
     add_event_dispatcher: bp("add_event_dispatcher"),
   },
   `- read: Read full BP structure. Params: assetPath
 - list_variables: List variables. Params: assetPath
 - list_functions: List functions/graphs. Params: assetPath
+- list_graphs: List all graphs in a blueprint (EventGraph, AnimGraph, functions). Params: assetPath
 - read_graph: Read graph nodes. Params: assetPath, graphName
 - create: Create Blueprint. Params: assetPath, parentClass?
 - add_variable: Add variable. Params: assetPath, name, varType
@@ -37,7 +39,7 @@ export const blueprintTool: ToolDef = categoryTool(
 - create_function: Create function. Params: assetPath, functionName
 - delete_function: Delete function. Params: assetPath, functionName
 - rename_function: Rename function. Params: assetPath, oldName, newName
-- add_node: Add graph node. Params: assetPath, graphName?, nodeClass, nodeParams?
+- add_node: Add graph node (K2, AnimGraph, etc — any UEdGraphNode subclass). Params: assetPath, graphName?, nodeClass, nodeParams?
 - delete_node: Delete node. Params: assetPath, graphName, nodeName
 - set_node_property: Set node property. Params: assetPath, graphName, nodeName, propertyName, value
 - connect_pins: Wire nodes. Params: sourceNode, sourcePin, targetNode, targetPin, assetPath, graphName?
