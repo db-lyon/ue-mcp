@@ -1052,14 +1052,28 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		if (NodeParams)
 		{
 			FString FunctionName;
+			FString TargetClassName;
+
+			// Accept flat params: functionName, targetClass
 			if (!(*NodeParams)->TryGetStringField(TEXT("functionName"), FunctionName))
 				(*NodeParams)->TryGetStringField(TEXT("memberName"), FunctionName);
+			if (!(*NodeParams)->TryGetStringField(TEXT("targetClass"), TargetClassName))
+				(*NodeParams)->TryGetStringField(TEXT("memberParent"), TargetClassName);
+
+			// Also accept nested: {"FunctionReference":{"MemberName":"X","MemberParent":"Y"}}
+			if (FunctionName.IsEmpty())
+			{
+				const TSharedPtr<FJsonObject>* FuncRef = nullptr;
+				if ((*NodeParams)->TryGetObjectField(TEXT("FunctionReference"), FuncRef))
+				{
+					(*FuncRef)->TryGetStringField(TEXT("MemberName"), FunctionName);
+					if (TargetClassName.IsEmpty())
+						(*FuncRef)->TryGetStringField(TEXT("MemberParent"), TargetClassName);
+				}
+			}
 
 			if (!FunctionName.IsEmpty())
 			{
-				FString TargetClassName;
-				if (!(*NodeParams)->TryGetStringField(TEXT("targetClass"), TargetClassName))
-					(*NodeParams)->TryGetStringField(TEXT("memberParent"), TargetClassName);
 
 				UClass* TargetClass = nullptr;
 				if (!TargetClassName.IsEmpty())
@@ -1087,14 +1101,27 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		if (NodeParams)
 		{
 			FString EventName;
+			FString EventClassName;
+
 			if (!(*NodeParams)->TryGetStringField(TEXT("eventName"), EventName))
 				(*NodeParams)->TryGetStringField(TEXT("memberName"), EventName);
+			if (!(*NodeParams)->TryGetStringField(TEXT("eventClass"), EventClassName))
+				(*NodeParams)->TryGetStringField(TEXT("memberParent"), EventClassName);
+
+			// Also accept nested: {"EventReference":{"MemberName":"X","MemberParent":"Y"}}
+			if (EventName.IsEmpty())
+			{
+				const TSharedPtr<FJsonObject>* EvtRef = nullptr;
+				if ((*NodeParams)->TryGetObjectField(TEXT("EventReference"), EvtRef))
+				{
+					(*EvtRef)->TryGetStringField(TEXT("MemberName"), EventName);
+					if (EventClassName.IsEmpty())
+						(*EvtRef)->TryGetStringField(TEXT("MemberParent"), EventClassName);
+				}
+			}
 
 			if (!EventName.IsEmpty())
 			{
-				FString EventClassName;
-				if (!(*NodeParams)->TryGetStringField(TEXT("eventClass"), EventClassName))
-					(*NodeParams)->TryGetStringField(TEXT("memberParent"), EventClassName);
 
 				if (!EventClassName.IsEmpty())
 				{
@@ -1125,7 +1152,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		if (NodeParams)
 		{
 			FString VarName;
-			if ((*NodeParams)->TryGetStringField(TEXT("variableName"), VarName))
+			if (!(*NodeParams)->TryGetStringField(TEXT("variableName"), VarName))
+			{
+				// Also accept {"VariableReference":{"MemberName":"X"}} format
+				const TSharedPtr<FJsonObject>* VarRef = nullptr;
+				if ((*NodeParams)->TryGetObjectField(TEXT("VariableReference"), VarRef))
+					(*VarRef)->TryGetStringField(TEXT("MemberName"), VarName);
+			}
+			if (!VarName.IsEmpty())
 			{
 				GetNode->VariableReference.SetSelfMember(FName(*VarName));
 			}
@@ -1136,7 +1170,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		if (NodeParams)
 		{
 			FString VarName;
-			if ((*NodeParams)->TryGetStringField(TEXT("variableName"), VarName))
+			if (!(*NodeParams)->TryGetStringField(TEXT("variableName"), VarName))
+			{
+				const TSharedPtr<FJsonObject>* VarRef = nullptr;
+				if ((*NodeParams)->TryGetObjectField(TEXT("VariableReference"), VarRef))
+					(*VarRef)->TryGetStringField(TEXT("MemberName"), VarName);
+			}
+			if (!VarName.IsEmpty())
 			{
 				SetNode->VariableReference.SetSelfMember(FName(*VarName));
 			}
