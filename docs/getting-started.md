@@ -3,34 +3,45 @@
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+
-- Unreal Engine 5.4–5.7 (any version with `PythonScriptPlugin`)
+- Unreal Engine 5.4–5.7
 - An MCP-capable AI client (Claude Code, Claude Desktop, Cursor, etc.)
 
-## 1. Clone and Build
+## 1. Run Setup
 
 ```bash
-git clone https://github.com/db-lyon/ue-mcp.git
-cd ue-mcp
-npm install
-npm run build
+npx ue-mcp init
 ```
 
-## 2. Configure Your MCP Client
+The interactive setup will walk you through:
 
-Add to your MCP configuration, passing your `.uproject` path as an argument.
+1. **Project path** — point it at your `.uproject` file or project directory
+2. **Tool categories** — choose which categories to enable (use arrow keys + spacebar to toggle)
+3. **Plugin deployment** — copies the C++ bridge plugin into your project
+4. **UE plugin enablement** — enables required plugins (PythonScriptPlugin, Niagara, PCG, etc.) based on your selections
+5. **MCP client config** — detects installed clients and writes the config for you
+
+You can also pass the project path directly:
+
+```bash
+npx ue-mcp init C:/Users/you/UnrealProjects/MyGame/MyGame.uproject
+```
+
+!!! warning "Restart Required"
+    After setup, **restart the editor once** so the C++ bridge plugin loads. From then on it starts automatically with the editor.
+
+## 2. Manual Configuration
+
+If you prefer to skip the interactive setup, add this to your MCP client config:
 
 === "Claude Code"
 
-    `.mcp.json` or project settings:
+    `.mcp.json` in project root:
     ```json
     {
       "mcpServers": {
         "ue-mcp": {
-          "command": "node",
-          "args": [
-            "C:/path/to/ue-mcp/dist/index.js",
-            "C:/Users/you/UnrealProjects/MyGame/MyGame.uproject"
-          ]
+          "command": "npx",
+          "args": ["ue-mcp", "C:/path/to/MyGame.uproject"]
         }
       }
     }
@@ -43,11 +54,8 @@ Add to your MCP configuration, passing your `.uproject` path as an argument.
     {
       "mcpServers": {
         "ue-mcp": {
-          "command": "node",
-          "args": [
-            "C:/path/to/ue-mcp/dist/index.js",
-            "C:/Users/you/UnrealProjects/MyGame/MyGame.uproject"
-          ]
+          "command": "npx",
+          "args": ["ue-mcp", "C:/path/to/MyGame.uproject"]
         }
       }
     }
@@ -55,33 +63,19 @@ Add to your MCP configuration, passing your `.uproject` path as an argument.
 
 === "Cursor"
 
-    `mcp.json`:
+    `.cursor/mcp.json`:
     ```json
     {
       "mcpServers": {
         "ue-mcp": {
-          "command": "node",
-          "args": [
-            "C:/path/to/ue-mcp/dist/index.js",
-            "C:/Users/you/UnrealProjects/MyGame/MyGame.uproject"
-          ]
+          "command": "npx",
+          "args": ["ue-mcp", "C:/path/to/MyGame.uproject"]
         }
       }
     }
     ```
 
-## 3. First Run
-
-On first run, the server automatically:
-
-1. Detects the engine version from `.uproject`
-2. Enables `PythonScriptPlugin` if needed
-3. Copies the C++ bridge plugin to `<Project>/Plugins/UE_MCP_Bridge/`
-4. Enables the plugin in `.uproject`
-5. Connects to the editor if it's running
-
-!!! warning "Restart Required"
-    After the first launch, **restart the editor once** so the C++ bridge plugin loads. From then on it starts automatically with the editor.
+The server auto-deploys the plugin and enables required UE plugins on first run.
 
 ## 4. Verify the Connection
 

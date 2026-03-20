@@ -15,33 +15,38 @@ Blueprints, materials, levels, actors, animation, VFX, landscape, PCG, foliage, 
 ## Quick Start
 
 ```bash
-git clone https://github.com/db-lyon/ue-mcp.git
-cd ue-mcp
-npm install && npm run build
+npx ue-mcp init
 ```
 
-Add to your MCP client config (Claude Code, Claude Desktop, Cursor, etc.):
+The interactive setup will:
 
-```json
-{
-  "mcpServers": {
-    "ue-mcp": {
-      "command": "node",
-      "args": [
-        "C:/path/to/ue-mcp/dist/index.js",
-        "C:/path/to/MyGame.uproject"
-      ]
-    }
-  }
-}
-```
+1. Ask for your `.uproject` path
+2. Let you choose which tool categories to enable
+3. Deploy the C++ bridge plugin to your project
+4. Enable required UE plugins (Niagara, PCG, GAS, etc.)
+5. Detect and configure your MCP client (Claude Code, Claude Desktop, Cursor)
 
-Restart the editor once after first run to load the C++ bridge plugin. Then:
+Restart the editor once after setup to load the bridge plugin. Then ask your AI:
 
 ```
 project(action="get_status")        — verify connection
 level(action="get_outliner")        — see what's in the level
 asset(action="list")                — browse project assets
+```
+
+### Manual Configuration
+
+If you prefer to configure manually, add to your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "ue-mcp": {
+      "command": "npx",
+      "args": ["ue-mcp", "C:/path/to/MyGame.uproject"]
+    }
+  }
+}
 ```
 
 ## Documentation

@@ -2,19 +2,16 @@
 
 ## MCP Client Configuration
 
-UE-MCP runs as a standard MCP server over stdio. Configure it in your AI client by pointing at the built `dist/index.js` and passing your `.uproject` path.
+The easiest way to configure UE-MCP is to run `npx ue-mcp init` — it detects your MCP clients and writes the config automatically.
 
-### Basic Configuration
+### Manual Configuration
 
 ```json
 {
   "mcpServers": {
     "ue-mcp": {
-      "command": "node",
-      "args": [
-        "C:/path/to/ue-mcp/dist/index.js",
-        "C:/Users/you/UnrealProjects/MyGame/MyGame.uproject"
-      ]
+      "command": "npx",
+      "args": ["ue-mcp", "C:/path/to/MyGame.uproject"]
     }
   }
 }
@@ -34,14 +31,12 @@ You can start the server without a `.uproject` argument. It will run in a limite
 
 ## Project Configuration (`.ue-mcp.json`)
 
-Place a `.ue-mcp.json` file in your UE project root (next to the `.uproject`) to customize behavior.
+Place a `.ue-mcp.json` file in your UE project root (next to the `.uproject`) to customize behavior. `npx ue-mcp init` creates this for you.
 
 ```json
 {
-  "contentRoots": [
-    "/Game/",
-    "/MyPlugin/"
-  ]
+  "contentRoots": ["/Game/", "/MyPlugin/"],
+  "disable": ["gas", "networking"]
 }
 ```
 
@@ -50,6 +45,7 @@ Place a `.ue-mcp.json` file in your UE project root (next to the `.uproject`) to
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `contentRoots` | `string[]` | `["/Game/"]` | Content paths to search when using `asset(action="search")`. Add plugin content roots here if your project uses plugins with their own assets. |
+| `disable` | `string[]` | `[]` | Tool categories to disable. Disabled categories are not registered with the MCP server, reducing context noise for the AI. |
 
 ## Bridge Connection
 

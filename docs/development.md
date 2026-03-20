@@ -36,6 +36,9 @@ npm run dev
 
 # Direct
 node dist/index.js C:/path/to/MyGame.uproject
+
+# Interactive setup (also available via npx ue-mcp init)
+node dist/index.js init C:/path/to/MyGame.uproject
 ```
 
 ## Project Structure
