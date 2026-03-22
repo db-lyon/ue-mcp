@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 22
 
-      - run: npm ci
+      - run: npm ci && npx tsc
 
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
@@ -36,7 +36,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx ue-mcp resolve ${{ github.event.issue.number }} --ci
+        run: node dist/index.js resolve ${{ github.event.issue.number }} --ci
 
       - name: Remove resolve label
         if: always()
