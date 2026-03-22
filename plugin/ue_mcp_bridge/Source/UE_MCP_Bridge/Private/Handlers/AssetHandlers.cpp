@@ -1925,7 +1925,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 
 	if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
 	{
-		TArray<USkeletalMeshSocket*>& Sockets = SKM->GetMeshOnlySocketList();
+		auto& Sockets = SKM->GetMeshOnlySocketList();
 		for (int32 i = 0; i < Sockets.Num(); ++i)
 		{
 			if (Sockets[i] && Sockets[i]->SocketName == FName(*SocketName))
