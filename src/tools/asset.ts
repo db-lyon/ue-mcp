@@ -73,7 +73,11 @@ export const assetTool: ToolDef = categoryTool(
     delete:         bp("delete_asset"),
     save:           bp("save_asset"),
     set_mesh_material:    bp("set_mesh_material"),
-    recenter_pivot:       bp("recenter_pivot"),
+    recenter_pivot:       bp("recenter_pivot", (p) => {
+      const paths = p.assetPaths as string[] | undefined;
+      if (paths && paths.length > 0) return { assetPaths: paths };
+      return { assetPath: p.assetPath };
+    }),
     import_static_mesh:   bp("import_static_mesh"),
     import_skeletal_mesh: bp("import_skeletal_mesh"),
     import_animation:     bp("import_animation"),
@@ -84,6 +88,9 @@ export const assetTool: ToolDef = categoryTool(
     list_textures:        bp("list_textures"),
     get_texture_info:     bp("get_texture_info"),
     set_texture_settings: bp("set_texture_settings"),
+    add_socket:           bp("add_socket"),
+    remove_socket:        bp("remove_socket"),
+    list_sockets:         bp("list_sockets", (p) => ({ assetPath: p.assetPath })),
   },
   `- list: List assets in directory. Params: directory?, typeFilter?, recursive?
 - search: Search by name/class/path. Params: query, directory?, maxResults?, searchAll? (set searchAll=true to search all content roots including plugin paths like /GASP/, not just /Game/)
@@ -95,7 +102,7 @@ export const assetTool: ToolDef = categoryTool(
 - delete: Delete asset. Params: assetPath
 - save: Save asset(s). Params: assetPath?
 - set_mesh_material: Assign material to static mesh slot. Params: assetPath, materialPath, slotIndex?
-- recenter_pivot: Move static mesh pivot to geometry center. Params: assetPath
+- recenter_pivot: Move static mesh pivot to geometry center. Params: assetPath OR assetPaths (array — first mesh sets the reference pivot for all)
 - import_static_mesh: Import from FBX/OBJ. Params: filePath, name?, packagePath?
 - import_skeletal_mesh: Import from FBX. Params: filePath, name?, packagePath?, skeletonPath?
 - import_animation: Import anim from FBX. Params: filePath, name?, packagePath?, skeletonPath?
@@ -105,7 +112,10 @@ export const assetTool: ToolDef = categoryTool(
 - reimport_datatable: Reimport from JSON. Params: assetPath, jsonPath?, jsonString?
 - list_textures: List textures. Params: directory?, recursive?
 - get_texture_info: Get texture details. Params: assetPath
-- set_texture_settings: Set texture settings. Params: assetPath, settings`,
+- set_texture_settings: Set texture settings. Params: assetPath, settings
+- add_socket: Add socket to StaticMesh or SkeletalMesh. Params: assetPath, socketName, boneName? (skeletal only), relativeLocation?, relativeRotation?, relativeScale?
+- remove_socket: Remove socket by name. Params: assetPath, socketName
+- list_sockets: List sockets on a mesh. Params: assetPath`,
   {
     assetPath: z.string().optional().describe("Asset path"),
     directory: z.string().optional(), query: z.string().optional(),
@@ -123,5 +133,11 @@ export const assetTool: ToolDef = categoryTool(
     jsonPath: z.string().optional(), jsonString: z.string().optional(),
     exportName: z.string().optional(), propertyName: z.string().optional(),
     settings: z.record(z.unknown()).optional(),
+    assetPaths: z.array(z.string()).optional().describe("Array of asset paths (for recenter_pivot batch — first mesh sets reference pivot)"),
+    socketName: z.string().optional().describe("Socket name"),
+    boneName: z.string().optional().describe("Bone name (for skeletal mesh sockets)"),
+    relativeLocation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Socket relative location"),
+    relativeRotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Socket relative rotation"),
+    relativeScale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Socket relative scale"),
   },
 );

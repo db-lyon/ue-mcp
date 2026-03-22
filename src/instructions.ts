@@ -21,7 +21,8 @@ asset — Assets: list, search, CRUD, import, datatables, textures
   list, search, read, read_properties, duplicate, rename, move, delete, save,
   import_static_mesh, import_skeletal_mesh, import_animation, import_texture,
   read_datatable, create_datatable, reimport_datatable, list_textures,
-  get_texture_info, set_texture_settings
+  get_texture_info, set_texture_settings,
+  add_socket, remove_socket, list_sockets
 
 blueprint — Blueprint reading, authoring, compilation
   read, list_variables, list_functions, read_graph, create, add_variable,

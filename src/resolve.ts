@@ -6,6 +6,9 @@
  * implement the fix, then pushes and opens a PR.  Never merges to main.
  */
 import { execSync, spawn } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -139,22 +142,28 @@ async function resolve() {
     `5. Do NOT push, create PRs, or make unrelated changes`,
   ].join("\n");
 
-  // Launch Claude Code
-  const claudeArgs = ciMode
-    ? ["--print", "--dangerously-skip-permissions", prompt]
-    : [prompt];
+  // Write prompt to a temp file so shell escaping can't mangle it
+  const promptFile = path.join(os.tmpdir(), `ue-mcp-resolve-${issueNum}.md`);
+  fs.writeFileSync(promptFile, prompt);
+
+  const claudeArgs = ["--print", "--dangerously-skip-permissions"];
 
   console.log(`  ${DIM}Launching Claude Code${ciMode ? " (CI mode)" : ""}...${RESET}`);
   console.log("");
 
   const exitCode = await new Promise<number | null>((resolve) => {
     const child = spawn("claude", claudeArgs, {
-      stdio: "inherit",
+      stdio: ["pipe", "inherit", "inherit"],
       shell: true,
     });
+    child.stdin!.write(prompt);
+    child.stdin!.end();
     child.on("exit", resolve);
     child.on("error", () => resolve(1));
   });
+
+  // Clean up
+  try { fs.unlinkSync(promptFile); } catch { /* ignore */ }
 
   console.log("");
 
