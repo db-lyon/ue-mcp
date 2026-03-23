@@ -19,6 +19,7 @@ The interactive setup will walk you through:
 3. **Plugin deployment** — copies the C++ bridge plugin into your project
 4. **UE plugin enablement** — enables required plugins (PythonScriptPlugin, Niagara, PCG, etc.) based on your selections
 5. **MCP client config** — detects installed clients and writes the config for you
+6. **Agent behavior** (Claude Code only) — installs hooks that prompt agents to report tool gaps when they fall back to raw Python
 
 You can also pass the project path directly:
 
@@ -127,6 +128,16 @@ project(action="set_project", projectPath="C:/path/to/Other.uproject")
 ```
 
 This re-deploys the bridge and reconnects.
+
+## Resolving Issues
+
+Anyone can pick up an open GitHub issue and let Claude Code fix it:
+
+```bash
+npx ue-mcp resolve 16
+```
+
+This fetches the issue, creates a `resolve/` branch, launches Claude Code with the issue context, then pushes and opens a PR. Requires `claude` and `gh` CLIs.
 
 ## Next Steps
 

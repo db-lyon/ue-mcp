@@ -53,3 +53,19 @@ Feedback issues are created with the `agent-feedback` label and include:
 - **Python Workaround** — the code that solved it, useful for implementing the native handler
 
 These issues form a prioritized backlog of tool gaps to close.
+
+## Claude Code Hooks
+
+If you ran `npx ue-mcp init` and selected "Agent behavior" hooks, Claude Code will automatically prompt agents to submit feedback whenever they fall back to `execute_python`. This is a Claude Code [PostToolUse hook](https://docs.anthropic.com/en/docs/claude-code/hooks) — it fires deterministically after the tool call, not as a suggestion the agent can ignore.
+
+The hook is configured in your project's `.claude/settings.json` and calls `npx ue-mcp hook post-tool-use` under the hood.
+
+## Resolving Feedback Issues
+
+Once feedback issues are triaged, anyone can resolve them:
+
+```bash
+npx ue-mcp resolve <issue-number>
+```
+
+This fetches the issue, creates a branch, launches Claude Code to implement the fix, and opens a PR. See [Getting Started](getting-started.md#resolving-issues) for details.

@@ -51,6 +51,11 @@ UE-MCP exposes **19 category tools** covering **300+ actions**. Every tool takes
 | `list_textures` | List texture assets | `directory?`, `recursive?` |
 | `get_texture_info` | Get texture details (size, format, etc.) | `assetPath` |
 | `set_texture_settings` | Set texture properties | `assetPath`, `settings` |
+| `set_mesh_material` | Assign material to a static mesh slot | `assetPath`, `materialPath`, `slotIndex?` |
+| `recenter_pivot` | Move static mesh pivot to geometry center | `assetPath` or `assetPaths[]` (first mesh sets reference pivot) |
+| `add_socket` | Add socket to StaticMesh or SkeletalMesh | `assetPath`, `socketName`, `boneName?`, `relativeLocation?`, `relativeRotation?`, `relativeScale?` |
+| `remove_socket` | Remove socket by name | `assetPath`, `socketName` |
+| `list_sockets` | List sockets on a mesh | `assetPath` |
 
 !!! note
     `search` auto-searches all configured content roots (see [Configuration](configuration.md)).
@@ -157,7 +162,7 @@ UE-MCP exposes **19 category tools** covering **300+ actions**. Every tool takes
 | `read_blendspace` | Read blendspace samples | `assetPath` |
 | `list` | List animation assets | `directory?`, `recursive?` |
 | `create_montage` | Create montage from a sequence | `animSequencePath` |
-| `create_anim_blueprint` | Create an AnimBP | `skeletonPath` |
+| `create_anim_blueprint` | Create an AnimBP | `skeletonPath`, `parentClass?` |
 | `create_blendspace` | Create a blendspace | `skeletonPath` |
 | `add_notify` | Add a notify event | `assetPath`, `notifyName`, `triggerTime` |
 | `get_skeleton_info` | Read skeleton bone hierarchy | `assetPath` |
