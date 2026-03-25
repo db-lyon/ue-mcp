@@ -20,6 +20,12 @@
 #include "Serialization/JsonSerializer.h"
 #include "Misc/FileHelper.h"
 
+// Mesh sockets
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshSocket.h"
+#include "Engine/SkeletalMesh.h"
+#include "Engine/SkeletalMeshSocket.h"
+
 // Import tasks
 #include "AssetImportTask.h"
 #include "AssetToolsModule.h"
@@ -70,6 +76,11 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// Mesh handlers
 	Registry.RegisterHandler(TEXT("set_mesh_material"), &SetMeshMaterial);
 	Registry.RegisterHandler(TEXT("recenter_pivot"), &RecenterPivot);
+
+	// Socket handlers
+	Registry.RegisterHandler(TEXT("add_socket"), &AddSocket);
+	Registry.RegisterHandler(TEXT("remove_socket"), &RemoveSocket);
+	Registry.RegisterHandler(TEXT("list_sockets"), &ListSockets);
 
 	// Additional DataTable handlers
 	Registry.RegisterHandler(TEXT("create_datatable"), &CreateDataTable);
@@ -1767,6 +1778,261 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
 	Result->SetStringField(TEXT("message"), TEXT("DataTable reimported successfully from JSON"));
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ─── Socket Handlers ──────────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString SocketName = Params->GetStringField(TEXT("socketName"));
+
+	if (AssetPath.IsEmpty() || SocketName.IsEmpty())
+	{
+		return MakeShared<FJsonValueString>(TEXT("Error: assetPath and socketName are required"));
+	}
+
+	FVector RelLoc = FVector::ZeroVector;
+	FRotator RelRot = FRotator::ZeroRotator;
+	FVector RelScale = FVector::OneVector;
+
+	if (const TSharedPtr<FJsonObject>* LocObj; Params->TryGetObjectField(TEXT("relativeLocation"), LocObj))
+	{
+		RelLoc.X = (*LocObj)->GetNumberField(TEXT("x"));
+		RelLoc.Y = (*LocObj)->GetNumberField(TEXT("y"));
+		RelLoc.Z = (*LocObj)->GetNumberField(TEXT("z"));
+	}
+	if (const TSharedPtr<FJsonObject>* RotObj; Params->TryGetObjectField(TEXT("relativeRotation"), RotObj))
+	{
+		RelRot.Pitch = (*RotObj)->GetNumberField(TEXT("pitch"));
+		RelRot.Yaw   = (*RotObj)->GetNumberField(TEXT("yaw"));
+		RelRot.Roll  = (*RotObj)->GetNumberField(TEXT("roll"));
+	}
+	if (const TSharedPtr<FJsonObject>* ScaleObj; Params->TryGetObjectField(TEXT("relativeScale"), ScaleObj))
+	{
+		RelScale.X = (*ScaleObj)->GetNumberField(TEXT("x"));
+		RelScale.Y = (*ScaleObj)->GetNumberField(TEXT("y"));
+		RelScale.Z = (*ScaleObj)->GetNumberField(TEXT("z"));
+	}
+
+	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	if (!Asset)
+	{
+		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: could not load asset '%s'"), *AssetPath));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	// Try StaticMesh first
+	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
+	{
+		// Check for duplicate
+		for (UStaticMeshSocket* Existing : SM->Sockets)
+		{
+			if (Existing && Existing->SocketName == FName(*SocketName))
+			{
+				return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: socket '%s' already exists"), *SocketName));
+			}
+		}
+
+		UStaticMeshSocket* NewSocket = NewObject<UStaticMeshSocket>(SM);
+		NewSocket->SocketName = FName(*SocketName);
+		NewSocket->RelativeLocation = RelLoc;
+		NewSocket->RelativeRotation = RelRot;
+		NewSocket->RelativeScale = RelScale;
+		SM->Modify();
+		SM->Sockets.Add(NewSocket);
+		SM->MarkPackageDirty();
+
+		Result->SetBoolField(TEXT("success"), true);
+		Result->SetStringField(TEXT("socketName"), SocketName);
+		Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Try SkeletalMesh
+	if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
+	{
+		FString BoneName = Params->GetStringField(TEXT("boneName"));
+		if (BoneName.IsEmpty()) BoneName = TEXT("root");
+
+		// Check for duplicate
+		for (USkeletalMeshSocket* Existing : SKM->GetMeshOnlySocketList())
+		{
+			if (Existing && Existing->SocketName == FName(*SocketName))
+			{
+				return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: socket '%s' already exists"), *SocketName));
+			}
+		}
+
+		USkeletalMeshSocket* NewSocket = NewObject<USkeletalMeshSocket>(SKM);
+		NewSocket->SocketName = FName(*SocketName);
+		NewSocket->BoneName = FName(*BoneName);
+		NewSocket->RelativeLocation = RelLoc;
+		NewSocket->RelativeRotation = RelRot;
+		NewSocket->RelativeScale = RelScale;
+		SKM->GetMeshOnlySocketList().Add(NewSocket);
+		SKM->MarkPackageDirty();
+		SKM->PostEditChange();
+
+		Result->SetBoolField(TEXT("success"), true);
+		Result->SetStringField(TEXT("socketName"), SocketName);
+		Result->SetStringField(TEXT("boneName"), BoneName);
+		Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: '%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString SocketName = Params->GetStringField(TEXT("socketName"));
+
+	if (AssetPath.IsEmpty() || SocketName.IsEmpty())
+	{
+		return MakeShared<FJsonValueString>(TEXT("Error: assetPath and socketName are required"));
+	}
+
+	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	if (!Asset)
+	{
+		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: could not load asset '%s'"), *AssetPath));
+	}
+
+	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
+	{
+		for (int32 i = 0; i < SM->Sockets.Num(); ++i)
+		{
+			if (SM->Sockets[i] && SM->Sockets[i]->SocketName == FName(*SocketName))
+			{
+				SM->Modify();
+				SM->Sockets.RemoveAt(i);
+				SM->MarkPackageDirty();
+
+				TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+				Result->SetBoolField(TEXT("success"), true);
+				Result->SetStringField(TEXT("removed"), SocketName);
+				return MakeShared<FJsonValueObject>(Result);
+			}
+		}
+		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: socket '%s' not found on StaticMesh"), *SocketName));
+	}
+
+	if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
+	{
+		auto& Sockets = SKM->GetMeshOnlySocketList();
+		for (int32 i = 0; i < Sockets.Num(); ++i)
+		{
+			if (Sockets[i] && Sockets[i]->SocketName == FName(*SocketName))
+			{
+				Sockets.RemoveAt(i);
+				SKM->MarkPackageDirty();
+				SKM->PostEditChange();
+
+				TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+				Result->SetBoolField(TEXT("success"), true);
+				Result->SetStringField(TEXT("removed"), SocketName);
+				return MakeShared<FJsonValueObject>(Result);
+			}
+		}
+		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: socket '%s' not found on SkeletalMesh"), *SocketName));
+	}
+
+	return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: '%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	if (AssetPath.IsEmpty())
+	{
+		return MakeShared<FJsonValueString>(TEXT("Error: assetPath is required"));
+	}
+
+	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	if (!Asset)
+	{
+		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: could not load asset '%s'"), *AssetPath));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> SocketArray;
+
+	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
+	{
+		for (UStaticMeshSocket* Socket : SM->Sockets)
+		{
+			if (!Socket) continue;
+			TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+			S->SetStringField(TEXT("name"), Socket->SocketName.ToString());
+			S->SetStringField(TEXT("tag"), Socket->Tag);
+
+			TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
+			Loc->SetNumberField(TEXT("x"), Socket->RelativeLocation.X);
+			Loc->SetNumberField(TEXT("y"), Socket->RelativeLocation.Y);
+			Loc->SetNumberField(TEXT("z"), Socket->RelativeLocation.Z);
+			S->SetObjectField(TEXT("relativeLocation"), Loc);
+
+			TSharedPtr<FJsonObject> Rot = MakeShared<FJsonObject>();
+			Rot->SetNumberField(TEXT("pitch"), Socket->RelativeRotation.Pitch);
+			Rot->SetNumberField(TEXT("yaw"), Socket->RelativeRotation.Yaw);
+			Rot->SetNumberField(TEXT("roll"), Socket->RelativeRotation.Roll);
+			S->SetObjectField(TEXT("relativeRotation"), Rot);
+
+			TSharedPtr<FJsonObject> Scale = MakeShared<FJsonObject>();
+			Scale->SetNumberField(TEXT("x"), Socket->RelativeScale.X);
+			Scale->SetNumberField(TEXT("y"), Socket->RelativeScale.Y);
+			Scale->SetNumberField(TEXT("z"), Socket->RelativeScale.Z);
+			S->SetObjectField(TEXT("relativeScale"), Scale);
+
+			SocketArray.Add(MakeShared<FJsonValueObject>(S));
+		}
+		Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+	}
+	else if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
+	{
+		for (USkeletalMeshSocket* Socket : SKM->GetMeshOnlySocketList())
+		{
+			if (!Socket) continue;
+			TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+			S->SetStringField(TEXT("name"), Socket->SocketName.ToString());
+			S->SetStringField(TEXT("boneName"), Socket->BoneName.ToString());
+
+			TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
+			Loc->SetNumberField(TEXT("x"), Socket->RelativeLocation.X);
+			Loc->SetNumberField(TEXT("y"), Socket->RelativeLocation.Y);
+			Loc->SetNumberField(TEXT("z"), Socket->RelativeLocation.Z);
+			S->SetObjectField(TEXT("relativeLocation"), Loc);
+
+			TSharedPtr<FJsonObject> Rot = MakeShared<FJsonObject>();
+			Rot->SetNumberField(TEXT("pitch"), Socket->RelativeRotation.Pitch);
+			Rot->SetNumberField(TEXT("yaw"), Socket->RelativeRotation.Yaw);
+			Rot->SetNumberField(TEXT("roll"), Socket->RelativeRotation.Roll);
+			S->SetObjectField(TEXT("relativeRotation"), Rot);
+
+			TSharedPtr<FJsonObject> Scale = MakeShared<FJsonObject>();
+			Scale->SetNumberField(TEXT("x"), Socket->RelativeScale.X);
+			Scale->SetNumberField(TEXT("y"), Socket->RelativeScale.Y);
+			Scale->SetNumberField(TEXT("z"), Socket->RelativeScale.Z);
+			S->SetObjectField(TEXT("relativeScale"), Scale);
+
+			SocketArray.Add(MakeShared<FJsonValueObject>(S));
+		}
+		Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+	}
+	else
+	{
+		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: '%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
+	}
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("socketCount"), SocketArray.Num());
+	Result->SetArrayField(TEXT("sockets"), SocketArray);
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

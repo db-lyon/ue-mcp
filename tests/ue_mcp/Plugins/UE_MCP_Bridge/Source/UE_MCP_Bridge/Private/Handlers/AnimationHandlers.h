@@ -40,4 +40,5 @@ private:
 
 	// Montage editing
 	static TSharedPtr<FJsonValue> SetMontageSequence(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetMontageProperties(const TSharedPtr<FJsonObject>& Params);
 };
