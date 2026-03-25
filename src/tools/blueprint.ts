@@ -20,7 +20,7 @@ export const blueprintTool: ToolDef = categoryTool(
     set_node_property: bp("set_node_property", (p) => ({ path: p.assetPath, graphName: p.graphName, nodeName: p.nodeName, propertyName: p.propertyName, value: p.value })),
     connect_pins:      bp("connect_pins"),
     add_component:     bp("add_component", (p) => ({ path: p.assetPath, componentClass: p.componentClass, componentName: p.componentName ?? p.componentClass })),
-    set_component_property: bp("set_component_property", (p) => ({ path: p.assetPath, componentName: p.componentName, propertyName: p.propertyName, value: p.value })),
+    set_component_property: bp("set_blueprint_component_property", (p) => ({ path: p.assetPath, componentName: p.componentName, propertyName: p.propertyName, value: p.value })),
     compile:           bp("compile_blueprint", (p) => ({ path: p.assetPath })),
     list_node_types:   bp("list_node_types"),
     search_node_types: bp("search_node_types"),

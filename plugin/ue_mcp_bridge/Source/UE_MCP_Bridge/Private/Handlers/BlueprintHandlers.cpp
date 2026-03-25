@@ -92,7 +92,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("delete_node"), &DeleteNode);
 	Registry.RegisterHandler(TEXT("set_node_property"), &SetNodeProperty);
 	Registry.RegisterHandler(TEXT("list_blueprint_graphs"), &ListGraphs);
-	Registry.RegisterHandler(TEXT("set_component_property"), &SetComponentProperty);
+	Registry.RegisterHandler(TEXT("set_blueprint_component_property"), &SetComponentProperty);
 }
 
 UBlueprint* FBlueprintHandlers::LoadBlueprint(const FString& AssetPath)
