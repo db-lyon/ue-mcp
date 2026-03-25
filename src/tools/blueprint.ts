@@ -20,6 +20,7 @@ export const blueprintTool: ToolDef = categoryTool(
     set_node_property: bp("set_node_property", (p) => ({ path: p.assetPath, graphName: p.graphName, nodeName: p.nodeName, propertyName: p.propertyName, value: p.value })),
     connect_pins:      bp("connect_pins"),
     add_component:     bp("add_component", (p) => ({ path: p.assetPath, componentClass: p.componentClass, componentName: p.componentName ?? p.componentClass })),
+    set_component_property: bp("set_component_property", (p) => ({ path: p.assetPath, componentName: p.componentName, propertyName: p.propertyName, value: p.value })),
     compile:           bp("compile_blueprint", (p) => ({ path: p.assetPath })),
     list_node_types:   bp("list_node_types"),
     search_node_types: bp("search_node_types"),
@@ -28,7 +29,7 @@ export const blueprintTool: ToolDef = categoryTool(
     list_graphs:           bp("list_blueprint_graphs", (p) => ({ path: p.assetPath })),
     add_event_dispatcher: bp("add_event_dispatcher"),
   },
-  `- read: Read full BP structure. Params: assetPath
+  `- read: Read BP structure incl. SCS components (name, class, mesh, materials, transform). Params: assetPath
 - list_variables: List variables. Params: assetPath
 - list_functions: List functions/graphs. Params: assetPath
 - list_graphs: List all graphs in a blueprint (EventGraph, AnimGraph, functions). Params: assetPath
@@ -44,6 +45,7 @@ export const blueprintTool: ToolDef = categoryTool(
 - set_node_property: Set node pin default or struct property (supports dot paths like "Node.IKBone.BoneName"). Params: assetPath, graphName, nodeName, propertyName, value
 - connect_pins: Wire nodes. Params: sourceNode, sourcePin, targetNode, targetPin, assetPath, graphName?
 - add_component: Add BP component. Params: assetPath, componentClass, componentName?
+- set_component_property: Set property on SCS component template (supports dot paths, asset paths for object refs). Params: assetPath, componentName, propertyName, value
 - compile: Compile Blueprint. Params: assetPath
 - list_node_types: List node types. Params: category?, includeFunctions?
 - search_node_types: Search nodes. Params: query
