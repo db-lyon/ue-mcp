@@ -1,53 +1,8 @@
 {
-  "permissions": {
-    "allow": [
-      "mcp__kantext__server_status",
-      "Bash(npx tsc:*)",
-      "Bash(ls:*)",
-      "Bash(wc:*)",
-      "Bash(do basename:*)",
-      "Bash(npm test:*)",
-      "Bash(npm run:*)",
-      "Bash(cp:*)",
-      "Bash(taskkill:*)",
-      "Bash(git:*)",
-      "Bash(node:*)",
-      "Bash(rm:*)",
-      "Bash(npx wscat:*)",
-      "Bash(tasklist:*)",
-      "mcp__ue-mcp__demo",
-      "mcp__ue-mcp__asset",
-      "mcp__ue-mcp__niagara",
-      "Bash(find:*)",
-      "mcp__ue-mcp__level",
-      "mcp__ue-mcp__editor",
-      "Bash(cd:*)",
-      "Bash(sleep:*)",
-      "mcp__ue-mcp__project",
-      "Bash(grep:*)",
-      "Bash(for file:*)",
-      "Bash(npx tsup:*)",
-      "mcp__ue-mcp__reflection",
-      "Read(//c/Users/david/Projects/UE/**)",
-      "Bash(gh repo:*)",
-      "Bash(gh api:*)",
-      "Bash(gh run:*)",
-      "Bash(gh release:*)",
-      "Bash(grep -oP '^\\\\s+\"\"\"\"\\\\K[a-z_]+\\(?=\"\"\"\"\\\\s*:\\)' tests/ue_mcp/Plugins/UE_MCP_Bridge/handlers/*.py)",
-      "Bash(gh auth:*)",
-      "Bash(gh secret:*)",
-      "Bash(npm pack:*)",
-      "Bash(rm -f dist/*.dll dist/*.exe dist/*.pdb dist/*.json dist/createdump*)",
-      "Bash(rm -rf dist/runtimes dist/so)",
-      "Bash(printf '\\\\n\\\\n')",
-      "Bash(rm -rf \"C:\\\\Users\\\\david\\\\Projects\\\\UE\\\\Vale\\\\Plugins\\\\UE_MCP_Bridge\")",
-      "Bash(rm -f \"C:\\\\Users\\\\david\\\\Projects\\\\UE\\\\Vale\\\\.ue-mcp.json\")",
-      "Bash(gh issue:*)",
-      "Bash(grep -r \"TSharedPtr<FJsonValue>.*Set\" /c/Users/david/Projects/UE/ue-mcp/plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/*.h)"
-    ]
-  },
-  "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "kantext"
-  ]
+    "permissions": {
+        "additionalDirectories": [
+            "../"
+        ]
+    },
+    "hooks": {}
 }
