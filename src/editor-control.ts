@@ -42,8 +42,13 @@ function findEditorExecutable(): string | null {
 
 function isEditorRunning(): boolean {
   try {
-    execSync('tasklist /FI "IMAGENAME eq UnrealEditor.exe" | find /I "UnrealEditor.exe"', { stdio: "pipe" });
-    return true;
+    // Use /NH (no header) and check output directly — avoids pipe/find issues
+    const output = execSync('tasklist /NH /FI "IMAGENAME eq UnrealEditor.exe"', {
+      stdio: "pipe",
+      encoding: "utf-8",
+    });
+    // tasklist returns "INFO: No tasks..." when not found, or the process line when found
+    return output.toLowerCase().includes("unrealeditor.exe");
   } catch {
     return false;
   }
@@ -141,7 +146,10 @@ export async function startEditor(project: ProjectContext): Promise<{ success: b
 }
 
 export async function stopEditor(force = false): Promise<{ success: boolean; message: string }> {
-  if (!isEditorRunning()) {
+  const processRunning = isEditorRunning();
+  const bridgeUp = await isBridgeAvailable();
+
+  if (!processRunning && !bridgeUp) {
     return { success: false, message: "Editor is not running" };
   }
 
