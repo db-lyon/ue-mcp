@@ -267,10 +267,14 @@ UE-MCP exposes **19 category tools** covering **300+ actions**. Every tool takes
 |--------|-------------|------------|
 | `read_tree` | Read widget hierarchy | `assetPath` |
 | `get_details` | Inspect a specific widget | `assetPath`, `widgetName` |
-| `set_property` | Set a widget property | `assetPath`, `widgetName`, `propertyName`, `value` |
+| `set_property` | Set widget or slot property. Use `slot.` prefix for layout (e.g. `slot.anchors`, `slot.hAlign`, `slot.padding`) | `assetPath`, `widgetName`, `propertyName`, `value` |
 | `list` | List Widget Blueprints | `directory?` |
 | `read_animations` | Read UMG animations | `assetPath` |
 | `create` | Create a Widget Blueprint | `name` |
+| `add_widget` | Add widget to tree (TextBlock, CanvasPanel, VerticalBox, Button, Image, etc.) | `assetPath`, `widgetClass`, `widgetName?`, `parentWidgetName?` |
+| `remove_widget` | Remove widget from tree | `assetPath`, `widgetName` |
+| `move_widget` | Reparent widget to a different panel | `assetPath`, `widgetName`, `newParentWidgetName` |
+| `list_classes` | List available widget classes with slot property hints | — |
 | `create_utility_widget` | Create an Editor Utility Widget | `name` |
 | `run_utility_widget` | Open an Editor Utility Widget panel | `assetPath` |
 | `create_utility_blueprint` | Create an Editor Utility Blueprint | `name` |

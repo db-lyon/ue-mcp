@@ -73,7 +73,8 @@ audio — Sound assets and playback
   list, play_at_location, spawn_ambient, create_cue, create_metasound
 
 widget — UMG widgets and editor utilities
-  read_tree, get_details, set_property, list, read_animations, create,
+  read_tree, get_details, set_property (slot.* for layout), list, read_animations,
+  create, add_widget, remove_widget, move_widget, list_classes,
   create_utility_widget, run_utility_widget,
   create_utility_blueprint, run_utility_blueprint
 

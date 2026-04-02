@@ -30,7 +30,7 @@
 - [x] **Networking** — set_variable_replication, get_replication_info, set_owner_only_relevant
 - [x] **Niagara** — spawn_niagara_at_location, set_niagara_parameter, create_niagara_system_from_emitter
 - [x] **PCG** — add_pcg_node, connect_pcg_nodes, remove_pcg_node, set_pcg_node_settings, execute_pcg_graph, spawn_pcg_volume
-- [x] **Widget** — search_widget_by_name, get_widget_properties, set_widget_property, read_widget_animations, run_editor_utility_widget, run_editor_utility_blueprint
+- [x] **Widget** — search_widget_by_name, get_widget_properties, set_widget_property, read_widget_animations, run_editor_utility_widget, run_editor_utility_blueprint, add_widget, remove_widget, move_widget, list_widget_classes
 
 **New handler files created:**
 - [x] SequencerHandlers (create_level_sequence, read_sequence_info, add_track, sequence_control)

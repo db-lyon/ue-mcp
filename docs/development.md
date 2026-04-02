@@ -129,7 +129,7 @@ npm run test:smoke
 | `niagara` | Niagara system inspection |
 | `pcg` | PCG graph listing |
 | `foliage` | Foliage types |
-| `widget` | Widget blueprint listing |
+| `widget` | Widget blueprint creation, tree manipulation, slot properties |
 | `networking` | Replication config |
 | `gas` | GAS component inspection |
 
