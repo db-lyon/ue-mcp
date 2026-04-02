@@ -22,6 +22,20 @@
 #include "Components/Slider.h"
 #include "Components/EditableTextBox.h"
 #include "Components/ComboBoxString.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/VerticalBox.h"
+#include "Components/Overlay.h"
+#include "Components/GridPanel.h"
+#include "Components/UniformGridPanel.h"
+#include "Components/WidgetSwitcher.h"
+#include "Components/ScrollBox.h"
+#include "Components/SizeBox.h"
+#include "Components/ScaleBox.h"
+#include "Components/Border.h"
+#include "Components/Spacer.h"
+#include "Components/RichTextBlock.h"
 #include "Animation/WidgetAnimation.h"
 #include "MovieScene.h"
 #include "MovieScenePossessable.h"
@@ -34,6 +48,7 @@
 #include "EditorUtilityWidget.h"
 #include "EditorUtilityWidgetBlueprint.h"
 #include "EditorUtilityBlueprint.h"
+#include "Kismet2/KismetEditorUtilities.h"
 
 void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -49,6 +64,8 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_widget_animations"), &ReadWidgetAnimations);
 	Registry.RegisterHandler(TEXT("run_editor_utility_widget"), &RunEditorUtilityWidget);
 	Registry.RegisterHandler(TEXT("run_editor_utility_blueprint"), &RunEditorUtilityBlueprint);
+	Registry.RegisterHandler(TEXT("add_widget"), &AddWidget);
+	Registry.RegisterHandler(TEXT("remove_widget"), &RemoveWidget);
 }
 
 UWidget* FWidgetHandlers::FindWidgetByNameRecursive(UWidget* Root, const FString& WidgetName)
@@ -757,6 +774,95 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 		}
 	}
 
+	// ── Slot properties (slot.anchors, slot.alignment, slot.position, slot.autoSize, slot.*) ──
+	if (!bPropertySet && PropertyName.StartsWith(TEXT("slot.")))
+	{
+		UPanelSlot* Slot = FoundWidget->Slot;
+		if (Slot)
+		{
+			FString SlotPropName = PropertyName.Mid(5); // strip "slot."
+
+			// Well-known CanvasPanelSlot properties
+			UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
+			if (CanvasSlot)
+			{
+				if (SlotPropName == TEXT("anchors") || SlotPropName == TEXT("Anchors"))
+				{
+					// Format: "minX,minY,maxX,maxY"  e.g. "0.5,0.5,0.5,0.5" for center
+					TArray<FString> Parts;
+					PropertyValue.ParseIntoArray(Parts, TEXT(","));
+					if (Parts.Num() >= 2)
+					{
+						FAnchors Anchors;
+						Anchors.Minimum = FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]));
+						Anchors.Maximum = Parts.Num() >= 4
+							? FVector2D(FCString::Atof(*Parts[2]), FCString::Atof(*Parts[3]))
+							: Anchors.Minimum;
+						CanvasSlot->SetAnchors(Anchors);
+						bPropertySet = true;
+					}
+				}
+				else if (SlotPropName == TEXT("alignment") || SlotPropName == TEXT("Alignment"))
+				{
+					// Format: "x,y"  e.g. "0.5,0.5"
+					TArray<FString> Parts;
+					PropertyValue.ParseIntoArray(Parts, TEXT(","));
+					if (Parts.Num() >= 2)
+					{
+						CanvasSlot->SetAlignment(FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1])));
+						bPropertySet = true;
+					}
+				}
+				else if (SlotPropName == TEXT("position") || SlotPropName == TEXT("Position"))
+				{
+					// Format: "x,y"
+					TArray<FString> Parts;
+					PropertyValue.ParseIntoArray(Parts, TEXT(","));
+					if (Parts.Num() >= 2)
+					{
+						CanvasSlot->SetPosition(FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1])));
+						bPropertySet = true;
+					}
+				}
+				else if (SlotPropName == TEXT("size") || SlotPropName == TEXT("Size"))
+				{
+					// Format: "x,y"
+					TArray<FString> Parts;
+					PropertyValue.ParseIntoArray(Parts, TEXT(","));
+					if (Parts.Num() >= 2)
+					{
+						CanvasSlot->SetSize(FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1])));
+						bPropertySet = true;
+					}
+				}
+				else if (SlotPropName == TEXT("autoSize") || SlotPropName == TEXT("AutoSize"))
+				{
+					CanvasSlot->SetAutoSize(PropertyValue.ToBool());
+					bPropertySet = true;
+				}
+				else if (SlotPropName == TEXT("zOrder") || SlotPropName == TEXT("ZOrder"))
+				{
+					CanvasSlot->SetZOrder(FCString::Atoi(*PropertyValue));
+					bPropertySet = true;
+				}
+			}
+
+			// Generic slot reflection fallback
+			if (!bPropertySet)
+			{
+				FProperty* SlotProp = Slot->GetClass()->FindPropertyByName(FName(*SlotPropName));
+				if (SlotProp)
+				{
+					void* SlotValuePtr = SlotProp->ContainerPtrToValuePtr<void>(Slot);
+					if (SlotProp->ImportText_Direct(*PropertyValue, SlotValuePtr, Slot, PPF_None))
+					{
+						bPropertySet = true;
+					}
+				}
+			}
+		}
+	}
+
 	// Fallback: try to set via UObject reflection
 	if (!bPropertySet)
 	{
@@ -775,6 +881,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	{
 		// Mark package dirty and save
 		WidgetBP->MarkPackageDirty();
+		FKismetEditorUtilities::CompileBlueprint(WidgetBP);
 		UEditorAssetLibrary::SaveAsset(AssetPath);
 
 		Result->SetStringField(TEXT("widgetName"), WidgetName);
@@ -979,6 +1086,284 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityBlueprint(const TSharedP
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), EUBlueprint->GetName());
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ── Well-known short names → UClass lookup ────────────────────────────
+static UClass* ResolveWidgetClass(const FString& ClassName)
+{
+	// Try well-known short names first (case-insensitive matching)
+	static const TMap<FString, FString> ShortNames = {
+		// Panels / containers
+		{ TEXT("canvaspanel"),       TEXT("/Script/UMG.CanvasPanel") },
+		{ TEXT("horizontalbox"),     TEXT("/Script/UMG.HorizontalBox") },
+		{ TEXT("verticalbox"),       TEXT("/Script/UMG.VerticalBox") },
+		{ TEXT("overlay"),           TEXT("/Script/UMG.Overlay") },
+		{ TEXT("gridpanel"),         TEXT("/Script/UMG.GridPanel") },
+		{ TEXT("uniformgridpanel"),  TEXT("/Script/UMG.UniformGridPanel") },
+		{ TEXT("widgetswitcher"),    TEXT("/Script/UMG.WidgetSwitcher") },
+		{ TEXT("scrollbox"),         TEXT("/Script/UMG.ScrollBox") },
+		{ TEXT("sizebox"),           TEXT("/Script/UMG.SizeBox") },
+		{ TEXT("scalebox"),          TEXT("/Script/UMG.ScaleBox") },
+		{ TEXT("border"),            TEXT("/Script/UMG.Border") },
+		// Common widgets
+		{ TEXT("textblock"),         TEXT("/Script/UMG.TextBlock") },
+		{ TEXT("image"),             TEXT("/Script/UMG.Image") },
+		{ TEXT("button"),            TEXT("/Script/UMG.Button") },
+		{ TEXT("progressbar"),       TEXT("/Script/UMG.ProgressBar") },
+		{ TEXT("checkbox"),          TEXT("/Script/UMG.CheckBox") },
+		{ TEXT("slider"),            TEXT("/Script/UMG.Slider") },
+		{ TEXT("editabletextbox"),   TEXT("/Script/UMG.EditableTextBox") },
+		{ TEXT("comboboxstring"),    TEXT("/Script/UMG.ComboBoxString") },
+		{ TEXT("spacer"),            TEXT("/Script/UMG.Spacer") },
+		{ TEXT("richtextblock"),     TEXT("/Script/UMG.RichTextBlock") },
+	};
+
+	FString Key = ClassName.ToLower();
+	if (const FString* FullPath = ShortNames.Find(Key))
+	{
+		UClass* Found = FindObject<UClass>(nullptr, **FullPath);
+		if (Found) return Found;
+	}
+
+	// Try as full class path  e.g. /Script/UMG.CanvasPanel
+	UClass* FullPathClass = FindObject<UClass>(nullptr, *ClassName);
+	if (FullPathClass && FullPathClass->IsChildOf(UWidget::StaticClass()))
+	{
+		return FullPathClass;
+	}
+
+	// Try /Script/UMG.<ClassName>
+	FString Guess = FString::Printf(TEXT("/Script/UMG.%s"), *ClassName);
+	UClass* GuessClass = FindObject<UClass>(nullptr, *Guess);
+	if (GuessClass && GuessClass->IsChildOf(UWidget::StaticClass()))
+	{
+		return GuessClass;
+	}
+
+	return nullptr;
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	// ── Required: assetPath ──
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// ── Required: widgetClass (e.g. "TextBlock", "CanvasPanel") ──
+	FString WidgetClassName;
+	if (!Params->TryGetStringField(TEXT("widgetClass"), WidgetClassName) && !Params->TryGetStringField(TEXT("typeName"), WidgetClassName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'widgetClass' parameter (e.g. TextBlock, CanvasPanel, Image)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// ── Optional: widgetName, parentWidgetName ──
+	FString WidgetName;
+	Params->TryGetStringField(TEXT("widgetName"), WidgetName);
+	if (WidgetName.IsEmpty()) Params->TryGetStringField(TEXT("name"), WidgetName);
+
+	FString ParentWidgetName;
+	Params->TryGetStringField(TEXT("parentWidgetName"), ParentWidgetName);
+
+	// ── Load the WidgetBlueprint ──
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	if (!WidgetBP)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	if (!WidgetBP->WidgetTree)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("WidgetTree is null"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// ── Resolve the UClass ──
+	UClass* WClass = ResolveWidgetClass(WidgetClassName);
+	if (!WClass)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown widget class '%s'. Use short names like TextBlock, CanvasPanel, Image, Button, etc."), *WidgetClassName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// ── Construct the widget ──
+	UWidget* NewWidget = WidgetBP->WidgetTree->ConstructWidget<UWidget>(WClass, WidgetName.IsEmpty() ? NAME_None : FName(*WidgetName));
+	if (!NewWidget)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to construct widget of class '%s'"), *WidgetClassName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// ── Place in hierarchy ──
+	bool bIsRoot = false;
+	if (!ParentWidgetName.IsEmpty())
+	{
+		// Find specified parent
+		UWidget* ParentRaw = nullptr;
+		WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
+		{
+			if (Widget && Widget->GetName() == ParentWidgetName)
+			{
+				ParentRaw = Widget;
+			}
+		});
+
+		if (!ParentRaw)
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Parent widget '%s' not found"), *ParentWidgetName));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		UPanelWidget* ParentPanel = Cast<UPanelWidget>(ParentRaw);
+		if (!ParentPanel)
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Parent widget '%s' (%s) is not a panel widget and cannot have children"), *ParentWidgetName, *ParentRaw->GetClass()->GetName()));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+
+		UPanelSlot* Slot = ParentPanel->AddChild(NewWidget);
+		if (!Slot)
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to add '%s' as child of '%s'"), *NewWidget->GetName(), *ParentWidgetName));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+	}
+	else if (WidgetBP->WidgetTree->RootWidget == nullptr)
+	{
+		// No root yet — make this the root widget
+		WidgetBP->WidgetTree->RootWidget = NewWidget;
+		bIsRoot = true;
+	}
+	else
+	{
+		// Root exists, try to add as child of root if it's a panel
+		UPanelWidget* RootPanel = Cast<UPanelWidget>(WidgetBP->WidgetTree->RootWidget);
+		if (RootPanel)
+		{
+			RootPanel->AddChild(NewWidget);
+		}
+		else
+		{
+			Result->SetStringField(TEXT("error"), TEXT("Root widget is not a panel. Specify parentWidgetName or set a panel as root first."));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+	}
+
+	// ── Save ──
+	WidgetBP->MarkPackageDirty();
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+
+	Result->SetStringField(TEXT("widgetName"), NewWidget->GetName());
+	Result->SetStringField(TEXT("widgetClass"), WClass->GetName());
+	Result->SetBoolField(TEXT("isRoot"), bIsRoot);
+	if (!ParentWidgetName.IsEmpty())
+	{
+		Result->SetStringField(TEXT("parentWidgetName"), ParentWidgetName);
+	}
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString WidgetName;
+	if (!Params->TryGetStringField(TEXT("widgetName"), WidgetName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'widgetName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	if (!WidgetBP)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	if (!WidgetBP->WidgetTree)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("WidgetTree is null"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the widget
+	UWidget* FoundWidget = nullptr;
+	WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
+	{
+		if (Widget && Widget->GetName() == WidgetName)
+		{
+			FoundWidget = Widget;
+		}
+	});
+
+	if (!FoundWidget)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString RemovedClass = FoundWidget->GetClass()->GetName();
+
+	// Remove from parent if parented
+	UPanelWidget* Parent = FoundWidget->GetParent();
+	if (Parent)
+	{
+		Parent->RemoveChild(FoundWidget);
+	}
+
+	// If this was the root widget, clear it
+	if (WidgetBP->WidgetTree->RootWidget == FoundWidget)
+	{
+		WidgetBP->WidgetTree->RootWidget = nullptr;
+	}
+
+	// Remove from widget tree
+	WidgetBP->WidgetTree->RemoveWidget(FoundWidget);
+
+	WidgetBP->MarkPackageDirty();
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+
+	Result->SetStringField(TEXT("widgetName"), WidgetName);
+	Result->SetStringField(TEXT("widgetClass"), RemovedClass);
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

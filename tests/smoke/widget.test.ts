@@ -27,9 +27,52 @@ describe("widget — create (with cleanup)", () => {
     expect(r.ok, r.error).toBe(true);
   });
 
-  it("read_widget_tree", async () => {
+  it("read_widget_tree (empty)", async () => {
     const r = await callBridge(bridge, "read_widget_tree", {
       assetPath: `${TEST_PREFIX}/WBP_SmokeTest`,
+    });
+    expect(r.ok, r.error).toBe(true);
+  });
+
+  it("add_widget — root CanvasPanel", async () => {
+    const r = await callBridge(bridge, "add_widget", {
+      assetPath: `${TEST_PREFIX}/WBP_SmokeTest`,
+      widgetClass: "CanvasPanel",
+      widgetName: "RootCanvas",
+    });
+    expect(r.ok, r.error).toBe(true);
+    const res = r.result as Record<string, unknown>;
+    expect(res.isRoot).toBe(true);
+  });
+
+  it("add_widget — child TextBlock", async () => {
+    const r = await callBridge(bridge, "add_widget", {
+      assetPath: `${TEST_PREFIX}/WBP_SmokeTest`,
+      widgetClass: "TextBlock",
+      widgetName: "Txt_Hello",
+      parentWidgetName: "RootCanvas",
+    });
+    expect(r.ok, r.error).toBe(true);
+    const res = r.result as Record<string, unknown>;
+    expect(res.parentWidgetName).toBe("RootCanvas");
+  });
+
+  it("read_widget_tree (populated)", async () => {
+    const r = await callBridge(bridge, "read_widget_tree", {
+      assetPath: `${TEST_PREFIX}/WBP_SmokeTest`,
+    });
+    expect(r.ok, r.error).toBe(true);
+    const res = r.result as Record<string, unknown>;
+    const tree = res.widgetTree as Record<string, unknown>;
+    expect(tree).toBeDefined();
+    expect(tree.name).toBe("RootCanvas");
+    expect((tree.children as unknown[]).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("remove_widget — child TextBlock", async () => {
+    const r = await callBridge(bridge, "remove_widget", {
+      assetPath: `${TEST_PREFIX}/WBP_SmokeTest`,
+      widgetName: "Txt_Hello",
     });
     expect(r.ok, r.error).toBe(true);
   });

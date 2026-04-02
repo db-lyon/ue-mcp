@@ -15,6 +15,8 @@ export const widgetTool: ToolDef = categoryTool(
     run_utility_widget:       bp("run_editor_utility_widget"),
     create_utility_blueprint: bp("create_editor_utility_blueprint"),
     run_utility_blueprint:    bp("run_editor_utility_blueprint"),
+    add_widget:               bp("add_widget"),
+    remove_widget:            bp("remove_widget"),
   },
   `- read_tree: Read widget hierarchy. Params: assetPath
 - get_details: Inspect widget. Params: assetPath, widgetName
@@ -22,6 +24,8 @@ export const widgetTool: ToolDef = categoryTool(
 - list: List Widget BPs. Params: directory?, recursive?
 - read_animations: Read UMG animations. Params: assetPath
 - create: Create Widget BP. Params: name, packagePath?, parentClass?
+- add_widget: Add widget to widget tree. Params: assetPath, widgetClass (TextBlock|CanvasPanel|Image|Button|VerticalBox|HorizontalBox|Overlay|etc.), widgetName?, parentWidgetName? (if omitted, becomes root or child of root panel)
+- remove_widget: Remove widget from tree. Params: assetPath, widgetName
 - create_utility_widget: Create editor panel. Params: name, packagePath?
 - run_utility_widget: Open editor panel. Params: assetPath
 - create_utility_blueprint: Create editor script. Params: name, packagePath?
@@ -29,6 +33,8 @@ export const widgetTool: ToolDef = categoryTool(
   {
     assetPath: z.string().optional(),
     widgetName: z.string().optional(),
+    widgetClass: z.string().optional(),
+    parentWidgetName: z.string().optional(),
     propertyName: z.string().optional(),
     value: z.unknown().optional(),
     directory: z.string().optional(),
