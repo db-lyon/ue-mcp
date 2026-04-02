@@ -1,6 +1,6 @@
 #include "GameThreadExecutor.h"
 #include "HAL/PlatformProcess.h"
-#include "Async/Async.h"
+#include "Containers/Ticker.h"
 
 FMCPGameThreadExecutor::FMCPGameThreadExecutor()
 {
@@ -23,27 +23,32 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 		return Handler(Params);
 	}
 
-	// Execute on game thread via AsyncTask
-	TSharedPtr<TFuture<TSharedPtr<FJsonValue>>> Future = MakeShared<TFuture<TSharedPtr<FJsonValue>>>(
-		Async(EAsyncExecution::TaskGraphMainThread, [Handler, Params]() -> TSharedPtr<FJsonValue>
+	// Use FTSTicker to run on the game thread tick loop (NOT inside TaskGraph).
+	// This avoids the TaskGraph recursion assertion when handlers trigger
+	// subsystems like InterchangeEngine that schedule their own TaskGraph work.
+	TSharedPtr<FJsonValue> Result;
+	FEvent* DoneEvent = FPlatformProcess::GetSynchEventFromPool();
+
+	FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateLambda([&Result, &Handler, &Params, DoneEvent](float) -> bool
 		{
-			return Handler(Params);
+			Result = Handler(Params);
+			DoneEvent->Trigger();
+			return false; // one-shot — do not re-tick
 		})
 	);
 
-	// Wait for result with timeout
-	double StartTime = FPlatformTime::Seconds();
-	while (!Future->IsReady())
+	// Block calling thread until the ticker fires or timeout
+	uint32 TimeoutMs = static_cast<uint32>(TimeoutSeconds * 1000.0f);
+	bool bCompleted = DoneEvent->Wait(TimeoutMs);
+	FPlatformProcess::ReturnSynchEventToPool(DoneEvent);
+
+	if (!bCompleted)
 	{
-		if (FPlatformTime::Seconds() - StartTime > TimeoutSeconds)
-		{
-			// Timeout
-			TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
-			ErrorObject->SetStringField(TEXT("error"), TEXT("Handler execution timed out"));
-			return MakeShared<FJsonValueObject>(ErrorObject);
-		}
-		FPlatformProcess::Sleep(0.01f); // 10ms sleep
+		TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
+		ErrorObject->SetStringField(TEXT("error"), TEXT("Handler execution timed out"));
+		return MakeShared<FJsonValueObject>(ErrorObject);
 	}
 
-	return Future->Get();
+	return Result;
 }

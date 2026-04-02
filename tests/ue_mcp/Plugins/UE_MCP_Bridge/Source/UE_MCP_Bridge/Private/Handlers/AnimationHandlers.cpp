@@ -29,6 +29,18 @@
 #include "Animation/AnimData/IAnimationDataModel.h"
 #include "Editor.h"
 
+// State machine authoring
+#include "AnimGraphNode_StateMachine.h"
+#include "AnimStateNode.h"
+#include "AnimStateTransitionNode.h"
+#include "AnimStateEntryNode.h"
+#include "AnimationStateMachineGraph.h"
+#include "AnimGraphNode_AssetPlayerBase.h"
+#include "AnimGraphNode_SequencePlayer.h"
+#include "AnimGraphNode_BlendSpacePlayer.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
+
 void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("list_anim_assets"), &ListAnimAssets);
@@ -51,6 +63,14 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_bone_transforms"), &GetBoneTransforms);
 	Registry.RegisterHandler(TEXT("set_montage_sequence"), &SetMontageSequence);
 	Registry.RegisterHandler(TEXT("set_montage_properties"), &SetMontageProperties);
+
+	// State machine authoring
+	Registry.RegisterHandler(TEXT("create_state_machine"), &CreateStateMachine);
+	Registry.RegisterHandler(TEXT("add_state"), &AddState);
+	Registry.RegisterHandler(TEXT("add_transition"), &AddTransition);
+	Registry.RegisterHandler(TEXT("set_state_animation"), &SetStateAnimation);
+	Registry.RegisterHandler(TEXT("set_transition_blend"), &SetTransitionBlend);
+	Registry.RegisterHandler(TEXT("read_state_machine"), &ReadStateMachine);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimAssets(const TSharedPtr<FJsonObject>& Params)
@@ -1562,6 +1582,645 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 	Result->SetNumberField(TEXT("rateScale"), Montage->RateScale);
 	Result->SetNumberField(TEXT("blendIn"), Montage->BlendIn.GetBlendTime());
 	Result->SetNumberField(TEXT("blendOut"), Montage->BlendOut.GetBlendTime());
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ─── State Machine Helpers ────────────────────────────────────────
+
+static UAnimBlueprint* LoadAnimBP(const FString& Path)
+{
+	return LoadObject<UAnimBlueprint>(nullptr, *Path);
+}
+
+static UEdGraph* FindGraphByName(UBlueprint* BP, const FString& Name)
+{
+	TArray<UEdGraph*> All;
+	BP->GetAllGraphs(All);
+	for (UEdGraph* G : All)
+	{
+		if (G && G->GetName() == Name) return G;
+	}
+	return nullptr;
+}
+
+// Find the SM container node (UAnimGraphNode_StateMachine) by its machine name
+static UAnimGraphNode_StateMachine* FindStateMachineNode(UBlueprint* BP, const FString& MachineName)
+{
+	TArray<UEdGraph*> All;
+	BP->GetAllGraphs(All);
+	for (UEdGraph* G : All)
+	{
+		for (UEdGraphNode* Node : G->Nodes)
+		{
+			if (UAnimGraphNode_StateMachine* SM = Cast<UAnimGraphNode_StateMachine>(Node))
+			{
+				if (UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SM->EditorStateMachineGraph))
+				{
+					if (SMGraph->GetName() == MachineName || SM->GetNodeTitle(ENodeTitleType::FullTitle).ToString().Contains(MachineName))
+					{
+						return SM;
+					}
+				}
+			}
+		}
+	}
+	return nullptr;
+}
+
+// Find a state node by name within a state machine graph
+static UAnimStateNode* FindStateNode(UAnimationStateMachineGraph* SMGraph, const FString& StateName)
+{
+	for (UEdGraphNode* Node : SMGraph->Nodes)
+	{
+		if (UAnimStateNode* State = Cast<UAnimStateNode>(Node))
+		{
+			if (State->GetStateName() == StateName)
+			{
+				return State;
+			}
+		}
+	}
+	return nullptr;
+}
+
+static void CompileAndSave(UBlueprint* BP)
+{
+	FKismetEditorUtilities::CompileBlueprint(BP);
+	UPackage* Package = BP->GetOutermost();
+	if (Package)
+	{
+		Package->MarkPackageDirty();
+		FString FileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Package, nullptr, *FileName, SaveArgs);
+	}
+}
+
+// ─── State Machine Handlers ──────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::CreateStateMachine(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString Name = TEXT("NewStateMachine");
+	Params->TryGetStringField(TEXT("name"), Name);
+
+	FString GraphName = TEXT("AnimGraph");
+	Params->TryGetStringField(TEXT("graphName"), GraphName);
+
+	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	if (!AnimBP)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UEdGraph* TargetGraph = FindGraphByName(AnimBP, GraphName);
+	if (!TargetGraph)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Create the state machine container node in the AnimGraph
+	UAnimGraphNode_StateMachine* SMNode = NewObject<UAnimGraphNode_StateMachine>(TargetGraph);
+	TargetGraph->AddNode(SMNode, false, false);
+	SMNode->CreateNewGuid();
+	SMNode->PostPlacedNewNode();  // This creates the EditorStateMachineGraph sub-graph
+	SMNode->AllocateDefaultPins();
+	SMNode->NodePosX = 200;
+	SMNode->NodePosY = 0;
+
+	// Rename the state machine graph to the desired name
+	if (SMNode->EditorStateMachineGraph)
+	{
+		SMNode->EditorStateMachineGraph->Rename(*Name);
+	}
+
+	CompileAndSave(AnimBP);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("name"), Name);
+	Result->SetStringField(TEXT("graphName"), GraphName);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString SMName;
+	if (!Params->TryGetStringField(TEXT("stateMachineName"), SMName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'stateMachineName'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString StateName;
+	if (!Params->TryGetStringField(TEXT("stateName"), StateName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'stateName'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	if (!AnimBP)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	if (!SMNode)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State machine '%s' not found"), *SMName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
+	if (!SMGraph)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("State machine has no editor graph"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Check for duplicate
+	if (FindStateNode(SMGraph, StateName))
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State '%s' already exists"), *StateName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Create state node
+	UAnimStateNode* NewState = NewObject<UAnimStateNode>(SMGraph);
+	SMGraph->AddNode(NewState, false, false);
+	NewState->CreateNewGuid();
+	NewState->PostPlacedNewNode();
+	NewState->AllocateDefaultPins();
+
+	// Set the state name via the BoundGraph (the state's internal graph)
+	if (NewState->BoundGraph)
+	{
+		NewState->BoundGraph->Rename(*StateName);
+	}
+
+	// Position states in a grid
+	int32 StateCount = 0;
+	for (UEdGraphNode* N : SMGraph->Nodes) { if (Cast<UAnimStateNode>(N)) StateCount++; }
+	NewState->NodePosX = 300 + ((StateCount - 1) % 4) * 300;
+	NewState->NodePosY = ((StateCount - 1) / 4) * 200;
+
+	CompileAndSave(AnimBP);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("stateMachineName"), SMName);
+	Result->SetStringField(TEXT("stateName"), StateName);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddTransition(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString SMName;
+	if (!Params->TryGetStringField(TEXT("stateMachineName"), SMName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'stateMachineName'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString FromState, ToState;
+	if (!Params->TryGetStringField(TEXT("fromState"), FromState))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'fromState'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+	if (!Params->TryGetStringField(TEXT("toState"), ToState))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'toState'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	if (!AnimBP)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	if (!SMNode)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State machine '%s' not found"), *SMName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
+	UAnimStateNode* From = FindStateNode(SMGraph, FromState);
+	UAnimStateNode* To = FindStateNode(SMGraph, ToState);
+	if (!From)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State '%s' not found"), *FromState));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+	if (!To)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State '%s' not found"), *ToState));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Create transition node
+	UAnimStateTransitionNode* TransNode = NewObject<UAnimStateTransitionNode>(SMGraph);
+	SMGraph->AddNode(TransNode, false, false);
+	TransNode->CreateNewGuid();
+	TransNode->PostPlacedNewNode();
+	TransNode->AllocateDefaultPins();
+
+	// Position between the two states
+	TransNode->NodePosX = (From->NodePosX + To->NodePosX) / 2;
+	TransNode->NodePosY = (From->NodePosY + To->NodePosY) / 2;
+
+	// Wire: From output → Transition input, Transition output → To input
+	UEdGraphPin* FromOut = From->GetOutputPin();
+	UEdGraphPin* TransIn = TransNode->GetInputPin();
+	UEdGraphPin* TransOut = TransNode->GetOutputPin();
+	UEdGraphPin* ToIn = To->GetInputPin();
+
+	if (FromOut && TransIn)
+	{
+		FromOut->MakeLinkTo(TransIn);
+	}
+	if (TransOut && ToIn)
+	{
+		TransOut->MakeLinkTo(ToIn);
+	}
+
+	CompileAndSave(AnimBP);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("stateMachineName"), SMName);
+	Result->SetStringField(TEXT("fromState"), FromState);
+	Result->SetStringField(TEXT("toState"), ToState);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::SetStateAnimation(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString SMName, StateName, AnimAssetPath;
+	if (!Params->TryGetStringField(TEXT("stateMachineName"), SMName) ||
+		!Params->TryGetStringField(TEXT("stateName"), StateName) ||
+		!Params->TryGetStringField(TEXT("animAssetPath"), AnimAssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing required params: stateMachineName, stateName, animAssetPath"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	if (!AnimBP)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	if (!SMNode)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State machine '%s' not found"), *SMName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
+	UAnimStateNode* State = FindStateNode(SMGraph, StateName);
+	if (!State)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State '%s' not found"), *StateName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Load the animation asset
+	UAnimationAsset* AnimAsset = LoadObject<UAnimationAsset>(nullptr, *AnimAssetPath);
+	if (!AnimAsset)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Animation asset not found: %s"), *AnimAssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Get the state's bound graph (internal graph that plays the animation)
+	UEdGraph* StateGraph = State->BoundGraph;
+	if (!StateGraph)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("State has no BoundGraph"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find or create the appropriate player node inside the state graph
+	// Look for existing sequence player or blendspace player
+	UAnimGraphNode_SequencePlayer* SeqPlayer = nullptr;
+	UAnimGraphNode_BlendSpacePlayer* BSPlayer = nullptr;
+	for (UEdGraphNode* Node : StateGraph->Nodes)
+	{
+		if (!SeqPlayer) SeqPlayer = Cast<UAnimGraphNode_SequencePlayer>(Node);
+		if (!BSPlayer) BSPlayer = Cast<UAnimGraphNode_BlendSpacePlayer>(Node);
+	}
+
+	if (UAnimSequence* Seq = Cast<UAnimSequence>(AnimAsset))
+	{
+		if (!SeqPlayer)
+		{
+			SeqPlayer = NewObject<UAnimGraphNode_SequencePlayer>(StateGraph);
+			StateGraph->AddNode(SeqPlayer, false, false);
+			SeqPlayer->CreateNewGuid();
+			SeqPlayer->PostPlacedNewNode();
+			SeqPlayer->AllocateDefaultPins();
+		}
+		SeqPlayer->SetAnimationAsset(Seq);
+	}
+	else if (UBlendSpace* BS = Cast<UBlendSpace>(AnimAsset))
+	{
+		if (!BSPlayer)
+		{
+			BSPlayer = NewObject<UAnimGraphNode_BlendSpacePlayer>(StateGraph);
+			StateGraph->AddNode(BSPlayer, false, false);
+			BSPlayer->CreateNewGuid();
+			BSPlayer->PostPlacedNewNode();
+			BSPlayer->AllocateDefaultPins();
+		}
+		BSPlayer->SetAnimationAsset(BS);
+	}
+	else
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unsupported animation asset type: %s"), *AnimAsset->GetClass()->GetName()));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	CompileAndSave(AnimBP);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("stateName"), StateName);
+	Result->SetStringField(TEXT("animAssetPath"), AnimAssetPath);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::SetTransitionBlend(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString SMName, FromState, ToState;
+	if (!Params->TryGetStringField(TEXT("stateMachineName"), SMName) ||
+		!Params->TryGetStringField(TEXT("fromState"), FromState) ||
+		!Params->TryGetStringField(TEXT("toState"), ToState))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing required params: stateMachineName, fromState, toState"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	if (!AnimBP)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	if (!SMNode)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State machine '%s' not found"), *SMName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
+
+	// Find the transition between fromState and toState
+	UAnimStateTransitionNode* TransNode = nullptr;
+	for (UEdGraphNode* Node : SMGraph->Nodes)
+	{
+		if (UAnimStateTransitionNode* T = Cast<UAnimStateTransitionNode>(Node))
+		{
+			UAnimStateNode* Prev = Cast<UAnimStateNode>(T->GetPreviousState());
+			UAnimStateNode* Next = Cast<UAnimStateNode>(T->GetNextState());
+			if (Prev && Next && Prev->GetStateName() == FromState && Next->GetStateName() == ToState)
+			{
+				TransNode = T;
+				break;
+			}
+		}
+	}
+
+	if (!TransNode)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("No transition from '%s' to '%s'"), *FromState, *ToState));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Set blend duration
+	double BlendDuration = 0.2;
+	if (Params->TryGetNumberField(TEXT("blendDuration"), BlendDuration))
+	{
+		TransNode->CrossfadeDuration = static_cast<float>(BlendDuration);
+	}
+
+	// Set blend logic (Standard vs Inertialization)
+	FString BlendLogic;
+	if (Params->TryGetStringField(TEXT("blendLogic"), BlendLogic))
+	{
+		if (BlendLogic.Equals(TEXT("Inertialization"), ESearchCase::IgnoreCase))
+		{
+			TransNode->BlendMode = EAlphaBlendOption::Linear;
+			TransNode->LogicType = ETransitionLogicType::TLT_Inertialization;
+		}
+		else // Standard
+		{
+			TransNode->LogicType = ETransitionLogicType::TLT_StandardBlend;
+		}
+	}
+
+	CompileAndSave(AnimBP);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("fromState"), FromState);
+	Result->SetStringField(TEXT("toState"), ToState);
+	Result->SetNumberField(TEXT("blendDuration"), BlendDuration);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadStateMachine(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString SMName;
+	if (!Params->TryGetStringField(TEXT("stateMachineName"), SMName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'stateMachineName'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	if (!AnimBP)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	if (!SMNode)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State machine '%s' not found"), *SMName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
+	if (!SMGraph)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("State machine has no editor graph"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Enumerate states
+	TArray<TSharedPtr<FJsonValue>> StatesArray;
+	for (UEdGraphNode* Node : SMGraph->Nodes)
+	{
+		if (UAnimStateNode* State = Cast<UAnimStateNode>(Node))
+		{
+			TSharedPtr<FJsonObject> StateObj = MakeShared<FJsonObject>();
+			StateObj->SetStringField(TEXT("name"), State->GetStateName());
+
+			// Check for animation asset inside the state
+			if (State->BoundGraph)
+			{
+				for (UEdGraphNode* Inner : State->BoundGraph->Nodes)
+				{
+					if (UAnimGraphNode_AssetPlayerBase* AssetNode = Cast<UAnimGraphNode_AssetPlayerBase>(Inner))
+					{
+						if (UAnimationAsset* Asset = AssetNode->GetAnimationAsset())
+						{
+							StateObj->SetStringField(TEXT("animAsset"), Asset->GetPathName());
+						}
+					}
+				}
+			}
+
+			StatesArray.Add(MakeShared<FJsonValueObject>(StateObj));
+		}
+	}
+	Result->SetArrayField(TEXT("states"), StatesArray);
+
+	// Enumerate transitions
+	TArray<TSharedPtr<FJsonValue>> TransArray;
+	for (UEdGraphNode* Node : SMGraph->Nodes)
+	{
+		if (UAnimStateTransitionNode* T = Cast<UAnimStateTransitionNode>(Node))
+		{
+			TSharedPtr<FJsonObject> TransObj = MakeShared<FJsonObject>();
+
+			UAnimStateNode* Prev = Cast<UAnimStateNode>(T->GetPreviousState());
+			UAnimStateNode* Next = Cast<UAnimStateNode>(T->GetNextState());
+			if (Prev) TransObj->SetStringField(TEXT("fromState"), Prev->GetStateName());
+			if (Next) TransObj->SetStringField(TEXT("toState"), Next->GetStateName());
+
+			TransObj->SetNumberField(TEXT("blendDuration"), T->CrossfadeDuration);
+			TransObj->SetStringField(TEXT("logicType"),
+				T->LogicType == ETransitionLogicType::TLT_Inertialization ? TEXT("Inertialization") : TEXT("Standard"));
+
+			TransArray.Add(MakeShared<FJsonValueObject>(TransObj));
+		}
+	}
+	Result->SetArrayField(TEXT("transitions"), TransArray);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("stateMachineName"), SMName);
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

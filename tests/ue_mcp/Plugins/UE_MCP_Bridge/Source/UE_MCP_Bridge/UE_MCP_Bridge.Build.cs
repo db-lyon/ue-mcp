@@ -32,6 +32,7 @@ public class UE_MCP_Bridge : ModuleRules
 			new string[]
 			{
 				"AIModule",
+				"AnimGraph",
 				"AnimationEditor",
 				"AssetRegistry",
 				"AssetTools",

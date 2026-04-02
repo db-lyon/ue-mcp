@@ -615,11 +615,67 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	UMaterialExpression* NewExpression = NewObject<UMaterialExpression>(Material, ExpressionClass);
 	Material->GetExpressionCollection().AddExpression(NewExpression);
 
+	// Apply optional properties
+	FString ExpressionName;
+	if (Params->TryGetStringField(TEXT("name"), ExpressionName) || Params->TryGetStringField(TEXT("expressionName"), ExpressionName))
+	{
+		NewExpression->Desc = ExpressionName;
+	}
+
+	// Set parameter name for parameter expressions
+	FString ParameterName;
+	if (Params->TryGetStringField(TEXT("parameterName"), ParameterName))
+	{
+		if (UMaterialExpressionScalarParameter* ScalarParam = Cast<UMaterialExpressionScalarParameter>(NewExpression))
+		{
+			ScalarParam->ParameterName = FName(*ParameterName);
+		}
+		else if (UMaterialExpressionVectorParameter* VectorParam = Cast<UMaterialExpressionVectorParameter>(NewExpression))
+		{
+			VectorParam->ParameterName = FName(*ParameterName);
+		}
+		else if (UMaterialExpressionTextureObjectParameter* TexParam = Cast<UMaterialExpressionTextureObjectParameter>(NewExpression))
+		{
+			TexParam->ParameterName = FName(*ParameterName);
+		}
+		// If name not set via Desc, use parameterName as the description too
+		if (NewExpression->Desc.IsEmpty())
+		{
+			NewExpression->Desc = ParameterName;
+		}
+	}
+
+	// Set position
+	double PosX = 0, PosY = 0;
+	if (Params->TryGetNumberField(TEXT("positionX"), PosX))
+	{
+		NewExpression->MaterialExpressionEditorX = static_cast<int32>(PosX);
+	}
+	if (Params->TryGetNumberField(TEXT("positionY"), PosY))
+	{
+		NewExpression->MaterialExpressionEditorY = static_cast<int32>(PosY);
+	}
+
 	Material->PostEditChange();
-	Material->MarkPackageDirty();
+
+	// Save the package so subsequent list/connect calls see the expression
+	UPackage* Package = Material->GetOutermost();
+	if (Package)
+	{
+		Package->MarkPackageDirty();
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+	}
+
+	// Return the index as nodeId for use with connect_expressions and other operations
+	int32 NodeIndex = Material->GetExpressions().Num() - 1;
 
 	Result->SetStringField(TEXT("expressionType"), ExpressionType);
 	Result->SetStringField(TEXT("expressionClass"), NewExpression->GetClass()->GetName());
+	Result->SetStringField(TEXT("nodeId"), FString::FromInt(NodeIndex));
+	Result->SetStringField(TEXT("description"), NewExpression->GetDescription());
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetNumberField(TEXT("expressionCount"), Material->GetExpressions().Num());
 	Result->SetBoolField(TEXT("success"), true);
@@ -648,15 +704,29 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialExpressions(const TSharedP
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ExpressionsArray;
-	for (UMaterialExpression* Expression : Material->GetExpressions())
+	auto Expressions = Material->GetExpressions();
+	for (int32 i = 0; i < Expressions.Num(); i++)
 	{
+		UMaterialExpression* Expression = Expressions[i];
 		if (!Expression) continue;
 
 		TSharedPtr<FJsonObject> ExprObj = MakeShared<FJsonObject>();
+		ExprObj->SetStringField(TEXT("nodeId"), FString::FromInt(i));
 		ExprObj->SetStringField(TEXT("class"), Expression->GetClass()->GetName());
 		ExprObj->SetStringField(TEXT("description"), Expression->GetDescription());
+		ExprObj->SetStringField(TEXT("name"), Expression->Desc);
 		ExprObj->SetNumberField(TEXT("positionX"), Expression->MaterialExpressionEditorX);
 		ExprObj->SetNumberField(TEXT("positionY"), Expression->MaterialExpressionEditorY);
+
+		// Include parameter name if applicable
+		if (UMaterialExpressionScalarParameter* SP = Cast<UMaterialExpressionScalarParameter>(Expression))
+		{
+			ExprObj->SetStringField(TEXT("parameterName"), SP->ParameterName.ToString());
+		}
+		else if (UMaterialExpressionVectorParameter* VP = Cast<UMaterialExpressionVectorParameter>(Expression))
+		{
+			ExprObj->SetStringField(TEXT("parameterName"), VP->ParameterName.ToString());
+		}
 
 		ExpressionsArray.Add(MakeShared<FJsonValueObject>(ExprObj));
 	}

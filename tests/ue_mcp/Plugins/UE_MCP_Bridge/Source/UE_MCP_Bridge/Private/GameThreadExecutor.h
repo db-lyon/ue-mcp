@@ -3,7 +3,6 @@
 #include "CoreMinimal.h"
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
-#include "Async/Async.h"
 #include "HAL/PlatformProcess.h"
 
 class FMCPGameThreadExecutor

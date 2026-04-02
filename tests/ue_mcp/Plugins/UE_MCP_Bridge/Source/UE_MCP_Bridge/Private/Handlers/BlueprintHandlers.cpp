@@ -41,6 +41,15 @@
 #include "Kismet/KismetStringLibrary.h"
 #include "Kismet/KismetArrayLibrary.h"
 
+// SCS component access
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/SkeletalMesh.h"
+#include "EditorAssetLibrary.h"
+
 // Helper: find a UClass by short name (e.g. "AnimInstance" finds UAnimInstance)
 static UClass* FindClassByShortName(const FString& ClassName)
 {
@@ -83,6 +92,8 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("delete_node"), &DeleteNode);
 	Registry.RegisterHandler(TEXT("set_node_property"), &SetNodeProperty);
 	Registry.RegisterHandler(TEXT("list_blueprint_graphs"), &ListGraphs);
+	Registry.RegisterHandler(TEXT("set_blueprint_component_property"), &SetComponentProperty);
+	Registry.RegisterHandler(TEXT("set_class_default"), &SetClassDefault);
 }
 
 UBlueprint* FBlueprintHandlers::LoadBlueprint(const FString& AssetPath)
@@ -330,6 +341,115 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprint(const TSharedPtr<FJsonO
 	{
 		Result->SetStringField(TEXT("parentClass"), Blueprint->ParentClass->GetName());
 	}
+
+	// Enumerate SCS components
+	TArray<TSharedPtr<FJsonValue>> ComponentsArray;
+	if (USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript)
+	{
+		// Build child->parent map from the tree
+		TMap<USCS_Node*, USCS_Node*> ParentMap;
+		for (USCS_Node* Node : SCS->GetAllNodes())
+		{
+			if (!Node) continue;
+			for (USCS_Node* Child : Node->ChildNodes)
+			{
+				if (Child) ParentMap.Add(Child, Node);
+			}
+		}
+
+		for (USCS_Node* Node : SCS->GetAllNodes())
+		{
+			if (!Node || !Node->ComponentTemplate) continue;
+
+			UActorComponent* Template = Node->ComponentTemplate;
+			TSharedPtr<FJsonObject> CompObj = MakeShared<FJsonObject>();
+			CompObj->SetStringField(TEXT("name"), Node->GetVariableName().ToString());
+			CompObj->SetStringField(TEXT("class"), Template->GetClass()->GetName());
+
+			// Parent component
+			if (USCS_Node** ParentPtr = ParentMap.Find(Node))
+			{
+				CompObj->SetStringField(TEXT("parent"), (*ParentPtr)->GetVariableName().ToString());
+			}
+
+			// Transform for SceneComponents
+			if (USceneComponent* SceneComp = Cast<USceneComponent>(Template))
+			{
+				TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
+				Loc->SetNumberField(TEXT("x"), SceneComp->GetRelativeLocation().X);
+				Loc->SetNumberField(TEXT("y"), SceneComp->GetRelativeLocation().Y);
+				Loc->SetNumberField(TEXT("z"), SceneComp->GetRelativeLocation().Z);
+				CompObj->SetObjectField(TEXT("relativeLocation"), Loc);
+
+				TSharedPtr<FJsonObject> Rot = MakeShared<FJsonObject>();
+				Rot->SetNumberField(TEXT("pitch"), SceneComp->GetRelativeRotation().Pitch);
+				Rot->SetNumberField(TEXT("yaw"), SceneComp->GetRelativeRotation().Yaw);
+				Rot->SetNumberField(TEXT("roll"), SceneComp->GetRelativeRotation().Roll);
+				CompObj->SetObjectField(TEXT("relativeRotation"), Rot);
+
+				TSharedPtr<FJsonObject> Scale = MakeShared<FJsonObject>();
+				Scale->SetNumberField(TEXT("x"), SceneComp->GetRelativeScale3D().X);
+				Scale->SetNumberField(TEXT("y"), SceneComp->GetRelativeScale3D().Y);
+				Scale->SetNumberField(TEXT("z"), SceneComp->GetRelativeScale3D().Z);
+				CompObj->SetObjectField(TEXT("relativeScale3D"), Scale);
+			}
+
+			// StaticMesh info
+			if (UStaticMeshComponent* SMC = Cast<UStaticMeshComponent>(Template))
+			{
+				if (UStaticMesh* Mesh = SMC->GetStaticMesh())
+				{
+					CompObj->SetStringField(TEXT("staticMesh"), Mesh->GetPathName());
+				}
+				// Material overrides
+				TArray<TSharedPtr<FJsonValue>> Mats;
+				for (int32 i = 0; i < SMC->GetNumMaterials(); i++)
+				{
+					if (UMaterialInterface* Mat = SMC->GetMaterial(i))
+					{
+						Mats.Add(MakeShared<FJsonValueString>(Mat->GetPathName()));
+					}
+					else
+					{
+						Mats.Add(MakeShared<FJsonValueNull>());
+					}
+				}
+				if (Mats.Num() > 0)
+				{
+					CompObj->SetArrayField(TEXT("materials"), Mats);
+				}
+			}
+
+			// SkeletalMesh info
+			if (USkeletalMeshComponent* SkMC = Cast<USkeletalMeshComponent>(Template))
+			{
+				if (USkeletalMesh* Mesh = SkMC->GetSkeletalMeshAsset())
+				{
+					CompObj->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
+				}
+				TArray<TSharedPtr<FJsonValue>> Mats;
+				for (int32 i = 0; i < SkMC->GetNumMaterials(); i++)
+				{
+					if (UMaterialInterface* Mat = SkMC->GetMaterial(i))
+					{
+						Mats.Add(MakeShared<FJsonValueString>(Mat->GetPathName()));
+					}
+					else
+					{
+						Mats.Add(MakeShared<FJsonValueNull>());
+					}
+				}
+				if (Mats.Num() > 0)
+				{
+					CompObj->SetArrayField(TEXT("materials"), Mats);
+				}
+			}
+
+			ComponentsArray.Add(MakeShared<FJsonValueObject>(CompObj));
+		}
+	}
+	Result->SetArrayField(TEXT("components"), ComponentsArray);
+
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);
@@ -2200,6 +2320,340 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("propertyName"), PinName);
 	Result->SetStringField(TEXT("value"), DefaultValue);
 	Result->SetStringField(TEXT("setVia"), bSetViaPin ? TEXT("pin") : TEXT("property"));
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_component_property — Set a property on an SCS component template
+// Params: assetPath, componentName, propertyName, value
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString ComponentName;
+	if (!Params->TryGetStringField(TEXT("componentName"), ComponentName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'componentName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("propertyName"), PropertyName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString Value;
+	if (!Params->TryGetStringField(TEXT("value"), Value))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'value' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
+	if (!SCS)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the SCS node by variable name or component template name
+	USCS_Node* TargetNode = nullptr;
+	for (USCS_Node* Node : SCS->GetAllNodes())
+	{
+		if (!Node || !Node->ComponentTemplate) continue;
+		if (Node->GetVariableName().ToString() == ComponentName ||
+			Node->ComponentTemplate->GetName() == ComponentName)
+		{
+			TargetNode = Node;
+			break;
+		}
+	}
+
+	if (!TargetNode || !TargetNode->ComponentTemplate)
+	{
+		// List available component names for error message
+		TArray<FString> Names;
+		for (USCS_Node* Node : SCS->GetAllNodes())
+		{
+			if (Node && Node->ComponentTemplate)
+			{
+				Names.Add(Node->GetVariableName().ToString());
+			}
+		}
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("Component '%s' not found. Available: [%s]"),
+			*ComponentName, *FString::Join(Names, TEXT(", "))));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UActorComponent* Template = TargetNode->ComponentTemplate;
+
+	// Navigate dotted property paths (e.g. "RelativeLocation.X")
+	TArray<FString> PathParts;
+	PropertyName.ParseIntoArray(PathParts, TEXT("."));
+
+	UStruct* CurrentStruct = Template->GetClass();
+	void* CurrentContainer = Template;
+	FProperty* FinalProp = nullptr;
+
+	for (int32 i = 0; i < PathParts.Num(); i++)
+	{
+		FProperty* Prop = CurrentStruct->FindPropertyByName(FName(*PathParts[i]));
+		if (!Prop) break;
+
+		if (i < PathParts.Num() - 1)
+		{
+			FStructProperty* StructProp = CastField<FStructProperty>(Prop);
+			if (!StructProp) break;
+			CurrentContainer = StructProp->ContainerPtrToValuePtr<void>(CurrentContainer);
+			CurrentStruct = StructProp->Struct;
+		}
+		else
+		{
+			FinalProp = Prop;
+		}
+	}
+
+	if (!FinalProp)
+	{
+		// List available properties for error message
+		TArray<FString> PropNames;
+		for (TFieldIterator<FProperty> It(Template->GetClass()); It; ++It)
+		{
+			PropNames.Add(It->GetName());
+		}
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("Property '%s' not found on %s. Properties: [%s]"),
+			*PropertyName, *Template->GetClass()->GetName(),
+			*FString::Join(PropNames, TEXT(", "))));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// For object reference properties, try loading the asset by path first
+	void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
+
+	if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(FinalProp))
+	{
+		UObject* LoadedObj = LoadObject<UObject>(nullptr, *Value);
+		if (!LoadedObj)
+		{
+			// Try with common prefixes stripped
+			LoadedObj = LoadObject<UObject>(nullptr, *Value);
+		}
+		if (LoadedObj)
+		{
+			ObjProp->SetObjectPropertyValue(ValuePtr, LoadedObj);
+		}
+		else
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("Could not load object at '%s' for property '%s'"), *Value, *PropertyName));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+	}
+	else if (FSoftObjectProperty* SoftProp = CastField<FSoftObjectProperty>(FinalProp))
+	{
+		FSoftObjectPath SoftPath(Value);
+		SoftProp->SetPropertyValue(ValuePtr, FSoftObjectPtr(SoftPath));
+	}
+	else
+	{
+		// Generic: use ImportText for value types (int, float, bool, FVector, FName, etc.)
+		FinalProp->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
+	}
+
+	Template->PostEditChange();
+
+	// Compile and save
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	UPackage* Package = Blueprint->GetOutermost();
+	if (Package)
+	{
+		Package->MarkPackageDirty();
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+	}
+
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("componentName"), ComponentName);
+	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("value"), Value);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_class_default — Set a UPROPERTY on a Blueprint's Class Default Object
+// Params: assetPath, propertyName, value
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("propertyName"), PropertyName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString Value;
+	if (!Params->TryGetStringField(TEXT("value"), Value))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'value' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UClass* GenClass = Blueprint->GeneratedClass;
+	if (!GenClass)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Blueprint has no GeneratedClass (needs compilation first?)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* CDO = GenClass->GetDefaultObject();
+	if (!CDO)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Could not get Class Default Object"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Navigate dotted property paths (e.g. "EjectConfigs.Cork.Force")
+	TArray<FString> PathParts;
+	PropertyName.ParseIntoArray(PathParts, TEXT("."));
+
+	UStruct* CurrentStruct = GenClass;
+	void* CurrentContainer = CDO;
+	FProperty* FinalProp = nullptr;
+
+	for (int32 i = 0; i < PathParts.Num(); i++)
+	{
+		FProperty* Prop = CurrentStruct->FindPropertyByName(FName(*PathParts[i]));
+		if (!Prop) break;
+
+		if (i < PathParts.Num() - 1)
+		{
+			FStructProperty* StructProp = CastField<FStructProperty>(Prop);
+			if (!StructProp) break;
+			CurrentContainer = StructProp->ContainerPtrToValuePtr<void>(CurrentContainer);
+			CurrentStruct = StructProp->Struct;
+		}
+		else
+		{
+			FinalProp = Prop;
+		}
+	}
+
+	if (!FinalProp)
+	{
+		TArray<FString> PropNames;
+		for (TFieldIterator<FProperty> It(GenClass); It; ++It)
+		{
+			PropNames.Add(It->GetName());
+		}
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("Property '%s' not found on %s. Properties: [%s]"),
+			*PropertyName, *GenClass->GetName(),
+			*FString::Join(PropNames, TEXT(", "))));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
+
+	if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(FinalProp))
+	{
+		UObject* LoadedObj = LoadObject<UObject>(nullptr, *Value);
+		if (LoadedObj)
+		{
+			ObjProp->SetObjectPropertyValue(ValuePtr, LoadedObj);
+		}
+		else
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("Could not load object at '%s' for property '%s'"), *Value, *PropertyName));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+	}
+	else if (FSoftObjectProperty* SoftProp = CastField<FSoftObjectProperty>(FinalProp))
+	{
+		FSoftObjectPath SoftPath(Value);
+		SoftProp->SetPropertyValue(ValuePtr, FSoftObjectPtr(SoftPath));
+	}
+	else
+	{
+		// Generic: ImportText handles FName, int, float, bool, FVector, TArray, TMap, etc.
+		FinalProp->ImportText_Direct(*Value, ValuePtr, CDO, PPF_None);
+	}
+
+	CDO->PostEditChange();
+
+	// Save
+	UPackage* Package = Blueprint->GetOutermost();
+	if (Package)
+	{
+		Package->MarkPackageDirty();
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+	}
+
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("value"), Value);
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

@@ -46,6 +46,9 @@ private:
 	static TSharedPtr<FJsonValue> SetTextureProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ImportTexture(const TSharedPtr<FJsonObject>& Params);
 
+	// Reimport
+	static TSharedPtr<FJsonValue> ReimportAsset(const TSharedPtr<FJsonObject>& Params);
+
 	// Socket handlers
 	static TSharedPtr<FJsonValue> AddSocket(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveSocket(const TSharedPtr<FJsonObject>& Params);

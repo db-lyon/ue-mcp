@@ -41,4 +41,12 @@ private:
 	// Montage editing
 	static TSharedPtr<FJsonValue> SetMontageSequence(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMontageProperties(const TSharedPtr<FJsonObject>& Params);
+
+	// State machine authoring
+	static TSharedPtr<FJsonValue> CreateStateMachine(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddState(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddTransition(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetStateAnimation(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetTransitionBlend(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadStateMachine(const TSharedPtr<FJsonObject>& Params);
 };

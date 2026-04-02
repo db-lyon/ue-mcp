@@ -36,6 +36,8 @@ private:
 	static TSharedPtr<FJsonValue> DeleteNode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetNodeProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListGraphs(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetComponentProperty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetClassDefault(const TSharedPtr<FJsonObject>& Params);
 
 	// Helper functions
 	static class UBlueprint* LoadBlueprint(const FString& AssetPath);
