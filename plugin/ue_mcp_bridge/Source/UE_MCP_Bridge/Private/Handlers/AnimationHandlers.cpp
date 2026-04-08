@@ -41,6 +41,19 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 
+// IK Rig (#93)
+#include "IKRigDefinition.h"
+#include "RigEditor/IKRigEditorController.h"
+#include "RetargetEditor/IKRetargetEditorController.h"
+
+// Control Rig (#11)
+#include "ControlRigBlueprint.h"
+#include "Rigs/RigHierarchyDefines.h"
+
+// Curve identifiers for UE5 animation data controller
+#include "Animation/AnimCurveTypes.h"
+#include "Animation/Skeleton.h"
+
 void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("list_anim_assets"), &ListAnimAssets);
@@ -71,6 +84,23 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_state_animation"), &SetStateAnimation);
 	Registry.RegisterHandler(TEXT("set_transition_blend"), &SetTransitionBlend);
 	Registry.RegisterHandler(TEXT("read_state_machine"), &ReadStateMachine);
+
+	// AnimGraph inspection (#23 / #91)
+	Registry.RegisterHandler(TEXT("read_anim_graph"), &ReadAnimGraph);
+
+	// Float curve authoring (#79 / #24)
+	Registry.RegisterHandler(TEXT("add_curve"), &AddCurve);
+
+	// Montage slot & section editing (#78, #27)
+	Registry.RegisterHandler(TEXT("set_montage_slot"), &SetMontageSlot);
+	Registry.RegisterHandler(TEXT("add_montage_section"), &AddMontageSection);
+
+	// IK Rig (#93)
+	Registry.RegisterHandler(TEXT("create_ik_rig"), &CreateIKRig);
+	Registry.RegisterHandler(TEXT("read_ik_rig"), &ReadIKRig);
+
+	// Control Rig (#11)
+	Registry.RegisterHandler(TEXT("list_control_rig_variables"), &ListControlRigVariables);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimAssets(const TSharedPtr<FJsonObject>& Params)
@@ -2221,6 +2251,532 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadStateMachine(const TSharedPtr<FJs
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ─── #23 / #91  read_anim_graph ─────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimGraph(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString GraphName = TEXT("AnimGraph");
+	Params->TryGetStringField(TEXT("graphName"), GraphName);
+
+	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	if (!AnimBP)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UEdGraph* TargetGraph = FindGraphByName(AnimBP, GraphName);
+	if (!TargetGraph)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> NodesArray;
+	for (UEdGraphNode* Node : TargetGraph->Nodes)
+	{
+		if (!Node) continue;
+
+		TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+		NodeObj->SetStringField(TEXT("id"), Node->NodeGuid.ToString());
+		NodeObj->SetStringField(TEXT("class"), Node->GetClass()->GetName());
+		NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+		NodeObj->SetNumberField(TEXT("posX"), Node->NodePosX);
+		NodeObj->SetNumberField(TEXT("posY"), Node->NodePosY);
+		NodeObj->SetStringField(TEXT("comment"), Node->NodeComment);
+
+		// ── Serialize editable properties via reflection ──
+		TArray<TSharedPtr<FJsonValue>> PropsArray;
+		UClass* NodeClass = Node->GetClass();
+		for (TFieldIterator<FProperty> PropIt(NodeClass, EFieldIteratorFlags::IncludeSuper); PropIt; ++PropIt)
+		{
+			FProperty* Prop = *PropIt;
+			if (!Prop || !Prop->HasAnyPropertyFlags(CPF_Edit)) continue;
+
+			// Skip internal / noise properties
+			FString PropName = Prop->GetName();
+			if (PropName.StartsWith(TEXT("Node")) || PropName == TEXT("ErrorMsg") || PropName == TEXT("bHasCompilerMessage"))
+				continue;
+
+			TSharedPtr<FJsonObject> PropObj = MakeShared<FJsonObject>();
+			PropObj->SetStringField(TEXT("name"), PropName);
+			PropObj->SetStringField(TEXT("type"), Prop->GetCPPType());
+
+			// Attempt to export the value to a human-readable string
+			FString ValueStr;
+			const void* Container = Node;
+			Prop->ExportTextItem_Direct(ValueStr, Prop->ContainerPtrToValuePtr<void>(Container), nullptr, nullptr, PPF_None);
+			PropObj->SetStringField(TEXT("value"), ValueStr);
+
+			PropsArray.Add(MakeShared<FJsonValueObject>(PropObj));
+		}
+		NodeObj->SetArrayField(TEXT("properties"), PropsArray);
+
+		// ── Pins ──
+		TArray<TSharedPtr<FJsonValue>> PinsArray;
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (!Pin) continue;
+			TSharedPtr<FJsonObject> PinObj = MakeShared<FJsonObject>();
+			PinObj->SetStringField(TEXT("name"), Pin->PinName.ToString());
+			PinObj->SetStringField(TEXT("type"), Pin->PinType.PinCategory.ToString());
+			PinObj->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("Input") : TEXT("Output"));
+			PinObj->SetStringField(TEXT("defaultValue"), Pin->DefaultValue);
+			PinObj->SetBoolField(TEXT("connected"), Pin->LinkedTo.Num() > 0);
+			PinsArray.Add(MakeShared<FJsonValueObject>(PinObj));
+		}
+		NodeObj->SetArrayField(TEXT("pins"), PinsArray);
+
+		NodesArray.Add(MakeShared<FJsonValueObject>(NodeObj));
+	}
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("graphName"), GraphName);
+	Result->SetArrayField(TEXT("nodes"), NodesArray);
+	Result->SetNumberField(TEXT("nodeCount"), NodesArray.Num());
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ─── #79 / #24  add_curve ───────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddCurve(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString CurveName;
+	if (!Params->TryGetStringField(TEXT("curveName"), CurveName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'curveName'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UAnimSequence* AnimSeq = Cast<UAnimSequence>(LoadedAsset);
+	if (!AnimSeq)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	USkeleton* Skeleton = AnimSeq->GetSkeleton();
+	if (!Skeleton)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("AnimSequence has no Skeleton"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Build the curve identifier via the Skeleton smart-name mapping
+	FSmartName SmartName;
+	Skeleton->AddSmartNameAndModify(USkeleton::AnimCurveMappingName, FName(*CurveName), SmartName);
+
+	FAnimationCurveIdentifier CurveId(SmartName, ERawCurveTrackTypes::RCT_Float);
+
+	IAnimationDataController& Controller = AnimSeq->GetController();
+	Controller.OpenBracket(NSLOCTEXT("MCP", "AddCurve", "MCP Add Curve"));
+
+	bool bAdded = Controller.AddCurve(CurveId, AACF_DefaultCurve);
+
+	Controller.CloseBracket();
+
+	if (!bAdded)
+	{
+		// Curve may already exist – not necessarily an error
+		Result->SetStringField(TEXT("warning"), FString::Printf(TEXT("Curve '%s' may already exist"), *CurveName));
+	}
+
+	AnimSeq->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("curveName"), CurveName);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ─── #78  set_montage_slot ──────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSlot(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString SlotName;
+	if (!Params->TryGetStringField(TEXT("slotName"), SlotName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'slotName'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	int32 TrackIndex = 0;
+	Params->TryGetNumberField(TEXT("trackIndex"), TrackIndex);
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UAnimMontage* Montage = Cast<UAnimMontage>(LoadedAsset);
+	if (!Montage)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	if (TrackIndex < 0 || TrackIndex >= Montage->SlotAnimTracks.Num())
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("trackIndex %d out of range (0..%d)"), TrackIndex, Montage->SlotAnimTracks.Num() - 1));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Montage->SlotAnimTracks[TrackIndex].SlotName = FName(*SlotName);
+
+	Montage->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("slotName"), SlotName);
+	Result->SetNumberField(TEXT("trackIndex"), TrackIndex);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ─── #27  add_montage_section ───────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSection(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString SectionName;
+	if (!Params->TryGetStringField(TEXT("sectionName"), SectionName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'sectionName'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	double StartTime = 0.0;
+	Params->TryGetNumberField(TEXT("startTime"), StartTime);
+
+	FString LinkedSection;
+	Params->TryGetStringField(TEXT("linkedSection"), LinkedSection);
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UAnimMontage* Montage = Cast<UAnimMontage>(LoadedAsset);
+	if (!Montage)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Check if section already exists
+	int32 ExistingIdx = Montage->GetSectionIndex(FName(*SectionName));
+	if (ExistingIdx != INDEX_NONE)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Section '%s' already exists at index %d"), *SectionName, ExistingIdx));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Add the composite section
+	FCompositeSection NewSection;
+	NewSection.SectionName = FName(*SectionName);
+	NewSection.SetTime(static_cast<float>(StartTime));
+	if (!LinkedSection.IsEmpty())
+	{
+		NewSection.NextSectionName = FName(*LinkedSection);
+	}
+
+	Montage->CompositeSections.Add(NewSection);
+
+	Montage->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("sectionName"), SectionName);
+	Result->SetNumberField(TEXT("startTime"), StartTime);
+	if (!LinkedSection.IsEmpty())
+	{
+		Result->SetStringField(TEXT("linkedSection"), LinkedSection);
+	}
+	Result->SetNumberField(TEXT("totalSections"), Montage->CompositeSections.Num());
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ─── #93  create_ik_rig ─────────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString Name;
+	if (!Params->TryGetStringField(TEXT("name"), Name))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'name'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString SkeletalMeshPath;
+	if (!Params->TryGetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'skeletalMeshPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString PackagePath = TEXT("/Game");
+	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+
+	// Load the skeletal mesh to get the skeleton
+	USkeletalMesh* SkelMesh = LoadObject<USkeletalMesh>(nullptr, *SkeletalMeshPath);
+	if (!SkelMesh)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *SkeletalMeshPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Create the IKRigDefinition asset via AssetTools
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
+	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FindObject<UClass>(nullptr, TEXT("/Script/IKRigEditor.IKRigDefinitionFactory")));
+	if (!Factory)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("IKRigDefinitionFactory not found — is the IKRig plugin enabled?"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UIKRigDefinition::StaticClass(), Factory);
+	UIKRigDefinition* IKRig = Cast<UIKRigDefinition>(NewAsset);
+	if (!IKRig)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to create IKRigDefinition asset"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Set the preview skeletal mesh (this also sets up the skeleton internally)
+	IKRig->SetPreviewMesh(SkelMesh, false);
+
+	IKRig->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(IKRig->GetPathName());
+
+	Result->SetStringField(TEXT("assetPath"), IKRig->GetPathName());
+	Result->SetStringField(TEXT("name"), Name);
+	Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ─── #93  read_ik_rig ───────────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRig(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UIKRigDefinition* IKRig = Cast<UIKRigDefinition>(LoadedAsset);
+	if (!IKRig)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load IKRigDefinition at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("name"), IKRig->GetName());
+
+	// Preview mesh
+	USkeletalMesh* PreviewMesh = IKRig->GetPreviewMesh();
+	if (PreviewMesh)
+	{
+		Result->SetStringField(TEXT("previewMesh"), PreviewMesh->GetPathName());
+	}
+
+	// Skeleton
+	const FIKRigSkeleton& RigSkeleton = IKRig->GetSkeleton();
+	TArray<TSharedPtr<FJsonValue>> BonesArray;
+	for (int32 i = 0; i < RigSkeleton.BoneNames.Num(); ++i)
+	{
+		TSharedPtr<FJsonObject> BoneObj = MakeShared<FJsonObject>();
+		BoneObj->SetStringField(TEXT("name"), RigSkeleton.BoneNames[i].ToString());
+		BoneObj->SetNumberField(TEXT("index"), i);
+		if (i < RigSkeleton.ParentIndices.Num())
+		{
+			BoneObj->SetNumberField(TEXT("parentIndex"), RigSkeleton.ParentIndices[i]);
+		}
+		BonesArray.Add(MakeShared<FJsonValueObject>(BoneObj));
+	}
+	Result->SetArrayField(TEXT("bones"), BonesArray);
+
+	// Retarget chains
+	const TArray<FBoneChain>& Chains = IKRig->GetRetargetChains();
+	TArray<TSharedPtr<FJsonValue>> ChainsArray;
+	for (const FBoneChain& Chain : Chains)
+	{
+		TSharedPtr<FJsonObject> ChainObj = MakeShared<FJsonObject>();
+		ChainObj->SetStringField(TEXT("name"), Chain.ChainName.ToString());
+		ChainObj->SetStringField(TEXT("startBone"), Chain.StartBone.BoneName.ToString());
+		ChainObj->SetStringField(TEXT("endBone"), Chain.EndBone.BoneName.ToString());
+		ChainsArray.Add(MakeShared<FJsonValueObject>(ChainObj));
+	}
+	Result->SetArrayField(TEXT("retargetChains"), ChainsArray);
+
+	// Solvers
+	const TArray<UIKRigSolver*>& Solvers = IKRig->GetSolverArray();
+	TArray<TSharedPtr<FJsonValue>> SolversArray;
+	for (const UIKRigSolver* Solver : Solvers)
+	{
+		if (!Solver) continue;
+		TSharedPtr<FJsonObject> SolverObj = MakeShared<FJsonObject>();
+		SolverObj->SetStringField(TEXT("name"), Solver->GetName());
+		SolverObj->SetStringField(TEXT("class"), Solver->GetClass()->GetName());
+		SolverObj->SetBoolField(TEXT("enabled"), Solver->IsEnabled());
+		SolversArray.Add(MakeShared<FJsonValueObject>(SolverObj));
+	}
+	Result->SetArrayField(TEXT("solvers"), SolversArray);
+
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ─── #11  list_control_rig_variables ────────────────────────────────
+
+TSharedPtr<FJsonValue> FAnimationHandlers::ListControlRigVariables(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UControlRigBlueprint* CRBlueprint = Cast<UControlRigBlueprint>(LoadedAsset);
+	if (!CRBlueprint)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load ControlRigBlueprint at '%s'"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("name"), CRBlueprint->GetName());
+
+	// Read user-defined variables from the blueprint
+	TArray<TSharedPtr<FJsonValue>> VariablesArray;
+	for (const FBPVariableDescription& Var : CRBlueprint->NewVariables)
+	{
+		TSharedPtr<FJsonObject> VarObj = MakeShared<FJsonObject>();
+		VarObj->SetStringField(TEXT("name"), Var.VarName.ToString());
+		VarObj->SetStringField(TEXT("type"), Var.VarType.ToString());
+
+		// Default value string
+		if (!Var.DefaultValue.IsEmpty())
+		{
+			VarObj->SetStringField(TEXT("defaultValue"), Var.DefaultValue);
+		}
+
+		VarObj->SetBoolField(TEXT("isPublic"),
+			Var.PropertyFlags & CPF_BlueprintVisible ? true : false);
+
+		VariablesArray.Add(MakeShared<FJsonValueObject>(VarObj));
+	}
+	Result->SetArrayField(TEXT("variables"), VariablesArray);
+	Result->SetNumberField(TEXT("variableCount"), VariablesArray.Num());
+
+	// Also list the rig hierarchy elements (bones, controls, nulls, etc.)
+	URigHierarchy* Hierarchy = CRBlueprint->Hierarchy;
+	if (Hierarchy)
+	{
+		TArray<TSharedPtr<FJsonValue>> ElementsArray;
+		Hierarchy->ForEach([&](FRigBaseElement* Element) -> bool
+		{
+			if (!Element) return true;
+			TSharedPtr<FJsonObject> ElemObj = MakeShared<FJsonObject>();
+			ElemObj->SetStringField(TEXT("name"), Element->GetName().ToString());
+
+			// Map element type enum to string
+			FString TypeStr;
+			switch (Element->GetType())
+			{
+			case ERigElementType::Bone:    TypeStr = TEXT("Bone"); break;
+			case ERigElementType::Control: TypeStr = TEXT("Control"); break;
+			case ERigElementType::Null:    TypeStr = TEXT("Null"); break;
+			case ERigElementType::Curve:   TypeStr = TEXT("Curve"); break;
+			default:                       TypeStr = TEXT("Other"); break;
+			}
+			ElemObj->SetStringField(TEXT("type"), TypeStr);
+
+			ElementsArray.Add(MakeShared<FJsonValueObject>(ElemObj));
+			return true; // continue iteration
+		});
+		Result->SetArrayField(TEXT("hierarchyElements"), ElementsArray);
+		Result->SetNumberField(TEXT("hierarchyElementCount"), ElementsArray.Num());
+	}
+
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);

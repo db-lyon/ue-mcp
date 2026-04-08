@@ -31,6 +31,23 @@ export const animationTool: ToolDef = categoryTool(
     set_state_animation:  bp("set_state_animation"),
     set_transition_blend: bp("set_transition_blend"),
     read_state_machine:   bp("read_state_machine"),
+
+    // AnimGraph inspection (#23 / #91)
+    read_anim_graph:      bp("read_anim_graph"),
+
+    // Float curve authoring (#79 / #24)
+    add_curve:            bp("add_curve"),
+
+    // Montage slot & section editing (#78, #27)
+    set_montage_slot:     bp("set_montage_slot"),
+    add_montage_section:  bp("add_montage_section"),
+
+    // IK Rig (#93)
+    create_ik_rig:        bp("create_ik_rig"),
+    read_ik_rig:          bp("read_ik_rig"),
+
+    // Control Rig (#11)
+    list_control_rig_variables: bp("list_control_rig_variables"),
   },
   `- read_anim_blueprint: Read AnimBP structure. Params: assetPath
 - read_montage: Read montage. Params: assetPath
@@ -55,7 +72,14 @@ export const animationTool: ToolDef = categoryTool(
 - add_transition: Add directed transition between states. Params: assetPath, stateMachineName, fromState, toState
 - set_state_animation: Assign anim asset to state. Params: assetPath, stateMachineName, stateName, animAssetPath
 - set_transition_blend: Set blend type/duration on transition. Params: assetPath, stateMachineName, fromState, toState, blendDuration?, blendLogic? (Standard|Inertialization)
-- read_state_machine: Read state machine topology. Params: assetPath, stateMachineName`,
+- read_state_machine: Read state machine topology. Params: assetPath, stateMachineName
+- read_anim_graph: Read AnimBP AnimGraph nodes with properties & pins. Params: assetPath, graphName? (default: AnimGraph)
+- add_curve: Add float curve to AnimSequence. Params: assetPath, curveName, curveType? (default: float)
+- set_montage_slot: Set slot name on a montage track. Params: assetPath, slotName, trackIndex? (default: 0)
+- add_montage_section: Add composite section to montage. Params: assetPath, sectionName, startTime?, linkedSection?
+- create_ik_rig: Create IKRigDefinition asset. Params: name, skeletalMeshPath, packagePath?
+- read_ik_rig: Read IK Rig chains, solvers, skeleton. Params: assetPath
+- list_control_rig_variables: List ControlRig variables and hierarchy. Params: assetPath`,
   {
     assetPath: z.string().optional(),
     directory: z.string().optional(),
@@ -88,6 +112,17 @@ export const animationTool: ToolDef = categoryTool(
     blendDuration: z.number().optional(),
     blendLogic: z.string().optional().describe("Standard or Inertialization"),
     graphName: z.string().optional().describe("Target graph name (default: AnimGraph)"),
+    // Curve params (#79 / #24)
+    curveName: z.string().optional().describe("Curve name for add_curve"),
+    curveType: z.string().optional().describe("Curve type (default: float)"),
+    // Montage slot & section params (#78, #27)
+    slotName: z.string().optional().describe("Slot name for set_montage_slot"),
+    trackIndex: z.number().optional().describe("Slot track index (default: 0)"),
+    sectionName: z.string().optional().describe("Section name for add_montage_section"),
+    startTime: z.number().optional().describe("Start time for montage section"),
+    linkedSection: z.string().optional().describe("Next section name to link to"),
+    // IK Rig params (#93)
+    skeletalMeshPath: z.string().optional().describe("Path to skeletal mesh for create_ik_rig"),
     keyframes: z.array(z.object({
       frame: z.number(),
       location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),

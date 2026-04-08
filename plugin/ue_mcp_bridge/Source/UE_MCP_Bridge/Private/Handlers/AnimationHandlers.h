@@ -49,4 +49,21 @@ private:
 	static TSharedPtr<FJsonValue> SetStateAnimation(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetTransitionBlend(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadStateMachine(const TSharedPtr<FJsonObject>& Params);
+
+	// AnimGraph inspection (#23 / #91)
+	static TSharedPtr<FJsonValue> ReadAnimGraph(const TSharedPtr<FJsonObject>& Params);
+
+	// Float curve authoring (#79 / #24)
+	static TSharedPtr<FJsonValue> AddCurve(const TSharedPtr<FJsonObject>& Params);
+
+	// Montage slot & section editing (#78, #27)
+	static TSharedPtr<FJsonValue> SetMontageSlot(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddMontageSection(const TSharedPtr<FJsonObject>& Params);
+
+	// IK Rig (#93)
+	static TSharedPtr<FJsonValue> CreateIKRig(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadIKRig(const TSharedPtr<FJsonObject>& Params);
+
+	// Control Rig (#11)
+	static TSharedPtr<FJsonValue> ListControlRigVariables(const TSharedPtr<FJsonObject>& Params);
 };
