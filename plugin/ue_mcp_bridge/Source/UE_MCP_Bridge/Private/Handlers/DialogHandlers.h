@@ -15,6 +15,9 @@ public:
 	// Call during module shutdown to restore the original delegate
 	static void RemoveDialogHook();
 
+	// Add a default dialog policy (e.g. auto-accept overwrite dialogs)
+	static void AddDefaultPolicy(const FString& Pattern, EAppReturnType::Type Response);
+
 private:
 	// Dialog policy: pattern -> response mapping
 	struct FDialogPolicy

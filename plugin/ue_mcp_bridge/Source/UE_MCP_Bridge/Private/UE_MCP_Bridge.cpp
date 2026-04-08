@@ -16,6 +16,11 @@ void FUE_MCP_BridgeModule::StartupModule()
 	// Create and start bridge server
 	G_BridgeServer = MakeShared<FMCPBridgeServer>(9877);
 	FDialogHandlers::InstallDialogHook();
+	// Safety net: auto-decline overwrite dialogs to prevent game thread blocking.
+	// Handlers should check for existing assets before creating, but if a dialog
+	// slips through, decline it rather than blocking the game thread forever.
+	FDialogHandlers::AddDefaultPolicy(TEXT("already exists"), EAppReturnType::No);
+	FDialogHandlers::AddDefaultPolicy(TEXT("Overwrite"), EAppReturnType::No);
 
 	if (G_BridgeServer->Start())
 	{

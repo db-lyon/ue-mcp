@@ -48,6 +48,14 @@ void FDialogHandlers::RemoveDialogHook()
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Dialog hook removed"));
 }
 
+void FDialogHandlers::AddDefaultPolicy(const FString& Pattern, EAppReturnType::Type Response)
+{
+	FDialogPolicy Policy;
+	Policy.Pattern = Pattern;
+	Policy.Response = Response;
+	Policies.Add(Policy);
+}
+
 EAppReturnType::Type FDialogHandlers::HandleModalDialog(EAppMsgType::Type MsgType, const FText& Text, const FText& Title)
 {
 	FString MessageStr = Text.ToString();
