@@ -625,9 +625,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	// Ensure expression type has the U prefix for class lookup
+	// Resolve short expression type names: "Multiply" → "UMaterialExpressionMultiply"
 	FString ClassName = ExpressionType;
-	if (!ClassName.StartsWith(TEXT("U")))
+	if (!ClassName.StartsWith(TEXT("MaterialExpression")) && !ClassName.StartsWith(TEXT("UMaterialExpression")))
+	{
+		ClassName = TEXT("UMaterialExpression") + ClassName;
+	}
+	else if (!ClassName.StartsWith(TEXT("U")))
 	{
 		ClassName = TEXT("U") + ClassName;
 	}
@@ -637,8 +641,18 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	if (!ExpressionClass)
 	{
 		// Try with /Script/Engine prefix
-		FString FullPath = FString::Printf(TEXT("/Script/Engine.%s"), *ExpressionType);
+		FString FullPath = FString::Printf(TEXT("/Script/Engine.%s"), *ClassName.Mid(1)); // strip U prefix for path
 		ExpressionClass = FindObject<UClass>(nullptr, *FullPath);
+	}
+	if (!ExpressionClass)
+	{
+		// Try original name as-is (user may have passed the full class name)
+		ExpressionClass = FindFirstObject<UClass>(*ExpressionType, EFindFirstObjectOptions::ExactClass);
+		if (!ExpressionClass)
+		{
+			FString WithU = TEXT("U") + ExpressionType;
+			ExpressionClass = FindFirstObject<UClass>(*WithU, EFindFirstObjectOptions::ExactClass);
+		}
 	}
 
 	if (!ExpressionClass || !ExpressionClass->IsChildOf(UMaterialExpression::StaticClass()))
