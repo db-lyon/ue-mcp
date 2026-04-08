@@ -682,7 +682,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 	}
 
 	// Try to set the property via reflection on the emitter handle's emitter data
-	FVersionedNiagaraEmitterData* EmitterData = Handles[TargetIdx].GetInstance().GetLatestEmitterData();
+	FVersionedNiagaraEmitterData* EmitterData = Handles[TargetIdx].GetInstance().GetEmitterData();
 	if (!EmitterData)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Could not access emitter data"));
@@ -763,7 +763,14 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::GetEmitterInfo(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("class"), Emitter->GetClass()->GetName());
 
 	// Include version data properties (#68)
-	FVersionedNiagaraEmitterData* Data = Emitter->GetLatestEmitterData();
+	// UNiagaraEmitter in UE 5.7 requires a version guid to get emitter data
+	// Use the exposed version array to get the latest
+	const TArray<FNiagaraAssetVersion>& Versions = Emitter->GetAllAvailableVersions();
+	FVersionedNiagaraEmitterData* Data = nullptr;
+	if (Versions.Num() > 0)
+	{
+		Data = Emitter->GetEmitterData(Versions.Last().VersionGuid);
+	}
 	if (Data)
 	{
 		// Simulation stages / sim target

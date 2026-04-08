@@ -2194,13 +2194,22 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReloadPackage(const TSharedPtr<FJsonObjec
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	TArray<UPackage*> PackagesToReload;
-	PackagesToReload.Add(Package);
+	// Unload and reload the package
+	FString PackageName = Package->GetName();
+	FString PackageFileName;
+	bool bSuccess = false;
+	if (FPackageName::DoesPackageExist(PackageName, &PackageFileName))
+	{
+		// Reset loaders so we can reload
+		ResetLoaders(Package);
 
-	TArray<UPackage*> FailedPackages;
-	UPackageTools::ReloadPackages(PackagesToReload, FailedPackages, UPackageTools::EReloadPackagesInteractionMode::AssumePositive);
+		// Force garbage collection to release old references
+		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
 
-	bool bSuccess = !FailedPackages.Contains(Package);
+		// Reload
+		UObject* Reloaded = UEditorAssetLibrary::LoadAsset(AssetPath);
+		bSuccess = (Reloaded != nullptr);
+	}
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("packageName"), Package->GetName());
 	Result->SetBoolField(TEXT("success"), bSuccess);

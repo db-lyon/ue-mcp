@@ -27,6 +27,7 @@
 #include "K2Node_CallFunction.h"
 #include "K2Node_Event.h"
 #include "K2Node_FunctionEntry.h"
+#include "K2Node_EditablePinBase.h"
 #include "K2Node_IfThenElse.h"
 #include "K2Node_MacroInstance.h"
 #include "K2Node_VariableGet.h"
@@ -2967,6 +2968,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		TArray<FSubobjectDataHandle> Handles;
 		Subsystem->K2_GatherSubobjectDataForBlueprint(Blueprint, Handles);
 
+		FSubobjectDataHandle ContextHandle = Handles.Num() > 0 ? Handles[0] : FSubobjectDataHandle();
 		for (const FSubobjectDataHandle& Handle : Handles)
 		{
 			const FSubobjectData* Data = Handle.GetData();
@@ -2974,7 +2976,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 			{
 				TArray<FSubobjectDataHandle> ToDelete;
 				ToDelete.Add(Handle);
-				int32 Removed = Subsystem->DeleteSubobjects(ToDelete, Blueprint);
+				int32 Removed = Subsystem->DeleteSubobjects(ContextHandle, ToDelete, Blueprint);
 				bRemoved = (Removed > 0);
 				break;
 			}
@@ -3179,16 +3181,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 
 	if (bIsOutput)
 	{
-		// For output (return) parameters, use FBlueprintEditorUtils
-		FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, FuncGraph, false, nullptr);
-
-		// Find or create the function result node
-		UK2Node* ResultNode = nullptr;
+		// For output parameters, find or create the function result node
+		UK2Node_FunctionEntry* ResultAsEntry = nullptr; // K2Node_FunctionResult also inherits UK2Node_EditablePinBase
+		UK2Node_EditablePinBase* ResultNode = nullptr;
 		for (UEdGraphNode* Node : FuncGraph->Nodes)
 		{
 			if (Node->GetClass()->GetName() == TEXT("K2Node_FunctionResult"))
 			{
-				ResultNode = Cast<UK2Node>(Node);
+				ResultNode = Cast<UK2Node_EditablePinBase>(Node);
 				break;
 			}
 		}
@@ -3207,11 +3207,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 			}
 			if (ResultNodeClass)
 			{
-				ResultNode = Cast<UK2Node>(NewObject<UEdGraphNode>(FuncGraph, ResultNodeClass));
-				FuncGraph->AddNode(ResultNode, false, false);
-				ResultNode->CreateNewGuid();
-				ResultNode->PostPlacedNewNode();
-				ResultNode->AllocateDefaultPins();
+				UEdGraphNode* NewResultNode = NewObject<UEdGraphNode>(FuncGraph, ResultNodeClass);
+				FuncGraph->AddNode(NewResultNode, false, false);
+				NewResultNode->CreateNewGuid();
+				NewResultNode->PostPlacedNewNode();
+				NewResultNode->AllocateDefaultPins();
+				ResultNode = Cast<UK2Node_EditablePinBase>(NewResultNode);
 			}
 		}
 

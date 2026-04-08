@@ -41,14 +41,11 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 
-// IK Rig (#93)
-#include "IKRigDefinition.h"
-#include "RigEditor/IKRigEditorController.h"
-#include "RetargetEditor/IKRetargetEditorController.h"
+// IK Rig (#93) — use subdirectory path for UE 5.7
+#include "Rig/IKRigDefinition.h"
 
-// Control Rig (#11)
-#include "ControlRigBlueprint.h"
-#include "Rigs/RigHierarchyDefines.h"
+// Control Rig (#11) — ControlRigBlueprint removed in UE 5.7, use reflection
+#include "ControlRig.h"
 
 // Curve identifiers for UE5 animation data controller
 #include "Animation/AnimCurveTypes.h"
@@ -2395,11 +2392,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddCurve(const TSharedPtr<FJsonObject
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	// Build the curve identifier via the Skeleton smart-name mapping
-	FSmartName SmartName;
-	Skeleton->AddSmartNameAndModify(USkeleton::AnimCurveMappingName, FName(*CurveName), SmartName);
-
-	FAnimationCurveIdentifier CurveId(SmartName, ERawCurveTrackTypes::RCT_Float);
+	// Build the curve identifier
+	FAnimationCurveIdentifier CurveId(FName(*CurveName), ERawCurveTrackTypes::RCT_Float);
 
 	IAnimationDataController& Controller = AnimSeq->GetController();
 	Controller.OpenBracket(NSLOCTEXT("MCP", "AddCurve", "MCP Add Curve"));
@@ -2680,17 +2674,20 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRig(const TSharedPtr<FJsonObjec
 	}
 	Result->SetArrayField(TEXT("retargetChains"), ChainsArray);
 
-	// Solvers
-	const TArray<UIKRigSolver*>& Solvers = IKRig->GetSolverArray();
+	// Solvers — enumerate via reflection since GetSolverArray not available in all UE versions
 	TArray<TSharedPtr<FJsonValue>> SolversArray;
-	for (const UIKRigSolver* Solver : Solvers)
+	FProperty* SolversProp = IKRig->GetClass()->FindPropertyByName(TEXT("Solvers"));
+	if (SolversProp)
 	{
-		if (!Solver) continue;
-		TSharedPtr<FJsonObject> SolverObj = MakeShared<FJsonObject>();
-		SolverObj->SetStringField(TEXT("name"), Solver->GetName());
-		SolverObj->SetStringField(TEXT("class"), Solver->GetClass()->GetName());
-		SolverObj->SetBoolField(TEXT("enabled"), Solver->IsEnabled());
-		SolversArray.Add(MakeShared<FJsonValueObject>(SolverObj));
+		FString SolversStr;
+		const void* ValPtr = SolversProp->ContainerPtrToValuePtr<void>(IKRig);
+		SolversProp->ExportText_Direct(SolversStr, ValPtr, ValPtr, IKRig, PPF_None);
+		if (!SolversStr.IsEmpty())
+		{
+			TSharedPtr<FJsonObject> SolverInfo = MakeShared<FJsonObject>();
+			SolverInfo->SetStringField(TEXT("raw"), SolversStr);
+			SolversArray.Add(MakeShared<FJsonValueObject>(SolverInfo));
+		}
 	}
 	Result->SetArrayField(TEXT("solvers"), SolversArray);
 
@@ -2713,17 +2710,23 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListControlRigVariables(const TShared
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
+	// In UE 5.7, ControlRigBlueprint was removed — load as a generic UBlueprint
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UControlRigBlueprint* CRBlueprint = Cast<UControlRigBlueprint>(LoadedAsset);
+	UBlueprint* CRBlueprint = Cast<UBlueprint>(LoadedAsset);
 	if (!CRBlueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load ControlRigBlueprint at '%s'"), *AssetPath));
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *AssetPath));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), CRBlueprint->GetName());
+	Result->SetStringField(TEXT("class"), CRBlueprint->GetClass()->GetName());
+	if (CRBlueprint->ParentClass)
+	{
+		Result->SetStringField(TEXT("parentClass"), CRBlueprint->ParentClass->GetName());
+	}
 
 	// Read user-defined variables from the blueprint
 	TArray<TSharedPtr<FJsonValue>> VariablesArray;
@@ -2731,51 +2734,32 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListControlRigVariables(const TShared
 	{
 		TSharedPtr<FJsonObject> VarObj = MakeShared<FJsonObject>();
 		VarObj->SetStringField(TEXT("name"), Var.VarName.ToString());
-		VarObj->SetStringField(TEXT("type"), Var.VarType.ToString());
-
-		// Default value string
+		VarObj->SetStringField(TEXT("type"), Var.VarType.PinCategory.ToString());
 		if (!Var.DefaultValue.IsEmpty())
 		{
 			VarObj->SetStringField(TEXT("defaultValue"), Var.DefaultValue);
 		}
-
 		VarObj->SetBoolField(TEXT("isPublic"),
-			Var.PropertyFlags & CPF_BlueprintVisible ? true : false);
-
+			!!(Var.PropertyFlags & CPF_BlueprintVisible));
 		VariablesArray.Add(MakeShared<FJsonValueObject>(VarObj));
 	}
 	Result->SetArrayField(TEXT("variables"), VariablesArray);
 	Result->SetNumberField(TEXT("variableCount"), VariablesArray.Num());
 
-	// Also list the rig hierarchy elements (bones, controls, nulls, etc.)
-	URigHierarchy* Hierarchy = CRBlueprint->Hierarchy;
-	if (Hierarchy)
+	// List all graphs
+	TArray<UEdGraph*> AllGraphs;
+	CRBlueprint->GetAllGraphs(AllGraphs);
+	TArray<TSharedPtr<FJsonValue>> GraphsArray;
+	for (UEdGraph* Graph : AllGraphs)
 	{
-		TArray<TSharedPtr<FJsonValue>> ElementsArray;
-		Hierarchy->ForEach([&](FRigBaseElement* Element) -> bool
-		{
-			if (!Element) return true;
-			TSharedPtr<FJsonObject> ElemObj = MakeShared<FJsonObject>();
-			ElemObj->SetStringField(TEXT("name"), Element->GetName().ToString());
-
-			// Map element type enum to string
-			FString TypeStr;
-			switch (Element->GetType())
-			{
-			case ERigElementType::Bone:    TypeStr = TEXT("Bone"); break;
-			case ERigElementType::Control: TypeStr = TEXT("Control"); break;
-			case ERigElementType::Null:    TypeStr = TEXT("Null"); break;
-			case ERigElementType::Curve:   TypeStr = TEXT("Curve"); break;
-			default:                       TypeStr = TEXT("Other"); break;
-			}
-			ElemObj->SetStringField(TEXT("type"), TypeStr);
-
-			ElementsArray.Add(MakeShared<FJsonValueObject>(ElemObj));
-			return true; // continue iteration
-		});
-		Result->SetArrayField(TEXT("hierarchyElements"), ElementsArray);
-		Result->SetNumberField(TEXT("hierarchyElementCount"), ElementsArray.Num());
+		if (!Graph) continue;
+		TSharedPtr<FJsonObject> GraphObj = MakeShared<FJsonObject>();
+		GraphObj->SetStringField(TEXT("name"), Graph->GetName());
+		GraphObj->SetStringField(TEXT("class"), Graph->GetClass()->GetName());
+		GraphObj->SetNumberField(TEXT("nodeCount"), Graph->Nodes.Num());
+		GraphsArray.Add(MakeShared<FJsonValueObject>(GraphObj));
 	}
+	Result->SetArrayField(TEXT("graphs"), GraphsArray);
 
 	Result->SetBoolField(TEXT("success"), true);
 

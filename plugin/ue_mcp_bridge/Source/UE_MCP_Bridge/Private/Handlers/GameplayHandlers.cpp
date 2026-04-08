@@ -2303,7 +2303,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadImc(const TSharedPtr<FJsonObject>&
 
 		// Triggers
 		TArray<TSharedPtr<FJsonValue>> TriggersArr;
-		for (const auto* Trigger : Mapping.Triggers)
+		for (const TObjectPtr<UInputTrigger>& Trigger : Mapping.Triggers)
 		{
 			if (Trigger)
 			{
@@ -2314,7 +2314,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadImc(const TSharedPtr<FJsonObject>&
 
 		// Modifiers
 		TArray<TSharedPtr<FJsonValue>> ModifiersArr;
-		for (const auto* Modifier : Mapping.Modifiers)
+		for (const TObjectPtr<UInputModifier>& Modifier : Mapping.Modifiers)
 		{
 			if (Modifier)
 			{
@@ -2612,29 +2612,28 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetPieAnimState(const TSharedPtr<FJson
 		Result->SetBoolField(TEXT("montageIsPlaying"), AnimInst->Montage_IsPlaying(CurrentMontage));
 	}
 
-	// State machine states
+	// State machine info — use the anim class interface to enumerate machines
 	TArray<TSharedPtr<FJsonValue>> StatesArr;
 	if (const IAnimClassInterface* AnimClassInterface = IAnimClassInterface::GetFromClass(AnimInst->GetClass()))
 	{
-		const TArray<FStructProperty*>& AnimNodeProperties = AnimClassInterface->GetAnimNodeProperties();
-		for (int32 MachineIdx = 0; MachineIdx < AnimInst->GetStateMachineInstanceNum(); ++MachineIdx)
+		const TArray<FBakedAnimationStateMachine>& BakedMachines = AnimClassInterface->GetBakedStateMachines();
+		for (int32 MachineIdx = 0; MachineIdx < BakedMachines.Num(); ++MachineIdx)
 		{
-			const FAnimNode_StateMachine* SM = AnimInst->GetStateMachineInstance(MachineIdx);
-			if (!SM) continue;
-
+			const FBakedAnimationStateMachine& BakedMachine = BakedMachines[MachineIdx];
 			TSharedPtr<FJsonObject> SMObj = MakeShared<FJsonObject>();
+			SMObj->SetStringField(TEXT("machineName"), BakedMachine.MachineName.ToString());
 			SMObj->SetNumberField(TEXT("machineIndex"), MachineIdx);
-			SMObj->SetNumberField(TEXT("currentStateIndex"), SM->GetCurrentState());
+			SMObj->SetNumberField(TEXT("stateCount"), BakedMachine.States.Num());
 
-			// Try to get state name from the baked data
-			const FBakedAnimationStateMachine* BakedMachine = AnimInst->GetStateMachineInstanceDesc(MachineIdx);
-			if (BakedMachine)
+			// Try to get current state from the instance
+			const FAnimNode_StateMachine* SM = AnimInst->GetStateMachineInstance(MachineIdx);
+			if (SM)
 			{
-				SMObj->SetStringField(TEXT("machineName"), BakedMachine->MachineName.ToString());
 				int32 StateIdx = SM->GetCurrentState();
-				if (BakedMachine->States.IsValidIndex(StateIdx))
+				SMObj->SetNumberField(TEXT("currentStateIndex"), StateIdx);
+				if (BakedMachine.States.IsValidIndex(StateIdx))
 				{
-					SMObj->SetStringField(TEXT("currentStateName"), BakedMachine->States[StateIdx].StateName.ToString());
+					SMObj->SetStringField(TEXT("currentStateName"), BakedMachine.States[StateIdx].StateName.ToString());
 				}
 			}
 
