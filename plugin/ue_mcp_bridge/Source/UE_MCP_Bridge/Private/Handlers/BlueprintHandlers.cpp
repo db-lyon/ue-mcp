@@ -94,11 +94,28 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_blueprint_graphs"), &ListGraphs);
 	Registry.RegisterHandler(TEXT("set_blueprint_component_property"), &SetComponentProperty);
 	Registry.RegisterHandler(TEXT("set_class_default"), &SetClassDefault);
+	Registry.RegisterHandler(TEXT("remove_component"), &RemoveComponent);
+	Registry.RegisterHandler(TEXT("delete_variable"), &DeleteVariable);
+	Registry.RegisterHandler(TEXT("add_function_parameter"), &AddFunctionParameter);
+	Registry.RegisterHandler(TEXT("set_variable_default"), &SetVariableDefault);
 }
 
 UBlueprint* FBlueprintHandlers::LoadBlueprint(const FString& AssetPath)
 {
-	return LoadObject<UBlueprint>(nullptr, *AssetPath);
+	// Try exact path first (handles both package path and full object path)
+	UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *AssetPath);
+	if (BP) return BP;
+
+	// If the path looks like a package path (no '.' after last '/'), try object path format
+	// e.g. "/Game/Foo/BP_Bar" → "/Game/Foo/BP_Bar.BP_Bar"
+	if (!AssetPath.Contains(TEXT(".")))
+	{
+		FString AssetName;
+		AssetPath.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+		FString ObjectPath = AssetPath + TEXT(".") + AssetName;
+		BP = LoadObject<UBlueprint>(nullptr, *ObjectPath);
+	}
+	return BP;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,11 +208,85 @@ FEdGraphPinType FBlueprintHandlers::MakePinType(const FString& TypeStr)
 	{
 		PinType.PinCategory = UEdGraphSchema_K2::PC_Class;
 	}
+	else if (LowerType == TEXT("softobject") || LowerType == TEXT("softobjectreference"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+	}
+	else if (LowerType == TEXT("softclass") || LowerType == TEXT("softclassreference"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_SoftClass;
+	}
+	else if (LowerType == TEXT("byte"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+	}
+	else if (LowerType == TEXT("enum"))
+	{
+		PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+	}
 	else
 	{
-		// Default to real/float
-		PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-		PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
+		// Try to resolve as a struct type (FVector, FRotator, FTransform, FLinearColor, FGameplayTag, etc.)
+		// Strip leading 'F' for lookup if present
+		FString StructName = TypeStr;
+		static const TMap<FString, FString> StructAliases = {
+			{ TEXT("vector"),       TEXT("Vector") },
+			{ TEXT("fvector"),      TEXT("Vector") },
+			{ TEXT("rotator"),      TEXT("Rotator") },
+			{ TEXT("frotator"),     TEXT("Rotator") },
+			{ TEXT("transform"),    TEXT("Transform") },
+			{ TEXT("ftransform"),   TEXT("Transform") },
+			{ TEXT("linearcolor"),  TEXT("LinearColor") },
+			{ TEXT("flinearcolor"), TEXT("LinearColor") },
+			{ TEXT("color"),        TEXT("Color") },
+			{ TEXT("fcolor"),       TEXT("Color") },
+			{ TEXT("vector2d"),     TEXT("Vector2D") },
+			{ TEXT("fvector2d"),    TEXT("Vector2D") },
+			{ TEXT("gameplaytag"),      TEXT("GameplayTag") },
+			{ TEXT("fgameplaytag"),     TEXT("GameplayTag") },
+			{ TEXT("gameplaytagcontainer"), TEXT("GameplayTagContainer") },
+			{ TEXT("fgameplaytagcontainer"), TEXT("GameplayTagContainer") },
+		};
+
+		const FString* Alias = StructAliases.Find(LowerType);
+		if (Alias)
+		{
+			StructName = *Alias;
+		}
+		else if (StructName.Len() > 1 && StructName[0] == 'F' && FChar::IsUpper(StructName[1]))
+		{
+			StructName = StructName.Mid(1);
+		}
+
+		UScriptStruct* Struct = FindObject<UScriptStruct>(nullptr, *(FString(TEXT("/Script/CoreUObject.")) + StructName));
+		if (!Struct)
+		{
+			Struct = FindObject<UScriptStruct>(nullptr, *(FString(TEXT("/Script/GameplayTags.")) + StructName));
+		}
+		if (!Struct)
+		{
+			// Broad search
+			for (TObjectIterator<UScriptStruct> It; It; ++It)
+			{
+				if (It->GetName() == StructName)
+				{
+					Struct = *It;
+					break;
+				}
+			}
+		}
+
+		if (Struct)
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+			PinType.PinSubCategoryObject = Struct;
+		}
+		else
+		{
+			// Default to real/float
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+			PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
+		}
 	}
 
 	return PinType;
@@ -268,21 +359,23 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 	FString ParentClassName = TEXT("Actor");
 	Params->TryGetStringField(TEXT("parentClass"), ParentClassName);
 
-	// Find parent class
+	// Find parent class — try multiple resolution strategies
 	UClass* ParentClass = nullptr;
-	ParentClass = FindObject<UClass>(nullptr, *ParentClassName);
+
+	// 1. Try as full class path (e.g. "/Script/Engine.Actor" or "/Script/MyModule.MyClass")
+	ParentClass = LoadObject<UClass>(nullptr, *ParentClassName);
+
+	// 2. Try FindClassByShortName which handles "Actor", "AActor", "UAnimInstance" etc.
 	if (!ParentClass)
 	{
-		ParentClass = FindObject<UClass>(nullptr, *(TEXT("A") + ParentClassName));
-	}
-	if (!ParentClass)
-	{
-		ParentClass = FindObject<UClass>(nullptr, *(TEXT("U") + ParentClassName));
+		ParentClass = FindClassByShortName(ParentClassName);
 	}
 
 	if (!ParentClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Parent class not found: %s"), *ParentClassName));
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("Parent class not found: '%s'. Try the full path (e.g. '/Script/Engine.Actor') or the class name without prefix (e.g. 'Actor', 'Pawn', 'Character')."),
+			*ParentClassName));
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
@@ -294,9 +387,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 	FString PackageName;
 	FString AssetName;
 	AssetPath.Split(TEXT("/"), &PackageName, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-	PackageName = PackageName.LeftChop(1); // Remove trailing /
 
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
+	BlueprintFactory->ParentClass = ParentClass;
 	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(AssetName, PackageName, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
@@ -305,11 +398,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 		return MakeShared<FJsonValueObject>(Result);
 	}
 
-	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
+	// Return both the package path and canonical object path
+	FString ObjectPath = NewBlueprint->GetPathName();
 	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("objectPath"), ObjectPath);
 	Result->SetStringField(TEXT("className"), NewBlueprint->GetName());
+	Result->SetStringField(TEXT("parentClass"), ParentClass->GetPathName());
 	Result->SetBoolField(TEXT("success"), true);
 
 	return MakeShared<FJsonValueObject>(Result);
@@ -763,6 +859,37 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchNodeTypes(const TSharedPtr<FJso
 		}
 	}
 
+	// Also search AnimGraph node types and other UEdGraphNode subclasses
+	for (TObjectIterator<UClass> It; It; ++It)
+	{
+		if (!It->IsChildOf(UEdGraphNode::StaticClass())) continue;
+		if (*It == UEdGraphNode::StaticClass()) continue;
+
+		FString ClassName = It->GetName();
+		if (ClassName.ToLower().Contains(LowerQuery))
+		{
+			// Avoid duplicates from function search above
+			bool bAlreadyListed = false;
+			for (const TSharedPtr<FJsonValue>& Existing : MatchingTypes)
+			{
+				if (Existing->AsObject()->GetStringField(TEXT("name")) == ClassName)
+				{
+					bAlreadyListed = true;
+					break;
+				}
+			}
+			if (!bAlreadyListed)
+			{
+				TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+				Entry->SetStringField(TEXT("name"), ClassName);
+				Entry->SetStringField(TEXT("class"), It->GetSuperClass() ? It->GetSuperClass()->GetName() : TEXT(""));
+				Entry->SetStringField(TEXT("fullPath"), It->GetPathName());
+				Entry->SetStringField(TEXT("type"), TEXT("graphNode"));
+				MatchingTypes.Add(MakeShared<FJsonValueObject>(Entry));
+			}
+		}
+	}
+
 	Result->SetArrayField(TEXT("results"), MatchingTypes);
 	Result->SetNumberField(TEXT("count"), MatchingTypes.Num());
 	Result->SetBoolField(TEXT("success"), true);
@@ -1192,26 +1319,62 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 				}
 			}
 
+			// Handle full path format: "/Script/Engine.GameplayStatics:GetGameMode"
+			if (!FunctionName.IsEmpty() && FunctionName.Contains(TEXT(":")))
+			{
+				FString ClassPath, FuncPart;
+				FunctionName.Split(TEXT(":"), &ClassPath, &FuncPart);
+				FunctionName = FuncPart;
+				if (TargetClassName.IsEmpty())
+				{
+					TargetClassName = ClassPath;
+				}
+			}
+
 			if (!FunctionName.IsEmpty())
 			{
+				UFunction* FoundFunc = nullptr;
 
-				UClass* TargetClass = nullptr;
+				// 1. Try explicit target class
 				if (!TargetClassName.IsEmpty())
 				{
-					TargetClass = FindClassByShortName(TargetClassName);
-				}
-				if (!TargetClass)
-				{
-					TargetClass = Blueprint->ParentClass;
+					UClass* TargetClass = LoadObject<UClass>(nullptr, *TargetClassName);
+					if (!TargetClass)
+					{
+						TargetClass = FindClassByShortName(TargetClassName);
+					}
+					if (TargetClass)
+					{
+						FoundFunc = TargetClass->FindFunctionByName(FName(*FunctionName));
+					}
 				}
 
-				if (TargetClass)
+				// 2. Try blueprint parent class
+				if (!FoundFunc && Blueprint->ParentClass)
 				{
-					UFunction* Func = TargetClass->FindFunctionByName(FName(*FunctionName));
-					if (Func)
+					FoundFunc = Blueprint->ParentClass->FindFunctionByName(FName(*FunctionName));
+				}
+
+				// 3. Search common library classes
+				if (!FoundFunc)
+				{
+					static UClass* LibraryClasses[] = {
+						UGameplayStatics::StaticClass(),
+						UKismetSystemLibrary::StaticClass(),
+						UKismetMathLibrary::StaticClass(),
+						UKismetStringLibrary::StaticClass(),
+						UKismetArrayLibrary::StaticClass(),
+					};
+					for (UClass* Lib : LibraryClasses)
 					{
-						CallNode->SetFromFunction(Func);
+						FoundFunc = Lib->FindFunctionByName(FName(*FunctionName));
+						if (FoundFunc) break;
 					}
+				}
+
+				if (FoundFunc)
+				{
+					CallNode->SetFromFunction(FoundFunc);
 				}
 			}
 		}
@@ -2394,15 +2557,56 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 		}
 	}
 
-	if (!TargetNode || !TargetNode->ComponentTemplate)
+	UActorComponent* Template = TargetNode ? TargetNode->ComponentTemplate : nullptr;
+
+	// If not found in SCS, search inherited components on the CDO
+	if (!Template && Blueprint->GeneratedClass)
+	{
+		UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
+		if (CDO)
+		{
+			TInlineComponentArray<UActorComponent*> Components;
+			if (AActor* ActorCDO = Cast<AActor>(CDO))
+			{
+				ActorCDO->GetComponents(Components);
+			}
+			for (UActorComponent* Comp : Components)
+			{
+				if (Comp && (Comp->GetName() == ComponentName ||
+					Comp->GetName().StartsWith(ComponentName + TEXT("_")) ||
+					Comp->GetFName().ToString() == ComponentName))
+				{
+					Template = Comp;
+					break;
+				}
+			}
+		}
+	}
+
+	if (!Template)
 	{
 		// List available component names for error message
 		TArray<FString> Names;
-		for (USCS_Node* Node : SCS->GetAllNodes())
+		if (SCS)
 		{
-			if (Node && Node->ComponentTemplate)
+			for (USCS_Node* Node : SCS->GetAllNodes())
 			{
-				Names.Add(Node->GetVariableName().ToString());
+				if (Node && Node->ComponentTemplate)
+				{
+					Names.Add(Node->GetVariableName().ToString());
+				}
+			}
+		}
+		if (Blueprint->GeneratedClass)
+		{
+			if (AActor* ActorCDO = Cast<AActor>(Blueprint->GeneratedClass->GetDefaultObject()))
+			{
+				TInlineComponentArray<UActorComponent*> Components;
+				ActorCDO->GetComponents(Components);
+				for (UActorComponent* Comp : Components)
+				{
+					if (Comp) Names.AddUnique(Comp->GetName());
+				}
 			}
 		}
 		Result->SetStringField(TEXT("error"), FString::Printf(
@@ -2411,8 +2615,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 		Result->SetBoolField(TEXT("success"), false);
 		return MakeShared<FJsonValueObject>(Result);
 	}
-
-	UActorComponent* Template = TargetNode->ComponentTemplate;
 
 	// Navigate dotted property paths (e.g. "RelativeLocation.X")
 	TArray<FString> PathParts;
@@ -2612,7 +2814,28 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 
 	void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
 
-	if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(FinalProp))
+	if (FClassProperty* ClassProp = CastField<FClassProperty>(FinalProp))
+	{
+		// TSubclassOf<T> — load the class by path or short name
+		UClass* ClassVal = LoadObject<UClass>(nullptr, *Value);
+		if (!ClassVal) ClassVal = FindClassByShortName(Value);
+		if (ClassVal)
+		{
+			ClassProp->SetObjectPropertyValue(ValuePtr, ClassVal);
+		}
+		else
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("Could not find class '%s' for property '%s'"), *Value, *PropertyName));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
+	}
+	else if (FSoftClassProperty* SoftClassProp = CastField<FSoftClassProperty>(FinalProp))
+	{
+		SoftClassProp->SetPropertyValue(ValuePtr, FSoftObjectPtr(FSoftObjectPath(Value)));
+	}
+	else if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(FinalProp))
 	{
 		UObject* LoadedObj = LoadObject<UObject>(nullptr, *Value);
 		if (LoadedObj)
@@ -2634,8 +2857,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 	}
 	else
 	{
-		// Generic: ImportText handles FName, int, float, bool, FVector, TArray, TMap, etc.
-		FinalProp->ImportText_Direct(*Value, ValuePtr, CDO, PPF_None);
+		// Generic: ImportText handles FName, int, float, bool, FVector, FGameplayTag,
+		// FGameplayTagContainer, TArray, TMap, etc.
+		const TCHAR* ImportResult = FinalProp->ImportText_Direct(*Value, ValuePtr, CDO, PPF_None);
+		if (!ImportResult)
+		{
+			Result->SetStringField(TEXT("error"), FString::Printf(
+				TEXT("ImportText failed for property '%s' with value '%s'. Check UE text format."), *PropertyName, *Value));
+			Result->SetBoolField(TEXT("success"), false);
+			return MakeShared<FJsonValueObject>(Result);
+		}
 	}
 
 	CDO->PostEditChange();
@@ -2653,6 +2884,502 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("value"), Value);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// remove_component — Remove an SCS component from a Blueprint
+// Params: assetPath, componentName
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString ComponentName;
+	if (!Params->TryGetStringField(TEXT("componentName"), ComponentName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'componentName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
+	if (!SCS)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?)"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the SCS node by variable name or component template name
+	USCS_Node* TargetNode = nullptr;
+	for (USCS_Node* Node : SCS->GetAllNodes())
+	{
+		if (!Node || !Node->ComponentTemplate) continue;
+		if (Node->GetVariableName().ToString() == ComponentName ||
+			Node->ComponentTemplate->GetName() == ComponentName)
+		{
+			TargetNode = Node;
+			break;
+		}
+	}
+
+	if (!TargetNode)
+	{
+		TArray<FString> Names;
+		for (USCS_Node* Node : SCS->GetAllNodes())
+		{
+			if (Node && Node->ComponentTemplate)
+			{
+				Names.Add(Node->GetVariableName().ToString());
+			}
+		}
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("Component '%s' not found. Available: [%s]"),
+			*ComponentName, *FString::Join(Names, TEXT(", "))));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Remove via SubobjectDataSubsystem if available
+	bool bRemoved = false;
+	if (USubobjectDataSubsystem* Subsystem = GEngine->GetEngineSubsystem<USubobjectDataSubsystem>())
+	{
+		TArray<FSubobjectDataHandle> Handles;
+		Subsystem->K2_GatherSubobjectDataForBlueprint(Blueprint, Handles);
+
+		for (const FSubobjectDataHandle& Handle : Handles)
+		{
+			const FSubobjectData* Data = Handle.GetData();
+			if (Data && Data->GetComponentTemplate() == TargetNode->ComponentTemplate)
+			{
+				TArray<FSubobjectDataHandle> ToDelete;
+				ToDelete.Add(Handle);
+				int32 Removed = Subsystem->DeleteSubobjects(ToDelete, Blueprint);
+				bRemoved = (Removed > 0);
+				break;
+			}
+		}
+	}
+
+	// Fallback: direct SCS removal
+	if (!bRemoved)
+	{
+		SCS->RemoveNode(TargetNode);
+		bRemoved = true;
+	}
+
+	if (bRemoved)
+	{
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+		FKismetEditorUtilities::CompileBlueprint(Blueprint);
+		UPackage* Package = Blueprint->GetOutermost();
+		if (Package)
+		{
+			Package->MarkPackageDirty();
+			FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+			FSavePackageArgs SaveArgs;
+			SaveArgs.TopLevelFlags = RF_Standalone;
+			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+		}
+
+		Result->SetStringField(TEXT("path"), AssetPath);
+		Result->SetStringField(TEXT("componentName"), ComponentName);
+		Result->SetBoolField(TEXT("success"), true);
+	}
+	else
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Failed to remove component"));
+		Result->SetBoolField(TEXT("success"), false);
+	}
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// delete_variable — Delete a member variable from a Blueprint
+// Params: assetPath, name
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString VarName;
+	if (!Params->TryGetStringField(TEXT("name"), VarName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Check that the variable exists
+	bool bFound = false;
+	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
+	{
+		if (Var.VarName.ToString() == VarName)
+		{
+			bFound = true;
+			break;
+		}
+	}
+
+	if (!bFound)
+	{
+		TArray<FString> Names;
+		for (const FBPVariableDescription& Var : Blueprint->NewVariables)
+		{
+			Names.Add(Var.VarName.ToString());
+		}
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("Variable '%s' not found. Available: [%s]"),
+			*VarName, *FString::Join(Names, TEXT(", "))));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, FName(*VarName));
+
+	// Compile and save
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	UPackage* Package = Blueprint->GetOutermost();
+	if (Package)
+	{
+		Package->MarkPackageDirty();
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+	}
+
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("variableName"), VarName);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// add_function_parameter — Add an input or output parameter to a Blueprint function
+// Params: assetPath, functionName, parameterName, parameterType, isOutput?
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString FunctionName;
+	if (!Params->TryGetStringField(TEXT("functionName"), FunctionName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'functionName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString ParamName;
+	if (!Params->TryGetStringField(TEXT("parameterName"), ParamName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'parameterName' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString ParamType = TEXT("Float");
+	Params->TryGetStringField(TEXT("parameterType"), ParamType);
+
+	bool bIsOutput = false;
+	Params->TryGetBoolField(TEXT("isOutput"), bIsOutput);
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the function graph
+	UEdGraph* FuncGraph = nullptr;
+	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
+	{
+		if (Graph && Graph->GetName() == FunctionName)
+		{
+			FuncGraph = Graph;
+			break;
+		}
+	}
+
+	if (!FuncGraph)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Function not found: %s"), *FunctionName));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the function entry node (K2Node_FunctionEntry) or result node
+	UK2Node_FunctionEntry* EntryNode = nullptr;
+	for (UEdGraphNode* Node : FuncGraph->Nodes)
+	{
+		if (UK2Node_FunctionEntry* Entry = Cast<UK2Node_FunctionEntry>(Node))
+		{
+			EntryNode = Entry;
+			break;
+		}
+	}
+
+	if (!EntryNode)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Function entry node not found in graph"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FEdGraphPinType PinType = MakePinType(ParamType);
+
+	if (bIsOutput)
+	{
+		// For output (return) parameters, use FBlueprintEditorUtils
+		FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, FuncGraph, false, nullptr);
+
+		// Find or create the function result node
+		UK2Node* ResultNode = nullptr;
+		for (UEdGraphNode* Node : FuncGraph->Nodes)
+		{
+			if (Node->GetClass()->GetName() == TEXT("K2Node_FunctionResult"))
+			{
+				ResultNode = Cast<UK2Node>(Node);
+				break;
+			}
+		}
+
+		if (!ResultNode)
+		{
+			// Create a result node
+			UClass* ResultNodeClass = nullptr;
+			for (TObjectIterator<UClass> It; It; ++It)
+			{
+				if (It->GetName() == TEXT("K2Node_FunctionResult") && It->IsChildOf(UEdGraphNode::StaticClass()))
+				{
+					ResultNodeClass = *It;
+					break;
+				}
+			}
+			if (ResultNodeClass)
+			{
+				ResultNode = Cast<UK2Node>(NewObject<UEdGraphNode>(FuncGraph, ResultNodeClass));
+				FuncGraph->AddNode(ResultNode, false, false);
+				ResultNode->CreateNewGuid();
+				ResultNode->PostPlacedNewNode();
+				ResultNode->AllocateDefaultPins();
+			}
+		}
+
+		if (ResultNode)
+		{
+			TSharedPtr<FUserPinInfo> PinInfo = MakeShared<FUserPinInfo>();
+			PinInfo->PinName = FName(*ParamName);
+			PinInfo->PinType = PinType;
+			PinInfo->DesiredPinDirection = EGPD_Input;
+			ResultNode->UserDefinedPins.Add(PinInfo);
+			ResultNode->ReconstructNode();
+		}
+	}
+	else
+	{
+		// Input parameter: add a user-defined pin to the function entry node
+		TSharedPtr<FUserPinInfo> PinInfo = MakeShared<FUserPinInfo>();
+		PinInfo->PinName = FName(*ParamName);
+		PinInfo->PinType = PinType;
+		PinInfo->DesiredPinDirection = EGPD_Output; // Entry outputs are function inputs
+		EntryNode->UserDefinedPins.Add(PinInfo);
+		EntryNode->ReconstructNode();
+	}
+
+	// Compile and save
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	UPackage* Package = Blueprint->GetOutermost();
+	if (Package)
+	{
+		Package->MarkPackageDirty();
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+	}
+
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("functionName"), FunctionName);
+	Result->SetStringField(TEXT("parameterName"), ParamName);
+	Result->SetStringField(TEXT("parameterType"), ParamType);
+	Result->SetBoolField(TEXT("isOutput"), bIsOutput);
+	Result->SetBoolField(TEXT("success"), true);
+
+	return MakeShared<FJsonValueObject>(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_variable_default — Set the default value of a Blueprint variable
+// Bypasses CDO restrictions by setting via FBlueprintEditorUtils on the BP variable description
+// Params: assetPath, name, value
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString VarName;
+	if (!Params->TryGetStringField(TEXT("name"), VarName))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	FString Value;
+	if (!Params->TryGetStringField(TEXT("value"), Value))
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Missing 'value' parameter"));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint)
+	{
+		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Find the variable description
+	FBPVariableDescription* FoundVar = nullptr;
+	for (FBPVariableDescription& Var : Blueprint->NewVariables)
+	{
+		if (Var.VarName.ToString() == VarName)
+		{
+			FoundVar = &Var;
+			break;
+		}
+	}
+
+	if (!FoundVar)
+	{
+		TArray<FString> Names;
+		for (const FBPVariableDescription& Var : Blueprint->NewVariables)
+		{
+			Names.Add(Var.VarName.ToString());
+		}
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("Variable '%s' not found. Available: [%s]"),
+			*VarName, *FString::Join(Names, TEXT(", "))));
+		Result->SetBoolField(TEXT("success"), false);
+		return MakeShared<FJsonValueObject>(Result);
+	}
+
+	// Set default value string on the variable description.
+	// This is the text representation that the BP serialization system uses.
+	FoundVar->DefaultValue = Value;
+
+	// Also try to set it on the CDO property if possible (for immediate reflection)
+	if (Blueprint->GeneratedClass)
+	{
+		UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
+		if (CDO)
+		{
+			FProperty* Prop = Blueprint->GeneratedClass->FindPropertyByName(FName(*VarName));
+			if (Prop)
+			{
+				void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(CDO);
+
+				if (FClassProperty* ClassProp = CastField<FClassProperty>(Prop))
+				{
+					UClass* ClassVal = LoadObject<UClass>(nullptr, *Value);
+					if (!ClassVal) ClassVal = FindClassByShortName(Value);
+					if (ClassVal) ClassProp->SetObjectPropertyValue(ValuePtr, ClassVal);
+				}
+				else if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(Prop))
+				{
+					UObject* LoadedObj = LoadObject<UObject>(nullptr, *Value);
+					if (LoadedObj) ObjProp->SetObjectPropertyValue(ValuePtr, LoadedObj);
+				}
+				else if (FArrayProperty* ArrayProp = CastField<FArrayProperty>(Prop))
+				{
+					// For arrays (including TArray<TSubclassOf<>>), use ImportText
+					Prop->ImportText_Direct(*Value, ValuePtr, CDO, PPF_None);
+				}
+				else
+				{
+					Prop->ImportText_Direct(*Value, ValuePtr, CDO, PPF_None);
+				}
+
+				CDO->PostEditChange();
+			}
+		}
+	}
+
+	// Compile and save
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	UPackage* Package = Blueprint->GetOutermost();
+	if (Package)
+	{
+		Package->MarkPackageDirty();
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+	}
+
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("variableName"), VarName);
 	Result->SetStringField(TEXT("value"), Value);
 	Result->SetBoolField(TEXT("success"), true);
 
