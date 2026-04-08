@@ -33,14 +33,14 @@
 
 ## Animation (8)
 
-- [ ] #93 Cannot create/read IK Rigs and IK Retargeters
-- [ ] #91 Cannot read AnimGraph node properties (RetargetPoseFromMesh, etc.)
-- [ ] #79 Cannot add/set animation curves on AnimSequence
-- [ ] #78 Cannot set montage SlotAnimTrack slot name
-- [ ] #27 Cannot author multi-section montages with different sequences per section
-- [ ] #24 Cannot add float curves to animation sequences or montages
-- [ ] #23 Cannot read AnimBP AnimGraph nodes via read_graph
-- [ ] #11 No native tool for Control Rig graph construction
+- [x] #93 Cannot create/read IK Rigs and IK Retargeters
+- [x] #91 Cannot read AnimGraph node properties (RetargetPoseFromMesh, etc.)
+- [x] #79 Cannot add/set animation curves on AnimSequence
+- [x] #78 Cannot set montage SlotAnimTrack slot name
+- [x] #27 Cannot author multi-section montages with different sequences per section
+- [x] #24 Cannot add float curves to animation sequences or montages
+- [x] #23 Cannot read AnimBP AnimGraph nodes via read_graph
+- [x] #11 No native tool for Control Rig graph construction
 
 ## Material (4)
 
@@ -51,34 +51,34 @@
 
 ## Level / Actors (7)
 
-- [ ] #73 place_actor can't resolve StaticMeshActor
-- [ ] #63 set_component_property can't find components by default name convention
-- [ ] #62 spawn_volume doesn't support PostProcessVolume
-- [ ] #59 place_actor fails for engine actor types like SkyAtmosphere
-- [ ] #58 level(action="create") fails — cannot create levels
-- [ ] #47 get_outliner doesn't show child components
-- [ ] #80 Set level WorldSettings default GameMode via native tool
+- [x] #73 place_actor can't resolve StaticMeshActor
+- [x] #63 set_component_property can't find components by default name convention
+- [x] #62 spawn_volume doesn't support PostProcessVolume
+- [x] #59 place_actor fails for engine actor types like SkyAtmosphere
+- [x] #58 level(action="create") fails — cannot create levels
+- [x] #47 get_outliner doesn't show child components
+- [x] #80 Set level WorldSettings default GameMode via native tool
 
 ## Input / PIE Runtime (7)
 
-- [ ] #90 Expose PIE runtime input binding inspection
-- [ ] #89 Add native PIE runtime controller/input binding inspection
-- [ ] #60 No native tool to read/modify IMC mappings
-- [ ] #57 No native tool to add key mappings to InputMappingContext
-- [ ] #54 PIE actor and component runtime inspection is insufficient
+- [x] #90 Expose PIE runtime input binding inspection
+- [x] #89 Add native PIE runtime controller/input binding inspection
+- [x] #60 No native tool to read/modify IMC mappings
+- [x] #57 No native tool to add key mappings to InputMappingContext
+- [x] #54 PIE actor and component runtime inspection is insufficient
 - [x] #50 create_input_action valueType parameter not applied
-- [ ] #26 Cannot inspect runtime PIE anim instance state
+- [x] #26 Cannot inspect runtime PIE anim instance state
 
 ## Widget (2)
 
-- [ ] #81 widget tool has no action to add child widgets to WidgetTree
-- [ ] #13 widget tool cannot construct UI content (add children, buttons, sliders, text)
+- [x] #81 widget tool has no action to add child widgets to WidgetTree
+- [x] #13 widget tool cannot construct UI content (add children, buttons, sliders, text)
 
 ## Asset / Data (4)
 
 - [ ] #53 Asset/material tools lack parenting and package reload
 - [ ] #48 Read protected UObject UPROPERTY arrays from DataAsset sub-objects
-- [ ] #29 set_property cannot set complex nested struct arrays
+- [x] #29 set_property cannot set complex nested struct arrays
 - [ ] #75 Cannot create serialized UObject subobjects for IMC/IA modifier and trigger arrays
 
 ## Editor / Stability (5)
@@ -86,13 +86,13 @@
 - [x] #61 Editor crash in NiagaraHandlers::CreateNiagaraSystem — array index out of bounds
 - [x] #56 Editor crash in FMCPGameThreadExecutor::ExecuteOnGameThread during startup
 - [x] #17 open_asset crashes editor when opening StaticMesh assets
-- [ ] #64 capture_screenshot silently fails when editor window not focused
-- [ ] #82 get_log and search_log always return empty results
+- [x] #64 capture_screenshot silently fails when editor window not focused
+- [x] #82 get_log and search_log always return empty results
 
 ## Project / Build (2)
 
-- [ ] #14 No native build action — project tool should support building C++ 
-- [ ] #49 Add native support for generating Visual Studio project files
+- [x] #14 No native build action — project tool should support building C++
+- [x] #49 Add native support for generating Visual Studio project files
 
 ## Skeletal Mesh / Post-Process (3)
 
