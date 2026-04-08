@@ -3,6 +3,8 @@
 #include "BridgeServer.h"
 #include "Handlers/DialogHandlers.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/CoreDelegates.h"
+#include "Containers/Ticker.h"
 
 DEFINE_LOG_CATEGORY(LogMCPBridge);
 IMPLEMENT_MODULE(FUE_MCP_BridgeModule, UE_MCP_Bridge)
@@ -23,6 +25,21 @@ void FUE_MCP_BridgeModule::StartupModule()
 	{
 		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to start bridge server"));
 	}
+
+	// Defer the editor-ready signal until the engine is fully initialized.
+	// Use a one-shot ticker so we fire after all modules have loaded and
+	// the editor subsystems are available.
+	FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateLambda([](float) -> bool
+		{
+			if (G_BridgeServer.IsValid())
+			{
+				G_BridgeServer->GetGameThreadExecutor().SetEditorReady();
+				UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Editor ready — accepting requests"));
+			}
+			return false; // one-shot
+		})
+	);
 }
 
 void FUE_MCP_BridgeModule::ShutdownModule()

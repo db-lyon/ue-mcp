@@ -10,6 +10,11 @@ FMCPGameThreadExecutor::~FMCPGameThreadExecutor()
 {
 }
 
+void FMCPGameThreadExecutor::SetEditorReady()
+{
+	bEditorReady = true;
+}
+
 bool FMCPGameThreadExecutor::IsGameThread()
 {
 	return IsInGameThread();
@@ -17,6 +22,13 @@ bool FMCPGameThreadExecutor::IsGameThread()
 
 TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunction Handler, const TSharedPtr<FJsonObject>& Params, float TimeoutSeconds)
 {
+	if (!bEditorReady)
+	{
+		TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
+		ErrorObject->SetStringField(TEXT("error"), TEXT("Editor is still initializing. Please wait and retry."));
+		return MakeShared<FJsonValueObject>(ErrorObject);
+	}
+
 	if (IsGameThread())
 	{
 		// Already on game thread, execute directly

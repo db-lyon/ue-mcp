@@ -37,6 +37,9 @@ public:
 	// Get handler registry
 	FMCPHandlerRegistry& GetHandlerRegistry() { return HandlerRegistry; }
 
+	// Get game thread executor (to set editor ready)
+	FMCPGameThreadExecutor& GetGameThreadExecutor() { return GameThreadExecutor; }
+
 	// Process a JSON-RPC message
 	FString ProcessMessage(const FString& Message);
 
