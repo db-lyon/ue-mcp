@@ -1612,13 +1612,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 	// Add multicast delegate variable with a proper signature graph
 	FName DispatcherFName(*DispatcherName);
 
-	// Create the delegate signature graph first so the compiler has something to reference
+	// Create the delegate signature graph so the compiler has a function to reference.
+	// The convention is "<DispatcherName>__DelegateSignature"
+	FString SigGraphName = DispatcherName + TEXT("__DelegateSignature");
 	UEdGraph* SigGraph = FBlueprintEditorUtils::CreateNewGraph(
-		Blueprint, FBlueprintEditorUtils::GetDelegateSignatureGraphName(DispatcherFName),
+		Blueprint, FName(*SigGraphName),
 		UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
 	if (SigGraph)
 	{
-		FBlueprintEditorUtils::AddDelegateSignatureGraph(Blueprint, SigGraph);
+		Blueprint->DelegateSignatureGraphs.AddUnique(SigGraph);
+		SigGraph->SetFlags(RF_Transactional);
 	}
 
 	FEdGraphPinType PinType;
