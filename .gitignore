@@ -28,12 +28,18 @@ obj/
 .kantext/
 kantext-mcp-*
 
+## Claude / Cursor local settings
+.claude/
+
 ## Junk
 TODO.md
 ISSUES.md
 RELEASE_NOTES*.md
 CODE_OF_CONDUCT.md
 *.stackdump
+debug.log
+deploy-bridge.js
+.gitmodules
 
 ## OS
 .DS_Store
