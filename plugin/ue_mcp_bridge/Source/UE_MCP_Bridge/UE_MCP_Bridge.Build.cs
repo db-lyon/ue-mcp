@@ -6,16 +6,6 @@ public class UE_MCP_Bridge : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicIncludePaths.AddRange(
-			new string[] {
-			}
-		);
-
-		PrivateIncludePaths.AddRange(
-			new string[] {
-			}
-		);
-
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
@@ -40,6 +30,8 @@ public class UE_MCP_Bridge : ModuleRules
 				"BlueprintGraph",
 				"Blutility",
 				"ContentBrowser",
+				"ControlRig",
+				"ControlRigDeveloper",
 				"DataValidation",
 				"EditorScriptingUtilities",
 				"EditorStyle",
@@ -49,19 +41,16 @@ public class UE_MCP_Bridge : ModuleRules
 				"Foliage",
 				"GameplayAbilities",
 				"GameplayTasks",
-				"ControlRig",
-				"ControlRigDeveloper",
 				"HTTP",
 				"IKRig",
-				"IKRigEditor",
 				"IKRigDeveloper",
+				"IKRigEditor",
 				"InputCore",
 				"Kismet",
 				"KismetCompiler",
 				"Landscape",
 				"LevelEditor",
 				"LevelSequence",
-				"LiveCoding",
 				"MaterialEditor",
 				"MovieScene",
 				"MovieSceneTracks",
@@ -84,10 +73,10 @@ public class UE_MCP_Bridge : ModuleRules
 			}
 		);
 
-		DynamicallyLoadedModuleNames.AddRange(
-			new string[]
-			{
-			}
-		);
+		// LiveCoding is Windows-only (Developer/Windows/LiveCoding)
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			PrivateDependencyModuleNames.Add("LiveCoding");
+		}
 	}
 }

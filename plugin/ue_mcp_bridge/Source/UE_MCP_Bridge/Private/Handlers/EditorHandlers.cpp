@@ -34,7 +34,9 @@
 #include "GameFramework/Actor.h"
 #include "EditorValidatorSubsystem.h"
 #include "GenericPlatform/GenericPlatformCrashContext.h"
+#if PLATFORM_WINDOWS
 #include "ILiveCodingModule.h"
+#endif
 #include "LevelEditorSubsystem.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "DesktopPlatformModule.h"
@@ -1130,6 +1132,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::FocusViewportOnActor(const TSharedPtr<FJ
 
 TSharedPtr<FJsonValue> FEditorHandlers::HotReload(const TSharedPtr<FJsonObject>& Params)
 {
+#if PLATFORM_WINDOWS
 	ILiveCodingModule* LiveCoding = FModuleManager::GetModulePtr<ILiveCodingModule>(LIVE_CODING_MODULE_NAME);
 	if (LiveCoding && LiveCoding->IsEnabledForSession())
 	{
@@ -1147,8 +1150,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::HotReload(const TSharedPtr<FJsonObject>&
 		return MCPResult(Result);
 	}
 	else
+#endif
 	{
-		// Live Coding not available - fall back to console command
+		// Live Coding not available (or not on Windows) - fall back to console command
 		UWorld* World = GetEditorWorld();
 		if (World)
 		{

@@ -13,7 +13,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "JsonSerializer.h"
-#include "HAL/PlatformFilemanager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 

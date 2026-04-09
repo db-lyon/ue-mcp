@@ -40,6 +40,7 @@
 #elif PLATFORM_LINUX || PLATFORM_MAC
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <sys/select.h>
@@ -551,10 +552,10 @@ FString FMCPBridgeServer::CreateWebSocketAcceptKey(const FString& ClientKey)
 	FString MagicString = TEXT("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
 	FString Combined = ClientKey + MagicString;
 
-	// Compute SHA1 hash (20 bytes) using Windows CryptoAPI
+	// Compute SHA1 hash (20 bytes)
 	FTCHARToUTF8 UTF8String(*Combined);
 	uint8 HashBytes[20];
-	
+
 #if PLATFORM_WINDOWS
 	HCRYPTPROV hProv = 0;
 	HCRYPTHASH hHash = 0;
@@ -570,13 +571,11 @@ FString FMCPBridgeServer::CreateWebSocketAcceptKey(const FString& ClientKey)
 		CryptReleaseContext(hProv, 0);
 	}
 #else
-	// Fallback: use a simple hash (not secure, but works for WebSocket handshake)
-	uint32 Hash = 0;
-	for (int32 i = 0; i < UTF8String.Length(); ++i)
-	{
-		Hash = Hash * 31 + UTF8String.Get()[i];
-	}
-	FMemory::Memcpy(HashBytes, &Hash, 20);
+	// UE's cross-platform SHA1
+	FSHA1 Sha1;
+	Sha1.Update((const uint8*)UTF8String.Get(), UTF8String.Length());
+	Sha1.Final();
+	Sha1.GetHash(HashBytes);
 #endif
 
 	// Base64 encode
