@@ -83,13 +83,20 @@ If you prefer to configure manually, add to your MCP client config:
 | **Editor** | Console, Python, PIE, viewport, sequencer, build pipeline, logs |
 | **Reflection** | Class/struct/enum introspection, gameplay tags |
 
-## Supported Versions
+## Supported Platforms
 
-Tested with UE 5.4–5.7. Requires `PythonScriptPlugin` (ships with UE 4.26+).
+- **Windows** — UE 5.4–5.7
+- **Linux** — UE 5.6+ (contributed by [@robinduckett](https://github.com/robinduckett))
+
+Requires `PythonScriptPlugin` (ships with UE 4.26+).
 
 ## Contributing
 
 Issues and pull requests welcome. If an AI agent had to fall back to `execute_python` during your session, it will offer to submit structured feedback automatically — this helps us prioritize which native handlers to add next.
+
+### Contributors
+
+- [@robinduckett](https://github.com/robinduckett) — Linux platform support ([#96](https://github.com/db-lyon/ue-mcp/pull/96))
 
 ## License
 
