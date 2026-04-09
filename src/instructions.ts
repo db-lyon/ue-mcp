@@ -98,7 +98,7 @@ gameplay — Physics, collision, navigation, input, behavior trees, AI, game fra
   set_collision_profile, set_simulate_physics, set_collision_enabled,
   set_physics_properties, rebuild_navigation, get_navmesh_info,
   project_to_nav, spawn_nav_modifier,
-  create_input_action, create_input_mapping, list_input_assets,
+  create_input_action, create_input_mapping, list_input_assets, set_mapping_modifiers,
   list_behavior_trees, get_behavior_tree_info,
   create_blackboard, create_behavior_tree,
   create_eqs_query, list_eqs_queries,

@@ -48,6 +48,8 @@
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "InputModifiers.h"
+#include "InputTriggers.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
@@ -112,6 +114,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_smart_object_component"), &AddSmartObjectComponent);
 	Registry.RegisterHandler(TEXT("read_imc"), &ReadImc);
 	Registry.RegisterHandler(TEXT("add_imc_mapping"), &AddImcMapping);
+	Registry.RegisterHandler(TEXT("set_mapping_modifiers"), &SetMappingModifiers);
 	Registry.RegisterHandler(TEXT("inspect_pie"), &InspectPie);
 	Registry.RegisterHandler(TEXT("get_pie_anim_state"), &GetPieAnimState);
 }
@@ -1956,6 +1959,208 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddImcMapping(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("inputAction"), InputAction->GetPathName());
 	Result->SetStringField(TEXT("key"), KeyName);
 
+	return MCPResult(Result);
+}
+
+// ─────────────────────────────────────────────────────────────
+// #75  set_mapping_modifiers — Add modifiers/triggers to an IMC mapping
+//      Creates UObject subobjects with IMC as outer so they serialize.
+// ─────────────────────────────────────────────────────────────
+TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ImcPath;
+	if (auto Err = RequireString(Params, TEXT("imcPath"), ImcPath)) return Err;
+
+	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
+	if (!IMC)
+	{
+		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
+	}
+
+	int32 MappingIndex = OptionalInt(Params, TEXT("mappingIndex"), 0);
+	TArray<FEnhancedActionKeyMapping>& Mappings = const_cast<TArray<FEnhancedActionKeyMapping>&>(IMC->GetMappings());
+	if (!Mappings.IsValidIndex(MappingIndex))
+	{
+		return MCPError(FString::Printf(TEXT("Mapping index %d out of range (count: %d)"), MappingIndex, Mappings.Num()));
+	}
+
+	FEnhancedActionKeyMapping& Mapping = Mappings[MappingIndex];
+
+	// ── Modifiers ──
+	const TArray<TSharedPtr<FJsonValue>>* ModifiersArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("modifiers"), ModifiersArr) && ModifiersArr)
+	{
+		Mapping.Modifiers.Empty();
+		for (const auto& ModVal : *ModifiersArr)
+		{
+			const TSharedPtr<FJsonObject>* ModObj = nullptr;
+			if (!ModVal->TryGetObject(ModObj) || !ModObj) continue;
+
+			FString TypeName;
+			(*ModObj)->TryGetStringField(TEXT("type"), TypeName);
+			if (TypeName.IsEmpty()) continue;
+
+			// Resolve class: "DeadZone" → UInputModifierDeadZone
+			FString ClassName = TypeName;
+			if (!ClassName.StartsWith(TEXT("UInputModifier")))
+			{
+				ClassName = TEXT("UInputModifier") + ClassName;
+			}
+
+			UClass* ModClass = FindClassByShortName(ClassName);
+			if (!ModClass || !ModClass->IsChildOf(UInputModifier::StaticClass()))
+			{
+				continue; // skip unknown modifier types
+			}
+
+			// Create with IMC as outer — this is the key fix for #75
+			UInputModifier* Modifier = NewObject<UInputModifier>(IMC, ModClass);
+
+			// Set properties via reflection
+			for (const auto& Pair : (*ModObj)->Values)
+			{
+				if (Pair.Key == TEXT("type")) continue;
+
+				FProperty* Prop = ModClass->FindPropertyByName(FName(*Pair.Key));
+				if (!Prop) continue;
+
+				void* PropAddr = Prop->ContainerPtrToValuePtr<void>(Modifier);
+
+				if (FFloatProperty* FloatProp = CastField<FFloatProperty>(Prop))
+				{
+					double Val = 0;
+					Pair.Value->TryGetNumber(Val);
+					FloatProp->SetPropertyValue(PropAddr, (float)Val);
+				}
+				else if (FDoubleProperty* DoubleProp = CastField<FDoubleProperty>(Prop))
+				{
+					double Val = 0;
+					Pair.Value->TryGetNumber(Val);
+					DoubleProp->SetPropertyValue(PropAddr, Val);
+				}
+				else if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
+				{
+					bool Val = false;
+					Pair.Value->TryGetBool(Val);
+					BoolProp->SetPropertyValue(PropAddr, Val);
+				}
+				else if (FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
+				{
+					FString EnumStr;
+					if (Pair.Value->TryGetString(EnumStr))
+					{
+						int64 EnumVal = EnumProp->GetEnum()->GetValueByNameString(EnumStr);
+						if (EnumVal != INDEX_NONE)
+						{
+							EnumProp->GetUnderlyingProperty()->SetIntPropertyValue(PropAddr, EnumVal);
+						}
+					}
+				}
+				else if (FByteProperty* ByteProp = CastField<FByteProperty>(Prop))
+				{
+					if (ByteProp->Enum)
+					{
+						FString EnumStr;
+						if (Pair.Value->TryGetString(EnumStr))
+						{
+							int64 EnumVal = ByteProp->Enum->GetValueByNameString(EnumStr);
+							if (EnumVal != INDEX_NONE)
+							{
+								ByteProp->SetPropertyValue(PropAddr, (uint8)EnumVal);
+							}
+						}
+					}
+					else
+					{
+						double Val = 0;
+						Pair.Value->TryGetNumber(Val);
+						ByteProp->SetPropertyValue(PropAddr, (uint8)Val);
+					}
+				}
+			}
+
+			Mapping.Modifiers.Add(Modifier);
+		}
+	}
+
+	// ── Triggers ──
+	const TArray<TSharedPtr<FJsonValue>>* TriggersArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("triggers"), TriggersArr) && TriggersArr)
+	{
+		Mapping.Triggers.Empty();
+		for (const auto& TrigVal : *TriggersArr)
+		{
+			const TSharedPtr<FJsonObject>* TrigObj = nullptr;
+			if (!TrigVal->TryGetObject(TrigObj) || !TrigObj) continue;
+
+			FString TypeName;
+			(*TrigObj)->TryGetStringField(TEXT("type"), TypeName);
+			if (TypeName.IsEmpty()) continue;
+
+			FString ClassName = TypeName;
+			if (!ClassName.StartsWith(TEXT("UInputTrigger")))
+			{
+				ClassName = TEXT("UInputTrigger") + ClassName;
+			}
+
+			UClass* TrigClass = FindClassByShortName(ClassName);
+			if (!TrigClass || !TrigClass->IsChildOf(UInputTrigger::StaticClass()))
+			{
+				continue;
+			}
+
+			UInputTrigger* Trigger = NewObject<UInputTrigger>(IMC, TrigClass);
+
+			// Set properties via reflection (same pattern as modifiers)
+			for (const auto& Pair : (*TrigObj)->Values)
+			{
+				if (Pair.Key == TEXT("type")) continue;
+
+				FProperty* Prop = TrigClass->FindPropertyByName(FName(*Pair.Key));
+				if (!Prop) continue;
+
+				void* PropAddr = Prop->ContainerPtrToValuePtr<void>(Trigger);
+
+				if (FFloatProperty* FloatProp = CastField<FFloatProperty>(Prop))
+				{
+					double Val = 0;
+					Pair.Value->TryGetNumber(Val);
+					FloatProp->SetPropertyValue(PropAddr, (float)Val);
+				}
+				else if (FDoubleProperty* DoubleProp = CastField<FDoubleProperty>(Prop))
+				{
+					double Val = 0;
+					Pair.Value->TryGetNumber(Val);
+					DoubleProp->SetPropertyValue(PropAddr, Val);
+				}
+				else if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
+				{
+					bool Val = false;
+					Pair.Value->TryGetBool(Val);
+					BoolProp->SetPropertyValue(PropAddr, Val);
+				}
+			}
+
+			Mapping.Triggers.Add(Trigger);
+		}
+	}
+
+	// Save
+	UPackage* Pkg = IMC->GetOutermost();
+	if (Pkg)
+	{
+		Pkg->MarkPackageDirty();
+		FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("imcPath"), IMC->GetPathName());
+	Result->SetNumberField(TEXT("mappingIndex"), MappingIndex);
+	Result->SetNumberField(TEXT("modifierCount"), Mapping.Modifiers.Num());
+	Result->SetNumberField(TEXT("triggerCount"), Mapping.Triggers.Num());
 	return MCPResult(Result);
 }
 

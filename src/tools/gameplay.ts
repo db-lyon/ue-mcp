@@ -22,6 +22,7 @@ export const gameplayTool: ToolDef = categoryTool(
     list_input_assets:      bp("list_input_assets"),
     read_imc:               bp("read_imc"),
     add_imc_mapping:        bp("add_imc_mapping"),
+    set_mapping_modifiers:  bp("set_mapping_modifiers"),
     // Behavior Trees
     list_behavior_trees:    bp("list_behavior_trees"),
     get_behavior_tree_info: bp("get_behavior_tree_info"),
@@ -65,6 +66,7 @@ export const gameplayTool: ToolDef = categoryTool(
 - list_input_assets: List input assets. Params: directory?, recursive?
 - read_imc: Read InputMappingContext mappings. Params: imcPath
 - add_imc_mapping: Add key mapping to InputMappingContext. Params: imcPath, inputActionPath, key (e.g. "W", "SpaceBar", "LeftMouseButton")
+- set_mapping_modifiers: Set modifiers/triggers on an IMC mapping (persists on save — creates subobjects with correct outer). Params: imcPath, mappingIndex?, modifiers? (array of {type, ...props}), triggers? (array of {type, ...props}). Modifier types: DeadZone (LowerThreshold, UpperThreshold, Type=Axial|Radial), Negate, Scalar, SwizzleAxis, Smooth, ScaleByDeltaTime, FOVScaling, ToWorldSpace, ResponseCurveExponential. Trigger types: Down, Pressed, Released, Hold (HoldTimeThreshold), HoldAndRelease, Tap, Pulse, ChordAction.
 - inspect_pie: Inspect PIE runtime. No params = list all PIE actors. Params: actorLabel? (detailed info with components)
 - get_pie_anim_state: Get PIE anim instance state. Params: actorLabel (returns current montage, state machines, anim class)
 - list_behavior_trees: List BTs. Params: directory?, recursive?
@@ -116,5 +118,8 @@ export const gameplayTool: ToolDef = categoryTool(
     imcPath: z.string().optional(),
     inputActionPath: z.string().optional(),
     key: z.string().optional(),
+    mappingIndex: z.number().optional().describe("Index of mapping in IMC (default 0)"),
+    modifiers: z.array(z.record(z.unknown())).optional().describe("Array of modifier objects: {type, ...props}"),
+    triggers: z.array(z.record(z.unknown())).optional().describe("Array of trigger objects: {type, ...props}"),
   },
 );
