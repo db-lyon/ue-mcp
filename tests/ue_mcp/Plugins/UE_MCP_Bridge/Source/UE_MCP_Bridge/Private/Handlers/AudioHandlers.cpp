@@ -1,5 +1,6 @@
 #include "AudioHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -27,10 +28,9 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FAudioHandlers::ListSoundAssets(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
-	bool bRecursive = true;
-	Params->TryGetBoolField(TEXT("recursive"), bRecursive);
+	bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -59,25 +59,16 @@ TSharedPtr<FJsonValue> FAudioHandlers::ListSoundAssets(const TSharedPtr<FJsonObj
 
 	Result->SetArrayField(TEXT("assets"), AssetsArray);
 	Result->SetNumberField(TEXT("count"), AssetsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundCue(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Audio/SoundCues");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/SoundCues"));
 
 	// Delete existing asset if it exists
 	FString FullAssetPath = PackagePath + TEXT("/") + Name;
@@ -90,42 +81,30 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundCue(const TSharedPtr<FJsonObje
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, USoundCue::StaticClass(), SoundCueFactory);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create SoundCue"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create SoundCue"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateMetaSoundSource(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Audio/MetaSounds");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/MetaSounds"));
 
 	// Find MetaSoundSource class
 	UClass* MetaSoundSourceClass = FindObject<UClass>(nullptr, TEXT("/Script/MetasoundEngine.MetaSoundSource"));
 	if (!MetaSoundSourceClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("MetaSoundSource class not found. Enable MetaSound plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("MetaSoundSource class not found. Enable MetaSound plugin."));
 	}
 
 	// Delete existing asset if it exists
@@ -138,50 +117,33 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateMetaSoundSource(const TSharedPtr<FJ
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, MetaSoundSourceClass, nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create MetaSoundSource"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create MetaSoundSource"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	// Get required sound asset path
 	FString SoundPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), SoundPath) && !Params->TryGetStringField(TEXT("path"), SoundPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), SoundPath)) return Err;
 
 	// Load the sound asset
 	USoundBase* Sound = Cast<USoundBase>(UEditorAssetLibrary::LoadAsset(SoundPath));
 	if (!Sound)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Sound not found: %s"), *SoundPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Sound not found: %s"), *SoundPath));
 	}
 
 	// Get the editor world
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Parse location from JSON object (defaults to origin)
 	FVector Location = FVector::ZeroVector;
@@ -208,33 +170,20 @@ TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJso
 	// Play the sound at the specified location
 	UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, static_cast<float>(Volume), static_cast<float>(Pitch));
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), SoundPath);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::SpawnAmbientSound(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	// Get required sound asset path
 	FString SoundPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), SoundPath) && !Params->TryGetStringField(TEXT("path"), SoundPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), SoundPath)) return Err;
 
 	// Get the editor world
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Parse location from JSON object (defaults to origin)
 	FVector Location = FVector::ZeroVector;
@@ -251,14 +200,12 @@ TSharedPtr<FJsonValue> FAudioHandlers::SpawnAmbientSound(const TSharedPtr<FJsonO
 	AAmbientSound* AmbientSoundActor = World->SpawnActor<AAmbientSound>(AAmbientSound::StaticClass(), SpawnTransform);
 	if (!AmbientSoundActor)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn AmbientSound actor"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to spawn AmbientSound actor"));
 	}
 
 	// Set actor label if provided
-	FString Label;
-	if (Params->TryGetStringField(TEXT("label"), Label) && !Label.IsEmpty())
+	FString Label = OptionalString(Params, TEXT("label"));
+	if (!Label.IsEmpty())
 	{
 		AmbientSoundActor->SetActorLabel(Label);
 	}
@@ -281,9 +228,9 @@ TSharedPtr<FJsonValue> FAudioHandlers::SpawnAmbientSound(const TSharedPtr<FJsonO
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), SoundPath);
 	Result->SetStringField(TEXT("label"), AmbientSoundActor->GetActorLabel());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { Vec3, Rotator } from "../schemas.js";
 
 export const assetTool: ToolDef = categoryTool(
   "asset",
@@ -145,8 +146,8 @@ export const assetTool: ToolDef = categoryTool(
     assetPaths: z.array(z.string()).optional().describe("Array of asset paths (for recenter_pivot batch — first mesh sets reference pivot)"),
     socketName: z.string().optional().describe("Socket name"),
     boneName: z.string().optional().describe("Bone name (for skeletal mesh sockets)"),
-    relativeLocation: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Socket relative location"),
-    relativeRotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional().describe("Socket relative rotation"),
-    relativeScale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional().describe("Socket relative scale"),
+    relativeLocation: Vec3.optional().describe("Socket relative location"),
+    relativeRotation: Rotator.optional().describe("Socket relative rotation"),
+    relativeScale: Vec3.optional().describe("Socket relative scale"),
   },
 );

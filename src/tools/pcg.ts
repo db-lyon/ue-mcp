@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { Vec3 } from "../schemas.js";
 
 export const pcgTool: ToolDef = categoryTool(
   "pcg",
@@ -39,7 +40,7 @@ export const pcgTool: ToolDef = categoryTool(
     targetNode: z.string().optional(), targetPin: z.string().optional(),
     settings: z.record(z.unknown()).optional(),
     graphPath: z.string().optional(),
-    location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
-    extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+    location: Vec3.optional(),
+    extent: Vec3.optional(),
   },
 );

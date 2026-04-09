@@ -11,7 +11,7 @@
 - **delete_variable**: Delete member variables (#77)
 - **add_function_parameter**: Add input/output parameters to blueprint functions (#87)
 - **set_variable_default**: Set default values on BP variables, including class reference arrays that can't be edited on the CDO (#92)
-- Idempotent `create` returns existing asset with `alreadyExisted: true` instead of triggering overwrite dialogs
+- Idempotent `create` — returns existing asset with `alreadyExisted: true` instead of triggering overwrite dialogs
 
 ### Animation (7 new actions)
 - **read_anim_graph**: Read AnimBP AnimGraph nodes with properties via reflection (#23, #91)
@@ -110,6 +110,6 @@
 | 75 | UObject subobject serialization for IMC/IA | Requires deep UE serialization internals |
 | 52 | Level Sequence binding details | Needs dedicated MovieScene handler |
 | 76 | Nested chooser row editing | Requires ChooserTable plugin private APIs |
-| N/A | Delegate signature warning | `CreateDefaultNodesForGraph` doesn't create proper delegate entry; cosmetic only |
-| N/A | `afterAll` delete log noise | Asset registry race in test cleanup; harmless |
-| N/A | `SetReplicates` CDO warning | Networking test sets replication on pre-init actor CDO; harmless |
+| — | Delegate signature warning | `CreateDefaultNodesForGraph` doesn't create proper delegate entry; cosmetic only |
+| — | `afterAll` delete log noise | Asset registry race in test cleanup; harmless |
+| — | `SetReplicates` CDO warning | Networking test sets replication on pre-init actor CDO; harmless |

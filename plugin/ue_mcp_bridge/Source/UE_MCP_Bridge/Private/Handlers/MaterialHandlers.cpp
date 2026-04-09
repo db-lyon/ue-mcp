@@ -1,6 +1,7 @@
 #include "MaterialHandlers.h"
 #include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -140,7 +141,7 @@ bool FMaterialHandlers::ParseMaterialProperty(const FString& PropertyName, EMate
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ListExpressionTypes(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 	TArray<TSharedPtr<FJsonValue>> TypesArray;
 
 	// Common material expression types
@@ -190,25 +191,16 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListExpressionTypes(const TSharedPtr<F
 
 	Result->SetArrayField(TEXT("expressionTypes"), TypesArray);
 	Result->SetNumberField(TEXT("count"), ExpressionTypes.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Materials");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Materials"));
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] CreateMaterial: name=%s packagePath=%s"), *Name, *PackagePath);
 
@@ -220,17 +212,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterial(const TSharedPtr<FJsonO
 
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create material asset"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create material asset"));
 	}
 
 	UMaterial* NewMaterial = Cast<UMaterial>(NewAsset);
 	if (!NewMaterial)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Created asset is not a material"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Created asset is not a material"));
 	}
 
 	// Save the package
@@ -244,35 +232,27 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterial(const TSharedPtr<FJsonO
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	FString AssetPath = NewMaterial->GetPathName();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UMaterial* Material = LoadMaterialFromPath(AssetPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), Material->GetName());
 	Result->SetStringField(TEXT("path"), Material->GetPathName());
 	Result->SetStringField(TEXT("shadingModel"), ShadingModelToString(Material->GetShadingModels().GetFirstShadingModel()));
@@ -432,37 +412,21 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterial(const TSharedPtr<FJsonObj
 		Result->SetObjectField(TEXT("connections"), ConnectionsObj);
 	}
 
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialShadingModel(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString ShadingModelStr;
-	if (!Params->TryGetStringField(TEXT("shadingModel"), ShadingModelStr) || ShadingModelStr.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'shadingModel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("shadingModel"), ShadingModelStr)) return Err;
 
 	UMaterial* Material = LoadMaterialFromPath(AssetPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
 	}
 
 	EMaterialShadingModel NewShadingModel = ParseShadingModel(ShadingModelStr);
@@ -474,39 +438,25 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialShadingModel(const TSharedP
 	// Mark dirty and save
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), Material->GetPathName());
 	Result->SetStringField(TEXT("shadingModel"), ShadingModelToString(NewShadingModel));
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBlendMode(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString BlendModeStr;
-	if (!Params->TryGetStringField(TEXT("blendMode"), BlendModeStr) || BlendModeStr.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'blendMode' parameter (Opaque, Masked, Translucent, Additive, Modulate, AlphaComposite, AlphaHoldout)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blendMode"), BlendModeStr)) return Err;
 
 	UMaterial* Material = LoadMaterialFromPath(AssetPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
 	}
 
 	EBlendMode NewBlendMode = BLEND_Opaque;
@@ -519,9 +469,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBlendMode(const TSharedPtr<
 	else if (BlendModeStr.Equals(TEXT("AlphaHoldout"), ESearchCase::IgnoreCase)) NewBlendMode = BLEND_AlphaHoldout;
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown blend mode: '%s'. Use Opaque, Masked, Translucent, Additive, Modulate, AlphaComposite, or AlphaHoldout"), *BlendModeStr));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown blend mode: '%s'. Use Opaque, Masked, Translucent, Additive, Modulate, AlphaComposite, or AlphaHoldout"), *BlendModeStr));
 	}
 
 	Material->PreEditChange(nullptr);
@@ -529,31 +477,22 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBlendMode(const TSharedPtr<
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), Material->GetPathName());
 	Result->SetStringField(TEXT("blendMode"), BlendModeStr);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBaseColor(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
 	if (!Params->TryGetObjectField(TEXT("color"), ColorObj))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'color' parameter (object with r,g,b,a)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'color' parameter (object with r,g,b,a)"));
 	}
 
 	double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
@@ -565,9 +504,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBaseColor(const TSharedPtr<
 	UMaterial* Material = LoadMaterialFromPath(AssetPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
 	}
 
 	Material->PreEditChange(nullptr);
@@ -585,6 +522,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBaseColor(const TSharedPtr<
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	TSharedPtr<FJsonObject> ColorResult = MakeShared<FJsonObject>();
 	ColorResult->SetNumberField(TEXT("r"), R);
 	ColorResult->SetNumberField(TEXT("g"), G);
@@ -592,40 +530,34 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBaseColor(const TSharedPtr<
 	ColorResult->SetNumberField(TEXT("a"), A);
 	Result->SetObjectField(TEXT("color"), ColorResult);
 	Result->SetStringField(TEXT("path"), Material->GetPathName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		// Also try assetPath as a third key
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	FString ExpressionType;
-	if (!Params->TryGetStringField(TEXT("expressionType"), ExpressionType) || ExpressionType.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'expressionType' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("expressionType"), ExpressionType)) return Err;
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
-	// Resolve short expression type names: "Multiply" → "UMaterialExpressionMultiply"
+	// Resolve short expression type names: "Multiply" -> "UMaterialExpressionMultiply"
 	FString ClassName = ExpressionType;
 	if (!ClassName.StartsWith(TEXT("MaterialExpression")) && !ClassName.StartsWith(TEXT("UMaterialExpression")))
 	{
@@ -657,9 +589,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 
 	if (!ExpressionClass || !ExpressionClass->IsChildOf(UMaterialExpression::StaticClass()))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown expression type: '%s'"), *ExpressionType));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown expression type: '%s'"), *ExpressionType));
 	}
 
 	Material->PreEditChange(nullptr);
@@ -724,35 +654,34 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	// Return the index as nodeId for use with connect_expressions and other operations
 	int32 NodeIndex = Material->GetExpressions().Num() - 1;
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("expressionType"), ExpressionType);
 	Result->SetStringField(TEXT("expressionClass"), NewExpression->GetClass()->GetName());
 	Result->SetStringField(TEXT("nodeId"), FString::FromInt(NodeIndex));
 	Result->SetStringField(TEXT("description"), NewExpression->GetDescription());
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetNumberField(TEXT("expressionCount"), Material->GetExpressions().Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialExpressions(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ExpressionsArray;
@@ -783,32 +712,23 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialExpressions(const TSharedP
 		ExpressionsArray.Add(MakeShared<FJsonValueObject>(ExprObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("expressions"), ExpressionsArray);
 	Result->SetNumberField(TEXT("count"), ExpressionsArray.Num());
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialParameters(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UMaterial* Material = LoadMaterialFromPath(AssetPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ScalarParams;
@@ -852,33 +772,32 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialParameters(const TSharedPt
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("scalarParameters"), ScalarParams);
 	Result->SetArrayField(TEXT("vectorParameters"), VectorParams);
 	Result->SetArrayField(TEXT("textureParameters"), TextureParams);
 	Result->SetStringField(TEXT("path"), Material->GetPathName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::RecompileMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Recompiling material: %s"), *MaterialPath);
@@ -887,34 +806,21 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RecompileMaterial(const TSharedPtr<FJs
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), Material->GetPathName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ParentPath;
-	if (!Params->TryGetStringField(TEXT("parentPath"), ParentPath) || ParentPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'parentPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("parentPath"), ParentPath)) return Err;
 
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Materials");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Materials"));
 
 	// Load the parent material
 	UMaterialInterface* ParentMaterial = Cast<UMaterialInterface>(
@@ -927,9 +833,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPt
 	}
 	if (!ParentMaterial)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load parent material at '%s'"), *ParentPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load parent material at '%s'"), *ParentPath));
 	}
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] CreateMaterialInstance: name=%s parent=%s packagePath=%s"), *Name, *ParentPath, *PackagePath);
@@ -943,17 +847,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPt
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UMaterialInstanceConstant::StaticClass(), Factory);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create material instance asset"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create material instance asset"));
 	}
 
 	UMaterialInstanceConstant* MaterialInstance = Cast<UMaterialInstanceConstant>(NewAsset);
 	if (!MaterialInstance)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Created asset is not a material instance"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Created asset is not a material instance"));
 	}
 
 	// Save the package
@@ -967,43 +867,30 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPt
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("parentPath"), ParentMaterial->GetPathName());
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString ParameterName;
-	if (!Params->TryGetStringField(TEXT("parameterName"), ParameterName) || ParameterName.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'parameterName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
 
-	// parameterType is optional — auto-detect if not provided (#71, #72)
-	FString ParameterType;
-	Params->TryGetStringField(TEXT("parameterType"), ParameterType);
+	// parameterType is optional -- auto-detect if not provided (#71, #72)
+	FString ParameterType = OptionalString(Params, TEXT("parameterType"));
 
 	UMaterialInstanceConstant* MaterialInstance = LoadMaterialInstanceFromPath(AssetPath);
 	if (!MaterialInstance)
 	{
-		// Not a MaterialInstance — might be a base Material with expression nodes (#71)
+		// Not a MaterialInstance -- might be a base Material with expression nodes (#71)
 		// Redirect to set_expression_value logic
 		UMaterial* BaseMaterial = LoadMaterialFromPath(AssetPath);
 		if (BaseMaterial)
@@ -1012,23 +899,21 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 			UMaterialExpression* Expr = FindExpressionByName(BaseMaterial, ParameterName);
 			if (Expr)
 			{
-				Result->SetStringField(TEXT("error"), FString::Printf(
+				return MCPError(FString::Printf(
 					TEXT("'%s' is a base Material, not a MaterialInstance. Use set_expression_value with expressionIndex to set values on expression nodes directly."),
 					*AssetPath));
 			}
 			else
 			{
-				Result->SetStringField(TEXT("error"), FString::Printf(
+				return MCPError(FString::Printf(
 					TEXT("'%s' is a base Material, not a MaterialInstance. Cannot set parameters. Create a MaterialInstance first."),
 					*AssetPath));
 			}
 		}
 		else
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material or material instance at '%s'"), *AssetPath));
+			return MCPError(FString::Printf(TEXT("Failed to load material or material instance at '%s'"), *AssetPath));
 		}
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	// Auto-detect parameter type if not provided
@@ -1056,28 +941,26 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 		double ScalarValue = 0.0;
 		if (!Params->TryGetNumberField(TEXT("value"), ScalarValue))
 		{
-			Result->SetStringField(TEXT("error"), TEXT("Missing 'value' number field for scalar parameter"));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(TEXT("Missing 'value' number field for scalar parameter"));
 		}
 
 		MaterialInstance->SetScalarParameterValueEditorOnly(FName(*ParameterName), static_cast<float>(ScalarValue));
 		MaterialInstance->MarkPackageDirty();
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("parameterName"), ParameterName);
 		Result->SetStringField(TEXT("parameterType"), TEXT("scalar"));
 		Result->SetNumberField(TEXT("value"), ScalarValue);
 		Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
-		Result->SetBoolField(TEXT("success"), true);
+
+		return MCPResult(Result);
 	}
 	else if (TypeLower == TEXT("vector"))
 	{
 		const TSharedPtr<FJsonObject>* ValueObj = nullptr;
 		if (!Params->TryGetObjectField(TEXT("value"), ValueObj))
 		{
-			Result->SetStringField(TEXT("error"), TEXT("Missing 'value' object field (r,g,b,a) for vector parameter"));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(TEXT("Missing 'value' object field (r,g,b,a) for vector parameter"));
 		}
 
 		double R = 0.0, G = 0.0, B = 0.0, A = 1.0;
@@ -1096,20 +979,20 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 		ValueResult->SetNumberField(TEXT("b"), B);
 		ValueResult->SetNumberField(TEXT("a"), A);
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("parameterName"), ParameterName);
 		Result->SetStringField(TEXT("parameterType"), TEXT("vector"));
 		Result->SetObjectField(TEXT("value"), ValueResult);
 		Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
-		Result->SetBoolField(TEXT("success"), true);
+
+		return MCPResult(Result);
 	}
 	else if (TypeLower == TEXT("texture"))
 	{
 		FString TexturePath;
 		if (!Params->TryGetStringField(TEXT("value"), TexturePath) || TexturePath.IsEmpty())
 		{
-			Result->SetStringField(TEXT("error"), TEXT("Missing 'value' string field (texture asset path) for texture parameter"));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(TEXT("Missing 'value' string field (texture asset path) for texture parameter"));
 		}
 
 		UTexture* Texture = Cast<UTexture>(StaticLoadObject(UTexture::StaticClass(), nullptr, *TexturePath));
@@ -1120,85 +1003,70 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 		}
 		if (!Texture)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load texture at '%s'"), *TexturePath));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("Failed to load texture at '%s'"), *TexturePath));
 		}
 
 		MaterialInstance->SetTextureParameterValueEditorOnly(FName(*ParameterName), Texture);
 		MaterialInstance->MarkPackageDirty();
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("parameterName"), ParameterName);
 		Result->SetStringField(TEXT("parameterType"), TEXT("texture"));
 		Result->SetStringField(TEXT("value"), Texture->GetPathName());
 		Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
-		Result->SetBoolField(TEXT("success"), true);
+
+		return MCPResult(Result);
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown parameterType '%s'. Use 'scalar', 'vector', or 'texture'."), *ParameterType));
-		Result->SetBoolField(TEXT("success"), false);
+		return MCPError(FString::Printf(TEXT("Unknown parameterType '%s'. Use 'scalar', 'vector', or 'texture'."), *ParameterType));
 	}
-
-	return MakeShared<FJsonValueObject>(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ConnectExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	int32 SourceIndex = -1;
 	if (!Params->TryGetNumberField(TEXT("sourceIndex"), SourceIndex))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'sourceIndex' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing required parameter 'sourceIndex'"));
 	}
 
 	int32 TargetIndex = -1;
 	if (!Params->TryGetNumberField(TEXT("targetIndex"), TargetIndex))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'targetIndex' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing required parameter 'targetIndex'"));
 	}
 
-	int32 SourceOutputIndex = 0;
-	Params->TryGetNumberField(TEXT("sourceOutputIndex"), SourceOutputIndex);
-
-	int32 TargetInputIndex = 0;
-	Params->TryGetNumberField(TEXT("targetInputIndex"), TargetInputIndex);
+	int32 SourceOutputIndex = OptionalInt(Params, TEXT("sourceOutputIndex"), 0);
+	int32 TargetInputIndex = OptionalInt(Params, TEXT("targetInputIndex"), 0);
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	auto Expressions = Material->GetExpressions();
 
 	if (SourceIndex < 0 || SourceIndex >= Expressions.Num())
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Source expression index %d out of range (0-%d)"), SourceIndex, Expressions.Num() - 1));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Source expression index %d out of range (0-%d)"), SourceIndex, Expressions.Num() - 1));
 	}
 
 	if (TargetIndex < 0 || TargetIndex >= Expressions.Num())
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Target expression index %d out of range (0-%d)"), TargetIndex, Expressions.Num() - 1));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Target expression index %d out of range (0-%d)"), TargetIndex, Expressions.Num() - 1));
 	}
 
 	UMaterialExpression* SourceExpression = Expressions[SourceIndex];
@@ -1206,18 +1074,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectExpression(const TSharedPtr<FJs
 
 	if (!SourceExpression || !TargetExpression)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Source or target expression is null"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Source or target expression is null"));
 	}
 
 	// Validate target input index by probing GetInput()
 	FExpressionInput* TargetInput = TargetExpression->GetInput(TargetInputIndex);
 	if (!TargetInput)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Target input index %d is out of range"), TargetInputIndex));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Target input index %d is out of range"), TargetInputIndex));
 	}
 
 	Material->PreEditChange(nullptr);
@@ -1226,6 +1090,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectExpression(const TSharedPtr<FJs
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetNumberField(TEXT("sourceIndex"), SourceIndex);
 	Result->SetStringField(TEXT("sourceClass"), SourceExpression->GetClass()->GetName());
@@ -1233,73 +1098,57 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectExpression(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("targetClass"), TargetExpression->GetClass()->GetName());
 	Result->SetNumberField(TEXT("sourceOutputIndex"), SourceOutputIndex);
 	Result->SetNumberField(TEXT("targetInputIndex"), TargetInputIndex);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	int32 ExpressionIndex = -1;
 	if (!Params->TryGetNumberField(TEXT("expressionIndex"), ExpressionIndex))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'expressionIndex' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing required parameter 'expressionIndex'"));
 	}
 
 	FString PropertyName;
-	if (!Params->TryGetStringField(TEXT("property"), PropertyName) || PropertyName.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'property' parameter (BaseColor, Normal, Metallic, Roughness, etc.)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("property"), PropertyName)) return Err;
 
-	int32 OutputIndex = 0;
-	Params->TryGetNumberField(TEXT("outputIndex"), OutputIndex);
+	int32 OutputIndex = OptionalInt(Params, TEXT("outputIndex"), 0);
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	auto Expressions = Material->GetExpressions();
 
 	if (ExpressionIndex < 0 || ExpressionIndex >= Expressions.Num())
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Expression index %d out of range (0-%d)"), ExpressionIndex, Expressions.Num() - 1));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Expression index %d out of range (0-%d)"), ExpressionIndex, Expressions.Num() - 1));
 	}
 
 	UMaterialExpression* Expression = Expressions[ExpressionIndex];
 	if (!Expression)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Expression at given index is null"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Expression at given index is null"));
 	}
 
 	EMaterialProperty MatProperty;
 	if (!ParseMaterialProperty(PropertyName, MatProperty))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown material property '%s'. Available: BaseColor, Metallic, Specular, Roughness, Anisotropy, EmissiveColor, Opacity, OpacityMask, Normal, Tangent, WorldPositionOffset, SubsurfaceColor, AmbientOcclusion, Refraction, PixelDepthOffset, ShadingModel"), *PropertyName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown material property '%s'. Available: BaseColor, Metallic, Specular, Roughness, Anisotropy, EmissiveColor, Opacity, OpacityMask, Normal, Tangent, WorldPositionOffset, SubsurfaceColor, AmbientOcclusion, Refraction, PixelDepthOffset, ShadingModel"), *PropertyName));
 	}
 
 	Material->PreEditChange(nullptr);
@@ -1327,9 +1176,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialProperty(const TSharedP
 	case MP_PixelDepthOffset:     PropertyInput = &EditorOnlyData->PixelDepthOffset; break;
 	case MP_ShadingModel:         PropertyInput = &EditorOnlyData->ShadingModelFromMaterialExpression; break;
 	default:
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Material property '%s' is not supported for direct connection"), *PropertyName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Material property '%s' is not supported for direct connection"), *PropertyName));
 	}
 
 	PropertyInput->Connect(OutputIndex, Expression);
@@ -1337,59 +1184,52 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialProperty(const TSharedP
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetNumberField(TEXT("expressionIndex"), ExpressionIndex);
 	Result->SetStringField(TEXT("expressionClass"), Expression->GetClass()->GetName());
 	Result->SetStringField(TEXT("property"), PropertyName);
 	Result->SetNumberField(TEXT("outputIndex"), OutputIndex);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::DeleteExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	int32 ExpressionIndex = -1;
 	if (!Params->TryGetNumberField(TEXT("expressionIndex"), ExpressionIndex))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'expressionIndex' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing required parameter 'expressionIndex'"));
 	}
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	auto Expressions = Material->GetExpressions();
 
 	if (ExpressionIndex < 0 || ExpressionIndex >= Expressions.Num())
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Expression index %d out of range (0-%d)"), ExpressionIndex, Expressions.Num() - 1));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Expression index %d out of range (0-%d)"), ExpressionIndex, Expressions.Num() - 1));
 	}
 
 	UMaterialExpression* Expression = Expressions[ExpressionIndex];
 	if (!Expression)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Expression at given index is null"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Expression at given index is null"));
 	}
 
 	FString DeletedClass = Expression->GetClass()->GetName();
@@ -1401,64 +1241,59 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteExpression(const TSharedPtr<FJso
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetNumberField(TEXT("deletedIndex"), ExpressionIndex);
 	Result->SetStringField(TEXT("deletedClass"), DeletedClass);
 	Result->SetNumberField(TEXT("expressionCount"), Material->GetExpressions().Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	int32 ExpressionIndex = -1;
 	if (!Params->TryGetNumberField(TEXT("expressionIndex"), ExpressionIndex))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'expressionIndex' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing required parameter 'expressionIndex'"));
 	}
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	auto Expressions = Material->GetExpressions();
 
 	if (ExpressionIndex < 0 || ExpressionIndex >= Expressions.Num())
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Expression index %d out of range (0-%d)"), ExpressionIndex, Expressions.Num() - 1));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Expression index %d out of range (0-%d)"), ExpressionIndex, Expressions.Num() - 1));
 	}
 
 	UMaterialExpression* Expression = Expressions[ExpressionIndex];
 	if (!Expression)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Expression at given index is null"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Expression at given index is null"));
 	}
 
 	Material->PreEditChange(nullptr);
 
 	FString ExpressionClass = Expression->GetClass()->GetName();
 	bool bValueSet = false;
+
+	auto Result = MCPSuccess();
 
 	// Handle UMaterialExpressionConstant - has a single float "R" value
 	if (UMaterialExpressionConstant* ConstExpr = Cast<UMaterialExpressionConstant>(Expression))
@@ -1633,9 +1468,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 			else
 			{
 				Material->PostEditChange();
-				Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load texture at '%s'"), *TexturePath));
-				Result->SetBoolField(TEXT("success"), false);
-				return MakeShared<FJsonValueObject>(Result);
+				return MCPError(FString::Printf(TEXT("Failed to load texture at '%s'"), *TexturePath));
 			}
 		}
 	}
@@ -1672,9 +1505,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	if (!bValueSet)
 	{
 		Material->PostEditChange();
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Could not set value on expression of type '%s'. Provide appropriate value parameters for this expression type."), *ExpressionClass));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Could not set value on expression of type '%s'. Provide appropriate value parameters for this expression type."), *ExpressionClass));
 	}
 
 	Material->PostEditChange();
@@ -1683,33 +1514,24 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetNumberField(TEXT("expressionIndex"), ExpressionIndex);
 	Result->SetStringField(TEXT("expressionClass"), ExpressionClass);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFromTexture(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString TexturePath;
-	if (!Params->TryGetStringField(TEXT("texturePath"), TexturePath) || TexturePath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'texturePath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("texturePath"), TexturePath)) return Err;
 
-	FString MaterialName;
-	if (!Params->TryGetStringField(TEXT("materialName"), MaterialName) || MaterialName.IsEmpty())
+	FString MaterialName = OptionalString(Params, TEXT("materialName"));
+	if (MaterialName.IsEmpty())
 	{
 		// Derive a material name from the texture name
 		FString TextureName = FPaths::GetBaseFilename(TexturePath);
 		MaterialName = TEXT("M_") + TextureName;
 	}
 
-	FString PackagePath = TEXT("/Game/Materials");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Materials"));
 
 	// Load the texture
 	UTexture* Texture = Cast<UTexture>(StaticLoadObject(UTexture::StaticClass(), nullptr, *TexturePath));
@@ -1720,9 +1542,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFromTexture(const TShare
 	}
 	if (!Texture)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load texture at '%s'"), *TexturePath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load texture at '%s'"), *TexturePath));
 	}
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] CreateMaterialFromTexture: texture=%s materialName=%s packagePath=%s"), *TexturePath, *MaterialName, *PackagePath);
@@ -1736,17 +1556,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFromTexture(const TShare
 
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create material asset"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create material asset"));
 	}
 
 	UMaterial* NewMaterial = Cast<UMaterial>(NewAsset);
 	if (!NewMaterial)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Created asset is not a material"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Created asset is not a material"));
 	}
 
 	NewMaterial->PreEditChange(nullptr);
@@ -1776,36 +1592,28 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFromTexture(const TShare
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("materialPath"), NewMaterial->GetPathName());
 	Result->SetStringField(TEXT("materialName"), MaterialName);
 	Result->SetStringField(TEXT("texturePath"), Texture->GetPathName());
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
 	Result->SetNumberField(TEXT("expressionCount"), NewMaterial->GetExpressions().Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterialInstance(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UMaterialInstanceConstant* MaterialInstance = LoadMaterialInstanceFromPath(AssetPath);
 	if (!MaterialInstance)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material instance at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material instance at '%s'"), *AssetPath));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), MaterialInstance->GetName());
 	Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
 	Result->SetBoolField(TEXT("isMaterialInstance"), true);
@@ -1869,9 +1677,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterialInstance(const TSharedPtr<
 	Result->SetArrayField(TEXT("vectorOverrides"), VectorOverrides);
 	Result->SetArrayField(TEXT("textureOverrides"), TextureOverrides);
 	Result->SetNumberField(TEXT("totalOverrides"), ScalarOverrides.Num() + VectorOverrides.Num() + TextureOverrides.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 UMaterialExpression* FMaterialHandlers::FindExpressionByName(UMaterial* Material, const FString& ExpressionName)
@@ -1940,23 +1747,19 @@ UMaterialExpression* FMaterialHandlers::FindExpressionByName(UMaterial* Material
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	FString TexturePath;
-	if (!Params->TryGetStringField(TEXT("texturePath"), TexturePath) || TexturePath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'texturePath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("texturePath"), TexturePath)) return Err;
 
 	FString PropertyName = TEXT("BaseColor");
 	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
@@ -1967,9 +1770,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	// Load the texture
@@ -1981,17 +1782,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 	}
 	if (!Texture)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load texture at '%s'"), *TexturePath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load texture at '%s'"), *TexturePath));
 	}
 
 	EMaterialProperty MatProperty;
 	if (!ParseMaterialProperty(PropertyName, MatProperty))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown material property '%s'"), *PropertyName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown material property '%s'"), *PropertyName));
 	}
 
 	Material->PreEditChange(nullptr);
@@ -2037,71 +1834,54 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("texturePath"), Texture->GetPathName());
 	Result->SetStringField(TEXT("property"), PropertyName);
 	Result->SetNumberField(TEXT("expressionCount"), Material->GetExpressions().Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	FString SourceExpressionName;
-	if (!Params->TryGetStringField(TEXT("sourceExpression"), SourceExpressionName) || SourceExpressionName.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'sourceExpression' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("sourceExpression"), SourceExpressionName)) return Err;
 
 	FString TargetExpressionName;
-	if (!Params->TryGetStringField(TEXT("targetExpression"), TargetExpressionName) || TargetExpressionName.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'targetExpression' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("targetExpression"), TargetExpressionName)) return Err;
 
 	// Source/target output/input can be specified by name or index
-	FString SourceOutputName;
-	Params->TryGetStringField(TEXT("sourceOutput"), SourceOutputName);
-	FString TargetInputName;
-	Params->TryGetStringField(TEXT("targetInput"), TargetInputName);
+	FString SourceOutputName = OptionalString(Params, TEXT("sourceOutput"));
+	FString TargetInputName = OptionalString(Params, TEXT("targetInput"));
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	UMaterialExpression* SourceExpression = FindExpressionByName(Material, SourceExpressionName);
 	if (!SourceExpression)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Source expression '%s' not found"), *SourceExpressionName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Source expression '%s' not found"), *SourceExpressionName));
 	}
 
 	UMaterialExpression* TargetExpression = FindExpressionByName(Material, TargetExpressionName);
 	if (!TargetExpression)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Target expression '%s' not found"), *TargetExpressionName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Target expression '%s' not found"), *TargetExpressionName));
 	}
 
 	// Resolve source output index
@@ -2155,9 +1935,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TShar
 	FExpressionInput* TargetInput = TargetExpression->GetInput(TargetInputIndex);
 	if (!TargetInput)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Target input index %d is out of range"), TargetInputIndex));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Target input index %d is out of range"), TargetInputIndex));
 	}
 
 	Material->PreEditChange(nullptr);
@@ -2165,61 +1943,47 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TShar
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("sourceExpression"), SourceExpression->GetClass()->GetName());
 	Result->SetStringField(TEXT("targetExpression"), TargetExpression->GetClass()->GetName());
 	Result->SetNumberField(TEXT("sourceOutputIndex"), SourceOutputIndex);
 	Result->SetNumberField(TEXT("targetInputIndex"), TargetInputIndex);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ConnectToMaterialProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	FString ExpressionName;
-	if (!Params->TryGetStringField(TEXT("expressionName"), ExpressionName) || ExpressionName.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'expressionName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("expressionName"), ExpressionName)) return Err;
 
 	FString PropertyName;
-	if (!Params->TryGetStringField(TEXT("property"), PropertyName) || PropertyName.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'property' parameter (BaseColor, Normal, Metallic, Roughness, etc.)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("property"), PropertyName)) return Err;
 
-	FString OutputName;
-	Params->TryGetStringField(TEXT("outputName"), OutputName);
+	FString OutputName = OptionalString(Params, TEXT("outputName"));
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	UMaterialExpression* Expression = FindExpressionByName(Material, ExpressionName);
 	if (!Expression)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Expression '%s' not found"), *ExpressionName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Expression '%s' not found"), *ExpressionName));
 	}
 
 	// Resolve output index
@@ -2247,9 +2011,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectToMaterialProperty(const TShare
 	EMaterialProperty MatProperty;
 	if (!ParseMaterialProperty(PropertyName, MatProperty))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown material property '%s'"), *PropertyName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown material property '%s'"), *PropertyName));
 	}
 
 	Material->PreEditChange(nullptr);
@@ -2276,9 +2038,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectToMaterialProperty(const TShare
 	case MP_PixelDepthOffset:     PropertyInput = &EditorOnlyData->PixelDepthOffset; break;
 	case MP_ShadingModel:         PropertyInput = &EditorOnlyData->ShadingModelFromMaterialExpression; break;
 	default:
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Material property '%s' is not supported for direct connection"), *PropertyName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Material property '%s' is not supported for direct connection"), *PropertyName));
 	}
 
 	PropertyInput->Connect(OutputIndex, Expression);
@@ -2286,50 +2046,42 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectToMaterialProperty(const TShare
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("expressionName"), ExpressionName);
 	Result->SetStringField(TEXT("expressionClass"), Expression->GetClass()->GetName());
 	Result->SetStringField(TEXT("property"), PropertyName);
 	Result->SetNumberField(TEXT("outputIndex"), OutputIndex);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
+	if (MaterialPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath', 'path', or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		if (MaterialPath.IsEmpty())
+		{
+			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
+		}
 	}
 
 	FString ExpressionName;
-	if (!Params->TryGetStringField(TEXT("expressionName"), ExpressionName) || ExpressionName.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'expressionName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("expressionName"), ExpressionName)) return Err;
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	UMaterialExpression* Expression = FindExpressionByName(Material, ExpressionName);
 	if (!Expression)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Expression '%s' not found"), *ExpressionName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Expression '%s' not found"), *ExpressionName));
 	}
 
 	FString DeletedClass = Expression->GetClass()->GetName();
@@ -2385,53 +2137,37 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TShared
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("deletedExpression"), ExpressionName);
 	Result->SetStringField(TEXT("deletedClass"), DeletedClass);
 	Result->SetNumberField(TEXT("expressionCount"), Material->GetExpressions().Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
-// disconnect_material_property — Clear a material property input (#43)
+// disconnect_material_property -- Clear a material property input (#43)
 // Params: materialPath, property (BaseColor, Normal, Roughness, etc.)
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FMaterialHandlers::DisconnectMaterialProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString MaterialPath;
-	if ((!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath)) || MaterialPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'materialPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("assetPath"), MaterialPath)) return Err;
 
 	FString PropertyName;
-	if (!Params->TryGetStringField(TEXT("property"), PropertyName) || PropertyName.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'property' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("property"), PropertyName)) return Err;
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	UMaterialEditorOnlyData* EditorOnlyData = Material->GetEditorOnlyData();
 	if (!EditorOnlyData)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Material has no editor-only data"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Material has no editor-only data"));
 	}
 
 	Material->PreEditChange(nullptr);
@@ -2464,19 +2200,17 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DisconnectMaterialProperty(const TShar
 
 	if (!bFound)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(
+		return MCPError(FString::Printf(
 			TEXT("Unknown property '%s'. Use: BaseColor, Metallic, Specular, Roughness, EmissiveColor, Opacity, OpacityMask, Normal, Tangent, WorldPositionOffset, SubsurfaceColor, AmbientOcclusion, Refraction, PixelDepthOffset"),
 			*PropertyName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("property"), PropertyName);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

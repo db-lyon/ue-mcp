@@ -1,6 +1,7 @@
 #include "GasHandlers.h"
 #include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Engine/Blueprint.h"
 #include "AssetToolsModule.h"
@@ -37,31 +38,19 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] CreateGameplayEffect called with name: %s"), *Name);
 
-	FString PackagePath = TEXT("/Game/GAS/Effects");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
-
-	FString DurationPolicy = TEXT("Instant");
-	Params->TryGetStringField(TEXT("durationPolicy"), DurationPolicy);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Effects"));
+	FString DurationPolicy = OptionalString(Params, TEXT("durationPolicy"), TEXT("Instant"));
 
 	// Find GameplayEffect class
 	UClass* GameplayEffectClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayEffect"));
 	if (!GameplayEffectClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("GameplayEffect class not found. Enable GameplayAbilities plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("GameplayEffect class not found. Enable GameplayAbilities plugin."));
 	}
 
 	// Create blueprint
@@ -92,9 +81,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJson
 	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(AssetName, PackageName, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create GameplayEffect Blueprint"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create GameplayEffect Blueprint"));
 	}
 
 	NewBlueprint->ParentClass = GameplayEffectClass;
@@ -111,48 +98,41 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJson
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
-	FString AssetPath = NewBlueprint->GetPathName();
-	Result->SetStringField(TEXT("path"), AssetPath);
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("durationPolicy"), DurationPolicy);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::GetGasInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
 	if (!Blueprint || !Blueprint->GeneratedClass)
 	{
 		// Return success with empty info rather than crashing
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 		Result->SetBoolField(TEXT("hasGasComponents"), false);
 		Result->SetStringField(TEXT("info"), TEXT("Blueprint not found or has no generated class"));
-		Result->SetBoolField(TEXT("success"), true);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
 	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
 	if (!CDO)
 	{
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 		Result->SetBoolField(TEXT("hasGasComponents"), false);
 		Result->SetStringField(TEXT("info"), TEXT("No CDO available"));
-		Result->SetBoolField(TEXT("success"), true);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetStringField(TEXT("className"), Blueprint->GeneratedClass->GetName());
 	Result->SetStringField(TEXT("parentClass"), Blueprint->ParentClass ? Blueprint->ParentClass->GetName() : TEXT("None"));
@@ -199,31 +179,20 @@ TSharedPtr<FJsonValue> FGasHandlers::GetGasInfo(const TSharedPtr<FJsonObject>& P
 	UClass* AttrSetClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AttributeSet"));
 	Result->SetBoolField(TEXT("isAttributeSet"), AttrSetClass && Blueprint->GeneratedClass->IsChildOf(AttrSetClass));
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayAbility(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/GAS/Abilities");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Abilities"));
 
 	UClass* GAClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayAbility"));
 	if (!GAClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("GameplayAbility class not found. Enable GameplayAbilities plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("GameplayAbility class not found. Enable GameplayAbilities plugin."));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -239,9 +208,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayAbility(const TSharedPtr<FJso
 	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create GameplayAbility Blueprint"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create GameplayAbility Blueprint"));
 	}
 
 	NewBlueprint->ParentClass = GAClass;
@@ -257,33 +224,23 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayAbility(const TSharedPtr<FJso
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateAttributeSet(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/GAS/Attributes");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Attributes"));
 
 	UClass* AttrSetClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AttributeSet"));
 	if (!AttrSetClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("AttributeSet class not found. Enable GameplayAbilities plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("AttributeSet class not found. Enable GameplayAbilities plugin."));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -298,9 +255,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateAttributeSet(const TSharedPtr<FJsonOb
 	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create AttributeSet Blueprint"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create AttributeSet Blueprint"));
 	}
 
 	NewBlueprint->ParentClass = AttrSetClass;
@@ -316,29 +271,19 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateAttributeSet(const TSharedPtr<FJsonOb
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/GAS/Cues");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
-
-	FString CueType = TEXT("Static");
-	Params->TryGetStringField(TEXT("cueType"), CueType);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Cues"));
+	FString CueType = OptionalString(Params, TEXT("cueType"), TEXT("Static"));
 
 	// Determine parent class based on cue type
 	FString ParentClassPath;
@@ -354,9 +299,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObj
 	UClass* ParentClass = FindObject<UClass>(nullptr, *ParentClassPath);
 	if (!ParentClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("GameplayCue parent class not found: %s. Enable GameplayAbilities plugin."), *ParentClassPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("GameplayCue parent class not found: %s. Enable GameplayAbilities plugin."), *ParentClassPath));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -371,9 +314,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObj
 	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create GameplayCue Blueprint"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create GameplayCue Blueprint"));
 	}
 
 	NewBlueprint->ParentClass = ParentClass;
@@ -389,58 +330,40 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObj
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("cueType"), CueType);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::AddAbilityTag(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
 	FString TagString;
-	if (!Params->TryGetStringField(TEXT("tag"), TagString))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'tag' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("tag"), TagString)) return Err;
 
 	// Load the ability blueprint
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
 	if (!Blueprint || !Blueprint->GeneratedClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
 	}
 
 	// Verify it is a GameplayAbility subclass
 	UClass* GAClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayAbility"));
 	if (!GAClass || !Blueprint->GeneratedClass->IsChildOf(GAClass))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Blueprint is not a GameplayAbility subclass"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Blueprint is not a GameplayAbility subclass"));
 	}
 
 	// Get CDO
 	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
 	if (!CDO)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Could not get CDO for ability blueprint"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Could not get CDO for ability blueprint"));
 	}
 
 	// Request the gameplay tag (this will create it if it does not exist)
@@ -453,26 +376,20 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilityTag(const TSharedPtr<FJsonObject>
 
 	if (!Tag.IsValid())
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Could not resolve gameplay tag: %s"), *TagString));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Could not resolve gameplay tag: %s"), *TagString));
 	}
 
 	// Find the AbilityTags property on the CDO and add the tag
 	FProperty* AbilityTagsProp = GAClass->FindPropertyByName(TEXT("AbilityTags"));
 	if (!AbilityTagsProp)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Could not find AbilityTags property on GameplayAbility"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Could not find AbilityTags property on GameplayAbility"));
 	}
 
 	FGameplayTagContainer* TagContainer = AbilityTagsProp->ContainerPtrToValuePtr<FGameplayTagContainer>(CDO);
 	if (!TagContainer)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Could not access AbilityTags container on CDO"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Could not access AbilityTags container on CDO"));
 	}
 
 	TagContainer->AddTag(Tag);
@@ -490,30 +407,20 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilityTag(const TSharedPtr<FJsonObject>
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetStringField(TEXT("tag"), TagString);
 	Result->SetNumberField(TEXT("totalTags"), TagContainer->Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/GAS/CueNotifies");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
-
-	FString NotifyType = TEXT("Actor");
-	Params->TryGetStringField(TEXT("notifyType"), NotifyType);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/CueNotifies"));
+	FString NotifyType = OptionalString(Params, TEXT("notifyType"), TEXT("Actor"));
 
 	// Determine parent class based on notify type
 	FString ParentClassPath;
@@ -533,9 +440,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJ
 	UClass* ParentClass = FindObject<UClass>(nullptr, *ParentClassPath);
 	if (!ParentClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("%s class not found: %s. Enable GameplayAbilities plugin."), *FriendlyName, *ParentClassPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("%s class not found: %s. Enable GameplayAbilities plugin."), *FriendlyName, *ParentClassPath));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -551,9 +456,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJ
 	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create %s Blueprint"), *FriendlyName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to create %s Blueprint"), *FriendlyName));
 	}
 
 	NewBlueprint->ParentClass = ParentClass;
@@ -570,43 +473,32 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJ
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("notifyType"), NotifyType);
 	Result->SetStringField(TEXT("parentClass"), FriendlyName);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::AddAbilitySystemComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString BPPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BPPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
 
 	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
 	if (!BP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
 	}
 
 	UClass* ASCClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AbilitySystemComponent"));
 	if (!ASCClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("AbilitySystemComponent not found. Enable GameplayAbilities plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("AbilitySystemComponent not found. Enable GameplayAbilities plugin."));
 	}
 
-	FString CompName = TEXT("AbilitySystemComp");
-	Params->TryGetStringField(TEXT("componentName"), CompName);
+	FString CompName = OptionalString(Params, TEXT("componentName"), TEXT("AbilitySystemComp"));
 
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(ASCClass, *CompName);
 	if (NewNode)
@@ -625,37 +517,24 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilitySystemComponent(const TSharedPtr<
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), CompName);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::AddAttribute(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString BPPath;
-	if (!Params->TryGetStringField(TEXT("attributeSetPath"), BPPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'attributeSetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("attributeSetPath"), BPPath)) return Err;
 
 	FString AttrName;
-	if (!Params->TryGetStringField(TEXT("attributeName"), AttrName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'attributeName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("attributeName"), AttrName)) return Err;
 
 	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
 	if (!BP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AttributeSet Blueprint not found: %s"), *BPPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("AttributeSet Blueprint not found: %s"), *BPPath));
 	}
 
 	// Add a FGameplayAttributeData variable
@@ -680,37 +559,27 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAttribute(const TSharedPtr<FJsonObject>&
 		UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("attributeSetPath"), BPPath);
 	Result->SetStringField(TEXT("attributeName"), AttrName);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::SetAbilityTags(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString AbilityPath;
-	if (!Params->TryGetStringField(TEXT("abilityPath"), AbilityPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'abilityPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("abilityPath"), AbilityPath)) return Err;
 
 	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(AbilityPath));
 	if (!BP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Ability Blueprint not found: %s"), *AbilityPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Ability Blueprint not found: %s"), *AbilityPath));
 	}
 
 	UObject* CDO = BP->GeneratedClass ? BP->GeneratedClass->GetDefaultObject() : nullptr;
 	if (!CDO)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Could not get CDO. Compile the blueprint first."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Could not get CDO. Compile the blueprint first."));
 	}
 
 	TSharedPtr<FJsonObject> TagsSet = MakeShared<FJsonObject>();
@@ -741,43 +610,29 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAbilityTags(const TSharedPtr<FJsonObject
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("abilityPath"), AbilityPath);
 	Result->SetObjectField(TEXT("tagsSet"), TagsSet);
-	Result->SetBoolField(TEXT("success"), true);
 	Result->SetStringField(TEXT("note"), TEXT("Tag container modification via C++ reflection is limited. Use execute_python for full tag manipulation."));
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::SetEffectModifier(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString EffectPath;
-	if (!Params->TryGetStringField(TEXT("effectPath"), EffectPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'effectPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("effectPath"), EffectPath)) return Err;
 
 	FString Attribute;
-	if (!Params->TryGetStringField(TEXT("attribute"), Attribute))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'attribute' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("attribute"), Attribute)) return Err;
 
-	FString Operation = TEXT("Additive");
-	Params->TryGetStringField(TEXT("operation"), Operation);
+	FString Operation = OptionalString(Params, TEXT("operation"), TEXT("Additive"));
+	double Magnitude = OptionalNumber(Params, TEXT("magnitude"), 0.0);
 
-	double Magnitude = 0.0;
-	Params->TryGetNumberField(TEXT("magnitude"), Magnitude);
-
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("effectPath"), EffectPath);
 	Result->SetStringField(TEXT("attribute"), Attribute);
 	Result->SetStringField(TEXT("operation"), Operation);
 	Result->SetNumberField(TEXT("magnitude"), Magnitude);
-	Result->SetBoolField(TEXT("success"), true);
 	Result->SetStringField(TEXT("note"), TEXT("GameplayEffect modifier configuration set. Use execute_python for full GE modifier array manipulation."));
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

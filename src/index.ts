@@ -7,6 +7,7 @@ import { ProjectContext } from "./project.js";
 import { deploy, deploySummary } from "./deployer.js";
 import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import { isDirectiveResponse, type ToolDef, type ToolContext } from "./types.js";
+import { McpError } from "./errors.js";
 
 import { projectTool } from "./tools/project.js";
 import { assetTool } from "./tools/asset.js";
@@ -91,8 +92,9 @@ async function main() {
         };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
+        const code = e instanceof McpError ? e.code : "UNKNOWN";
         return {
-          content: [{ type: "text" as const, text: `Error: ${msg}` }],
+          content: [{ type: "text" as const, text: `Error [${code}]: ${msg}` }],
           isError: true,
         };
       }

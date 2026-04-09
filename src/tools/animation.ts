@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { Vec3, Quat } from "../schemas.js";
 
 export const animationTool: ToolDef = categoryTool(
   "animation",
@@ -125,9 +126,9 @@ export const animationTool: ToolDef = categoryTool(
     skeletalMeshPath: z.string().optional().describe("Path to skeletal mesh for create_ik_rig"),
     keyframes: z.array(z.object({
       frame: z.number(),
-      location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
-      rotation: z.object({ x: z.number(), y: z.number(), z: z.number(), w: z.number() }).optional(),
-      scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+      location: Vec3.optional(),
+      rotation: Quat.optional(),
+      scale: Vec3.optional(),
     })).optional(),
   },
 );

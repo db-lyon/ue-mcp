@@ -1,5 +1,6 @@
 #include "WidgetHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -101,10 +102,7 @@ UWidget* FWidgetHandlers::FindWidgetByNameRecursive(UWidget* Root, const FString
 
 TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetBlueprints(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	bool bRecursive = true;
-	Params->TryGetBoolField(TEXT("recursive"), bRecursive);
+	bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -121,27 +119,19 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetBlueprints(const TSharedPtr<FJ
 		AssetsArray.Add(MakeShared<FJsonValueObject>(AssetObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("assets"), AssetsArray);
 	Result->SetNumberField(TEXT("count"), AssetsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/UI/Widgets");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/UI/Widgets"));
 
 	// Delete existing asset if it exists
 	FString FullAssetPath = PackagePath + TEXT("/") + Name;
@@ -156,40 +146,31 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetBlueprint(const TSharedPtr<F
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UWidgetBlueprint::StaticClass(), WidgetFactory);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create WidgetBlueprint"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create WidgetBlueprint"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetTree(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
 	if (!WidgetBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
 	}
+
+	auto Result = MCPSuccess();
 
 	// Recursive lambda to build widget hierarchy
 	TFunction<TSharedPtr<FJsonObject>(UWidget*)> BuildWidgetJson = [&](UWidget* Widget) -> TSharedPtr<FJsonObject>
@@ -233,22 +214,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetTree(const TSharedPtr<FJsonObj
 		Result->SetStringField(TEXT("widgetTree"), TEXT("empty"));
 	}
 
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Path;
-	if (!Params->TryGetStringField(TEXT("path"), Path) && !Params->TryGetStringField(TEXT("assetPath"), Path))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), Path)) return Err;
 
 	// Split path into package path and asset name
 	FString PackagePath;
@@ -256,18 +228,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 	Path.Split(TEXT("/"), &PackagePath, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
 	if (AssetName.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Invalid path format. Expected '/Game/.../AssetName'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Invalid path format. Expected '/Game/.../AssetName'"));
 	}
 
 	// Find EditorUtilityWidgetBlueprint class
 	UClass* EUWBClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityWidgetBlueprint"));
 	if (!EUWBClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("EditorUtilityWidgetBlueprint class not found. Enable Blutility plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("EditorUtilityWidgetBlueprint class not found. Enable Blutility plugin."));
 	}
 
 	// Delete existing asset if it exists
@@ -283,31 +251,22 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, EUWBClass, WidgetFactory);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create EditorUtilityWidgetBlueprint"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create EditorUtilityWidgetBlueprint"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), AssetName);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Path;
-	if (!Params->TryGetStringField(TEXT("path"), Path) && !Params->TryGetStringField(TEXT("assetPath"), Path))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), Path)) return Err;
 
 	// Split path into package path and asset name
 	FString PackagePath;
@@ -315,18 +274,14 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 	Path.Split(TEXT("/"), &PackagePath, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
 	if (AssetName.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Invalid path format. Expected '/Game/.../AssetName'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Invalid path format. Expected '/Game/.../AssetName'"));
 	}
 
 	// Find EditorUtilityBlueprint class
 	UClass* EUBClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityBlueprint"));
 	if (!EUBClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("EditorUtilityBlueprint class not found. Enable Blutility plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("EditorUtilityBlueprint class not found. Enable Blutility plugin."));
 	}
 
 	// Delete existing asset if it exists
@@ -338,54 +293,36 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, EUBClass, nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create EditorUtilityBlueprint"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create EditorUtilityBlueprint"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), AssetName);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::SearchWidgetByName(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString WidgetName;
-	if (!Params->TryGetStringField(TEXT("widgetName"), WidgetName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'widgetName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
 	if (!WidgetBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
 	}
 
 	if (!WidgetBP->WidgetTree)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("WidgetTree is null"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("WidgetTree is null"));
 	}
 
 	// Search recursively from root
@@ -406,9 +343,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SearchWidgetByName(const TSharedPtr<FJso
 
 	if (!FoundWidget)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
 	}
 
 	TSharedPtr<FJsonObject> WidgetObj = MakeShared<FJsonObject>();
@@ -431,46 +366,30 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SearchWidgetByName(const TSharedPtr<FJso
 		WidgetObj->SetNumberField(TEXT("childCount"), AsPanel->GetChildrenCount());
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetObjectField(TEXT("widget"), WidgetObj);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString WidgetName;
-	if (!Params->TryGetStringField(TEXT("widgetName"), WidgetName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'widgetName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
 	if (!WidgetBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
 	}
 
 	if (!WidgetBP->WidgetTree)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("WidgetTree is null"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("WidgetTree is null"));
 	}
 
 	// Find the widget
@@ -485,9 +404,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetProperties(const TSharedPtr<FJs
 
 	if (!FoundWidget)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
 	}
 
 	TSharedPtr<FJsonObject> PropsObj = MakeShared<FJsonObject>();
@@ -620,62 +537,36 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetProperties(const TSharedPtr<FJs
 		PropsObj->SetStringField(TEXT("parentClass"), ParentWidget->GetClass()->GetName());
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetObjectField(TEXT("properties"), PropsObj);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString WidgetName;
-	if (!Params->TryGetStringField(TEXT("widgetName"), WidgetName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'widgetName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 
 	FString PropertyName;
-	if (!Params->TryGetStringField(TEXT("propertyName"), PropertyName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
 	FString PropertyValue;
-	if (!Params->TryGetStringField(TEXT("propertyValue"), PropertyValue) && !Params->TryGetStringField(TEXT("value"), PropertyValue))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyValue' or 'value' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("propertyValue"), TEXT("value"), PropertyValue)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
 	if (!WidgetBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
 	}
 
 	if (!WidgetBP->WidgetTree)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("WidgetTree is null"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("WidgetTree is null"));
 	}
 
 	// Find the widget
@@ -690,9 +581,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 
 	if (!FoundWidget)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
 	}
 
 	bool bPropertySet = false;
@@ -1000,39 +889,29 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 		FKismetEditorUtilities::CompileBlueprint(WidgetBP);
 		UEditorAssetLibrary::SaveAsset(AssetPath);
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("widgetName"), WidgetName);
 		Result->SetStringField(TEXT("propertyName"), PropertyName);
 		Result->SetStringField(TEXT("propertyValue"), PropertyValue);
-		Result->SetBoolField(TEXT("success"), true);
+
+		return MCPResult(Result);
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to set property '%s' on widget '%s'. Property not found or value format invalid."), *PropertyName, *WidgetName));
-		Result->SetBoolField(TEXT("success"), false);
+		return MCPError(FString::Printf(TEXT("Failed to set property '%s' on widget '%s'. Property not found or value format invalid."), *PropertyName, *WidgetName));
 	}
-
-	return MakeShared<FJsonValueObject>(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetAnimations(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
 	if (!WidgetBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> AnimationsArray;
@@ -1124,87 +1003,65 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetAnimations(const TSharedPtr<FJ
 		AnimationsArray.Add(MakeShared<FJsonValueObject>(AnimObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("animations"), AnimationsArray);
 	Result->SetNumberField(TEXT("count"), AnimationsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UEditorUtilityWidgetBlueprint* EUWidget = Cast<UEditorUtilityWidgetBlueprint>(LoadedAsset);
 	if (!EUWidget)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load EditorUtilityWidgetBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load EditorUtilityWidgetBlueprint at '%s'"), *AssetPath));
 	}
 
 	UEditorUtilitySubsystem* Subsystem = GEditor->GetEditorSubsystem<UEditorUtilitySubsystem>();
 	if (!Subsystem)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("EditorUtilitySubsystem not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("EditorUtilitySubsystem not available"));
 	}
 
 	Subsystem->SpawnAndRegisterTab(EUWidget);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), EUWidget->GetName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UEditorUtilityBlueprint* EUBlueprint = Cast<UEditorUtilityBlueprint>(LoadedAsset);
 	if (!EUBlueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load EditorUtilityBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load EditorUtilityBlueprint at '%s'"), *AssetPath));
 	}
 
 	UEditorUtilitySubsystem* Subsystem = GEditor->GetEditorSubsystem<UEditorUtilitySubsystem>();
 	if (!Subsystem)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("EditorUtilitySubsystem not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("EditorUtilitySubsystem not available"));
 	}
 
 	Subsystem->TryRun(LoadedAsset);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), EUBlueprint->GetName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ── Well-known short names → UClass lookup ────────────────────────────
@@ -1264,67 +1121,45 @@ static UClass* ResolveWidgetClass(const FString& ClassName)
 
 TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	// ── Required: assetPath ──
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	// ── Required: widgetClass (e.g. "TextBlock", "CanvasPanel") ──
 	FString WidgetClassName;
-	if (!Params->TryGetStringField(TEXT("widgetClass"), WidgetClassName) && !Params->TryGetStringField(TEXT("typeName"), WidgetClassName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'widgetClass' parameter (e.g. TextBlock, CanvasPanel, Image)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("widgetClass"), TEXT("typeName"), WidgetClassName)) return Err;
 
 	// ── Optional: widgetName, parentWidgetName ──
-	FString WidgetName;
-	Params->TryGetStringField(TEXT("widgetName"), WidgetName);
-	if (WidgetName.IsEmpty()) Params->TryGetStringField(TEXT("name"), WidgetName);
+	FString WidgetName = OptionalString(Params, TEXT("widgetName"));
+	if (WidgetName.IsEmpty()) WidgetName = OptionalString(Params, TEXT("name"));
 
-	FString ParentWidgetName;
-	Params->TryGetStringField(TEXT("parentWidgetName"), ParentWidgetName);
+	FString ParentWidgetName = OptionalString(Params, TEXT("parentWidgetName"));
 
 	// ── Load the WidgetBlueprint ──
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
 	if (!WidgetBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
 	}
 
 	if (!WidgetBP->WidgetTree)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("WidgetTree is null"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("WidgetTree is null"));
 	}
 
 	// ── Resolve the UClass ──
 	UClass* WClass = ResolveWidgetClass(WidgetClassName);
 	if (!WClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown widget class '%s'. Use short names like TextBlock, CanvasPanel, Image, Button, etc."), *WidgetClassName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown widget class '%s'. Use short names like TextBlock, CanvasPanel, Image, Button, etc."), *WidgetClassName));
 	}
 
 	// ── Construct the widget ──
 	UWidget* NewWidget = WidgetBP->WidgetTree->ConstructWidget<UWidget>(WClass, WidgetName.IsEmpty() ? NAME_None : FName(*WidgetName));
 	if (!NewWidget)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to construct widget of class '%s'"), *WidgetClassName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to construct widget of class '%s'"), *WidgetClassName));
 	}
 
 	// ── Place in hierarchy ──
@@ -1343,25 +1178,19 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 
 		if (!ParentRaw)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Parent widget '%s' not found"), *ParentWidgetName));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("Parent widget '%s' not found"), *ParentWidgetName));
 		}
 
 		UPanelWidget* ParentPanel = Cast<UPanelWidget>(ParentRaw);
 		if (!ParentPanel)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Parent widget '%s' (%s) is not a panel widget and cannot have children"), *ParentWidgetName, *ParentRaw->GetClass()->GetName()));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("Parent widget '%s' (%s) is not a panel widget and cannot have children"), *ParentWidgetName, *ParentRaw->GetClass()->GetName()));
 		}
 
 		UPanelSlot* Slot = ParentPanel->AddChild(NewWidget);
 		if (!Slot)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to add '%s' as child of '%s'"), *NewWidget->GetName(), *ParentWidgetName));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("Failed to add '%s' as child of '%s'"), *NewWidget->GetName(), *ParentWidgetName));
 		}
 	}
 	else if (WidgetBP->WidgetTree->RootWidget == nullptr)
@@ -1380,9 +1209,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 		}
 		else
 		{
-			Result->SetStringField(TEXT("error"), TEXT("Root widget is not a panel. Specify parentWidgetName or set a panel as root first."));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(TEXT("Root widget is not a panel. Specify parentWidgetName or set a panel as root first."));
 		}
 	}
 
@@ -1397,6 +1224,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("widgetName"), NewWidget->GetName());
 	Result->SetStringField(TEXT("widgetClass"), WClass->GetName());
 	Result->SetBoolField(TEXT("isRoot"), bIsRoot);
@@ -1404,45 +1232,28 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	{
 		Result->SetStringField(TEXT("parentWidgetName"), ParentWidgetName);
 	}
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString WidgetName;
-	if (!Params->TryGetStringField(TEXT("widgetName"), WidgetName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'widgetName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
 	if (!WidgetBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
 	}
 
 	if (!WidgetBP->WidgetTree)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("WidgetTree is null"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("WidgetTree is null"));
 	}
 
 	// Find the widget
@@ -1457,9 +1268,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 
 	if (!FoundWidget)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
 	}
 
 	FString RemovedClass = FoundWidget->GetClass()->GetName();
@@ -1484,48 +1293,29 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("widgetName"), WidgetName);
 	Result->SetStringField(TEXT("widgetClass"), RemovedClass);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString WidgetName;
-	if (!Params->TryGetStringField(TEXT("widgetName"), WidgetName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'widgetName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 
 	FString NewParentName;
-	if (!Params->TryGetStringField(TEXT("newParentWidgetName"), NewParentName) && !Params->TryGetStringField(TEXT("parentWidgetName"), NewParentName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'newParentWidgetName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("newParentWidgetName"), TEXT("parentWidgetName"), NewParentName)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
 	if (!WidgetBP || !WidgetBP->WidgetTree)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
 	}
 
 	// Find the widget to move
@@ -1539,24 +1329,18 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 
 	if (!WidgetToMove)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
 	}
 
 	if (!NewParentRaw)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("New parent not found: '%s'"), *NewParentName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("New parent not found: '%s'"), *NewParentName));
 	}
 
 	UPanelWidget* NewParentPanel = Cast<UPanelWidget>(NewParentRaw);
 	if (!NewParentPanel)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("New parent '%s' (%s) is not a panel widget"), *NewParentName, *NewParentRaw->GetClass()->GetName()));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("New parent '%s' (%s) is not a panel widget"), *NewParentName, *NewParentRaw->GetClass()->GetName()));
 	}
 
 	// Remove from current parent
@@ -1580,18 +1364,16 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("widgetName"), WidgetName);
 	Result->SetStringField(TEXT("oldParent"), OldParentName);
 	Result->SetStringField(TEXT("newParent"), NewParentName);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetClasses(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	struct FWidgetClassInfo { FString Name; FString Category; };
 	TArray<FWidgetClassInfo> Classes = {
 		// Panels / containers
@@ -1646,9 +1428,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetClasses(const TSharedPtr<FJson
 		ClassesArray.Add(MakeShared<FJsonValueObject>(Obj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("classes"), ClassesArray);
 	Result->SetNumberField(TEXT("count"), ClassesArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

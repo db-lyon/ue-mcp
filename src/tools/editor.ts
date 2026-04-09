@@ -2,6 +2,7 @@ import { z } from "zod";
 import { categoryTool, bp, directive, type ToolDef, type ToolContext } from "../types.js";
 import { startEditor, stopEditor, restartEditor } from "../editor-control.js";
 import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
+import { Vec3, Rotator } from "../schemas.js";
 
 export const editorTool: ToolDef = categoryTool(
   "editor",
@@ -150,8 +151,8 @@ export const editorTool: ToolDef = categoryTool(
     level: z.string().optional(),
     filename: z.string().optional(),
     resolution: z.number().optional(),
-    location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
-    rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional(),
+    location: Vec3.optional(),
+    rotation: Rotator.optional(),
     name: z.string().optional(),
     packagePath: z.string().optional(),
     assetPath: z.string().optional(),

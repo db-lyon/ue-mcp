@@ -1,5 +1,6 @@
 #include "NetworkingHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "Engine/Blueprint.h"
 #include "GameFramework/Actor.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -72,18 +73,12 @@ void FNetworkingHandlers::SaveBlueprint(UBlueprint* Blueprint)
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::GetNetworkingInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MakeShared<FJsonValueObject>(Result);
+	if (!CDO) return MCPResult(Result);
 
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("replicates"), CDO->GetIsReplicated());
@@ -95,26 +90,19 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::GetNetworkingInfo(const TSharedPtr<F
 	Result->SetNumberField(TEXT("netDormancy"), (int32)CDO->NetDormancy);
 	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetReplicates(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MakeShared<FJsonValueObject>(Result);
+	if (!CDO) return MCPResult(Result);
 
-	bool bReplicates = false;
-	Params->TryGetBoolField(TEXT("replicates"), bReplicates);
+	bool bReplicates = OptionalBool(Params, TEXT("replicates"), false);
 	CDO->SetReplicates(bReplicates);
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
@@ -123,23 +111,17 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetReplicates(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("replicates"), bReplicates);
 	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetUpdateFrequency(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MakeShared<FJsonValueObject>(Result);
+	if (!CDO) return MCPResult(Result);
 
 	double NetUpdateFrequency = 0;
 	if (Params->TryGetNumberField(TEXT("netUpdateFrequency"), NetUpdateFrequency))
@@ -159,26 +141,20 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetUpdateFrequency(const TS
 	Result->SetNumberField(TEXT("netUpdateFrequency"), CDO->GetNetUpdateFrequency());
 	Result->SetNumberField(TEXT("minNetUpdateFrequency"), CDO->GetMinNetUpdateFrequency());
 	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetDormancy(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MakeShared<FJsonValueObject>(Result);
+	if (!CDO) return MCPResult(Result);
 
-	FString Dormancy;
-	if (Params->TryGetStringField(TEXT("dormancy"), Dormancy))
+	FString Dormancy = OptionalString(Params, TEXT("dormancy"));
+	if (!Dormancy.IsEmpty())
 	{
 		if (Dormancy == TEXT("DORM_Never"))
 			CDO->NetDormancy = DORM_Never;
@@ -198,26 +174,19 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetDormancy(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetNumberField(TEXT("netDormancy"), (int32)CDO->NetDormancy);
 	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetAlwaysRelevant(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MakeShared<FJsonValueObject>(Result);
+	if (!CDO) return MCPResult(Result);
 
-	bool bAlwaysRelevant = false;
-	Params->TryGetBoolField(TEXT("alwaysRelevant"), bAlwaysRelevant);
+	bool bAlwaysRelevant = OptionalBool(Params, TEXT("alwaysRelevant"), false);
 	CDO->bAlwaysRelevant = bAlwaysRelevant;
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
@@ -226,29 +195,20 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetAlwaysRelevant(const TSharedPtr<F
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("alwaysRelevant"), bAlwaysRelevant);
 	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetPriority(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MakeShared<FJsonValueObject>(Result);
+	if (!CDO) return MCPResult(Result);
 
-	double NetPriority = 1.0;
-	if (Params->TryGetNumberField(TEXT("netPriority"), NetPriority))
-	{
-		CDO->NetPriority = (float)NetPriority;
-	}
+	double NetPriority = OptionalNumber(Params, TEXT("netPriority"), 1.0);
+	CDO->NetPriority = (float)NetPriority;
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
 	SaveBlueprint(Blueprint);
@@ -256,26 +216,19 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetPriority(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetNumberField(TEXT("netPriority"), CDO->NetPriority);
 	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetReplicateMovement(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MakeShared<FJsonValueObject>(Result);
+	if (!CDO) return MCPResult(Result);
 
-	bool bReplicateMovement = false;
-	Params->TryGetBoolField(TEXT("replicateMovement"), bReplicateMovement);
+	bool bReplicateMovement = OptionalBool(Params, TEXT("replicateMovement"), false);
 	CDO->SetReplicatingMovement(bReplicateMovement);
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
@@ -284,38 +237,23 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetReplicateMovement(const TSharedPt
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("replicateMovement"), bReplicateMovement);
 	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetVariableReplication(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
 	FString VariableName;
-	if (!Params->TryGetStringField(TEXT("variableName"), VariableName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'variableName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("variableName"), VariableName)) return Err;
 
-	FString ReplicationType = TEXT("None");
-	Params->TryGetStringField(TEXT("replicationType"), ReplicationType);
+	FString ReplicationType = OptionalString(Params, TEXT("replicationType"), TEXT("None"));
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
 	}
 
 	// Find the variable in the blueprint
@@ -332,9 +270,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetVariableReplication(const TShared
 
 	if (!VarDesc)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Variable '%s' not found in blueprint"), *VariableName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Variable '%s' not found in blueprint"), *VariableName));
 	}
 
 	// Set the replication condition
@@ -343,14 +279,12 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetVariableReplication(const TShared
 		VarDesc->PropertyFlags |= CPF_Net;
 		VarDesc->PropertyFlags &= ~CPF_RepNotify;
 		VarDesc->ReplicationCondition = COND_None;
-		// Replication condition is already set on VarDesc above
 	}
 	else if (ReplicationType == TEXT("RepNotify"))
 	{
 		VarDesc->PropertyFlags |= CPF_Net;
 		VarDesc->PropertyFlags |= CPF_RepNotify;
 		VarDesc->ReplicationCondition = COND_None;
-		// Replication condition is already set on VarDesc above
 	}
 	else // "None"
 	{
@@ -360,42 +294,32 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetVariableReplication(const TShared
 
 	SaveBlueprint(Blueprint);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetStringField(TEXT("variableName"), VariableName);
 	Result->SetStringField(TEXT("replicationType"), ReplicationType);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::GetReplicationInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
 	if (!Blueprint || !Blueprint->GeneratedClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
 	}
 
 	AActor* CDO = Cast<AActor>(Blueprint->GeneratedClass->GetDefaultObject());
 	if (!CDO)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("CDO is not an Actor"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("CDO is not an Actor"));
 	}
 
 	// General replication info
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("replicates"), CDO->GetIsReplicated());
 	Result->SetBoolField(TEXT("replicateMovement"), CDO->IsReplicatingMovement());
@@ -460,27 +384,19 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::GetReplicationInfo(const TSharedPtr<
 
 	Result->SetArrayField(TEXT("replicatedProperties"), ReplicatedProps);
 	Result->SetNumberField(TEXT("replicatedPropertyCount"), ReplicatedProps.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetOwnerOnlyRelevant(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
-	if (!CDO) return MakeShared<FJsonValueObject>(Result);
+	if (!CDO) return MCPResult(Result);
 
-	bool bOnlyRelevantToOwner = false;
-	Params->TryGetBoolField(TEXT("onlyRelevantToOwner"), bOnlyRelevantToOwner);
+	bool bOnlyRelevantToOwner = OptionalBool(Params, TEXT("onlyRelevantToOwner"), false);
 	CDO->bOnlyRelevantToOwner = bOnlyRelevantToOwner;
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
@@ -489,17 +405,19 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetOwnerOnlyRelevant(const TSharedPt
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("onlyRelevantToOwner"), bOnlyRelevantToOwner);
 	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetLoadOnClient(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(Params->GetStringField(TEXT("blueprintPath")), Result);
-	if (!CDO) return MakeShared<FJsonValueObject>(Result);
+	FString BlueprintPath;
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
-	bool bLoadOnClient = true;
-	Params->TryGetBoolField(TEXT("loadOnClient"), bLoadOnClient);
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
+	if (!CDO) return MCPResult(Result);
+
+	bool bLoadOnClient = OptionalBool(Params, TEXT("loadOnClient"), true);
 
 	FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("bNetLoadOnClient"));
 	if (Prop)
@@ -511,23 +429,25 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetLoadOnClient(const TSharedPtr<
 		}
 	}
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(Params->GetStringField(TEXT("blueprintPath"))));
+	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BlueprintPath));
 	if (BP) SaveBlueprint(BP);
 
-	Result->SetStringField(TEXT("blueprintPath"), Params->GetStringField(TEXT("blueprintPath")));
+	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("loadOnClient"), bLoadOnClient);
 	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetCullDistance(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	AActor* CDO = LoadBlueprintCDO(Params->GetStringField(TEXT("blueprintPath")), Result);
-	if (!CDO) return MakeShared<FJsonValueObject>(Result);
+	FString BlueprintPath;
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
-	double Distance = 225000000.0;
-	Params->TryGetNumberField(TEXT("netCullDistanceSquared"), Distance);
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	AActor* CDO = LoadBlueprintCDO(BlueprintPath, Result);
+	if (!CDO) return MCPResult(Result);
+
+	double Distance = OptionalNumber(Params, TEXT("netCullDistanceSquared"), 225000000.0);
 
 	FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("NetCullDistanceSquared"));
 	if (Prop)
@@ -544,11 +464,11 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetCullDistance(const TShar
 		}
 	}
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(Params->GetStringField(TEXT("blueprintPath"))));
+	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BlueprintPath));
 	if (BP) SaveBlueprint(BP);
 
-	Result->SetStringField(TEXT("blueprintPath"), Params->GetStringField(TEXT("blueprintPath")));
+	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetNumberField(TEXT("netCullDistanceSquared"), Distance);
 	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

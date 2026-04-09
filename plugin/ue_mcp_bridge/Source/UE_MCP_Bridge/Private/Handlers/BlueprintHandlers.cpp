@@ -1,5 +1,6 @@
 #include "BlueprintHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Engine/Blueprint.h"
@@ -51,22 +52,6 @@
 #include "Engine/SkeletalMesh.h"
 #include "EditorAssetLibrary.h"
 
-// Helper: find a UClass by short name (e.g. "AnimInstance" finds UAnimInstance)
-static UClass* FindClassByShortName(const FString& ClassName)
-{
-	UClass* PrefixedMatch = nullptr;
-	for (TObjectIterator<UClass> It; It; ++It)
-	{
-		const FString& Name = It->GetName();
-		if (Name == ClassName) return *It;
-		if (!PrefixedMatch && (Name == TEXT("U") + ClassName || Name == TEXT("A") + ClassName))
-		{
-			PrefixedMatch = *It;
-		}
-	}
-	return PrefixedMatch;
-}
-
 void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("create_blueprint"), &CreateBlueprint);
@@ -108,7 +93,7 @@ UBlueprint* FBlueprintHandlers::LoadBlueprint(const FString& AssetPath)
 	if (BP) return BP;
 
 	// If the path looks like a package path (no '.' after last '/'), try object path format
-	// e.g. "/Game/Foo/BP_Bar" → "/Game/Foo/BP_Bar.BP_Bar"
+	// e.g. "/Game/Foo/BP_Bar" -> "/Game/Foo/BP_Bar.BP_Bar"
 	if (!AssetPath.Contains(TEXT(".")))
 	{
 		FString AssetName;
@@ -120,26 +105,17 @@ UBlueprint* FBlueprintHandlers::LoadBlueprint(const FString& AssetPath)
 }
 
 // ---------------------------------------------------------------------------
-// list_blueprint_graphs — List all graphs in a blueprint (EventGraph, AnimGraph, functions, etc.)
+// list_blueprint_graphs -- List all graphs in a blueprint (EventGraph, AnimGraph, functions, etc.)
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FBlueprintHandlers::ListGraphs(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	TArray<UEdGraph*> AllGraphs;
@@ -156,11 +132,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListGraphs(const TSharedPtr<FJsonObje
 		GraphsArray.Add(MakeShared<FJsonValueObject>(GraphObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetArrayField(TEXT("graphs"), GraphsArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 FEdGraphPinType FBlueprintHandlers::MakePinType(const FString& TypeStr)
@@ -347,20 +323,12 @@ UEdGraphNode* FBlueprintHandlers::FindNodeByGuidOrName(UEdGraph* Graph, const FS
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
-	FString ParentClassName = TEXT("Actor");
-	Params->TryGetStringField(TEXT("parentClass"), ParentClassName);
+	FString ParentClassName = OptionalString(Params, TEXT("parentClass"), TEXT("Actor"));
 
-	// Find parent class — try multiple resolution strategies
+	// Find parent class -- try multiple resolution strategies
 	UClass* ParentClass = nullptr;
 
 	// 1. Try silent short-name search first (handles "Actor", "AActor", "UAnimInstance" etc.)
@@ -374,11 +342,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 
 	if (!ParentClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(
+		return MCPError(FString::Printf(
 			TEXT("Parent class not found: '%s'. Try the full path (e.g. '/Script/Engine.Actor') or the class name without prefix (e.g. 'Actor', 'Pawn', 'Character')."),
 			*ParentClassName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	// Create blueprint
@@ -394,6 +360,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 	if (ExistingBP)
 	{
 		FString ObjectPath = ExistingBP->GetPathName();
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("objectPath"), ObjectPath);
 		Result->SetStringField(TEXT("className"), ExistingBP->GetName());
@@ -402,8 +369,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 			Result->SetStringField(TEXT("parentClass"), ExistingBP->ParentClass->GetPathName());
 		}
 		Result->SetBoolField(TEXT("alreadyExisted"), true);
-		Result->SetBoolField(TEXT("success"), true);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
@@ -411,44 +377,34 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprint(const TSharedPtr<FJso
 	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(AssetName, PackageName, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create Blueprint"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create Blueprint"));
 	}
 
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
 	// Return both the package path and canonical object path
 	FString ObjectPath = NewBlueprint->GetPathName();
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("objectPath"), ObjectPath);
 	Result->SetStringField(TEXT("className"), NewBlueprint->GetName());
 	Result->SetStringField(TEXT("parentClass"), ParentClass->GetPathName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("className"), Blueprint->GetName());
 	if (Blueprint->ParentClass)
@@ -564,40 +520,23 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprint(const TSharedPtr<FJsonO
 	}
 	Result->SetArrayField(TEXT("components"), ComponentsArray);
 
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString VarName;
-	if (!Params->TryGetStringField(TEXT("name"), VarName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), VarName)) return Err;
 
-	FString VarType = TEXT("Float");
-	Params->TryGetStringField(TEXT("type"), VarType);
+	FString VarType = OptionalString(Params, TEXT("type"), TEXT("Float"));
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	// Create pin type
@@ -622,49 +561,32 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 		}
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("variableName"), VarName);
 		Result->SetStringField(TEXT("variableType"), VarType);
-		Result->SetBoolField(TEXT("success"), true);
+		return MCPResult(Result);
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to add variable - FBlueprintEditorUtils::AddMemberVariable returned false"));
-		Result->SetBoolField(TEXT("success"), false);
+		return MCPError(TEXT("Failed to add variable - FBlueprintEditorUtils::AddMemberVariable returned false"));
 	}
-
-	return MakeShared<FJsonValueObject>(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString ComponentClass;
-	if (!Params->TryGetStringField(TEXT("componentClass"), ComponentClass))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'componentClass' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("componentClass"), ComponentClass)) return Err;
 
-	FString ComponentName = ComponentClass;
-	Params->TryGetStringField(TEXT("componentName"), ComponentName);
+	FString ComponentName = OptionalString(Params, TEXT("componentName"), ComponentClass);
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	// Find component class
@@ -676,9 +598,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 
 	if (!CompClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Component class not found: %s"), *ComponentClass));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Component class not found: %s"), *ComponentClass));
 	}
 
 	// Try using SubobjectDataSubsystem (UE5 method)
@@ -725,54 +645,36 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 		}
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentClass"), ComponentClass);
 		Result->SetStringField(TEXT("componentName"), ComponentName);
-		Result->SetBoolField(TEXT("success"), true);
+		return MCPResult(Result);
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to add component via SubobjectDataSubsystem"));
-		Result->SetBoolField(TEXT("success"), false);
+		return MCPError(TEXT("Failed to add component via SubobjectDataSubsystem"));
 	}
-
-	return MakeShared<FJsonValueObject>(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
 	FString InterfacePathStr;
-	if (!Params->TryGetStringField(TEXT("interfacePath"), InterfacePathStr))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'interfacePath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("interfacePath"), InterfacePathStr)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(BlueprintPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
 	}
 
 	UClass* InterfaceClass = LoadObject<UClass>(nullptr, *InterfacePathStr);
 	if (!InterfaceClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Interface not found: %s"), *InterfacePathStr));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Interface not found: %s"), *InterfacePathStr));
 	}
 
 	// Use FBlueprintEditorUtils to add interface
@@ -794,57 +696,39 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPt
 			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 		}
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 		Result->SetStringField(TEXT("interfacePath"), InterfacePathStr);
-		Result->SetBoolField(TEXT("success"), true);
+		return MCPResult(Result);
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to add interface - FBlueprintEditorUtils::AddInterfaceToBlueprint returned false"));
-		Result->SetBoolField(TEXT("success"), false);
+		return MCPError(TEXT("Failed to add interface - FBlueprintEditorUtils::AddInterfaceToBlueprint returned false"));
 	}
-
-	return MakeShared<FJsonValueObject>(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	Result->SetStringField(TEXT("path"), AssetPath);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), AssetPath);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::SearchNodeTypes(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Query;
-	if (!Params->TryGetStringField(TEXT("query"), Query))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'query' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("query"), Query)) return Err;
 
 	TArray<TSharedPtr<FJsonValue>> MatchingTypes;
 	FString LowerQuery = Query.ToLower();
@@ -908,19 +792,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchNodeTypes(const TSharedPtr<FJso
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("results"), MatchingTypes);
 	Result->SetNumberField(TEXT("count"), MatchingTypes.Num());
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::ListNodeTypes(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	FString Category = TEXT("Utilities");
-	Params->TryGetStringField(TEXT("category"), Category);
+	FString Category = OptionalString(Params, TEXT("category"), TEXT("Utilities"));
 
 	TArray<TSharedPtr<FJsonValue>> NodeTypes;
 	FString LowerCategory = Category.ToLower();
@@ -972,32 +852,22 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListNodeTypes(const TSharedPtr<FJsonO
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("category"), Category);
 	Result->SetArrayField(TEXT("nodeTypes"), NodeTypes);
 	Result->SetNumberField(TEXT("count"), NodeTypes.Num());
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintVariables(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Variables;
@@ -1028,40 +898,25 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintVariables(const TSharedP
 		Variables.Add(MakeShared<FJsonValueObject>(VarObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetArrayField(TEXT("variables"), Variables);
 	Result->SetNumberField(TEXT("count"), Variables.Num());
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString VarName;
-	if (!Params->TryGetStringField(TEXT("name"), VarName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), VarName)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	// Find the variable
@@ -1077,9 +932,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 
 	if (!FoundVar)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Variable not found: %s"), *VarName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Variable not found: %s"), *VarName));
 	}
 
 	// Set instance editable
@@ -1123,39 +976,24 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString FunctionName;
-	if (!Params->TryGetStringField(TEXT("functionName"), FunctionName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'functionName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("functionName"), FunctionName)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
@@ -1166,9 +1004,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 	);
 	if (!NewGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create function: %s"), *FunctionName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to create function: %s"), *FunctionName));
 	}
 
 	FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, NewGraph, /*bIsUserCreated=*/true, /*SignatureFromObject=*/nullptr);
@@ -1185,31 +1021,21 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintFunctions(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Functions;
@@ -1222,43 +1048,27 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintFunctions(const TSharedP
 		Functions.Add(MakeShared<FJsonValueObject>(FuncObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetArrayField(TEXT("functions"), Functions);
 	Result->SetNumberField(TEXT("count"), Functions.Num());
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
-	FString GraphName = TEXT("EventGraph");
-	Params->TryGetStringField(TEXT("graphName"), GraphName);
+	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
 
 	FString NodeClass;
-	if (!Params->TryGetStringField(TEXT("nodeClass"), NodeClass))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeClass' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("nodeClass"), NodeClass)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	// Find the target graph
@@ -1266,9 +1076,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 
 	if (!TargetGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Graph not found: %s"), *GraphName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
 	// Get optional node params
@@ -1297,18 +1105,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 
 	if (!NodeUClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Node class not found: %s (must be a UEdGraphNode subclass)"), *NodeClass));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Node class not found: %s (must be a UEdGraphNode subclass)"), *NodeClass));
 	}
 
 	// Create node instance
 	UEdGraphNode* NewNode = NewObject<UEdGraphNode>(TargetGraph, NodeUClass);
 	if (!NewNode)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create node"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create node"));
 	}
 
 	// Special-case initialization for known types (must happen BEFORE AllocateDefaultPins)
@@ -1426,7 +1230,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 
 				if (!EventClassName.IsEmpty())
 				{
-					// Engine event override — bind via EventReference
+					// Engine event override -- bind via EventReference
 					UClass* EventClass = FindClassByShortName(EventClassName);
 					if (!EventClass) EventClass = Blueprint->ParentClass;
 
@@ -1442,7 +1246,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 				}
 				else
 				{
-					// Custom event — just set the name
+					// Custom event -- just set the name
 					EventNode->CustomFunctionName = FName(*EventName);
 				}
 			}
@@ -1484,7 +1288,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		}
 	}
 
-	// Common initialization (works for all UEdGraphNode subclasses — K2, AnimGraph, etc.)
+	// Common initialization (works for all UEdGraphNode subclasses -- K2, AnimGraph, etc.)
 	TargetGraph->AddNode(NewNode, false, false);
 	NewNode->CreateNewGuid();
 	NewNode->PostPlacedNewNode();
@@ -1502,6 +1306,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeClass"), NewNode->GetClass()->GetName());
@@ -1520,32 +1325,21 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		PinsArray.Add(MakeShared<FJsonValueObject>(PinObj));
 	}
 	Result->SetArrayField(TEXT("pins"), PinsArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
-	FString GraphName = TEXT("EventGraph");
-	Params->TryGetStringField(TEXT("graphName"), GraphName);
+	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	// Find the graph in UbergraphPages and FunctionGraphs
@@ -1553,9 +1347,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 
 	if (!TargetGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Graph not found: %s"), *GraphName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Nodes;
@@ -1589,41 +1381,26 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 		Nodes.Add(MakeShared<FJsonValueObject>(NodeObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetArrayField(TEXT("nodes"), Nodes);
 	Result->SetNumberField(TEXT("nodeCount"), Nodes.Num());
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
 	FString DispatcherName;
-	if (!Params->TryGetStringField(TEXT("name"), DispatcherName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), DispatcherName)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(BlueprintPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
 	}
 
 	// Add multicast delegate variable with a proper signature graph
@@ -1667,53 +1444,32 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 		}
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 		Result->SetStringField(TEXT("name"), DispatcherName);
-		Result->SetBoolField(TEXT("success"), true);
+		return MCPResult(Result);
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to add event dispatcher: %s"), *DispatcherName));
-		Result->SetBoolField(TEXT("success"), false);
+		return MCPError(FString::Printf(TEXT("Failed to add event dispatcher: %s"), *DispatcherName));
 	}
-
-	return MakeShared<FJsonValueObject>(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString OldName;
-	if (!Params->TryGetStringField(TEXT("oldName"), OldName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'oldName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("oldName"), OldName)) return Err;
 
 	FString NewName;
-	if (!Params->TryGetStringField(TEXT("newName"), NewName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'newName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("newName"), NewName)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	// Find the function graph
@@ -1729,9 +1485,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJson
 
 	if (!FoundGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Function not found: %s"), *OldName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Function not found: %s"), *OldName));
 	}
 
 	FBlueprintEditorUtils::RenameGraph(FoundGraph, NewName);
@@ -1748,40 +1502,25 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJson
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("oldName"), OldName);
 	Result->SetStringField(TEXT("newName"), NewName);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString FunctionName;
-	if (!Params->TryGetStringField(TEXT("functionName"), FunctionName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'functionName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("functionName"), FunctionName)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	// Find the function graph
@@ -1797,9 +1536,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 
 	if (!FoundGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Function not found: %s"), *FunctionName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Function not found: %s"), *FunctionName));
 	}
 
 	FBlueprintEditorUtils::RemoveGraph(Blueprint, FoundGraph);
@@ -1816,24 +1553,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprintInterface(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	// Create a Blueprint Interface asset
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -1850,18 +1579,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprintInterface(const TShare
 	UBlueprint* NewInterface = Cast<UBlueprint>(AssetTools.CreateAsset(AssetName, PackageName, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewInterface)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create Blueprint Interface"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create Blueprint Interface"));
 	}
 
 	FKismetEditorUtilities::CompileBlueprint(NewInterface);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("name"), NewInterface->GetName());
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ============================================================================
@@ -1870,8 +1596,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprintInterface(const TShare
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::ListNodeTypesDetailed(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	// Static catalog of common K2Node types with descriptions and categories
 	struct FNodeTypeEntry
 	{
@@ -1950,8 +1674,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListNodeTypesDetailed(const TSharedPt
 		{ TEXT("Reroute"), TEXT("Utility"), TEXT("Reroute node for cleaner wiring"), TEXT("K2Node_Knot") },
 	};
 
-	FString FilterCategory;
-	Params->TryGetStringField(TEXT("category"), FilterCategory);
+	FString FilterCategory = OptionalString(Params, TEXT("category"));
 	FString LowerFilter = FilterCategory.ToLower();
 
 	TArray<TSharedPtr<FJsonValue>> NodeTypesArray;
@@ -1974,27 +1697,18 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListNodeTypesDetailed(const TSharedPt
 		NodeTypesArray.Add(MakeShared<FJsonValueObject>(NodeObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("nodeTypes"), NodeTypesArray);
 	Result->SetNumberField(TEXT("count"), NodeTypesArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallableFunctions(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Query;
-	if (!Params->TryGetStringField(TEXT("query"), Query))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'query' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("query"), Query)) return Err;
 
-	int32 MaxResults = 50;
-	Params->TryGetNumberField(TEXT("maxResults"), MaxResults);
+	int32 MaxResults = OptionalInt(Params, TEXT("maxResults"), 50);
 
 	FString LowerQuery = Query.ToLower();
 
@@ -2010,8 +1724,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallableFunctions(const TShared
 	LibraryClasses.Add(APlayerController::StaticClass());
 
 	// Optionally filter by a specific class
-	FString TargetClassName;
-	if (Params->TryGetStringField(TEXT("targetClass"), TargetClassName))
+	FString TargetClassName = OptionalString(Params, TEXT("targetClass"));
+	if (!TargetClassName.IsEmpty())
 	{
 		UClass* TargetClass = FindObject<UClass>(nullptr, *TargetClassName);
 		if (!TargetClass)
@@ -2105,93 +1819,56 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallableFunctions(const TShared
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("results"), ResultsArray);
 	Result->SetNumberField(TEXT("count"), ResultsArray.Num());
 	Result->SetStringField(TEXT("query"), Query);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
-	FString GraphName = TEXT("EventGraph");
-	Params->TryGetStringField(TEXT("graphName"), GraphName);
+	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
 
 	FString SourceNodeId;
-	if (!Params->TryGetStringField(TEXT("sourceNodeId"), SourceNodeId) && !Params->TryGetStringField(TEXT("sourceNode"), SourceNodeId))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'sourceNode' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("sourceNodeId"), TEXT("sourceNode"), SourceNodeId)) return Err;
 
 	FString SourcePinName;
-	if (!Params->TryGetStringField(TEXT("sourcePinName"), SourcePinName) && !Params->TryGetStringField(TEXT("sourcePin"), SourcePinName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'sourcePin' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("sourcePinName"), TEXT("sourcePin"), SourcePinName)) return Err;
 
 	FString TargetNodeId;
-	if (!Params->TryGetStringField(TEXT("targetNodeId"), TargetNodeId) && !Params->TryGetStringField(TEXT("targetNode"), TargetNodeId))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'targetNode' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("targetNodeId"), TEXT("targetNode"), TargetNodeId)) return Err;
 
 	FString TargetPinName;
-	if (!Params->TryGetStringField(TEXT("targetPinName"), TargetPinName) && !Params->TryGetStringField(TEXT("targetPin"), TargetPinName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'targetPin' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("targetPinName"), TEXT("targetPin"), TargetPinName)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
 	if (!TargetGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Graph not found: %s"), *GraphName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
 	// Find source node
 	UEdGraphNode* SourceNode = FindNodeByGuidOrName(TargetGraph, SourceNodeId);
 	if (!SourceNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Source node not found: %s"), *SourceNodeId));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Source node not found: %s"), *SourceNodeId));
 	}
 
 	// Find target node
 	UEdGraphNode* TargetNode = FindNodeByGuidOrName(TargetGraph, TargetNodeId);
 	if (!TargetNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Target node not found: %s"), *TargetNodeId));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Target node not found: %s"), *TargetNodeId));
 	}
 
 	// Find source pin
@@ -2206,9 +1883,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	}
 	if (!SourcePin)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Source pin not found: '%s' on node '%s'"), *SourcePinName, *SourceNodeId));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Source pin not found: '%s' on node '%s'"), *SourcePinName, *SourceNodeId));
 	}
 
 	// Find target pin
@@ -2223,18 +1898,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	}
 	if (!TargetPin)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Target pin not found: '%s' on node '%s'"), *TargetPinName, *TargetNodeId));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Target pin not found: '%s' on node '%s'"), *TargetPinName, *TargetNodeId));
 	}
 
 	// Use the graph's own schema (K2 for EventGraphs, AnimationGraph schema for AnimGraphs, etc.)
 	const UEdGraphSchema* Schema = TargetGraph->GetSchema();
 	if (!Schema)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Graph has no schema"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Graph has no schema"));
 	}
 
 	bool bConnected = Schema->TryCreateConnection(SourcePin, TargetPin);
@@ -2253,13 +1924,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 		}
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("graphName"), GraphName);
 		Result->SetStringField(TEXT("sourceNodeId"), SourceNodeId);
 		Result->SetStringField(TEXT("sourcePinName"), SourcePinName);
 		Result->SetStringField(TEXT("targetNodeId"), TargetNodeId);
 		Result->SetStringField(TEXT("targetPinName"), TargetPinName);
-		Result->SetBoolField(TEXT("success"), true);
+		return MCPResult(Result);
 	}
 	else
 	{
@@ -2270,59 +1942,37 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		{
 			ErrorMsg = FString::Printf(TEXT("Connection failed: %s"), *Response.Message.ToString());
 		}
-		Result->SetStringField(TEXT("error"), ErrorMsg);
-		Result->SetBoolField(TEXT("success"), false);
+		return MCPError(ErrorMsg);
 	}
-
-	return MakeShared<FJsonValueObject>(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
-	FString GraphName = TEXT("EventGraph");
-	Params->TryGetStringField(TEXT("graphName"), GraphName);
+	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
 
 	FString NodeId;
-	if (!Params->TryGetStringField(TEXT("nodeId"), NodeId) && !Params->TryGetStringField(TEXT("nodeName"), NodeId))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeId' or 'nodeName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("nodeId"), TEXT("nodeName"), NodeId)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
 	if (!TargetGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Graph not found: %s"), *GraphName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
 	// Find the node
 	UEdGraphNode* NodeToDelete = FindNodeByGuidOrName(TargetGraph, NodeId);
 	if (!NodeToDelete)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Node not found: %s"), *NodeId));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeId));
 	}
 
 	// Break all pin links before removing
@@ -2343,76 +1993,46 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeId"), NodeId);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
-	FString GraphName = TEXT("EventGraph");
-	Params->TryGetStringField(TEXT("graphName"), GraphName);
+	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
 
 	FString NodeId;
-	if (!Params->TryGetStringField(TEXT("nodeId"), NodeId) && !Params->TryGetStringField(TEXT("nodeName"), NodeId))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeId' or 'nodeName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("nodeId"), TEXT("nodeName"), NodeId)) return Err;
 
 	FString PinName;
-	if (!Params->TryGetStringField(TEXT("pinName"), PinName) && !Params->TryGetStringField(TEXT("propertyName"), PinName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'pinName' or 'propertyName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("pinName"), TEXT("propertyName"), PinName)) return Err;
 
 	FString DefaultValue;
-	if (!Params->TryGetStringField(TEXT("defaultValue"), DefaultValue) && !Params->TryGetStringField(TEXT("value"), DefaultValue))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'defaultValue' or 'value' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("defaultValue"), TEXT("value"), DefaultValue)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
 	if (!TargetGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Graph not found: %s"), *GraphName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
 	// Find the node
 	UEdGraphNode* TargetNode = FindNodeByGuidOrName(TargetGraph, NodeId);
 	if (!TargetNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Node not found: %s"), *NodeId));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeId));
 	}
 
 	// First try to find a pin with this name
@@ -2443,7 +2063,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 
 	if (!bSetViaPin)
 	{
-		// No pin found — try setting as a node property via reflection.
+		// No pin found -- try setting as a node property via reflection.
 		// Supports dotted paths like "Node.IKBone.BoneName" for AnimGraph inner structs.
 		TArray<FString> PathParts;
 		PinName.ParseIntoArray(PathParts, TEXT("."));
@@ -2459,7 +2079,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 
 			if (i < PathParts.Num() - 1)
 			{
-				// Intermediate path segment — drill into struct
+				// Intermediate path segment -- drill into struct
 				FStructProperty* StructProp = CastField<FStructProperty>(Prop);
 				if (!StructProp) break;
 				CurrentContainer = StructProp->ContainerPtrToValuePtr<void>(CurrentContainer);
@@ -2482,7 +2102,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 
 	if (!bSetViaPin && !bSetViaProperty)
 	{
-		// Neither pin nor property found — build a helpful error
+		// Neither pin nor property found -- build a helpful error
 		TArray<FString> PinNames;
 		for (UEdGraphPin* Pin : TargetNode->Pins)
 		{
@@ -2495,11 +2115,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 			PropNames.Add(It->GetName());
 		}
 
-		Result->SetStringField(TEXT("error"), FString::Printf(
+		return MCPError(FString::Printf(
 			TEXT("'%s' not found as pin or property. Pins: [%s]. Properties: [%s]"),
 			*PinName, *FString::Join(PinNames, TEXT(", ")), *FString::Join(PropNames, TEXT(", "))));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	// Compile and save
@@ -2514,71 +2132,44 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeId"), NodeId);
 	Result->SetStringField(TEXT("propertyName"), PinName);
 	Result->SetStringField(TEXT("value"), DefaultValue);
 	Result->SetStringField(TEXT("setVia"), bSetViaPin ? TEXT("pin") : TEXT("property"));
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
-// set_component_property — Set a property on an SCS component template
+// set_component_property -- Set a property on an SCS component template
 // Params: assetPath, componentName, propertyName, value
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString ComponentName;
-	if (!Params->TryGetStringField(TEXT("componentName"), ComponentName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'componentName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
 
 	FString PropertyName;
-	if (!Params->TryGetStringField(TEXT("propertyName"), PropertyName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
 	FString Value;
-	if (!Params->TryGetStringField(TEXT("value"), Value))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'value' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("value"), Value)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
 	if (!SCS)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?)"));
 	}
 
 	// Find the SCS node by variable name or component template name
@@ -2646,11 +2237,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 				}
 			}
 		}
-		Result->SetStringField(TEXT("error"), FString::Printf(
+		return MCPError(FString::Printf(
 			TEXT("Component '%s' not found. Available: [%s]"),
 			*ComponentName, *FString::Join(Names, TEXT(", "))));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	// Navigate dotted property paths (e.g. "RelativeLocation.X")
@@ -2687,12 +2276,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 		{
 			PropNames.Add(It->GetName());
 		}
-		Result->SetStringField(TEXT("error"), FString::Printf(
+		return MCPError(FString::Printf(
 			TEXT("Property '%s' not found on %s. Properties: [%s]"),
 			*PropertyName, *Template->GetClass()->GetName(),
 			*FString::Join(PropNames, TEXT(", "))));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	// For object reference properties, try loading the asset by path first
@@ -2712,10 +2299,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 		}
 		else
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(
+			return MCPError(FString::Printf(
 				TEXT("Could not load object at '%s' for property '%s'"), *Value, *PropertyName));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
 		}
 	}
 	else if (FSoftObjectProperty* SoftProp = CastField<FSoftObjectProperty>(FinalProp))
@@ -2743,69 +2328,45 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("value"), Value);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
-// set_class_default — Set a UPROPERTY on a Blueprint's Class Default Object
+// set_class_default -- Set a UPROPERTY on a Blueprint's Class Default Object
 // Params: assetPath, propertyName, value
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString PropertyName;
-	if (!Params->TryGetStringField(TEXT("propertyName"), PropertyName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
 	FString Value;
-	if (!Params->TryGetStringField(TEXT("value"), Value))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'value' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("value"), Value)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	UClass* GenClass = Blueprint->GeneratedClass;
 	if (!GenClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Blueprint has no GeneratedClass (needs compilation first?)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Blueprint has no GeneratedClass (needs compilation first?)"));
 	}
 
 	UObject* CDO = GenClass->GetDefaultObject();
 	if (!CDO)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Could not get Class Default Object"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Could not get Class Default Object"));
 	}
 
 	// Navigate dotted property paths (e.g. "EjectConfigs.Cork.Force")
@@ -2841,19 +2402,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 		{
 			PropNames.Add(It->GetName());
 		}
-		Result->SetStringField(TEXT("error"), FString::Printf(
+		return MCPError(FString::Printf(
 			TEXT("Property '%s' not found on %s. Properties: [%s]"),
 			*PropertyName, *GenClass->GetName(),
 			*FString::Join(PropNames, TEXT(", "))));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
 
 	if (FClassProperty* ClassProp = CastField<FClassProperty>(FinalProp))
 	{
-		// TSubclassOf<T> — load the class by path or short name
+		// TSubclassOf<T> -- load the class by path or short name
 		UClass* ClassVal = LoadObject<UClass>(nullptr, *Value);
 		if (!ClassVal) ClassVal = FindClassByShortName(Value);
 		if (ClassVal)
@@ -2862,10 +2421,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 		}
 		else
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(
+			return MCPError(FString::Printf(
 				TEXT("Could not find class '%s' for property '%s'"), *Value, *PropertyName));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
 		}
 	}
 	else if (FSoftClassProperty* SoftClassProp = CastField<FSoftClassProperty>(FinalProp))
@@ -2881,10 +2438,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 		}
 		else
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(
+			return MCPError(FString::Printf(
 				TEXT("Could not load object at '%s' for property '%s'"), *Value, *PropertyName));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
 		}
 	}
 	else if (FSoftObjectProperty* SoftProp = CastField<FSoftObjectProperty>(FinalProp))
@@ -2899,10 +2454,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 		const TCHAR* ImportResult = FinalProp->ImportText_Direct(*Value, ValuePtr, CDO, PPF_None);
 		if (!ImportResult)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(
+			return MCPError(FString::Printf(
 				TEXT("ImportText failed for property '%s' with value '%s'. Check UE text format."), *PropertyName, *Value));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
 		}
 	}
 
@@ -2919,52 +2472,35 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("value"), Value);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
-// remove_component — Remove an SCS component from a Blueprint
+// remove_component -- Remove an SCS component from a Blueprint
 // Params: assetPath, componentName
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString ComponentName;
-	if (!Params->TryGetStringField(TEXT("componentName"), ComponentName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'componentName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
 	if (!SCS)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Blueprint has no SimpleConstructionScript (not an Actor blueprint?)"));
 	}
 
 	// Find the SCS node by variable name or component template name
@@ -2990,11 +2526,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 				Names.Add(Node->GetVariableName().ToString());
 			}
 		}
-		Result->SetStringField(TEXT("error"), FString::Printf(
+		return MCPError(FString::Printf(
 			TEXT("Component '%s' not found. Available: [%s]"),
 			*ComponentName, *FString::Join(Names, TEXT(", "))));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	// Remove via SubobjectDataSubsystem if available
@@ -3040,49 +2574,33 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 		}
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentName"), ComponentName);
-		Result->SetBoolField(TEXT("success"), true);
+		return MCPResult(Result);
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to remove component"));
-		Result->SetBoolField(TEXT("success"), false);
+		return MCPError(TEXT("Failed to remove component"));
 	}
-
-	return MakeShared<FJsonValueObject>(Result);
 }
 
 // ---------------------------------------------------------------------------
-// delete_variable — Delete a member variable from a Blueprint
+// delete_variable -- Delete a member variable from a Blueprint
 // Params: assetPath, name
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString VarName;
-	if (!Params->TryGetStringField(TEXT("name"), VarName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), VarName)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	// Check that the variable exists
@@ -3103,11 +2621,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 		{
 			Names.Add(Var.VarName.ToString());
 		}
-		Result->SetStringField(TEXT("error"), FString::Printf(
+		return MCPError(FString::Printf(
 			TEXT("Variable '%s' not found. Available: [%s]"),
 			*VarName, *FString::Join(Names, TEXT(", "))));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, FName(*VarName));
@@ -3124,57 +2640,35 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
-// add_function_parameter — Add an input or output parameter to a Blueprint function
+// add_function_parameter -- Add an input or output parameter to a Blueprint function
 // Params: assetPath, functionName, parameterName, parameterType, isOutput?
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString FunctionName;
-	if (!Params->TryGetStringField(TEXT("functionName"), FunctionName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'functionName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("functionName"), FunctionName)) return Err;
 
 	FString ParamName;
-	if (!Params->TryGetStringField(TEXT("parameterName"), ParamName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'parameterName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("parameterName"), ParamName)) return Err;
 
-	FString ParamType = TEXT("Float");
-	Params->TryGetStringField(TEXT("parameterType"), ParamType);
+	FString ParamType = OptionalString(Params, TEXT("parameterType"), TEXT("Float"));
 
-	bool bIsOutput = false;
-	Params->TryGetBoolField(TEXT("isOutput"), bIsOutput);
+	bool bIsOutput = OptionalBool(Params, TEXT("isOutput"), false);
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	// Find the function graph
@@ -3190,9 +2684,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 
 	if (!FuncGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Function not found: %s"), *FunctionName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Function not found: %s"), *FunctionName));
 	}
 
 	// Find the function entry node (K2Node_FunctionEntry) or result node
@@ -3208,9 +2700,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 
 	if (!EntryNode)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Function entry node not found in graph"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Function entry node not found in graph"));
 	}
 
 	FEdGraphPinType PinType = MakePinType(ParamType);
@@ -3285,55 +2775,35 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
 	Result->SetStringField(TEXT("parameterName"), ParamName);
 	Result->SetStringField(TEXT("parameterType"), ParamType);
 	Result->SetBoolField(TEXT("isOutput"), bIsOutput);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
-// set_variable_default — Set the default value of a Blueprint variable
+// set_variable_default -- Set the default value of a Blueprint variable
 // Bypasses CDO restrictions by setting via FBlueprintEditorUtils on the BP variable description
 // Params: assetPath, name, value
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString VarName;
-	if (!Params->TryGetStringField(TEXT("name"), VarName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), VarName)) return Err;
 
 	FString Value;
-	if (!Params->TryGetStringField(TEXT("value"), Value))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'value' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("value"), Value)) return Err;
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
 	// Find the variable description
@@ -3354,11 +2824,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 		{
 			Names.Add(Var.VarName.ToString());
 		}
-		Result->SetStringField(TEXT("error"), FString::Printf(
+		return MCPError(FString::Printf(
 			TEXT("Variable '%s' not found. Available: [%s]"),
 			*VarName, *FString::Join(Names, TEXT(", "))));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	// Set default value string on the variable description.
@@ -3415,10 +2883,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
 	Result->SetStringField(TEXT("value"), Value);
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

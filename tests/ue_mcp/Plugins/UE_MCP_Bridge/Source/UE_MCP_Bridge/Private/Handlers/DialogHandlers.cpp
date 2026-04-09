@@ -1,6 +1,7 @@
 #include "DialogHandlers.h"
 #include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "Misc/CoreDelegates.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
@@ -98,23 +99,14 @@ EAppReturnType::Type FDialogHandlers::HandleModalDialog(EAppMsgType::Type MsgTyp
 
 TSharedPtr<FJsonValue> FDialogHandlers::SetDialogPolicy(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Pattern;
 	if (!Params->TryGetStringField(TEXT("pattern"), Pattern) || Pattern.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'pattern' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing or empty 'pattern' parameter"));
 	}
 
 	FString ResponseStr;
-	if (!Params->TryGetStringField(TEXT("response"), ResponseStr))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'response' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("response"), ResponseStr)) return Err;
 
 	EAppReturnType::Type Response = ParseResponseType(ResponseStr);
 
@@ -133,20 +125,20 @@ TSharedPtr<FJsonValue> FDialogHandlers::SetDialogPolicy(const TSharedPtr<FJsonOb
 		InstallDialogHook();
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("pattern"), Pattern);
 	Result->SetStringField(TEXT("response"), ResponseTypeToString(Response));
 	Result->SetNumberField(TEXT("policyCount"), Policies.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FDialogHandlers::ClearDialogPolicy(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
-	FString Pattern;
-	if (Params->TryGetStringField(TEXT("pattern"), Pattern) && !Pattern.IsEmpty())
+	FString Pattern = OptionalString(Params, TEXT("pattern"));
+	if (!Pattern.IsEmpty())
 	{
 		int32 Removed = Policies.RemoveAll([&Pattern](const FDialogPolicy& P) { return P.Pattern == Pattern; });
 		Result->SetStringField(TEXT("pattern"), Pattern);
@@ -160,14 +152,13 @@ TSharedPtr<FJsonValue> FDialogHandlers::ClearDialogPolicy(const TSharedPtr<FJson
 	}
 
 	Result->SetNumberField(TEXT("policyCount"), Policies.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FDialogHandlers::GetDialogPolicy(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
 	TArray<TSharedPtr<FJsonValue>> PoliciesArray;
 	for (const FDialogPolicy& Policy : Policies)
@@ -181,14 +172,13 @@ TSharedPtr<FJsonValue> FDialogHandlers::GetDialogPolicy(const TSharedPtr<FJsonOb
 	Result->SetArrayField(TEXT("policies"), PoliciesArray);
 	Result->SetNumberField(TEXT("count"), Policies.Num());
 	Result->SetBoolField(TEXT("hookInstalled"), bHookInstalled);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 	TArray<TSharedPtr<FJsonValue>> DialogsArray;
 
 	if (FSlateApplication::IsInitialized())
@@ -279,35 +269,26 @@ TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject
 
 	Result->SetArrayField(TEXT("dialogs"), DialogsArray);
 	Result->SetNumberField(TEXT("count"), DialogsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	if (!FSlateApplication::IsInitialized())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Slate not initialized"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Slate not initialized"));
 	}
 
 	TSharedPtr<SWindow> ActiveModal = FSlateApplication::Get().GetActiveModalWindow();
 	if (!ActiveModal.IsValid())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("No active modal dialog"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("No active modal dialog"));
 	}
 
 	// Determine action: buttonIndex, buttonLabel, or key simulation
-	FString ButtonLabel;
-	int32 ButtonIndex = -1;
-	Params->TryGetStringField(TEXT("buttonLabel"), ButtonLabel);
-	Params->TryGetNumberField(TEXT("buttonIndex"), ButtonIndex);
+	FString ButtonLabel = OptionalString(Params, TEXT("buttonLabel"));
+	int32 ButtonIndex = OptionalInt(Params, TEXT("buttonIndex"), -1);
 
 	// Find buttons in the dialog
 	TArray<TSharedRef<SButton>> Buttons;
@@ -368,6 +349,8 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 		TargetIndex = ButtonIndex;
 	}
 
+	auto Result = MCPSuccess();
+
 	if (TargetIndex >= 0 && TargetIndex < Buttons.Num())
 	{
 		// Simulate the button click
@@ -397,18 +380,16 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 
 		Result->SetStringField(TEXT("clickedButton"), ButtonTexts[TargetIndex]);
 		Result->SetNumberField(TEXT("buttonIndex"), TargetIndex);
-		Result->SetBoolField(TEXT("success"), true);
 	}
 	else
 	{
 		// Fallback: send Escape key to dismiss
-		FString Action;
-		if (Params->TryGetStringField(TEXT("action"), Action) && Action == TEXT("escape"))
+		FString Action = OptionalString(Params, TEXT("action"));
+		if (Action == TEXT("escape"))
 		{
 			FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
 			FSlateApplication::Get().ProcessKeyUpEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
 			Result->SetStringField(TEXT("action"), TEXT("escape"));
-			Result->SetBoolField(TEXT("success"), true);
 		}
 		else
 		{
@@ -417,13 +398,13 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 			{
 				AvailableButtons.Add(MakeShared<FJsonValueString>(T));
 			}
+			Result->SetBoolField(TEXT("success"), false);
 			Result->SetArrayField(TEXT("availableButtons"), AvailableButtons);
 			Result->SetStringField(TEXT("error"), TEXT("Button not found. Provide buttonIndex or buttonLabel matching an available button."));
-			Result->SetBoolField(TEXT("success"), false);
 		}
 	}
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 EAppReturnType::Type FDialogHandlers::ParseResponseType(const FString& ResponseStr)

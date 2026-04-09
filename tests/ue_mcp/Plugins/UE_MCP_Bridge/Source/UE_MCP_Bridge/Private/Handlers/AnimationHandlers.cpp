@@ -1,5 +1,6 @@
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -102,10 +103,9 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimAssets(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
-	bool bRecursive = true;
-	Params->TryGetBoolField(TEXT("recursive"), bRecursive);
+	bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -136,17 +136,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimAssets(const TSharedPtr<FJson
 
 	Result->SetArrayField(TEXT("assets"), AssetsArray);
 	Result->SetNumberField(TEXT("count"), AssetsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListSkeletalMeshes(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
-	bool bRecursive = true;
-	Params->TryGetBoolField(TEXT("recursive"), bRecursive);
+	bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -165,39 +163,29 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListSkeletalMeshes(const TSharedPtr<F
 
 	Result->SetArrayField(TEXT("assets"), AssetsArray);
 	Result->SetNumberField(TEXT("count"), AssetsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::GetSkeletonInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(LoadedAsset);
 	if (!SkeletalMesh)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *AssetPath));
 	}
 
 	USkeleton* Skeleton = SkeletalMesh->GetSkeleton();
 	if (!Skeleton)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("SkeletalMesh has no Skeleton"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("SkeletalMesh has no Skeleton"));
 	}
+
+	auto Result = MCPSuccess();
 
 	const FReferenceSkeleton& RefSkeleton = Skeleton->GetReferenceSkeleton();
 	TArray<TSharedPtr<FJsonValue>> BonesArray;
@@ -213,39 +201,29 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetSkeletonInfo(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("skeletonName"), Skeleton->GetName());
 	Result->SetArrayField(TEXT("bones"), BonesArray);
 	Result->SetNumberField(TEXT("boneCount"), BonesArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListSockets(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(LoadedAsset);
 	if (!SkeletalMesh)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *AssetPath));
 	}
 
 	USkeleton* Skeleton = SkeletalMesh->GetSkeleton();
 	if (!Skeleton)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("SkeletalMesh has no Skeleton"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("SkeletalMesh has no Skeleton"));
 	}
+
+	auto Result = MCPSuccess();
 
 	TArray<TSharedPtr<FJsonValue>> SocketsArray;
 	const TArray<USkeletalMeshSocket*>& Sockets = Skeleton->Sockets;
@@ -280,39 +258,29 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListSockets(const TSharedPtr<FJsonObj
 
 	Result->SetArrayField(TEXT("sockets"), SocketsArray);
 	Result->SetNumberField(TEXT("count"), SocketsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::GetPhysicsAssetInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(LoadedAsset);
 	if (!SkeletalMesh)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *AssetPath));
 	}
 
 	UPhysicsAsset* PhysicsAsset = SkeletalMesh->GetPhysicsAsset();
 	if (!PhysicsAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("SkeletalMesh has no PhysicsAsset"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("SkeletalMesh has no PhysicsAsset"));
 	}
+
+	auto Result = MCPSuccess();
 
 	Result->SetStringField(TEXT("physicsAssetName"), PhysicsAsset->GetName());
 	Result->SetStringField(TEXT("physicsAssetPath"), PhysicsAsset->GetPathName());
@@ -329,9 +297,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetPhysicsAssetInfo(const TSharedPtr<
 	}
 
 	Result->SetArrayField(TEXT("bodies"), BodiesArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -339,24 +306,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetPhysicsAssetInfo(const TSharedPtr<
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(LoadedAsset);
 	if (!AnimBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimBlueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimBlueprint at '%s'"), *AssetPath));
 	}
+
+	auto Result = MCPSuccess();
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), AnimBP->GetName());
@@ -421,8 +381,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimBlueprint(const TSharedPtr<FJ
 	}
 	Result->SetArrayField(TEXT("stateMachines"), StateMachinesArray);
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -430,24 +389,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimBlueprint(const TSharedPtr<FJ
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimMontage(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UAnimMontage* Montage = Cast<UAnimMontage>(LoadedAsset);
 	if (!Montage)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
 	}
+
+	auto Result = MCPSuccess();
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), Montage->GetName());
@@ -517,8 +469,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimMontage(const TSharedPtr<FJso
 	}
 	Result->SetArrayField(TEXT("slotAnimTracks"), SlotTracksArray);
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -526,24 +477,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimMontage(const TSharedPtr<FJso
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimSequence(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UAnimSequence* AnimSeq = Cast<UAnimSequence>(LoadedAsset);
 	if (!AnimSeq)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AssetPath));
 	}
+
+	auto Result = MCPSuccess();
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), AnimSeq->GetName());
@@ -598,8 +542,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimSequence(const TSharedPtr<FJs
 	}
 	Result->SetArrayField(TEXT("curveNames"), CurvesArray);
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -607,38 +550,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimSequence(const TSharedPtr<FJs
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString SkeletonPath;
-	if (!Params->TryGetStringField(TEXT("skeletonPath"), SkeletonPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'skeletonPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
 
-	FString PackagePath = TEXT("/Game/Animations");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
-
-	FString ParentClassName;
-	Params->TryGetStringField(TEXT("parentClass"), ParentClassName);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
+	FString ParentClassName = OptionalString(Params, TEXT("parentClass"));
 
 	// Load the skeleton
 	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
 	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
 	if (!Skeleton)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
 
 	// Delete existing asset if present
@@ -665,19 +591,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UAnimBlueprint::StaticClass(), Factory);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create AnimBlueprint"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create AnimBlueprint"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), NewAsset->GetName());
 	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -685,35 +609,20 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString AnimSequencePath;
-	if (!Params->TryGetStringField(TEXT("animSequencePath"), AnimSequencePath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'animSequencePath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("animSequencePath"), AnimSequencePath)) return Err;
 
-	FString PackagePath = TEXT("/Game/Animations");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
 
 	// Load the source anim sequence
 	UObject* SourceAsset = UEditorAssetLibrary::LoadAsset(AnimSequencePath);
 	UAnimSequence* SourceSequence = Cast<UAnimSequence>(SourceAsset);
 	if (!SourceSequence)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimSequencePath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimSequencePath));
 	}
 
 	// Delete existing asset if present
@@ -731,19 +640,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UAnimMontage::StaticClass(), Factory);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create AnimMontage"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create AnimMontage"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), NewAsset->GetName());
 	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -751,24 +658,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::ReadBlendspace(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UBlendSpace* BlendSpace = Cast<UBlendSpace>(LoadedAsset);
 	if (!BlendSpace)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load BlendSpace at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load BlendSpace at '%s'"), *AssetPath));
 	}
+
+	auto Result = MCPSuccess();
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), BlendSpace->GetName());
@@ -824,8 +724,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadBlendspace(const TSharedPtr<FJson
 	Result->SetArrayField(TEXT("samples"), SamplesArray);
 	Result->SetNumberField(TEXT("sampleCount"), SamplesArray.Num());
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -833,43 +732,26 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadBlendspace(const TSharedPtr<FJson
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString NotifyName;
-	if (!Params->TryGetStringField(TEXT("notifyName"), NotifyName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'notifyName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("notifyName"), NotifyName)) return Err;
 
 	double TriggerTime = 0.0;
 	if (!Params->TryGetNumberField(TEXT("triggerTime"), TriggerTime))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'triggerTime' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'triggerTime' parameter"));
 	}
 
-	FString NotifyClassName;
-	Params->TryGetStringField(TEXT("notifyClass"), NotifyClassName);
+	FString NotifyClassName = OptionalString(Params, TEXT("notifyClass"));
 
 	// Load the animation asset — could be a montage or a sequence
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UAnimSequenceBase* AnimAsset = Cast<UAnimSequenceBase>(LoadedAsset);
 	if (!AnimAsset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimSequenceBase at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimSequenceBase at '%s'"), *AssetPath));
 	}
 
 	// Clamp trigger time to valid range
@@ -911,6 +793,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	// Save the asset
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("notifyName"), NotifyName);
 	Result->SetNumberField(TEXT("triggerTime"), ClampedTime);
@@ -918,9 +801,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	{
 		Result->SetStringField(TEXT("notifyClass"), NewNotify->GetClass()->GetName());
 	}
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -928,50 +810,27 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString SkeletonPath;
-	if (!Params->TryGetStringField(TEXT("skeletonPath"), SkeletonPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'skeletonPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
 
-	FString PackagePath = TEXT("/Game/Animations");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
+	FString AxisHorizontal = OptionalString(Params, TEXT("axisHorizontal"), TEXT("Speed"));
+	FString AxisVertical = OptionalString(Params, TEXT("axisVertical"), TEXT("Direction"));
 
-	FString AxisHorizontal = TEXT("Speed");
-	Params->TryGetStringField(TEXT("axisHorizontal"), AxisHorizontal);
-
-	FString AxisVertical = TEXT("Direction");
-	Params->TryGetStringField(TEXT("axisVertical"), AxisVertical);
-
-	double HorizontalMin = 0.0;
-	double HorizontalMax = 500.0;
-	double VerticalMin = -180.0;
-	double VerticalMax = 180.0;
-	Params->TryGetNumberField(TEXT("horizontalMin"), HorizontalMin);
-	Params->TryGetNumberField(TEXT("horizontalMax"), HorizontalMax);
-	Params->TryGetNumberField(TEXT("verticalMin"), VerticalMin);
-	Params->TryGetNumberField(TEXT("verticalMax"), VerticalMax);
+	double HorizontalMin = OptionalNumber(Params, TEXT("horizontalMin"), 0.0);
+	double HorizontalMax = OptionalNumber(Params, TEXT("horizontalMax"), 500.0);
+	double VerticalMin = OptionalNumber(Params, TEXT("verticalMin"), -180.0);
+	double VerticalMax = OptionalNumber(Params, TEXT("verticalMax"), 180.0);
 
 	// Load the skeleton
 	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
 	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
 	if (!Skeleton)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
 
 	// Delete existing asset if present
@@ -988,9 +847,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UBlendSpace::StaticClass(), Factory);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create BlendSpace"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create BlendSpace"));
 	}
 
 	// Configure axis settings on the newly created BlendSpace
@@ -1010,14 +867,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), NewAsset->GetName());
 	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
 	Result->SetStringField(TEXT("axisHorizontal"), AxisHorizontal);
 	Result->SetStringField(TEXT("axisVertical"), AxisVertical);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -1026,32 +883,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString SkeletonPath;
-	if (!Params->TryGetStringField(TEXT("skeletonPath"), SkeletonPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'skeletonPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
 
-	FString PackagePath = TEXT("/Game/Animations");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
-
-	double FrameRate = 30.0;
-	Params->TryGetNumberField(TEXT("frameRate"), FrameRate);
-
-	double NumFrames = 30.0;
-	Params->TryGetNumberField(TEXT("numFrames"), NumFrames);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
+	double FrameRate = OptionalNumber(Params, TEXT("frameRate"), 30.0);
+	double NumFrames = OptionalNumber(Params, TEXT("numFrames"), 30.0);
 
 	// Load the skeleton
 	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
@@ -1067,9 +907,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 	}
 	if (!Skeleton)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
 
 	// Delete existing asset if present
@@ -1081,18 +919,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 	UPackage* Package = CreatePackage(*PackageName);
 	if (!Package)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create package"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create package"));
 	}
 
 	// Create the AnimSequence
 	UAnimSequence* NewSeq = NewObject<UAnimSequence>(Package, *Name, RF_Public | RF_Standalone);
 	if (!NewSeq)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create AnimSequence"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create AnimSequence"));
 	}
 
 	NewSeq->SetSkeleton(Skeleton);
@@ -1121,15 +955,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 	// Save
 	UEditorAssetLibrary::SaveAsset(FullAssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), FullAssetPath);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("skeleton"), Skeleton->GetPathName());
 	Result->SetNumberField(TEXT("numFrames"), NumFrames);
 	Result->SetNumberField(TEXT("frameRate"), FrameRate);
 	Result->SetNumberField(TEXT("sequenceLength"), NewSeq->GetPlayLength());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -1139,30 +973,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString BoneName;
-	if (!Params->TryGetStringField(TEXT("boneName"), BoneName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'boneName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("boneName"), BoneName)) return Err;
 
 	const TArray<TSharedPtr<FJsonValue>>* KeyframesArray;
 	if (!Params->TryGetArrayField(TEXT("keyframes"), KeyframesArray))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'keyframes' array parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'keyframes' array parameter"));
 	}
 
 	// Load the anim sequence
@@ -1170,27 +990,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 	UAnimSequence* AnimSeq = Cast<UAnimSequence>(LoadedAsset);
 	if (!AnimSeq)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AssetPath));
 	}
 
 	// Verify bone exists in skeleton
 	USkeleton* Skeleton = AnimSeq->GetSkeleton();
 	if (!Skeleton)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("AnimSequence has no Skeleton"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("AnimSequence has no Skeleton"));
 	}
 
 	const FReferenceSkeleton& RefSkeleton = Skeleton->GetReferenceSkeleton();
 	int32 BoneIndex = RefSkeleton.FindBoneIndex(FName(*BoneName));
 	if (BoneIndex == INDEX_NONE)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Bone '%s' not found in skeleton"), *BoneName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Bone '%s' not found in skeleton"), *BoneName));
 	}
 
 	IAnimationDataController& Controller = AnimSeq->GetController();
@@ -1270,12 +1084,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 	AnimSeq->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("boneName"), BoneName);
 	Result->SetNumberField(TEXT("keyframesSet"), KeyframeCount);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -1284,16 +1098,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::GetBoneTransforms(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("skeletonPath"), AssetPath)
 		&& !Params->TryGetStringField(TEXT("assetPath"), AssetPath)
 		&& !Params->TryGetStringField(TEXT("path"), AssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'skeletonPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'skeletonPath' parameter"));
 	}
 
 	// Load skeleton (accept either USkeleton or USkeletalMesh)
@@ -1306,9 +1116,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetBoneTransforms(const TSharedPtr<FJ
 	}
 	if (!Skeleton)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load Skeleton from '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load Skeleton from '%s'"), *AssetPath));
 	}
 
 	const FReferenceSkeleton& RefSkeleton = Skeleton->GetReferenceSkeleton();
@@ -1328,6 +1136,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetBoneTransforms(const TSharedPtr<FJ
 			}
 		}
 	}
+
+	auto Result = MCPSuccess();
 
 	TArray<TSharedPtr<FJsonValue>> BonesArray;
 	for (int32 i = 0; i < RefSkeleton.GetNum(); ++i)
@@ -1367,9 +1177,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetBoneTransforms(const TSharedPtr<FJ
 
 	Result->SetArrayField(TEXT("bones"), BonesArray);
 	Result->SetNumberField(TEXT("boneCount"), BonesArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -1416,35 +1225,20 @@ static void SetMontageSequenceLength(UAnimMontage* Montage, float NewLength)
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString AnimSequencePath;
-	if (!Params->TryGetStringField(TEXT("animSequencePath"), AnimSequencePath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'animSequencePath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("animSequencePath"), AnimSequencePath)) return Err;
 
-	double SlotIndex = 0.0;
-	Params->TryGetNumberField(TEXT("slotIndex"), SlotIndex);
+	double SlotIndex = OptionalNumber(Params, TEXT("slotIndex"), 0.0);
 
 	// Load the montage
 	UObject* MontageAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UAnimMontage* Montage = Cast<UAnimMontage>(MontageAsset);
 	if (!Montage)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
 	}
 
 	// Load the new sequence
@@ -1452,18 +1246,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 	UAnimSequence* NewSequence = Cast<UAnimSequence>(SeqAsset);
 	if (!NewSequence)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimSequencePath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimSequencePath));
 	}
 
 	// Access the slot tracks
 	int32 TrackIdx = static_cast<int32>(SlotIndex);
 	if (TrackIdx < 0 || TrackIdx >= Montage->SlotAnimTracks.Num())
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Slot track index %d out of range (montage has %d tracks)"), TrackIdx, Montage->SlotAnimTracks.Num()));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Slot track index %d out of range (montage has %d tracks)"), TrackIdx, Montage->SlotAnimTracks.Num()));
 	}
 
 	FSlotAnimationTrack& SlotTrack = Montage->SlotAnimTracks[TrackIdx];
@@ -1509,15 +1299,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 	Montage->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("animSequencePath"), AnimSequencePath);
 	Result->SetStringField(TEXT("slotName"), SlotTrack.SlotName.ToString());
 	Result->SetNumberField(TEXT("segmentsUpdated"), SegmentsUpdated);
 	Result->SetNumberField(TEXT("sequenceLength"), NewSequence->GetPlayLength());
 	Result->SetNumberField(TEXT("montageLength"), NewTotalLength);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -1526,23 +1316,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* MontageAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UAnimMontage* Montage = Cast<UAnimMontage>(MontageAsset);
 	if (!Montage)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
 	}
 
 	TArray<FString> Modified;
@@ -1588,9 +1369,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 
 	if (Modified.Num() == 0)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("No properties to set. Provide at least one of: sequenceLength, rateScale, blendIn, blendOut"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("No properties to set. Provide at least one of: sequenceLength, rateScale, blendIn, blendOut"));
 	}
 
 	Montage->PostEditChange();
@@ -1598,6 +1377,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	// Return current state
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	TArray<TSharedPtr<FJsonValue>> ModifiedArray;
 	for (const FString& M : Modified)
@@ -1609,9 +1389,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 	Result->SetNumberField(TEXT("rateScale"), Montage->RateScale);
 	Result->SetNumberField(TEXT("blendIn"), Montage->BlendIn.GetBlendTime());
 	Result->SetNumberField(TEXT("blendOut"), Montage->BlendOut.GetBlendTime());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ─── State Machine Helpers ────────────────────────────────────────
@@ -1690,36 +1469,22 @@ static void CompileAndSave(UBlueprint* BP)
 
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateStateMachine(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	FString Name = TEXT("NewStateMachine");
-	Params->TryGetStringField(TEXT("name"), Name);
-
-	FString GraphName = TEXT("AnimGraph");
-	Params->TryGetStringField(TEXT("graphName"), GraphName);
+	FString Name = OptionalString(Params, TEXT("name"), TEXT("NewStateMachine"));
+	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
 
 	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
 	if (!AnimBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
 	UEdGraph* TargetGraph = FindGraphByName(AnimBP, GraphName);
 	if (!TargetGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Graph not found: %s"), *GraphName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
 	// Create the state machine container node in the AnimGraph
@@ -1739,72 +1504,47 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateStateMachine(const TSharedPtr<F
 
 	CompileAndSave(AnimBP);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("graphName"), GraphName);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString SMName;
-	if (!Params->TryGetStringField(TEXT("stateMachineName"), SMName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'stateMachineName'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("stateMachineName"), SMName)) return Err;
 
 	FString StateName;
-	if (!Params->TryGetStringField(TEXT("stateName"), StateName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'stateName'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("stateName"), StateName)) return Err;
 
 	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
 	if (!AnimBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
 	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State machine '%s' not found"), *SMName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
 	}
 
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
 	if (!SMGraph)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("State machine has no editor graph"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("State machine has no editor graph"));
 	}
 
 	// Check for duplicate
 	if (FindStateNode(SMGraph, StateName))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State '%s' already exists"), *StateName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("State '%s' already exists"), *StateName));
 	}
 
 	// Create state node
@@ -1828,62 +1568,38 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 
 	CompileAndSave(AnimBP);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
 	Result->SetStringField(TEXT("stateName"), StateName);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::AddTransition(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString SMName;
-	if (!Params->TryGetStringField(TEXT("stateMachineName"), SMName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'stateMachineName'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("stateMachineName"), SMName)) return Err;
 
-	FString FromState, ToState;
-	if (!Params->TryGetStringField(TEXT("fromState"), FromState))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'fromState'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
-	if (!Params->TryGetStringField(TEXT("toState"), ToState))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'toState'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	FString FromState;
+	if (auto Err = RequireString(Params, TEXT("fromState"), FromState)) return Err;
+
+	FString ToState;
+	if (auto Err = RequireString(Params, TEXT("toState"), ToState)) return Err;
 
 	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
 	if (!AnimBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
 	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State machine '%s' not found"), *SMName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
 	}
 
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
@@ -1891,15 +1607,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddTransition(const TSharedPtr<FJsonO
 	UAnimStateNode* To = FindStateNode(SMGraph, ToState);
 	if (!From)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State '%s' not found"), *FromState));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("State '%s' not found"), *FromState));
 	}
 	if (!To)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State '%s' not found"), *ToState));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("State '%s' not found"), *ToState));
 	}
 
 	// Create transition node
@@ -1930,78 +1642,59 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddTransition(const TSharedPtr<FJsonO
 
 	CompileAndSave(AnimBP);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
 	Result->SetStringField(TEXT("fromState"), FromState);
 	Result->SetStringField(TEXT("toState"), ToState);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::SetStateAnimation(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString SMName, StateName, AnimAssetPath;
 	if (!Params->TryGetStringField(TEXT("stateMachineName"), SMName) ||
 		!Params->TryGetStringField(TEXT("stateName"), StateName) ||
 		!Params->TryGetStringField(TEXT("animAssetPath"), AnimAssetPath))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing required params: stateMachineName, stateName, animAssetPath"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing required params: stateMachineName, stateName, animAssetPath"));
 	}
 
 	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
 	if (!AnimBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
 	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State machine '%s' not found"), *SMName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
 	}
 
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
 	UAnimStateNode* State = FindStateNode(SMGraph, StateName);
 	if (!State)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State '%s' not found"), *StateName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("State '%s' not found"), *StateName));
 	}
 
 	// Load the animation asset
 	UAnimationAsset* AnimAsset = LoadObject<UAnimationAsset>(nullptr, *AnimAssetPath);
 	if (!AnimAsset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Animation asset not found: %s"), *AnimAssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Animation asset not found: %s"), *AnimAssetPath));
 	}
 
 	// Get the state's bound graph (internal graph that plays the animation)
 	UEdGraph* StateGraph = State->BoundGraph;
 	if (!StateGraph)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("State has no BoundGraph"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("State has no BoundGraph"));
 	}
 
 	// Find or create the appropriate player node inside the state graph
@@ -2040,57 +1733,42 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetStateAnimation(const TSharedPtr<FJ
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unsupported animation asset type: %s"), *AnimAsset->GetClass()->GetName()));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unsupported animation asset type: %s"), *AnimAsset->GetClass()->GetName()));
 	}
 
 	CompileAndSave(AnimBP);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateName"), StateName);
 	Result->SetStringField(TEXT("animAssetPath"), AnimAssetPath);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::SetTransitionBlend(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString SMName, FromState, ToState;
 	if (!Params->TryGetStringField(TEXT("stateMachineName"), SMName) ||
 		!Params->TryGetStringField(TEXT("fromState"), FromState) ||
 		!Params->TryGetStringField(TEXT("toState"), ToState))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing required params: stateMachineName, fromState, toState"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing required params: stateMachineName, fromState, toState"));
 	}
 
 	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
 	if (!AnimBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
 	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State machine '%s' not found"), *SMName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
 	}
 
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
@@ -2113,9 +1791,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetTransitionBlend(const TSharedPtr<F
 
 	if (!TransNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("No transition from '%s' to '%s'"), *FromState, *ToState));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("No transition from '%s' to '%s'"), *FromState, *ToState));
 	}
 
 	// Set blend duration
@@ -2142,58 +1818,42 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetTransitionBlend(const TSharedPtr<F
 
 	CompileAndSave(AnimBP);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("fromState"), FromState);
 	Result->SetStringField(TEXT("toState"), ToState);
 	Result->SetNumberField(TEXT("blendDuration"), BlendDuration);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ReadStateMachine(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString SMName;
-	if (!Params->TryGetStringField(TEXT("stateMachineName"), SMName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'stateMachineName'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("stateMachineName"), SMName)) return Err;
 
 	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
 	if (!AnimBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
 	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
 	if (!SMNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("State machine '%s' not found"), *SMName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
 	}
 
 	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
 	if (!SMGraph)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("State machine has no editor graph"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("State machine has no editor graph"));
 	}
+
+	auto Result = MCPSuccess();
 
 	// Enumerate states
 	TArray<TSharedPtr<FJsonValue>> StatesArray;
@@ -2248,43 +1908,32 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadStateMachine(const TSharedPtr<FJs
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ─── #23 / #91  read_anim_graph ─────────────────────────────────────
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	FString GraphName = TEXT("AnimGraph");
-	Params->TryGetStringField(TEXT("graphName"), GraphName);
+	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
 
 	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
 	if (!AnimBP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
 	}
 
 	UEdGraph* TargetGraph = FindGraphByName(AnimBP, GraphName);
 	if (!TargetGraph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Graph not found: %s"), *GraphName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
+
+	auto Result = MCPSuccess();
 
 	TArray<TSharedPtr<FJsonValue>> NodesArray;
 	for (UEdGraphNode* Node : TargetGraph->Nodes)
@@ -2348,48 +1997,31 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimGraph(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetArrayField(TEXT("nodes"), NodesArray);
 	Result->SetNumberField(TEXT("nodeCount"), NodesArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ─── #79 / #24  add_curve ───────────────────────────────────────────
 
 TSharedPtr<FJsonValue> FAnimationHandlers::AddCurve(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString CurveName;
-	if (!Params->TryGetStringField(TEXT("curveName"), CurveName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'curveName'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("curveName"), CurveName)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UAnimSequence* AnimSeq = Cast<UAnimSequence>(LoadedAsset);
 	if (!AnimSeq)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AssetPath));
 	}
 
 	USkeleton* Skeleton = AnimSeq->GetSkeleton();
 	if (!Skeleton)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("AnimSequence has no Skeleton"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("AnimSequence has no Skeleton"));
 	}
 
 	// Build the curve identifier
@@ -2402,6 +2034,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddCurve(const TSharedPtr<FJsonObject
 
 	Controller.CloseBracket();
 
+	auto Result = MCPSuccess();
+
 	if (!bAdded)
 	{
 		// Curve may already exist – not necessarily an error
@@ -2413,50 +2047,32 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddCurve(const TSharedPtr<FJsonObject
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("curveName"), CurveName);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ─── #78  set_montage_slot ──────────────────────────────────────────
 
 TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSlot(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString SlotName;
-	if (!Params->TryGetStringField(TEXT("slotName"), SlotName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'slotName'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("slotName"), SlotName)) return Err;
 
-	int32 TrackIndex = 0;
-	Params->TryGetNumberField(TEXT("trackIndex"), TrackIndex);
+	int32 TrackIndex = OptionalInt(Params, TEXT("trackIndex"), 0);
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UAnimMontage* Montage = Cast<UAnimMontage>(LoadedAsset);
 	if (!Montage)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
 	}
 
 	if (TrackIndex < 0 || TrackIndex >= Montage->SlotAnimTracks.Num())
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("trackIndex %d out of range (0..%d)"), TrackIndex, Montage->SlotAnimTracks.Num() - 1));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("trackIndex %d out of range (0..%d)"), TrackIndex, Montage->SlotAnimTracks.Num() - 1));
 	}
 
 	Montage->SlotAnimTracks[TrackIndex].SlotName = FName(*SlotName);
@@ -2464,58 +2080,39 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSlot(const TSharedPtr<FJson
 	Montage->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("slotName"), SlotName);
 	Result->SetNumberField(TEXT("trackIndex"), TrackIndex);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ─── #27  add_montage_section ───────────────────────────────────────
 
 TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSection(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString SectionName;
-	if (!Params->TryGetStringField(TEXT("sectionName"), SectionName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'sectionName'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("sectionName"), SectionName)) return Err;
 
-	double StartTime = 0.0;
-	Params->TryGetNumberField(TEXT("startTime"), StartTime);
-
-	FString LinkedSection;
-	Params->TryGetStringField(TEXT("linkedSection"), LinkedSection);
+	double StartTime = OptionalNumber(Params, TEXT("startTime"), 0.0);
+	FString LinkedSection = OptionalString(Params, TEXT("linkedSection"));
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UAnimMontage* Montage = Cast<UAnimMontage>(LoadedAsset);
 	if (!Montage)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
 	}
 
 	// Check if section already exists
 	int32 ExistingIdx = Montage->GetSectionIndex(FName(*SectionName));
 	if (ExistingIdx != INDEX_NONE)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Section '%s' already exists at index %d"), *SectionName, ExistingIdx));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Section '%s' already exists at index %d"), *SectionName, ExistingIdx));
 	}
 
 	// Add the composite section
@@ -2532,6 +2129,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSection(const TSharedPtr<FJ
 	Montage->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("sectionName"), SectionName);
 	Result->SetNumberField(TEXT("startTime"), StartTime);
@@ -2540,43 +2138,27 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSection(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("linkedSection"), LinkedSection);
 	}
 	Result->SetNumberField(TEXT("totalSections"), Montage->CompositeSections.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ─── #93  create_ik_rig ─────────────────────────────────────────────
 
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString SkeletalMeshPath;
-	if (!Params->TryGetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'skeletalMeshPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("skeletalMeshPath"), SkeletalMeshPath)) return Err;
 
-	FString PackagePath = TEXT("/Game");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
 
 	// Load the skeletal mesh to get the skeleton
 	USkeletalMesh* SkelMesh = LoadObject<USkeletalMesh>(nullptr, *SkeletalMeshPath);
 	if (!SkelMesh)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *SkeletalMeshPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *SkeletalMeshPath));
 	}
 
 	// Create the IKRigDefinition asset via AssetTools
@@ -2584,18 +2166,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FindObject<UClass>(nullptr, TEXT("/Script/IKRigEditor.IKRigDefinitionFactory")));
 	if (!Factory)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("IKRigDefinitionFactory not found — is the IKRig plugin enabled?"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("IKRigDefinitionFactory not found — is the IKRig plugin enabled?"));
 	}
 
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UIKRigDefinition::StaticClass(), Factory);
 	UIKRigDefinition* IKRig = Cast<UIKRigDefinition>(NewAsset);
 	if (!IKRig)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create IKRigDefinition asset"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create IKRigDefinition asset"));
 	}
 
 	// Set the preview skeletal mesh (this also sets up the skeleton internally)
@@ -2604,36 +2182,29 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 	IKRig->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(IKRig->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), IKRig->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ─── #93  read_ik_rig ───────────────────────────────────────────────
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRig(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UIKRigDefinition* IKRig = Cast<UIKRigDefinition>(LoadedAsset);
 	if (!IKRig)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load IKRigDefinition at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load IKRigDefinition at '%s'"), *AssetPath));
 	}
+
+	auto Result = MCPSuccess();
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), IKRig->GetName());
@@ -2691,34 +2262,25 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRig(const TSharedPtr<FJsonObjec
 	}
 	Result->SetArrayField(TEXT("solvers"), SolversArray);
 
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ─── #11  list_control_rig_variables ────────────────────────────────
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListControlRigVariables(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	// In UE 5.7, ControlRigBlueprint was removed — load as a generic UBlueprint
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UBlueprint* CRBlueprint = Cast<UBlueprint>(LoadedAsset);
 	if (!CRBlueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *AssetPath));
 	}
+
+	auto Result = MCPSuccess();
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), CRBlueprint->GetName());
@@ -2761,7 +2323,5 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListControlRigVariables(const TShared
 	}
 	Result->SetArrayField(TEXT("graphs"), GraphsArray);
 
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

@@ -1,5 +1,6 @@
 #include "ReflectionHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/Class.h"
 #include "UObject/UnrealType.h"
@@ -29,25 +30,17 @@ void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 TSharedPtr<FJsonValue> FReflectionHandlers::ReflectClass(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ClassName;
-	if (!Params->TryGetStringField(TEXT("className"), ClassName))
-	{
-		TSharedPtr<FJsonObject> Error = MakeShared<FJsonObject>();
-		Error->SetStringField(TEXT("error"), TEXT("className parameter required"));
-		return MakeShared<FJsonValueObject>(Error);
-	}
+	if (auto Err = RequireString(Params, TEXT("className"), ClassName)) return Err;
 
 	UClass* Class = FindClass(ClassName);
 	if (!Class)
 	{
-		TSharedPtr<FJsonObject> Error = MakeShared<FJsonObject>();
-		Error->SetStringField(TEXT("error"), FString::Printf(TEXT("Class not found: %s"), *ClassName));
-		return MakeShared<FJsonValueObject>(Error);
+		return MCPError(FString::Printf(TEXT("Class not found: %s"), *ClassName));
 	}
 
-	bool bIncludeInherited = false;
-	Params->TryGetBoolField(TEXT("includeInherited"), bIncludeInherited);
+	bool bIncludeInherited = OptionalBool(Params, TEXT("includeInherited"), false);
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("className"), Class->GetName());
 
 	if (Class->GetSuperClass())
@@ -92,28 +85,21 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectClass(const TSharedPtr<FJsonO
 	Result->SetArrayField(TEXT("functions"), FunctionsArray);
 	Result->SetNumberField(TEXT("functionCount"), FunctionsArray.Num());
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FReflectionHandlers::ReflectStruct(const TSharedPtr<FJsonObject>& Params)
 {
 	FString StructName;
-	if (!Params->TryGetStringField(TEXT("structName"), StructName))
-	{
-		TSharedPtr<FJsonObject> Error = MakeShared<FJsonObject>();
-		Error->SetStringField(TEXT("error"), TEXT("structName parameter required"));
-		return MakeShared<FJsonValueObject>(Error);
-	}
+	if (auto Err = RequireString(Params, TEXT("structName"), StructName)) return Err;
 
 	UScriptStruct* Struct = FindStruct(StructName);
 	if (!Struct)
 	{
-		TSharedPtr<FJsonObject> Error = MakeShared<FJsonObject>();
-		Error->SetStringField(TEXT("error"), FString::Printf(TEXT("Struct not found: %s"), *StructName));
-		return MakeShared<FJsonValueObject>(Error);
+		return MCPError(FString::Printf(TEXT("Struct not found: %s"), *StructName));
 	}
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("structName"), Struct->GetName());
 
 	TArray<TSharedPtr<FJsonValue>> FieldsArray;
@@ -128,28 +114,21 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectStruct(const TSharedPtr<FJson
 	Result->SetArrayField(TEXT("fields"), FieldsArray);
 	Result->SetNumberField(TEXT("fieldCount"), FieldsArray.Num());
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FReflectionHandlers::ReflectEnum(const TSharedPtr<FJsonObject>& Params)
 {
 	FString EnumName;
-	if (!Params->TryGetStringField(TEXT("enumName"), EnumName))
-	{
-		TSharedPtr<FJsonObject> Error = MakeShared<FJsonObject>();
-		Error->SetStringField(TEXT("error"), TEXT("enumName parameter required"));
-		return MakeShared<FJsonValueObject>(Error);
-	}
+	if (auto Err = RequireString(Params, TEXT("enumName"), EnumName)) return Err;
 
 	UEnum* Enum = FindEnum(EnumName);
 	if (!Enum)
 	{
-		TSharedPtr<FJsonObject> Error = MakeShared<FJsonObject>();
-		Error->SetStringField(TEXT("error"), FString::Printf(TEXT("Enum not found: %s"), *EnumName));
-		return MakeShared<FJsonValueObject>(Error);
+		return MCPError(FString::Printf(TEXT("Enum not found: %s"), *EnumName));
 	}
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("enumName"), Enum->GetName());
 
 	TArray<TSharedPtr<FJsonValue>> ValuesArray;
@@ -169,26 +148,24 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectEnum(const TSharedPtr<FJsonOb
 	Result->SetArrayField(TEXT("values"), ValuesArray);
 	Result->SetNumberField(TEXT("valueCount"), ValuesArray.Num());
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FReflectionHandlers::ListClasses(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ParentFilter;
-	Params->TryGetStringField(TEXT("parentFilter"), ParentFilter);
+	FString ParentFilter = OptionalString(Params, TEXT("parentFilter"));
 
 	int32 Limit = 100;
 	Params->TryGetNumberField(TEXT("limit"), Limit);
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
 	if (!ParentFilter.IsEmpty())
 	{
 		UClass* ParentClass = FindClass(ParentFilter);
 		if (!ParentClass)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Parent class not found: %s"), *ParentFilter));
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("Parent class not found: %s"), *ParentFilter));
 		}
 
 		TArray<TSharedPtr<FJsonValue>> ClassesArray;
@@ -249,15 +226,14 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListClasses(const TSharedPtr<FJsonOb
 		Result->SetNumberField(TEXT("count"), ClassesArray.Num());
 	}
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FReflectionHandlers::ListGameplayTags(const TSharedPtr<FJsonObject>& Params)
 {
-	FString FilterPrefix;
-	Params->TryGetStringField(TEXT("filter"), FilterPrefix);
+	FString FilterPrefix = OptionalString(Params, TEXT("filter"));
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
 	UGameplayTagsManager& TagsManager = UGameplayTagsManager::Get();
 	FGameplayTagContainer AllTags;
@@ -281,29 +257,23 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListGameplayTags(const TSharedPtr<FJ
 	Result->SetArrayField(TEXT("tags"), TagsArray);
 	Result->SetNumberField(TEXT("count"), TagsArray.Num());
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FReflectionHandlers::CreateGameplayTag(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Tag;
-	if (!Params->TryGetStringField(TEXT("tag"), Tag) || Tag.IsEmpty())
-	{
-		TSharedPtr<FJsonObject> Error = MakeShared<FJsonObject>();
-		Error->SetStringField(TEXT("error"), TEXT("tag parameter is required (e.g. 'Combat.Damage.Fire')"));
-		return MakeShared<FJsonValueObject>(Error);
-	}
+	if (auto Err = RequireString(Params, TEXT("tag"), Tag)) return Err;
 
-	FString Comment;
-	Params->TryGetStringField(TEXT("comment"), Comment);
+	FString Comment = OptionalString(Params, TEXT("comment"));
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("tag"), Tag);
 
 	// Add tag via DefaultGameplayTags.ini (not AddNativeGameplayTag which asserts after init)
 	FString ProjectDir = FPaths::ProjectDir();
 	FString TagFile = FPaths::Combine(ProjectDir, TEXT("Config"), TEXT("DefaultGameplayTags.ini"));
-	
+
 	FString Section = TEXT("[/Script/GameplayTags.GameplayTagsSettings]");
 	FString Entry = FString::Printf(TEXT("+GameplayTagList=(Tag=\"%s\",DevComment=\"%s\")"), *Tag, *Comment);
 
@@ -326,15 +296,12 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateGameplayTag(const TSharedPtr<F
 
 	if (FFileHelper::SaveStringToFile(FileContent, *TagFile))
 	{
-		Result->SetBoolField(TEXT("success"), true);
 		Result->SetStringField(TEXT("method"), TEXT("ini_append"));
 		Result->SetStringField(TEXT("note"), TEXT("Restart editor to pick up new tag"));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
-	Result->SetBoolField(TEXT("success"), false);
-	Result->SetStringField(TEXT("error"), TEXT("Could not add gameplay tag via available APIs"));
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPError(TEXT("Could not add gameplay tag via available APIs"));
 }
 
 UClass* FReflectionHandlers::FindClass(const FString& ClassName)

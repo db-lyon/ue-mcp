@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { Vec3 } from "../schemas.js";
 
 export const audioTool: ToolDef = categoryTool(
   "audio",
@@ -19,7 +20,7 @@ export const audioTool: ToolDef = categoryTool(
   {
     directory: z.string().optional(), recursive: z.boolean().optional(),
     soundPath: z.string().optional(),
-    location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+    location: Vec3.optional(),
     volumeMultiplier: z.number().optional(),
     pitchMultiplier: z.number().optional(),
     label: z.string().optional(),

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { Color } from "../schemas.js";
 
 export const materialTool: ToolDef = categoryTool(
   "material",
@@ -54,7 +55,7 @@ export const materialTool: ToolDef = categoryTool(
     packagePath: z.string().optional(),
     shadingModel: z.string().optional(),
     blendMode: z.string().optional().describe("Blend mode: Opaque, Masked, Translucent, Additive, Modulate, AlphaComposite, AlphaHoldout"),
-    color: z.object({ r: z.number(), g: z.number(), b: z.number(), a: z.number().optional() }).optional(),
+    color: Color.optional(),
     materialPath: z.string().optional(),
     texturePath: z.string().optional(),
     property: z.string().optional().describe("Material property: BaseColor, Normal, Roughness, Metallic, EmissiveColor, etc."),

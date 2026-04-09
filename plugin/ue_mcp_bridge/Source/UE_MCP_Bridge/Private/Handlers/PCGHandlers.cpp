@@ -1,5 +1,6 @@
 #include "PCGHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -43,8 +44,6 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FPCGHandlers::ListPCGGraphs(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/PCG"), TEXT("PCGGraph")), Assets, true);
@@ -57,23 +56,16 @@ TSharedPtr<FJsonValue> FPCGHandlers::ListPCGGraphs(const TSharedPtr<FJsonObject>
 		AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
 		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
 	}
+
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("graphs"), AssetArray);
 	Result->SetNumberField(TEXT("count"), AssetArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::GetPCGComponents(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	TArray<TSharedPtr<FJsonValue>> CompArray;
 	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
@@ -98,26 +90,18 @@ TSharedPtr<FJsonValue> FPCGHandlers::GetPCGComponents(const TSharedPtr<FJsonObje
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("components"), CompArray);
 	Result->SetNumberField(TEXT("count"), CompArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::CreatePCGGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/PCG");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/PCG"));
 
 	FString FullAssetPath = PackagePath + TEXT("/") + Name;
 	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
@@ -128,39 +112,29 @@ TSharedPtr<FJsonValue> FPCGHandlers::CreatePCGGraph(const TSharedPtr<FJsonObject
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UPCGGraph::StaticClass(), nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create PCGGraph"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create PCGGraph"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
 	if (!Graph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), Graph->GetName());
 	Result->SetStringField(TEXT("path"), AssetPath);
 
@@ -177,36 +151,21 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGGraph(const TSharedPtr<FJsonObject>&
 
 	Result->SetArrayField(TEXT("nodes"), NodeArray);
 	Result->SetNumberField(TEXT("nodeCount"), NodeArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString NodeType;
-	if (!Params->TryGetStringField(TEXT("nodeType"), NodeType))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeType' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("nodeType"), NodeType)) return Err;
 
 	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
 	if (!Graph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
 	}
 
 	// Find the settings class by name
@@ -227,27 +186,21 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	}
 	if (!SettingsClass || !SettingsClass->IsChildOf(UPCGSettings::StaticClass()))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("PCG settings class not found or invalid: %s"), *NodeType));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("PCG settings class not found or invalid: %s"), *NodeType));
 	}
 
 	// Create default settings object
 	UPCGSettings* DefaultSettings = NewObject<UPCGSettings>(GetTransientPackage(), SettingsClass);
 	if (!DefaultSettings)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create PCG settings instance"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create PCG settings instance"));
 	}
 
 	// Add node to graph
 	UPCGNode* NewNode = Graph->AddNode(DefaultSettings);
 	if (!NewNode)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to add node to PCG graph"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to add node to PCG graph"));
 	}
 
 	// Set position if provided
@@ -261,48 +214,29 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	// Save the graph asset
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
 	Result->SetStringField(TEXT("nodeType"), NodeType);
 	Result->SetStringField(TEXT("nodeTitle"), NewNode->GetNodeTitle(EPCGNodeTitleType::ListView).ToString());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString SourceNodeName;
-	if (!Params->TryGetStringField(TEXT("sourceNodeName"), SourceNodeName) && !Params->TryGetStringField(TEXT("sourceNode"), SourceNodeName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'sourceNodeName' or 'sourceNode' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("sourceNodeName"), TEXT("sourceNode"), SourceNodeName)) return Err;
 
 	FString TargetNodeName;
-	if (!Params->TryGetStringField(TEXT("targetNodeName"), TargetNodeName) && !Params->TryGetStringField(TEXT("targetNode"), TargetNodeName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'targetNodeName' or 'targetNode' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("targetNodeName"), TEXT("targetNode"), TargetNodeName)) return Err;
 
 	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
 	if (!Graph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
 	}
 
 	// Find source and target nodes
@@ -334,15 +268,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 
 	if (!SourceNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Source node not found: %s"), *SourceNodeName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Source node not found: %s"), *SourceNodeName));
 	}
 	if (!TargetNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Target node not found: %s"), *TargetNodeName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Target node not found: %s"), *TargetNodeName));
 	}
 
 	// Get pin labels if specified, otherwise use the first available pins
@@ -392,63 +322,43 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 
 	if (ResolvedSourcePinLabel == NAME_None)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("No suitable output pin found on source node"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("No suitable output pin found on source node"));
 	}
 	if (ResolvedTargetPinLabel == NAME_None)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("No suitable input pin found on target node"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("No suitable input pin found on target node"));
 	}
 
 	UPCGNode* ResultNode = Graph->AddEdge(SourceNode, ResolvedSourcePinLabel, TargetNode, ResolvedTargetPinLabel);
 	if (!ResultNode)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to connect pins - connection may already exist or be incompatible"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to connect pins - connection may already exist or be incompatible"));
 	}
 
 	// Save the graph asset
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("sourceNodeName"), SourceNodeName);
 	Result->SetStringField(TEXT("targetNodeName"), TargetNodeName);
 	Result->SetStringField(TEXT("sourcePinLabel"), ResolvedSourcePinLabel.ToString());
 	Result->SetStringField(TEXT("targetPinLabel"), ResolvedTargetPinLabel.ToString());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString NodeName;
-	if (!Params->TryGetStringField(TEXT("nodeName"), NodeName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("nodeName"), NodeName)) return Err;
 
 	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
 	if (!Graph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
 	}
 
 	// Find the node by name
@@ -465,9 +375,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 
 	if (!FoundNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Node not found: %s"), *NodeName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeName));
 	}
 
 	// Remove the node from the graph
@@ -476,31 +384,19 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 	// Save the graph asset
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("removedNodeName"), NodeName);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString NodeName;
-	if (!Params->TryGetStringField(TEXT("nodeName"), NodeName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("nodeName"), NodeName)) return Err;
 
 	// Accept either a 'settings' object (key-value pairs) or individual 'propertyName'/'propertyValue'
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
@@ -511,24 +407,18 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 
 	if (!bUseSettingsObject && !bUseSingleProperty)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'settings' object or 'propertyName'/'propertyValue' parameters"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'settings' object or 'propertyName'/'propertyValue' parameters"));
 	}
 
 	if (bUseSingleProperty && !Params->TryGetStringField(TEXT("propertyValue"), PropertyValue))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyValue' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'propertyValue' parameter"));
 	}
 
 	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
 	if (!Graph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
 	}
 
 	// Find the node by name
@@ -545,18 +435,14 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 
 	if (!FoundNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Node not found: %s"), *NodeName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeName));
 	}
 
 	// Get the settings object from the node
 	UPCGSettings* Settings = const_cast<UPCGSettings*>(FoundNode->GetSettings());
 	if (!Settings)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Node has no settings object"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Node has no settings object"));
 	}
 
 	// Build a list of property name/value pairs to set
@@ -620,6 +506,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 	// Save the graph asset
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("nodeName"), NodeName);
 	Result->SetObjectField(TEXT("setProperties"), SetResults);
@@ -633,28 +520,15 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 		Result->SetArrayField(TEXT("errors"), ErrorArray);
 	}
 	Result->SetBoolField(TEXT("success"), Errors.Num() == 0);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::ExecutePCGGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* FoundActor = nullptr;
@@ -670,18 +544,14 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExecutePCGGraph(const TSharedPtr<FJsonObjec
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));
 	}
 
 	// Get PCG component from the actor
 	UPCGComponent* PCGComp = FoundActor->FindComponentByClass<UPCGComponent>();
 	if (!PCGComp)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("No PCGComponent found on actor: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("No PCGComponent found on actor: %s"), *ActorLabel));
 	}
 
 	// Set seed if provided
@@ -694,6 +564,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExecutePCGGraph(const TSharedPtr<FJsonObjec
 	// Trigger generation
 	PCGComp->Generate();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("componentName"), PCGComp->GetName());
 	if (PCGComp->GetGraph())
@@ -701,21 +572,12 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExecutePCGGraph(const TSharedPtr<FJsonObjec
 		Result->SetStringField(TEXT("graphName"), PCGComp->GetGraph()->GetName());
 	}
 	Result->SetNumberField(TEXT("seed"), PCGComp->Seed);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Parse location
 	FVector Location = FVector::ZeroVector;
@@ -740,24 +602,24 @@ TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject
 	APCGVolume* PCGVolumeActor = World->SpawnActor<APCGVolume>(APCGVolume::StaticClass(), SpawnTransform);
 	if (!PCGVolumeActor)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn PCGVolume actor"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to spawn PCGVolume actor"));
 	}
 
 	// Set the extent/scale of the volume
 	PCGVolumeActor->SetActorScale3D(Extent / 100.0);
 
 	// Set label if provided
-	FString Label;
-	if (Params->TryGetStringField(TEXT("label"), Label))
+	FString Label = OptionalString(Params, TEXT("label"));
+	if (!Label.IsEmpty())
 	{
 		PCGVolumeActor->SetActorLabel(Label);
 	}
 
 	// Set graph reference if provided
-	FString GraphPath;
-	if (Params->TryGetStringField(TEXT("graphPath"), GraphPath))
+	FString GraphPath = OptionalString(Params, TEXT("graphPath"));
+	auto Result = MCPSuccess();
+
+	if (!GraphPath.IsEmpty())
 	{
 		UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *GraphPath);
 		if (Graph)
@@ -791,36 +653,21 @@ TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject
 	ExtentObj->SetNumberField(TEXT("z"), Extent.Z);
 	Result->SetObjectField(TEXT("extent"), ExtentObj);
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGNodeSettings(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString NodeName;
-	if (!Params->TryGetStringField(TEXT("nodeName"), NodeName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'nodeName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("nodeName"), NodeName)) return Err;
 
 	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
 	if (!Graph)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
 	}
 
 	// Find the node by name
@@ -847,11 +694,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGNodeSettings(const TSharedPtr<FJsonO
 
 	if (!FoundNode)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Node not found: %s"), *NodeName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeName));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("nodeName"), FoundNode->GetName());
 	Result->SetStringField(TEXT("nodeTitle"), FoundNode->GetNodeTitle(EPCGNodeTitleType::ListView).ToString());
 
@@ -860,8 +706,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGNodeSettings(const TSharedPtr<FJsonO
 	if (!Settings)
 	{
 		Result->SetStringField(TEXT("note"), TEXT("Node has no settings object"));
-		Result->SetBoolField(TEXT("success"), true);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
 	Result->SetStringField(TEXT("settingsClass"), Settings->GetClass()->GetName());
@@ -912,29 +757,15 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGNodeSettings(const TSharedPtr<FJsonO
 	}
 	Result->SetArrayField(TEXT("outputPins"), OutputPinsArray);
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::GetPCGComponentDetails(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* FoundActor = nullptr;
@@ -950,9 +781,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::GetPCGComponentDetails(const TSharedPtr<FJs
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));
 	}
 
 	// Get all PCG components on the actor
@@ -961,11 +790,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::GetPCGComponentDetails(const TSharedPtr<FJs
 
 	if (PCGComps.Num() == 0)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("No PCGComponent found on actor: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("No PCGComponent found on actor: %s"), *ActorLabel));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorClass"), FoundActor->GetClass()->GetName());
 
@@ -1019,6 +847,5 @@ TSharedPtr<FJsonValue> FPCGHandlers::GetPCGComponentDetails(const TSharedPtr<FJs
 
 	Result->SetArrayField(TEXT("components"), ComponentsArray);
 	Result->SetNumberField(TEXT("componentCount"), ComponentsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

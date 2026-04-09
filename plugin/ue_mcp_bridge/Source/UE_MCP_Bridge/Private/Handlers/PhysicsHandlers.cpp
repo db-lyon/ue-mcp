@@ -1,5 +1,6 @@
 #include "PhysicsHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "Components/PrimitiveComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "Engine/World.h"
@@ -23,31 +24,13 @@ void FPhysicsHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionProfile(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	FString ProfileName;
-	if (!Params->TryGetStringField(TEXT("profileName"), ProfileName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'profileName' parameter (e.g. BlockAll, OverlapAll, BlockAllDynamic, NoCollision, Pawn, PhysicsActor)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("profileName"), ProfileName)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* Actor = nullptr;
@@ -62,9 +45,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionProfile(const TSharedPtr<FJ
 
 	if (!Actor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Set collision profile on all PrimitiveComponents
@@ -79,6 +60,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionProfile(const TSharedPtr<FJ
 		ComponentsModified++;
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("profileName"), ProfileName);
 	Result->SetNumberField(TEXT("componentsModified"), ComponentsModified);
@@ -89,36 +71,21 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionProfile(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents found on actor"));
 	}
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPhysicsHandlers::SetPhysicsEnabled(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	bool bEnabled = true;
 	if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'enabled' parameter (true/false)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'enabled' parameter (true/false)"));
 	}
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* Actor = nullptr;
@@ -133,9 +100,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetPhysicsEnabled(const TSharedPtr<FJso
 
 	if (!Actor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Enable/disable physics on all PrimitiveComponents
@@ -150,6 +115,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetPhysicsEnabled(const TSharedPtr<FJso
 		ComponentsModified++;
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetBoolField(TEXT("enabled"), bEnabled);
 	Result->SetNumberField(TEXT("componentsModified"), ComponentsModified);
@@ -160,28 +126,16 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetPhysicsEnabled(const TSharedPtr<FJso
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents found on actor"));
 	}
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	FString CollisionType;
-	if (!Params->TryGetStringField(TEXT("collisionType"), CollisionType))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'collisionType' parameter (NoCollision, QueryOnly, PhysicsOnly, QueryAndPhysics)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("collisionType"), CollisionType)) return Err;
 
 	// Map string to ECollisionEnabled
 	ECollisionEnabled::Type CollisionEnabled;
@@ -203,18 +157,10 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown collision type: '%s'. Use NoCollision, QueryOnly, PhysicsOnly, or QueryAndPhysics."), *CollisionType));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown collision type: '%s'. Use NoCollision, QueryOnly, PhysicsOnly, or QueryAndPhysics."), *CollisionType));
 	}
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* Actor = nullptr;
@@ -229,9 +175,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 
 	if (!Actor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Set collision enabled on all PrimitiveComponents
@@ -246,6 +190,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 		ComponentsModified++;
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("collisionType"), CollisionType);
 	Result->SetNumberField(TEXT("componentsModified"), ComponentsModified);
@@ -256,28 +201,15 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents found on actor"));
 	}
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* Actor = nullptr;
@@ -292,9 +224,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 
 	if (!Actor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Get all PrimitiveComponents
@@ -356,6 +286,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 		PropsArray.Add(MakeShared<FJsonValueString>(PropName));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetArrayField(TEXT("propertiesSet"), PropsArray);
 	Result->SetNumberField(TEXT("componentsModified"), ComponentsModified);
@@ -366,5 +297,5 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents with BodyInstance found on actor"));
 	}
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

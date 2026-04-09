@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { Vec3 } from "../schemas.js";
 
 export const foliageTool: ToolDef = categoryTool(
   "foliage",
@@ -23,7 +24,7 @@ export const foliageTool: ToolDef = categoryTool(
   {
     foliageTypeName: z.string().optional(),
     foliageType: z.string().optional(),
-    center: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+    center: Vec3.optional(),
     radius: z.number().optional(),
     count: z.number().optional(),
     density: z.number().optional(),

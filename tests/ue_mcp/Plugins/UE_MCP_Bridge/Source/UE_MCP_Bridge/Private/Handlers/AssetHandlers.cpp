@@ -1,5 +1,6 @@
 #include "AssetHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "UObject/UObjectGlobals.h"
@@ -97,10 +98,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FAssetHandlers::ListAssets(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	FString Query = TEXT("*");
-	Params->TryGetStringField(TEXT("query"), Query);
+	FString Query = OptionalString(Params, TEXT("query"), TEXT("*"));
 
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
@@ -122,29 +120,24 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListAssets(const TSharedPtr<FJsonObject>&
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("assets"), AssetsArray);
 	Result->SetNumberField(TEXT("count"), AssetsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::SearchAssets(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	FString Query;
-	Params->TryGetStringField(TEXT("query"), Query);
+	FString Query = OptionalString(Params, TEXT("query"));
 	FString Directory;
 	bool bHasDirectory = Params->TryGetStringField(TEXT("directory"), Directory);
 	if (!bHasDirectory)
 	{
 		Directory = TEXT("/Game/");
 	}
-	int32 MaxResults = 50;
-	Params->TryGetNumberField(TEXT("maxResults"), MaxResults);
-	bool bSearchAll = false;
-	Params->TryGetBoolField(TEXT("searchAll"), bSearchAll);
+	int32 MaxResults = OptionalInt(Params, TEXT("maxResults"), 50);
+	bool bSearchAll = OptionalBool(Params, TEXT("searchAll"));
 
 	// Use AssetRegistry for global search when searchAll is true or directory contains wildcards
 	if (bSearchAll || (!bHasDirectory && !Query.IsEmpty() && Query.Contains(TEXT("*"))))
@@ -193,12 +186,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::SearchAssets(const TSharedPtr<FJsonObject
 			ResultsArray.Add(MakeShared<FJsonValueObject>(Item));
 		}
 
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("query"), Query);
 		Result->SetStringField(TEXT("searchScope"), bHasDirectory ? Directory : TEXT("all"));
 		Result->SetNumberField(TEXT("resultCount"), ResultsArray.Num());
 		Result->SetArrayField(TEXT("results"), ResultsArray);
-		Result->SetBoolField(TEXT("success"), true);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
 	// Default: directory-based search (original behavior)
@@ -238,30 +231,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::SearchAssets(const TSharedPtr<FJsonObject
 		ResultsArray.Add(MakeShared<FJsonValueObject>(Item));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("query"), Query);
 	Result->SetStringField(TEXT("directory"), Directory);
 	Result->SetNumberField(TEXT("resultCount"), ResultsArray.Num());
 	Result->SetArrayField(TEXT("results"), ResultsArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ReadAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Params->TryGetStringField(TEXT("assetPath"), AssetPath);
-	}
-	if (AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (!Asset)
@@ -271,11 +253,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAsset(const TSharedPtr<FJsonObject>& 
 	}
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("className"), Asset->GetClass()->GetName());
 	Result->SetStringField(TEXT("objectName"), Asset->GetName());
@@ -386,33 +367,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAsset(const TSharedPtr<FJsonObject>& 
 	}
 
 	Result->SetObjectField(TEXT("properties"), PropertiesObj);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Params->TryGetStringField(TEXT("assetPath"), AssetPath);
-	}
-	if (AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
 	// Helper lambda to export a property value as string (#48 — reads arrays, structs, sub-objects)
@@ -430,21 +397,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 		FProperty* Prop = Asset->GetClass()->FindPropertyByName(*PropertyName);
 		if (!Prop)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Property not found: %s"), *PropertyName));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("Property not found: %s"), *PropertyName));
 		}
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("propertyName"), PropertyName);
 		Result->SetStringField(TEXT("type"), Prop->GetCPPType());
 		Result->SetStringField(TEXT("value"), ExportPropertyValue(Prop, Asset, Asset));
-		Result->SetBoolField(TEXT("success"), true);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
 	// Return all properties with their values
-	bool bIncludeValues = false;
-	Params->TryGetBoolField(TEXT("includeValues"), bIncludeValues);
+	bool bIncludeValues = OptionalBool(Params, TEXT("includeValues"));
 
 	TArray<TSharedPtr<FJsonValue>> PropsArray;
 	for (TFieldIterator<FProperty> It(Asset->GetClass()); It; ++It)
@@ -458,46 +422,40 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 		}
 		PropsArray.Add(MakeShared<FJsonValueObject>(P));
 	}
+
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("className"), Asset->GetClass()->GetName());
 	Result->SetNumberField(TEXT("propertyCount"), PropsArray.Num());
 	Result->SetArrayField(TEXT("properties"), PropsArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::DuplicateAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	FString SourcePath, DestPath;
-	if (!Params->TryGetStringField(TEXT("sourcePath"), SourcePath) || !Params->TryGetStringField(TEXT("destinationPath"), DestPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'sourcePath' and 'destinationPath'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	FString SourcePath;
+	if (auto Err = RequireString(Params, TEXT("sourcePath"), SourcePath)) return Err;
+	FString DestPath;
+	if (auto Err = RequireString(Params, TEXT("destinationPath"), DestPath)) return Err;
 
 	if (!UEditorAssetLibrary::DoesAssetExist(SourcePath))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Source asset not found: %s"), *SourcePath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Source asset not found: %s"), *SourcePath));
 	}
 
 	UObject* Dup = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestPath);
+
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("sourcePath"), SourcePath);
 	Result->SetStringField(TEXT("destinationPath"), DestPath);
 	Result->SetBoolField(TEXT("success"), Dup != nullptr);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString SourcePath, DestPath;
 	if (Params->TryGetStringField(TEXT("sourcePath"), SourcePath) && Params->TryGetStringField(TEXT("destinationPath"), DestPath))
 	{
@@ -519,24 +477,22 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>
 
 	if (SourcePath.IsEmpty() || DestPath.IsEmpty())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'sourcePath'+'destinationPath' or 'assetPath'+'newName'"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'sourcePath'+'destinationPath' or 'assetPath'+'newName'"));
 	}
 
 	if (!UEditorAssetLibrary::DoesAssetExist(SourcePath))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *SourcePath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *SourcePath));
 	}
 
 	bool bOk = UEditorAssetLibrary::RenameAsset(SourcePath, DestPath);
+
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("sourcePath"), SourcePath);
 	Result->SetStringField(TEXT("destinationPath"), DestPath);
 	Result->SetBoolField(TEXT("success"), bOk);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::MoveAsset(const TSharedPtr<FJsonObject>& Params)
@@ -547,53 +503,43 @@ TSharedPtr<FJsonValue> FAssetHandlers::MoveAsset(const TSharedPtr<FJsonObject>& 
 
 TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath) && !Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	bool bSuccess = UEditorAssetLibrary::DeleteAsset(AssetPath);
+
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("success"), bSuccess);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::SaveAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
 	if ((Params->TryGetStringField(TEXT("path"), AssetPath) || Params->TryGetStringField(TEXT("assetPath"), AssetPath)) && !AssetPath.IsEmpty() && AssetPath != TEXT("all"))
 	{
 		bool bSuccess = UEditorAssetLibrary::SaveAsset(AssetPath);
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetBoolField(TEXT("success"), bSuccess);
+		return MCPResult(Result);
 	}
 	else
 	{
 		// Save all dirty assets
 		UEditorAssetLibrary::SaveDirectory(TEXT("/Game"));
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("message"), TEXT("All modified assets saved"));
-		Result->SetBoolField(TEXT("success"), true);
+		return MCPResult(Result);
 	}
-
-	return MakeShared<FJsonValueObject>(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ListTextures(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	FString Directory = TEXT("/Game/");
-	Params->TryGetStringField(TEXT("directory"), Directory);
-	int32 MaxResults = 50;
-	Params->TryGetNumberField(TEXT("maxResults"), MaxResults);
+	FString Directory = OptionalString(Params, TEXT("directory"), TEXT("/Game/"));
+	int32 MaxResults = OptionalInt(Params, TEXT("maxResults"), 50);
 
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
@@ -614,10 +560,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListTextures(const TSharedPtr<FJsonObject
 		TexturesArray.Add(MakeShared<FJsonValueObject>(TexObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("textures"), TexturesArray);
 	Result->SetNumberField(TEXT("count"), TexturesArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ============================================================================
@@ -626,38 +572,22 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListTextures(const TSharedPtr<FJsonObject
 
 TSharedPtr<FJsonValue> FAssetHandlers::ImportDataTableJson(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString JsonString;
-	if (!Params->TryGetStringField(TEXT("jsonString"), JsonString))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'jsonString' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("jsonString"), JsonString)) return Err;
 
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
 	UDataTable* DataTable = Cast<UDataTable>(Asset);
 	if (!DataTable)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
 	}
 
 	TArray<FString> Errors = DataTable->CreateTableFromJSONString(JsonString);
@@ -669,58 +599,48 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportDataTableJson(const TSharedPtr<FJso
 		{
 			ErrorsArray.Add(MakeShared<FJsonValueString>(Error));
 		}
-		Result->SetArrayField(TEXT("errors"), ErrorsArray);
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Import completed with %d error(s)"), Errors.Num()));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		TSharedPtr<FJsonObject> ErrResult = MakeShared<FJsonObject>();
+		ErrResult->SetBoolField(TEXT("success"), false);
+		ErrResult->SetArrayField(TEXT("errors"), ErrorsArray);
+		ErrResult->SetStringField(TEXT("error"), FString::Printf(TEXT("Import completed with %d error(s)"), Errors.Num()));
+		return MCPResult(ErrResult);
 	}
 
 	DataTable->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
 	Result->SetStringField(TEXT("message"), TEXT("DataTable imported successfully from JSON"));
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ExportDataTableJson(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
 	UDataTable* DataTable = Cast<UDataTable>(Asset);
 	if (!DataTable)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
 	}
 
 	FString JsonString = DataTable->GetTableAsJSON(EDataTableExportFlags::UseJsonObjectsForStructs);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("json"), JsonString);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ============================================================================
@@ -729,27 +649,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportDataTableJson(const TSharedPtr<FJso
 
 TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString FileName;
-	if (!Params->TryGetStringField(TEXT("filename"), FileName) && !Params->TryGetStringField(TEXT("filePath"), FileName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'filePath' parameter (absolute path to FBX/OBJ file)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("filename"), TEXT("filePath"), FileName)) return Err;
 
-	FString DestinationPath = TEXT("/Game/Meshes");
-	if (!Params->TryGetStringField(TEXT("destinationPath"), DestinationPath))
+	FString DestinationPath = OptionalString(Params, TEXT("destinationPath"), TEXT("/Game/Meshes"));
+	if (DestinationPath == TEXT("/Game/Meshes"))
 	{
-		Params->TryGetStringField(TEXT("packagePath"), DestinationPath);
+		FString PkgPath = OptionalString(Params, TEXT("packagePath"));
+		if (!PkgPath.IsEmpty()) DestinationPath = PkgPath;
 	}
 
 	if (!FPaths::FileExists(FileName))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("File not found: %s"), *FileName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("File not found: %s"), *FileName));
 	}
 
 	UFbxFactory* FbxFactory = NewObject<UFbxFactory>();
@@ -825,6 +737,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("filename"), FileName);
 	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
 	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
@@ -838,32 +751,24 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 	Task->RemoveFromRoot();
 	FbxFactory->RemoveFromRoot();
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString FileName;
-	if (!Params->TryGetStringField(TEXT("filename"), FileName) && !Params->TryGetStringField(TEXT("filePath"), FileName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'filePath' parameter (absolute path to FBX file)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("filename"), TEXT("filePath"), FileName)) return Err;
 
-	FString DestinationPath = TEXT("/Game/Meshes");
-	if (!Params->TryGetStringField(TEXT("destinationPath"), DestinationPath))
+	FString DestinationPath = OptionalString(Params, TEXT("destinationPath"), TEXT("/Game/Meshes"));
+	if (DestinationPath == TEXT("/Game/Meshes"))
 	{
-		Params->TryGetStringField(TEXT("packagePath"), DestinationPath);
+		FString PkgPath = OptionalString(Params, TEXT("packagePath"));
+		if (!PkgPath.IsEmpty()) DestinationPath = PkgPath;
 	}
 
 	if (!FPaths::FileExists(FileName))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("File not found: %s"), *FileName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("File not found: %s"), *FileName));
 	}
 
 	UFbxFactory* FbxFactory = NewObject<UFbxFactory>();
@@ -900,7 +805,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 		}
 		else
 		{
+			auto Result = MCPSuccess();
 			Result->SetStringField(TEXT("warning"), FString::Printf(TEXT("Skeleton not found: %s, importing without skeleton target"), *SkeletonPath));
+			// Continue with import — don't return here, just note the warning
 		}
 	}
 
@@ -944,6 +851,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("filename"), FileName);
 	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
 	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
@@ -957,48 +865,33 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	Task->RemoveFromRoot();
 	FbxFactory->RemoveFromRoot();
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString FileName;
-	if (!Params->TryGetStringField(TEXT("filename"), FileName) && !Params->TryGetStringField(TEXT("filePath"), FileName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'filePath' parameter (absolute path to FBX file)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("filename"), TEXT("filePath"), FileName)) return Err;
 
 	FString SkeletonPath;
-	if (!Params->TryGetStringField(TEXT("skeletonPath"), SkeletonPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'skeletonPath' parameter (path to target Skeleton asset)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
 
-	FString DestinationPath = TEXT("/Game/Animations");
-	if (!Params->TryGetStringField(TEXT("destinationPath"), DestinationPath))
+	FString DestinationPath = OptionalString(Params, TEXT("destinationPath"), TEXT("/Game/Animations"));
+	if (DestinationPath == TEXT("/Game/Animations"))
 	{
-		Params->TryGetStringField(TEXT("packagePath"), DestinationPath);
+		FString PkgPath = OptionalString(Params, TEXT("packagePath"));
+		if (!PkgPath.IsEmpty()) DestinationPath = PkgPath;
 	}
 
 	if (!FPaths::FileExists(FileName))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("File not found: %s"), *FileName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("File not found: %s"), *FileName));
 	}
 
 	USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
 	if (!Skeleton)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 	}
 
 	UFbxFactory* FbxFactory = NewObject<UFbxFactory>();
@@ -1065,6 +958,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("filename"), FileName);
 	Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
 	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
@@ -1079,7 +973,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 	Task->RemoveFromRoot();
 	FbxFactory->RemoveFromRoot();
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ============================================================================
@@ -1088,35 +982,22 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 
 TSharedPtr<FJsonValue> FAssetHandlers::ListTextureProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		if (!Params->TryGetStringField(TEXT("path"), AssetPath))
-		{
-			Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' or 'path' parameter"));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
-		}
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
 	UTexture2D* Texture = Cast<UTexture2D>(Asset);
 	if (!Texture)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset is not a Texture2D: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset is not a Texture2D: %s"), *AssetPath));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), Texture->GetName());
 
@@ -1180,40 +1061,24 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListTextureProperties(const TSharedPtr<FJ
 	// Pixel format
 	Result->SetStringField(TEXT("pixelFormat"), GPixelFormats[Texture->GetPixelFormat()].Name);
 
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		if (!Params->TryGetStringField(TEXT("path"), AssetPath))
-		{
-			Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' or 'path' parameter"));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
-		}
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
 	UTexture2D* Texture = Cast<UTexture2D>(Asset);
 	if (!Texture)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset is not a Texture2D: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset is not a Texture2D: %s"), *AssetPath));
 	}
 
 	TArray<FString> ModifiedProperties;
@@ -1286,9 +1151,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 
 	if (ModifiedProperties.Num() == 0)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("No valid properties specified to set"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("No valid properties specified to set"));
 	}
 
 	// Notify the engine of property changes and mark dirty
@@ -1301,94 +1164,67 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 		ModifiedArray.Add(MakeShared<FJsonValueString>(PropName));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetArrayField(TEXT("modifiedProperties"), ModifiedArray);
 	Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Modified %d texture properties"), ModifiedProperties.Num()));
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::SetMeshMaterial(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if ((!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath)) || AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'assetPath' parameter (static mesh path)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) || MaterialPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing or empty 'materialPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("materialPath"), MaterialPath)) return Err;
 
-	int32 SlotIndex = 0;
-	Params->TryGetNumberField(TEXT("slotIndex"), SlotIndex);
+	int32 SlotIndex = OptionalInt(Params, TEXT("slotIndex"), 0);
 
 	UStaticMesh* Mesh = Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(), nullptr, *AssetPath));
 	if (!Mesh)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load static mesh at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load static mesh at '%s'"), *AssetPath));
 	}
 
 	UMaterialInterface* Material = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, *MaterialPath));
 	if (!Material)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
 	}
 
 	if (SlotIndex < 0 || SlotIndex >= Mesh->GetStaticMaterials().Num())
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Slot index %d out of range (mesh has %d slots)"), SlotIndex, Mesh->GetStaticMaterials().Num()));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Slot index %d out of range (mesh has %d slots)"), SlotIndex, Mesh->GetStaticMaterials().Num()));
 	}
 
 	Mesh->SetMaterial(SlotIndex, Material);
 	UEditorAssetLibrary::SaveAsset(AssetPath, false);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("materialPath"), MaterialPath);
 	Result->SetNumberField(TEXT("slotIndex"), SlotIndex);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString FileName;
-	if (!Params->TryGetStringField(TEXT("filename"), FileName) && !Params->TryGetStringField(TEXT("filePath"), FileName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'filePath' parameter (absolute path to texture file)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("filename"), TEXT("filePath"), FileName)) return Err;
 
-	FString DestinationPath = TEXT("/Game/Textures");
-	if (!Params->TryGetStringField(TEXT("destinationPath"), DestinationPath))
+	FString DestinationPath = OptionalString(Params, TEXT("destinationPath"), TEXT("/Game/Textures"));
+	if (DestinationPath == TEXT("/Game/Textures"))
 	{
-		Params->TryGetStringField(TEXT("packagePath"), DestinationPath);
+		FString PkgPath = OptionalString(Params, TEXT("packagePath"));
+		if (!PkgPath.IsEmpty()) DestinationPath = PkgPath;
 	}
 
 	if (!FPaths::FileExists(FileName))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("File not found: %s"), *FileName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("File not found: %s"), *FileName));
 	}
 
 	UTextureFactory* TextureFactory = NewObject<UTextureFactory>();
@@ -1444,6 +1280,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("filename"), FileName);
 	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
 	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
@@ -1457,13 +1294,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 	Task->RemoveFromRoot();
 	TextureFactory->RemoveFromRoot();
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	// Support single assetPath or array of assetPaths
 	TArray<FString> AssetPaths;
 	const TArray<TSharedPtr<FJsonValue>>* PathsArray = nullptr;
@@ -1490,9 +1325,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 
 	if (AssetPaths.Num() == 0)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' (string) or 'assetPaths' (array of strings)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'assetPath' (string) or 'assetPaths' (array of strings)"));
 	}
 
 	// Load all meshes
@@ -1502,9 +1335,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 		UStaticMesh* Mesh = Cast<UStaticMesh>(StaticLoadObject(UStaticMesh::StaticClass(), nullptr, *Path));
 		if (!Mesh)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load static mesh at '%s'"), *Path));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("Failed to load static mesh at '%s'"), *Path));
 		}
 		Meshes.Add(Mesh);
 	}
@@ -1513,9 +1344,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 	FMeshDescription* RefDesc = Meshes[0]->GetMeshDescription(0);
 	if (!RefDesc)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to get mesh description for reference mesh LOD 0"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to get mesh description for reference mesh LOD 0"));
 	}
 
 	FVertexArray& RefVerts = RefDesc->Vertices();
@@ -1525,9 +1354,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 	int32 RefVertCount = RefVerts.Num();
 	if (RefVertCount == 0)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Reference mesh has no vertices"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Reference mesh has no vertices"));
 	}
 
 	for (FVertexID VertID : RefVerts.GetElementIDs())
@@ -1563,12 +1390,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 		ResultArray.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("meshes"), ResultArray);
 	Result->SetStringField(TEXT("offsetApplied"), FString::Printf(TEXT("(%.2f, %.2f, %.2f)"), Center.X, Center.Y, Center.Z));
 	Result->SetNumberField(TEXT("meshCount"), Meshes.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ============================================================================
@@ -1577,26 +1404,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 
 TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString RowStruct;
-	if (!Params->TryGetStringField(TEXT("rowStruct"), RowStruct))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'rowStruct' parameter (e.g. '/Script/Engine.DataTableRowHandle' or a struct name)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("rowStruct"), RowStruct)) return Err;
 
-	FString PackagePath = TEXT("/Game/DataTables");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/DataTables"));
 
 	// Find the row struct type
 	UScriptStruct* ScriptStruct = nullptr;
@@ -1620,9 +1434,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObj
 
 	if (!ScriptStruct)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Row struct not found: %s"), *RowStruct));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Row struct not found: %s"), *RowStruct));
 	}
 
 	// Create the DataTable asset
@@ -1635,69 +1447,51 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataTable(const TSharedPtr<FJsonObj
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UDataTable::StaticClass(), Factory);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create DataTable: %s/%s"), *PackagePath, *Name));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to create DataTable: %s/%s"), *PackagePath, *Name));
 	}
 
 	UDataTable* DataTable = Cast<UDataTable>(NewAsset);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
 	Result->SetStringField(TEXT("assetPath"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("rowStruct"), ScriptStruct->GetName());
 	Result->SetNumberField(TEXT("rowCount"), DataTable ? DataTable->GetRowMap().Num() : 0);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Params->TryGetStringField(TEXT("assetPath"), AssetPath);
-	}
-	if (AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
 	UDataTable* DataTable = Cast<UDataTable>(Asset);
 	if (!DataTable)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
 	}
 
-	FString RowFilter;
-	Params->TryGetStringField(TEXT("rowFilter"), RowFilter);
+	FString RowFilter = OptionalString(Params, TEXT("rowFilter"));
 
 	// Get the row struct for property iteration
 	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
 	if (!RowStruct)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("DataTable has no row struct"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("DataTable has no row struct"));
 	}
 
 	// Export the table as JSON for reliable serialization, then parse it
 	FString JsonString = DataTable->GetTableAsJSON(EDataTableExportFlags::UseJsonObjectsForStructs);
+
+	auto Result = MCPSuccess();
 
 	TArray<TSharedPtr<FJsonValue>> ParsedRows;
 	TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(JsonString);
@@ -1745,41 +1539,25 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 		RowNames.Add(MakeShared<FJsonValueString>(Pair.Key.ToString()));
 	}
 	Result->SetArrayField(TEXT("rowNames"), RowNames);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Params->TryGetStringField(TEXT("assetPath"), AssetPath);
-	}
-	if (AssetPath.IsEmpty())
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
 	UDataTable* DataTable = Cast<UDataTable>(Asset);
 	if (!DataTable)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
 	}
 
 	// Get JSON string from either inline jsonString or from a file path
@@ -1791,22 +1569,16 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 		{
 			if (!FPaths::FileExists(JsonPath))
 			{
-				Result->SetStringField(TEXT("error"), FString::Printf(TEXT("JSON file not found: %s"), *JsonPath));
-				Result->SetBoolField(TEXT("success"), false);
-				return MakeShared<FJsonValueObject>(Result);
+				return MCPError(FString::Printf(TEXT("JSON file not found: %s"), *JsonPath));
 			}
 			if (!FFileHelper::LoadFileToString(JsonString, *JsonPath))
 			{
-				Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to read JSON file: %s"), *JsonPath));
-				Result->SetBoolField(TEXT("success"), false);
-				return MakeShared<FJsonValueObject>(Result);
+				return MCPError(FString::Printf(TEXT("Failed to read JSON file: %s"), *JsonPath));
 			}
 		}
 		else
 		{
-			Result->SetStringField(TEXT("error"), TEXT("Missing 'jsonString' or 'jsonPath' parameter"));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(TEXT("Missing 'jsonString' or 'jsonPath' parameter"));
 		}
 	}
 
@@ -1819,42 +1591,34 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 		{
 			ErrorsArray.Add(MakeShared<FJsonValueString>(Error));
 		}
-		Result->SetArrayField(TEXT("errors"), ErrorsArray);
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Reimport completed with %d error(s)"), Errors.Num()));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		TSharedPtr<FJsonObject> ErrResult = MakeShared<FJsonObject>();
+		ErrResult->SetBoolField(TEXT("success"), false);
+		ErrResult->SetArrayField(TEXT("errors"), ErrorsArray);
+		ErrResult->SetStringField(TEXT("error"), FString::Printf(TEXT("Reimport completed with %d error(s)"), Errors.Num()));
+		return MCPResult(ErrResult);
 	}
 
 	DataTable->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
 	Result->SetStringField(TEXT("message"), TEXT("DataTable reimported successfully from JSON"));
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
-// ─── Reimport ─────────────────────────────────────────────────────
+// --- Reimport ---------------------------------------------------------
 
 TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
 	// Optionally override the source file path
@@ -1863,9 +1627,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	{
 		if (!FPaths::FileExists(NewSourcePath))
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("File not found: %s"), *NewSourcePath));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("File not found: %s"), *NewSourcePath));
 		}
 
 		// Update the stored source file path on the asset import data
@@ -1897,28 +1659,26 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	// Use FReimportManager to reimport
 	bool bSuccess = FReimportManager::Instance()->Reimport(Asset, /*bAskForNewFileIfMissing=*/false, /*bShowNotification=*/false);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
 	Result->SetBoolField(TEXT("success"), bSuccess);
 	if (!bSuccess)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Reimport failed — check that the asset has a valid source file"));
+		Result->SetStringField(TEXT("error"), TEXT("Reimport failed -- check that the asset has a valid source file"));
 	}
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
-// ─── Socket Handlers ──────────────────────────────────────────────
+// --- Socket Handlers --------------------------------------------------
 
 TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("assetPath"));
-	FString SocketName = Params->GetStringField(TEXT("socketName"));
-
-	if (AssetPath.IsEmpty() || SocketName.IsEmpty())
-	{
-		return MakeShared<FJsonValueString>(TEXT("Error: assetPath and socketName are required"));
-	}
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FString SocketName;
+	if (auto Err = RequireString(Params, TEXT("socketName"), SocketName)) return Err;
 
 	FVector RelLoc = FVector::ZeroVector;
 	FRotator RelRot = FRotator::ZeroRotator;
@@ -1946,10 +1706,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
 	if (!Asset)
 	{
-		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: could not load asset '%s'"), *AssetPath));
+		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
 	}
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	// Try StaticMesh first
 	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
@@ -1959,7 +1717,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		{
 			if (Existing && Existing->SocketName == FName(*SocketName))
 			{
-				return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: socket '%s' already exists"), *SocketName));
+				return MCPError(FString::Printf(TEXT("Socket '%s' already exists"), *SocketName));
 			}
 		}
 
@@ -1972,24 +1730,23 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		SM->Sockets.Add(NewSocket);
 		SM->MarkPackageDirty();
 
-		Result->SetBoolField(TEXT("success"), true);
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("socketName"), SocketName);
 		Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
 	// Try SkeletalMesh
 	if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
 	{
-		FString BoneName = Params->GetStringField(TEXT("boneName"));
-		if (BoneName.IsEmpty()) BoneName = TEXT("root");
+		FString BoneName = OptionalString(Params, TEXT("boneName"), TEXT("root"));
 
 		// Check for duplicate
 		for (USkeletalMeshSocket* Existing : SKM->GetMeshOnlySocketList())
 		{
 			if (Existing && Existing->SocketName == FName(*SocketName))
 			{
-				return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: socket '%s' already exists"), *SocketName));
+				return MCPError(FString::Printf(TEXT("Socket '%s' already exists"), *SocketName));
 			}
 		}
 
@@ -2003,30 +1760,27 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		SKM->MarkPackageDirty();
 		SKM->PostEditChange();
 
-		Result->SetBoolField(TEXT("success"), true);
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("socketName"), SocketName);
 		Result->SetStringField(TEXT("boneName"), BoneName);
 		Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
-	return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: '%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
+	return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("assetPath"));
-	FString SocketName = Params->GetStringField(TEXT("socketName"));
-
-	if (AssetPath.IsEmpty() || SocketName.IsEmpty())
-	{
-		return MakeShared<FJsonValueString>(TEXT("Error: assetPath and socketName are required"));
-	}
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	FString SocketName;
+	if (auto Err = RequireString(Params, TEXT("socketName"), SocketName)) return Err;
 
 	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
 	if (!Asset)
 	{
-		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: could not load asset '%s'"), *AssetPath));
+		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
 	}
 
 	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
@@ -2039,13 +1793,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 				SM->Sockets.RemoveAt(i);
 				SM->MarkPackageDirty();
 
-				TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-				Result->SetBoolField(TEXT("success"), true);
+				auto Result = MCPSuccess();
 				Result->SetStringField(TEXT("removed"), SocketName);
-				return MakeShared<FJsonValueObject>(Result);
+				return MCPResult(Result);
 			}
 		}
-		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: socket '%s' not found on StaticMesh"), *SocketName));
+		return MCPError(FString::Printf(TEXT("Socket '%s' not found on StaticMesh"), *SocketName));
 	}
 
 	if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
@@ -2059,33 +1812,29 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 				SKM->MarkPackageDirty();
 				SKM->PostEditChange();
 
-				TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-				Result->SetBoolField(TEXT("success"), true);
+				auto Result = MCPSuccess();
 				Result->SetStringField(TEXT("removed"), SocketName);
-				return MakeShared<FJsonValueObject>(Result);
+				return MCPResult(Result);
 			}
 		}
-		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: socket '%s' not found on SkeletalMesh"), *SocketName));
+		return MCPError(FString::Printf(TEXT("Socket '%s' not found on SkeletalMesh"), *SocketName));
 	}
 
-	return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: '%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
+	return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("assetPath"));
-	if (AssetPath.IsEmpty())
-	{
-		return MakeShared<FJsonValueString>(TEXT("Error: assetPath is required"));
-	}
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
 	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
 	if (!Asset)
 	{
-		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: could not load asset '%s'"), *AssetPath));
+		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
 	}
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 	TArray<TSharedPtr<FJsonValue>> SocketArray;
 
 	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
@@ -2152,46 +1901,34 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 	}
 	else
 	{
-		return MakeShared<FJsonValueString>(FString::Printf(TEXT("Error: '%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
+		return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
 	}
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("socketCount"), SocketArray.Num());
 	Result->SetArrayField(TEXT("sockets"), SocketArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
-// reload_package — Force reload an asset package from disk (#53)
+// reload_package -- Force reload an asset package from disk (#53)
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAssetHandlers::ReloadPackage(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
 	UPackage* Package = Asset->GetOutermost();
 	if (!Package)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Could not get asset package"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Could not get asset package"));
 	}
 
 	// Unload and reload the package
@@ -2210,6 +1947,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReloadPackage(const TSharedPtr<FJsonObjec
 		UObject* Reloaded = UEditorAssetLibrary::LoadAsset(AssetPath);
 		bSuccess = (Reloaded != nullptr);
 	}
+
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("packageName"), Package->GetName());
 	Result->SetBoolField(TEXT("success"), bSuccess);
@@ -2218,5 +1957,5 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReloadPackage(const TSharedPtr<FJsonObjec
 		Result->SetStringField(TEXT("error"), TEXT("Package reload failed"));
 	}
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

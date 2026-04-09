@@ -1,5 +1,6 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "EditorScriptingUtilities/Public/EditorLevelLibrary.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
@@ -9,8 +10,6 @@
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UObjectIterator.h"
 #include "EngineUtils.h"
-#include "Editor.h"
-#include "Editor/EditorEngine.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "JsonSerializer.h"
@@ -40,22 +39,6 @@
 #include "GameFramework/WorldSettings.h"
 #include "GameFramework/GameModeBase.h"
 
-// Helper: find a UClass by short name (e.g. "StaticMeshActor" finds AStaticMeshActor)
-static UClass* FindClassByShortName(const FString& ClassName)
-{
-	UClass* PrefixedMatch = nullptr;
-	for (TObjectIterator<UClass> It; It; ++It)
-	{
-		const FString& Name = It->GetName();
-		if (Name == ClassName) return *It;
-		if (!PrefixedMatch && (Name == TEXT("U") + ClassName || Name == TEXT("A") + ClassName))
-		{
-			PrefixedMatch = *It;
-		}
-	}
-	return PrefixedMatch;
-}
-
 void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("get_world_outliner"), &GetOutliner);
@@ -83,22 +66,11 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	REQUIRE_EDITOR_WORLD(World);
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
-
-	FString ClassFilter;
-	Params->TryGetStringField(TEXT("classFilter"), ClassFilter);
-	FString NameFilter;
-	Params->TryGetStringField(TEXT("nameFilter"), NameFilter);
-	int32 Limit = 500;
-	Params->TryGetNumberField(TEXT("limit"), Limit);
+	FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
+	FString NameFilter = OptionalString(Params, TEXT("nameFilter"));
+	int32 Limit = OptionalInt(Params, TEXT("limit"), 500);
 
 	TArray<TSharedPtr<FJsonValue>> ActorsArray;
 	int32 TotalCount = 0;
@@ -159,36 +131,23 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 		ActorsArray.Add(MakeShared<FJsonValueObject>(ActorObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("worldName"), World->GetName());
 	Result->SetNumberField(TEXT("totalActors"), TotalCount);
 	Result->SetNumberField(TEXT("returnedActors"), ActorsArray.Num());
 	Result->SetArrayField(TEXT("actors"), ActorsArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorClass;
-	if (!Params->TryGetStringField(TEXT("actorClass"), ActorClass))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorClass' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorClass"), ActorClass)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
-	// Find actor class — silent short-name search first, then full path load
+	// Find actor class -- silent short-name search first, then full path load
 	UClass* Class = FindClassByShortName(ActorClass);
 	if (!Class)
 	{
@@ -197,9 +156,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 
 	if (!Class)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor class not found: %s"), *ActorClass));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor class not found: %s"), *ActorClass));
 	}
 
 	// Get location
@@ -217,37 +174,22 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 	AActor* NewActor = World->SpawnActor<AActor>(Class, SpawnTransform);
 	if (!NewActor)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn actor"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to spawn actor"));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), NewActor->GetActorLabel());
 	Result->SetStringField(TEXT("actorClass"), ActorClass);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::DeleteActor(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* ActorToDelete = nullptr;
@@ -262,37 +204,23 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActor(const TSharedPtr<FJsonObject>
 
 	if (!ActorToDelete)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	World->DestroyActor(ActorToDelete);
-	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* Actor = nullptr;
@@ -307,11 +235,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObj
 
 	if (!Actor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("label"), Actor->GetActorLabel());
 	Result->SetStringField(TEXT("class"), Actor->GetClass()->GetName());
 	Result->SetStringField(TEXT("path"), Actor->GetPathName());
@@ -323,49 +250,29 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObj
 	LocationObj->SetNumberField(TEXT("z"), Location.Z);
 	Result->SetObjectField(TEXT("location"), LocationObj);
 
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetCurrentLevel(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	ULevel* CurrentLevel = World->GetCurrentLevel();
 	if (!CurrentLevel)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("No current level"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("No current level"));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("levelName"), World->GetName());
 	Result->SetStringField(TEXT("levelPath"), World->GetPathName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::ListLevels(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	TArray<TSharedPtr<FJsonValue>> LevelsArray;
 
@@ -390,23 +297,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListLevels(const TSharedPtr<FJsonObject>&
 		LevelsArray.Add(MakeShared<FJsonValueObject>(LevelObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("levels"), LevelsArray);
 	Result->SetNumberField(TEXT("count"), LevelsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetSelectedActors(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	USelection* Selection = GEditor->GetSelectedActors();
 	if (!Selection)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Unable to get selection"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Unable to get selection"));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ActorsArray;
@@ -431,27 +334,18 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetSelectedActors(const TSharedPtr<FJsonO
 		ActorsArray.Add(MakeShared<FJsonValueObject>(ActorObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("actors"), ActorsArray);
 	Result->SetNumberField(TEXT("count"), ActorsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::ListVolumes(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	REQUIRE_EDITOR_WORLD(World);
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
-
-	FString VolumeType;
-	Params->TryGetStringField(TEXT("volumeType"), VolumeType);
+	FString VolumeType = OptionalString(Params, TEXT("volumeType"));
 
 	TArray<TSharedPtr<FJsonValue>> VolumesArray;
 	for (TActorIterator<AVolume> ActorIt(World); ActorIt; ++ActorIt)
@@ -481,32 +375,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListVolumes(const TSharedPtr<FJsonObject>
 		VolumesArray.Add(MakeShared<FJsonValueObject>(VolumeObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("volumes"), VolumesArray);
 	Result->SetNumberField(TEXT("count"), VolumesArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* Actor = nullptr;
@@ -521,9 +402,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 
 	if (!Actor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Get location
@@ -554,40 +433,30 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 	NewLocationObj->SetNumberField(TEXT("x"), NewLocation.X);
 	NewLocationObj->SetNumberField(TEXT("y"), NewLocation.Y);
 	NewLocationObj->SetNumberField(TEXT("z"), NewLocation.Z);
-	Result->SetObjectField(TEXT("location"), NewLocationObj);
 
 	FRotator NewRotation = Actor->GetActorRotation();
 	TSharedPtr<FJsonObject> NewRotationObj = MakeShared<FJsonObject>();
 	NewRotationObj->SetNumberField(TEXT("pitch"), NewRotation.Pitch);
 	NewRotationObj->SetNumberField(TEXT("yaw"), NewRotation.Yaw);
 	NewRotationObj->SetNumberField(TEXT("roll"), NewRotation.Roll);
+
+	auto Result = MCPSuccess();
+	Result->SetObjectField(TEXT("location"), NewLocationObj);
 	Result->SetObjectField(TEXT("rotation"), NewRotationObj);
-
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	const TArray<TSharedPtr<FJsonValue>>* ActorLabelsArray = nullptr;
 	if (!Params->TryGetArrayField(TEXT("actorLabels"), ActorLabelsArray))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabels' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'actorLabels' parameter"));
 	}
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Deselect all
 	GEditor->SelectNone(true, true, false);
@@ -617,33 +486,20 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("selected"), SelectedArray);
 	Result->SetArrayField(TEXT("notFound"), NotFoundArray);
 	Result->SetNumberField(TEXT("selectedCount"), SelectedArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString LightType;
-	if (!Params->TryGetStringField(TEXT("lightType"), LightType))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'lightType' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("lightType"), LightType)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Get location
 	FVector Location = FVector::ZeroVector;
@@ -655,8 +511,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 		(*LocationObj)->TryGetNumberField(TEXT("z"), Location.Z);
 	}
 
-	double Intensity = 5000.0;
-	Params->TryGetNumberField(TEXT("intensity"), Intensity);
+	double Intensity = OptionalNumber(Params, TEXT("intensity"), 5000.0);
 
 	// Determine light class
 	UClass* LightClass = nullptr;
@@ -678,23 +533,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown light type: %s. Use point, spot, directional, or rect."), *LightType));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown light type: %s. Use point, spot, directional, or rect."), *LightType));
 	}
 
 	FTransform LightTransform(FRotator::ZeroRotator, Location);
 	AActor* NewLight = World->SpawnActor<AActor>(LightClass, LightTransform);
 	if (!NewLight)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn light actor"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to spawn light actor"));
 	}
 
 	// Set label if provided
-	FString Label;
-	if (Params->TryGetStringField(TEXT("label"), Label))
+	FString Label = OptionalString(Params, TEXT("label"));
+	if (!Label.IsEmpty())
 	{
 		NewLight->SetActorLabel(Label);
 	}
@@ -706,33 +557,20 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 		LightComponent->SetIntensity(Intensity);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), NewLight->GetActorLabel());
 	Result->SetStringField(TEXT("actorName"), NewLight->GetName());
 	Result->SetStringField(TEXT("lightType"), LightType);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* Actor = nullptr;
@@ -747,17 +585,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 
 	if (!Actor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	ULightComponent* LightComponent = Actor->FindComponentByClass<ULightComponent>();
 	if (!LightComponent)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor '%s' does not have a light component"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor '%s' does not have a light component"), *ActorLabel));
 	}
 
 	// Set intensity if provided
@@ -778,6 +612,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 		LightComponent->SetLightColor(FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetNumberField(TEXT("intensity"), LightComponent->Intensity);
 
@@ -788,30 +623,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	ColorResult->SetNumberField(TEXT("b"), CurrentColor.B * 255.0f);
 	Result->SetObjectField(TEXT("color"), ColorResult);
 
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString VolumeType;
-	if (!Params->TryGetStringField(TEXT("volumeType"), VolumeType))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'volumeType' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("volumeType"), VolumeType)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Get location
 	FVector Location = FVector::ZeroVector;
@@ -875,23 +695,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>
 
 	if (!VolumeClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Volume class not found: %s"), *VolumeType));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Volume class not found: %s"), *VolumeType));
 	}
 
 	FTransform VolumeTransform(FRotator::ZeroRotator, Location);
 	AActor* NewVolume = World->SpawnActor<AActor>(VolumeClass, VolumeTransform);
 	if (!NewVolume)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn volume actor"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to spawn volume actor"));
 	}
 
 	// Set label if provided
-	FString Label;
-	if (Params->TryGetStringField(TEXT("label"), Label))
+	FString Label = OptionalString(Params, TEXT("label"));
+	if (!Label.IsEmpty())
 	{
 		NewVolume->SetActorLabel(Label);
 	}
@@ -899,49 +715,26 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>
 	// Set scale based on extent
 	NewVolume->SetActorScale3D(Extent / 100.0);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), NewVolume->GetActorLabel());
 	Result->SetStringField(TEXT("actorName"), NewVolume->GetName());
 	Result->SetStringField(TEXT("volumeType"), VolumeType);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	FString ComponentClass;
-	if (!Params->TryGetStringField(TEXT("componentClass"), ComponentClass))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'componentClass' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("componentClass"), ComponentClass)) return Err;
 
 	FString ComponentName;
-	if (!Params->TryGetStringField(TEXT("componentName"), ComponentName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'componentName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* Actor = nullptr;
@@ -956,9 +749,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 
 	if (!Actor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Find component class
@@ -970,25 +761,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 
 	if (!CompClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Component class not found: %s"), *ComponentClass));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Component class not found: %s"), *ComponentClass));
 	}
 
 	if (!CompClass->IsChildOf(UActorComponent::StaticClass()))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Class '%s' is not an ActorComponent"), *ComponentClass));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Class '%s' is not an ActorComponent"), *ComponentClass));
 	}
 
 	FName CompName = FName(*ComponentName);
 	UActorComponent* NewComponent = NewObject<UActorComponent>(Actor, CompClass, CompName);
 	if (!NewComponent)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create component"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create component"));
 	}
 
 	// If it's a scene component, attach it to root
@@ -1001,44 +786,34 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 	NewComponent->RegisterComponent();
 	Actor->AddInstanceComponent(NewComponent);
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetStringField(TEXT("componentClass"), NewComponent->GetClass()->GetName());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString LevelPath;
-	if (!Params->TryGetStringField(TEXT("levelPath"), LevelPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'levelPath' parameter (e.g. /Game/Maps/MyMap)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("levelPath"), LevelPath)) return Err;
 
 	// Use the LevelEditorSubsystem to load the level
 	ULevelEditorSubsystem* LevelEditorSubsystem = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
 	if (!LevelEditorSubsystem)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("LevelEditorSubsystem not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("LevelEditorSubsystem not available"));
 	}
 
 	bool bSuccess = LevelEditorSubsystem->LoadLevel(LevelPath);
 	if (!bSuccess)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load level: %s"), *LevelPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load level: %s"), *LevelPath));
 	}
 
 	// Get info about the newly loaded world
+	auto Result = MCPSuccess();
 	UWorld* World = GEditor->GetEditorWorldContext().World();
 	if (World)
 	{
@@ -1047,57 +822,38 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 	}
 
 	Result->SetStringField(TEXT("levelPath"), LevelPath);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::SaveLevel(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Use the LevelEditorSubsystem to save the current level
 	ULevelEditorSubsystem* LevelEditorSubsystem = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
 	if (!LevelEditorSubsystem)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("LevelEditorSubsystem not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("LevelEditorSubsystem not available"));
 	}
 
 	bool bSuccess = LevelEditorSubsystem->SaveCurrentLevel();
 
-	Result->SetStringField(TEXT("levelName"), World->GetName());
-	Result->SetStringField(TEXT("levelPath"), World->GetPathName());
-	Result->SetBoolField(TEXT("success"), bSuccess);
-
 	if (!bSuccess)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to save current level"));
+		return MCPError(TEXT("Failed to save current level"));
 	}
 
-	return MakeShared<FJsonValueObject>(Result);
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("levelName"), World->GetName());
+	Result->SetStringField(TEXT("levelPath"), World->GetPathName());
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::ListSublevels(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	TArray<TSharedPtr<FJsonValue>> SublevelsArray;
 
@@ -1132,41 +888,25 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListSublevels(const TSharedPtr<FJsonObjec
 		SublevelsArray.Add(MakeShared<FJsonValueObject>(LevelObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("persistentLevel"), World->GetName());
 	Result->SetArrayField(TEXT("sublevels"), SublevelsArray);
 	Result->SetNumberField(TEXT("count"), SublevelsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	FString ComponentName;
-	Params->TryGetStringField(TEXT("componentName"), ComponentName);
+	FString ComponentName = OptionalString(Params, TEXT("componentName"));
 
 	FString PropertyName;
-	if (!Params->TryGetStringField(TEXT("propertyName"), PropertyName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyName' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	AActor* TargetActor = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
@@ -1180,11 +920,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 
 	if (!TargetActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
-	// Find the component — exact match first, then prefix/class match
+	// Find the component -- exact match first, then prefix/class match
 	UActorComponent* TargetComp = nullptr;
 	if (!ComponentName.IsEmpty())
 	{
@@ -1220,24 +959,21 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 
 	if (!TargetComp)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Component '%s' not found on actor '%s'"), *ComponentName, *ActorLabel));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Component '%s' not found on actor '%s'"), *ComponentName, *ActorLabel));
 	}
 
 	// Set the property
 	FProperty* Prop = TargetComp->GetClass()->FindPropertyByName(*PropertyName);
 	if (!Prop)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Property '%s' not found on component"), *PropertyName));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Property '%s' not found on component"), *PropertyName));
 	}
 
 	// Handle different value types from JSON
 	const TSharedPtr<FJsonValue>* ValueField = Params->Values.Find(TEXT("value"));
 	if (!ValueField || !(*ValueField).IsValid())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'value' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'value' parameter"));
 	}
 
 	FString ValueStr;
@@ -1266,30 +1002,20 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 
 	TargetComp->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("componentClass"), TargetComp->GetClass()->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	AActor* TargetActor = nullptr;
 	for (TActorIterator<AActor> It(World); It; ++It)
@@ -1303,8 +1029,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 
 	if (!TargetActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Volume not found: %s"), *ActorLabel));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Volume not found: %s"), *ActorLabel));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Changes;
@@ -1335,33 +1060,25 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetArrayField(TEXT("changes"), Changes);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetWorldSettings(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	AWorldSettings* Settings = World->GetWorldSettings();
 	if (!Settings)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("WorldSettings not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("WorldSettings not available"));
 	}
 
 	// DefaultGameMode
+	auto Result = MCPSuccess();
 	if (Settings->DefaultGameMode)
 	{
 		Result->SetStringField(TEXT("defaultGameMode"), Settings->DefaultGameMode->GetPathName());
@@ -1386,28 +1103,17 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetWorldSettings(const TSharedPtr<FJsonOb
 	// World name
 	Result->SetStringField(TEXT("worldName"), World->GetName());
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	AWorldSettings* Settings = World->GetWorldSettings();
 	if (!Settings)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("WorldSettings not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("WorldSettings not available"));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Changes;
@@ -1435,9 +1141,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 			}
 			else
 			{
-				Result->SetStringField(TEXT("error"), FString::Printf(TEXT("GameMode class not found or invalid: %s"), *GameModeStr));
-				Result->SetBoolField(TEXT("success"), false);
-				return MakeShared<FJsonValueObject>(Result);
+				return MCPError(FString::Printf(TEXT("GameMode class not found or invalid: %s"), *GameModeStr));
 			}
 		}
 	}
@@ -1468,8 +1172,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 
 	Settings->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("changes"), Changes);
 	Result->SetStringField(TEXT("worldName"), World->GetName());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }

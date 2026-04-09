@@ -1,5 +1,6 @@
 #include "SequencerHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "LevelSequence.h"
 #include "LevelSequenceActor.h"
 // LevelSequenceFactoryNew may not be available; use AssetTools directly
@@ -38,27 +39,17 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Cinematics");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Cinematics"));
 
 	// Create the package
 	FString FullPackagePath = PackagePath / Name;
 	UPackage* Package = CreatePackage(*FullPackagePath);
 	if (!Package)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create package at '%s'"), *FullPackagePath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to create package at '%s'"), *FullPackagePath));
 	}
 
 	// Create the level sequence asset
@@ -67,9 +58,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<
 
 	if (!NewSequence)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create LevelSequence asset"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create LevelSequence asset"));
 	}
 
 	// Notify the asset registry
@@ -78,43 +67,33 @@ TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<
 	// Mark package dirty so it can be saved
 	Package->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("path"), NewSequence->GetPathName());
 	Result->SetStringField(TEXT("packagePath"), FullPackagePath);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	ULevelSequence* Sequence = Cast<ULevelSequence>(LoadedAsset);
 	if (!Sequence)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load LevelSequence at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load LevelSequence at '%s'"), *AssetPath));
 	}
 
 	UMovieScene* MovieScene = Sequence->GetMovieScene();
 	if (!MovieScene)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("LevelSequence has no MovieScene"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("LevelSequence has no MovieScene"));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), Sequence->GetName());
 	Result->SetStringField(TEXT("path"), Sequence->GetPathName());
 
@@ -207,46 +186,28 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 	Result->SetArrayField(TEXT("masterTracks"), MasterTracksArray);
 	Result->SetNumberField(TEXT("masterTrackCount"), MasterTracksArray.Num());
 
-	Result->SetBoolField(TEXT("success"), true);
-
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	FString TrackType;
-	if (!Params->TryGetStringField(TEXT("trackType"), TrackType))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'trackType' parameter (e.g. Transform, Float, SkeletalAnimation, CameraCut, Audio, Event, Fade)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("trackType"), TrackType)) return Err;
 
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	ULevelSequence* Sequence = Cast<ULevelSequence>(LoadedAsset);
 	if (!Sequence)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to load LevelSequence at '%s'"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to load LevelSequence at '%s'"), *AssetPath));
 	}
 
 	UMovieScene* MovieScene = Sequence->GetMovieScene();
 	if (!MovieScene)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("LevelSequence has no MovieScene"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("LevelSequence has no MovieScene"));
 	}
 
 	// Determine track class from type name
@@ -281,23 +242,17 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown track type: '%s'. Use Transform, Float, SkeletalAnimation, CameraCut, Audio, Event, or Fade."), *TrackType));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown track type: '%s'. Use Transform, Float, SkeletalAnimation, CameraCut, Audio, Event, or Fade."), *TrackType));
 	}
 
 	// Check if we should add to an actor binding or as a master track
-	FString ActorLabel;
-	if (Params->TryGetStringField(TEXT("actorLabel"), ActorLabel) && !ActorLabel.IsEmpty())
+	FString ActorLabel = OptionalString(Params, TEXT("actorLabel"));
+	auto Result = MCPSuccess();
+
+	if (!ActorLabel.IsEmpty())
 	{
 		// Find the binding for this actor
-		UWorld* World = GEditor->GetEditorWorldContext().World();
-		if (!World)
-		{
-			Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
-		}
+		REQUIRE_EDITOR_WORLD(World);
 
 		// Find actor by label
 		AActor* TargetActor = nullptr;
@@ -312,9 +267,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 
 		if (!TargetActor)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 		}
 
 		// Find or create a binding for this actor
@@ -344,9 +297,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 		UMovieSceneTrack* NewTrack = MovieScene->AddTrack(TrackClass, BindingGuid);
 		if (!NewTrack)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to add %s track to actor '%s'"), *TrackType, *ActorLabel));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("Failed to add %s track to actor '%s'"), *TrackType, *ActorLabel));
 		}
 
 		Result->SetStringField(TEXT("actorLabel"), ActorLabel);
@@ -354,7 +305,6 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 		Result->SetStringField(TEXT("trackType"), TrackType);
 		Result->SetStringField(TEXT("trackClass"), NewTrack->GetClass()->GetName());
 		Result->SetStringField(TEXT("scope"), TEXT("binding"));
-		Result->SetBoolField(TEXT("success"), true);
 	}
 	else
 	{
@@ -362,34 +312,24 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 		UMovieSceneTrack* NewTrack = MovieScene->AddTrack(TrackClass);
 		if (!NewTrack)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to add master %s track"), *TrackType));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("Failed to add master %s track"), *TrackType));
 		}
 
 		Result->SetStringField(TEXT("trackType"), TrackType);
 		Result->SetStringField(TEXT("trackClass"), NewTrack->GetClass()->GetName());
 		Result->SetStringField(TEXT("scope"), TEXT("master"));
-		Result->SetBoolField(TEXT("success"), true);
 	}
 
 	// Mark the sequence package dirty
 	Sequence->GetOutermost()->MarkPackageDirty();
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FSequencerHandlers::SequenceControl(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Action;
-	if (!Params->TryGetStringField(TEXT("action"), Action))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'action' parameter (play, pause, stop)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("action"), Action)) return Err;
 
 	FString Command;
 	if (Action.Equals(TEXT("play"), ESearchCase::IgnoreCase))
@@ -406,9 +346,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SequenceControl(const TSharedPtr<FJso
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown action: '%s'. Use play, pause, or stop."), *Action));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown action: '%s'. Use play, pause, or stop."), *Action));
 	}
 
 	// Execute via console command
@@ -418,9 +356,9 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SequenceControl(const TSharedPtr<FJso
 		GEditor->Exec(World, *Command, *GLog);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("action"), Action);
 	Result->SetStringField(TEXT("command"), Command);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

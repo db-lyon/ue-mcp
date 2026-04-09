@@ -1,9 +1,10 @@
 import { z } from "zod";
-import type { EditorBridge } from "./bridge.js";
+import type { IBridge } from "./bridge.js";
 import type { ProjectContext } from "./project.js";
+import { McpError, ErrorCode } from "./errors.js";
 
 export interface ToolContext {
-  bridge: EditorBridge;
+  bridge: IBridge;
   project: ProjectContext;
 }
 
@@ -39,7 +40,7 @@ export function categoryTool(
       const action = params.action as string;
       const spec = actions[action];
       if (!spec) {
-        throw new Error(`Unknown action '${action}'. Available: ${actionNames.join(", ")}`);
+        throw new McpError(ErrorCode.UNKNOWN_ACTION, `Unknown action '${action}'. Available: ${actionNames.join(", ")}`);
       }
       if (spec.handler) {
         return spec.handler(ctx, params);
@@ -48,7 +49,7 @@ export function categoryTool(
         const mapped = spec.mapParams ? spec.mapParams(params) : stripAction(params);
         return ctx.bridge.call(spec.bridge, mapped);
       }
-      throw new Error(`Action '${action}' has no handler or bridge method`);
+      throw new McpError(ErrorCode.NO_HANDLER, `Action '${action}' has no handler or bridge method`);
     },
   };
 }

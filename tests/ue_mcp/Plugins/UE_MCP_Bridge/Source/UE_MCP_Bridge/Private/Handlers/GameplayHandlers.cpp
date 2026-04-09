@@ -1,5 +1,6 @@
 #include "GameplayHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -117,18 +118,10 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/AI/SmartObjects");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/SmartObjects"));
 
 	// Delete existing asset if it exists
 	FString AssetPath = PackagePath + TEXT("/") + Name;
@@ -138,9 +131,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 	UClass* SmartObjectDefClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectDefinition"));
 	if (!SmartObjectDefClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("SmartObjectDefinition class not found. Enable SmartObjects plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("SmartObjectDefinition class not found. Enable SmartObjects plugin."));
 	}
 
 	// Create asset
@@ -164,40 +155,31 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackageName, SmartObjectDefClass, nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create SmartObjectDefinition"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create SmartObjectDefinition"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::GetNavmeshInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
 	if (!NavSys)
 	{
+		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("status"), TEXT("no_navigation_system"));
-		Result->SetBoolField(TEXT("success"), true);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("status"), TEXT("active"));
 
 	// Get nav data info
@@ -214,22 +196,15 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetNavmeshInfo(const TSharedPtr<FJsonO
 		}
 	}
 	Result->SetArrayField(TEXT("navData"), NavDataArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::GetGameFrameworkInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	REQUIRE_EDITOR_WORLD(World);
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	auto Result = MCPSuccess();
 
 	// Game mode
 	AGameModeBase* GameMode = World->GetAuthGameMode();
@@ -263,13 +238,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetGameFrameworkInfo(const TSharedPtr<
 		}
 	}
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ListInputAssets(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 
@@ -301,13 +275,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListInputAssets(const TSharedPtr<FJson
 	}
 	Result->SetArrayField(TEXT("inputMappingContexts"), MappingContextArray);
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ListBehaviorTrees(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
@@ -322,14 +295,13 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListBehaviorTrees(const TSharedPtr<FJs
 		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
 	}
 	Result->SetArrayField(TEXT("behaviorTrees"), AssetArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ListEqsQueries(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
@@ -344,14 +316,13 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListEqsQueries(const TSharedPtr<FJsonO
 		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
 	}
 	Result->SetArrayField(TEXT("eqsQueries"), AssetArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ListStateTrees(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
@@ -366,21 +337,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListStateTrees(const TSharedPtr<FJsonO
 		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
 	}
 	Result->SetArrayField(TEXT("stateTrees"), AssetArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ProjectPointToNavigation(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
 	if (!Params->TryGetObjectField(TEXT("location"), LocationObj))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'location' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'location' parameter"));
 	}
 
 	FVector Point;
@@ -388,25 +354,18 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ProjectPointToNavigation(const TShared
 	Point.Y = (*LocationObj)->GetNumberField(TEXT("y"));
 	Point.Z = (*LocationObj)->GetNumberField(TEXT("z"));
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
 	if (!NavSys)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("No navigation system available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("No navigation system available"));
 	}
 
 	FNavLocation NavLocation;
 	bool bProjected = NavSys->ProjectPointToNavigation(Point, NavLocation);
 
+	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("projected"), bProjected);
 	if (bProjected)
 	{
@@ -416,32 +375,21 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ProjectPointToNavigation(const TShared
 		ProjectedPoint->SetNumberField(TEXT("z"), NavLocation.Location.Z);
 		Result->SetObjectField(TEXT("projectedLocation"), ProjectedPoint);
 	}
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputAction(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Input");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Input"));
 
 	UClass* InputActionClass = FindObject<UClass>(nullptr, TEXT("/Script/EnhancedInput.InputAction"));
 	if (!InputActionClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("InputAction class not found. Enable EnhancedInput plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("InputAction class not found. Enable EnhancedInput plugin."));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -450,14 +398,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputAction(const TSharedPtr<FJs
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, InputActionClass, nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create InputAction"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create InputAction"));
 	}
 
 	// Apply valueType if provided
-	FString ValueTypeStr;
-	if (Params->TryGetStringField(TEXT("valueType"), ValueTypeStr) && !ValueTypeStr.IsEmpty())
+	FString ValueTypeStr = OptionalString(Params, TEXT("valueType"));
+	if (!ValueTypeStr.IsEmpty())
 	{
 		EInputActionValueType DesiredType = EInputActionValueType::Boolean;
 		bool bValidType = true;
@@ -495,33 +441,24 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputAction(const TSharedPtr<FJs
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputMappingContext(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Input");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Input"));
 
 	UClass* IMCClass = FindObject<UClass>(nullptr, TEXT("/Script/EnhancedInput.InputMappingContext"));
 	if (!IMCClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("InputMappingContext class not found. Enable EnhancedInput plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("InputMappingContext class not found. Enable EnhancedInput plugin."));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -530,40 +467,29 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputMappingContext(const TShare
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, IMCClass, nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create InputMappingContext"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create InputMappingContext"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlackboard(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/AI");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
 
 	UClass* BlackboardClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.BlackboardData"));
 	if (!BlackboardClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("BlackboardData class not found."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("BlackboardData class not found."));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -572,40 +498,29 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlackboard(const TSharedPtr<FJso
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, BlackboardClass, nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create BlackboardData"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create BlackboardData"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/AI");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
 
 	UClass* BTClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.BehaviorTree"));
 	if (!BTClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("BehaviorTree class not found."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("BehaviorTree class not found."));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -614,40 +529,29 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJ
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, BTClass, nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create BehaviorTree"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create BehaviorTree"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateEqsQuery(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/AI/EQS");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/EQS"));
 
 	UClass* EQSClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.EnvironmentQuery"));
 	if (!EQSClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("EnvironmentQuery class not found."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("EnvironmentQuery class not found."));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -656,40 +560,29 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateEqsQuery(const TSharedPtr<FJsonO
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, EQSClass, nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create EnvironmentQuery"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create EnvironmentQuery"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/AI");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
 
 	UClass* STClass = FindObject<UClass>(nullptr, TEXT("/Script/StateTreeModule.StateTree"));
 	if (!STClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("StateTree class not found. Enable StateTree plugin."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("StateTree class not found. Enable StateTree plugin."));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -698,29 +591,24 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, STClass, nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create StateTree"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create StateTree"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlueprintWithParent(const FString& Name, const FString& PackagePath, const FString& ParentClassPath, const FString& FriendlyTypeName)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	UClass* ParentClass = FindObject<UClass>(nullptr, *ParentClassPath);
 	if (!ParentClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("%s class not found: %s"), *FriendlyTypeName, *ParentClassPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("%s class not found: %s"), *FriendlyTypeName, *ParentClassPath));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -736,9 +624,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlueprintWithParent(const FStrin
 	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Failed to create %s Blueprint"), *FriendlyTypeName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Failed to create %s Blueprint"), *FriendlyTypeName));
 	}
 
 	NewBlueprint->ParentClass = ParentClass;
@@ -755,130 +641,73 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlueprintWithParent(const FStrin
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("type"), FriendlyTypeName);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateGameMode(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Blueprints/GameFramework");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Blueprints/GameFramework"));
 
 	return CreateBlueprintWithParent(Name, PackagePath, TEXT("/Script/Engine.GameModeBase"), TEXT("GameMode"));
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateGameState(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Blueprints/GameFramework");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Blueprints/GameFramework"));
 
 	return CreateBlueprintWithParent(Name, PackagePath, TEXT("/Script/Engine.GameStateBase"), TEXT("GameState"));
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreatePlayerController(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Blueprints/GameFramework");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Blueprints/GameFramework"));
 
 	return CreateBlueprintWithParent(Name, PackagePath, TEXT("/Script/Engine.PlayerController"), TEXT("PlayerController"));
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreatePlayerState(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Blueprints/GameFramework");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Blueprints/GameFramework"));
 
 	return CreateBlueprintWithParent(Name, PackagePath, TEXT("/Script/Engine.PlayerState"), TEXT("PlayerState"));
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateHud(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/Blueprints/GameFramework");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Blueprints/GameFramework"));
 
 	return CreateBlueprintWithParent(Name, PackagePath, TEXT("/Script/Engine.HUD"), TEXT("HUD"));
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::SetCollisionProfile(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	FString ProfileName;
-	if (!Params->TryGetStringField(TEXT("profileName"), ProfileName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'profileName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("profileName"), ProfileName)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* FoundActor = nullptr;
@@ -893,9 +722,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetCollisionProfile(const TSharedPtr<F
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Set collision profile on all primitive components
@@ -912,35 +739,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetCollisionProfile(const TSharedPtr<F
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("profileName"), ProfileName);
 	Result->SetNumberField(TEXT("componentsUpdated"), ComponentsUpdated);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::SetPhysicsEnabled(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	bool bEnabled = true;
-	Params->TryGetBoolField(TEXT("enabled"), bEnabled);
+	bool bEnabled = OptionalBool(Params, TEXT("enabled"), true);
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* FoundActor = nullptr;
@@ -955,9 +769,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetPhysicsEnabled(const TSharedPtr<FJs
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Set physics simulation on all primitive components
@@ -974,32 +786,21 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetPhysicsEnabled(const TSharedPtr<FJs
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetBoolField(TEXT("enabled"), bEnabled);
 	Result->SetNumberField(TEXT("componentsUpdated"), ComponentsUpdated);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::SetCollisionType(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	FString CollisionType;
-	if (!Params->TryGetStringField(TEXT("collisionType"), CollisionType))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'collisionType' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("collisionType"), CollisionType)) return Err;
 
 	// Map string to ECollisionEnabled::Type
 	ECollisionEnabled::Type CollisionEnabled;
@@ -1021,18 +822,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetCollisionType(const TSharedPtr<FJso
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Invalid collisionType: %s. Use NoCollision, QueryOnly, PhysicsOnly, or QueryAndPhysics"), *CollisionType));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Invalid collisionType: %s. Use NoCollision, QueryOnly, PhysicsOnly, or QueryAndPhysics"), *CollisionType));
 	}
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* FoundActor = nullptr;
@@ -1047,9 +840,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetCollisionType(const TSharedPtr<FJso
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Set collision enabled on all primitive components
@@ -1066,32 +857,20 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetCollisionType(const TSharedPtr<FJso
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("collisionType"), CollisionType);
 	Result->SetNumberField(TEXT("componentsUpdated"), ComponentsUpdated);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::SetBodyProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* FoundActor = nullptr;
@@ -1106,9 +885,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBodyProperties(const TSharedPtr<FJs
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Set body properties on all primitive components
@@ -1151,23 +928,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBodyProperties(const TSharedPtr<FJs
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetNumberField(TEXT("componentsUpdated"), ComponentsUpdated);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Get location
 	FVector Location = FVector::ZeroVector;
@@ -1196,9 +966,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPt
 	ANavModifierVolume* NewVolume = World->SpawnActor<ANavModifierVolume>(ANavModifierVolume::StaticClass(), SpawnTransform);
 	if (!NewVolume)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn NavModifierVolume"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to spawn NavModifierVolume"));
 	}
 
 	// Set label if provided
@@ -1208,6 +976,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPt
 		NewVolume->SetActorLabel(Label);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), NewVolume->GetActorLabel());
 	Result->SetStringField(TEXT("actorName"), NewVolume->GetName());
 
@@ -1218,41 +987,26 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPt
 	LocationResult->SetNumberField(TEXT("z"), ActorLocation.Z);
 	Result->SetObjectField(TEXT("location"), LocationResult);
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::RebuildNavmesh(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Trigger navmesh rebuild via console command
 	GEditor->Exec(World, TEXT("RebuildNavigation"));
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("status"), TEXT("rebuild_triggered"));
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::GetCdoDefaults(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ClassName;
-	if (!Params->TryGetStringField(TEXT("className"), ClassName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'className' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("className"), ClassName)) return Err;
 
 	// Try to find the class by name - support both short names and full paths
 	UClass* FoundClass = nullptr;
@@ -1275,19 +1029,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetCdoDefaults(const TSharedPtr<FJsonO
 
 	if (!FoundClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Class not found: %s"), *ClassName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Class not found: %s"), *ClassName));
 	}
 
 	UObject* CDO = FoundClass->GetDefaultObject();
 	if (!CDO)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Could not get CDO for class: %s"), *ClassName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Could not get CDO for class: %s"), *ClassName));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("className"), FoundClass->GetName());
 	Result->SetStringField(TEXT("classPath"), FoundClass->GetPathName());
 
@@ -1314,29 +1065,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetCdoDefaults(const TSharedPtr<FJsonO
 
 	Result->SetArrayField(TEXT("properties"), PropertiesArray);
 	Result->SetNumberField(TEXT("propertyCount"), PropertiesArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::SetWorldGameMode(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString GameModeClassPath;
-	if (!Params->TryGetStringField(TEXT("gameModeClass"), GameModeClassPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'gameModeClass' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("gameModeClass"), GameModeClassPath)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Try to find the game mode class - support blueprint paths ending with _C
 	UClass* GameModeClass = nullptr;
@@ -1359,78 +1097,57 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetWorldGameMode(const TSharedPtr<FJso
 
 	if (!GameModeClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("GameMode class not found: %s"), *GameModeClassPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("GameMode class not found: %s"), *GameModeClassPath));
 	}
 
 	if (!GameModeClass->IsChildOf(AGameModeBase::StaticClass()))
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Class '%s' is not a GameModeBase subclass"), *GameModeClassPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Class '%s' is not a GameModeBase subclass"), *GameModeClassPath));
 	}
 
 	AWorldSettings* WorldSettings = World->GetWorldSettings();
 	if (!WorldSettings)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Could not get WorldSettings"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Could not get WorldSettings"));
 	}
 
 	WorldSettings->DefaultGameMode = GameModeClass;
 	WorldSettings->MarkPackageDirty();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("gameModeClass"), GameModeClass->GetPathName());
 	Result->SetStringField(TEXT("gameModeName"), GameModeClass->GetName());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateAiPerceptionConfig(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlueprintPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BlueprintPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
 	if (!Blueprint || !Blueprint->GeneratedClass)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
 	}
 
 	// The blueprint must be an Actor-based blueprint to add components
 	if (!Blueprint->GeneratedClass->IsChildOf(AActor::StaticClass()))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Blueprint must be based on AActor to add perception component"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Blueprint must be based on AActor to add perception component"));
 	}
 
 	// Read which senses to configure
-	bool bAddSight = true;
-	bool bAddHearing = false;
-	bool bAddDamage = false;
-	Params->TryGetBoolField(TEXT("addSight"), bAddSight);
-	Params->TryGetBoolField(TEXT("addHearing"), bAddHearing);
-	Params->TryGetBoolField(TEXT("addDamage"), bAddDamage);
+	bool bAddSight = OptionalBool(Params, TEXT("addSight"), true);
+	bool bAddHearing = OptionalBool(Params, TEXT("addHearing"), false);
+	bool bAddDamage = OptionalBool(Params, TEXT("addDamage"), false);
 
 	// Add AIPerceptionComponent via the SCS (SimpleConstructionScript)
 	USCS_Node* PerceptionNode = Blueprint->SimpleConstructionScript->CreateNode(UAIPerceptionComponent::StaticClass(), TEXT("AIPerceptionComp"));
 	if (!PerceptionNode)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create AIPerceptionComponent node"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create AIPerceptionComponent node"));
 	}
 
 	Blueprint->SimpleConstructionScript->AddNode(PerceptionNode);
@@ -1438,9 +1155,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateAiPerceptionConfig(const TShared
 	UAIPerceptionComponent* PerceptionComp = Cast<UAIPerceptionComponent>(PerceptionNode->ComponentTemplate);
 	if (!PerceptionComp)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to get AIPerceptionComponent template"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to get AIPerceptionComponent template"));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> SensesAdded;
@@ -1486,42 +1201,28 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateAiPerceptionConfig(const TShared
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetStringField(TEXT("componentName"), TEXT("AIPerceptionComp"));
 	Result->SetArrayField(TEXT("sensesConfigured"), SensesAdded);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString BlackboardPath;
-	if (!Params->TryGetStringField(TEXT("blackboardPath"), BlackboardPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blackboardPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blackboardPath"), BlackboardPath)) return Err;
 
 	FString KeyName;
-	if (!Params->TryGetStringField(TEXT("keyName"), KeyName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'keyName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("keyName"), KeyName)) return Err;
 
-	FString KeyType = TEXT("Bool");
-	Params->TryGetStringField(TEXT("keyType"), KeyType);
+	FString KeyType = OptionalString(Params, TEXT("keyType"), TEXT("Bool"));
 
 	UBlackboardData* BlackboardAsset = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
 	if (!BlackboardAsset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
 	}
 
 	// Determine the key type class
@@ -1568,9 +1269,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJso
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown key type: %s. Supported: Bool, Int, Float, String, Name, Object, Class, Enum, Vector, Rotator"), *KeyType));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown key type: %s. Supported: Bool, Int, Float, String, Name, Object, Class, Enum, Vector, Rotator"), *KeyType));
 	}
 
 	// Add the new key entry
@@ -1584,44 +1283,26 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJso
 	// Save
 	UEditorAssetLibrary::SaveAsset(BlackboardAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
 	Result->SetStringField(TEXT("keyName"), KeyName);
 	Result->SetStringField(TEXT("keyType"), KeyType);
 	Result->SetNumberField(TEXT("totalKeys"), BlackboardAsset->Keys.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::SetupEnhancedInput(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	FString MappingContextPath;
-	if (!Params->TryGetStringField(TEXT("mappingContextPath"), MappingContextPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'mappingContextPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("mappingContextPath"), MappingContextPath)) return Err;
 
-	int32 Priority = 0;
-	Params->TryGetNumberField(TEXT("priority"), Priority);
+	int32 Priority = OptionalInt(Params, TEXT("priority"), 0);
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* FoundActor = nullptr;
@@ -1636,27 +1317,21 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetupEnhancedInput(const TSharedPtr<FJ
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Load the mapping context asset
 	UInputMappingContext* MappingContext = LoadObject<UInputMappingContext>(nullptr, *MappingContextPath);
 	if (!MappingContext)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("InputMappingContext not found: %s"), *MappingContextPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *MappingContextPath));
 	}
 
 	// Check if the actor has an EnhancedInputComponent
 	UEnhancedInputComponent* InputComp = FoundActor->FindComponentByClass<UEnhancedInputComponent>();
 	if (!InputComp)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Actor does not have an EnhancedInputComponent"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Actor does not have an EnhancedInputComponent"));
 	}
 
 	// Optionally bind input actions from params
@@ -1685,41 +1360,24 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetupEnhancedInput(const TSharedPtr<FJ
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("mappingContext"), MappingContext->GetName());
 	Result->SetNumberField(TEXT("priority"), Priority);
 	Result->SetArrayField(TEXT("boundActions"), BoundActions);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureBehaviorTree(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	FString BehaviorTreePath;
-	if (!Params->TryGetStringField(TEXT("behaviorTreePath"), BehaviorTreePath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'behaviorTreePath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("behaviorTreePath"), BehaviorTreePath)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label - should be an AI-controlled pawn/character
 	AActor* FoundActor = nullptr;
@@ -1734,18 +1392,14 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureBehaviorTree(const TSharedPtr
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Load the behavior tree asset
 	UBehaviorTree* BehaviorTree = LoadObject<UBehaviorTree>(nullptr, *BehaviorTreePath);
 	if (!BehaviorTree)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("BehaviorTree not found: %s"), *BehaviorTreePath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("BehaviorTree not found: %s"), *BehaviorTreePath));
 	}
 
 	// Optionally load blackboard
@@ -1756,9 +1410,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureBehaviorTree(const TSharedPtr
 		BlackboardAsset = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
 		if (!BlackboardAsset)
 		{
-			Result->SetStringField(TEXT("error"), FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
 		}
 	}
 
@@ -1766,17 +1418,13 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureBehaviorTree(const TSharedPtr
 	APawn* Pawn = Cast<APawn>(FoundActor);
 	if (!Pawn)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Actor is not a Pawn. BehaviorTree requires an AI-controlled Pawn."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Actor is not a Pawn. BehaviorTree requires an AI-controlled Pawn."));
 	}
 
 	AAIController* AIController = Cast<AAIController>(Pawn->GetController());
 	if (!AIController)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Pawn does not have an AAIController. Assign an AI controller first."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Pawn does not have an AAIController. Assign an AI controller first."));
 	}
 
 	// In UE 5.7, use RunBehaviorTree() on the AI controller rather than
@@ -1786,9 +1434,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureBehaviorTree(const TSharedPtr
 	bool bSuccess = AIController->RunBehaviorTree(BehaviorTree);
 	if (!bSuccess)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to run behavior tree on AI controller"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to run behavior tree on AI controller"));
 	}
 
 	// If a separate blackboard was specified, use the tree's component to apply it
@@ -1808,35 +1454,23 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureBehaviorTree(const TSharedPtr
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("behaviorTree"), BehaviorTree->GetName());
 	if (BlackboardAsset)
 	{
 		Result->SetStringField(TEXT("blackboard"), BlackboardAsset->GetName());
 	}
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::SetupPathFollowing(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* FoundActor = nullptr;
@@ -1851,36 +1485,30 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetupPathFollowing(const TSharedPtr<FJ
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Actor must be a Pawn with an AI controller
 	APawn* Pawn = Cast<APawn>(FoundActor);
 	if (!Pawn)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Actor is not a Pawn"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Actor is not a Pawn"));
 	}
 
 	AAIController* AIController = Cast<AAIController>(Pawn->GetController());
 	if (!AIController)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Pawn does not have an AAIController"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Pawn does not have an AAIController"));
 	}
 
 	// Get the PathFollowingComponent from the AI controller
 	UPathFollowingComponent* PathFollowComp = AIController->GetPathFollowingComponent();
 	if (!PathFollowComp)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("AI Controller does not have a PathFollowingComponent"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("AI Controller does not have a PathFollowingComponent"));
 	}
+
+	auto Result = MCPSuccess();
 
 	// SetMovementComponent is deprecated but SetNavMoveInterface doesn't exist yet in 5.7
 	UNavMovementComponent* NavMoveComp = Pawn->FindComponentByClass<UNavMovementComponent>();
@@ -1931,45 +1559,25 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetBoolField(TEXT("hasNavMovementComponent"), NavMoveComp != nullptr);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::RunEqsQuery(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString QueryPath;
-	if (!Params->TryGetStringField(TEXT("queryPath"), QueryPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'queryPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("queryPath"), QueryPath)) return Err;
 
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter - querier actor is required"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Load the EQS query asset
 	UEnvQuery* EnvQuery = LoadObject<UEnvQuery>(nullptr, *QueryPath);
 	if (!EnvQuery)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("EnvQuery not found: %s"), *QueryPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("EnvQuery not found: %s"), *QueryPath));
 	}
 
 	// Find the querier actor
@@ -1985,9 +1593,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RunEqsQuery(const TSharedPtr<FJsonObje
 
 	if (!QuerierActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Querier actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Querier actor not found: %s"), *ActorLabel));
 	}
 
 	// In UE 5.7, run EQS queries via UEnvQueryManager::RunQuery() with FEnvQueryRequest.
@@ -1996,9 +1602,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RunEqsQuery(const TSharedPtr<FJsonObje
 	UEnvQueryManager* EQSManager = UEnvQueryManager::GetCurrent(World);
 	if (!EQSManager)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("EnvQueryManager not available in current world"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("EnvQueryManager not available in current world"));
 	}
 
 	// Run the query synchronously-ish: we trigger it and report that it was started.
@@ -2007,37 +1611,31 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RunEqsQuery(const TSharedPtr<FJsonObje
 
 	if (!QueryInstance)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to start EQS query"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to start EQS query"));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("queryPath"), QueryPath);
 	Result->SetStringField(TEXT("queryName"), EnvQuery->GetName());
 	Result->SetStringField(TEXT("querierActor"), ActorLabel);
 	Result->SetNumberField(TEXT("queryId"), QueryInstance->GetUniqueID());
 	Result->SetStringField(TEXT("status"), TEXT("query_started"));
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::GetBehaviorTreeInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	if (!Asset)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("BehaviorTree not found: %s"), *AssetPath));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("BehaviorTree not found: %s"), *AssetPath));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("name"), Asset->GetName());
 	Result->SetStringField(TEXT("className"), Asset->GetClass()->GetName());
@@ -2090,31 +1688,24 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetBehaviorTreeInfo(const TSharedPtr<F
 		}
 	}
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString BPPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BPPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
 
 	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
 	if (!BP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
 	}
 
 	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.AIPerceptionComponent"));
 	if (!CompClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("AIPerceptionComponent not found. Enable AIModule."));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("AIPerceptionComponent not found. Enable AIModule."));
 	}
 
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("AIPerceptionComp"));
@@ -2134,24 +1725,19 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("AIPerceptionComp"));
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString BPPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BPPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
 
-	FString SenseType = TEXT("Sight");
-	Params->TryGetStringField(TEXT("senseType"), SenseType);
+	FString SenseType = OptionalString(Params, TEXT("senseType"), TEXT("Sight"));
 
 	TMap<FString, FString> SenseMap;
 	SenseMap.Add(TEXT("Sight"), TEXT("AISenseConfig_Sight"));
@@ -2163,40 +1749,33 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 	FString* SenseClassName = SenseMap.Find(SenseType);
 	if (!SenseClassName)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unknown sense type: %s. Available: Sight, Hearing, Damage, Touch, Team"), *SenseType));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unknown sense type: %s. Available: Sight, Hearing, Damage, Touch, Team"), *SenseType));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("senseType"), SenseType);
 	Result->SetStringField(TEXT("senseClass"), *SenseClassName);
-	Result->SetBoolField(TEXT("success"), true);
 	Result->SetStringField(TEXT("note"), FString::Printf(TEXT("Use editor.execute_python to fully configure %s properties."), **SenseClassName));
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString BPPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BPPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
 
 	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
 	if (!BP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
 	}
 
 	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/StateTreeModule.StateTreeComponent"));
 	if (!CompClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("StateTreeComponent not found. Enable StateTree plugin."));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("StateTreeComponent not found. Enable StateTree plugin."));
 	}
 
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("StateTreeComp"));
@@ -2216,34 +1795,28 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("StateTreeComp"));
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString BPPath;
-	if (!Params->TryGetStringField(TEXT("blueprintPath"), BPPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'blueprintPath' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BPPath)) return Err;
 
 	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BPPath));
 	if (!BP)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BPPath));
 	}
 
 	UClass* CompClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectComponent"));
 	if (!CompClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("SmartObjectComponent not found. Enable SmartObjects plugin."));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("SmartObjectComponent not found. Enable SmartObjects plugin."));
 	}
 
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("SmartObjectComp"));
@@ -2263,10 +1836,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("SmartObjectComp"));
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2274,23 +1848,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 // ─────────────────────────────────────────────────────────────
 TSharedPtr<FJsonValue> FGameplayHandlers::ReadImc(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ImcPath;
-	if (!Params->TryGetStringField(TEXT("imcPath"), ImcPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'imcPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("imcPath"), ImcPath)) return Err;
 
 	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
 	if (!IMC)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
 	}
+
+	auto Result = MCPSuccess();
 
 	TArray<TSharedPtr<FJsonValue>> MappingsArr;
 	const TArray<FEnhancedActionKeyMapping>& Mappings = IMC->GetMappings();
@@ -2330,8 +1897,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadImc(const TSharedPtr<FJsonObject>&
 	Result->SetStringField(TEXT("imcName"), IMC->GetName());
 	Result->SetArrayField(TEXT("mappings"), MappingsArr);
 	Result->SetNumberField(TEXT("count"), MappingsArr.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2339,54 +1906,31 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadImc(const TSharedPtr<FJsonObject>&
 // ─────────────────────────────────────────────────────────────
 TSharedPtr<FJsonValue> FGameplayHandlers::AddImcMapping(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ImcPath;
-	if (!Params->TryGetStringField(TEXT("imcPath"), ImcPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'imcPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("imcPath"), ImcPath)) return Err;
 
 	FString InputActionPath;
-	if (!Params->TryGetStringField(TEXT("inputActionPath"), InputActionPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'inputActionPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("inputActionPath"), InputActionPath)) return Err;
 
 	FString KeyName;
-	if (!Params->TryGetStringField(TEXT("key"), KeyName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'key' parameter (e.g. \"W\", \"SpaceBar\", \"LeftMouseButton\")"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("key"), KeyName)) return Err;
 
 	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
 	if (!IMC)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
 	}
 
 	UInputAction* InputAction = LoadObject<UInputAction>(nullptr, *InputActionPath);
 	if (!InputAction)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("InputAction not found: %s"), *InputActionPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("InputAction not found: %s"), *InputActionPath));
 	}
 
 	FKey Key(*KeyName);
 	if (!Key.IsValid())
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Invalid key name: %s"), *KeyName));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Invalid key name: %s"), *KeyName));
 	}
 
 	// Create the mapping and add it
@@ -2407,11 +1951,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddImcMapping(const TSharedPtr<FJsonOb
 		UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("imcPath"), IMC->GetPathName());
 	Result->SetStringField(TEXT("inputAction"), InputAction->GetPathName());
 	Result->SetStringField(TEXT("key"), KeyName);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2419,15 +1964,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddImcMapping(const TSharedPtr<FJsonOb
 // ─────────────────────────────────────────────────────────────
 TSharedPtr<FJsonValue> FGameplayHandlers::InspectPie(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	// Get PIE world
 	FWorldContext* PIEContext = GEditor->GetPIEWorldContext();
 	if (!PIEContext || !PIEContext->World())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("No PIE world available. Is Play-In-Editor running?"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
 	}
 
 	UWorld* PIEWorld = PIEContext->World();
@@ -2459,10 +2000,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::InspectPie(const TSharedPtr<FJsonObjec
 			ActorsArr.Add(MakeShared<FJsonValueObject>(AObj));
 		}
 
+		auto Result = MCPSuccess();
 		Result->SetArrayField(TEXT("actors"), ActorsArr);
 		Result->SetNumberField(TEXT("count"), ActorsArr.Num());
-		Result->SetBoolField(TEXT("success"), true);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPResult(Result);
 	}
 
 	// Find specific actor by label
@@ -2478,11 +2019,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::InspectPie(const TSharedPtr<FJsonObjec
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found in PIE: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found in PIE: %s"), *ActorLabel));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), FoundActor->GetName());
 	Result->SetStringField(TEXT("label"), FoundActor->GetActorLabel());
 	Result->SetStringField(TEXT("class"), FoundActor->GetClass()->GetName());
@@ -2533,8 +2073,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::InspectPie(const TSharedPtr<FJsonObjec
 	UEnhancedInputComponent* InputComp = FoundActor->FindComponentByClass<UEnhancedInputComponent>();
 	Result->SetBoolField(TEXT("hasEnhancedInput"), InputComp != nullptr);
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2542,23 +2081,14 @@ TSharedPtr<FJsonValue> FGameplayHandlers::InspectPie(const TSharedPtr<FJsonObjec
 // ─────────────────────────────────────────────────────────────
 TSharedPtr<FJsonValue> FGameplayHandlers::GetPieAnimState(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	// Get PIE world
 	FWorldContext* PIEContext = GEditor->GetPIEWorldContext();
 	if (!PIEContext || !PIEContext->World())
 	{
-		Result->SetStringField(TEXT("error"), TEXT("No PIE world available. Is Play-In-Editor running?"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
 	}
 
 	UWorld* PIEWorld = PIEContext->World();
@@ -2576,29 +2106,24 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetPieAnimState(const TSharedPtr<FJson
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found in PIE: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found in PIE: %s"), *ActorLabel));
 	}
 
 	// Find SkeletalMeshComponent
 	USkeletalMeshComponent* SkelMesh = FoundActor->FindComponentByClass<USkeletalMeshComponent>();
 	if (!SkelMesh)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Actor does not have a SkeletalMeshComponent"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Actor does not have a SkeletalMeshComponent"));
 	}
 
 	// Get AnimInstance
 	UAnimInstance* AnimInst = SkelMesh->GetAnimInstance();
 	if (!AnimInst)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("No AnimInstance on the SkeletalMeshComponent"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("No AnimInstance on the SkeletalMeshComponent"));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorName"), FoundActor->GetName());
 	Result->SetStringField(TEXT("animClass"), AnimInst->GetClass()->GetName());
@@ -2642,6 +2167,5 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetPieAnimState(const TSharedPtr<FJson
 	}
 	Result->SetArrayField(TEXT("stateMachines"), StatesArr);
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

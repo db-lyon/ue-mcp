@@ -1,5 +1,6 @@
 #include "NiagaraHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -36,8 +37,6 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::ListNiagaraSystems(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/Niagara"), TEXT("NiagaraSystem")), Assets, true);
@@ -64,16 +63,14 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListNiagaraSystems(const TSharedPtr<FJs
 		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("assets"), AssetArray);
 	Result->SetNumberField(TEXT("count"), AssetArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::ListNiagaraModules(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/Niagara"), TEXT("NiagaraScript")), Assets, true);
@@ -86,26 +83,19 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListNiagaraModules(const TSharedPtr<FJs
 		AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
 		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
 	}
+
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("modules"), AssetArray);
 	Result->SetNumberField(TEXT("count"), AssetArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystem(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/VFX");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/VFX"));
 
 	FString FullAssetPath = PackagePath + TEXT("/") + Name;
 
@@ -123,39 +113,29 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystem(const TSharedPtr<FJ
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UNiagaraSystem::StaticClass(), Factory);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create NiagaraSystem. Ensure the Niagara plugin is enabled."));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create NiagaraSystem. Ensure the Niagara plugin is enabled."));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::GetNiagaraInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !Params->TryGetStringField(TEXT("path"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'path' or 'assetPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *AssetPath);
 	if (!System)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("NiagaraSystem not found: %s"), *AssetPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *AssetPath));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("name"), System->GetName());
 	Result->SetStringField(TEXT("path"), AssetPath);
 
@@ -171,28 +151,18 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::GetNiagaraInfo(const TSharedPtr<FJsonOb
 		EmitterArray.Add(MakeShared<FJsonValueObject>(EmitterObj));
 	}
 	Result->SetArrayField(TEXT("emitters"), EmitterArray);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::ListEmittersInSystem(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString SystemPath;
-	if (!Params->TryGetStringField(TEXT("systemPath"), SystemPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'systemPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
 
 	UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
 	if (!System)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
 	}
 
 	const TArray<FNiagaraEmitterHandle>& EmitterHandles = System->GetEmitterHandles();
@@ -206,26 +176,18 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListEmittersInSystem(const TSharedPtr<F
 		EmitterArray.Add(MakeShared<FJsonValueObject>(EmitterObj));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("emitters"), EmitterArray);
 	Result->SetNumberField(TEXT("count"), EmitterArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraEmitter(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("name"), Name))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'name' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	FString PackagePath = TEXT("/Game/VFX");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/VFX"));
 
 	// In UE5, standalone NiagaraEmitter creation may not be supported
 	// Try to create via AssetTools
@@ -238,54 +200,35 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraEmitter(const TSharedPtr<F
 	UClass* EmitterClass = FindObject<UClass>(nullptr, TEXT("/Script/Niagara.NiagaraEmitter"));
 	if (!EmitterClass)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("NiagaraEmitter class not found - factory not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("NiagaraEmitter class not found - factory not available"));
 	}
 
 	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, EmitterClass, nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create NiagaraEmitter - factory not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create NiagaraEmitter - factory not available"));
 	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraAtLocation(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString SystemPath;
-	if (!Params->TryGetStringField(TEXT("systemPath"), SystemPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'systemPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
 
 	UNiagaraSystem* NiagaraSystem = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
 	if (!NiagaraSystem)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
 	}
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Parse location — accept nested object {x,y,z} or flat x/y/z (#70)
 	FVector Location = FVector::ZeroVector;
@@ -338,8 +281,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraAtLocation(const TSharedPtr
 	}
 
 	// Default autoDestroy to false so editor spawns persist (#66)
-	bool bAutoDestroy = false;
-	Params->TryGetBoolField(TEXT("autoDestroy"), bAutoDestroy);
+	bool bAutoDestroy = OptionalBool(Params, TEXT("autoDestroy"), false);
 
 	UNiagaraComponent* SpawnedComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		World,
@@ -352,18 +294,17 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraAtLocation(const TSharedPtr
 
 	if (!SpawnedComponent)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn Niagara system at location"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to spawn Niagara system at location"));
 	}
 
 	// Apply label if provided
-	FString Label;
-	if (Params->TryGetStringField(TEXT("label"), Label))
+	FString Label = OptionalString(Params, TEXT("label"));
+	if (!Label.IsEmpty())
 	{
 		SpawnedComponent->GetOwner()->SetActorLabel(*Label);
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("systemPath"), SystemPath);
 	Result->SetStringField(TEXT("componentName"), SpawnedComponent->GetName());
 	if (SpawnedComponent->GetOwner())
@@ -385,40 +326,20 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraAtLocation(const TSharedPtr
 	Result->SetObjectField(TEXT("rotation"), RotationObj);
 
 	Result->SetBoolField(TEXT("autoDestroy"), bAutoDestroy);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	FString ParameterName;
-	if (!Params->TryGetStringField(TEXT("parameterName"), ParameterName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'parameterName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
 
-	FString ParameterType = TEXT("float");
-	Params->TryGetStringField(TEXT("parameterType"), ParameterType);
+	FString ParameterType = OptionalString(Params, TEXT("parameterType"), TEXT("float"));
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("No editor world available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* FoundActor = nullptr;
@@ -434,19 +355,17 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 
 	if (!FoundActor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));
 	}
 
 	// Get Niagara component from the actor
 	UNiagaraComponent* NiagaraComp = FoundActor->FindComponentByClass<UNiagaraComponent>();
 	if (!NiagaraComp)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("No NiagaraComponent found on actor: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("No NiagaraComponent found on actor: %s"), *ActorLabel));
 	}
+
+	auto Result = MCPSuccess();
 
 	// Set parameter based on type
 	FName ParamFName(*ParameterName);
@@ -455,9 +374,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 		double Value = 0;
 		if (!Params->TryGetNumberField(TEXT("value"), Value))
 		{
-			Result->SetStringField(TEXT("error"), TEXT("Missing 'value' parameter for float type"));
-			Result->SetBoolField(TEXT("success"), false);
-			return MakeShared<FJsonValueObject>(Result);
+			return MCPError(TEXT("Missing 'value' parameter for float type"));
 		}
 		NiagaraComp->SetVariableFloat(ParamFName, (float)Value);
 		Result->SetNumberField(TEXT("value"), Value);
@@ -479,62 +396,42 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 	}
 	else if (ParameterType == TEXT("bool"))
 	{
-		bool bValue = false;
-		Params->TryGetBoolField(TEXT("value"), bValue);
+		bool bValue = OptionalBool(Params, TEXT("value"), false);
 		NiagaraComp->SetVariableBool(ParamFName, bValue);
 		Result->SetBoolField(TEXT("value"), bValue);
 	}
 	else if (ParameterType == TEXT("int"))
 	{
-		double IntValue = 0;
-		Params->TryGetNumberField(TEXT("value"), IntValue);
+		double IntValue = OptionalNumber(Params, TEXT("value"), 0.0);
 		NiagaraComp->SetVariableInt(ParamFName, (int32)IntValue);
 		Result->SetNumberField(TEXT("value"), IntValue);
 	}
 	else
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Unsupported parameter type: %s (use float, vector, bool, or int)"), *ParameterType));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Unsupported parameter type: %s (use float, vector, bool, or int)"), *ParameterType));
 	}
 
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("parameterName"), ParameterName);
 	Result->SetStringField(TEXT("parameterType"), ParameterType);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromEmitter(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString SystemName;
-	if (!Params->TryGetStringField(TEXT("systemName"), SystemName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'systemName' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("systemName"), SystemName)) return Err;
 
 	FString EmitterPath;
-	if (!Params->TryGetStringField(TEXT("emitterPath"), EmitterPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'emitterPath' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("emitterPath"), EmitterPath)) return Err;
 
-	FString PackagePath = TEXT("/Game/VFX");
-	Params->TryGetStringField(TEXT("packagePath"), PackagePath);
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/VFX"));
 
 	// Load the emitter asset
 	UNiagaraEmitter* Emitter = LoadObject<UNiagaraEmitter>(nullptr, *EmitterPath);
 	if (!Emitter)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("NiagaraEmitter not found: %s"), *EmitterPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("NiagaraEmitter not found: %s"), *EmitterPath));
 	}
 
 	// Create a new Niagara system
@@ -547,17 +444,13 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromEmitter(const TS
 	UObject* NewAsset = AssetTools.CreateAsset(SystemName, PackagePath, UNiagaraSystem::StaticClass(), nullptr);
 	if (!NewAsset)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create NiagaraSystem"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to create NiagaraSystem"));
 	}
 
 	UNiagaraSystem* NewSystem = Cast<UNiagaraSystem>(NewAsset);
 	if (!NewSystem)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Created asset is not a NiagaraSystem"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Created asset is not a NiagaraSystem"));
 	}
 
 	// Add the emitter to the system
@@ -566,42 +459,32 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromEmitter(const TS
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("systemPath"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("systemName"), SystemName);
 	Result->SetStringField(TEXT("emitterPath"), EmitterPath);
 	Result->SetStringField(TEXT("emitterHandleName"), EmitterHandle.GetName().ToString());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	FString SystemPath, EmitterPath;
-	if (!Params->TryGetStringField(TEXT("systemPath"), SystemPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'systemPath' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
-	if (!Params->TryGetStringField(TEXT("emitterPath"), EmitterPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'emitterPath' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+
+	FString EmitterPath;
+	if (auto Err = RequireString(Params, TEXT("emitterPath"), EmitterPath)) return Err;
 
 	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
 	UNiagaraEmitter* Emitter = Cast<UNiagaraEmitter>(UEditorAssetLibrary::LoadAsset(EmitterPath));
 
 	if (!System)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
 	}
 	if (!Emitter)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("NiagaraEmitter not found: %s"), *EmitterPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("NiagaraEmitter not found: %s"), *EmitterPath));
 	}
 
 	// Actually add the emitter to the system (#69)
@@ -610,46 +493,31 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJs
 
 	UEditorAssetLibrary::SaveAsset(System->GetPathName());
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("systemPath"), SystemPath);
 	Result->SetStringField(TEXT("emitterPath"), EmitterPath);
 	Result->SetStringField(TEXT("emitterHandleName"), Handle.GetName().ToString());
 	Result->SetNumberField(TEXT("emitterCount"), System->GetEmitterHandles().Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString SystemPath;
-	if (!Params->TryGetStringField(TEXT("systemPath"), SystemPath) && !Params->TryGetStringField(TEXT("assetPath"), SystemPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'systemPath' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireStringAlt(Params, TEXT("systemPath"), TEXT("assetPath"), SystemPath)) return Err;
 
-	FString EmitterName, PropName;
-	Params->TryGetStringField(TEXT("emitterName"), EmitterName);
-	if (!Params->TryGetStringField(TEXT("propertyName"), PropName))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'propertyName' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	FString EmitterName = OptionalString(Params, TEXT("emitterName"));
+
+	FString PropName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropName)) return Err;
 
 	FString Value;
-	if (!Params->TryGetStringField(TEXT("value"), Value))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'value' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("value"), Value)) return Err;
 
 	UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *SystemPath);
 	if (!System)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("NiagaraSystem not found: %s"), *SystemPath));
 	}
 
 	// Find the emitter handle by name (use first if no name specified)
@@ -675,20 +543,18 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 	{
 		TArray<FString> Names;
 		for (const FNiagaraEmitterHandle& H : Handles) Names.Add(H.GetName().ToString());
-		Result->SetStringField(TEXT("error"), FString::Printf(
+		return MCPError(FString::Printf(
 			TEXT("Emitter '%s' not found. Available: [%s]"), *EmitterName, *FString::Join(Names, TEXT(", "))));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
 	}
 
 	// Try to set the property via reflection on the emitter handle's emitter data
 	FVersionedNiagaraEmitterData* EmitterData = Handles[TargetIdx].GetInstance().GetEmitterData();
 	if (!EmitterData)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Could not access emitter data"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Could not access emitter data"));
 	}
+
+	auto Result = MCPSuccess();
 
 	// Handle common properties
 	bool bSet = false;
@@ -738,26 +604,21 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 			TEXT("Property '%s' not found or could not be set. Available: [%s]"),
 			*PropName, *FString::Join(PropNames, TEXT(", "))));
 	}
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::GetEmitterInfo(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("assetPath"), AssetPath))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'assetPath' parameter"));
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
 	UNiagaraEmitter* Emitter = Cast<UNiagaraEmitter>(UEditorAssetLibrary::LoadAsset(AssetPath));
 	if (!Emitter)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("NiagaraEmitter not found: %s"), *AssetPath));
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("NiagaraEmitter not found: %s"), *AssetPath));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("name"), Emitter->GetName());
 	Result->SetStringField(TEXT("class"), Emitter->GetClass()->GetName());
@@ -803,6 +664,5 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::GetEmitterInfo(const TSharedPtr<FJsonOb
 		Result->SetArrayField(TEXT("properties"), PropsArray);
 	}
 
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

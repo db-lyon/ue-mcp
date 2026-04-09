@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { McpError, ErrorCode } from "./errors.js";
 
 export interface PluginInfo {
   name: string;
@@ -33,7 +34,7 @@ export class ProjectContext {
         .readdirSync(inputPath)
         .filter((f) => f.endsWith(".uproject"));
       if (files.length === 0) {
-        throw new Error(`No .uproject file found in ${inputPath}`);
+        throw new McpError(ErrorCode.NOT_FOUND, `No .uproject file found in ${inputPath}`);
       }
       this.projectPath = path.resolve(inputPath, files[0]);
     }
@@ -46,7 +47,8 @@ export class ProjectContext {
 
   ensureLoaded(): void {
     if (!this.isLoaded) {
-      throw new Error(
+      throw new McpError(
+        ErrorCode.PROJECT_NOT_LOADED,
         'No project loaded. Pass the .uproject path as an argument in your MCP config, e.g. "args": ["C:/path/to/MyGame.uproject"]',
       );
     }

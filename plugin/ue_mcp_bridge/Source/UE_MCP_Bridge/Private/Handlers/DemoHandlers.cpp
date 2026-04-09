@@ -1,5 +1,6 @@
 #include "DemoHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 
 // Core / Editor
 #include "Editor.h"
@@ -131,7 +132,7 @@ TArray<FDemoHandlers::FDemoStep> FDemoHandlers::GetStepDefinitions()
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FDemoHandlers::DemoGetSteps(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	auto Result = MCPSuccess();
 	TArray<FDemoStep> Steps = GetStepDefinitions();
 
 	TArray<TSharedPtr<FJsonValue>> StepsArray;
@@ -146,8 +147,8 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoGetSteps(const TSharedPtr<FJsonObject>
 
 	Result->SetArrayField(TEXT("steps"), StepsArray);
 	Result->SetNumberField(TEXT("count"), StepsArray.Num());
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,10 +190,7 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoStep(const TSharedPtr<FJsonObject>& Pa
 	case 19: StepResult = StepSave(); break;
 	default:
 	{
-		TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
-		Err->SetStringField(TEXT("error"), FString::Printf(TEXT("Invalid step index %d. Valid range: 1-19"), StepIndex));
-		Err->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Err);
+		return MCPError(FString::Printf(TEXT("Invalid step index %d. Valid range: 1-19"), StepIndex));
 	}
 	}
 
@@ -207,7 +205,7 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoStep(const TSharedPtr<FJsonObject>& Pa
 		}
 	}
 
-	return MakeShared<FJsonValueObject>(StepResult);
+	return MCPResult(StepResult);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,9 +213,7 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoStep(const TSharedPtr<FJsonObject>& Pa
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 
 	// 1) Destroy actors whose label starts with "Demo_"
 	int32 ActorsDeleted = 0;
@@ -279,10 +275,11 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 		}
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetNumberField(TEXT("actorsDeleted"), ActorsDeleted);
 	Result->SetNumberField(TEXT("assetsDeleted"), AssetsDeleted);
-	Result->SetBoolField(TEXT("success"), true);
-	return MakeShared<FJsonValueObject>(Result);
+
+	return MCPResult(Result);
 }
 
 // ===========================================================================
@@ -291,7 +288,7 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 AActor* FDemoHandlers::SpawnMesh(const FString& Label, const FString& MeshPath,
 	FVector Location, FRotator Rotation, FVector Scale)
 {
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (!World) return nullptr;
 
 	FTransform SpawnTransform(Rotation, Location);
@@ -316,7 +313,7 @@ AActor* FDemoHandlers::SpawnMesh(const FString& Label, const FString& MeshPath,
 AActor* FDemoHandlers::SpawnPointLight(const FString& Label, FVector Location,
 	FColor Color, float Intensity)
 {
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (!World) return nullptr;
 
 	FTransform SpawnTransform(FRotator::ZeroRotator, Location);
@@ -714,7 +711,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepMoonlight()
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
@@ -752,7 +749,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepSkyLight()
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
@@ -788,7 +785,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepFog()
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
@@ -827,7 +824,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepPostProcess()
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
@@ -871,7 +868,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
@@ -963,7 +960,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepPcgScatter()
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
@@ -1008,7 +1005,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepOrbitRings()
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
@@ -1089,7 +1086,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepLevelSequence()
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (!World)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
@@ -1204,7 +1201,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepSave()
 
 	bool bSaved = LevelSub->SaveCurrentLevel();
 
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	UWorld* World = GetEditorWorld();
 	if (World)
 	{
 		Result->SetStringField(TEXT("levelName"), World->GetName());

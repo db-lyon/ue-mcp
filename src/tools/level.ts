@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { Vec3, Rotator, Color } from "../schemas.js";
 
 export const levelTool: ToolDef = categoryTool(
   "level",
@@ -53,9 +54,9 @@ export const levelTool: ToolDef = categoryTool(
   {
     actorLabel: z.string().optional(), actorLabels: z.array(z.string()).optional(),
     actorClass: z.string().optional(), label: z.string().optional(),
-    location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
-    rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional(),
-    scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+    location: Vec3.optional(),
+    rotation: Rotator.optional(),
+    scale: Vec3.optional(),
     properties: z.record(z.unknown()).optional(),
     classFilter: z.string().optional(), nameFilter: z.string().optional(),
     componentClass: z.string().optional(), componentName: z.string().optional(),
@@ -63,14 +64,14 @@ export const levelTool: ToolDef = categoryTool(
     levelPath: z.string().optional(), templateLevel: z.string().optional(),
     directory: z.string().optional(), recursive: z.boolean().optional(),
     volumeType: z.string().optional(),
-    extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+    extent: Vec3.optional(),
     lightType: z.string().optional(), intensity: z.number().optional(),
-    color: z.object({ r: z.number(), g: z.number(), b: z.number() }).optional(),
+    color: Color.optional(),
     temperature: z.number().optional(), castShadows: z.boolean().optional(),
     attenuationRadius: z.number().optional(),
     innerConeAngle: z.number().optional(), outerConeAngle: z.number().optional(),
     quality: z.string().optional(),
-    points: z.array(z.object({ x: z.number(), y: z.number(), z: z.number() })).optional(),
+    points: z.array(Vec3).optional(),
     closedLoop: z.boolean().optional(),
     defaultGameMode: z.string().optional(),
     killZ: z.number().optional(),

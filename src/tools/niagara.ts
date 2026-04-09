@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { Vec3, Rotator } from "../schemas.js";
 
 export const niagaraTool: ToolDef = categoryTool(
   "niagara",
@@ -33,8 +34,8 @@ export const niagaraTool: ToolDef = categoryTool(
     assetPath: z.string().optional(), actorLabel: z.string().optional(),
     directory: z.string().optional(), recursive: z.boolean().optional(),
     systemPath: z.string().optional(), emitterPath: z.string().optional(),
-    location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
-    rotation: z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).optional(),
+    location: Vec3.optional(),
+    rotation: Rotator.optional(),
     label: z.string().optional(),
     parameterName: z.string().optional(),
     value: z.unknown().optional(),

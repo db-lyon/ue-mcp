@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { Vec3 } from "../schemas.js";
 
 export const gameplayTool: ToolDef = categoryTool(
   "gameplay",
@@ -95,8 +96,8 @@ export const gameplayTool: ToolDef = categoryTool(
     linearDamping: z.number().optional(),
     angularDamping: z.number().optional(),
     enableGravity: z.boolean().optional(),
-    location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
-    extent: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+    location: Vec3.optional(),
+    extent: Vec3.optional(),
     areaClass: z.string().optional(),
     name: z.string().optional(),
     packagePath: z.string().optional(),

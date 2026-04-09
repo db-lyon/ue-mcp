@@ -1,5 +1,6 @@
 #include "SplineHandlers.h"
 #include "HandlerRegistry.h"
+#include "HandlerUtils.h"
 #include "Components/SplineComponent.h"
 #include "Engine/World.h"
 #include "Editor.h"
@@ -19,15 +20,7 @@ void FSplineHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FSplineHandlers::CreateSplineActor(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Get location
 	FVector Location = FVector::ZeroVector;
@@ -44,9 +37,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::CreateSplineActor(const TSharedPtr<FJson
 	AActor* NewActor = World->SpawnActor<AActor>(AActor::StaticClass(), SpawnTransform);
 	if (!NewActor)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to spawn actor"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Failed to spawn actor"));
 	}
 
 	// Add a root scene component if none exists
@@ -61,15 +52,15 @@ TSharedPtr<FJsonValue> FSplineHandlers::CreateSplineActor(const TSharedPtr<FJson
 	NewActor->AddInstanceComponent(SplineComp);
 
 	// Set label if provided
-	FString Label;
-	if (Params->TryGetStringField(TEXT("label"), Label))
+	FString Label = OptionalString(Params, TEXT("label"));
+	if (!Label.IsEmpty())
 	{
 		NewActor->SetActorLabel(Label);
 	}
 
 	// Optionally set closed loop
-	bool bClosedLoop = false;
-	if (Params->TryGetBoolField(TEXT("closedLoop"), bClosedLoop))
+	bool bClosedLoop = OptionalBool(Params, TEXT("closedLoop"), false);
+	if (Params->HasField(TEXT("closedLoop")))
 	{
 		SplineComp->SetClosedLoop(bClosedLoop);
 	}
@@ -94,34 +85,21 @@ TSharedPtr<FJsonValue> FSplineHandlers::CreateSplineActor(const TSharedPtr<FJson
 		SplineComp->UpdateSpline();
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), NewActor->GetActorLabel());
 	Result->SetStringField(TEXT("actorName"), NewActor->GetName());
 	Result->SetNumberField(TEXT("splinePointCount"), SplineComp->GetNumberOfSplinePoints());
 	Result->SetBoolField(TEXT("closedLoop"), SplineComp->IsClosedLoop());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FSplineHandlers::ReadSpline(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* Actor = nullptr;
@@ -136,20 +114,17 @@ TSharedPtr<FJsonValue> FSplineHandlers::ReadSpline(const TSharedPtr<FJsonObject>
 
 	if (!Actor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Find spline component
 	USplineComponent* SplineComp = Actor->FindComponentByClass<USplineComponent>();
 	if (!SplineComp)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor '%s' does not have a SplineComponent"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor '%s' does not have a SplineComponent"), *ActorLabel));
 	}
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetNumberField(TEXT("splinePointCount"), SplineComp->GetNumberOfSplinePoints());
 	Result->SetBoolField(TEXT("closedLoop"), SplineComp->IsClosedLoop());
@@ -208,38 +183,22 @@ TSharedPtr<FJsonValue> FSplineHandlers::ReadSpline(const TSharedPtr<FJsonObject>
 	}
 
 	Result->SetArrayField(TEXT("points"), PointsArray);
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonObject>& Params)
 {
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-
 	FString ActorLabel;
-	if (!Params->TryGetStringField(TEXT("actorLabel"), ActorLabel))
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'actorLabel' parameter"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
 	const TArray<TSharedPtr<FJsonValue>>* PointsArray = nullptr;
 	if (!Params->TryGetArrayField(TEXT("points"), PointsArray))
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Missing 'points' parameter (array of {x, y, z} objects)"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(TEXT("Missing 'points' parameter (array of {x, y, z} objects)"));
 	}
 
-	UWorld* World = GEditor->GetEditorWorldContext().World();
-	if (!World)
-	{
-		Result->SetStringField(TEXT("error"), TEXT("Editor world not available"));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
-	}
+	REQUIRE_EDITOR_WORLD(World);
 
 	// Find actor by label
 	AActor* Actor = nullptr;
@@ -254,18 +213,14 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 
 	if (!Actor)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
 	// Find spline component
 	USplineComponent* SplineComp = Actor->FindComponentByClass<USplineComponent>();
 	if (!SplineComp)
 	{
-		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("Actor '%s' does not have a SplineComponent"), *ActorLabel));
-		Result->SetBoolField(TEXT("success"), false);
-		return MakeShared<FJsonValueObject>(Result);
+		return MCPError(FString::Printf(TEXT("Actor '%s' does not have a SplineComponent"), *ActorLabel));
 	}
 
 	// Clear existing points and add new ones
@@ -293,11 +248,11 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 
 	SplineComp->UpdateSpline();
 
+	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetNumberField(TEXT("splinePointCount"), SplineComp->GetNumberOfSplinePoints());
 	Result->SetBoolField(TEXT("closedLoop"), SplineComp->IsClosedLoop());
 	Result->SetNumberField(TEXT("splineLength"), SplineComp->GetSplineLength());
-	Result->SetBoolField(TEXT("success"), true);
 
-	return MakeShared<FJsonValueObject>(Result);
+	return MCPResult(Result);
 }

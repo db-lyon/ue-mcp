@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { McpError, ErrorCode } from "./errors.js";
 
 export interface BridgeResponse {
   id: string;
@@ -12,7 +13,14 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
 }
 
-export class EditorBridge {
+/** Minimal interface for tool handlers — enables mocking in tests. */
+export interface IBridge {
+  readonly isConnected: boolean;
+  call(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  connect(timeoutMs?: number): Promise<void>;
+}
+
+export class EditorBridge implements IBridge {
   private ws: WebSocket | null = null;
   private pending = new Map<string, PendingRequest>();
   private reconnectTimer: ReturnType<typeof setInterval> | null = null;
@@ -37,7 +45,7 @@ export class EditorBridge {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         ws.terminate();
-        reject(new Error(`Connection to editor bridge timed out (${url})`));
+        reject(new McpError(ErrorCode.BRIDGE_TIMEOUT, `Connection to editor bridge timed out (${url})`));
       }, timeoutMs);
 
       const ws = new WebSocket(url);
@@ -52,7 +60,8 @@ export class EditorBridge {
       ws.on("error", (err) => {
         clearTimeout(timer);
         reject(
-          new Error(
+          new McpError(
+            ErrorCode.NOT_CONNECTED,
             `Failed to connect to editor bridge at ${url}: ${err.message}`,
           ),
         );
@@ -82,7 +91,8 @@ export class EditorBridge {
 
   async call(method: string, params?: Record<string, unknown>): Promise<unknown> {
     if (!this.isConnected) {
-      throw new Error(
+      throw new McpError(
+        ErrorCode.NOT_CONNECTED,
         "Not connected to editor bridge. Is Unreal Editor running with the MCP bridge plugin?",
       );
     }
@@ -93,7 +103,7 @@ export class EditorBridge {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`Bridge call '${method}' timed out after 30s`));
+        reject(new McpError(ErrorCode.BRIDGE_TIMEOUT, `Bridge call '${method}' timed out after 30s`));
       }, 30_000);
 
       this.pending.set(id, { resolve, reject, timer });
@@ -110,7 +120,7 @@ export class EditorBridge {
     this.stopReconnecting();
     for (const [, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(new Error("Bridge disconnected"));
+      pending.reject(new McpError(ErrorCode.CONNECTION_LOST, "Bridge disconnected"));
     }
     this.pending.clear();
     if (this.ws) {
@@ -130,7 +140,7 @@ export class EditorBridge {
         clearTimeout(pending.timer);
 
         if (msg.error) {
-          pending.reject(new Error(`Bridge error: ${msg.error.message}`));
+          pending.reject(new McpError(ErrorCode.BRIDGE_ERROR, `Bridge error: ${msg.error.message}`));
         } else {
           pending.resolve(msg.result);
         }
@@ -142,7 +152,7 @@ export class EditorBridge {
     ws.on("close", () => {
       for (const [, pending] of this.pending) {
         clearTimeout(pending.timer);
-        pending.reject(new Error("Bridge connection lost"));
+        pending.reject(new McpError(ErrorCode.CONNECTION_LOST, "Bridge connection lost"));
       }
       this.pending.clear();
       this.ws = null;
