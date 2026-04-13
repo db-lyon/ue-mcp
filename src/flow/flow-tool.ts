@@ -14,13 +14,16 @@ export function createFlowTool(
     description:
       `Run or inspect named flows defined in ue-mcp.yml. Config is reloaded on every call — no restart needed.\n\n` +
       `Actions:\n` +
-      `- run: Execute a flow. Params: flowName, skip?\n` +
+      `- run: Execute a flow. Params: flowName, skip?, params?\n` +
       `- plan: Show execution plan without running. Params: flowName\n` +
-      `- list: List available flows`,
+      `- list: List available flows\n\n` +
+      `params: Runtime options merged into every step's options (highest priority). ` +
+      `Use to override YAML-hardcoded values like levelPath, directory, configuration, etc.`,
     schema: {
       action: z.enum(["run", "plan", "list"]).describe("Action to perform"),
       flowName: z.string().optional().describe("Flow name from ue-mcp.yml"),
       skip: z.array(z.string()).optional().describe("Step names or numbers to skip"),
+      params: z.record(z.unknown()).optional().describe("Runtime options merged into every step's options (highest priority)"),
     },
     actions: {
       run: { handler: async (ctx, params) => runFlow(registry, reloadConfig(), ctx, params) },
@@ -68,9 +71,10 @@ async function runFlow(
   const flowName = params.flowName as string;
   if (!flowName) throw new Error("flowName is required");
   const skip = (params.skip as string[] | undefined) ?? [];
+  const flowParams = params.params as Record<string, unknown> | undefined;
 
   const runner = makeRunner(registry, config, ctx);
-  const result = await runner.run({ flowName, skip });
+  const result = await runner.run({ flowName, skip, params: flowParams });
 
   return formatFlowResult(result);
 }

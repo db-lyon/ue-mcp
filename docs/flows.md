@@ -171,6 +171,27 @@ steps:
       timeout: 300000             # optional, defaults to 5 minutes
 ```
 
+## Runtime Parameters
+
+Hardcoding every option in YAML gets tedious. Pass `params` at call time to override step options for that run:
+
+```
+flow(action="run", flowName="beacon", params={
+  levelPath: "/Game/MyCustomLevel",
+  configuration: "Shipping"
+})
+```
+
+Runtime `params` merge into every step's options with **highest priority**:
+
+```
+taskDef.options  <  step.options  <  runtime params
+```
+
+So a step with `options: { levelPath: "/Game/Flows/Beacon" }` in the YAML will use `/Game/MyCustomLevel` if you pass `params: { levelPath: "/Game/MyCustomLevel" }` at runtime.
+
+Params apply to every step — steps that don't use a given key simply ignore it. This makes flows fully parameterizable without templating syntax.
+
 ## Skipping Steps
 
 Pass step names or numbers in the `skip` array:
