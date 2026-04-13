@@ -38,6 +38,10 @@
 #include "FileHelpers.h"
 #include "GameFramework/WorldSettings.h"
 #include "GameFramework/GameModeBase.h"
+#include "Engine/StaticMeshActor.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 
 void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -59,6 +63,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("save_level"), &SaveLevel);
 	Registry.RegisterHandler(TEXT("list_sublevels"), &ListSublevels);
 	Registry.RegisterHandler(TEXT("set_component_property"), &SetComponentProperty);
+	Registry.RegisterHandler(TEXT("set_actor_material"), &SetActorMaterial);
 	Registry.RegisterHandler(TEXT("set_volume_properties"), &SetVolumeProperties);
 	Registry.RegisterHandler(TEXT("get_world_settings"), &GetWorldSettings);
 	Registry.RegisterHandler(TEXT("set_world_settings"), &SetWorldSettings);
@@ -159,7 +164,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 		return MCPError(FString::Printf(TEXT("Actor class not found: %s"), *ActorClass));
 	}
 
-	// Get location
+	// Location
 	FVector Location = FVector::ZeroVector;
 	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("location"), LocationObj))
@@ -169,12 +174,70 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 		(*LocationObj)->TryGetNumberField(TEXT("z"), Location.Z);
 	}
 
-	// Spawn actor
-	FTransform SpawnTransform(FRotator::ZeroRotator, Location);
+	// Rotation
+	FRotator Rotation = FRotator::ZeroRotator;
+	const TSharedPtr<FJsonObject>* RotObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("rotation"), RotObj))
+	{
+		(*RotObj)->TryGetNumberField(TEXT("pitch"), Rotation.Pitch);
+		(*RotObj)->TryGetNumberField(TEXT("yaw"), Rotation.Yaw);
+		(*RotObj)->TryGetNumberField(TEXT("roll"), Rotation.Roll);
+	}
+
+	// Spawn
+	FTransform SpawnTransform(Rotation, Location);
 	AActor* NewActor = World->SpawnActor<AActor>(Class, SpawnTransform);
 	if (!NewActor)
 	{
 		return MCPError(TEXT("Failed to spawn actor"));
+	}
+
+	// Label
+	FString Label = OptionalString(Params, TEXT("label"));
+	if (!Label.IsEmpty())
+	{
+		NewActor->SetActorLabel(Label);
+	}
+
+	// Scale
+	const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("scale"), ScaleObj))
+	{
+		FVector Scale = FVector::OneVector;
+		(*ScaleObj)->TryGetNumberField(TEXT("x"), Scale.X);
+		(*ScaleObj)->TryGetNumberField(TEXT("y"), Scale.Y);
+		(*ScaleObj)->TryGetNumberField(TEXT("z"), Scale.Z);
+		NewActor->SetActorScale3D(Scale);
+	}
+
+	// Static mesh shorthand — set mesh on StaticMeshActor
+	FString StaticMeshPath = OptionalString(Params, TEXT("staticMesh"));
+	if (!StaticMeshPath.IsEmpty())
+	{
+		AStaticMeshActor* MeshActor = Cast<AStaticMeshActor>(NewActor);
+		if (MeshActor && MeshActor->GetStaticMeshComponent())
+		{
+			UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *StaticMeshPath);
+			if (Mesh)
+			{
+				MeshActor->GetStaticMeshComponent()->SetStaticMesh(Mesh);
+			}
+		}
+	}
+
+	// Material shorthand — apply to first primitive component, slot 0
+	FString MaterialPath = OptionalString(Params, TEXT("material"));
+	if (!MaterialPath.IsEmpty())
+	{
+		UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
+		if (Material)
+		{
+			UPrimitiveComponent* PrimComp = NewActor->FindComponentByClass<UPrimitiveComponent>();
+			if (PrimComp)
+			{
+				PrimComp->SetMaterial(0, Material);
+			}
+		}
 	}
 
 	auto Result = MCPSuccess();
@@ -1175,6 +1238,56 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("changes"), Changes);
 	Result->SetStringField(TEXT("worldName"), World->GetName());
+
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::SetActorMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+
+	FString MaterialPath;
+	if (auto Err = RequireString(Params, TEXT("materialPath"), MaterialPath)) return Err;
+
+	int32 SlotIndex = OptionalInt(Params, TEXT("slotIndex"), 0);
+
+	REQUIRE_EDITOR_WORLD(World);
+
+	AActor* Actor = nullptr;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (It->GetActorLabel() == ActorLabel)
+		{
+			Actor = *It;
+			break;
+		}
+	}
+
+	if (!Actor)
+	{
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+	}
+
+	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
+	if (!Material)
+	{
+		return MCPError(FString::Printf(TEXT("Material not found: %s"), *MaterialPath));
+	}
+
+	UPrimitiveComponent* PrimComp = Actor->FindComponentByClass<UPrimitiveComponent>();
+	if (!PrimComp)
+	{
+		return MCPError(FString::Printf(TEXT("Actor '%s' has no primitive component"), *ActorLabel));
+	}
+
+	PrimComp->SetMaterial(SlotIndex, Material);
+	PrimComp->MarkRenderStateDirty();
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("materialPath"), MaterialPath);
+	Result->SetNumberField(TEXT("slotIndex"), SlotIndex);
 
 	return MCPResult(Result);
 }

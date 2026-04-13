@@ -37,193 +37,206 @@ export function buildDefaults(tools: ToolDef[]): Record<string, unknown> {
   return { tasks, flows: defaultFlows() };
 }
 
+// Shorthand constants
+const PKG = "/Game/Flows/Beacon";
+const CUBE = "/Engine/BasicShapes/Cube.Cube";
+const SPHERE = "/Engine/BasicShapes/Sphere.Sphere";
+const CYLINDER = "/Engine/BasicShapes/Cylinder.Cylinder";
+
+const M_FLOOR = `${PKG}/M_Floor`;
+const M_PILLAR = `${PKG}/M_Pillar`;
+const M_GLOW = `${PKG}/M_Glow`;
+const M_PEDESTAL = `${PKG}/M_Pedestal`;
+
 /** Built-in flows that ship with ue-mcp. */
 function defaultFlows(): Record<string, unknown> {
+  let s = 0;
+  const steps: Record<string, unknown> = {};
+  const step = (task: string, options: Record<string, unknown>) => {
+    steps[String(++s)] = { task, options };
+  };
+
+  // ── 1. Create level & atmosphere ──────────────────────────────────
+  step("level.create", { levelPath: `${PKG}/BeaconLevel` });
+  step("level.place_actor", { actorClass: "SkyAtmosphere", label: "Sky" });
+  step("level.place_actor", { actorClass: "ExponentialHeightFog", label: "Fog" });
+  step("level.place_actor", { actorClass: "SkyLight", label: "Ambient" });
+
+  // ── 2. Materials ──────────────────────────────────────────────────
+
+  // M_Floor — dark stone
+  step("material.create", { name: "M_Floor", packagePath: PKG });
+  step("material.set_base_color", { assetPath: M_FLOOR, color: { r: 15, g: 15, b: 18 } });
+  step("material.recompile", { materialPath: M_FLOOR });
+
+  // M_Pillar — brushed metallic blue-grey
+  step("material.create", { name: "M_Pillar", packagePath: PKG });
+  step("material.set_base_color", { assetPath: M_PILLAR, color: { r: 60, g: 65, b: 80 } });
+  step("material.add_expression", {
+    materialPath: M_PILLAR, expressionType: "Constant", name: "Metallic",
+  });
+  step("material.set_expression_value", {
+    materialPath: M_PILLAR, expressionIndex: 0, value: 1.0,
+  });
+  step("material.connect_to_property", {
+    materialPath: M_PILLAR, expressionName: "Metallic", property: "Metallic",
+  });
+  step("material.add_expression", {
+    materialPath: M_PILLAR, expressionType: "Constant", name: "Roughness",
+  });
+  step("material.set_expression_value", {
+    materialPath: M_PILLAR, expressionIndex: 1, value: 0.3,
+  });
+  step("material.connect_to_property", {
+    materialPath: M_PILLAR, expressionName: "Roughness", property: "Roughness",
+  });
+  step("material.recompile", { materialPath: M_PILLAR });
+
+  // M_Pedestal — warm stone
+  step("material.create", { name: "M_Pedestal", packagePath: PKG });
+  step("material.set_base_color", { assetPath: M_PEDESTAL, color: { r: 90, g: 80, b: 65 } });
+  step("material.recompile", { materialPath: M_PEDESTAL });
+
+  // M_Glow — parameterized emissive (VectorParam × Strength → EmissiveColor)
+  step("material.create", { name: "M_Glow", packagePath: PKG });
+  step("material.add_expression", {
+    materialPath: M_GLOW, expressionType: "VectorParameter",
+    name: "GlowColor", parameterName: "GlowColor",
+  });
+  step("material.add_expression", {
+    materialPath: M_GLOW, expressionType: "Constant", name: "GlowStrength",
+  });
+  step("material.set_expression_value", {
+    materialPath: M_GLOW, expressionIndex: 1, value: 50,
+  });
+  step("material.add_expression", {
+    materialPath: M_GLOW, expressionType: "Multiply", name: "Multiply",
+  });
+  step("material.connect_expressions", {
+    materialPath: M_GLOW, sourceExpression: "GlowColor",
+    targetExpression: "Multiply", targetInput: "A",
+  });
+  step("material.connect_expressions", {
+    materialPath: M_GLOW, sourceExpression: "GlowStrength",
+    targetExpression: "Multiply", targetInput: "B",
+  });
+  step("material.connect_to_property", {
+    materialPath: M_GLOW, expressionName: "Multiply", property: "EmissiveColor",
+  });
+  step("material.recompile", { materialPath: M_GLOW });
+
+  // ── 3. Geometry ───────────────────────────────────────────────────
+
+  // Floor — large dark slab
+  step("level.place_actor", {
+    actorClass: "StaticMeshActor", label: "Floor",
+    staticMesh: CUBE, material: M_FLOOR,
+    location: { x: 0, y: 0, z: -5 },
+    scale: { x: 25, y: 25, z: 0.1 },
+  });
+
+  // Center pedestal — tall cylinder
+  step("level.place_actor", {
+    actorClass: "StaticMeshActor", label: "Pedestal",
+    staticMesh: CYLINDER, material: M_PEDESTAL,
+    location: { x: 0, y: 0, z: 0 },
+    scale: { x: 1.5, y: 1.5, z: 3 },
+  });
+
+  // Glowing orb on top of pedestal
+  step("level.place_actor", {
+    actorClass: "StaticMeshActor", label: "Orb",
+    staticMesh: SPHERE, material: M_GLOW,
+    location: { x: 0, y: 0, z: 350 },
+    scale: { x: 1.5, y: 1.5, z: 1.5 },
+  });
+
+  // 5 pillars in a pentagon (radius 600, z=0)
+  const pillarAngles = [0, 72, 144, 216, 288];
+  for (let i = 0; i < pillarAngles.length; i++) {
+    const rad = (pillarAngles[i] * Math.PI) / 180;
+    const x = Math.round(600 * Math.cos(rad));
+    const y = Math.round(600 * Math.sin(rad));
+    step("level.place_actor", {
+      actorClass: "StaticMeshActor", label: `Pillar_${i + 1}`,
+      staticMesh: CUBE, material: M_PILLAR,
+      location: { x, y, z: 0 },
+      scale: { x: 0.4, y: 0.4, z: 5 },
+    });
+  }
+
+  // ── 4. Lighting ───────────────────────────────────────────────────
+
+  // Sunset directional
+  step("level.spawn_light", { lightType: "directional", label: "Sun", intensity: 10 });
+  step("level.set_light_properties", {
+    actorLabel: "Sun", color: { r: 255, g: 160, b: 80 },
+  });
+  step("level.move_actor", {
+    actorLabel: "Sun", rotation: { pitch: -25, yaw: -135 },
+  });
+
+  // Colored point light at each pillar
+  const pillarColors = [
+    { r: 0, g: 200, b: 255 },   // cyan
+    { r: 255, g: 0, b: 200 },   // magenta
+    { r: 255, g: 200, b: 0 },   // gold
+    { r: 100, g: 255, b: 50 },  // green
+    { r: 120, g: 80, b: 255 },  // violet
+  ];
+  for (let i = 0; i < pillarAngles.length; i++) {
+    const rad = (pillarAngles[i] * Math.PI) / 180;
+    const x = Math.round(600 * Math.cos(rad));
+    const y = Math.round(600 * Math.sin(rad));
+    step("level.spawn_light", {
+      lightType: "point", label: `PillarLight_${i + 1}`,
+      location: { x, y, z: 550 }, intensity: 80000,
+    });
+    step("level.set_light_properties", {
+      actorLabel: `PillarLight_${i + 1}`, color: pillarColors[i],
+    });
+  }
+
+  // Center spotlight pointing down at the orb
+  step("level.spawn_light", {
+    lightType: "spot", label: "OrbSpot",
+    location: { x: 0, y: 0, z: 700 }, intensity: 300000,
+  });
+  step("level.move_actor", {
+    actorLabel: "OrbSpot", rotation: { pitch: -90, yaw: 0 },
+  });
+
+  // Warm fill light from below
+  step("level.spawn_light", {
+    lightType: "point", label: "FillWarm",
+    location: { x: -400, y: -300, z: 100 }, intensity: 20000,
+  });
+  step("level.set_light_properties", {
+    actorLabel: "FillWarm", color: { r: 255, g: 200, b: 150 },
+  });
+
+  // Cool fill light opposite side
+  step("level.spawn_light", {
+    lightType: "point", label: "FillCool",
+    location: { x: 400, y: 300, z: 100 }, intensity: 15000,
+  });
+  step("level.set_light_properties", {
+    actorLabel: "FillCool", color: { r: 150, g: 200, b: 255 },
+  });
+
+  // ── 5. Camera ─────────────────────────────────────────────────────
+  step("editor.set_viewport", {
+    location: { x: -900, y: -500, z: 400 },
+    rotation: { pitch: -15, yaw: 30 },
+  });
+
   return {
     beacon: {
       description:
-        "Demo — create a dramatic light-sculpture scene with atmosphere, colored lights, and a material graph",
-      steps: {
-        // ── Scene foundation ──
-        "1": {
-          task: "level.create",
-          options: { levelPath: "/Game/Flows/Beacon" },
-        },
-        "2": {
-          task: "level.place_actor",
-          options: { actorClass: "SkyAtmosphere", label: "Sky" },
-        },
-        "3": {
-          task: "level.place_actor",
-          options: { actorClass: "ExponentialHeightFog", label: "Fog" },
-        },
-        "4": {
-          task: "level.place_actor",
-          options: { actorClass: "SkyLight", label: "Ambient" },
-        },
-
-        // ── Sunset sun ──
-        "5": {
-          task: "level.spawn_light",
-          options: { lightType: "directional", label: "Sun", intensity: 10 },
-        },
-        "6": {
-          task: "level.set_light_properties",
-          options: { actorLabel: "Sun", color: { r: 255, g: 160, b: 80 } },
-        },
-        "7": {
-          task: "level.move_actor",
-          options: { actorLabel: "Sun", rotation: { pitch: -25, yaw: -135 } },
-        },
-
-        // ── Light ring (3 colored point lights) ──
-        "8": {
-          task: "level.spawn_light",
-          options: {
-            lightType: "point",
-            label: "Beacon_Cyan",
-            location: { x: 200, y: 0, z: 300 },
-            intensity: 80000,
-          },
-        },
-        "9": {
-          task: "level.set_light_properties",
-          options: {
-            actorLabel: "Beacon_Cyan",
-            color: { r: 0, g: 200, b: 255 },
-          },
-        },
-        "10": {
-          task: "level.spawn_light",
-          options: {
-            lightType: "point",
-            label: "Beacon_Magenta",
-            location: { x: -100, y: 175, z: 300 },
-            intensity: 80000,
-          },
-        },
-        "11": {
-          task: "level.set_light_properties",
-          options: {
-            actorLabel: "Beacon_Magenta",
-            color: { r: 255, g: 0, b: 200 },
-          },
-        },
-        "12": {
-          task: "level.spawn_light",
-          options: {
-            lightType: "point",
-            label: "Beacon_Gold",
-            location: { x: -100, y: -175, z: 300 },
-            intensity: 80000,
-          },
-        },
-        "13": {
-          task: "level.set_light_properties",
-          options: {
-            actorLabel: "Beacon_Gold",
-            color: { r: 255, g: 200, b: 0 },
-          },
-        },
-
-        // ── Center spotlight ──
-        "14": {
-          task: "level.spawn_light",
-          options: {
-            lightType: "spot",
-            label: "CenterSpot",
-            location: { x: 0, y: 0, z: 500 },
-            intensity: 300000,
-          },
-        },
-        "15": {
-          task: "level.move_actor",
-          options: {
-            actorLabel: "CenterSpot",
-            rotation: { pitch: -90, yaw: 0 },
-          },
-        },
-
-        // ── Emissive material (demonstrates graph authoring) ──
-        "16": {
-          task: "material.create",
-          options: { name: "M_Beacon_Glow", packagePath: "/Game/Flows/Beacon" },
-        },
-        "17": {
-          task: "material.add_expression",
-          options: {
-            materialPath: "/Game/Flows/Beacon/M_Beacon_Glow",
-            expressionType: "VectorParameter",
-            name: "GlowColor",
-            parameterName: "GlowColor",
-          },
-        },
-        "18": {
-          task: "material.add_expression",
-          options: {
-            materialPath: "/Game/Flows/Beacon/M_Beacon_Glow",
-            expressionType: "Constant",
-            name: "GlowStrength",
-          },
-        },
-        "19": {
-          task: "material.set_expression_value",
-          options: {
-            materialPath: "/Game/Flows/Beacon/M_Beacon_Glow",
-            expressionIndex: 1,
-            value: 25,
-          },
-        },
-        "20": {
-          task: "material.add_expression",
-          options: {
-            materialPath: "/Game/Flows/Beacon/M_Beacon_Glow",
-            expressionType: "Multiply",
-            name: "Multiply",
-          },
-        },
-        "21": {
-          task: "material.connect_expressions",
-          options: {
-            materialPath: "/Game/Flows/Beacon/M_Beacon_Glow",
-            sourceExpression: "GlowColor",
-            targetExpression: "Multiply",
-            targetInput: "A",
-          },
-        },
-        "22": {
-          task: "material.connect_expressions",
-          options: {
-            materialPath: "/Game/Flows/Beacon/M_Beacon_Glow",
-            sourceExpression: "GlowStrength",
-            targetExpression: "Multiply",
-            targetInput: "B",
-          },
-        },
-        "23": {
-          task: "material.connect_to_property",
-          options: {
-            materialPath: "/Game/Flows/Beacon/M_Beacon_Glow",
-            expressionName: "Multiply",
-            property: "EmissiveColor",
-          },
-        },
-        "24": {
-          task: "material.recompile",
-          options: {
-            materialPath: "/Game/Flows/Beacon/M_Beacon_Glow",
-          },
-        },
-
-        // ── Camera ──
-        "25": {
-          task: "editor.set_viewport",
-          options: {
-            location: { x: -600, y: 0, z: 250 },
-            rotation: { pitch: -10, yaw: 0 },
-          },
-        },
-      },
+        "Demo — build a shrine scene from scratch: floor, pedestal, orb, five pillars, " +
+        "four materials (dark stone, brushed metal, warm stone, parameterized emissive), " +
+        "colored lights, and atmosphere",
+      steps,
     },
   };
 }

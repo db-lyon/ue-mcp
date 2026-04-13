@@ -195,7 +195,7 @@ UE-MCP ships with a default flow you can run out of the box.
 
 ### Beacon
 
-A 25-step demo that creates a dramatic light-sculpture scene from scratch — atmosphere, sunset lighting, a ring of colored point lights, a center spotlight, and a parameterized emissive material.
+A 56-step demo that builds a complete shrine scene from scratch — geometry, materials, lighting, atmosphere, and camera.
 
 ```
 flow(action="run", flowName="beacon")
@@ -205,13 +205,20 @@ What it creates:
 
 | Steps | Category | What |
 |-------|----------|------|
-| 1 | level | New level at `/Game/Flows/Beacon` |
-| 2–4 | level | SkyAtmosphere, ExponentialHeightFog, SkyLight |
-| 5–7 | level | Warm directional light at a sunset angle |
-| 8–13 | level | 3 colored point lights (cyan, magenta, gold) in a triangle |
-| 14–15 | level | Center spotlight pointing straight down |
-| 16–24 | material | Emissive material `M_Beacon_Glow` with a VectorParameter multiplied by intensity, wired to EmissiveColor |
-| 25 | editor | Viewport camera framing the scene |
+| 1–4 | level | New level, SkyAtmosphere, ExponentialHeightFog, SkyLight |
+| 5–7 | material | **M_Floor** — dark stone base color |
+| 8–16 | material | **M_Pillar** — brushed metallic (Metallic=1, Roughness=0.3) |
+| 17–19 | material | **M_Pedestal** — warm stone |
+| 20–28 | material | **M_Glow** — parameterized emissive (VectorParameter × 50 → EmissiveColor) |
+| 29 | level | Floor slab (scaled Cube with M_Floor) |
+| 30 | level | Center pedestal (Cylinder with M_Pedestal) |
+| 31 | level | Glowing orb (Sphere with M_Glow) |
+| 32–36 | level | 5 pillars in a pentagon (Cubes with M_Pillar) |
+| 37–39 | level | Sunset directional light |
+| 40–49 | level | 5 colored point lights at pillar tops (cyan, magenta, gold, green, violet) |
+| 50–51 | level | Center spotlight pointing down at orb |
+| 52–55 | level | Warm and cool fill lights |
+| 56 | editor | Viewport camera framing the scene |
 
 Preview the execution plan without running:
 
