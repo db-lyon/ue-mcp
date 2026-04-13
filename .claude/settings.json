@@ -1,0 +1,64 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "additionalDirectories": ["~/.claude/"],
+    "allow": [
+      "Bash(*)",
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "WebFetch(*)",
+      "WebSearch"
+    ],
+    "deny": [
+      "Edit(/etc/**)",
+      "Edit(/usr/**)",
+      "Edit(/bin/**)",
+      "Edit(/sbin/**)",
+      "Edit(~/.ssh/**)",
+      "Edit(~/.aws/**)",
+      "Edit(~/.zshrc)",
+      "Edit(~/.bashrc)",
+      "Edit(~/.gitconfig)",
+      "Bash(git push --force*)",
+      "Bash(git push *--force*)",
+      "Bash(git push *-f *)",
+      "Bash(git push *-f)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -fd*)",
+      "Bash(git rebase -i*)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(sudo rm *)",
+      "Bash(shred *)",
+      "Bash(find * -delete)",
+      "Bash(find * -exec rm *)",
+      "Bash(sudo *)",
+      "Bash(su *)",
+      "Bash(mkfs *)",
+      "Bash(dd *)",
+      "Bash(chmod -R 777 *)",
+      "Bash(chown -R *)",
+      "Bash(killall *)",
+      "Bash(pkill *)",
+      "Bash(curl * | bash)",
+      "Bash(curl * | sh)",
+      "Bash(wget * | bash)",
+      "Bash(wget * | sh)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.command // empty'); if echo \"$CMD\" | grep -qE 'git[[:space:]]+push.*(\\bmain\\b|\\bmaster\\b)'; then echo 'BLOCKED: pushing to main/master requires explicit human approval' >&2; exit 2; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

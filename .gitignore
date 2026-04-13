@@ -29,7 +29,8 @@ obj/
 kantext-mcp-*
 
 ## Claude / Cursor local settings
-.claude/
+.claude/settings.local.json
+
 
 ## Junk
 TODO.md
