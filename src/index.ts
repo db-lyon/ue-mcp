@@ -67,7 +67,7 @@ async function main() {
 
   const server = new McpServer({
     name: "ue-mcp",
-    version: "0.6.0",
+    version: "0.6.1",
   }, {
     instructions: SERVER_INSTRUCTIONS,
   });

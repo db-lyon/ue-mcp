@@ -1,6 +1,6 @@
 {
   "name": "ue-mcp",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Unreal Engine MCP server — 19 tools, 300+ actions for AI-driven editor control",
   "type": "module",
   "main": "dist/index.js",
@@ -64,7 +64,7 @@
     "prepublishOnly": "npx tsc && tsx scripts/generate-default-config.ts"
   },
   "dependencies": {
-    "@db-lyon/flowkit": "^0.1.0",
+    "@db-lyon/flowkit": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "ws": "^8.18.0",
     "zod": "^3.24.0"
