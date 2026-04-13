@@ -93,18 +93,48 @@ function makeRunner(registry: TaskRegistry, config: FlowConfig, ctx: ToolContext
 }
 
 function formatFlowResult(result: FlowRunResult): Record<string, unknown> {
+  const lines: string[] = [];
+  const icon = result.success ? "✓" : "✗";
+  lines.push(`${icon} Flow ${result.success ? "completed" : "failed"} in ${formatDuration(result.duration)}`);
+  lines.push("");
+
+  for (const s of result.steps) {
+    const stepIcon = s.skipped ? "○" : s.result?.success ? "✓" : "✗";
+    const status = s.skipped ? "skipped" : s.result?.success ? formatDuration(s.duration) : "FAILED";
+    lines.push(`  ${stepIcon} ${s.stepNumber}. ${s.name} (${s.type}) — ${status}`);
+
+    if (s.result?.error) {
+      lines.push(`      ${s.result.error.message}`);
+    }
+
+    // Show shell output if present
+    if (s.result?.data?.output && typeof s.result.data.output === "string") {
+      const output = s.result.data.output;
+      if (output.length > 0) {
+        const truncated = output.length > 500 ? output.slice(-500) + "\n      ..." : output;
+        for (const line of truncated.split("\n")) {
+          lines.push(`      ${line}`);
+        }
+      }
+    }
+  }
+
+  if (result.error && !result.steps.some((s) => s.result?.error)) {
+    lines.push("");
+    lines.push(`  Error: ${result.error.message}`);
+  }
+
   return {
+    summary: lines.join("\n"),
     success: result.success,
     duration: result.duration,
-    error: result.error?.message,
-    steps: result.steps.map((s) => ({
-      step: s.stepNumber,
-      name: s.name,
-      type: s.type,
-      skipped: s.skipped,
-      success: s.result?.success ?? null,
-      duration: s.duration,
-      error: s.result?.error?.message,
-    })),
+    stepCount: result.steps.length,
+    failedStep: result.steps.find((s) => s.result?.success === false)?.name,
   };
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 }

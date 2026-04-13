@@ -9,9 +9,13 @@ export const editorTool: ToolDef = categoryTool(
   "Editor commands, Python execution, PIE, undo/redo, hot reload, viewport, performance, sequencer, build pipeline, logs, editor control.",
   {
     start_editor: {
-      description: "Launch Unreal Editor with the current project",
+      description: "Launch Unreal Editor with the current project and reconnect bridge",
       handler: async (ctx: ToolContext) => {
-        return startEditor(ctx.project);
+        const result = await startEditor(ctx.project);
+        if (result.success) {
+          try { await ctx.bridge.connect(5000); } catch { /* reconnect timer handles it */ }
+        }
+        return result;
       },
     },
     stop_editor: {
