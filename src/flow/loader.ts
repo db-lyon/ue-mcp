@@ -27,6 +27,13 @@ export function buildDefaults(tools: ToolDef[]): Record<string, unknown> {
     }
   }
 
+  // Built-in shell task
+  tasks["shell"] = {
+    class_path: "shell",
+    group: "util",
+    description: "Run a shell command. Params: command, cwd?, timeout?",
+  };
+
   return { tasks, flows: {} };
 }
 
