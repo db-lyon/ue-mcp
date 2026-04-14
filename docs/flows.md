@@ -192,6 +192,43 @@ So a step with `options: { levelPath: "/Game/Flows/Beacon" }` in the YAML will u
 
 Params apply to every step — steps that don't use a given key simply ignore it. This makes flows fully parameterizable without templating syntax.
 
+## Step References
+
+When one step needs the output of an earlier step, reference it with `${steps.<id>.<path>}`:
+
+```yaml
+flows:
+  build_and_open:
+    description: Build, then open the packaged artifact
+    steps:
+      1:
+        task: project.build
+        options:
+          configuration: Development
+      2:
+        task: asset.list
+        options:
+          directory: ${steps.1.outputDir}       # whole-value → raw type preserved
+      3:
+        task: editor.execute_console
+        options:
+          command: "echo built ${steps.project.build.version}"  # embedded → stringified
+```
+
+- **`<id>`** — step number (`1`) or task name (`project.build`). For task names that contain dots, the longest prefix that matches a step wins.
+- **`<path>`** — dot path into that step's `result.data`.
+- If a task name appears in multiple steps, references resolve to the **most recently completed** one.
+- If the whole option value is a single `${...}` reference, the raw value is substituted (objects and arrays round-trip). Embedded references inside a larger string are stringified.
+- References that can't be resolved fail the step.
+
+Precedence (highest wins):
+
+```
+taskDef.options  <  step.options  <  runtime params
+```
+
+References in any of those layers resolve at step-execution time against already-completed steps in the same flow. Nested flows have their own scope — a nested step cannot reference a step in the enclosing flow.
+
 ## Skipping Steps
 
 Pass step names or numbers in the `skip` array:
