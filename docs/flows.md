@@ -229,6 +229,93 @@ taskDef.options  <  step.options  <  runtime params
 
 References in any of those layers resolve at step-execution time against already-completed steps in the same flow. Nested flows have their own scope — a nested step cannot reference a step in the enclosing flow.
 
+## Flow-level Hooks
+
+A flow can attach steps that run around the main sequence, keyed by outcome:
+
+```yaml
+flows:
+  deploy:
+    description: Build and push the plugin
+    on_start:   [ { task: editor.execute_console, options: { command: "echo starting" } } ]
+    on_success: [ { task: editor.execute_console, options: { command: "echo done ${steps.build.version}" } } ]
+    on_failure: [ { task: agent_prompt, options: { prompt: "Triage: ${error.message}" } } ]
+    finally:    [ { task: project.get_status } ]
+    steps:
+      1: { task: project.build }
+      2: { task: asset.save }
+```
+
+- **`on_start`** — before the first step. Failure aborts the flow.
+- **`on_success`** — after all steps succeed.
+- **`on_failure`** — after any step fails. The `${error.message|name|stack|step}` namespace resolves inside this phase.
+- **`finally`** — after `on_success` / `on_failure`, regardless of outcome.
+
+Hook steps share the full execution model — same references, same option merging, same runtime params. Hook failures appear in `result.hookErrors` but don't change the primary success/failure outcome.
+
+## Per-step Retry
+
+A step can retry itself on failure:
+
+```yaml
+steps:
+  1:
+    task: project.build
+    retries: 2            # up to 3 total attempts
+    retryDelay: 1000      # ms between attempts
+    retryOn: "timeout"    # only retry when error message contains this substring
+```
+
+Omit `retryOn` to retry on any error. The actual attempt count surfaces on `result.steps[i].attempts`.
+
+## Rollback on Failure
+
+Mutating bridge handlers emit a `rollback: { method, payload }` record on success. When a flow sets `rollback_on_failure: true` (or the caller passes it) and a later step fails, the runner invokes the collected inverses **in reverse order**, best-effort, and reports the outcome in `result.rollback`:
+
+```yaml
+flows:
+  safe_scene:
+    description: Place pillars with automatic cleanup on failure
+    rollback_on_failure: true
+    steps:
+      1: { task: level.place_actor, options: { actorClass: StaticMeshActor, label: A } }
+      2: { task: level.place_actor, options: { actorClass: StaticMeshActor, label: B } }
+      3: { task: some_fragile_step }
+```
+
+If step 3 fails: the `delete_actor` inverses for B and A run, leaving the level as it was. Handlers without an inverse (`execute_console`, `shell`, some deletes) simply don't contribute records; their steps are left as-is when rollback runs.
+
+Conventions for handlers — natural keys, the `onConflict: skip|update|error` option, and rollback record shape — live in [docs/handler-conventions.md](handler-conventions.md).
+
+## `agent_prompt` — LLM-backed steps
+
+When `ANTHROPIC_API_KEY` is set, the `agent_prompt` task is available. It calls Claude and returns the response as the step's data:
+
+```yaml
+steps:
+  1:
+    task: agent_prompt
+    options:
+      system: "You triage UE flow failures."
+      prompt: "Last error: ${error.message}. Suggest a one-line fix."
+      model: claude-opus-4-6
+      maxTokens: 512
+      schema: { type: object, properties: { fix: { type: string } } }  # optional — parses JSON response
+```
+
+Returns `{ text, parsed?, usage }`. `parsed` is populated when a `schema` is provided and the model's output is valid JSON.
+
+Pairs naturally with `on_failure` for auto-triage:
+
+```yaml
+on_failure:
+  - task: agent_prompt
+    options:
+      prompt: "Flow ${error.step} failed with: ${error.message}. What should the user change?"
+```
+
+Skip this section if you're not using the MCP server's Anthropic-backed provider. Swap in your own by attaching a `LLMProvider` to the flow context.
+
 ## Skipping Steps
 
 Pass step names or numbers in the `skip` array:
