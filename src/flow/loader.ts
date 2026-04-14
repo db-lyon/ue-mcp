@@ -248,16 +248,19 @@ function defaultFlows(): Record<string, unknown> {
 export function loadFlowConfig(
   tools: ToolDef[],
   configDir?: string,
-): LoadedConfig<FlowConfig> | null {
+): LoadedConfig<FlowConfig> {
   const dir = configDir ?? process.cwd();
   const configPath = path.join(dir, "ue-mcp.yml");
+  const defaults = buildDefaults(tools);
 
-  if (!fs.existsSync(configPath)) return null;
+  if (!fs.existsSync(configPath)) {
+    return { config: FlowConfigSchema.parse(defaults), configDir: dir };
+  }
 
   return loadConfig({
     filename: "ue-mcp.yml",
     schema: FlowConfigSchema,
-    defaults: buildDefaults(tools),
+    defaults,
     envVar: "UE_MCP_ENV",
     configDir: dir,
   });
