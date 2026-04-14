@@ -1,4 +1,4 @@
-import { BaseTask, type TaskResult } from "@db-lyon/flowkit";
+import { BaseTask, type TaskResult, type RollbackRecord } from "@db-lyon/flowkit";
 import type { FlowContext } from "./context.js";
 
 /**
@@ -13,6 +13,10 @@ import type { FlowContext } from "./context.js";
  * 2. **Built-in tasks** via `bridgeTaskClass()` factory:
  *    The bridge method is baked into the class closure.
  *    Options are passed through as bridge params.
+ *
+ * Handlers may attach a `rollback: { method, payload }` to their response.
+ * When present, it is lifted onto `TaskResult.rollback` so the flow runner
+ * can invoke the inverse on failure when `rollback_on_failure` is enabled.
  */
 export class BridgeTask extends BaseTask {
   get taskName() {
@@ -25,12 +29,29 @@ export class BridgeTask extends BaseTask {
       throw new Error('BridgeTask requires a "method" option');
     }
     const ctx = this.ctx as FlowContext;
-    const data = await ctx.bridge.call(method as string, params);
-    return {
-      success: true,
-      data: typeof data === "object" && data !== null
-        ? (data as Record<string, unknown>)
-        : { result: data },
-    };
+    const raw = await ctx.bridge.call(method as string, params);
+
+    if (typeof raw !== "object" || raw === null) {
+      return { success: true, data: { result: raw } };
+    }
+
+    const { rollback, ...rest } = raw as Record<string, unknown>;
+    const result: TaskResult = { success: true, data: rest };
+
+    if (rollback && typeof rollback === "object") {
+      const rb = rollback as { method?: unknown; payload?: unknown };
+      if (typeof rb.method === "string") {
+        const record: RollbackRecord = {
+          taskName: rb.method,
+          payload:
+            rb.payload && typeof rb.payload === "object"
+              ? (rb.payload as Record<string, unknown>)
+              : {},
+        };
+        result.rollback = record;
+      }
+    }
+
+    return result;
   }
 }

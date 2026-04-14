@@ -1,29 +1,59 @@
 import { z } from "zod";
-import { FlowRunner } from "@db-lyon/flowkit";
-import type { TaskRegistry, FlowRunResult, TaskDefinition, FlowDefinition } from "@db-lyon/flowkit";
+import { FlowRunner, AgentPromptTask } from "@db-lyon/flowkit";
+import type {
+  TaskRegistry,
+  FlowRunResult,
+  TaskDefinition,
+  FlowDefinition,
+  LLMProvider,
+} from "@db-lyon/flowkit";
 import type { FlowContext } from "./context.js";
 import type { FlowConfig } from "./schema.js";
 import type { ToolDef, ToolContext } from "../types.js";
+import { AnthropicProvider } from "./anthropic-provider.js";
+
+// Lazy-init the LLM provider so the server still starts without an API key.
+let llmProvider: LLMProvider | undefined;
+let llmProviderInitAttempted = false;
+function getLLMProvider(): LLMProvider | undefined {
+  if (llmProviderInitAttempted) return llmProvider;
+  llmProviderInitAttempted = true;
+  try {
+    llmProvider = new AnthropicProvider();
+  } catch {
+    // No API key — agent_prompt steps will fail clearly when invoked.
+  }
+  return llmProvider;
+}
 
 export function createFlowTool(
   registry: TaskRegistry,
   reloadConfig: () => FlowConfig,
 ): ToolDef {
+  // Ensure agent_prompt is registered on the shared registry.
+  registry.registerClassPath(
+    "flow.agent_prompt",
+    AgentPromptTask as unknown as Parameters<typeof registry.registerClassPath>[1],
+  );
+
   return {
     name: "flow",
     description:
       `Run or inspect named flows defined in ue-mcp.yml. Config is reloaded on every call — no restart needed.\n\n` +
       `Actions:\n` +
-      `- run: Execute a flow. Params: flowName, skip?, params?\n` +
+      `- run: Execute a flow. Params: flowName, skip?, params?, rollback_on_failure?\n` +
       `- plan: Show execution plan without running. Params: flowName\n` +
       `- list: List available flows\n\n` +
       `params: Runtime options merged into every step's options (highest priority). ` +
-      `Use to override YAML-hardcoded values like levelPath, directory, configuration, etc.`,
+      `Use to override YAML-hardcoded values like levelPath, directory, configuration, etc.\n\n` +
+      `rollback_on_failure: When true, rollback records from completed steps are invoked ` +
+      `in reverse order if a subsequent step fails.`,
     schema: {
       action: z.enum(["run", "plan", "list"]).describe("Action to perform"),
       flowName: z.string().optional().describe("Flow name from ue-mcp.yml"),
       skip: z.array(z.string()).optional().describe("Step names or numbers to skip"),
       params: z.record(z.unknown()).optional().describe("Runtime options merged into every step's options (highest priority)"),
+      rollback_on_failure: z.boolean().optional().describe("Invoke inverse tasks in reverse order on failure"),
     },
     actions: {
       run: { handler: async (ctx, params) => runFlow(registry, reloadConfig(), ctx, params) },
@@ -72,9 +102,10 @@ async function runFlow(
   if (!flowName) throw new Error("flowName is required");
   const skip = (params.skip as string[] | undefined) ?? [];
   const flowParams = params.params as Record<string, unknown> | undefined;
+  const rollback_on_failure = params.rollback_on_failure as boolean | undefined;
 
   const runner = makeRunner(registry, config, ctx);
-  const result = await runner.run({ flowName, skip, params: flowParams });
+  const result = await runner.run({ flowName, skip, params: flowParams, rollback_on_failure });
 
   return formatFlowResult(result);
 }
@@ -83,6 +114,7 @@ function makeRunner(registry: TaskRegistry, config: FlowConfig, ctx: ToolContext
   const flowCtx: FlowContext = {
     bridge: ctx.bridge,
     project: ctx.project,
+    llm: getLLMProvider(),
   };
 
   return new FlowRunner({
@@ -102,13 +134,13 @@ function formatFlowResult(result: FlowRunResult): Record<string, unknown> {
   for (const s of result.steps) {
     const stepIcon = s.skipped ? "○" : s.result?.success ? "✓" : "✗";
     const status = s.skipped ? "skipped" : s.result?.success ? formatDuration(s.duration) : "FAILED";
-    lines.push(`  ${stepIcon} ${s.stepNumber}. ${s.name} (${s.type}) — ${status}`);
+    const attempts = s.attempts && s.attempts > 1 ? ` [${s.attempts} attempts]` : "";
+    lines.push(`  ${stepIcon} ${s.stepNumber}. ${s.name} (${s.type}) — ${status}${attempts}`);
 
     if (s.result?.error) {
       lines.push(`      ${s.result.error.message}`);
     }
 
-    // Show shell output if present
     if (s.result?.data?.output && typeof s.result.data.output === "string") {
       const output = s.result.data.output;
       if (output.length > 0) {
@@ -125,12 +157,33 @@ function formatFlowResult(result: FlowRunResult): Record<string, unknown> {
     lines.push(`  Error: ${result.error.message}`);
   }
 
+  if (result.rollback) {
+    lines.push("");
+    lines.push(
+      `  Rollback: ${result.rollback.succeeded}/${result.rollback.attempted} inverses succeeded` +
+        (result.rollback.errors.length ? ` — ${result.rollback.errors.length} failed` : ""),
+    );
+    for (const e of result.rollback.errors) {
+      lines.push(`      ✗ ${e.taskName}: ${e.error.message}`);
+    }
+  }
+
+  if (result.hookErrors && result.hookErrors.length > 0) {
+    lines.push("");
+    lines.push(`  Hook errors (${result.hookErrors.length}):`);
+    for (const h of result.hookErrors) {
+      lines.push(`      ✗ ${h.phase}:${h.name} — ${h.error.message}`);
+    }
+  }
+
   return {
     summary: lines.join("\n"),
     success: result.success,
     duration: result.duration,
     stepCount: result.steps.length,
     failedStep: result.steps.find((s) => s.result?.success === false)?.name,
+    rollback: result.rollback,
+    hookErrors: result.hookErrors,
   };
 }
 
