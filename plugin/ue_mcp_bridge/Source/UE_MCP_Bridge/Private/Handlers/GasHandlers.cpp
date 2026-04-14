@@ -45,40 +45,24 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJson
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Effects"));
 	FString DurationPolicy = OptionalString(Params, TEXT("durationPolicy"), TEXT("Instant"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	// Find GameplayEffect class
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("GameplayEffect")))
+	{
+		return Existing;
+	}
+
 	UClass* GameplayEffectClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayEffect"));
 	if (!GameplayEffectClass)
 	{
 		return MCPError(TEXT("GameplayEffect class not found. Enable GameplayAbilities plugin."));
 	}
 
-	// Create blueprint
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
-	FString PackageName;
-	FString AssetName;
-	PackagePath.Split(TEXT("/"), &PackageName, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-	if (AssetName.IsEmpty())
-	{
-		AssetName = Name;
-	}
-	else
-	{
-		PackageName = PackagePath;
-		AssetName = Name;
-	}
-	if (PackageName.EndsWith(TEXT("/"))) PackageName = PackageName.LeftChop(1);
-
-	// Create asset path
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-
-	// Delete existing asset if it exists
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
-
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
-	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(AssetName, PackageName, UBlueprint::StaticClass(), BlueprintFactory));
+	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
 		return MCPError(TEXT("Failed to create GameplayEffect Blueprint"));
@@ -87,7 +71,6 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJson
 	NewBlueprint->ParentClass = GameplayEffectClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	// Save asset
 	UPackage* Package = NewBlueprint->GetOutermost();
 	if (Package)
 	{
@@ -99,9 +82,11 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJson
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("durationPolicy"), DurationPolicy);
+	MCPSetDeleteAssetRollback(Result, NewBlueprint->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -188,6 +173,12 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayAbility(const TSharedPtr<FJso
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Abilities"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("GameplayAbility")))
+	{
+		return Existing;
+	}
 
 	UClass* GAClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayAbility"));
 	if (!GAClass)
@@ -197,10 +188,6 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayAbility(const TSharedPtr<FJso
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	// Delete existing asset if it exists
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
 
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
 	BlueprintFactory->ParentClass = GAClass;
@@ -225,8 +212,10 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayAbility(const TSharedPtr<FJso
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewBlueprint->GetPathName());
 	return MCPResult(Result);
 }
 
@@ -236,6 +225,12 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateAttributeSet(const TSharedPtr<FJsonOb
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Attributes"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("AttributeSet")))
+	{
+		return Existing;
+	}
 
 	UClass* AttrSetClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AttributeSet"));
 	if (!AttrSetClass)
@@ -245,9 +240,6 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateAttributeSet(const TSharedPtr<FJsonOb
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
 
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
 	BlueprintFactory->ParentClass = AttrSetClass;
@@ -272,8 +264,10 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateAttributeSet(const TSharedPtr<FJsonOb
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewBlueprint->GetPathName());
 	return MCPResult(Result);
 }
 
@@ -284,8 +278,13 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObj
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Cues"));
 	FString CueType = OptionalString(Params, TEXT("cueType"), TEXT("Static"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	// Determine parent class based on cue type
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("GameplayCue")))
+	{
+		return Existing;
+	}
+
 	FString ParentClassPath;
 	if (CueType == TEXT("Actor"))
 	{
@@ -304,9 +303,6 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObj
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
 
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
 	BlueprintFactory->ParentClass = ParentClass;
@@ -331,9 +327,11 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObj
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("cueType"), CueType);
+	MCPSetDeleteAssetRollback(Result, NewBlueprint->GetPathName());
 	return MCPResult(Result);
 }
 
@@ -421,8 +419,13 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJ
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/CueNotifies"));
 	FString NotifyType = OptionalString(Params, TEXT("notifyType"), TEXT("Actor"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	// Determine parent class based on notify type
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("GameplayCueNotify")))
+	{
+		return Existing;
+	}
+
 	FString ParentClassPath;
 	FString FriendlyName;
 	if (NotifyType == TEXT("Static"))
@@ -446,10 +449,6 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJ
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
-	// Delete existing asset if it exists
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
-
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
 	BlueprintFactory->ParentClass = ParentClass;
 
@@ -462,7 +461,6 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJ
 	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	// Save
 	UPackage* Package = NewBlueprint->GetOutermost();
 	if (Package)
 	{
@@ -474,10 +472,12 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJ
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("notifyType"), NotifyType);
 	Result->SetStringField(TEXT("parentClass"), FriendlyName);
+	MCPSetDeleteAssetRollback(Result, NewBlueprint->GetPathName());
 	return MCPResult(Result);
 }
 

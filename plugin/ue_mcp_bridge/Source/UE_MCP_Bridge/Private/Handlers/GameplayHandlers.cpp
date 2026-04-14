@@ -125,37 +125,23 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/SmartObjects"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	// Delete existing asset if it exists
-	FString AssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(AssetPath);
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("SmartObjectDefinition")))
+	{
+		return Existing;
+	}
 
-	// Find SmartObjectDefinition class
 	UClass* SmartObjectDefClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectDefinition"));
 	if (!SmartObjectDefClass)
 	{
 		return MCPError(TEXT("SmartObjectDefinition class not found. Enable SmartObjects plugin."));
 	}
 
-	// Create asset
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
-	FString PackageName;
-	FString AssetName;
-	PackagePath.Split(TEXT("/"), &PackageName, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-	if (AssetName.IsEmpty())
-	{
-		AssetName = Name;
-	}
-	else
-	{
-		PackageName = PackagePath;
-		AssetName = Name;
-	}
-	if (PackageName.EndsWith(TEXT("/"))) PackageName = PackageName.LeftChop(1);
-
-	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackageName, SmartObjectDefClass, nullptr);
+	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, SmartObjectDefClass, nullptr);
 	if (!NewAsset)
 	{
 		return MCPError(TEXT("Failed to create SmartObjectDefinition"));
@@ -164,8 +150,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -388,6 +376,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputAction(const TSharedPtr<FJs
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Input"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("InputAction")))
+	{
+		return Existing;
+	}
 
 	UClass* InputActionClass = FindObject<UClass>(nullptr, TEXT("/Script/EnhancedInput.InputAction"));
 	if (!InputActionClass)
@@ -445,8 +439,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputAction(const TSharedPtr<FJs
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -457,6 +453,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputMappingContext(const TShare
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Input"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("InputMappingContext")))
+	{
+		return Existing;
+	}
 
 	UClass* IMCClass = FindObject<UClass>(nullptr, TEXT("/Script/EnhancedInput.InputMappingContext"));
 	if (!IMCClass)
@@ -476,8 +478,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputMappingContext(const TShare
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -488,6 +492,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlackboard(const TSharedPtr<FJso
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("BlackboardData")))
+	{
+		return Existing;
+	}
 
 	UClass* BlackboardClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.BlackboardData"));
 	if (!BlackboardClass)
@@ -507,8 +517,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlackboard(const TSharedPtr<FJso
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -519,6 +531,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJ
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("BehaviorTree")))
+	{
+		return Existing;
+	}
 
 	UClass* BTClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.BehaviorTree"));
 	if (!BTClass)
@@ -538,8 +556,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJ
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -550,6 +570,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateEqsQuery(const TSharedPtr<FJsonO
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/EQS"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("EnvironmentQuery")))
+	{
+		return Existing;
+	}
 
 	UClass* EQSClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.EnvironmentQuery"));
 	if (!EQSClass)
@@ -569,8 +595,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateEqsQuery(const TSharedPtr<FJsonO
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -581,6 +609,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("StateTree")))
+	{
+		return Existing;
+	}
 
 	UClass* STClass = FindObject<UClass>(nullptr, TEXT("/Script/StateTreeModule.StateTree"));
 	if (!STClass)
@@ -600,8 +634,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -614,12 +650,20 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlueprintWithParent(const FStrin
 		return MCPError(FString::Printf(TEXT("%s class not found: %s"), *FriendlyTypeName, *ParentClassPath));
 	}
 
+	// Idempotency: check if the blueprint already exists.
+	const FString ProbePath = PackagePath + TEXT("/") + Name + TEXT(".") + Name;
+	if (UBlueprint* Existing = LoadObject<UBlueprint>(nullptr, *ProbePath))
+	{
+		auto Res = MCPSuccess();
+		MCPSetExisted(Res);
+		Res->SetStringField(TEXT("path"), Existing->GetPathName());
+		Res->SetStringField(TEXT("name"), Name);
+		Res->SetStringField(TEXT("type"), FriendlyTypeName);
+		return MCPResult(Res);
+	}
+
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	// Delete existing asset if it exists
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
 
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
 	BlueprintFactory->ParentClass = ParentClass;
@@ -633,7 +677,6 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlueprintWithParent(const FStrin
 	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	// Save
 	UPackage* Package = NewBlueprint->GetOutermost();
 	if (Package)
 	{
@@ -644,10 +687,17 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlueprintWithParent(const FStrin
 		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
 
+	const FString CreatedPath = NewBlueprint->GetPathName();
+
 	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("path"), CreatedPath);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("type"), FriendlyTypeName);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), CreatedPath);
+	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
 
 	return MCPResult(Result);
 }
@@ -942,7 +992,27 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPt
 {
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Get location
+	const FString Label = OptionalString(Params, TEXT("label"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (!Label.IsEmpty())
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->GetActorLabel() == Label)
+			{
+				if (OnConflict == TEXT("error"))
+				{
+					return MCPError(FString::Printf(TEXT("NavModifierVolume '%s' already exists"), *Label));
+				}
+				auto Existing = MCPSuccess();
+				MCPSetExisted(Existing);
+				Existing->SetStringField(TEXT("actorLabel"), Label);
+				return MCPResult(Existing);
+			}
+		}
+	}
+
 	FVector Location = FVector::ZeroVector;
 	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("location"), LocationObj))
@@ -972,15 +1042,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPt
 		return MCPError(TEXT("Failed to spawn NavModifierVolume"));
 	}
 
-	// Set label if provided
-	FString Label;
-	if (Params->TryGetStringField(TEXT("label"), Label))
+	if (!Label.IsEmpty())
 	{
 		NewVolume->SetActorLabel(Label);
 	}
 
+	const FString FinalLabel = NewVolume->GetActorLabel();
+
 	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("actorLabel"), NewVolume->GetActorLabel());
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("actorLabel"), FinalLabel);
 	Result->SetStringField(TEXT("actorName"), NewVolume->GetName());
 
 	TSharedPtr<FJsonObject> LocationResult = MakeShared<FJsonObject>();
@@ -989,6 +1060,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPt
 	LocationResult->SetNumberField(TEXT("y"), ActorLocation.Y);
 	LocationResult->SetNumberField(TEXT("z"), ActorLocation.Z);
 	Result->SetObjectField(TEXT("location"), LocationResult);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorLabel"), FinalLabel);
+	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
 
 	return MCPResult(Result);
 }

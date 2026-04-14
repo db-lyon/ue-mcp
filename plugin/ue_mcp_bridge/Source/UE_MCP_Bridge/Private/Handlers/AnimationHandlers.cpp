@@ -558,8 +558,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
 	FString ParentClassName = OptionalString(Params, TEXT("parentClass"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	// Load the skeleton
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("AnimBlueprint")))
+	{
+		return Existing;
+	}
+
 	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
 	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
 	if (!Skeleton)
@@ -567,18 +572,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<
 		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
 
-	// Delete existing asset if present
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
-
-	// Create the AnimBlueprint via factory
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
 	UAnimBlueprintFactory* Factory = NewObject<UAnimBlueprintFactory>();
 	Factory->TargetSkeleton = Skeleton;
 
-	// Resolve parent class if specified, default to UAnimInstance
 	if (!ParentClassName.IsEmpty())
 	{
 		UClass* FoundClass = FindFirstObject<UClass>(*ParentClassName);
@@ -597,9 +596,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), NewAsset->GetName());
 	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -616,8 +617,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 	if (auto Err = RequireString(Params, TEXT("animSequencePath"), AnimSequencePath)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	// Load the source anim sequence
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("AnimMontage")))
+	{
+		return Existing;
+	}
+
 	UObject* SourceAsset = UEditorAssetLibrary::LoadAsset(AnimSequencePath);
 	UAnimSequence* SourceSequence = Cast<UAnimSequence>(SourceAsset);
 	if (!SourceSequence)
@@ -625,11 +631,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 		return MCPError(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimSequencePath));
 	}
 
-	// Delete existing asset if present
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
-
-	// Create the montage via factory
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
@@ -646,9 +647,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), NewAsset->GetName());
 	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -819,13 +822,18 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
 	FString AxisHorizontal = OptionalString(Params, TEXT("axisHorizontal"), TEXT("Speed"));
 	FString AxisVertical = OptionalString(Params, TEXT("axisVertical"), TEXT("Direction"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("BlendSpace")))
+	{
+		return Existing;
+	}
 
 	double HorizontalMin = OptionalNumber(Params, TEXT("horizontalMin"), 0.0);
 	double HorizontalMax = OptionalNumber(Params, TEXT("horizontalMax"), 500.0);
 	double VerticalMin = OptionalNumber(Params, TEXT("verticalMin"), -180.0);
 	double VerticalMax = OptionalNumber(Params, TEXT("verticalMax"), 180.0);
 
-	// Load the skeleton
 	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
 	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
 	if (!Skeleton)
@@ -833,11 +841,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
 
-	// Delete existing asset if present
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
-
-	// Create the BlendSpace via factory
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
@@ -850,7 +853,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 		return MCPError(TEXT("Failed to create BlendSpace"));
 	}
 
-	// Configure axis settings on the newly created BlendSpace
 	UBlendSpace* BlendSpace = Cast<UBlendSpace>(NewAsset);
 	if (BlendSpace)
 	{
@@ -868,11 +870,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), NewAsset->GetName());
 	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
 	Result->SetStringField(TEXT("axisHorizontal"), AxisHorizontal);
 	Result->SetStringField(TEXT("axisVertical"), AxisVertical);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -892,13 +896,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
 	double FrameRate = OptionalNumber(Params, TEXT("frameRate"), 30.0);
 	double NumFrames = OptionalNumber(Params, TEXT("numFrames"), 30.0);
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	// Load the skeleton
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("AnimSequence")))
+	{
+		return Existing;
+	}
+
 	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
 	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
 	if (!Skeleton)
 	{
-		// Try loading as skeletal mesh and getting its skeleton
 		USkeletalMesh* SkelMesh = Cast<USkeletalMesh>(SkeletonAsset);
 		if (SkelMesh)
 		{
@@ -910,9 +918,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
 
-	// Delete existing asset if present
 	FString FullAssetPath = PackagePath / Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
 
 	// Create the package
 	FString PackageName = PackagePath / Name;
@@ -952,16 +958,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 	NewSeq->PostEditChange();
 	NewSeq->MarkPackageDirty();
 
-	// Save
 	UEditorAssetLibrary::SaveAsset(FullAssetPath);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), FullAssetPath);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("skeleton"), Skeleton->GetPathName());
 	Result->SetNumberField(TEXT("numFrames"), NumFrames);
 	Result->SetNumberField(TEXT("frameRate"), FrameRate);
 	Result->SetNumberField(TEXT("sequenceLength"), NewSeq->GetPlayLength());
+	MCPSetDeleteAssetRollback(Result, NewSeq->GetPathName());
 
 	return MCPResult(Result);
 }

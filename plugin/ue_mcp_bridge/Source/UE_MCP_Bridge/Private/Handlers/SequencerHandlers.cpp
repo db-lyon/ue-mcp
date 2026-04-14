@@ -43,8 +43,13 @@ TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Cinematics"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	// Create the package
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("LevelSequence")))
+	{
+		return Existing;
+	}
+
 	FString FullPackagePath = PackagePath / Name;
 	UPackage* Package = CreatePackage(*FullPackagePath);
 	if (!Package)
@@ -52,7 +57,6 @@ TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<
 		return MCPError(FString::Printf(TEXT("Failed to create package at '%s'"), *FullPackagePath));
 	}
 
-	// Create the level sequence asset
 	ULevelSequence* NewSequence = NewObject<ULevelSequence>(Package, FName(*Name), RF_Public | RF_Standalone);
 	NewSequence->Initialize();
 
@@ -61,16 +65,15 @@ TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<
 		return MCPError(TEXT("Failed to create LevelSequence asset"));
 	}
 
-	// Notify the asset registry
 	FAssetRegistryModule::AssetCreated(NewSequence);
-
-	// Mark package dirty so it can be saved
 	Package->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("path"), NewSequence->GetPathName());
 	Result->SetStringField(TEXT("packagePath"), FullPackagePath);
+	MCPSetDeleteAssetRollback(Result, NewSequence->GetPathName());
 
 	return MCPResult(Result);
 }

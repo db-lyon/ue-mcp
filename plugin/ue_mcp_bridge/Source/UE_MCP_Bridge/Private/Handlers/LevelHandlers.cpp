@@ -730,14 +730,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("Actor '%s' does not have a light component"), *ActorLabel));
 	}
 
-	// Set intensity if provided
+	// Capture previous values before mutation for self-inverse rollback.
+	const double PreviousIntensity = LightComponent->Intensity;
+	const FLinearColor PreviousColor = LightComponent->GetLightColor();
+
+	bool bAnyChange = false;
+
 	double Intensity = 0.0;
 	if (Params->TryGetNumberField(TEXT("intensity"), Intensity))
 	{
 		LightComponent->SetIntensity(Intensity);
+		bAnyChange = true;
 	}
 
-	// Set color if provided
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("color"), ColorObj))
 	{
@@ -746,9 +751,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 		(*ColorObj)->TryGetNumberField(TEXT("g"), G);
 		(*ColorObj)->TryGetNumberField(TEXT("b"), B);
 		LightComponent->SetLightColor(FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f));
+		bAnyChange = true;
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetNumberField(TEXT("intensity"), LightComponent->Intensity);
 
@@ -758,6 +765,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	ColorResult->SetNumberField(TEXT("g"), CurrentColor.G * 255.0f);
 	ColorResult->SetNumberField(TEXT("b"), CurrentColor.B * 255.0f);
 	Result->SetObjectField(TEXT("color"), ColorResult);
+
+	if (bAnyChange)
+	{
+		TSharedPtr<FJsonObject> PrevColor = MakeShared<FJsonObject>();
+		PrevColor->SetNumberField(TEXT("r"), PreviousColor.R * 255.0f);
+		PrevColor->SetNumberField(TEXT("g"), PreviousColor.G * 255.0f);
+		PrevColor->SetNumberField(TEXT("b"), PreviousColor.B * 255.0f);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetNumberField(TEXT("intensity"), PreviousIntensity);
+		Payload->SetObjectField(TEXT("color"), PrevColor);
+		MCPSetRollback(Result, TEXT("set_light_properties"), Payload);
+	}
 
 	return MCPResult(Result);
 }
@@ -898,9 +918,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 	FString ComponentName;
 	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
 
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Find actor by label
 	AActor* Actor = nullptr;
 	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
 	{
@@ -916,7 +937,26 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
-	// Find component class
+	// Idempotency: check for an existing component with the same name on the actor.
+	FName CompName = FName(*ComponentName);
+	for (UActorComponent* Existing : Actor->GetComponents())
+	{
+		if (Existing && Existing->GetFName() == CompName)
+		{
+			if (OnConflict == TEXT("error"))
+			{
+				return MCPError(FString::Printf(
+					TEXT("Component '%s' already exists on '%s'"), *ComponentName, *ActorLabel));
+			}
+			auto ExistingResult = MCPSuccess();
+			MCPSetExisted(ExistingResult);
+			ExistingResult->SetStringField(TEXT("actorLabel"), ActorLabel);
+			ExistingResult->SetStringField(TEXT("componentName"), ComponentName);
+			ExistingResult->SetStringField(TEXT("componentClass"), Existing->GetClass()->GetName());
+			return MCPResult(ExistingResult);
+		}
+	}
+
 	UClass* CompClass = FindObject<UClass>(nullptr, *ComponentClass);
 	if (!CompClass)
 	{
@@ -933,14 +973,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 		return MCPError(FString::Printf(TEXT("Class '%s' is not an ActorComponent"), *ComponentClass));
 	}
 
-	FName CompName = FName(*ComponentName);
 	UActorComponent* NewComponent = NewObject<UActorComponent>(Actor, CompClass, CompName);
 	if (!NewComponent)
 	{
 		return MCPError(TEXT("Failed to create component"));
 	}
 
-	// If it's a scene component, attach it to root
 	USceneComponent* SceneComp = Cast<USceneComponent>(NewComponent);
 	if (SceneComp && Actor->GetRootComponent())
 	{
@@ -951,10 +989,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 	Actor->AddInstanceComponent(NewComponent);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetStringField(TEXT("componentClass"), NewComponent->GetClass()->GetName());
-
+	// No generic remove-instance-component handler exists yet; not emitting a
+	// rollback record. Adding one later will make this reversible.
 	return MCPResult(Result);
 }
 
@@ -1126,19 +1166,22 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("Component '%s' not found on actor '%s'"), *ComponentName, *ActorLabel));
 	}
 
-	// Set the property
 	FProperty* Prop = TargetComp->GetClass()->FindPropertyByName(*PropertyName);
 	if (!Prop)
 	{
 		return MCPError(FString::Printf(TEXT("Property '%s' not found on component"), *PropertyName));
 	}
 
-	// Handle different value types from JSON
 	const TSharedPtr<FJsonValue>* ValueField = Params->Values.Find(TEXT("value"));
 	if (!ValueField || !(*ValueField).IsValid())
 	{
 		return MCPError(TEXT("Missing 'value' parameter"));
 	}
+
+	// Capture previous value as a string for self-inverse rollback.
+	FString PreviousValueStr;
+	Prop->ExportText_Direct(PreviousValueStr, Prop->ContainerPtrToValuePtr<void>(TargetComp),
+		Prop->ContainerPtrToValuePtr<void>(TargetComp), TargetComp, PPF_None);
 
 	FString ValueStr;
 	if ((*ValueField)->TryGetString(ValueStr))
@@ -1167,9 +1210,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 	TargetComp->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("componentClass"), TargetComp->GetClass()->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("previousValue"), PreviousValueStr);
+
+	// Self-inverse: same handler with previous value as string.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+	if (!ComponentName.IsEmpty()) Payload->SetStringField(TEXT("componentName"), ComponentName);
+	Payload->SetStringField(TEXT("propertyName"), PropertyName);
+	Payload->SetStringField(TEXT("value"), PreviousValueStr);
+	MCPSetRollback(Result, TEXT("set_component_property"), Payload);
 
 	return MCPResult(Result);
 }
@@ -1197,6 +1250,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Changes;
+	TSharedPtr<FJsonObject> PreviousValues = MakeShared<FJsonObject>();
 	for (auto& Pair : Params->Values)
 	{
 		if (Pair.Key == TEXT("actorLabel") || Pair.Key == TEXT("action"))
@@ -1205,11 +1259,16 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 		FProperty* Prop = TargetActor->GetClass()->FindPropertyByName(*Pair.Key);
 		if (Prop)
 		{
+			FString PrevStr;
+			Prop->ExportText_Direct(PrevStr, Prop->ContainerPtrToValuePtr<void>(TargetActor),
+				Prop->ContainerPtrToValuePtr<void>(TargetActor), TargetActor, PPF_None);
+
 			FString ValueStr;
+			bool bApplied = false;
 			if (Pair.Value->TryGetString(ValueStr))
 			{
 				Prop->ImportText_Direct(*ValueStr, Prop->ContainerPtrToValuePtr<void>(TargetActor), TargetActor, PPF_None);
-				Changes.Add(MakeShared<FJsonValueString>(Pair.Key));
+				bApplied = true;
 			}
 			else
 			{
@@ -1218,15 +1277,34 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 				{
 					ValueStr = FString::SanitizeFloat(NumVal);
 					Prop->ImportText_Direct(*ValueStr, Prop->ContainerPtrToValuePtr<void>(TargetActor), TargetActor, PPF_None);
-					Changes.Add(MakeShared<FJsonValueString>(Pair.Key));
+					bApplied = true;
 				}
+			}
+
+			if (bApplied)
+			{
+				Changes.Add(MakeShared<FJsonValueString>(Pair.Key));
+				PreviousValues->SetStringField(Pair.Key, PrevStr);
 			}
 		}
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetArrayField(TEXT("changes"), Changes);
+
+	if (Changes.Num() > 0)
+	{
+		// Self-inverse: call again with previous values as strings.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		for (auto& Prev : PreviousValues->Values)
+		{
+			Payload->SetField(Prev.Key, Prev.Value);
+		}
+		MCPSetRollback(Result, TEXT("set_volume_properties"), Payload);
+	}
 
 	return MCPResult(Result);
 }
@@ -1280,9 +1358,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("WorldSettings not available"));
 	}
 
-	TArray<TSharedPtr<FJsonValue>> Changes;
+	// Capture previous values for rollback before mutating.
+	const FString PrevGameMode = Settings->DefaultGameMode ? Settings->DefaultGameMode->GetPathName() : TEXT("None");
+	const double PrevKillZ = Settings->KillZ;
+	const double PrevGravityZ = Settings->GlobalGravityZ;
+	const bool PrevBoundsChecks = Settings->bEnableWorldBoundsChecks;
 
-	// DefaultGameMode
+	TArray<TSharedPtr<FJsonValue>> Changes;
+	TSharedPtr<FJsonObject> PrevPayload = MakeShared<FJsonObject>();
+
 	FString GameModeStr;
 	if (Params->TryGetStringField(TEXT("defaultGameMode"), GameModeStr))
 	{
@@ -1290,6 +1374,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 		{
 			Settings->DefaultGameMode = nullptr;
 			Changes.Add(MakeShared<FJsonValueString>(TEXT("defaultGameMode")));
+			PrevPayload->SetStringField(TEXT("defaultGameMode"), PrevGameMode);
 		}
 		else
 		{
@@ -1302,6 +1387,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 			{
 				Settings->DefaultGameMode = GMClass;
 				Changes.Add(MakeShared<FJsonValueString>(TEXT("defaultGameMode")));
+				PrevPayload->SetStringField(TEXT("defaultGameMode"), PrevGameMode);
 			}
 			else
 			{
@@ -1310,35 +1396,41 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 		}
 	}
 
-	// KillZ
 	double KillZ;
 	if (Params->TryGetNumberField(TEXT("killZ"), KillZ))
 	{
 		Settings->KillZ = KillZ;
 		Changes.Add(MakeShared<FJsonValueString>(TEXT("killZ")));
+		PrevPayload->SetNumberField(TEXT("killZ"), PrevKillZ);
 	}
 
-	// GlobalGravityZ
 	double GravityZ;
 	if (Params->TryGetNumberField(TEXT("globalGravityZ"), GravityZ))
 	{
 		Settings->GlobalGravityZ = GravityZ;
 		Changes.Add(MakeShared<FJsonValueString>(TEXT("globalGravityZ")));
+		PrevPayload->SetNumberField(TEXT("globalGravityZ"), PrevGravityZ);
 	}
 
-	// bEnableWorldBoundsChecks
 	bool bBoundsChecks;
 	if (Params->TryGetBoolField(TEXT("enableWorldBoundsChecks"), bBoundsChecks))
 	{
 		Settings->bEnableWorldBoundsChecks = bBoundsChecks;
 		Changes.Add(MakeShared<FJsonValueString>(TEXT("enableWorldBoundsChecks")));
+		PrevPayload->SetBoolField(TEXT("enableWorldBoundsChecks"), PrevBoundsChecks);
 	}
 
 	Settings->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetArrayField(TEXT("changes"), Changes);
 	Result->SetStringField(TEXT("worldName"), World->GetName());
+
+	if (Changes.Num() > 0)
+	{
+		MCPSetRollback(Result, TEXT("set_world_settings"), PrevPayload);
+	}
 
 	return MCPResult(Result);
 }

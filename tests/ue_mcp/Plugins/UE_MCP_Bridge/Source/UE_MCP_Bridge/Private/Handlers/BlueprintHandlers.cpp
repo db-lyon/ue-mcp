@@ -543,6 +543,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 	if (auto Err = RequireString(Params, TEXT("name"), VarName)) return Err;
 
 	FString VarType = OptionalString(Params, TEXT("type"), TEXT("Float"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -550,18 +551,31 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	// Create pin type
+	// Idempotency: if the variable already exists on the blueprint, short-circuit.
+	const FName VarNameFName(*VarName);
+	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
+	{
+		if (Var.VarName == VarNameFName)
+		{
+			if (OnConflict == TEXT("error"))
+			{
+				return MCPError(FString::Printf(TEXT("Variable '%s' already exists"), *VarName));
+			}
+			auto Existing = MCPSuccess();
+			MCPSetExisted(Existing);
+			Existing->SetStringField(TEXT("path"), AssetPath);
+			Existing->SetStringField(TEXT("variableName"), VarName);
+			return MCPResult(Existing);
+		}
+	}
+
 	FEdGraphPinType PinType = MakePinType(VarType);
 
-	// Use FBlueprintEditorUtils to add variable
-	FName VarNameFName(*VarName);
 	bool bSuccess = FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarNameFName, PinType);
 
 	if (bSuccess)
 	{
-		// Compile and save
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		// Save asset
 		UPackage* Package = Blueprint->GetOutermost();
 		if (Package)
 		{
@@ -573,9 +587,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 		}
 
 		auto Result = MCPSuccess();
+		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("variableName"), VarName);
 		Result->SetStringField(TEXT("variableType"), VarType);
+
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("path"), AssetPath);
+		Payload->SetStringField(TEXT("variableName"), VarName);
+		MCPSetRollback(Result, TEXT("delete_variable"), Payload);
+
 		return MCPResult(Result);
 	}
 	else
@@ -593,11 +614,33 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	if (auto Err = RequireString(Params, TEXT("componentClass"), ComponentClass)) return Err;
 
 	FString ComponentName = OptionalString(Params, TEXT("componentName"), ComponentClass);
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
 		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
+	// Idempotency: existing SCS component with same name short-circuits.
+	if (USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript)
+	{
+		for (USCS_Node* Node : SCS->GetAllNodes())
+		{
+			if (Node && Node->GetVariableName().ToString() == ComponentName)
+			{
+				if (OnConflict == TEXT("error"))
+				{
+					return MCPError(FString::Printf(TEXT("Component '%s' already exists"), *ComponentName));
+				}
+				auto Existing = MCPSuccess();
+				MCPSetExisted(Existing);
+				Existing->SetStringField(TEXT("path"), AssetPath);
+				Existing->SetStringField(TEXT("componentName"), ComponentName);
+				Existing->SetStringField(TEXT("componentClass"), ComponentClass);
+				return MCPResult(Existing);
+			}
+		}
 	}
 
 	// Find component class
@@ -657,9 +700,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 		}
 
 		auto Result = MCPSuccess();
+		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentClass"), ComponentClass);
 		Result->SetStringField(TEXT("componentName"), ComponentName);
+
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("path"), AssetPath);
+		Payload->SetStringField(TEXT("componentName"), ComponentName);
+		MCPSetRollback(Result, TEXT("remove_component"), Payload);
+
 		return MCPResult(Result);
 	}
 	else
@@ -1001,10 +1051,29 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 	FString FunctionName;
 	if (auto Err = RequireString(Params, TEXT("functionName"), FunctionName)) return Err;
 
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
 		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+	}
+
+	// Idempotency: existing function graph short-circuits.
+	for (UEdGraph* G : Blueprint->FunctionGraphs)
+	{
+		if (G && G->GetName() == FunctionName)
+		{
+			if (OnConflict == TEXT("error"))
+			{
+				return MCPError(FString::Printf(TEXT("Function '%s' already exists"), *FunctionName));
+			}
+			auto Existing = MCPSuccess();
+			MCPSetExisted(Existing);
+			Existing->SetStringField(TEXT("path"), AssetPath);
+			Existing->SetStringField(TEXT("functionName"), FunctionName);
+			return MCPResult(Existing);
+		}
 	}
 
 	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
@@ -1020,7 +1089,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 
 	FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, NewGraph, /*bIsUserCreated=*/true, /*SignatureFromObject=*/nullptr);
 
-	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 	UPackage* Package = Blueprint->GetOutermost();
 	if (Package)
@@ -1033,8 +1101,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), AssetPath);
+	Payload->SetStringField(TEXT("functionName"), FunctionName);
+	MCPSetRollback(Result, TEXT("delete_function"), Payload);
+
 	return MCPResult(Result);
 }
 
@@ -1501,7 +1576,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJson
 
 	FBlueprintEditorUtils::RenameGraph(FoundGraph, NewName);
 
-	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 	UPackage* Package = Blueprint->GetOutermost();
 	if (Package)
@@ -1514,9 +1588,18 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJson
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("oldName"), OldName);
 	Result->SetStringField(TEXT("newName"), NewName);
+
+	// Self-inverse: rename back.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), AssetPath);
+	Payload->SetStringField(TEXT("oldName"), NewName);
+	Payload->SetStringField(TEXT("newName"), OldName);
+	MCPSetRollback(Result, TEXT("rename_function"), Payload);
+
 	return MCPResult(Result);
 }
 
@@ -1534,7 +1617,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	// Find the function graph
 	UEdGraph* FoundGraph = nullptr;
 	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
 	{
@@ -1545,14 +1627,18 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 		}
 	}
 
+	// Idempotent: no function to delete is a no-op.
 	if (!FoundGraph)
 	{
-		return MCPError(FString::Printf(TEXT("Function not found: %s"), *FunctionName));
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("functionName"), FunctionName);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
 	}
 
 	FBlueprintEditorUtils::RemoveGraph(Blueprint, FoundGraph);
 
-	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 	UPackage* Package = Blueprint->GetOutermost();
 	if (Package)
@@ -1567,6 +1653,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
+	Result->SetBoolField(TEXT("deleted"), true);
+	// Delete of a function is not reversible by default.
 	return MCPResult(Result);
 }
 
@@ -1575,7 +1663,22 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprintInterface(const TShare
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
-	// Create a Blueprint Interface asset
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	// Idempotency: check if asset already exists.
+	if (UBlueprint* Existing = LoadBlueprint(AssetPath))
+	{
+		if (OnConflict == TEXT("error"))
+		{
+			return MCPError(FString::Printf(TEXT("Interface '%s' already exists"), *AssetPath));
+		}
+		auto Result = MCPSuccess();
+		MCPSetExisted(Result);
+		Result->SetStringField(TEXT("path"), AssetPath);
+		Result->SetStringField(TEXT("name"), Existing->GetName());
+		return MCPResult(Result);
+	}
+
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
@@ -1595,9 +1698,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateBlueprintInterface(const TShare
 
 	FKismetEditorUtilities::CompileBlueprint(NewInterface);
 
+	const FString ObjectPath = NewInterface->GetPathName();
+
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("name"), NewInterface->GetName());
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), ObjectPath);
+	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
+
 	return MCPResult(Result);
 }
 
@@ -1979,20 +2090,20 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
-	// Find the node
 	UEdGraphNode* NodeToDelete = FindNodeByGuidOrName(TargetGraph, NodeId);
 	if (!NodeToDelete)
 	{
-		return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeId));
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("graphName"), GraphName);
+		Noop->SetStringField(TEXT("nodeId"), NodeId);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
 	}
 
-	// Break all pin links before removing
 	NodeToDelete->BreakAllNodeLinks();
-
-	// Remove node from graph
 	TargetGraph->RemoveNode(NodeToDelete);
 
-	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 	UPackage* Package = Blueprint->GetOutermost();
 	if (Package)
@@ -2008,6 +2119,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeId"), NodeId);
+	Result->SetBoolField(TEXT("deleted"), true);
+	// Not reversible by default.
 	return MCPResult(Result);
 }
 
@@ -2527,19 +2640,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		}
 	}
 
+	// Idempotent: nothing to remove is a no-op.
 	if (!TargetNode)
 	{
-		TArray<FString> Names;
-		for (USCS_Node* Node : SCS->GetAllNodes())
-		{
-			if (Node && Node->ComponentTemplate)
-			{
-				Names.Add(Node->GetVariableName().ToString());
-			}
-		}
-		return MCPError(FString::Printf(
-			TEXT("Component '%s' not found. Available: [%s]"),
-			*ComponentName, *FString::Join(Names, TEXT(", "))));
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("componentName"), ComponentName);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
 	}
 
 	// Remove via SubobjectDataSubsystem if available
@@ -2614,7 +2722,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
-	// Check that the variable exists
 	bool bFound = false;
 	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
 	{
@@ -2625,16 +2732,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 		}
 	}
 
+	// Idempotent: nothing to delete is a no-op.
 	if (!bFound)
 	{
-		TArray<FString> Names;
-		for (const FBPVariableDescription& Var : Blueprint->NewVariables)
-		{
-			Names.Add(Var.VarName.ToString());
-		}
-		return MCPError(FString::Printf(
-			TEXT("Variable '%s' not found. Available: [%s]"),
-			*VarName, *FString::Join(Names, TEXT(", "))));
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("variableName"), VarName);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
 	}
 
 	FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, FName(*VarName));

@@ -192,10 +192,22 @@ These handlers cannot meaningfully participate:
 
 ## Conversion progress
 
-| Category | Creates | Modifies | Deletes | Status |
-|---|---|---|---|---|
-| Level | place_actor, spawn_light, spawn_volume, create_level, add_component | move_actor, set_actor_material, set_component_property, set_light_*, set_volume_properties, set_world_settings | delete_actor | In progress |
-| Asset | create_datatable, create_material, import_* | rename, move, set_texture_settings, add_socket, remove_socket | delete, duplicate (create side) | Pending |
-| Blueprint | create, add_variable, create_function, add_node, add_component, add_interface, add_event_dispatcher, create_interface | set_variable_properties, set_node_property, rename_function | delete_function, delete_node | Pending |
-| Material | create, add_parameter | — | — | Pending |
-| Niagara/PCG/GAS/Widget/Audio/Foliage/Landscape/Animation/Gameplay/Networking | various | various | various | Pending |
+| Category | Done | Remaining |
+|---|---|---|
+| Level | place_actor, spawn_light, spawn_volume, move_actor, set_actor_material, set_light_properties, set_component_property, set_volume_properties, set_world_settings, add_component_to_actor, delete_actor | — |
+| Asset | duplicate_asset, rename_asset, move_asset, delete_asset, create_datatable, import_static_mesh, import_skeletal_mesh, import_animation, import_texture, set_mesh_material, set_texture_properties (partial), add_socket, remove_socket | recenter_pivot, reimport_* |
+| Blueprint | create_blueprint, add_variable, add_component, create_function, rename_function, delete_function, delete_node, delete_variable, remove_component, create_blueprint_interface | set_variable_properties, set_node_property, add_node, connect_pins, set_class_default, set_variable_default, add_function_parameter |
+| Material | create_material, create_material_instance, create_material_from_texture | add_material_expression, set_*, connect_expression, delete_expression |
+| Animation | create_anim_blueprint, create_montage, create_blendspace, create_sequence | add_anim_notify, create_state_machine, add_state, add_transition, set_*, set_bone_keyframes |
+| Audio | create_sound_cue, create_metasound_source, spawn_ambient_sound | — |
+| Foliage | create_foliage_type | create_foliage_layer, paint_foliage, set_foliage_type_settings |
+| Gameplay | create_smart_object_definition, create_input_action, create_input_mapping_context, create_blackboard, create_behavior_tree, create_eqs_query, create_state_tree, create_game_mode/state/player_controller/player_state/hud (via CreateBlueprintWithParent), spawn_nav_modifier_volume | set_collision_profile, set_physics_enabled, set_body_properties, create_ai_perception_config |
+| GAS | create_gameplay_effect, create_gameplay_ability, create_attribute_set, create_gameplay_cue, create_gameplay_cue_notify | add_ability_tag, add_attribute, set_ability_tags, set_effect_modifier, add_ability_system_component |
+| Niagara | create_niagara_system, create_niagara_emitter, create_niagara_system_from_emitter | spawn_niagara_at_location, set_niagara_parameter, add_emitter_to_system, set_emitter_property |
+| PCG | create_pcg_graph, spawn_pcg_volume | add_pcg_node, connect_pcg_nodes, remove_pcg_node, set_pcg_node_settings |
+| Sequencer | create_level_sequence | add_track, sequence_control |
+| Spline | create_spline_actor | set_spline_points |
+| Widget | create_widget_blueprint, create_editor_utility_widget, create_editor_utility_blueprint | set_widget_property, add_widget, remove_widget, move_widget |
+| Landscape/Networking/Physics/Reflection | — | set_landscape_material, import_heightmap, sculpt_*, paint_*, networking setters, physics setters, create_gameplay_tag |
+
+Every handler in the "Done" column is idempotent (checks for existing entity by natural key, returns `{ existed: true }` on replay) and emits a rollback record where a paired inverse exists. Handlers in "Remaining" are either pure modifies that need before-state capture, or pure deletes that need snapshot-before-delete to be reversible. They still work; they just don't yet participate in rollback.

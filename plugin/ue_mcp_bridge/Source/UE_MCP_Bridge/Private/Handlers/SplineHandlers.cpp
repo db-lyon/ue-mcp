@@ -22,7 +22,27 @@ TSharedPtr<FJsonValue> FSplineHandlers::CreateSplineActor(const TSharedPtr<FJson
 {
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Get location
+	const FString Label = OptionalString(Params, TEXT("label"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (!Label.IsEmpty())
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->GetActorLabel() == Label)
+			{
+				if (OnConflict == TEXT("error"))
+				{
+					return MCPError(FString::Printf(TEXT("Spline actor '%s' already exists"), *Label));
+				}
+				auto Existing = MCPSuccess();
+				MCPSetExisted(Existing);
+				Existing->SetStringField(TEXT("actorLabel"), Label);
+				return MCPResult(Existing);
+			}
+		}
+	}
+
 	FVector Location = FVector::ZeroVector;
 	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("location"), LocationObj))
@@ -32,7 +52,6 @@ TSharedPtr<FJsonValue> FSplineHandlers::CreateSplineActor(const TSharedPtr<FJson
 		(*LocationObj)->TryGetNumberField(TEXT("z"), Location.Z);
 	}
 
-	// Spawn an empty actor
 	FTransform SpawnTransform(FRotator::ZeroRotator, Location);
 	AActor* NewActor = World->SpawnActor<AActor>(AActor::StaticClass(), SpawnTransform);
 	if (!NewActor)
@@ -51,8 +70,6 @@ TSharedPtr<FJsonValue> FSplineHandlers::CreateSplineActor(const TSharedPtr<FJson
 	SplineComp->RegisterComponent();
 	NewActor->AddInstanceComponent(SplineComp);
 
-	// Set label if provided
-	FString Label = OptionalString(Params, TEXT("label"));
 	if (!Label.IsEmpty())
 	{
 		NewActor->SetActorLabel(Label);
@@ -85,11 +102,18 @@ TSharedPtr<FJsonValue> FSplineHandlers::CreateSplineActor(const TSharedPtr<FJson
 		SplineComp->UpdateSpline();
 	}
 
+	const FString FinalLabel = NewActor->GetActorLabel();
+
 	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("actorLabel"), NewActor->GetActorLabel());
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("actorLabel"), FinalLabel);
 	Result->SetStringField(TEXT("actorName"), NewActor->GetName());
 	Result->SetNumberField(TEXT("splinePointCount"), SplineComp->GetNumberOfSplinePoints());
 	Result->SetBoolField(TEXT("closedLoop"), SplineComp->IsClosedLoop());
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorLabel"), FinalLabel);
+	MCPSetRollback(Result, TEXT("delete_actor"), Payload);
 
 	return MCPResult(Result);
 }

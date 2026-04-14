@@ -67,6 +67,42 @@ inline void MCPSetUpdated(TSharedPtr<FJsonObject> Result)
 	Result->SetBoolField(TEXT("updated"), true);
 }
 
+/** Check for an existing asset at `PackagePath/Name`. Returns a fully-formed
+ *  "already existed" result on hit (caller can return it directly), or an
+ *  unset pointer on miss so the caller proceeds to create. Also honors an
+ *  optional `onConflict: "error"` to return an MCPError instead.
+ *  On miss, returns a null shared pointer (check with `.IsValid()`). */
+inline TSharedPtr<FJsonValue> MCPCheckAssetExists(
+	const FString& PackagePath,
+	const FString& Name,
+	const FString& OnConflict,
+	const FString& FriendlyType = TEXT("Asset"))
+{
+	const FString ProbePath = PackagePath + TEXT("/") + Name + TEXT(".") + Name;
+	if (UObject* Existing = LoadObject<UObject>(nullptr, *ProbePath))
+	{
+		if (OnConflict == TEXT("error"))
+		{
+			return MCPError(FString::Printf(TEXT("%s '%s' already exists"), *FriendlyType, *ProbePath));
+		}
+		auto Res = MCPSuccess();
+		MCPSetExisted(Res);
+		Res->SetStringField(TEXT("path"), Existing->GetPathName());
+		Res->SetStringField(TEXT("name"), Name);
+		Res->SetStringField(TEXT("packagePath"), PackagePath);
+		return MCPResult(Res);
+	}
+	return TSharedPtr<FJsonValue>();
+}
+
+/** Emit the standard delete_asset rollback record on a create result. */
+inline void MCPSetDeleteAssetRollback(TSharedPtr<FJsonObject> Result, const FString& AssetPath)
+{
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
+}
+
 // ── Parameter extraction ─────────────────────────────────────────────────────
 
 /** Extract a required string parameter.  Returns error JSON on failure, nullptr on success. */

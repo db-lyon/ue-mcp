@@ -442,17 +442,41 @@ TSharedPtr<FJsonValue> FAssetHandlers::DuplicateAsset(const TSharedPtr<FJsonObje
 	FString DestPath;
 	if (auto Err = RequireString(Params, TEXT("destinationPath"), DestPath)) return Err;
 
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
 	if (!UEditorAssetLibrary::DoesAssetExist(SourcePath))
 	{
 		return MCPError(FString::Printf(TEXT("Source asset not found: %s"), *SourcePath));
 	}
 
+	// Idempotency: if the destination already exists, short-circuit.
+	if (UEditorAssetLibrary::DoesAssetExist(DestPath))
+	{
+		if (OnConflict == TEXT("error"))
+		{
+			return MCPError(FString::Printf(TEXT("Destination asset already exists: %s"), *DestPath));
+		}
+		auto Existing = MCPSuccess();
+		MCPSetExisted(Existing);
+		Existing->SetStringField(TEXT("sourcePath"), SourcePath);
+		Existing->SetStringField(TEXT("destinationPath"), DestPath);
+		return MCPResult(Existing);
+	}
+
 	UObject* Dup = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestPath);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("sourcePath"), SourcePath);
 	Result->SetStringField(TEXT("destinationPath"), DestPath);
 	Result->SetBoolField(TEXT("success"), Dup != nullptr);
+
+	if (Dup)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), DestPath);
+		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
+	}
 
 	return MCPResult(Result);
 }
@@ -483,17 +507,46 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>
 		return MCPError(TEXT("Missing 'sourcePath'+'destinationPath' or 'assetPath'+'newName'"));
 	}
 
+	// Idempotency: if already at destination, no-op.
+	if (SourcePath == DestPath)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("sourcePath"), SourcePath);
+		Noop->SetStringField(TEXT("destinationPath"), DestPath);
+		return MCPResult(Noop);
+	}
+
+	// Idempotency: if source is absent but destination exists, prior run succeeded.
 	if (!UEditorAssetLibrary::DoesAssetExist(SourcePath))
 	{
+		if (UEditorAssetLibrary::DoesAssetExist(DestPath))
+		{
+			auto Noop = MCPSuccess();
+			MCPSetExisted(Noop);
+			Noop->SetStringField(TEXT("sourcePath"), SourcePath);
+			Noop->SetStringField(TEXT("destinationPath"), DestPath);
+			return MCPResult(Noop);
+		}
 		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *SourcePath));
 	}
 
 	bool bOk = UEditorAssetLibrary::RenameAsset(SourcePath, DestPath);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("sourcePath"), SourcePath);
 	Result->SetStringField(TEXT("destinationPath"), DestPath);
 	Result->SetBoolField(TEXT("success"), bOk);
+
+	if (bOk)
+	{
+		// Self-inverse: rename back.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("sourcePath"), DestPath);
+		Payload->SetStringField(TEXT("destinationPath"), SourcePath);
+		MCPSetRollback(Result, TEXT("rename_asset"), Payload);
+	}
 
 	return MCPResult(Result);
 }
@@ -751,6 +804,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 	}
 
 	auto Result = MCPSuccess();
+	if (ImportedPaths.Num() > 0) { MCPSetCreated(Result); }
 	Result->SetStringField(TEXT("filename"), FileName);
 	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
 	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
@@ -759,6 +813,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 	if (ImportedPaths.Num() == 0)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no assets were produced"));
+	}
+
+	// Rollback only when a single asset was produced (paired inverse: delete_asset).
+	if (ImportedPaths.Num() == 1)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
+		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
 	}
 
 	Task->RemoveFromRoot();
@@ -865,6 +927,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	}
 
 	auto Result = MCPSuccess();
+	if (ImportedPaths.Num() > 0) { MCPSetCreated(Result); }
 	Result->SetStringField(TEXT("filename"), FileName);
 	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
 	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
@@ -873,6 +936,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	if (ImportedPaths.Num() == 0)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no assets were produced"));
+	}
+
+	if (ImportedPaths.Num() == 1)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
+		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
 	}
 
 	Task->RemoveFromRoot();
@@ -972,6 +1042,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 	}
 
 	auto Result = MCPSuccess();
+	if (ImportedPaths.Num() > 0) { MCPSetCreated(Result); }
 	Result->SetStringField(TEXT("filename"), FileName);
 	Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
 	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
@@ -981,6 +1052,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 	if (ImportedPaths.Num() == 0)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no assets were produced"));
+	}
+
+	if (ImportedPaths.Num() == 1)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
+		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
 	}
 
 	Task->RemoveFromRoot();
@@ -1094,6 +1172,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("Asset is not a Texture2D: %s"), *AssetPath));
 	}
 
+	// Capture previous values for self-inverse rollback. Use reflection paths
+	// since the enum string mapping is long.
+	const TextureCompressionSettings PrevCompression = Texture->CompressionSettings;
+	const TextureGroup PrevLODGroup = Texture->LODGroup;
+	const bool PrevSRGB = Texture->SRGB;
+	const bool PrevNeverStream = Texture->NeverStream;
+
 	TArray<FString> ModifiedProperties;
 
 	// Compression settings
@@ -1178,9 +1263,38 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetArrayField(TEXT("modifiedProperties"), ModifiedArray);
 	Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Modified %d texture properties"), ModifiedProperties.Num()));
+
+	// Self-inverse rollback. We store enum values as numeric strings for the
+	// inverse call; the handler accepts strings so we'd lose the mapping back
+	// to string keys. For safety, emit rollback only when simple bool props
+	// changed — compression/LOD group changes are not reversed here.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	bool bHaveReversibleField = false;
+	for (const FString& P : ModifiedProperties)
+	{
+		if (P == TEXT("sRGB"))
+		{
+			Payload->SetBoolField(TEXT("sRGB"), PrevSRGB);
+			bHaveReversibleField = true;
+		}
+		else if (P == TEXT("neverStream"))
+		{
+			Payload->SetBoolField(TEXT("neverStream"), PrevNeverStream);
+			bHaveReversibleField = true;
+		}
+	}
+	// Suppress unused-variable warnings on the enum captures when no
+	// reversible fields matched.
+	(void)PrevCompression; (void)PrevLODGroup;
+	if (bHaveReversibleField)
+	{
+		MCPSetRollback(Result, TEXT("set_texture_properties"), Payload);
+	}
 
 	return MCPResult(Result);
 }
@@ -1212,13 +1326,31 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshMaterial(const TSharedPtr<FJsonObj
 		return MCPError(FString::Printf(TEXT("Slot index %d out of range (mesh has %d slots)"), SlotIndex, Mesh->GetStaticMaterials().Num()));
 	}
 
+	// Capture previous material for self-inverse rollback.
+	FString PreviousMaterialPath;
+	if (UMaterialInterface* Prev = Mesh->GetMaterial(SlotIndex))
+	{
+		PreviousMaterialPath = Prev->GetPathName();
+	}
+
 	Mesh->SetMaterial(SlotIndex, Material);
 	UEditorAssetLibrary::SaveAsset(AssetPath, false);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("materialPath"), MaterialPath);
 	Result->SetNumberField(TEXT("slotIndex"), SlotIndex);
+	Result->SetStringField(TEXT("previousMaterialPath"), PreviousMaterialPath);
+
+	if (!PreviousMaterialPath.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("materialPath"), PreviousMaterialPath);
+		Payload->SetNumberField(TEXT("slotIndex"), SlotIndex);
+		MCPSetRollback(Result, TEXT("set_mesh_material"), Payload);
+	}
 
 	return MCPResult(Result);
 }
@@ -1294,6 +1426,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 	}
 
 	auto Result = MCPSuccess();
+	if (ImportedPaths.Num() > 0) { MCPSetCreated(Result); }
 	Result->SetStringField(TEXT("filename"), FileName);
 	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
 	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
@@ -1302,6 +1435,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 	if (ImportedPaths.Num() == 0)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no assets were produced"));
+	}
+
+	if (ImportedPaths.Num() == 1)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
+		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
 	}
 
 	Task->RemoveFromRoot();
@@ -1747,15 +1887,24 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
 	}
 
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
 	// Try StaticMesh first
 	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
 	{
-		// Check for duplicate
 		for (UStaticMeshSocket* Existing : SM->Sockets)
 		{
 			if (Existing && Existing->SocketName == FName(*SocketName))
 			{
-				return MCPError(FString::Printf(TEXT("Socket '%s' already exists"), *SocketName));
+				if (OnConflict == TEXT("error"))
+				{
+					return MCPError(FString::Printf(TEXT("Socket '%s' already exists"), *SocketName));
+				}
+				auto ExistingResult = MCPSuccess();
+				MCPSetExisted(ExistingResult);
+				ExistingResult->SetStringField(TEXT("socketName"), SocketName);
+				ExistingResult->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+				return MCPResult(ExistingResult);
 			}
 		}
 
@@ -1769,8 +1918,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		SM->MarkPackageDirty();
 
 		auto Result = MCPSuccess();
+		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("socketName"), SocketName);
 		Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("socketName"), SocketName);
+		MCPSetRollback(Result, TEXT("remove_socket"), Payload);
 		return MCPResult(Result);
 	}
 
@@ -1779,12 +1933,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 	{
 		FString BoneName = OptionalString(Params, TEXT("boneName"), TEXT("root"));
 
-		// Check for duplicate
 		for (USkeletalMeshSocket* Existing : SKM->GetMeshOnlySocketList())
 		{
 			if (Existing && Existing->SocketName == FName(*SocketName))
 			{
-				return MCPError(FString::Printf(TEXT("Socket '%s' already exists"), *SocketName));
+				if (OnConflict == TEXT("error"))
+				{
+					return MCPError(FString::Printf(TEXT("Socket '%s' already exists"), *SocketName));
+				}
+				auto ExistingResult = MCPSuccess();
+				MCPSetExisted(ExistingResult);
+				ExistingResult->SetStringField(TEXT("socketName"), SocketName);
+				ExistingResult->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+				return MCPResult(ExistingResult);
 			}
 		}
 
@@ -1799,9 +1960,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		SKM->PostEditChange();
 
 		auto Result = MCPSuccess();
+		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("socketName"), SocketName);
 		Result->SetStringField(TEXT("boneName"), BoneName);
 		Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("socketName"), SocketName);
+		MCPSetRollback(Result, TEXT("remove_socket"), Payload);
 		return MCPResult(Result);
 	}
 
@@ -1833,10 +1999,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 
 				auto Result = MCPSuccess();
 				Result->SetStringField(TEXT("removed"), SocketName);
+				Result->SetBoolField(TEXT("deleted"), true);
 				return MCPResult(Result);
 			}
 		}
-		return MCPError(FString::Printf(TEXT("Socket '%s' not found on StaticMesh"), *SocketName));
+		// Idempotent: socket already absent.
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("socketName"), SocketName);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
 	}
 
 	if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
@@ -1852,10 +2023,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 
 				auto Result = MCPSuccess();
 				Result->SetStringField(TEXT("removed"), SocketName);
+				Result->SetBoolField(TEXT("deleted"), true);
 				return MCPResult(Result);
 			}
 		}
-		return MCPError(FString::Printf(TEXT("Socket '%s' not found on SkeletalMesh"), *SocketName));
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("socketName"), SocketName);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
 	}
 
 	return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));

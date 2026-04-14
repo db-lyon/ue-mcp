@@ -132,10 +132,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetBlueprint(const TSharedPtr<F
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/UI/Widgets"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	// Delete existing asset if it exists
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("WidgetBlueprint")))
+	{
+		return Existing;
+	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
@@ -152,8 +154,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetBlueprint(const TSharedPtr<F
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -222,7 +226,6 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 	FString Path;
 	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), Path)) return Err;
 
-	// Split path into package path and asset name
 	FString PackagePath;
 	FString AssetName;
 	Path.Split(TEXT("/"), &PackagePath, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
@@ -231,15 +234,17 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 		return MCPError(TEXT("Invalid path format. Expected '/Game/.../AssetName'"));
 	}
 
-	// Find EditorUtilityWidgetBlueprint class
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	if (auto Existing = MCPCheckAssetExists(PackagePath, AssetName, OnConflict, TEXT("EditorUtilityWidgetBlueprint")))
+	{
+		return Existing;
+	}
+
 	UClass* EUWBClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityWidgetBlueprint"));
 	if (!EUWBClass)
 	{
 		return MCPError(TEXT("EditorUtilityWidgetBlueprint class not found. Enable Blutility plugin."));
 	}
-
-	// Delete existing asset if it exists
-	UEditorAssetLibrary::DeleteAsset(Path);
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
@@ -257,8 +262,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), AssetName);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -268,7 +275,6 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 	FString Path;
 	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), Path)) return Err;
 
-	// Split path into package path and asset name
 	FString PackagePath;
 	FString AssetName;
 	Path.Split(TEXT("/"), &PackagePath, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
@@ -277,15 +283,17 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 		return MCPError(TEXT("Invalid path format. Expected '/Game/.../AssetName'"));
 	}
 
-	// Find EditorUtilityBlueprint class
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	if (auto Existing = MCPCheckAssetExists(PackagePath, AssetName, OnConflict, TEXT("EditorUtilityBlueprint")))
+	{
+		return Existing;
+	}
+
 	UClass* EUBClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityBlueprint"));
 	if (!EUBClass)
 	{
 		return MCPError(TEXT("EditorUtilityBlueprint class not found. Enable Blutility plugin."));
 	}
-
-	// Delete existing asset if it exists
-	UEditorAssetLibrary::DeleteAsset(Path);
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
@@ -299,8 +307,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), AssetName);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
 	return MCPResult(Result);
 }

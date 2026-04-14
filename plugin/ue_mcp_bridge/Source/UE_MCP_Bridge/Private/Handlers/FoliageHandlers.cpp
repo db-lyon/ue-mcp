@@ -706,14 +706,12 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageType(const TSharedPtr<FJso
 	FString MeshPath;
 	if (auto Err = RequireString(Params, TEXT("meshPath"), MeshPath)) return Err;
 
-	// Load the mesh first to verify it exists
 	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
 	if (!Mesh)
 	{
 		return MCPError(FString::Printf(TEXT("Static mesh not found: %s"), *MeshPath));
 	}
 
-	// Determine asset name - use provided name or derive from mesh name
 	FString AssetName = OptionalString(Params, TEXT("name"));
 	if (AssetName.IsEmpty())
 	{
@@ -721,6 +719,12 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageType(const TSharedPtr<FJso
 	}
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Foliage"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, AssetName, OnConflict, TEXT("FoliageType")))
+	{
+		return Existing;
+	}
 
 	FString PackageFullPath = PackagePath / AssetName;
 	UPackage* Package = CreatePackage(*PackageFullPath);
@@ -775,11 +779,13 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageType(const TSharedPtr<FJso
 	UEditorAssetLibrary::SaveAsset(PackageFullPath, false);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), PackageFullPath);
 	Result->SetStringField(TEXT("name"), FoliageType->GetName());
 	Result->SetStringField(TEXT("className"), FoliageType->GetClass()->GetName());
 	Result->SetStringField(TEXT("meshPath"), MeshPath);
 	Result->SetStringField(TEXT("meshName"), Mesh->GetName());
+	MCPSetDeleteAssetRollback(Result, FoliageType->GetPathName());
 
 	return MCPResult(Result);
 }

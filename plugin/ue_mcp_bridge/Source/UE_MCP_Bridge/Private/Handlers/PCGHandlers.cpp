@@ -102,9 +102,12 @@ TSharedPtr<FJsonValue> FPCGHandlers::CreatePCGGraph(const TSharedPtr<FJsonObject
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/PCG"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	FString FullAssetPath = PackagePath + TEXT("/") + Name;
-	UEditorAssetLibrary::DeleteAsset(FullAssetPath);
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("PCGGraph")))
+	{
+		return Existing;
+	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
@@ -118,8 +121,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::CreatePCGGraph(const TSharedPtr<FJsonObject
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 	return MCPResult(Result);
 }
 
@@ -579,6 +584,27 @@ TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject
 {
 	REQUIRE_EDITOR_WORLD(World);
 
+	const FString Label = OptionalString(Params, TEXT("label"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (!Label.IsEmpty())
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->GetActorLabel() == Label)
+			{
+				if (OnConflict == TEXT("error"))
+				{
+					return MCPError(FString::Printf(TEXT("PCGVolume '%s' already exists"), *Label));
+				}
+				auto Existing = MCPSuccess();
+				MCPSetExisted(Existing);
+				Existing->SetStringField(TEXT("actorLabel"), Label);
+				return MCPResult(Existing);
+			}
+		}
+	}
+
 	// Parse location
 	FVector Location = FVector::ZeroVector;
 	double X = 0, Y = 0, Z = 0;
@@ -605,19 +631,19 @@ TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject
 		return MCPError(TEXT("Failed to spawn PCGVolume actor"));
 	}
 
-	// Set the extent/scale of the volume
 	PCGVolumeActor->SetActorScale3D(Extent / 100.0);
 
-	// Set label if provided
-	FString Label = OptionalString(Params, TEXT("label"));
 	if (!Label.IsEmpty())
 	{
 		PCGVolumeActor->SetActorLabel(Label);
 	}
 
-	// Set graph reference if provided
 	FString GraphPath = OptionalString(Params, TEXT("graphPath"));
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	TSharedPtr<FJsonObject> RBPayload = MakeShared<FJsonObject>();
+	RBPayload->SetStringField(TEXT("actorLabel"), PCGVolumeActor->GetActorLabel());
+	MCPSetRollback(Result, TEXT("delete_actor"), RBPayload);
 
 	if (!GraphPath.IsEmpty())
 	{

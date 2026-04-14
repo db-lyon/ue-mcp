@@ -843,8 +843,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPt
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Materials"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	// Load the parent material
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("MaterialInstance")))
+	{
+		return Existing;
+	}
+
 	UMaterialInterface* ParentMaterial = Cast<UMaterialInterface>(
 		StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, *ParentPath));
 	if (!ParentMaterial)
@@ -890,10 +895,12 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPt
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("parentPath"), ParentMaterial->GetPathName());
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
+	MCPSetDeleteAssetRollback(Result, MaterialInstance->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -1548,12 +1555,17 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFromTexture(const TShare
 	FString MaterialName = OptionalString(Params, TEXT("materialName"));
 	if (MaterialName.IsEmpty())
 	{
-		// Derive a material name from the texture name
 		FString TextureName = FPaths::GetBaseFilename(TexturePath);
 		MaterialName = TEXT("M_") + TextureName;
 	}
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Materials"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, MaterialName, OnConflict, TEXT("Material")))
+	{
+		return Existing;
+	}
 
 	// Load the texture
 	UTexture* Texture = Cast<UTexture>(StaticLoadObject(UTexture::StaticClass(), nullptr, *TexturePath));
@@ -1615,11 +1627,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFromTexture(const TShare
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("materialPath"), NewMaterial->GetPathName());
 	Result->SetStringField(TEXT("materialName"), MaterialName);
 	Result->SetStringField(TEXT("texturePath"), Texture->GetPathName());
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
 	Result->SetNumberField(TEXT("expressionCount"), NewMaterial->GetExpressions().Num());
+	MCPSetDeleteAssetRollback(Result, NewMaterial->GetPathName());
 
 	return MCPResult(Result);
 }
