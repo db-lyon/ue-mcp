@@ -783,19 +783,41 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetCollisionProfile(const TSharedPtr<F
 	TArray<UPrimitiveComponent*> PrimitiveComponents;
 	FoundActor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
 
+	// Idempotency: if every prim already matches, short-circuit
+	const FName ProfileFName(*ProfileName);
+	bool bAllMatch = PrimitiveComponents.Num() > 0;
+	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
+	{
+		if (!PrimComp || PrimComp->GetCollisionProfileName() != ProfileFName)
+		{
+			bAllMatch = false;
+			break;
+		}
+	}
+	if (bAllMatch)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Noop->SetStringField(TEXT("profileName"), ProfileName);
+		return MCPResult(Noop);
+	}
+
 	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
 	{
 		if (PrimComp)
 		{
-			PrimComp->SetCollisionProfileName(FName(*ProfileName));
+			PrimComp->SetCollisionProfileName(ProfileFName);
 			ComponentsUpdated++;
 		}
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("profileName"), ProfileName);
 	Result->SetNumberField(TEXT("componentsUpdated"), ComponentsUpdated);
+	// No rollback: multi-component previous state capture not yet implemented.
 
 	return MCPResult(Result);
 }
@@ -830,6 +852,25 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetPhysicsEnabled(const TSharedPtr<FJs
 	TArray<UPrimitiveComponent*> PrimitiveComponents;
 	FoundActor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
 
+	// Idempotency: if every prim already matches, short-circuit
+	bool bAllMatch = PrimitiveComponents.Num() > 0;
+	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
+	{
+		if (!PrimComp || PrimComp->IsSimulatingPhysics() != bEnabled)
+		{
+			bAllMatch = false;
+			break;
+		}
+	}
+	if (bAllMatch)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Noop->SetBoolField(TEXT("enabled"), bEnabled);
+		return MCPResult(Noop);
+	}
+
 	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
 	{
 		if (PrimComp)
@@ -840,9 +881,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetPhysicsEnabled(const TSharedPtr<FJs
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetBoolField(TEXT("enabled"), bEnabled);
 	Result->SetNumberField(TEXT("componentsUpdated"), ComponentsUpdated);
+
+	// Rollback: self-inverse with flipped flag (approximation: prior state assumed uniform)
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Payload->SetBoolField(TEXT("enabled"), !bEnabled);
+	MCPSetRollback(Result, TEXT("set_physics_enabled"), Payload);
 
 	return MCPResult(Result);
 }
@@ -901,6 +949,25 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetCollisionType(const TSharedPtr<FJso
 	TArray<UPrimitiveComponent*> PrimitiveComponents;
 	FoundActor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
 
+	// Idempotency: all prims already match?
+	bool bAllMatch = PrimitiveComponents.Num() > 0;
+	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
+	{
+		if (!PrimComp || PrimComp->GetCollisionEnabled() != CollisionEnabled)
+		{
+			bAllMatch = false;
+			break;
+		}
+	}
+	if (bAllMatch)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Noop->SetStringField(TEXT("collisionType"), CollisionType);
+		return MCPResult(Noop);
+	}
+
 	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
 	{
 		if (PrimComp)
@@ -911,9 +978,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetCollisionType(const TSharedPtr<FJso
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("collisionType"), CollisionType);
 	Result->SetNumberField(TEXT("componentsUpdated"), ComponentsUpdated);
+	// No rollback: multi-component previous state capture not yet implemented.
 
 	return MCPResult(Result);
 }
@@ -982,8 +1051,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBodyProperties(const TSharedPtr<FJs
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetNumberField(TEXT("componentsUpdated"), ComponentsUpdated);
+	// No rollback: multi-component previous state capture not yet implemented.
 
 	return MCPResult(Result);
 }
@@ -1189,12 +1260,31 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetWorldGameMode(const TSharedPtr<FJso
 		return MCPError(TEXT("Could not get WorldSettings"));
 	}
 
+	// Idempotency: capture previous value, bail if already matching
+	UClass* PrevGameMode = WorldSettings->DefaultGameMode;
+	if (PrevGameMode == GameModeClass)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("gameModeClass"), GameModeClass->GetPathName());
+		return MCPResult(Noop);
+	}
+
 	WorldSettings->DefaultGameMode = GameModeClass;
 	WorldSettings->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("gameModeClass"), GameModeClass->GetPathName());
 	Result->SetStringField(TEXT("gameModeName"), GameModeClass->GetName());
+
+	// Rollback: self-inverse with previous game mode
+	if (PrevGameMode)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("gameModeClass"), PrevGameMode->GetPathName());
+		MCPSetRollback(Result, TEXT("set_world_game_mode"), Payload);
+	}
 
 	return MCPResult(Result);
 }
@@ -1303,6 +1393,20 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJso
 		return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
 	}
 
+	// Idempotency: key with this name already present?
+	const FName KeyFName(*KeyName);
+	for (const FBlackboardEntry& E : BlackboardAsset->Keys)
+	{
+		if (E.EntryName == KeyFName)
+		{
+			auto Existed = MCPSuccess();
+			MCPSetExisted(Existed);
+			Existed->SetStringField(TEXT("blackboardPath"), BlackboardPath);
+			Existed->SetStringField(TEXT("keyName"), KeyName);
+			return MCPResult(Existed);
+		}
+	}
+
 	// Determine the key type class
 	UBlackboardKeyType* KeyTypeInstance = nullptr;
 	if (KeyType == TEXT("Bool"))
@@ -1362,10 +1466,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJso
 	UEditorAssetLibrary::SaveAsset(BlackboardAsset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
 	Result->SetStringField(TEXT("keyName"), KeyName);
 	Result->SetStringField(TEXT("keyType"), KeyType);
 	Result->SetNumberField(TEXT("totalKeys"), BlackboardAsset->Keys.Num());
+	// No rollback: no paired remove_blackboard_key handler.
 
 	return MCPResult(Result);
 }
@@ -1786,6 +1892,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 		return MCPError(TEXT("AIPerceptionComponent not found. Enable AIModule."));
 	}
 
+	// Idempotency: existing AIPerceptionComponent on the SCS?
+	if (BP->SimpleConstructionScript)
+	{
+		for (USCS_Node* N : BP->SimpleConstructionScript->GetAllNodes())
+		{
+			if (N && N->ComponentTemplate && N->ComponentTemplate->GetClass() == CompClass)
+			{
+				auto Existed = MCPSuccess();
+				MCPSetExisted(Existed);
+				Existed->SetStringField(TEXT("blueprintPath"), BPPath);
+				Existed->SetStringField(TEXT("component"), N->GetVariableName().ToString());
+				return MCPResult(Existed);
+			}
+		}
+	}
+
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("AIPerceptionComp"));
 	if (NewNode)
 	{
@@ -1804,8 +1926,15 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("AIPerceptionComp"));
+
+	// Rollback: remove_component
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), BPPath);
+	Payload->SetStringField(TEXT("componentName"), TEXT("AIPerceptionComp"));
+	MCPSetRollback(Result, TEXT("remove_component"), Payload);
 
 	return MCPResult(Result);
 }
@@ -1856,6 +1985,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 		return MCPError(TEXT("StateTreeComponent not found. Enable StateTree plugin."));
 	}
 
+	// Idempotency: check for existing component by name/class on the SCS
+	if (BP->SimpleConstructionScript)
+	{
+		for (USCS_Node* N : BP->SimpleConstructionScript->GetAllNodes())
+		{
+			if (N && N->ComponentTemplate && N->ComponentTemplate->GetClass() == CompClass)
+			{
+				auto Existed = MCPSuccess();
+				MCPSetExisted(Existed);
+				Existed->SetStringField(TEXT("blueprintPath"), BPPath);
+				Existed->SetStringField(TEXT("component"), N->GetVariableName().ToString());
+				return MCPResult(Existed);
+			}
+		}
+	}
+
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("StateTreeComp"));
 	if (NewNode)
 	{
@@ -1874,8 +2019,15 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("StateTreeComp"));
+
+	// Rollback: remove_component handler
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), BPPath);
+	Payload->SetStringField(TEXT("componentName"), TEXT("StateTreeComp"));
+	MCPSetRollback(Result, TEXT("remove_component"), Payload);
 
 	return MCPResult(Result);
 }
@@ -1897,6 +2049,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 		return MCPError(TEXT("SmartObjectComponent not found. Enable SmartObjects plugin."));
 	}
 
+	// Idempotency: existing component of this class already on the SCS?
+	if (BP->SimpleConstructionScript)
+	{
+		for (USCS_Node* N : BP->SimpleConstructionScript->GetAllNodes())
+		{
+			if (N && N->ComponentTemplate && N->ComponentTemplate->GetClass() == CompClass)
+			{
+				auto Existed = MCPSuccess();
+				MCPSetExisted(Existed);
+				Existed->SetStringField(TEXT("blueprintPath"), BPPath);
+				Existed->SetStringField(TEXT("component"), N->GetVariableName().ToString());
+				return MCPResult(Existed);
+			}
+		}
+	}
+
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, TEXT("SmartObjectComp"));
 	if (NewNode)
 	{
@@ -1915,8 +2083,15 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), TEXT("SmartObjectComp"));
+
+	// Rollback: remove_component
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), BPPath);
+	Payload->SetStringField(TEXT("componentName"), TEXT("SmartObjectComp"));
+	MCPSetRollback(Result, TEXT("remove_component"), Payload);
 
 	return MCPResult(Result);
 }
@@ -2011,6 +2186,20 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddImcMapping(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("Invalid key name: %s"), *KeyName));
 	}
 
+	// Idempotency: mapping with (action, key) already present?
+	for (const FEnhancedActionKeyMapping& M : IMC->GetMappings())
+	{
+		if (M.Action == InputAction && M.Key == Key)
+		{
+			auto Existed = MCPSuccess();
+			MCPSetExisted(Existed);
+			Existed->SetStringField(TEXT("imcPath"), IMC->GetPathName());
+			Existed->SetStringField(TEXT("inputAction"), InputAction->GetPathName());
+			Existed->SetStringField(TEXT("key"), KeyName);
+			return MCPResult(Existed);
+		}
+	}
+
 	// Create the mapping and add it
 	FEnhancedActionKeyMapping NewMapping;
 	NewMapping.Action = InputAction;
@@ -2030,9 +2219,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddImcMapping(const TSharedPtr<FJsonOb
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("imcPath"), IMC->GetPathName());
 	Result->SetStringField(TEXT("inputAction"), InputAction->GetPathName());
 	Result->SetStringField(TEXT("key"), KeyName);
+	// No rollback: no paired remove_imc_mapping handler.
 
 	return MCPResult(Result);
 }
