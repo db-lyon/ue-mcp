@@ -81,7 +81,7 @@ export const editorTool: ToolDef = categoryTool(
     set_viewport: bp("Set viewport camera. Params: location?, rotation?", "set_viewport_camera"),
     focus_on_actor: bp("Focus on actor. Params: actorLabel", "focus_viewport_on_actor"),
     create_sequence: bp("Create Level Sequence. Params: name, packagePath?", "create_level_sequence"),
-    get_sequence_info: bp("Read sequence. Params: assetPath", "get_sequence_info"),
+    get_sequence_info: bp("Read sequence. Params: assetPath, includeSectionDetails? (attach sockets, first transform key values per track)", "get_sequence_info"),
     add_sequence_track: bp("Add track. Params: assetPath, trackType, actorLabel?", "add_sequence_track"),
     play_sequence: bp("Play/stop/pause sequence. Params: assetPath, sequenceAction", "play_sequence", (p) => ({ assetPath: p.assetPath, action: p.sequenceAction ?? "play" })),
     build_all: bp("Build all (geometry, lighting, paths, HLOD)", "build_all"),
@@ -136,5 +136,6 @@ export const editorTool: ToolDef = categoryTool(
     buttonIndex: z.number().optional().describe("Index of button to click in active dialog"),
     buttonLabel: z.string().optional().describe("Label of button to click in active dialog"),
     factor: z.number().optional().describe("Time-scale factor for set_pie_time_scale (e.g. 500)"),
+    includeSectionDetails: z.boolean().optional().describe("Include attach sockets + first-key transform values in get_sequence_info"),
   },
 );
