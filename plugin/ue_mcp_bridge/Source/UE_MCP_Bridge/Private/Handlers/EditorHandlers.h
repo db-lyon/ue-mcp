@@ -153,4 +153,6 @@ private:
 	static TSharedPtr<FJsonValue> BuildProject(const TSharedPtr<FJsonObject>& Params);
 	// #49: Generate project files
 	static TSharedPtr<FJsonValue> GenerateProjectFiles(const TSharedPtr<FJsonObject>& Params);
+	// #126: Fast-forward PIE game time
+	static TSharedPtr<FJsonValue> SetPieTimeScale(const TSharedPtr<FJsonObject>& Params);
 };

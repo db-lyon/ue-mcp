@@ -93,6 +93,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("build_project"), &BuildProject);
 	// #49: Generate project files
 	Registry.RegisterHandler(TEXT("generate_project_files"), &GenerateProjectFiles);
+	// #126: fast-forward PIE game time
+	Registry.RegisterHandler(TEXT("set_pie_time_scale"), &SetPieTimeScale);
 }
 
 TSharedPtr<FJsonValue> FEditorHandlers::ExecuteCommand(const TSharedPtr<FJsonObject>& Params)
@@ -1659,4 +1661,44 @@ TSharedPtr<FJsonValue> FEditorHandlers::GenerateProjectFiles(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("note"), TEXT("Project file generation launched. Check output log for progress."));
 		return MCPResult(Result);
 	}
+}
+
+// #126: Fast-forward PIE game time. Raises WorldSettings dilation caps and calls SetGlobalTimeDilation.
+TSharedPtr<FJsonValue> FEditorHandlers::SetPieTimeScale(const TSharedPtr<FJsonObject>& Params)
+{
+	double Factor = 1.0;
+	if (!Params->TryGetNumberField(TEXT("factor"), Factor))
+	{
+		return MCPError(TEXT("Missing 'factor' (number) parameter"));
+	}
+	if (Factor <= 0.0)
+	{
+		return MCPError(TEXT("'factor' must be > 0"));
+	}
+
+	UWorld* World = GetPIEWorld();
+	if (!World)
+	{
+		return MCPError(TEXT("No PIE/Game world active — start PIE first"));
+	}
+
+	AWorldSettings* WS = World->GetWorldSettings();
+	if (!WS)
+	{
+		return MCPError(TEXT("WorldSettings not available on PIE world"));
+	}
+
+	// Raise dilation caps so Factor isn't clamped.
+	const float CapHigh = FMath::Max(1000.0f, (float)Factor * 2.0f);
+	WS->MaxGlobalTimeDilation = FMath::Max(WS->MaxGlobalTimeDilation, CapHigh);
+	WS->MinGlobalTimeDilation = FMath::Min(WS->MinGlobalTimeDilation, 0.0001f);
+
+	UGameplayStatics::SetGlobalTimeDilation(World, (float)Factor);
+
+	auto Result = MCPSuccess();
+	Result->SetNumberField(TEXT("factor"), Factor);
+	Result->SetNumberField(TEXT("maxCap"), WS->MaxGlobalTimeDilation);
+	Result->SetNumberField(TEXT("minCap"), WS->MinGlobalTimeDilation);
+	Result->SetStringField(TEXT("world"), World->GetName());
+	return MCPResult(Result);
 }

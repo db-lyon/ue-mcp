@@ -69,6 +69,7 @@ export const editorTool: ToolDef = categoryTool(
     set_property: bp("Set UObject property. Params: objectPath, propertyName, value", "set_property"),
     play_in_editor: bp("PIE control. Params: pieAction (start|stop|status)", "pie_control", (p) => ({ action: p.pieAction ?? "status" })),
     get_runtime_value: bp("Read PIE actor value. Params: actorLabel, propertyName", "get_runtime_value"),
+    set_pie_time_scale: bp("Fast-forward PIE game time. Params: factor (>0). Raises WorldSettings caps and calls SetGlobalTimeDilation.", "set_pie_time_scale"),
     hot_reload: bp("Hot reload C++", "hot_reload"),
     undo: bp("Undo last transaction", "undo"),
     redo: bp("Redo last transaction", "redo"),
@@ -134,5 +135,6 @@ export const editorTool: ToolDef = categoryTool(
     response: z.enum(["yes", "no", "ok", "cancel", "retry", "continue", "yesall", "noall"]).optional().describe("Auto-response for matched dialogs"),
     buttonIndex: z.number().optional().describe("Index of button to click in active dialog"),
     buttonLabel: z.string().optional().describe("Label of button to click in active dialog"),
+    factor: z.number().optional().describe("Time-scale factor for set_pie_time_scale (e.g. 500)"),
   },
 );
