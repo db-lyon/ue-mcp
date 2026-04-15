@@ -48,11 +48,32 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionProfile(const TSharedPtr<FJ
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
-	// Set collision profile on all PrimitiveComponents
-	int32 ComponentsModified = 0;
+	// Capture previous profile from first component (for rollback)
 	TArray<UPrimitiveComponent*> PrimitiveComponents;
 	Actor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+	FString PrevProfile;
+	bool bAllAlreadyMatch = !PrimitiveComponents.IsEmpty();
+	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
+	{
+		if (!PrimComp) continue;
+		const FString CompProfile = PrimComp->GetCollisionProfileName().ToString();
+		if (PrevProfile.IsEmpty()) PrevProfile = CompProfile;
+		if (CompProfile != ProfileName) bAllAlreadyMatch = false;
+	}
 
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("profileName"), ProfileName);
+
+	if (bAllAlreadyMatch)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetNumberField(TEXT("componentsModified"), 0);
+		return MCPResult(Result);
+	}
+
+	int32 ComponentsModified = 0;
 	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
 	{
 		if (!PrimComp) continue;
@@ -60,15 +81,20 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionProfile(const TSharedPtr<FJ
 		ComponentsModified++;
 	}
 
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
-	Result->SetStringField(TEXT("profileName"), ProfileName);
 	Result->SetNumberField(TEXT("componentsModified"), ComponentsModified);
 	Result->SetBoolField(TEXT("success"), ComponentsModified > 0);
 
 	if (ComponentsModified == 0)
 	{
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents found on actor"));
+	}
+	else
+	{
+		MCPSetUpdated(Result);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("profileName"), PrevProfile);
+		MCPSetRollback(Result, TEXT("set_collision_profile"), Payload);
 	}
 
 	return MCPResult(Result);
@@ -103,11 +129,33 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetPhysicsEnabled(const TSharedPtr<FJso
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
-	// Enable/disable physics on all PrimitiveComponents
-	int32 ComponentsModified = 0;
+	// Capture previous state for rollback / idempotency check
 	TArray<UPrimitiveComponent*> PrimitiveComponents;
 	Actor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+	bool bPrev = false;
+	bool bAnySim = false;
+	bool bAllAlready = !PrimitiveComponents.IsEmpty();
+	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
+	{
+		if (!PrimComp) continue;
+		const bool bCompSim = PrimComp->IsSimulatingPhysics();
+		if (!bAnySim) { bPrev = bCompSim; bAnySim = true; }
+		if (bCompSim != bEnabled) bAllAlready = false;
+	}
 
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetBoolField(TEXT("enabled"), bEnabled);
+
+	if (bAllAlready)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetNumberField(TEXT("componentsModified"), 0);
+		return MCPResult(Result);
+	}
+
+	int32 ComponentsModified = 0;
 	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
 	{
 		if (!PrimComp) continue;
@@ -115,15 +163,20 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetPhysicsEnabled(const TSharedPtr<FJso
 		ComponentsModified++;
 	}
 
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
-	Result->SetBoolField(TEXT("enabled"), bEnabled);
 	Result->SetNumberField(TEXT("componentsModified"), ComponentsModified);
 	Result->SetBoolField(TEXT("success"), ComponentsModified > 0);
 
 	if (ComponentsModified == 0)
 	{
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents found on actor"));
+	}
+	else
+	{
+		MCPSetUpdated(Result);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetBoolField(TEXT("enabled"), bPrev);
+		MCPSetRollback(Result, TEXT("set_physics_enabled"), Payload);
 	}
 
 	return MCPResult(Result);
@@ -178,11 +231,33 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 	}
 
-	// Set collision enabled on all PrimitiveComponents
-	int32 ComponentsModified = 0;
+	// Capture previous state
 	TArray<UPrimitiveComponent*> PrimitiveComponents;
 	Actor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
+	ECollisionEnabled::Type PrevType = ECollisionEnabled::NoCollision;
+	bool bAnyFound = false;
+	bool bAllAlready = !PrimitiveComponents.IsEmpty();
+	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
+	{
+		if (!PrimComp) continue;
+		const ECollisionEnabled::Type CompCol = PrimComp->GetCollisionEnabled();
+		if (!bAnyFound) { PrevType = CompCol; bAnyFound = true; }
+		if (CompCol != CollisionEnabled) bAllAlready = false;
+	}
 
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("collisionType"), CollisionType);
+
+	if (bAllAlready)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetNumberField(TEXT("componentsModified"), 0);
+		return MCPResult(Result);
+	}
+
+	int32 ComponentsModified = 0;
 	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
 	{
 		if (!PrimComp) continue;
@@ -190,15 +265,29 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 		ComponentsModified++;
 	}
 
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
-	Result->SetStringField(TEXT("collisionType"), CollisionType);
 	Result->SetNumberField(TEXT("componentsModified"), ComponentsModified);
 	Result->SetBoolField(TEXT("success"), ComponentsModified > 0);
 
 	if (ComponentsModified == 0)
 	{
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents found on actor"));
+	}
+	else
+	{
+		MCPSetUpdated(Result);
+		FString PrevTypeStr;
+		switch (PrevType)
+		{
+		case ECollisionEnabled::NoCollision: PrevTypeStr = TEXT("NoCollision"); break;
+		case ECollisionEnabled::QueryOnly: PrevTypeStr = TEXT("QueryOnly"); break;
+		case ECollisionEnabled::PhysicsOnly: PrevTypeStr = TEXT("PhysicsOnly"); break;
+		case ECollisionEnabled::QueryAndPhysics: PrevTypeStr = TEXT("QueryAndPhysics"); break;
+		default: PrevTypeStr = TEXT("NoCollision"); break;
+		}
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("collisionType"), PrevTypeStr);
+		MCPSetRollback(Result, TEXT("set_collision_enabled"), Payload);
 	}
 
 	return MCPResult(Result);
@@ -235,12 +324,42 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 	// Track which properties were set
 	TArray<FString> PropertiesSet;
 
+	// Capture previous values from first component for rollback payload
+	TSharedPtr<FJsonObject> PrevPayload = MakeShared<FJsonObject>();
+	PrevPayload->SetStringField(TEXT("actorLabel"), ActorLabel);
+	bool bCapturedPrev = false;
+
 	for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
 	{
 		if (!PrimComp) continue;
 
 		FBodyInstance* BodyInstance = PrimComp->GetBodyInstance();
 		if (!BodyInstance) continue;
+
+		if (!bCapturedPrev)
+		{
+			double Mass = 0.0;
+			if (Params->TryGetNumberField(TEXT("mass"), Mass))
+			{
+				PrevPayload->SetNumberField(TEXT("mass"), BodyInstance->GetMassOverride());
+			}
+			double LinearDamping = 0.0;
+			if (Params->TryGetNumberField(TEXT("linearDamping"), LinearDamping))
+			{
+				PrevPayload->SetNumberField(TEXT("linearDamping"), BodyInstance->LinearDamping);
+			}
+			double AngularDamping = 0.0;
+			if (Params->TryGetNumberField(TEXT("angularDamping"), AngularDamping))
+			{
+				PrevPayload->SetNumberField(TEXT("angularDamping"), BodyInstance->AngularDamping);
+			}
+			bool bEnableGravity = true;
+			if (Params->TryGetBoolField(TEXT("enableGravity"), bEnableGravity))
+			{
+				PrevPayload->SetBoolField(TEXT("enableGravity"), BodyInstance->bEnableGravity);
+			}
+			bCapturedPrev = true;
+		}
 
 		// Set mass override if provided
 		double Mass = 0.0;
@@ -295,6 +414,17 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 	if (ComponentsModified == 0)
 	{
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents with BodyInstance found on actor"));
+	}
+	else if (PropertiesSet.Num() > 0)
+	{
+		MCPSetUpdated(Result);
+		MCPSetRollback(Result, TEXT("set_body_properties"), PrevPayload);
+	}
+	else
+	{
+		// No properties were actually requested
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
 	}
 
 	return MCPResult(Result);

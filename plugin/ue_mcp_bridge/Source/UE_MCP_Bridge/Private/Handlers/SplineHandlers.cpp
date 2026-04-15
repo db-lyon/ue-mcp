@@ -247,6 +247,19 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("Actor '%s' does not have a SplineComponent"), *ActorLabel));
 	}
 
+	// Capture previous spline points for rollback
+	TArray<TSharedPtr<FJsonValue>> PrevPoints;
+	for (int32 i = 0; i < SplineComp->GetNumberOfSplinePoints(); ++i)
+	{
+		FVector P = SplineComp->GetLocationAtSplinePoint(i, ESplineCoordinateSpace::World);
+		TSharedPtr<FJsonObject> PObj = MakeShared<FJsonObject>();
+		PObj->SetNumberField(TEXT("x"), P.X);
+		PObj->SetNumberField(TEXT("y"), P.Y);
+		PObj->SetNumberField(TEXT("z"), P.Z);
+		PrevPoints.Add(MakeShared<FJsonValueObject>(PObj));
+	}
+	const bool bPrevClosedLoop = SplineComp->IsClosedLoop();
+
 	// Clear existing points and add new ones
 	SplineComp->ClearSplinePoints(false);
 
@@ -273,10 +286,17 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 	SplineComp->UpdateSpline();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetNumberField(TEXT("splinePointCount"), SplineComp->GetNumberOfSplinePoints());
 	Result->SetBoolField(TEXT("closedLoop"), SplineComp->IsClosedLoop());
 	Result->SetNumberField(TEXT("splineLength"), SplineComp->GetSplineLength());
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Payload->SetArrayField(TEXT("points"), PrevPoints);
+	Payload->SetBoolField(TEXT("closedLoop"), bPrevClosedLoop);
+	MCPSetRollback(Result, TEXT("set_spline_points"), Payload);
 
 	return MCPResult(Result);
 }
