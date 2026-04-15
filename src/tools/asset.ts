@@ -74,6 +74,8 @@ export const assetTool: ToolDef = categoryTool(
     rename:         bp("Rename asset. Params: assetPath, newName", "rename_asset"),
     move:           bp("Move asset. Params: sourcePath, destinationPath", "move_asset"),
     delete:         bp("Delete asset. Params: assetPath", "delete_asset"),
+    delete_batch:   bp("Batch-delete assets. Params: assetPaths[]. Returns per-path status (deleted/absent/failed).", "delete_asset_batch"),
+    create_data_asset: bp("Create UDataAsset instance of custom class. Params: name, className (/Script/Module.ClassName or loaded name), packagePath?, properties? (key/value map)", "create_data_asset"),
     save:           bp("Save asset(s). Params: assetPath?", "save_asset"),
     set_mesh_material:    bp("Assign material to static mesh slot. Params: assetPath, materialPath, slotIndex?", "set_mesh_material"),
     recenter_pivot:       { description: "Move static mesh pivot to geometry center. Params: assetPath OR assetPaths", bridge: "recenter_pivot", mapParams: (p) => {
@@ -131,5 +133,7 @@ export const assetTool: ToolDef = categoryTool(
     relativeScale: Vec3.optional().describe("Socket relative scale"),
     outputPath: z.string().optional().describe("Absolute file path for export (e.g. C:/output/texture.png)"),
     classFilter: z.string().optional().describe("Restrict search_fts to assets whose class name contains this substring"),
+    className: z.string().optional().describe("UClass path (/Script/Module.ClassName) or loaded class name for create_data_asset"),
+    properties: z.record(z.unknown()).optional().describe("Key/value property overrides for create_data_asset"),
   },
 );
