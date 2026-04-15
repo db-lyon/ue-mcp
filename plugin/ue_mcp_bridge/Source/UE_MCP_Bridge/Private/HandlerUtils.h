@@ -196,6 +196,35 @@ inline UWorld* GetEditorWorld()
 	return GEditor->GetEditorWorldContext().World();
 }
 
+/** Get the active PIE/Game world if one is running, or nullptr. */
+inline UWorld* GetPIEWorld()
+{
+	if (!GEngine) return nullptr;
+	for (const FWorldContext& Ctx : GEngine->GetWorldContexts())
+	{
+		if (Ctx.WorldType == EWorldType::PIE || Ctx.WorldType == EWorldType::Game)
+		{
+			if (UWorld* W = Ctx.World()) return W;
+		}
+	}
+	return nullptr;
+}
+
+/** Resolve a world scope string ("editor"|"pie"|"game"|"auto") to a UWorld. "auto" prefers PIE if running. */
+inline UWorld* ResolveWorldScope(const FString& Scope)
+{
+	if (Scope.Equals(TEXT("pie"), ESearchCase::IgnoreCase) || Scope.Equals(TEXT("game"), ESearchCase::IgnoreCase))
+	{
+		return GetPIEWorld();
+	}
+	if (Scope.Equals(TEXT("auto"), ESearchCase::IgnoreCase))
+	{
+		if (UWorld* W = GetPIEWorld()) return W;
+		return GetEditorWorld();
+	}
+	return GetEditorWorld();
+}
+
 /** Get the editor world or return an error response. */
 #define REQUIRE_EDITOR_WORLD(WorldVar) \
 	UWorld* WorldVar = GetEditorWorld(); \

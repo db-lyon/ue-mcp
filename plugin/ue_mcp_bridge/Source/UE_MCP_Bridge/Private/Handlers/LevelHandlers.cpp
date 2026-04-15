@@ -71,7 +71,9 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>& Params)
 {
-	REQUIRE_EDITOR_WORLD(World);
+	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
 
 	FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
 	FString NameFilter = OptionalString(Params, TEXT("nameFilter"));

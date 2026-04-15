@@ -6,7 +6,7 @@ export const levelTool: ToolDef = categoryTool(
   "level",
   "Level actors, selection, components, level management, volumes, lights, and splines.",
   {
-    get_outliner:       bp("List actors. Params: classFilter?, nameFilter?", "get_world_outliner"),
+    get_outliner:       bp("List actors. Params: classFilter?, nameFilter?, world? (editor|pie|auto), limit?", "get_world_outliner"),
     place_actor:        bp("Spawn actor. Params: actorClass, label?, location?, rotation?, scale?, staticMesh?, material?", "place_actor"),
     delete_actor:       bp("Remove actor. Params: actorLabel", "delete_actor"),
     get_actor_details:  bp("Inspect actor. Params: actorLabel OR actorPath, includeProperties?, propertyName?, world? (editor|pie)", "get_actor_details"),
