@@ -57,4 +57,8 @@ private:
 	static TSharedPtr<FJsonValue> RemoveSocket(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListSockets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReloadPackage(const TSharedPtr<FJsonObject>& Params);
+
+	// v0.7.8 — FTS5-backed asset search (stubs)
+	static TSharedPtr<FJsonValue> SearchAssetsFTS(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReindexAssetsFTS(const TSharedPtr<FJsonObject>& Params);
 };

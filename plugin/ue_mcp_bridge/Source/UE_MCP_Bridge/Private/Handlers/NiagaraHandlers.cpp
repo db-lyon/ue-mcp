@@ -14,10 +14,17 @@
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraRendererProperties.h"
+#include "NiagaraMeshRendererProperties.h"
+#include "NiagaraSpriteRendererProperties.h"
+#include "NiagaraRibbonRendererProperties.h"
+#include "NiagaraDataInterface.h"
+#include "NiagaraScriptSource.h"
+#include "NiagaraScript.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "Factories/Factory.h"
 
 void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -33,6 +40,16 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_emitter_to_system"), &AddEmitterToSystem);
 	Registry.RegisterHandler(TEXT("set_emitter_property"), &SetEmitterProperty);
 	Registry.RegisterHandler(TEXT("get_emitter_info"), &GetEmitterInfo);
+
+	// v0.7.10 — depth
+	Registry.RegisterHandler(TEXT("list_emitter_renderers"), &ListEmitterRenderers);
+	Registry.RegisterHandler(TEXT("add_emitter_renderer"), &AddEmitterRenderer);
+	Registry.RegisterHandler(TEXT("remove_emitter_renderer"), &RemoveEmitterRenderer);
+	Registry.RegisterHandler(TEXT("set_renderer_property"), &SetRendererProperty);
+	Registry.RegisterHandler(TEXT("inspect_data_interface"), &InspectDataInterface);
+	Registry.RegisterHandler(TEXT("create_niagara_system_from_spec"), &CreateNiagaraSystemFromSpec);
+	Registry.RegisterHandler(TEXT("get_niagara_compiled_hlsl"), &GetCompiledHLSL);
+	Registry.RegisterHandler(TEXT("list_niagara_system_parameters"), &ListSystemParameters);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::ListNiagaraSystems(const TSharedPtr<FJsonObject>& Params)
@@ -688,4 +705,354 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::GetEmitterInfo(const TSharedPtr<FJsonOb
 	}
 
 	return MCPResult(Result);
+}
+
+// ===========================================================================
+// v0.7.10 — Niagara depth
+// ===========================================================================
+
+namespace
+{
+	FVersionedNiagaraEmitterData* ResolveEmitter(UNiagaraSystem* System, const FString& EmitterName, int32 EmitterIndex, UNiagaraEmitter*& OutEmitter, FGuid& OutVersion)
+	{
+		OutEmitter = nullptr;
+		const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
+		int32 TargetIdx = -1;
+		if (!EmitterName.IsEmpty())
+		{
+			for (int32 i = 0; i < Handles.Num(); ++i)
+			{
+				if (Handles[i].GetName().ToString().Equals(EmitterName, ESearchCase::IgnoreCase)) { TargetIdx = i; break; }
+			}
+		}
+		else if (EmitterIndex >= 0 && EmitterIndex < Handles.Num())
+		{
+			TargetIdx = EmitterIndex;
+		}
+		if (TargetIdx < 0) return nullptr;
+
+		FVersionedNiagaraEmitter VE = Handles[TargetIdx].GetInstance();
+		OutEmitter = VE.Emitter;
+		OutVersion = VE.Version;
+		return VE.GetEmitterData();
+	}
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::ListEmitterRenderers(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
+	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
+	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+
+	UNiagaraEmitter* Emitter = nullptr;
+	FGuid Version;
+	FVersionedNiagaraEmitterData* Data = ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version);
+	if (!Data) return MCPError(TEXT("Emitter not resolved"));
+
+	TArray<TSharedPtr<FJsonValue>> RArr;
+	int32 Idx = 0;
+	for (UNiagaraRendererProperties* R : Data->GetRenderers())
+	{
+		if (!R) { ++Idx; continue; }
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("index"), Idx++);
+		O->SetStringField(TEXT("class"), R->GetClass()->GetName());
+		O->SetBoolField(TEXT("enabled"), R->GetIsEnabled());
+		RArr.Add(MakeShared<FJsonValueObject>(O));
+	}
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	Res->SetStringField(TEXT("systemPath"), SystemPath);
+	Res->SetStringField(TEXT("emitter"), Emitter ? Emitter->GetName() : TEXT(""));
+	Res->SetArrayField(TEXT("renderers"), RArr);
+	Res->SetNumberField(TEXT("rendererCount"), RArr.Num());
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterRenderer(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+	FString RendererType;
+	if (auto Err = RequireString(Params, TEXT("rendererType"), RendererType)) return Err;
+	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
+	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
+	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+
+	UNiagaraEmitter* Emitter = nullptr;
+	FGuid Version;
+	FVersionedNiagaraEmitterData* Data = ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version);
+	if (!Data || !Emitter) return MCPError(TEXT("Emitter not resolved"));
+
+	UClass* RendererClass = nullptr;
+	if (RendererType.Equals(TEXT("sprite"), ESearchCase::IgnoreCase))        RendererClass = UNiagaraSpriteRendererProperties::StaticClass();
+	else if (RendererType.Equals(TEXT("mesh"), ESearchCase::IgnoreCase))     RendererClass = UNiagaraMeshRendererProperties::StaticClass();
+	else if (RendererType.Equals(TEXT("ribbon"), ESearchCase::IgnoreCase))   RendererClass = UNiagaraRibbonRendererProperties::StaticClass();
+	else
+	{
+		RendererClass = FindObject<UClass>(nullptr, *RendererType);
+		if (!RendererClass) RendererClass = FindClassByShortName(RendererType);
+	}
+	if (!RendererClass || !RendererClass->IsChildOf(UNiagaraRendererProperties::StaticClass()))
+	{
+		return MCPError(FString::Printf(TEXT("Unknown renderer type: %s"), *RendererType));
+	}
+
+	UNiagaraRendererProperties* NewRenderer = NewObject<UNiagaraRendererProperties>(Emitter, RendererClass, NAME_None, RF_Transactional);
+	Emitter->Modify();
+	Emitter->AddRenderer(NewRenderer, Version);
+	Emitter->PostEditChange();
+	UEditorAssetLibrary::SaveLoadedAsset(System);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("rendererClass"), RendererClass->GetName());
+	Res->SetStringField(TEXT("emitter"), Emitter->GetName());
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterRenderer(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+	const int32 RendererIndex = OptionalInt(Params, TEXT("rendererIndex"), -1);
+	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
+	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
+
+	if (RendererIndex < 0) return MCPError(TEXT("Missing 'rendererIndex'"));
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
+	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+
+	UNiagaraEmitter* Emitter = nullptr;
+	FGuid Version;
+	FVersionedNiagaraEmitterData* Data = ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version);
+	if (!Data || !Emitter) return MCPError(TEXT("Emitter not resolved"));
+
+	TArray<UNiagaraRendererProperties*> Renderers = Data->GetRenderers();
+	if (RendererIndex >= Renderers.Num()) return MCPError(TEXT("rendererIndex out of range"));
+
+	UNiagaraRendererProperties* ToRemove = Renderers[RendererIndex];
+	Emitter->Modify();
+	Emitter->RemoveRenderer(ToRemove, Version);
+	Emitter->PostEditChange();
+	UEditorAssetLibrary::SaveLoadedAsset(System);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("emitter"), Emitter->GetName());
+	Res->SetNumberField(TEXT("removedIndex"), RendererIndex);
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+	FString PropertyName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
+	const int32 RendererIndex = OptionalInt(Params, TEXT("rendererIndex"), 0);
+	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
+	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
+	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+
+	UNiagaraEmitter* Emitter = nullptr;
+	FGuid Version;
+	FVersionedNiagaraEmitterData* Data = ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version);
+	if (!Data || !Emitter) return MCPError(TEXT("Emitter not resolved"));
+
+	TArray<UNiagaraRendererProperties*> Renderers = Data->GetRenderers();
+	if (RendererIndex >= Renderers.Num() || !Renderers[RendererIndex])
+	{
+		return MCPError(TEXT("rendererIndex out of range or null"));
+	}
+	UNiagaraRendererProperties* R = Renderers[RendererIndex];
+
+	FProperty* Prop = R->GetClass()->FindPropertyByName(*PropertyName);
+	if (!Prop) return MCPError(FString::Printf(TEXT("Property not found: %s"), *PropertyName));
+
+	FString StringValue;
+	bool BoolValue = false;
+	double NumValue = 0.0;
+	R->Modify();
+	if (FBoolProperty* BP = CastField<FBoolProperty>(Prop))
+	{
+		if (!Params->TryGetBoolField(TEXT("value"), BoolValue)) return MCPError(TEXT("Expected bool 'value'"));
+		BP->SetPropertyValue(BP->ContainerPtrToValuePtr<void>(R), BoolValue);
+	}
+	else if (FNumericProperty* NP = CastField<FNumericProperty>(Prop))
+	{
+		if (!Params->TryGetNumberField(TEXT("value"), NumValue)) return MCPError(TEXT("Expected numeric 'value'"));
+		NP->SetFloatingPointPropertyValue(NP->ContainerPtrToValuePtr<void>(R), NumValue);
+	}
+	else if (FStrProperty* SP = CastField<FStrProperty>(Prop))
+	{
+		if (!Params->TryGetStringField(TEXT("value"), StringValue)) return MCPError(TEXT("Expected string 'value'"));
+		SP->SetPropertyValue(SP->ContainerPtrToValuePtr<void>(R), StringValue);
+	}
+	else
+	{
+		return MCPError(FString::Printf(TEXT("Property type not yet supported: %s"), *Prop->GetCPPType()));
+	}
+	R->PostEditChange();
+	Emitter->PostEditChange();
+	UEditorAssetLibrary::SaveLoadedAsset(System);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("property"), PropertyName);
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::InspectDataInterface(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
+	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+
+	TArray<TSharedPtr<FJsonValue>> DIs;
+
+	const FNiagaraUserRedirectionParameterStore& UserParams = System->GetExposedParameters();
+	TArray<FNiagaraVariable> AllVars;
+	UserParams.GetParameters(AllVars);
+	for (const FNiagaraVariable& Var : AllVars)
+	{
+		if (!Var.IsDataInterface()) continue;
+		UNiagaraDataInterface* DI = UserParams.GetDataInterface(Var);
+		if (!DI) continue;
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("name"), Var.GetName().ToString());
+		O->SetStringField(TEXT("class"), DI->GetClass()->GetName());
+		O->SetStringField(TEXT("scope"), TEXT("user"));
+		DIs.Add(MakeShared<FJsonValueObject>(O));
+	}
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	Res->SetStringField(TEXT("systemPath"), SystemPath);
+	Res->SetArrayField(TEXT("dataInterfaces"), DIs);
+	Res->SetNumberField(TEXT("count"), DIs.Num());
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromSpec(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/VFX"));
+
+	const TArray<TSharedPtr<FJsonValue>>* EmittersArr = nullptr;
+	Params->TryGetArrayField(TEXT("emitters"), EmittersArr);
+
+	if (auto Hit = MCPCheckAssetExists(PackagePath, Name, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("NiagaraSystem")))
+	{
+		return Hit;
+	}
+
+	const FString PkgName = PackagePath + TEXT("/") + Name;
+	UPackage* Package = CreatePackage(*PkgName);
+	UNiagaraSystem* System = NewObject<UNiagaraSystem>(Package, UNiagaraSystem::StaticClass(), *Name, RF_Public | RF_Standalone);
+	if (!System) return MCPError(TEXT("Failed to create NiagaraSystem"));
+	FAssetRegistryModule::AssetCreated(System);
+	System->MarkPackageDirty();
+	Package->SetDirtyFlag(true);
+
+	int32 AddedEmitters = 0;
+	if (EmittersArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *EmittersArr)
+		{
+			const TSharedPtr<FJsonObject>* EmitterObj = nullptr;
+			if (!V->TryGetObject(EmitterObj)) continue;
+			FString EmitterPath;
+			if (!(*EmitterObj)->TryGetStringField(TEXT("path"), EmitterPath)) continue;
+			UNiagaraEmitter* Source = Cast<UNiagaraEmitter>(UEditorAssetLibrary::LoadAsset(EmitterPath));
+			if (!Source) continue;
+			const FGuid Version = Source->GetExposedVersion().VersionGuid;
+			System->AddEmitterHandle(*Source, FName(*Source->GetName()), Version);
+			++AddedEmitters;
+		}
+	}
+
+	System->PostEditChange();
+	UEditorAssetLibrary::SaveLoadedAsset(System);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("path"), System->GetPathName());
+	Res->SetNumberField(TEXT("emittersAdded"), AddedEmitters);
+	MCPSetDeleteAssetRollback(Res, System->GetPathName());
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::GetCompiledHLSL(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
+	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
+	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+
+	UNiagaraEmitter* Emitter = nullptr;
+	FGuid Version;
+	FVersionedNiagaraEmitterData* Data = ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version);
+	if (!Data) return MCPError(TEXT("Emitter not resolved"));
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	Res->SetStringField(TEXT("systemPath"), SystemPath);
+
+	if (Data->SimTarget == ENiagaraSimTarget::GPUComputeSim)
+	{
+		UNiagaraScript* Script = Data->GetGPUComputeScript();
+		if (Script)
+		{
+			Res->SetStringField(TEXT("scriptName"), Script->GetName());
+			Res->SetBoolField(TEXT("isCompiled"), Script->IsCompilable());
+		}
+	}
+	else
+	{
+		Res->SetStringField(TEXT("note"), TEXT("Emitter is CPU-sim; no compiled HLSL available"));
+	}
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::ListSystemParameters(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
+	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+
+	const FNiagaraUserRedirectionParameterStore& UserParams = System->GetExposedParameters();
+	TArray<FNiagaraVariable> Vars;
+	UserParams.GetParameters(Vars);
+
+	TArray<TSharedPtr<FJsonValue>> Arr;
+	for (const FNiagaraVariable& V : Vars)
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("name"), V.GetName().ToString());
+		O->SetStringField(TEXT("type"), V.GetType().GetName());
+		O->SetBoolField(TEXT("isDataInterface"), V.IsDataInterface());
+		Arr.Add(MakeShared<FJsonValueObject>(O));
+	}
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	Res->SetStringField(TEXT("systemPath"), SystemPath);
+	Res->SetArrayField(TEXT("parameters"), Arr);
+	Res->SetNumberField(TEXT("parameterCount"), Arr.Num());
+	return MCPResult(Res);
 }

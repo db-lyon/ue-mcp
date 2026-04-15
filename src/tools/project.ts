@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef, type ToolContext } from "../types.js";
-import { deploy, deploySummary } from "../deployer.js";
+import { deploy, deploySummary, findEngineInstall } from "../deployer.js";
 
 function resolveConfigPath(configDir: string, configName: string): string {
   if (path.isAbsolute(configName)) return configName;
@@ -229,6 +229,67 @@ export const projectTool: ToolDef = categoryTool(
         return { query: p.query, directory: p.directory ?? "(all)", resultCount: results.length, results };
       },
     },
+    read_engine_header: {
+      description: "Parse a .h file from the engine source tree. Params: headerPath (relative to Engine/Source, or absolute)",
+      handler: async (ctx, p) => {
+        ctx.project.ensureLoaded();
+        const engineRoot = findEngineInstall(ctx.project.engineAssociation ?? null);
+        if (!engineRoot) throw new Error("Could not resolve engine install path");
+        const headerPath = p.headerPath as string;
+        const resolved = path.isAbsolute(headerPath)
+          ? headerPath
+          : path.join(engineRoot, "Engine", "Source", headerPath);
+        if (!fs.existsSync(resolved)) throw new Error(`Engine header not found: ${resolved}`);
+        const content = fs.readFileSync(resolved, "utf-8");
+        return { ...parseHeader(content, resolved), engineRoot };
+      },
+    },
+    find_engine_symbol: {
+      description: "Grep engine headers for a symbol. Params: symbol, maxResults?",
+      handler: async (ctx, p) => {
+        ctx.project.ensureLoaded();
+        const engineRoot = findEngineInstall(ctx.project.engineAssociation ?? null);
+        if (!engineRoot) throw new Error("Could not resolve engine install path");
+        const engineSource = path.join(engineRoot, "Engine", "Source", "Runtime");
+        if (!fs.existsSync(engineSource)) throw new Error(`Engine source not found: ${engineSource}`);
+        const symbol = p.symbol as string;
+        const maxResults = (p.maxResults as number) ?? 100;
+        const results: Array<{ file: string; line: number; content: string }> = [];
+        const needle = symbol;
+        function scan(dir: string): void {
+          if (results.length >= maxResults) return;
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (results.length >= maxResults) return;
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) { scan(full); continue; }
+            if (!/\.(h|inl)$/i.test(entry.name)) continue;
+            const lines = fs.readFileSync(full, "utf-8").split(/\r?\n/);
+            for (let i = 0; i < lines.length; i++) {
+              if (lines[i].includes(needle)) {
+                results.push({ file: path.relative(engineSource, full).replace(/\\/g, "/"), line: i + 1, content: lines[i].trimEnd() });
+                if (results.length >= maxResults) return;
+              }
+            }
+          }
+        }
+        scan(engineSource);
+        return { symbol, engineRoot, resultCount: results.length, results };
+      },
+    },
+    list_engine_modules: {
+      description: "List modules in Engine/Source/Runtime",
+      handler: async (ctx) => {
+        ctx.project.ensureLoaded();
+        const engineRoot = findEngineInstall(ctx.project.engineAssociation ?? null);
+        if (!engineRoot) throw new Error("Could not resolve engine install path");
+        const runtimeDir = path.join(engineRoot, "Engine", "Source", "Runtime");
+        if (!fs.existsSync(runtimeDir)) throw new Error(`Runtime dir not found: ${runtimeDir}`);
+        const modules = fs.readdirSync(runtimeDir, { withFileTypes: true })
+          .filter(e => e.isDirectory())
+          .map(e => ({ name: e.name, hasBuildCs: fs.existsSync(path.join(runtimeDir, e.name, `${e.name}.Build.cs`)) }));
+        return { engineRoot, moduleCount: modules.length, modules };
+      },
+    },
     set_config: bp("Write to INI. Params: configName, section, key, value", "set_config"),
     build: bp("Build C++ project. Params: configuration?, platform?, clean?", "build_project"),
     generate_project_files: bp("Generate IDE project files (Visual Studio, Xcode, etc.)", "generate_project_files"),
@@ -247,5 +308,7 @@ export const projectTool: ToolDef = categoryTool(
     configuration: z.string().optional().describe("Build configuration: Development, Debug, Shipping"),
     platform: z.string().optional().describe("Target platform: Win64, Linux, Mac"),
     clean: z.boolean().optional().describe("Clean build"),
+    symbol: z.string().optional().describe("Symbol name for find_engine_symbol"),
+    maxResults: z.number().optional().describe("Cap on find_engine_symbol hits (default 100)"),
   },
 );

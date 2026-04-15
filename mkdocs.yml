@@ -55,6 +55,8 @@ nav:
   - Getting Started: getting-started.md
   - Architecture: architecture.md
   - Tool Reference: tool-reference.md
+  - Handler Conventions: handler-conventions.md
+  - Flows: flows.md
   - Configuration: configuration.md
   - Neon Shrine Demo: neon-shrine-demo.md
   - Feedback: feedback.md

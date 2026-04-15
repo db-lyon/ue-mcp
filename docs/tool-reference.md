@@ -1,6 +1,6 @@
 # Tool Reference
 
-UE-MCP exposes **19 category tools** covering **330+ actions**. Every tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **19 category tools** covering **360+ actions**. Every tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -24,9 +24,13 @@ UE-MCP exposes **19 category tools** covering **330+ actions**. Every tool takes
 | `search_cpp` | Search `.h`/`.cpp` files for text | `query`, `directory?` |
 | `build` | Launch UnrealBuildTool to build C++ | `configuration?`, `platform?`, `clean?` |
 | `generate_project_files` | Generate IDE project files (VS, Xcode) | |
+| `read_engine_header` | Parse a `.h` from the engine source tree | `headerPath` (absolute or relative to `Engine/Source`) |
+| `find_engine_symbol` | Grep engine `.h`/`.inl` files under `Engine/Source/Runtime` for a symbol | `symbol`, `maxResults?` |
+| `list_engine_modules` | List modules under `Engine/Source/Runtime` | |
 
 !!! note
-    `read_config`, `read_cpp_header`, `list_modules`, and `search_cpp` work without the editor (filesystem only).
+    `read_config`, `read_cpp_header`, `list_modules`, `search_cpp`, and the `*_engine_*` actions work without the editor (filesystem only).
+    Engine actions resolve the engine install via `engineAssociation` in the `.uproject`.
 
 ---
 
@@ -60,9 +64,12 @@ UE-MCP exposes **19 category tools** covering **330+ actions**. Every tool takes
 | `list_sockets` | List sockets on a mesh | `assetPath` |
 | `reload_package` | Force reload an asset package from disk | `assetPath` |
 | `export` | Export asset to disk file (Texture2D → PNG, StaticMesh → FBX, etc.) | `assetPath`, `outputPath` |
+| `search_fts` | Ranked token search over asset name/class/path (replaces wildcard search for agent use) | `query`, `maxResults?`, `classFilter?` |
+| `reindex_fts` | Force AssetRegistry rescan to refresh FTS search coverage | `directory?` |
 
 !!! note
     `search` auto-searches all configured content roots (see [Configuration](configuration.md)).
+    `search_fts` is preferred for agent-driven lookups: tokenized, ranked, and returns a score so the LLM can reason about match quality.
 
 ---
 
@@ -98,6 +105,16 @@ UE-MCP exposes **19 category tools** covering **330+ actions**. Every tool takes
 | `create_interface` | Create a Blueprint Interface | `assetPath` |
 | `add_interface` | Implement an interface on a BP | `blueprintPath`, `interfacePath` |
 | `add_event_dispatcher` | Add an event dispatcher | `blueprintPath`, `name` |
+| `read_graph_summary` | Lightweight graph summary: nodes + exec/data edges only, no pin defaults. Target ~10KB vs ~170KB from `read_graph`. | `assetPath`, `graphName?` |
+| `get_execution_flow` | Trace exec pins BFS from an entry point (Event / FunctionEntry / CustomEvent); returns ordered steps with branch information. | `assetPath`, `graphName?`, `entryPoint?` |
+| `get_dependencies` | Forward (`classes`, `functions`, `assets`) or reverse (`referencers`) dependency set via AssetRegistry + graph walk. | `assetPath`, `reverse?` |
+| `duplicate` | Duplicate a Blueprint asset (rollback via `delete_asset`). | `sourcePath`, `destinationPath` |
+| `add_local_variable` | Add a function-scope local variable to a function's entry node. | `assetPath`, `functionName`, `name`, `varType?` |
+| `list_local_variables` | List local variables for a function. | `assetPath`, `functionName` |
+| `validate` | Compile without saving and collect compiler diagnostics (errors + warnings). | `assetPath` |
+
+!!! tip "Agent-friendly introspection"
+    Prefer `read_graph_summary` over `read_graph` for LLM use: the summary strips pin defaults, positions, and comments, keeping only what's needed to reason about structure. Use `get_execution_flow` to follow event-driven logic and `get_dependencies` (reverse) before renaming/deleting shared assets.
 
 !!! tip "Graph Scripting Workflow"
     `search_node_types` → `add_node` → `connect_pins` is the standard flow for graph scripting.
@@ -163,6 +180,14 @@ UE-MCP exposes **19 category tools** covering **330+ actions**. Every tool takes
 | `delete_expression` | Delete an expression node | `assetPath`, `expressionName` |
 | `list_expression_types` | List available expression types | `filter?` |
 | `recompile` | Recompile the material | `assetPath` |
+| `duplicate` | Duplicate a material asset (rollback via `delete_asset`). | `sourcePath`, `destinationPath` |
+| `validate` | Walk expressions from material property roots; report orphans and null texture refs. | `assetPath` |
+| `get_shader_stats` | Texture-sample count, scalar/vector/texture parameter counts, shading model. | `assetPath` |
+| `export_graph` | Export material expression graph as JSON (nodes + property connections). | `assetPath` |
+| `import_graph` | Build a material graph from a JSON spec (alias of `build_graph`). | `assetPath`, `nodes`, `propertyConnections?` |
+| `build_graph` | Declarative graph builder: `{nodes: [{name, class, posX, posY, value?}], propertyConnections: [{property, from, outputIndex}]}`. | `assetPath`, `nodes`, `propertyConnections?` |
+| `render_preview` | Render a preview PNG of the material (base color approximation in v0.7.8). | `assetPath`, `outputPath`, `width?`, `height?` |
+| `begin_transaction` / `end_transaction` | Bracket multi-step edits in a single undo transaction. | `label?` |
 
 ---
 
@@ -195,6 +220,10 @@ UE-MCP exposes **19 category tools** covering **330+ actions**. Every tool takes
 | `create_ik_rig` | Create IKRigDefinition asset | `name`, `skeletalMeshPath`, `packagePath?` |
 | `read_ik_rig` | Read IK Rig chains and solvers | `assetPath` |
 | `list_control_rig_variables` | Read ControlRig blueprint variables and graphs | `assetPath` |
+| `set_root_motion` | Set `bEnableRootMotion`, `bForceRootLock`, `RootMotionRootLock` on AnimSequence. | `assetPath`, `enableRootMotion?`, `forceRootLock?`, `rootMotionRootLock?` |
+| `add_virtual_bone` / `remove_virtual_bone` | Add or remove virtual bones on a skeleton. | `skeletonPath`, `sourceBone`/`targetBone` or `virtualBoneName` |
+| `create_composite` | Create an AnimComposite asset bound to a skeleton. | `name`, `skeletonPath`, `packagePath?` |
+| `list_modifiers` | List applied animation modifiers on a sequence. | `assetPath` |
 
 !!! note
     Most animation tools need a skeleton path — use `list_skeletal_meshes` to find it.
@@ -266,6 +295,14 @@ UE-MCP exposes **19 category tools** covering **330+ actions**. Every tool takes
 | `set_emitter_property` | Set emitter property | `assetPath`, `emitterName`, `propertyName`, `value` |
 | `list_modules` | List modules in an emitter | `assetPath`, `emitterName` |
 | `get_emitter_info` | Get detailed emitter info | `assetPath`, `emitterName` |
+| `list_renderers` | List renderers on an emitter (class + enabled state). | `systemPath`, `emitterName?`/`emitterIndex?` |
+| `add_renderer` | Add sprite/mesh/ribbon (or custom class) renderer to an emitter. | `systemPath`, `rendererType`, `emitterName?` |
+| `remove_renderer` | Remove a renderer by index. | `systemPath`, `rendererIndex`, `emitterName?` |
+| `set_renderer_property` | Set bool/number/string renderer property via reflection. | `systemPath`, `rendererIndex`, `propertyName`, `value` |
+| `inspect_data_interfaces` | List user-scope data interfaces bound to the system. | `systemPath` |
+| `create_system_from_spec` | Declaratively create a NiagaraSystem and add emitter handles from a list. | `name`, `packagePath?`, `emitters?:[{path}]` |
+| `get_compiled_hlsl` | Inspect the GPU compute script when SimTarget=GPU. | `systemPath`, `emitterName?`/`emitterIndex?` |
+| `list_system_parameters` | List user-exposed system parameters with type info. | `systemPath` |
 
 ---
 

@@ -51,6 +51,11 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
 #include "EditorAssetLibrary.h"
+#include "Containers/Queue.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "Logging/TokenizedMessage.h"
+#include "Kismet2/CompilerResultsLog.h"
 
 void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -84,6 +89,264 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("delete_variable"), &DeleteVariable);
 	Registry.RegisterHandler(TEXT("add_function_parameter"), &AddFunctionParameter);
 	Registry.RegisterHandler(TEXT("set_variable_default"), &SetVariableDefault);
+
+	// v0.7.8 stubs
+	Registry.RegisterHandler(TEXT("read_blueprint_graph_summary"), &ReadBlueprintGraphSummary);
+	Registry.RegisterHandler(TEXT("get_blueprint_execution_flow"), &GetBlueprintExecutionFlow);
+	Registry.RegisterHandler(TEXT("get_blueprint_dependencies"), &GetBlueprintDependencies);
+
+	// v0.7.11 — BP authoring depth
+	Registry.RegisterHandler(TEXT("duplicate_blueprint"), &DuplicateBlueprint);
+	Registry.RegisterHandler(TEXT("add_local_variable"), &AddLocalVariable);
+	Registry.RegisterHandler(TEXT("list_local_variables"), &ListLocalVariables);
+	Registry.RegisterHandler(TEXT("validate_blueprint"), &ValidateBlueprint);
+}
+
+// ---------------------------------------------------------------------------
+// v0.7.8 STUBS — agent-ergonomics actions (Milestone A)
+// Bodies intentionally minimal; flesh out one per follow-up patch.
+// ---------------------------------------------------------------------------
+
+TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraphSummary(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	UEdGraph* Graph = FindGraph(Blueprint, GraphName);
+	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	// Nodes: id + class + concise title only. No pin defaults, no positions, no comments.
+	TArray<TSharedPtr<FJsonValue>> Nodes;
+	TArray<TSharedPtr<FJsonValue>> ExecEdges;
+	TArray<TSharedPtr<FJsonValue>> DataEdges;
+
+	for (UEdGraphNode* Node : Graph->Nodes)
+	{
+		if (!Node) continue;
+
+		TSharedPtr<FJsonObject> N = MakeShared<FJsonObject>();
+		N->SetStringField(TEXT("id"), Node->NodeGuid.ToString(EGuidFormats::Short));
+		N->SetStringField(TEXT("class"), Node->GetClass()->GetName());
+		N->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
+		Nodes.Add(MakeShared<FJsonValueObject>(N));
+
+		// Walk output pins only (one edge per connection, no dup).
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (!Pin || Pin->Direction != EGPD_Output) continue;
+			const bool bExec = (Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec);
+			for (UEdGraphPin* Linked : Pin->LinkedTo)
+			{
+				if (!Linked || !Linked->GetOwningNode()) continue;
+				TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+				E->SetStringField(TEXT("from"), Node->NodeGuid.ToString(EGuidFormats::Short));
+				E->SetStringField(TEXT("fromPin"), Pin->PinName.ToString());
+				E->SetStringField(TEXT("to"), Linked->GetOwningNode()->NodeGuid.ToString(EGuidFormats::Short));
+				E->SetStringField(TEXT("toPin"), Linked->PinName.ToString());
+				(bExec ? ExecEdges : DataEdges).Add(MakeShared<FJsonValueObject>(E));
+			}
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("graphName"), GraphName);
+	Result->SetArrayField(TEXT("nodes"), Nodes);
+	Result->SetArrayField(TEXT("execEdges"), ExecEdges);
+	Result->SetArrayField(TEXT("dataEdges"), DataEdges);
+	Result->SetNumberField(TEXT("nodeCount"), Nodes.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FBlueprintHandlers::GetBlueprintExecutionFlow(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
+	FString EntryPoint = OptionalString(Params, TEXT("entryPoint"), TEXT(""));
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	UEdGraph* Graph = FindGraph(Blueprint, GraphName);
+	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	// Locate entry node. If EntryPoint is given, match by title. Else pick first
+	// K2Node_Event / K2Node_FunctionEntry / K2Node_CustomEvent encountered.
+	UEdGraphNode* Entry = nullptr;
+	for (UEdGraphNode* Node : Graph->Nodes)
+	{
+		if (!Node) continue;
+		const bool bIsEntry =
+			Node->IsA<UK2Node_Event>() ||
+			Node->IsA<UK2Node_FunctionEntry>() ||
+			Node->IsA<UK2Node_CustomEvent>();
+		if (!bIsEntry) continue;
+		if (EntryPoint.IsEmpty())
+		{
+			Entry = Node;
+			break;
+		}
+		if (Node->GetNodeTitle(ENodeTitleType::ListView).ToString().Contains(EntryPoint))
+		{
+			Entry = Node;
+			break;
+		}
+	}
+
+	if (!Entry)
+	{
+		return MCPError(EntryPoint.IsEmpty()
+			? TEXT("No event or function entry node found")
+			: FString::Printf(TEXT("Entry node not found: %s"), *EntryPoint));
+	}
+
+	// BFS through exec output pins. Track visited node guids to break cycles.
+	TArray<TSharedPtr<FJsonValue>> Steps;
+	TSet<FGuid> Visited;
+	TQueue<UEdGraphNode*> Queue;
+	Queue.Enqueue(Entry);
+
+	while (!Queue.IsEmpty())
+	{
+		UEdGraphNode* Cur = nullptr;
+		Queue.Dequeue(Cur);
+		if (!Cur || Visited.Contains(Cur->NodeGuid)) continue;
+		Visited.Add(Cur->NodeGuid);
+
+		TSharedPtr<FJsonObject> Step = MakeShared<FJsonObject>();
+		Step->SetStringField(TEXT("id"), Cur->NodeGuid.ToString(EGuidFormats::Short));
+		Step->SetStringField(TEXT("class"), Cur->GetClass()->GetName());
+		Step->SetStringField(TEXT("title"), Cur->GetNodeTitle(ENodeTitleType::ListView).ToString());
+
+		// Enumerate exec branches from this node, one per output exec pin.
+		TArray<TSharedPtr<FJsonValue>> Branches;
+		for (UEdGraphPin* Pin : Cur->Pins)
+		{
+			if (!Pin || Pin->Direction != EGPD_Output) continue;
+			if (Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec) continue;
+
+			for (UEdGraphPin* Linked : Pin->LinkedTo)
+			{
+				if (!Linked || !Linked->GetOwningNode()) continue;
+				UEdGraphNode* Next = Linked->GetOwningNode();
+
+				TSharedPtr<FJsonObject> B = MakeShared<FJsonObject>();
+				B->SetStringField(TEXT("pin"), Pin->PinName.ToString());
+				B->SetStringField(TEXT("toId"), Next->NodeGuid.ToString(EGuidFormats::Short));
+				Branches.Add(MakeShared<FJsonValueObject>(B));
+
+				if (!Visited.Contains(Next->NodeGuid))
+				{
+					Queue.Enqueue(Next);
+				}
+			}
+		}
+		Step->SetArrayField(TEXT("branches"), Branches);
+		Steps.Add(MakeShared<FJsonValueObject>(Step));
+	}
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("graphName"), GraphName);
+	Result->SetStringField(TEXT("entryPoint"), Entry->GetNodeTitle(ENodeTitleType::ListView).ToString());
+	Result->SetStringField(TEXT("entryId"), Entry->NodeGuid.ToString(EGuidFormats::Short));
+	Result->SetArrayField(TEXT("steps"), Steps);
+	Result->SetNumberField(TEXT("stepCount"), Steps.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FBlueprintHandlers::GetBlueprintDependencies(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	const bool bReverse = OptionalBool(Params, TEXT("reverse"), false);
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	IAssetRegistry& Registry = AssetRegistryModule.Get();
+	const FName PackageName = Blueprint->GetOutermost()->GetFName();
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetBoolField(TEXT("reverse"), bReverse);
+
+	if (bReverse)
+	{
+		TArray<FName> Referencers;
+		Registry.GetReferencers(PackageName, Referencers, UE::AssetRegistry::EDependencyCategory::Package);
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(Referencers.Num());
+		for (const FName& Ref : Referencers)
+		{
+			Arr.Add(MakeShared<FJsonValueString>(Ref.ToString()));
+		}
+		Result->SetArrayField(TEXT("referencers"), Arr);
+		Result->SetNumberField(TEXT("referencerCount"), Arr.Num());
+		return MCPResult(Result);
+	}
+
+	// Forward: asset-level deps from registry + class-level walk.
+	TArray<FName> AssetDeps;
+	Registry.GetDependencies(PackageName, AssetDeps, UE::AssetRegistry::EDependencyCategory::Package);
+	TArray<TSharedPtr<FJsonValue>> AssetArr;
+	AssetArr.Reserve(AssetDeps.Num());
+	for (const FName& Dep : AssetDeps)
+	{
+		AssetArr.Add(MakeShared<FJsonValueString>(Dep.ToString()));
+	}
+
+	// Classes referenced by variables + function signatures + parent class.
+	TSet<FString> Classes;
+	if (UClass* ParentClass = Blueprint->ParentClass)
+	{
+		Classes.Add(ParentClass->GetPathName());
+	}
+	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
+	{
+		if (UObject* Sub = Var.VarType.PinSubCategoryObject.Get())
+		{
+			Classes.Add(Sub->GetPathName());
+		}
+	}
+
+	// Functions called via K2Node_CallFunction across all graphs.
+	TSet<FString> Functions;
+	auto VisitGraph = [&Functions](UEdGraph* G)
+	{
+		if (!G) return;
+		for (UEdGraphNode* Node : G->Nodes)
+		{
+			if (UK2Node_CallFunction* Call = Cast<UK2Node_CallFunction>(Node))
+			{
+				if (UFunction* Fn = Call->GetTargetFunction())
+				{
+					Functions.Add(Fn->GetPathName());
+				}
+			}
+		}
+	};
+	for (UEdGraph* G : Blueprint->UbergraphPages) VisitGraph(G);
+	for (UEdGraph* G : Blueprint->FunctionGraphs) VisitGraph(G);
+
+	TArray<TSharedPtr<FJsonValue>> ClassArr;
+	for (const FString& C : Classes) ClassArr.Add(MakeShared<FJsonValueString>(C));
+	TArray<TSharedPtr<FJsonValue>> FnArr;
+	for (const FString& F : Functions) FnArr.Add(MakeShared<FJsonValueString>(F));
+
+	Result->SetArrayField(TEXT("assets"), AssetArr);
+	Result->SetArrayField(TEXT("classes"), ClassArr);
+	Result->SetArrayField(TEXT("functions"), FnArr);
+	Result->SetNumberField(TEXT("assetCount"), AssetArr.Num());
+	Result->SetNumberField(TEXT("classCount"), ClassArr.Num());
+	Result->SetNumberField(TEXT("functionCount"), FnArr.Num());
+	return MCPResult(Result);
 }
 
 UBlueprint* FBlueprintHandlers::LoadBlueprint(const FString& AssetPath)
@@ -3003,5 +3266,149 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
 	Result->SetStringField(TEXT("value"), Value);
+	return MCPResult(Result);
+}
+
+// ===========================================================================
+// v0.7.11 — Blueprint authoring depth
+// ===========================================================================
+
+TSharedPtr<FJsonValue> FBlueprintHandlers::DuplicateBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SourcePath;
+	if (auto Err = RequireString(Params, TEXT("sourcePath"), SourcePath)) return Err;
+	FString DestinationPath;
+	if (auto Err = RequireString(Params, TEXT("destinationPath"), DestinationPath)) return Err;
+
+	UObject* Dup = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestinationPath);
+	if (!Dup) return MCPError(FString::Printf(TEXT("Failed to duplicate '%s'"), *SourcePath));
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("sourcePath"), SourcePath);
+	Result->SetStringField(TEXT("destinationPath"), Dup->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Dup->GetPathName());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FBlueprintHandlers::AddLocalVariable(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	FString FunctionName;
+	if (auto Err = RequireString(Params, TEXT("functionName"), FunctionName)) return Err;
+	FString VarName;
+	if (auto Err = RequireString(Params, TEXT("name"), VarName)) return Err;
+	FString TypeStr = OptionalString(Params, TEXT("varType"), TEXT("bool"));
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	// Find the function graph and its FunctionEntry node.
+	UEdGraph* FuncGraph = nullptr;
+	for (UEdGraph* G : Blueprint->FunctionGraphs)
+	{
+		if (G && G->GetName() == FunctionName) { FuncGraph = G; break; }
+	}
+	if (!FuncGraph) return MCPError(FString::Printf(TEXT("Function not found: %s"), *FunctionName));
+
+	UK2Node_FunctionEntry* Entry = nullptr;
+	for (UEdGraphNode* Node : FuncGraph->Nodes)
+	{
+		if (UK2Node_FunctionEntry* E = Cast<UK2Node_FunctionEntry>(Node)) { Entry = E; break; }
+	}
+	if (!Entry) return MCPError(TEXT("Function has no entry node"));
+
+	FEdGraphPinType PinType = MakePinType(TypeStr);
+	FBPVariableDescription NewVar;
+	NewVar.VarName = FName(*VarName);
+	NewVar.VarGuid = FGuid::NewGuid();
+	NewVar.VarType = PinType;
+	NewVar.FriendlyName = VarName;
+	Entry->Modify();
+	Entry->LocalVariables.Add(NewVar);
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("functionName"), FunctionName);
+	Result->SetStringField(TEXT("name"), VarName);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FBlueprintHandlers::ListLocalVariables(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	FString FunctionName;
+	if (auto Err = RequireString(Params, TEXT("functionName"), FunctionName)) return Err;
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	UEdGraph* FuncGraph = nullptr;
+	for (UEdGraph* G : Blueprint->FunctionGraphs)
+	{
+		if (G && G->GetName() == FunctionName) { FuncGraph = G; break; }
+	}
+	if (!FuncGraph) return MCPError(FString::Printf(TEXT("Function not found: %s"), *FunctionName));
+
+	UK2Node_FunctionEntry* Entry = nullptr;
+	for (UEdGraphNode* Node : FuncGraph->Nodes)
+	{
+		if (UK2Node_FunctionEntry* E = Cast<UK2Node_FunctionEntry>(Node)) { Entry = E; break; }
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Arr;
+	if (Entry)
+	{
+		for (const FBPVariableDescription& Var : Entry->LocalVariables)
+		{
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("name"), Var.VarName.ToString());
+			O->SetStringField(TEXT("type"), Var.VarType.PinCategory.ToString());
+			Arr.Add(MakeShared<FJsonValueObject>(O));
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("functionName"), FunctionName);
+	Result->SetArrayField(TEXT("variables"), Arr);
+	Result->SetNumberField(TEXT("variableCount"), Arr.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FBlueprintHandlers::ValidateBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	// Run compile without saving; collect diagnostics from the compiler result log.
+	FCompilerResultsLog Log;
+	Log.bSilentMode = true;
+	FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipSave, &Log);
+
+	TArray<TSharedPtr<FJsonValue>> Errors;
+	for (TSharedRef<FTokenizedMessage> Msg : Log.Messages)
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("severity"), Msg->GetSeverity() == EMessageSeverity::Error ? TEXT("Error")
+			: Msg->GetSeverity() == EMessageSeverity::Warning ? TEXT("Warning") : TEXT("Info"));
+		O->SetStringField(TEXT("message"), Msg->ToText().ToString());
+		Errors.Add(MakeShared<FJsonValueObject>(O));
+	}
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetNumberField(TEXT("errorCount"), Log.NumErrors);
+	Result->SetNumberField(TEXT("warningCount"), Log.NumWarnings);
+	Result->SetBoolField(TEXT("valid"), Log.NumErrors == 0);
+	Result->SetArrayField(TEXT("messages"), Errors);
 	return MCPResult(Result);
 }

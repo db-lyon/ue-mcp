@@ -37,6 +37,11 @@ export const animationTool: ToolDef = categoryTool(
     create_ik_rig:        bp("Create IKRigDefinition asset. Params: name, skeletalMeshPath, packagePath?", "create_ik_rig"),
     read_ik_rig:          bp("Read IK Rig chains, solvers, skeleton. Params: assetPath", "read_ik_rig"),
     list_control_rig_variables: bp("List ControlRig variables and hierarchy. Params: assetPath", "list_control_rig_variables"),
+    set_root_motion:    bp("Set root motion settings on AnimSequence. Params: assetPath, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?", "set_root_motion_settings", (p) => ({ path: p.assetPath, enableRootMotion: p.enableRootMotion, forceRootLock: p.forceRootLock, useNormalizedRootMotionScale: p.useNormalizedRootMotionScale, rootMotionRootLock: p.rootMotionRootLock })),
+    add_virtual_bone:   bp("Add virtual bone. Params: skeletonPath, sourceBone, targetBone", "add_virtual_bone"),
+    remove_virtual_bone: bp("Remove virtual bone. Params: skeletonPath, virtualBoneName", "remove_virtual_bone"),
+    create_composite:   bp("Create AnimComposite. Params: name, skeletonPath, packagePath?", "create_anim_composite"),
+    list_modifiers:     bp("List applied animation modifiers. Params: assetPath", "list_anim_modifiers", (p) => ({ path: p.assetPath })),
   },
   undefined,
   {
@@ -82,6 +87,13 @@ export const animationTool: ToolDef = categoryTool(
     linkedSection: z.string().optional().describe("Next section name to link to"),
     // IK Rig params (#93)
     skeletalMeshPath: z.string().optional().describe("Path to skeletal mesh for create_ik_rig"),
+    enableRootMotion: z.boolean().optional(),
+    forceRootLock: z.boolean().optional(),
+    useNormalizedRootMotionScale: z.boolean().optional(),
+    rootMotionRootLock: z.string().optional().describe("RefPose|AnimFirstFrame|Zero"),
+    sourceBone: z.string().optional(),
+    targetBone: z.string().optional(),
+    virtualBoneName: z.string().optional(),
     keyframes: z.array(z.object({
       frame: z.number(),
       location: Vec3.optional(),

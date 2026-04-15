@@ -97,6 +97,144 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// Generic reimport / export
 	Registry.RegisterHandler(TEXT("reimport_asset"), &ReimportAsset);
 	Registry.RegisterHandler(TEXT("export_asset"), &ExportAsset);
+
+	// v0.7.8 stubs — FTS5-backed asset search
+	Registry.RegisterHandler(TEXT("search_assets_fts"), &SearchAssetsFTS);
+	Registry.RegisterHandler(TEXT("reindex_assets_fts"), &ReindexAssetsFTS);
+}
+
+// ---------------------------------------------------------------------------
+// v0.7.8 STUBS — FTS5-backed asset index (Milestone A)
+// Strategy:
+//  - Index lives at <project>/Saved/MCP/asset_index.sqlite (SQLite with FTS5).
+//  - Columns: name, path, class, tags, referencers (tokenized).
+//  - Populate via AssetRegistry scan; refresh via OnAssetAdded/Renamed/Removed hooks.
+//  - search_assets_fts: MATCH on name/tags/class with bm25 ranking, limit/offset paging.
+// ---------------------------------------------------------------------------
+
+// Tokenize on non-alnum boundaries, lowercase, drop empties.
+static void TokenizeLower(const FString& In, TArray<FString>& Out)
+{
+	FString Buf;
+	Buf.Reserve(In.Len());
+	for (TCHAR C : In)
+	{
+		if (FChar::IsAlnum(C)) Buf.AppendChar(FChar::ToLower(C));
+		else if (Buf.Len()) { Out.Add(Buf); Buf.Reset(); }
+	}
+	if (Buf.Len()) Out.Add(Buf);
+}
+
+// Score a document against query tokens. Exact whole-token hit = 10; prefix hit = 5; substring = 2.
+// Name field scores x3, class x2, path x1 (weights bias toward asset name matches).
+static int32 ScoreAsset(const TArray<FString>& QueryTokens, const TArray<FString>& NameToks, const TArray<FString>& ClassToks, const TArray<FString>& PathToks)
+{
+	int32 Score = 0;
+	auto ScoreField = [&](const TArray<FString>& DocToks, int32 Weight)
+	{
+		for (const FString& Q : QueryTokens)
+		{
+			int32 Best = 0;
+			for (const FString& D : DocToks)
+			{
+				if (D == Q)                    { Best = FMath::Max(Best, 10); }
+				else if (D.StartsWith(Q))      { Best = FMath::Max(Best, 5); }
+				else if (D.Contains(Q))        { Best = FMath::Max(Best, 2); }
+			}
+			Score += Best * Weight;
+		}
+	};
+	ScoreField(NameToks, 3);
+	ScoreField(ClassToks, 2);
+	ScoreField(PathToks, 1);
+	return Score;
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::SearchAssetsFTS(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Query;
+	if (auto Err = RequireString(Params, TEXT("query"), Query)) return Err;
+	const int32 MaxResults = OptionalInt(Params, TEXT("maxResults"), 50);
+	const FString ClassFilter = OptionalString(Params, TEXT("classFilter"), TEXT(""));
+
+	TArray<FString> QueryToks;
+	TokenizeLower(Query, QueryToks);
+	if (QueryToks.Num() == 0)
+	{
+		return MCPError(TEXT("Query contained no searchable tokens"));
+	}
+
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	IAssetRegistry& Registry = AssetRegistryModule.Get();
+
+	TArray<FAssetData> AllAssets;
+	Registry.GetAllAssets(AllAssets, /*bIncludeOnlyOnDiskAssets=*/true);
+
+	struct FHit { int32 Score; const FAssetData* Data; };
+	TArray<FHit> Hits;
+	Hits.Reserve(1024);
+
+	for (const FAssetData& Data : AllAssets)
+	{
+		const FString ClassStr = Data.AssetClassPath.GetAssetName().ToString();
+		if (!ClassFilter.IsEmpty() && !ClassStr.Contains(ClassFilter)) continue;
+
+		const FString NameStr = Data.AssetName.ToString();
+		const FString PathStr = Data.PackageName.ToString();
+
+		TArray<FString> NameToks, ClassToks, PathToks;
+		TokenizeLower(NameStr, NameToks);
+		TokenizeLower(ClassStr, ClassToks);
+		TokenizeLower(PathStr, PathToks);
+
+		const int32 S = ScoreAsset(QueryToks, NameToks, ClassToks, PathToks);
+		if (S > 0) Hits.Add({ S, &Data });
+	}
+
+	Hits.Sort([](const FHit& A, const FHit& B) { return A.Score > B.Score; });
+	const int32 Kept = FMath::Min(Hits.Num(), MaxResults);
+
+	TArray<TSharedPtr<FJsonValue>> Arr;
+	Arr.Reserve(Kept);
+	for (int32 i = 0; i < Kept; ++i)
+	{
+		const FAssetData& D = *Hits[i].Data;
+		TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
+		R->SetStringField(TEXT("path"), D.PackageName.ToString());
+		R->SetStringField(TEXT("name"), D.AssetName.ToString());
+		R->SetStringField(TEXT("class"), D.AssetClassPath.GetAssetName().ToString());
+		R->SetNumberField(TEXT("score"), Hits[i].Score);
+		Arr.Add(MakeShared<FJsonValueObject>(R));
+	}
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	Result->SetStringField(TEXT("query"), Query);
+	Result->SetNumberField(TEXT("totalMatched"), Hits.Num());
+	Result->SetNumberField(TEXT("resultCount"), Arr.Num());
+	Result->SetArrayField(TEXT("results"), Arr);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::ReindexAssetsFTS(const TSharedPtr<FJsonObject>& Params)
+{
+	// No persistent index yet — ranked search runs live against the asset registry,
+	// which keeps itself current. This endpoint forces a registry rescan so newly
+	// added assets on disk become searchable immediately.
+	const FString Directory = OptionalString(Params, TEXT("directory"), TEXT("/Game"));
+
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	IAssetRegistry& Registry = AssetRegistryModule.Get();
+
+	TArray<FString> ScanPaths = { Directory };
+	Registry.ScanPathsSynchronous(ScanPaths, /*bForceRescan=*/true);
+
+	TArray<FAssetData> Found;
+	Registry.GetAssetsByPath(FName(*Directory), Found, /*bRecursive=*/true);
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	Result->SetStringField(TEXT("directory"), Directory);
+	Result->SetNumberField(TEXT("indexedCount"), Found.Num());
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ListAssets(const TSharedPtr<FJsonObject>& Params)

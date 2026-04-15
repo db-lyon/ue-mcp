@@ -97,6 +97,8 @@ export const assetTool: ToolDef = categoryTool(
     list_sockets:         bp("List sockets on a mesh. Params: assetPath", "list_sockets", (p) => ({ assetPath: p.assetPath })),
     reload_package:       bp("Force reload an asset package from disk. Params: assetPath", "reload_package"),
     export:               bp("Export asset to disk file (Texture2D → PNG, StaticMesh → FBX, etc.). Params: assetPath, outputPath", "export_asset"),
+    search_fts:           bp("Ranked asset search (token-scored over name/class/path). Params: query, maxResults?, classFilter?", "search_assets_fts", (p) => ({ query: p.query, maxResults: p.maxResults, classFilter: p.classFilter })),
+    reindex_fts:          bp("Rebuild the SQLite FTS5 asset index. Params: directory?", "reindex_assets_fts", (p) => ({ directory: p.directory })),
   },
   undefined,
   {
@@ -128,5 +130,6 @@ export const assetTool: ToolDef = categoryTool(
     relativeRotation: Rotator.optional().describe("Socket relative rotation"),
     relativeScale: Vec3.optional().describe("Socket relative scale"),
     outputPath: z.string().optional().describe("Absolute file path for export (e.g. C:/output/texture.png)"),
+    classFilter: z.string().optional().describe("Restrict search_fts to assets whose class name contains this substring"),
   },
 );

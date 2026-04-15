@@ -66,4 +66,11 @@ private:
 
 	// Control Rig (#11)
 	static TSharedPtr<FJsonValue> ListControlRigVariables(const TSharedPtr<FJsonObject>& Params);
+
+	// v0.7.11 — depth
+	static TSharedPtr<FJsonValue> SetRootMotionSettings(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddVirtualBone(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveVirtualBone(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CreateAnimComposite(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListAnimModifiers(const TSharedPtr<FJsonObject>& Params);
 };

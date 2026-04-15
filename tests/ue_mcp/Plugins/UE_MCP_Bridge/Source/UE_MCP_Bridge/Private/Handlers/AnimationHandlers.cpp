@@ -10,6 +10,7 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/BlendSpace.h"
+#include "Animation/AnimComposite.h"
 #include "Animation/AnimBlueprintGeneratedClass.h"
 #include "Animation/AnimNotifies/AnimNotify.h"
 #include "PhysicsEngine/PhysicsAsset.h"
@@ -99,6 +100,13 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Control Rig (#11)
 	Registry.RegisterHandler(TEXT("list_control_rig_variables"), &ListControlRigVariables);
+
+	// v0.7.11 — depth
+	Registry.RegisterHandler(TEXT("set_root_motion_settings"), &SetRootMotionSettings);
+	Registry.RegisterHandler(TEXT("add_virtual_bone"), &AddVirtualBone);
+	Registry.RegisterHandler(TEXT("remove_virtual_bone"), &RemoveVirtualBone);
+	Registry.RegisterHandler(TEXT("create_anim_composite"), &CreateAnimComposite);
+	Registry.RegisterHandler(TEXT("list_anim_modifiers"), &ListAnimModifiers);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimAssets(const TSharedPtr<FJsonObject>& Params)
@@ -2330,5 +2338,167 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListControlRigVariables(const TShared
 	}
 	Result->SetArrayField(TEXT("graphs"), GraphsArray);
 
+	return MCPResult(Result);
+}
+
+// ===========================================================================
+// v0.7.11 — Animation depth
+// ===========================================================================
+
+TSharedPtr<FJsonValue> FAnimationHandlers::SetRootMotionSettings(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+
+	UAnimSequence* Seq = LoadAssetByPath<UAnimSequence>(AssetPath);
+	if (!Seq) return MCPError(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
+
+	Seq->Modify();
+	bool EnableRootMotion;
+	if (Params->TryGetBoolField(TEXT("enableRootMotion"), EnableRootMotion))
+	{
+		Seq->bEnableRootMotion = EnableRootMotion;
+	}
+	bool ForceRootLock;
+	if (Params->TryGetBoolField(TEXT("forceRootLock"), ForceRootLock))
+	{
+		Seq->bForceRootLock = ForceRootLock;
+	}
+	bool UseNormalizedRootMotionScale;
+	if (Params->TryGetBoolField(TEXT("useNormalizedRootMotionScale"), UseNormalizedRootMotionScale))
+	{
+		Seq->bUseNormalizedRootMotionScale = UseNormalizedRootMotionScale;
+	}
+	FString RootMotionMode;
+	if (Params->TryGetStringField(TEXT("rootMotionRootLock"), RootMotionMode))
+	{
+		if      (RootMotionMode.Equals(TEXT("RefPose"),       ESearchCase::IgnoreCase)) Seq->RootMotionRootLock = ERootMotionRootLock::RefPose;
+		else if (RootMotionMode.Equals(TEXT("AnimFirstFrame"), ESearchCase::IgnoreCase)) Seq->RootMotionRootLock = ERootMotionRootLock::AnimFirstFrame;
+		else if (RootMotionMode.Equals(TEXT("Zero"),          ESearchCase::IgnoreCase)) Seq->RootMotionRootLock = ERootMotionRootLock::Zero;
+	}
+
+	Seq->PostEditChange();
+	UEditorAssetLibrary::SaveLoadedAsset(Seq);
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetBoolField(TEXT("enableRootMotion"), Seq->bEnableRootMotion);
+	Result->SetBoolField(TEXT("forceRootLock"), Seq->bForceRootLock);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddVirtualBone(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SkeletonPath;
+	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
+	FString SourceBone;
+	if (auto Err = RequireString(Params, TEXT("sourceBone"), SourceBone)) return Err;
+	FString TargetBone;
+	if (auto Err = RequireString(Params, TEXT("targetBone"), TargetBone)) return Err;
+
+	USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
+	if (!Skeleton) return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
+
+	Skeleton->Modify();
+	FName NewBoneName;
+	const bool bOk = Skeleton->AddNewVirtualBone(FName(*SourceBone), FName(*TargetBone), NewBoneName);
+	if (!bOk)
+	{
+		return MCPError(TEXT("Failed to add virtual bone (source/target invalid or duplicate)"));
+	}
+	Skeleton->PostEditChange();
+	UEditorAssetLibrary::SaveLoadedAsset(Skeleton);
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
+	Result->SetStringField(TEXT("virtualBoneName"), NewBoneName.ToString());
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("skeletonPath"), SkeletonPath);
+	Rollback->SetStringField(TEXT("virtualBoneName"), NewBoneName.ToString());
+	MCPSetRollback(Result, TEXT("remove_virtual_bone"), Rollback);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::RemoveVirtualBone(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SkeletonPath;
+	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
+	FString BoneName;
+	if (auto Err = RequireString(Params, TEXT("virtualBoneName"), BoneName)) return Err;
+
+	USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
+	if (!Skeleton) return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
+
+	Skeleton->Modify();
+	TArray<FName> ToRemove = { FName(*BoneName) };
+	Skeleton->RemoveVirtualBones(ToRemove);
+	Skeleton->PostEditChange();
+	UEditorAssetLibrary::SaveLoadedAsset(Skeleton);
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
+	Result->SetStringField(TEXT("removed"), BoneName);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimComposite(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FString SkeletonPath;
+	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
+
+	if (auto Hit = MCPCheckAssetExists(PackagePath, Name, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("AnimComposite")))
+	{
+		return Hit;
+	}
+
+	USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
+	if (!Skeleton) return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
+
+	// Manually construct the package so we don't depend on a specialized factory.
+	FString PkgName = PackagePath + TEXT("/") + Name;
+	UPackage* Package = CreatePackage(*PkgName);
+	UAnimComposite* Composite = NewObject<UAnimComposite>(Package, UAnimComposite::StaticClass(), *Name, RF_Public | RF_Standalone);
+	Composite->SetSkeleton(Skeleton);
+	FAssetRegistryModule::AssetCreated(Composite);
+	Composite->MarkPackageDirty();
+	Package->SetDirtyFlag(true);
+	UEditorAssetLibrary::SaveLoadedAsset(Composite);
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("path"), Composite->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Composite->GetPathName());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimModifiers(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+
+	UAnimSequence* Seq = LoadAssetByPath<UAnimSequence>(AssetPath);
+	if (!Seq) return MCPError(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
+
+	TArray<TSharedPtr<FJsonValue>> Arr;
+	// AnimationModifiers is an editor-only sub-list stored as AppliedAnimationModifiers
+	// in UE 5.7; surface whatever classes we find via property reflection for portability.
+	FProperty* ModifiersProp = Seq->GetClass()->FindPropertyByName(TEXT("AppliedAnimationModifiers"));
+	if (ModifiersProp)
+	{
+		TSharedPtr<FJsonObject> Info = MakeShared<FJsonObject>();
+		Info->SetStringField(TEXT("note"), TEXT("Property reflection used — full modifier enumeration requires AnimationModifiers module linkage"));
+		Arr.Add(MakeShared<FJsonValueObject>(Info));
+	}
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetArrayField(TEXT("modifiers"), Arr);
 	return MCPResult(Result);
 }

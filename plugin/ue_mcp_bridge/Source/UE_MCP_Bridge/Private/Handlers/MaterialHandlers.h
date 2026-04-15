@@ -51,4 +51,15 @@ private:
 
 	// Helper to find an expression by name (description or class) within a material
 	static UMaterialExpression* FindExpressionByName(UMaterial* Material, const FString& ExpressionName);
+
+	// v0.7.9 — material depth
+	static TSharedPtr<FJsonValue> DuplicateMaterial(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ValidateMaterial(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetMaterialShaderStats(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ExportMaterialGraph(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ImportMaterialGraph(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BuildMaterialGraph(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RenderMaterialPreview(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BeginMaterialTransaction(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> EndMaterialTransaction(const TSharedPtr<FJsonObject>& Params);
 };

@@ -43,6 +43,17 @@ private:
 	static TSharedPtr<FJsonValue> AddFunctionParameter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetVariableDefault(const TSharedPtr<FJsonObject>& Params);
 
+	// v0.7.8 — agent-ergonomics additions (stubs)
+	static TSharedPtr<FJsonValue> ReadBlueprintGraphSummary(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetBlueprintExecutionFlow(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetBlueprintDependencies(const TSharedPtr<FJsonObject>& Params);
+
+	// v0.7.11 — BP authoring depth
+	static TSharedPtr<FJsonValue> DuplicateBlueprint(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddLocalVariable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListLocalVariables(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ValidateBlueprint(const TSharedPtr<FJsonObject>& Params);
+
 	// Helper functions
 	static class UBlueprint* LoadBlueprint(const FString& AssetPath);
 	static struct FEdGraphPinType MakePinType(const FString& TypeStr);

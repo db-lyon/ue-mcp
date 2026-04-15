@@ -1,6 +1,6 @@
 # UE-MCP
 
-**Unreal Engine Model Context Protocol Server** — gives AI assistants deep read/write access to the Unreal Editor through 19 category tools covering 300+ actions.
+**Unreal Engine Model Context Protocol Server** — gives AI assistants deep read/write access to the Unreal Editor through 19 category tools covering 360+ actions.
 
 ```mermaid
 flowchart LR
