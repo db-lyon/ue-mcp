@@ -296,6 +296,18 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 			Sequence->BindPossessableObject(BindingGuid, *TargetActor, World);
 		}
 
+		// Idempotency: existing track of this class on binding?
+		if (UMovieSceneTrack* ExistingTrack = MovieScene->FindTrack(TrackClass, BindingGuid))
+		{
+			MCPSetExisted(Result);
+			Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+			Result->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
+			Result->SetStringField(TEXT("trackType"), TrackType);
+			Result->SetStringField(TEXT("trackClass"), ExistingTrack->GetClass()->GetName());
+			Result->SetStringField(TEXT("scope"), TEXT("binding"));
+			return MCPResult(Result);
+		}
+
 		// Add track to binding
 		UMovieSceneTrack* NewTrack = MovieScene->AddTrack(TrackClass, BindingGuid);
 		if (!NewTrack)
@@ -303,6 +315,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 			return MCPError(FString::Printf(TEXT("Failed to add %s track to actor '%s'"), *TrackType, *ActorLabel));
 		}
 
+		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 		Result->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
 		Result->SetStringField(TEXT("trackType"), TrackType);
@@ -311,6 +324,20 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 	}
 	else
 	{
+		// Idempotency: any existing master track of this class?
+		TArray<UMovieSceneTrack*> MasterTracks = MovieScene->GetTracks();
+		for (UMovieSceneTrack* T : MasterTracks)
+		{
+			if (T && T->IsA(TrackClass))
+			{
+				MCPSetExisted(Result);
+				Result->SetStringField(TEXT("trackType"), TrackType);
+				Result->SetStringField(TEXT("trackClass"), T->GetClass()->GetName());
+				Result->SetStringField(TEXT("scope"), TEXT("master"));
+				return MCPResult(Result);
+			}
+		}
+
 		// Add as master track
 		UMovieSceneTrack* NewTrack = MovieScene->AddTrack(TrackClass);
 		if (!NewTrack)
@@ -318,6 +345,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 			return MCPError(FString::Printf(TEXT("Failed to add master %s track"), *TrackType));
 		}
 
+		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("trackType"), TrackType);
 		Result->SetStringField(TEXT("trackClass"), NewTrack->GetClass()->GetName());
 		Result->SetStringField(TEXT("scope"), TEXT("master"));
