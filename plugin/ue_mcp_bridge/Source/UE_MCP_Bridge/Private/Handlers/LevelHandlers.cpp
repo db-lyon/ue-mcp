@@ -1298,6 +1298,52 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 	FString ValueStr;
 	if ((*ValueField)->TryGetString(ValueStr))
 	{
+		// #121: resolve bare actor labels (e.g. TargetActor=BP_Portcullis) to full object paths
+		// so ImportText_Direct can resolve TObjectPtr<AActor> fields in struct arrays.
+		if (!ValueStr.IsEmpty() && ValueStr.Contains(TEXT("=")))
+		{
+			FString Result;
+			Result.Reserve(ValueStr.Len());
+			int32 i = 0;
+			while (i < ValueStr.Len())
+			{
+				TCHAR C = ValueStr[i];
+				Result.AppendChar(C);
+				if (C == TEXT('='))
+				{
+					// Gather the following identifier token (letters, digits, underscore) — stop before quotes/parens/paths
+					int32 Start = i + 1;
+					int32 End = Start;
+					while (End < ValueStr.Len())
+					{
+						TCHAR TC = ValueStr[End];
+						if (FChar::IsAlnum(TC) || TC == TEXT('_')) End++;
+						else break;
+					}
+					if (End > Start && (End >= ValueStr.Len() || ValueStr[End] == TEXT(',') || ValueStr[End] == TEXT(')') || ValueStr[End] == TEXT(']') || ValueStr[End] == TEXT('}')))
+					{
+						FString Token = ValueStr.Mid(Start, End - Start);
+						// Skip obvious non-identifiers
+						if (Token != TEXT("True") && Token != TEXT("False") && Token != TEXT("None") && !Token.IsNumeric())
+						{
+							// Try to resolve as actor label
+							for (TActorIterator<AActor> It(World); It; ++It)
+							{
+								if (It->GetActorLabel() == Token)
+								{
+									Result.Append(It->GetPathName());
+									i = End;
+									goto AppendDone;
+								}
+							}
+						}
+					}
+				}
+			AppendDone:
+				i++;
+			}
+			ValueStr = Result;
+		}
 		Prop->ImportText_Direct(*ValueStr, Prop->ContainerPtrToValuePtr<void>(TargetComp), TargetComp, PPF_None);
 	}
 	else
