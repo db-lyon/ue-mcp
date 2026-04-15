@@ -39,6 +39,7 @@ public class UE_MCP_Bridge : ModuleRules
 				"EditorWidgets",
 				"EnhancedInput",
 				"Foliage",
+				"GameProjectGeneration",
 				"GameplayAbilities",
 				"GameplayTasks",
 				"HTTP",

@@ -3,6 +3,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "Misc/CoreDelegates.h"
+#include "GenericPlatform/GenericPlatformMisc.h" // EAppMsgCategory
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
 #include "Widgets/Text/STextBlock.h"
@@ -29,11 +30,13 @@ void FDialogHandlers::InstallDialogHook()
 		return;
 	}
 
-	// UE 5.7: ModalErrorMessage was removed. Use OnModalMessageBox instead if available.
-	// For now, we skip the hook — dialog listing/responding still works via Slate.
+	// UE 5.7 routes FMessageDialog::Open through FCoreDelegates::ModalMessageDialog
+	// when bound. Bind our handler so SetDialogPolicy can auto-answer "save changes?",
+	// "overwrite?", and other prompts that would otherwise block the editor.
+	FCoreDelegates::ModalMessageDialog.BindStatic(&FDialogHandlers::HandleModalDialogV2);
 	bHookInstalled = true;
 
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Dialog hook installed"));
+	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Dialog hook installed (ModalMessageDialog delegate bound)"));
 }
 
 void FDialogHandlers::RemoveDialogHook()
@@ -43,10 +46,16 @@ void FDialogHandlers::RemoveDialogHook()
 		return;
 	}
 
+	FCoreDelegates::ModalMessageDialog.Unbind();
 	bHookInstalled = false;
 	Policies.Empty();
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Dialog hook removed"));
+}
+
+EAppReturnType::Type FDialogHandlers::HandleModalDialogV2(EAppMsgCategory /*Category*/, EAppMsgType::Type MsgType, const FText& Text, const FText& Title)
+{
+	return HandleModalDialog(MsgType, Text, Title);
 }
 
 void FDialogHandlers::AddDefaultPolicy(const FString& Pattern, EAppReturnType::Type Response)

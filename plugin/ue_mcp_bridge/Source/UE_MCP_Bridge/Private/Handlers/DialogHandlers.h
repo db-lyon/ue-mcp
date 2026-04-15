@@ -35,6 +35,8 @@ private:
 
 	// The hooked dialog handler
 	static EAppReturnType::Type HandleModalDialog(EAppMsgType::Type MsgType, const FText& Text, const FText& Title);
+	// FCoreDelegates::ModalMessageDialog (UE 5.7) signature includes an EAppMsgCategory.
+	static EAppReturnType::Type HandleModalDialogV2(enum EAppMsgCategory Category, EAppMsgType::Type MsgType, const FText& Text, const FText& Title);
 
 	// Convert string to EAppReturnType
 	static EAppReturnType::Type ParseResponseType(const FString& ResponseStr);

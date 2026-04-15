@@ -16,7 +16,7 @@ interface PendingRequest {
 /** Minimal interface for tool handlers — enables mocking in tests. */
 export interface IBridge {
   readonly isConnected: boolean;
-  call(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   connect(timeoutMs?: number): Promise<void>;
 }
 
@@ -89,7 +89,7 @@ export class EditorBridge implements IBridge {
     }
   }
 
-  async call(method: string, params?: Record<string, unknown>): Promise<unknown> {
+  async call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown> {
     if (!this.isConnected) {
       throw new McpError(
         ErrorCode.NOT_CONNECTED,
@@ -99,12 +99,13 @@ export class EditorBridge implements IBridge {
 
     const id = String(++this.idCounter);
     const request = { id, method, params: params ?? {} };
+    const timeout = timeoutMs ?? 30_000;
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new McpError(ErrorCode.BRIDGE_TIMEOUT, `Bridge call '${method}' timed out after 30s`));
-      }, 30_000);
+        reject(new McpError(ErrorCode.BRIDGE_TIMEOUT, `Bridge call '${method}' timed out after ${Math.round(timeout / 1000)}s`));
+      }, timeout);
 
       this.pending.set(id, { resolve, reject, timer });
       this.ws!.send(JSON.stringify(request));

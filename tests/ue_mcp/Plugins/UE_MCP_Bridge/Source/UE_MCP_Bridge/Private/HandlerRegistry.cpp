@@ -17,6 +17,24 @@ void FMCPHandlerRegistry::RegisterHandler(const FString& MethodName, FHandlerFun
 	CppHandlers.Add(MethodName, Handler);
 }
 
+void FMCPHandlerRegistry::RegisterHandlerWithTimeout(const FString& MethodName, FHandlerFunction Handler, float TimeoutSeconds)
+{
+	CppHandlers.Add(MethodName, Handler);
+	if (TimeoutSeconds > 0.0f)
+	{
+		HandlerTimeouts.Add(MethodName, TimeoutSeconds);
+	}
+}
+
+float FMCPHandlerRegistry::GetHandlerTimeout(const FString& MethodName) const
+{
+	if (const float* V = HandlerTimeouts.Find(MethodName))
+	{
+		return *V;
+	}
+	return 0.0f;
+}
+
 void FMCPHandlerRegistry::RegisterPythonHandler(const FString& MethodName, const FString& PythonScriptPath)
 {
 	FPythonHandlerInfo Info;
@@ -64,6 +82,7 @@ void FMCPHandlerRegistry::Clear()
 {
 	CppHandlers.Empty();
 	PythonHandlers.Empty();
+	HandlerTimeouts.Empty();
 }
 
 TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecutePythonHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)

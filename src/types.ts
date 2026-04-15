@@ -21,6 +21,8 @@ export interface ActionSpec {
   bridge?: string;
   mapParams?: (p: Record<string, unknown>) => Record<string, unknown>;
   handler?: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
+  /** Override the bridge call timeout in milliseconds. Defaults to 30s. */
+  timeoutMs?: number;
 }
 
 export function categoryTool(
@@ -59,7 +61,7 @@ export function categoryTool(
       }
       if (spec.bridge) {
         const mapped = spec.mapParams ? spec.mapParams(params) : stripAction(params);
-        return ctx.bridge.call(spec.bridge, mapped);
+        return ctx.bridge.call(spec.bridge, mapped, spec.timeoutMs);
       }
       throw new McpError(ErrorCode.NO_HANDLER, `Action '${action}' has no handler or bridge method`);
     },

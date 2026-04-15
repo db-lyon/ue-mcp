@@ -21,6 +21,17 @@ void FUE_MCP_BridgeModule::StartupModule()
 	// slips through, decline it rather than blocking the game thread forever.
 	FDialogHandlers::AddDefaultPolicy(TEXT("already exists"), EAppReturnType::No);
 	FDialogHandlers::AddDefaultPolicy(TEXT("Overwrite"), EAppReturnType::No);
+	// Safety-net for the editor's auto "save level / save unsaved" prompts —
+	// when an agent session ends or the editor closes, these would otherwise
+	// block the main thread waiting on a human. Default to "Discard".
+	// (Agents that actually want to persist changes still call project(build)
+	//  / level(save) / asset(save) explicitly.)
+	FDialogHandlers::AddDefaultPolicy(TEXT("Save Changes"), EAppReturnType::No);
+	FDialogHandlers::AddDefaultPolicy(TEXT("Save Content"), EAppReturnType::No);
+	FDialogHandlers::AddDefaultPolicy(TEXT("Unsaved"), EAppReturnType::No);
+	FDialogHandlers::AddDefaultPolicy(TEXT("Untitled"), EAppReturnType::No);
+	FDialogHandlers::AddDefaultPolicy(TEXT("save your changes"), EAppReturnType::No);
+	FDialogHandlers::AddDefaultPolicy(TEXT("save the level"), EAppReturnType::No);
 
 	if (G_BridgeServer->Start())
 	{

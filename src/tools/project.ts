@@ -293,6 +293,143 @@ export const projectTool: ToolDef = categoryTool(
     set_config: bp("Write to INI. Params: configName, section, key, value", "set_config"),
     build: bp("Build C++ project. Params: configuration?, platform?, clean?", "build_project"),
     generate_project_files: bp("Generate IDE project files (Visual Studio, Xcode, etc.)", "generate_project_files"),
+
+    // v0.7.13 — native C++ authoring. Bridge handlers wrap
+    // GameProjectUtils / ILiveCodingModule (same APIs used by the editor's
+    // File → New C++ Class and Live Coding menus).
+    create_cpp_class: {
+      description: "Create a new native UCLASS in a project module. Uses the same engine template path as File → New C++ Class. Writes .h + .cpp; returns both paths plus needsEditorRestart (true unless Live Coding successfully hot-reloaded). Params: className (no prefix), parentClass? (default UObject; accepts short names like 'Actor' or /Script/<Module>.<Class> paths), moduleName? (default: first project module, use list_project_modules to pick), classDomain? ('public'|'private'|'classes', default public), subPath?",
+      bridge: "create_cpp_class",
+      // AddCodeToProject regenerates IDE project files synchronously — can
+      // easily exceed the default 30-second cap on first use.
+      timeoutMs: 300_000,
+      mapParams: (p) => ({
+        className: p.className,
+        parentClass: p.parentClass,
+        moduleName: p.moduleName,
+        classDomain: p.classDomain,
+        subPath: p.subPath,
+      }),
+    },
+    list_project_modules: bp(
+      "List native modules in the current project (name, host type, source path). Feed moduleName from here into create_cpp_class.",
+      "list_project_modules",
+      () => ({}),
+    ),
+    live_coding_compile: {
+      description: "Trigger a Live Coding compile (Windows only). Hot-patches method bodies of existing UCLASSes without editor restart — the fast inner loop for UFUNCTION implementations. Does NOT reliably register brand-new UCLASSes; use build_project + editor restart for those. Params: wait? (default false — fire and return 'in_progress').",
+      bridge: "live_coding_compile",
+      timeoutMs: 300_000,
+      mapParams: (p) => ({ wait: p.wait }),
+    },
+    live_coding_status: bp(
+      "Report Live Coding availability/state (available, started, enabledForSession, compiling). Helps choose between live_coding_compile and build_project.",
+      "live_coding_status",
+      () => ({}),
+    ),
+
+    write_cpp_file: {
+      description:
+        "Write a .h / .cpp / .inl file under the project's Source/ tree. Used to append UPROPERTYs/UFUNCTIONs or method bodies after create_cpp_class. Writes are scoped to Source/ for safety. Params: path (relative to Source/ or absolute within Source/), content (full file contents). After editing, call live_coding_compile (for existing classes) or build_project (for new classes).",
+      handler: async (ctx, p) => {
+        ctx.project.ensureLoaded();
+        const sourceDir = path.join(ctx.project.projectDir!, "Source");
+        const rel = p.path as string;
+        if (!rel) throw new Error("Missing 'path' parameter");
+        const content = p.content as string;
+        if (typeof content !== "string") throw new Error("Missing or invalid 'content' parameter (must be a string)");
+
+        const resolved = path.isAbsolute(rel) ? path.resolve(rel) : path.resolve(sourceDir, rel);
+        const sourceAbs = path.resolve(sourceDir);
+        if (!resolved.startsWith(sourceAbs + path.sep) && resolved !== sourceAbs) {
+          throw new Error(`Refusing to write outside project Source/: ${resolved}`);
+        }
+        if (!/\.(h|cpp|inl|cs)$/i.test(resolved)) {
+          throw new Error(`write_cpp_file only accepts .h/.cpp/.inl/.cs files (got '${path.extname(resolved)}')`);
+        }
+
+        const overwrote = fs.existsSync(resolved);
+        fs.mkdirSync(path.dirname(resolved), { recursive: true });
+        fs.writeFileSync(resolved, content, "utf-8");
+        return {
+          path: resolved,
+          bytesWritten: Buffer.byteLength(content, "utf-8"),
+          overwrote,
+          hint: overwrote
+            ? "Overwrote existing file. Call live_coding_compile (existing class edits) or build_project for a full rebuild."
+            : "Created new file. Call generate_project_files if you also want the IDE project refreshed, then build_project.",
+        };
+      },
+    },
+    read_cpp_source: {
+      description: "Read a .cpp file from the project Source/ tree. Companion to read_cpp_header for round-trip edits. Params: sourcePath (relative to Source/ or absolute).",
+      handler: async (ctx, p) => {
+        ctx.project.ensureLoaded();
+        const sourceDir = path.join(ctx.project.projectDir!, "Source");
+        const sp = p.sourcePath as string;
+        if (!sp) throw new Error("Missing 'sourcePath' parameter");
+        const resolved = path.isAbsolute(sp) ? sp : path.join(sourceDir, sp);
+        if (!fs.existsSync(resolved)) throw new Error(`File not found: ${resolved}`);
+        const content = fs.readFileSync(resolved, "utf-8");
+        return { path: resolved, bytes: content.length, content };
+      },
+    },
+    add_module_dependency: {
+      description:
+        "Add a module to a target module's Build.cs dependency array. Params: moduleName (the Build.cs to edit — must exist in the project), dependency (module name to add, e.g. 'UMG'), access? ('public'|'private', default 'private'). Creates the corresponding AddRange block if missing. Rebuild required afterward.",
+      handler: async (ctx, p) => {
+        ctx.project.ensureLoaded();
+        const moduleName = p.moduleName as string;
+        const dependency = p.dependency as string;
+        const access = ((p.access as string) || "private").toLowerCase();
+        if (!moduleName || !dependency) throw new Error("Missing 'moduleName' and/or 'dependency'");
+        if (access !== "public" && access !== "private") {
+          throw new Error("'access' must be 'public' or 'private'");
+        }
+
+        const buildCs = path.join(ctx.project.projectDir!, "Source", moduleName, `${moduleName}.Build.cs`);
+        if (!fs.existsSync(buildCs)) {
+          throw new Error(`Build.cs not found for module '${moduleName}' at ${buildCs}`);
+        }
+
+        let content = fs.readFileSync(buildCs, "utf-8");
+        const fieldName = access === "public" ? "PublicDependencyModuleNames" : "PrivateDependencyModuleNames";
+
+        // Already present?
+        const existingArrayRe = new RegExp(`${fieldName}\\.AddRange\\s*\\(\\s*new\\s+string\\s*\\[\\s*\\]\\s*\\{([\\s\\S]*?)\\}\\s*\\)\\s*;`, "m");
+        const existingMatch = content.match(existingArrayRe);
+
+        if (existingMatch) {
+          const body = existingMatch[1];
+          const entries = new Set<string>();
+          for (const m of body.matchAll(/"([A-Za-z0-9_]+)"/g)) entries.add(m[1]);
+          if (entries.has(dependency)) {
+            return { status: "existed", buildCs, access, dependency };
+          }
+          entries.add(dependency);
+          const sortedList = [...entries].sort();
+          const replacement = `${fieldName}.AddRange(\n\t\t\tnew string[]\n\t\t\t{\n${sortedList.map(e => `\t\t\t\t"${e}",`).join("\n")}\n\t\t\t}\n\t\t);`;
+          content = content.replace(existingArrayRe, replacement);
+        } else {
+          // Insert a new AddRange block before the closing brace of the ModuleRules ctor.
+          const ctorCloseRe = /(\n\s*\}\s*\n\s*\})\s*$/;
+          if (!ctorCloseRe.test(content)) {
+            throw new Error(`Could not locate module ctor in ${buildCs} — edit manually.`);
+          }
+          const newBlock = `\n\t\t${fieldName}.AddRange(\n\t\t\tnew string[]\n\t\t\t{\n\t\t\t\t"${dependency}",\n\t\t\t}\n\t\t);\n`;
+          content = content.replace(ctorCloseRe, `${newBlock}$1`);
+        }
+
+        fs.writeFileSync(buildCs, content, "utf-8");
+        return {
+          status: "updated",
+          buildCs,
+          access,
+          dependency,
+          hint: "Rebuild the project (project(build)) for the new dependency to take effect.",
+        };
+      },
+    },
   },
   undefined,
   {
@@ -310,5 +447,17 @@ export const projectTool: ToolDef = categoryTool(
     clean: z.boolean().optional().describe("Clean build"),
     symbol: z.string().optional().describe("Symbol name for find_engine_symbol"),
     maxResults: z.number().optional().describe("Cap on find_engine_symbol hits (default 100)"),
+
+    // v0.7.13 — native C++ authoring
+    className: z.string().optional().describe("For create_cpp_class: new class name (no A/U prefix — handled by parent type)"),
+    parentClass: z.string().optional().describe("For create_cpp_class: parent UClass. Short native names ('Actor') or /Script/<Module>.<Class> paths work. Default UObject."),
+    classDomain: z.enum(["public", "private", "classes"]).optional().describe("For create_cpp_class: which folder under the module (Public/Private/Classes). Default 'public'."),
+    subPath: z.string().optional().describe("For create_cpp_class: nested folder under the class domain (e.g. 'Gameplay/Abilities')."),
+    wait: z.boolean().optional().describe("For live_coding_compile: block until compile finishes. Default false."),
+    path: z.string().optional().describe("For write_cpp_file: path to write (relative to Source/ or absolute within Source/)."),
+    content: z.string().optional().describe("For write_cpp_file: full file contents."),
+    sourcePath: z.string().optional().describe("For read_cpp_source: path to .cpp (relative to Source/ or absolute)."),
+    dependency: z.string().optional().describe("For add_module_dependency: module name to add (e.g. 'UMG')."),
+    access: z.enum(["public", "private"]).optional().describe("For add_module_dependency: 'public' (PublicDependencyModuleNames) or 'private' (default)."),
   },
 );

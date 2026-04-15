@@ -70,7 +70,8 @@ function discoverHandlers() {
     .filter((f) => f.endsWith(".cpp"))
     .sort();
 
-  const pattern = /Registry\.RegisterHandler\(TEXT\("([^"]+)"\)/g;
+  // Matches Registry.RegisterHandler(...) and Registry.RegisterHandlerWithTimeout(...)
+  const pattern = /Registry\.RegisterHandler(?:WithTimeout)?\(TEXT\("([^"]+)"\)/g;
   const handlers = []; // { method, file }
 
   for (const file of cppFiles) {

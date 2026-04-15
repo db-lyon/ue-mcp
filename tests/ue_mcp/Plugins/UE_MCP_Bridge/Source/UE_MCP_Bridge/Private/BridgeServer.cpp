@@ -11,6 +11,7 @@
 #include "Handlers/EditorHandlers.h"
 #include "Handlers/AssetHandlers.h"
 #include "Handlers/BlueprintHandlers.h"
+#include "Handlers/ProjectHandlers.h"
 #include "Handlers/LevelHandlers.h"
 #include "Handlers/ReflectionHandlers.h"
 #include "Handlers/GasHandlers.h"
@@ -83,6 +84,7 @@ FMCPBridgeServer::FMCPBridgeServer(int32 Port)
 	FSplineHandlers::RegisterHandlers(HandlerRegistry);
 	FPhysicsHandlers::RegisterHandlers(HandlerRegistry);
 	FDemoHandlers::RegisterHandlers(HandlerRegistry);
+	FProjectHandlers::RegisterHandlers(HandlerRegistry);
 }
 
 FMCPBridgeServer::~FMCPBridgeServer()
@@ -366,7 +368,13 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		return HandlerRegistry.ExecuteHandler(Method, HandlerParams);
 	};
 
-	TSharedPtr<FJsonValue> Result = GameThreadExecutor.ExecuteOnGameThread(Handler, Params);
+	// Some handlers (create_cpp_class regenerates IDE project files;
+	// long-running compiles) legitimately need minutes. Honor per-handler
+	// timeouts registered via FMCPHandlerRegistry::RegisterHandlerWithTimeout.
+	const float PerHandlerTimeout = HandlerRegistry.GetHandlerTimeout(Method);
+	TSharedPtr<FJsonValue> Result = (PerHandlerTimeout > 0.0f)
+		? GameThreadExecutor.ExecuteOnGameThread(Handler, Params, PerHandlerTimeout)
+		: GameThreadExecutor.ExecuteOnGameThread(Handler, Params);
 
 	if (Result.IsValid())
 	{
