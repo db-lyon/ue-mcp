@@ -13,6 +13,7 @@ afterAll(async () => {
   if (hasNiagara) {
     await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/NS_SmokeTest` });
     await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/NE_SmokeTest` });
+    await callBridge(bridge, "delete_asset", { assetPath: `${TEST_PREFIX}/M_SmokeHlsl` });
   }
   disconnectBridge();
 });
@@ -63,6 +64,48 @@ describe("niagara — create (with cleanup)", () => {
     });
     // NiagaraEmitterFactory may not exist in UE5 (system-centric workflow)
     if (r.error?.includes("factory not available")) skip();
+    expect(r.ok, r.error).toBe(true);
+  });
+});
+
+describe("niagara — v0.7.14: module inputs + static switches + HLSL modules", () => {
+  it("list_niagara_module_inputs tolerates empty systems", async ({ skip }) => {
+    if (!hasNiagara) skip();
+    const r = await callBridge(bridge, "list_niagara_module_inputs", {
+      systemPath: `${TEST_PREFIX}/NS_SmokeTest`,
+      stackContext: "all",
+    });
+    // Empty system has no emitters — handler should return a structured error, not crash
+    expect(typeof r.ok).toBe("boolean");
+  });
+
+  it("list_niagara_static_switches tolerates empty systems", async ({ skip }) => {
+    if (!hasNiagara) skip();
+    const r = await callBridge(bridge, "list_niagara_static_switches", {
+      systemPath: `${TEST_PREFIX}/NS_SmokeTest`,
+    });
+    expect(typeof r.ok).toBe("boolean");
+  });
+
+  it("set_niagara_module_input reports missing module cleanly", async ({ skip }) => {
+    if (!hasNiagara) skip();
+    const r = await callBridge(bridge, "set_niagara_module_input", {
+      systemPath: `${TEST_PREFIX}/NS_SmokeTest`,
+      moduleName: "DoesNotExist",
+      inputName: "Foo",
+      value: "1",
+    });
+    // Empty system → either 'Emitter not resolved' or module-not-found, both acceptable non-crash paths
+    expect(r.ok === true || typeof r.error === "string").toBe(true);
+  });
+
+  it("create_niagara_module_from_hlsl", async ({ skip }) => {
+    if (!hasNiagara) skip();
+    const r = await callBridge(bridge, "create_niagara_module_from_hlsl", {
+      name: "M_SmokeHlsl",
+      packagePath: TEST_PREFIX,
+      hlsl: "// smoke test\nOutput = Input;",
+    });
     expect(r.ok, r.error).toBe(true);
   });
 });

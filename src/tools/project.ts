@@ -290,6 +290,62 @@ export const projectTool: ToolDef = categoryTool(
         return { engineRoot, moduleCount: modules.length, modules };
       },
     },
+    search_engine_cpp: {
+      description: "Search engine .h/.cpp/.inl files across Runtime/Editor/Developer/Plugins. Params: query, tree? (Runtime|Editor|Developer|Plugins|all — default Runtime), subdirectory?, maxResults? (default 500)",
+      handler: async (ctx, p) => {
+        ctx.project.ensureLoaded();
+        const resolvedEngineRoot = findEngineInstall(ctx.project.engineAssociation ?? null);
+        if (!resolvedEngineRoot) throw new Error("Could not resolve engine install path");
+        const engineRoot: string = resolvedEngineRoot;
+        const query = (p.query as string)?.toLowerCase();
+        if (!query) throw new Error("Missing required parameter 'query'");
+        const tree = (p.tree as string) ?? "Runtime";
+        const maxResults = (p.maxResults as number) ?? 500;
+        const subdir = p.subdirectory as string | undefined;
+        const engineSource = path.join(engineRoot, "Engine", "Source");
+        const roots: string[] = [];
+        if (tree === "all") {
+          for (const t of ["Runtime", "Editor", "Developer"]) {
+            const d = path.join(engineSource, t);
+            if (fs.existsSync(d)) roots.push(d);
+          }
+          const pluginsDir = path.join(engineRoot, "Engine", "Plugins");
+          if (fs.existsSync(pluginsDir)) roots.push(pluginsDir);
+        } else if (tree === "Plugins") {
+          const d = path.join(engineRoot, "Engine", "Plugins");
+          if (!fs.existsSync(d)) throw new Error(`Engine plugins dir not found: ${d}`);
+          roots.push(d);
+        } else {
+          const d = path.join(engineSource, tree);
+          if (!fs.existsSync(d)) throw new Error(`Engine tree '${tree}' not found: ${d}`);
+          roots.push(subdir ? path.join(d, subdir) : d);
+        }
+        const results: Array<{ file: string; line: number; content: string }> = [];
+        function scan(dir: string): boolean {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (results.length >= maxResults) return true;
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              if (entry.name === "Intermediate" || entry.name === "Binaries") continue;
+              if (scan(full)) return true;
+            } else if (/\.(h|cpp|inl)$/i.test(entry.name)) {
+              let content: string;
+              try { content = fs.readFileSync(full, "utf-8"); } catch { continue; }
+              const lines = content.split(/\r?\n/);
+              for (let i = 0; i < lines.length; i++) {
+                if (lines[i].toLowerCase().includes(query)) {
+                  results.push({ file: path.relative(engineRoot, full).replace(/\\/g, "/"), line: i + 1, content: lines[i].trimEnd() });
+                  if (results.length >= maxResults) return true;
+                }
+              }
+            }
+          }
+          return false;
+        }
+        for (const r of roots) { if (scan(r)) break; }
+        return { query: p.query, tree, subdirectory: subdir ?? "(root)", engineRoot, resultCount: results.length, results };
+      },
+    },
     set_config: bp("Write to INI. Params: configName, section, key, value", "set_config"),
     build: bp("Build C++ project. Params: configuration?, platform?, clean?", "build_project"),
     generate_project_files: bp("Generate IDE project files (Visual Studio, Xcode, etc.)", "generate_project_files"),
@@ -446,7 +502,9 @@ export const projectTool: ToolDef = categoryTool(
     platform: z.string().optional().describe("Target platform: Win64, Linux, Mac"),
     clean: z.boolean().optional().describe("Clean build"),
     symbol: z.string().optional().describe("Symbol name for find_engine_symbol"),
-    maxResults: z.number().optional().describe("Cap on find_engine_symbol hits (default 100)"),
+    maxResults: z.number().optional().describe("Cap on find_engine_symbol / search_engine_cpp hits (default 100 / 500)"),
+    tree: z.string().optional().describe("For search_engine_cpp: Runtime|Editor|Developer|Plugins|all (default Runtime)"),
+    subdirectory: z.string().optional().describe("For search_engine_cpp: subdirectory within the chosen tree"),
 
     // v0.7.13 — native C++ authoring
     className: z.string().optional().describe("For create_cpp_class: new class name (no A/U prefix — handled by parent type)"),
