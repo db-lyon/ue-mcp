@@ -34,4 +34,7 @@ private:
 	static TSharedPtr<FJsonValue> GetWorldSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetWorldSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetActorMaterial(const TSharedPtr<FJsonObject>& Params);
+	// #94: Fog + sky helpers
+	static TSharedPtr<FJsonValue> SetFogProperties(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetActorsByClass(const TSharedPtr<FJsonObject>& Params);
 };

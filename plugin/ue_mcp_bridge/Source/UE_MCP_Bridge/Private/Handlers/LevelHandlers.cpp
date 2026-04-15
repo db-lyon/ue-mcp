@@ -22,6 +22,10 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/RectLightComponent.h"
 #include "Components/LightComponent.h"
+#include "Components/SkyLightComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "Engine/ExponentialHeightFog.h"
+#include "Engine/SkyLight.h"
 #include "Engine/BrushBuilder.h"
 #include "GameFramework/Volume.h"
 #include "Engine/BlockingVolume.h"
@@ -67,6 +71,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_volume_properties"), &SetVolumeProperties);
 	Registry.RegisterHandler(TEXT("get_world_settings"), &GetWorldSettings);
 	Registry.RegisterHandler(TEXT("set_world_settings"), &SetWorldSettings);
+	Registry.RegisterHandler(TEXT("set_fog_properties"), &SetFogProperties);
+	Registry.RegisterHandler(TEXT("get_actors_by_class"), &GetActorsByClass);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>& Params)
@@ -815,6 +821,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	// Capture previous values before mutation for self-inverse rollback.
 	const double PreviousIntensity = LightComponent->Intensity;
 	const FLinearColor PreviousColor = LightComponent->GetLightColor();
+	const FRotator PreviousRotation = Actor->GetActorRotation();
 
 	bool bAnyChange = false;
 
@@ -834,6 +841,29 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 		(*ColorObj)->TryGetNumberField(TEXT("b"), B);
 		LightComponent->SetLightColor(FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f));
 		bAnyChange = true;
+	}
+
+	// #94: DirectionalLight rotation support (sun angle for time-of-day)
+	const TSharedPtr<FJsonObject>* RotObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("rotation"), RotObj))
+	{
+		double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
+		(*RotObj)->TryGetNumberField(TEXT("pitch"), Pitch);
+		(*RotObj)->TryGetNumberField(TEXT("yaw"), Yaw);
+		(*RotObj)->TryGetNumberField(TEXT("roll"), Roll);
+		Actor->SetActorRotation(FRotator((float)Pitch, (float)Yaw, (float)Roll));
+		bAnyChange = true;
+	}
+
+	// #94: SkyLight recapture after intensity/color change
+	if (USkyLightComponent* Sky = Cast<USkyLightComponent>(LightComponent))
+	{
+		bool bRecapture = false;
+		Params->TryGetBoolField(TEXT("recaptureSky"), bRecapture);
+		if (bRecapture || bAnyChange)
+		{
+			Sky->RecaptureSky();
+		}
 	}
 
 	auto Result = MCPSuccess();
@@ -1585,5 +1615,96 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorMaterial(const TSharedPtr<FJsonOb
 		MCPSetRollback(Result, TEXT("set_actor_material"), Payload);
 	}
 
+	return MCPResult(Result);
+}
+
+// #94: ExponentialHeightFog tuning
+TSharedPtr<FJsonValue> FLevelHandlers::SetFogProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	FString ActorLabel = OptionalString(Params, TEXT("actorLabel"));
+
+	AExponentialHeightFog* Fog = nullptr;
+	for (TActorIterator<AExponentialHeightFog> It(World); It; ++It)
+	{
+		if (ActorLabel.IsEmpty() || It->GetActorLabel() == ActorLabel)
+		{
+			Fog = *It;
+			break;
+		}
+	}
+	if (!Fog) return MCPError(TEXT("No ExponentialHeightFog actor found"));
+
+	UExponentialHeightFogComponent* FC = Fog->GetComponent();
+	if (!FC) return MCPError(TEXT("Fog component missing"));
+
+	double Density = 0.0;
+	if (Params->TryGetNumberField(TEXT("fogDensity"), Density))
+	{
+		FC->FogDensity = (float)Density;
+	}
+	double HeightFalloff = 0.0;
+	if (Params->TryGetNumberField(TEXT("fogHeightFalloff"), HeightFalloff))
+	{
+		FC->FogHeightFalloff = (float)HeightFalloff;
+	}
+	double StartDistance = 0.0;
+	if (Params->TryGetNumberField(TEXT("startDistance"), StartDistance))
+	{
+		FC->StartDistance = (float)StartDistance;
+	}
+	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("fogInscatteringColor"), ColorObj) ||
+	    Params->TryGetObjectField(TEXT("color"), ColorObj))
+	{
+		double R = 255, G = 255, B = 255;
+		(*ColorObj)->TryGetNumberField(TEXT("r"), R);
+		(*ColorObj)->TryGetNumberField(TEXT("g"), G);
+		(*ColorObj)->TryGetNumberField(TEXT("b"), B);
+		FC->FogInscatteringLuminance = FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f);
+	}
+
+	FC->MarkRenderStateDirty();
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("actorLabel"), Fog->GetActorLabel());
+	Result->SetNumberField(TEXT("fogDensity"), FC->FogDensity);
+	Result->SetNumberField(TEXT("fogHeightFalloff"), FC->FogHeightFalloff);
+	return MCPResult(Result);
+}
+
+// #94: Bulk actor lookup helper
+TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByClass(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ClassName;
+	if (auto Err = RequireString(Params, TEXT("className"), ClassName)) return Err;
+
+	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	TArray<TSharedPtr<FJsonValue>> Out;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* A = *It;
+		if (!A) continue;
+		FString CName = A->GetClass()->GetName();
+		if (CName == ClassName || A->GetClass()->IsChildOf(AActor::StaticClass()) && CName.Contains(ClassName))
+		{
+			TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+			E->SetStringField(TEXT("label"), A->GetActorLabel());
+			E->SetStringField(TEXT("class"), CName);
+			E->SetStringField(TEXT("path"), A->GetPathName());
+			Out.Add(MakeShared<FJsonValueObject>(E));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("actors"), Out);
+	Result->SetNumberField(TEXT("count"), Out.Num());
 	return MCPResult(Result);
 }
