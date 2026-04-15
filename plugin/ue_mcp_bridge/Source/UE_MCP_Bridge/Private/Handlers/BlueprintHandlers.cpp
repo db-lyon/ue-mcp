@@ -1001,34 +1001,41 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPt
 		return MCPError(FString::Printf(TEXT("Interface not found: %s"), *InterfacePathStr));
 	}
 
-	// Use FBlueprintEditorUtils to add interface
+	// Idempotency: check if interface already implemented on this blueprint
 	FTopLevelAssetPath InterfaceAssetPath(InterfaceClass->GetPathName());
-	FBlueprintEditorUtils::ImplementNewInterface(Blueprint, InterfaceAssetPath);
-	bool bSuccess = true;
-
-	if (bSuccess)
+	for (const FBPInterfaceDescription& Impl : Blueprint->ImplementedInterfaces)
 	{
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		// Save asset
-		UPackage* Package = Blueprint->GetOutermost();
-		if (Package)
+		if (Impl.Interface == InterfaceClass)
 		{
-			Package->MarkPackageDirty();
-			FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-			FSavePackageArgs SaveArgs;
-			SaveArgs.TopLevelFlags = RF_Standalone;
-			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+			auto Existed = MCPSuccess();
+			MCPSetExisted(Existed);
+			Existed->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+			Existed->SetStringField(TEXT("interfacePath"), InterfacePathStr);
+			return MCPResult(Existed);
 		}
+	}
 
-		auto Result = MCPSuccess();
-		Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-		Result->SetStringField(TEXT("interfacePath"), InterfacePathStr);
-		return MCPResult(Result);
-	}
-	else
+	// Use FBlueprintEditorUtils to add interface
+	FBlueprintEditorUtils::ImplementNewInterface(Blueprint, InterfaceAssetPath);
+
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	// Save asset
+	UPackage* Package = Blueprint->GetOutermost();
+	if (Package)
 	{
-		return MCPError(TEXT("Failed to add interface - FBlueprintEditorUtils::AddInterfaceToBlueprint returned false"));
+		Package->MarkPackageDirty();
+		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 	}
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Result->SetStringField(TEXT("interfacePath"), InterfacePathStr);
+	// No rollback: no paired remove_blueprint_interface handler yet.
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprint(const TSharedPtr<FJsonObject>& Params)
@@ -1259,9 +1266,23 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 		return MCPError(FString::Printf(TEXT("Variable not found: %s"), *VarName));
 	}
 
+	// Capture previous values for rollback
+	const bool bPrevInstanceEditable = (FoundVar->PropertyFlags & CPF_Edit) != 0;
+	FString PrevCategory;
+	if (FoundVar->HasMetaData(FBlueprintMetadata::MD_FunctionCategory))
+	{
+		PrevCategory = FoundVar->GetMetaData(FBlueprintMetadata::MD_FunctionCategory);
+	}
+	FString PrevTooltip;
+	if (FoundVar->HasMetaData(FBlueprintMetadata::MD_Tooltip))
+	{
+		PrevTooltip = FoundVar->GetMetaData(FBlueprintMetadata::MD_Tooltip);
+	}
+
 	// Set instance editable
 	bool bInstanceEditable = false;
-	if (Params->TryGetBoolField(TEXT("instanceEditable"), bInstanceEditable))
+	const bool bHasInstanceEditable = Params->TryGetBoolField(TEXT("instanceEditable"), bInstanceEditable);
+	if (bHasInstanceEditable)
 	{
 		if (bInstanceEditable)
 		{
@@ -1276,16 +1297,32 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 
 	// Set category
 	FString CategoryStr;
-	if (Params->TryGetStringField(TEXT("category"), CategoryStr))
+	const bool bHasCategory = Params->TryGetStringField(TEXT("category"), CategoryStr);
+	if (bHasCategory)
 	{
 		FoundVar->SetMetaData(FBlueprintMetadata::MD_FunctionCategory, *CategoryStr);
 	}
 
 	// Set tooltip
 	FString TooltipStr;
-	if (Params->TryGetStringField(TEXT("tooltip"), TooltipStr))
+	const bool bHasTooltip = Params->TryGetStringField(TEXT("tooltip"), TooltipStr);
+	if (bHasTooltip)
 	{
 		FoundVar->SetMetaData(FBlueprintMetadata::MD_Tooltip, *TooltipStr);
+	}
+
+	// Detect no-op: nothing requested OR every requested field already matches
+	const bool bAnyChanged =
+		(bHasInstanceEditable && bInstanceEditable != bPrevInstanceEditable) ||
+		(bHasCategory && CategoryStr != PrevCategory) ||
+		(bHasTooltip && TooltipStr != PrevTooltip);
+	if (!bAnyChanged)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("name"), VarName);
+		return MCPResult(Noop);
 	}
 
 	// Compile and save
@@ -1301,8 +1338,19 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
+
+	// Rollback: call set_variable_properties with previous values
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), AssetPath);
+	Payload->SetStringField(TEXT("name"), VarName);
+	if (bHasInstanceEditable) Payload->SetBoolField(TEXT("instanceEditable"), bPrevInstanceEditable);
+	if (bHasCategory) Payload->SetStringField(TEXT("category"), PrevCategory);
+	if (bHasTooltip) Payload->SetStringField(TEXT("tooltip"), PrevTooltip);
+	MCPSetRollback(Result, TEXT("set_variable_properties"), Payload);
+
 	return MCPResult(Result);
 }
 
@@ -1656,10 +1704,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeClass"), NewNode->GetClass()->GetName());
-	Result->SetStringField(TEXT("nodeId"), NewNode->NodeGuid.ToString());
+	const FString NodeIdStr = NewNode->NodeGuid.ToString();
+	Result->SetStringField(TEXT("nodeId"), NodeIdStr);
 	Result->SetStringField(TEXT("title"), NewNode->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
 
 	// Return pin info so the caller knows what to connect
@@ -1674,6 +1724,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		PinsArray.Add(MakeShared<FJsonValueObject>(PinObj));
 	}
 	Result->SetArrayField(TEXT("pins"), PinsArray);
+
+	// Rollback: delete the node we just created by guid.
+	// Note: add_node has no natural key, so we cannot short-circuit on replay.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), AssetPath);
+	Payload->SetStringField(TEXT("graphName"), GraphName);
+	Payload->SetStringField(TEXT("nodeId"), NodeIdStr);
+	MCPSetRollback(Result, TEXT("delete_node"), Payload);
 
 	return MCPResult(Result);
 }
@@ -1752,8 +1810,20 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
 	}
 
-	// Add multicast delegate variable with a proper signature graph
 	FName DispatcherFName(*DispatcherName);
+
+	// Idempotency: if a variable with this name already exists, short-circuit
+	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
+	{
+		if (Var.VarName == DispatcherFName)
+		{
+			auto Existed = MCPSuccess();
+			MCPSetExisted(Existed);
+			Existed->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+			Existed->SetStringField(TEXT("name"), DispatcherName);
+			return MCPResult(Existed);
+		}
+	}
 
 	// Create the delegate signature graph so the compiler has a function to reference.
 	// Convention: "<Name>__DelegateSignature"
@@ -1794,8 +1864,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 		}
 
 		auto Result = MCPSuccess();
+		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 		Result->SetStringField(TEXT("name"), DispatcherName);
+
+		// Rollback: delete_variable (dispatcher is a member variable under the hood)
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("path"), BlueprintPath);
+		Payload->SetStringField(TEXT("name"), DispatcherName);
+		MCPSetRollback(Result, TEXT("delete_variable"), Payload);
+
 		return MCPResult(Result);
 	}
 	else
@@ -2286,6 +2364,20 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		return MCPError(FString::Printf(TEXT("Target pin not found: '%s' on node '%s'"), *TargetPinName, *TargetNodeId));
 	}
 
+	// Idempotency: if already linked between these two pins, short-circuit
+	if (SourcePin->LinkedTo.Contains(TargetPin))
+	{
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("path"), AssetPath);
+		Existed->SetStringField(TEXT("graphName"), GraphName);
+		Existed->SetStringField(TEXT("sourceNodeId"), SourceNodeId);
+		Existed->SetStringField(TEXT("sourcePinName"), SourcePinName);
+		Existed->SetStringField(TEXT("targetNodeId"), TargetNodeId);
+		Existed->SetStringField(TEXT("targetPinName"), TargetPinName);
+		return MCPResult(Existed);
+	}
+
 	// Use the graph's own schema (K2 for EventGraphs, AnimationGraph schema for AnimGraphs, etc.)
 	const UEdGraphSchema* Schema = TargetGraph->GetSchema();
 	if (!Schema)
@@ -2310,12 +2402,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		}
 
 		auto Result = MCPSuccess();
+		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("graphName"), GraphName);
 		Result->SetStringField(TEXT("sourceNodeId"), SourceNodeId);
 		Result->SetStringField(TEXT("sourcePinName"), SourcePinName);
 		Result->SetStringField(TEXT("targetNodeId"), TargetNodeId);
 		Result->SetStringField(TEXT("targetPinName"), TargetPinName);
+		// No rollback: no paired disconnect_pins handler.
 		return MCPResult(Result);
 	}
 	else
@@ -2435,9 +2529,26 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 
 	bool bSetViaPin = false;
 	bool bSetViaProperty = false;
+	FString PrevValue;
+	bool bHasPrevValue = false;
 
 	if (TargetPin)
 	{
+		// Capture previous pin default for rollback
+		PrevValue = TargetPin->DefaultValue;
+		bHasPrevValue = true;
+		// No-op short-circuit: pin default already matches
+		if (PrevValue == DefaultValue)
+		{
+			auto Noop = MCPSuccess();
+			MCPSetExisted(Noop);
+			Noop->SetStringField(TEXT("path"), AssetPath);
+			Noop->SetStringField(TEXT("graphName"), GraphName);
+			Noop->SetStringField(TEXT("nodeId"), NodeId);
+			Noop->SetStringField(TEXT("propertyName"), PinName);
+			Noop->SetStringField(TEXT("value"), DefaultValue);
+			return MCPResult(Noop);
+		}
 		// Set pin default value using the graph's own schema
 		const UEdGraphSchema* Schema = TargetGraph->GetSchema();
 		if (Schema)
@@ -2520,12 +2631,25 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeId"), NodeId);
 	Result->SetStringField(TEXT("propertyName"), PinName);
 	Result->SetStringField(TEXT("value"), DefaultValue);
 	Result->SetStringField(TEXT("setVia"), bSetViaPin ? TEXT("pin") : TEXT("property"));
+
+	// Rollback: self-inverse with previous pin default value (pin path only; property path has no reliable previous capture)
+	if (bSetViaPin && bHasPrevValue)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("path"), AssetPath);
+		Payload->SetStringField(TEXT("graphName"), GraphName);
+		Payload->SetStringField(TEXT("nodeId"), NodeId);
+		Payload->SetStringField(TEXT("pinName"), PinName);
+		Payload->SetStringField(TEXT("defaultValue"), PrevValue);
+		MCPSetRollback(Result, TEXT("set_node_property"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -2672,6 +2796,20 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 	// For object reference properties, try loading the asset by path first
 	void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
 
+	// Capture previous value for rollback (generic via ExportText)
+	FString PrevValue;
+	FinalProp->ExportText_Direct(PrevValue, ValuePtr, ValuePtr, nullptr, PPF_None);
+	if (PrevValue == Value)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("componentName"), ComponentName);
+		Noop->SetStringField(TEXT("propertyName"), PropertyName);
+		Noop->SetStringField(TEXT("value"), Value);
+		return MCPResult(Noop);
+	}
+
 	if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(FinalProp))
 	{
 		UObject* LoadedObj = LoadObject<UObject>(nullptr, *Value);
@@ -2716,10 +2854,20 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("value"), Value);
+
+	// Rollback: self-inverse with previous value
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), AssetPath);
+	Payload->SetStringField(TEXT("componentName"), ComponentName);
+	Payload->SetStringField(TEXT("propertyName"), PropertyName);
+	Payload->SetStringField(TEXT("value"), PrevValue);
+	MCPSetRollback(Result, TEXT("set_component_property"), Payload);
+
 	return MCPResult(Result);
 }
 
@@ -2797,6 +2945,19 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 
 	void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
 
+	// Capture previous value for rollback and idempotency
+	FString PrevValue;
+	FinalProp->ExportText_Direct(PrevValue, ValuePtr, ValuePtr, nullptr, PPF_None);
+	if (PrevValue == Value)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("propertyName"), PropertyName);
+		Noop->SetStringField(TEXT("value"), Value);
+		return MCPResult(Noop);
+	}
+
 	if (FClassProperty* ClassProp = CastField<FClassProperty>(FinalProp))
 	{
 		// TSubclassOf<T> -- load the class by path or short name
@@ -2860,9 +3021,18 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("value"), Value);
+
+	// Rollback: self-inverse with previous value
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), AssetPath);
+	Payload->SetStringField(TEXT("propertyName"), PropertyName);
+	Payload->SetStringField(TEXT("value"), PrevValue);
+	MCPSetRollback(Result, TEXT("set_class_default"), Payload);
+
 	return MCPResult(Result);
 }
 
@@ -2959,6 +3129,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentName"), ComponentName);
+		Result->SetBoolField(TEXT("deleted"), true);
+		// No rollback: component removal is not reversible by default.
 		return MCPResult(Result);
 	}
 	else
@@ -3022,6 +3194,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
+	Result->SetBoolField(TEXT("deleted"), true);
+	// No rollback: variable deletion is not reversible by default.
 	return MCPResult(Result);
 }
 
@@ -3080,6 +3254,50 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 	if (!EntryNode)
 	{
 		return MCPError(TEXT("Function entry node not found in graph"));
+	}
+
+	// Idempotency: check if parameter already exists
+	const FName ParamFName(*ParamName);
+	if (!bIsOutput)
+	{
+		for (const TSharedPtr<FUserPinInfo>& Info : EntryNode->UserDefinedPins)
+		{
+			if (Info.IsValid() && Info->PinName == ParamFName)
+			{
+				auto Existed = MCPSuccess();
+				MCPSetExisted(Existed);
+				Existed->SetStringField(TEXT("path"), AssetPath);
+				Existed->SetStringField(TEXT("functionName"), FunctionName);
+				Existed->SetStringField(TEXT("parameterName"), ParamName);
+				Existed->SetBoolField(TEXT("isOutput"), false);
+				return MCPResult(Existed);
+			}
+		}
+	}
+	else
+	{
+		for (UEdGraphNode* Node : FuncGraph->Nodes)
+		{
+			if (Node && Node->GetClass()->GetName() == TEXT("K2Node_FunctionResult"))
+			{
+				if (UK2Node_EditablePinBase* R = Cast<UK2Node_EditablePinBase>(Node))
+				{
+					for (const TSharedPtr<FUserPinInfo>& Info : R->UserDefinedPins)
+					{
+						if (Info.IsValid() && Info->PinName == ParamFName)
+						{
+							auto Existed = MCPSuccess();
+							MCPSetExisted(Existed);
+							Existed->SetStringField(TEXT("path"), AssetPath);
+							Existed->SetStringField(TEXT("functionName"), FunctionName);
+							Existed->SetStringField(TEXT("parameterName"), ParamName);
+							Existed->SetBoolField(TEXT("isOutput"), true);
+							return MCPResult(Existed);
+						}
+					}
+				}
+			}
+		}
 	}
 
 	FEdGraphPinType PinType = MakePinType(ParamType);
@@ -3155,11 +3373,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
 	Result->SetStringField(TEXT("parameterName"), ParamName);
 	Result->SetStringField(TEXT("parameterType"), ParamType);
 	Result->SetBoolField(TEXT("isOutput"), bIsOutput);
+	// No rollback: no paired remove_function_parameter handler yet.
 	return MCPResult(Result);
 }
 
@@ -3206,6 +3426,18 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 		return MCPError(FString::Printf(
 			TEXT("Variable '%s' not found. Available: [%s]"),
 			*VarName, *FString::Join(Names, TEXT(", "))));
+	}
+
+	// Capture previous value for rollback and idempotency
+	const FString PrevValue = FoundVar->DefaultValue;
+	if (PrevValue == Value)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("variableName"), VarName);
+		Noop->SetStringField(TEXT("value"), Value);
+		return MCPResult(Noop);
 	}
 
 	// Set default value string on the variable description.
@@ -3263,9 +3495,18 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
 	Result->SetStringField(TEXT("value"), Value);
+
+	// Rollback: self-inverse with previous value
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), AssetPath);
+	Payload->SetStringField(TEXT("name"), VarName);
+	Payload->SetStringField(TEXT("value"), PrevValue);
+	MCPSetRollback(Result, TEXT("set_variable_default"), Payload);
+
 	return MCPResult(Result);
 }
 
@@ -3319,9 +3560,24 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddLocalVariable(const TSharedPtr<FJs
 	}
 	if (!Entry) return MCPError(TEXT("Function has no entry node"));
 
+	// Idempotency: check if local variable already exists on the entry node
+	const FName VarFName(*VarName);
+	for (const FBPVariableDescription& Existing : Entry->LocalVariables)
+	{
+		if (Existing.VarName == VarFName)
+		{
+			auto ExistedRes = MCPSuccess();
+			MCPSetExisted(ExistedRes);
+			ExistedRes->SetStringField(TEXT("path"), AssetPath);
+			ExistedRes->SetStringField(TEXT("functionName"), FunctionName);
+			ExistedRes->SetStringField(TEXT("name"), VarName);
+			return MCPResult(ExistedRes);
+		}
+	}
+
 	FEdGraphPinType PinType = MakePinType(TypeStr);
 	FBPVariableDescription NewVar;
-	NewVar.VarName = FName(*VarName);
+	NewVar.VarName = VarFName;
 	NewVar.VarGuid = FGuid::NewGuid();
 	NewVar.VarType = PinType;
 	NewVar.FriendlyName = VarName;
@@ -3335,6 +3591,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddLocalVariable(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
 	Result->SetStringField(TEXT("name"), VarName);
+	// No rollback: no paired remove_local_variable handler yet.
 	return MCPResult(Result);
 }
 
