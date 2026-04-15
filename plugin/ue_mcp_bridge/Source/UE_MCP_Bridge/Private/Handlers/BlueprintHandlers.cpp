@@ -547,9 +547,34 @@ UEdGraph* FBlueprintHandlers::FindGraph(UBlueprint* Blueprint, const FString& Gr
 	TArray<UEdGraph*> AllGraphs;
 	Blueprint->GetAllGraphs(AllGraphs);
 
+	// #119: support indexed addressing "Transition[4]" for disambiguating the N'th graph
+	// with that name (AnimBP state-machine transition graphs all share name "Transition")
+	FString BaseName = GraphName;
+	int32 Index = -1;
+	int32 LB = GraphName.Find(TEXT("["));
+	int32 RB = GraphName.Find(TEXT("]"));
+	if (LB != INDEX_NONE && RB != INDEX_NONE && RB > LB)
+	{
+		BaseName = GraphName.Left(LB);
+		FString IdxStr = GraphName.Mid(LB + 1, RB - LB - 1);
+		Index = FCString::Atoi(*IdxStr);
+	}
+
+	int32 Matched = 0;
 	for (UEdGraph* Graph : AllGraphs)
 	{
-		if (Graph && Graph->GetName() == GraphName)
+		if (Graph && Graph->GetName() == BaseName)
+		{
+			if (Index < 0) return Graph;
+			if (Matched == Index) return Graph;
+			Matched++;
+		}
+	}
+
+	// Also support object-path addressing "Outer.Graph" by matching suffix
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		if (Graph && Graph->GetPathName().EndsWith(TEXT(".") + GraphName))
 		{
 			return Graph;
 		}
