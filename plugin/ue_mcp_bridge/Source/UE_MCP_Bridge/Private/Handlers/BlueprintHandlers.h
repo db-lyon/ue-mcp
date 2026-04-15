@@ -54,6 +54,12 @@ private:
 	static TSharedPtr<FJsonValue> ListLocalVariables(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ValidateBlueprint(const TSharedPtr<FJsonObject>& Params);
 
+	// v0.7.11 — issue fixes
+	static TSharedPtr<FJsonValue> ReadComponentProperties(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadNodeProperty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReparentComponent(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetActorTickSettings(const TSharedPtr<FJsonObject>& Params);
+
 	// Helper functions
 	static class UBlueprint* LoadBlueprint(const FString& AssetPath);
 	static struct FEdGraphPinType MakePinType(const FString& TypeStr);
