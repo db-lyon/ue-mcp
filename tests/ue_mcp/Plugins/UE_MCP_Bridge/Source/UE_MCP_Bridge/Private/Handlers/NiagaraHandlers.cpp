@@ -321,6 +321,23 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraAtLocation(const TSharedPtr
 	// Default autoDestroy to false so editor spawns persist (#66)
 	bool bAutoDestroy = OptionalBool(Params, TEXT("autoDestroy"), false);
 
+	// Idempotency: if a label is provided and an actor with that label already exists, short-circuit
+	FString Label = OptionalString(Params, TEXT("label"));
+	if (!Label.IsEmpty())
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->GetActorLabel() == Label)
+			{
+				auto Existed = MCPSuccess();
+				MCPSetExisted(Existed);
+				Existed->SetStringField(TEXT("systemPath"), SystemPath);
+				Existed->SetStringField(TEXT("actorLabel"), Label);
+				return MCPResult(Existed);
+			}
+		}
+	}
+
 	UNiagaraComponent* SpawnedComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		World,
 		NiagaraSystem,
@@ -336,19 +353,24 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraAtLocation(const TSharedPtr
 	}
 
 	// Apply label if provided
-	FString Label = OptionalString(Params, TEXT("label"));
 	if (!Label.IsEmpty())
 	{
 		SpawnedComponent->GetOwner()->SetActorLabel(*Label);
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("systemPath"), SystemPath);
 	Result->SetStringField(TEXT("componentName"), SpawnedComponent->GetName());
 	if (SpawnedComponent->GetOwner())
 	{
 		Result->SetStringField(TEXT("actorLabel"), SpawnedComponent->GetOwner()->GetActorLabel());
 		Result->SetStringField(TEXT("actorName"), SpawnedComponent->GetOwner()->GetName());
+
+		// Rollback: delete_actor
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorLabel"), SpawnedComponent->GetOwner()->GetActorLabel());
+		MCPSetRollback(Result, TEXT("delete_actor"), Payload);
 	}
 
 	TSharedPtr<FJsonObject> LocationObj = MakeShared<FJsonObject>();
@@ -449,9 +471,11 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 		return MCPError(FString::Printf(TEXT("Unsupported parameter type: %s (use float, vector, bool, or int)"), *ParameterType));
 	}
 
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("parameterName"), ParameterName);
 	Result->SetStringField(TEXT("parameterType"), ParameterType);
+	// No rollback: runtime niagara parameter overrides are ephemeral; replaying is safe.
 	return MCPResult(Result);
 }
 
@@ -527,6 +551,22 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("NiagaraEmitter not found: %s"), *EmitterPath));
 	}
 
+	// Idempotency: if an emitter with the same source asset is already present, short-circuit
+	const FName EmitterFName = Emitter->GetFName();
+	for (const FNiagaraEmitterHandle& H : System->GetEmitterHandles())
+	{
+		if (H.GetInstance().Emitter == Emitter || H.GetName() == EmitterFName)
+		{
+			auto Existed = MCPSuccess();
+			MCPSetExisted(Existed);
+			Existed->SetStringField(TEXT("systemPath"), SystemPath);
+			Existed->SetStringField(TEXT("emitterPath"), EmitterPath);
+			Existed->SetStringField(TEXT("emitterHandleName"), H.GetName().ToString());
+			Existed->SetNumberField(TEXT("emitterCount"), System->GetEmitterHandles().Num());
+			return MCPResult(Existed);
+		}
+	}
+
 	// Actually add the emitter to the system (#69)
 	System->Modify();
 	FNiagaraEmitterHandle Handle = System->AddEmitterHandle(*Emitter, Emitter->GetFName(), FGuid::NewGuid());
@@ -534,10 +574,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJs
 	UEditorAssetLibrary::SaveAsset(System->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("systemPath"), SystemPath);
 	Result->SetStringField(TEXT("emitterPath"), EmitterPath);
 	Result->SetStringField(TEXT("emitterHandleName"), Handle.GetName().ToString());
 	Result->SetNumberField(TEXT("emitterCount"), System->GetEmitterHandles().Num());
+	// No rollback: no paired remove_emitter_from_system handler.
 	return MCPResult(Result);
 }
 
@@ -626,11 +668,13 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 		UEditorAssetLibrary::SaveAsset(System->GetPathName());
 	}
 
+	if (bSet) MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("systemPath"), SystemPath);
 	Result->SetStringField(TEXT("emitterName"), EmitterName);
 	Result->SetStringField(TEXT("propertyName"), PropName);
 	Result->SetStringField(TEXT("value"), Value);
 	Result->SetBoolField(TEXT("success"), bSet);
+	// No rollback: emitter reflection writes don't capture a comparable previous value cleanly.
 	if (!bSet)
 	{
 		// List available properties

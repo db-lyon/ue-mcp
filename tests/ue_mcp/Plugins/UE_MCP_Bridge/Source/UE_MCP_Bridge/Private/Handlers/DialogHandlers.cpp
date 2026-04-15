@@ -110,6 +110,20 @@ TSharedPtr<FJsonValue> FDialogHandlers::SetDialogPolicy(const TSharedPtr<FJsonOb
 
 	EAppReturnType::Type Response = ParseResponseType(ResponseStr);
 
+	// Idempotency: check if existing policy with same pattern+response
+	for (const FDialogPolicy& P : Policies)
+	{
+		if (P.Pattern == Pattern && P.Response == Response)
+		{
+			auto Existed = MCPSuccess();
+			MCPSetExisted(Existed);
+			Existed->SetStringField(TEXT("pattern"), Pattern);
+			Existed->SetStringField(TEXT("response"), ResponseTypeToString(Response));
+			Existed->SetNumberField(TEXT("policyCount"), Policies.Num());
+			return MCPResult(Existed);
+		}
+	}
+
 	// Remove existing policy with same pattern
 	Policies.RemoveAll([&Pattern](const FDialogPolicy& P) { return P.Pattern == Pattern; });
 
@@ -126,9 +140,15 @@ TSharedPtr<FJsonValue> FDialogHandlers::SetDialogPolicy(const TSharedPtr<FJsonOb
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("pattern"), Pattern);
 	Result->SetStringField(TEXT("response"), ResponseTypeToString(Response));
 	Result->SetNumberField(TEXT("policyCount"), Policies.Num());
+
+	// Rollback: clear_dialog_policy with same pattern
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("pattern"), Pattern);
+	MCPSetRollback(Result, TEXT("clear_dialog_policy"), Payload);
 
 	return MCPResult(Result);
 }

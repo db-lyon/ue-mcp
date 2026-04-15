@@ -465,6 +465,12 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageLayer(const TSharedPtr<FJs
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Foliage"));
 	FString MeshPath = OptionalString(Params, TEXT("meshPath"));
 	FString AssetType = OptionalString(Params, TEXT("assetType"), TEXT("FoliageType"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Hit = MCPCheckAssetExists(PackagePath, AssetName, OnConflict, *AssetType))
+	{
+		return Hit;
+	}
 
 	FString FullPath = PackagePath / AssetName;
 
@@ -514,6 +520,8 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageLayer(const TSharedPtr<FJs
 			Result->SetStringField(TEXT("meshPath"), MeshPath);
 		}
 		Result->SetBoolField(TEXT("success"), true);
+		MCPSetCreated(Result);
+		MCPSetDeleteAssetRollback(Result, GrassType->GetPathName());
 	}
 	else
 	{
@@ -558,6 +566,8 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageLayer(const TSharedPtr<FJs
 			Result->SetStringField(TEXT("meshPath"), MeshPath);
 		}
 		Result->SetBoolField(TEXT("success"), true);
+		MCPSetCreated(Result);
+		MCPSetDeleteAssetRollback(Result, FoliageType->GetPathName());
 	}
 
 	return MCPResult(Result);

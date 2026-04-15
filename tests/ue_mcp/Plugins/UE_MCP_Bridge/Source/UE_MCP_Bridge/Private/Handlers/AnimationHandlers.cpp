@@ -769,6 +769,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	float PlayLength = AnimAsset->GetPlayLength();
 	float ClampedTime = FMath::Clamp(static_cast<float>(TriggerTime), 0.0f, PlayLength);
 
+	// Idempotency: check for existing notify with same name at same trigger time
+	const FName NotifyFName(*NotifyName);
+	for (const FAnimNotifyEvent& Existing : AnimAsset->Notifies)
+	{
+		if (Existing.NotifyName == NotifyFName && FMath::IsNearlyEqual(Existing.GetTime(), ClampedTime, 0.001f))
+		{
+			auto ExistedRes = MCPSuccess();
+			MCPSetExisted(ExistedRes);
+			ExistedRes->SetStringField(TEXT("assetPath"), AssetPath);
+			ExistedRes->SetStringField(TEXT("notifyName"), NotifyName);
+			ExistedRes->SetNumberField(TEXT("triggerTime"), ClampedTime);
+			return MCPResult(ExistedRes);
+		}
+	}
+
 	// If a notify class is specified, try to find and instantiate it
 	UAnimNotify* NewNotify = nullptr;
 	if (!NotifyClassName.IsEmpty())
@@ -805,6 +820,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("notifyName"), NotifyName);
 	Result->SetNumberField(TEXT("triggerTime"), ClampedTime);
@@ -812,6 +828,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	{
 		Result->SetStringField(TEXT("notifyClass"), NewNotify->GetClass()->GetName());
 	}
+	// No rollback: no paired remove_anim_notify handler yet.
 
 	return MCPResult(Result);
 }
@@ -1341,50 +1358,87 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
 	}
 
+	// Capture previous values for rollback
+	const float PrevSeqLen = Montage->GetPlayLength();
+	const float PrevRateScale = Montage->RateScale;
+	const float PrevBlendIn = Montage->BlendIn.GetBlendTime();
+	const float PrevBlendOut = Montage->BlendOut.GetBlendTime();
+
 	TArray<FString> Modified;
+	bool bAnyChanged = false;
 
 	// sequenceLength — update via property reflection (SequenceLength is protected)
 	double SeqLen;
-	if (Params->TryGetNumberField(TEXT("sequenceLength"), SeqLen))
+	const bool bHasSeqLen = Params->TryGetNumberField(TEXT("sequenceLength"), SeqLen);
+	if (bHasSeqLen)
 	{
 		float NewLength = static_cast<float>(SeqLen);
-		SetMontageSequenceLength(Montage, NewLength);
-
-		// Also update composite sections' segment lengths to match
-		for (FCompositeSection& Section : Montage->CompositeSections)
+		if (!FMath::IsNearlyEqual(NewLength, PrevSeqLen))
 		{
-			SetSegmentLength(Section, NewLength);
+			SetMontageSequenceLength(Montage, NewLength);
+			for (FCompositeSection& Section : Montage->CompositeSections)
+			{
+				SetSegmentLength(Section, NewLength);
+			}
+			Modified.Add(TEXT("sequenceLength"));
+			bAnyChanged = true;
 		}
-		Modified.Add(TEXT("sequenceLength"));
 	}
 
 	// rateScale
 	double RateScale;
-	if (Params->TryGetNumberField(TEXT("rateScale"), RateScale))
+	const bool bHasRate = Params->TryGetNumberField(TEXT("rateScale"), RateScale);
+	if (bHasRate)
 	{
-		Montage->RateScale = static_cast<float>(RateScale);
-		Modified.Add(TEXT("rateScale"));
+		float NewRate = static_cast<float>(RateScale);
+		if (!FMath::IsNearlyEqual(NewRate, PrevRateScale))
+		{
+			Montage->RateScale = NewRate;
+			Modified.Add(TEXT("rateScale"));
+			bAnyChanged = true;
+		}
 	}
 
 	// blendIn
 	double BlendIn;
-	if (Params->TryGetNumberField(TEXT("blendIn"), BlendIn))
+	const bool bHasBlendIn = Params->TryGetNumberField(TEXT("blendIn"), BlendIn);
+	if (bHasBlendIn)
 	{
-		Montage->BlendIn.SetBlendTime(static_cast<float>(BlendIn));
-		Modified.Add(TEXT("blendIn"));
+		float NewIn = static_cast<float>(BlendIn);
+		if (!FMath::IsNearlyEqual(NewIn, PrevBlendIn))
+		{
+			Montage->BlendIn.SetBlendTime(NewIn);
+			Modified.Add(TEXT("blendIn"));
+			bAnyChanged = true;
+		}
 	}
 
 	// blendOut
 	double BlendOut;
-	if (Params->TryGetNumberField(TEXT("blendOut"), BlendOut))
+	const bool bHasBlendOut = Params->TryGetNumberField(TEXT("blendOut"), BlendOut);
+	if (bHasBlendOut)
 	{
-		Montage->BlendOut.SetBlendTime(static_cast<float>(BlendOut));
-		Modified.Add(TEXT("blendOut"));
+		float NewOut = static_cast<float>(BlendOut);
+		if (!FMath::IsNearlyEqual(NewOut, PrevBlendOut))
+		{
+			Montage->BlendOut.SetBlendTime(NewOut);
+			Modified.Add(TEXT("blendOut"));
+			bAnyChanged = true;
+		}
 	}
 
-	if (Modified.Num() == 0)
+	if (!bHasSeqLen && !bHasRate && !bHasBlendIn && !bHasBlendOut)
 	{
 		return MCPError(TEXT("No properties to set. Provide at least one of: sequenceLength, rateScale, blendIn, blendOut"));
+	}
+
+	// Idempotent: requested values match current state
+	if (!bAnyChanged)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("assetPath"), AssetPath);
+		return MCPResult(Noop);
 	}
 
 	Montage->PostEditChange();
@@ -1393,6 +1447,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 
 	// Return current state
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	TArray<TSharedPtr<FJsonValue>> ModifiedArray;
 	for (const FString& M : Modified)
@@ -1404,6 +1459,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 	Result->SetNumberField(TEXT("rateScale"), Montage->RateScale);
 	Result->SetNumberField(TEXT("blendIn"), Montage->BlendIn.GetBlendTime());
 	Result->SetNumberField(TEXT("blendOut"), Montage->BlendOut.GetBlendTime());
+
+	// Rollback: self-inverse with previous values
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	if (bHasSeqLen) Payload->SetNumberField(TEXT("sequenceLength"), PrevSeqLen);
+	if (bHasRate) Payload->SetNumberField(TEXT("rateScale"), PrevRateScale);
+	if (bHasBlendIn) Payload->SetNumberField(TEXT("blendIn"), PrevBlendIn);
+	if (bHasBlendOut) Payload->SetNumberField(TEXT("blendOut"), PrevBlendOut);
+	MCPSetRollback(Result, TEXT("set_montage_properties"), Payload);
 
 	return MCPResult(Result);
 }
@@ -1502,6 +1566,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateStateMachine(const TSharedPtr<F
 		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
+	// Idempotency: check for existing state machine by name
+	if (FindStateMachineNode(AnimBP, Name))
+	{
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("assetPath"), AssetPath);
+		Existed->SetStringField(TEXT("name"), Name);
+		Existed->SetStringField(TEXT("graphName"), GraphName);
+		return MCPResult(Existed);
+	}
+
 	// Create the state machine container node in the AnimGraph
 	UAnimGraphNode_StateMachine* SMNode = NewObject<UAnimGraphNode_StateMachine>(TargetGraph);
 	TargetGraph->AddNode(SMNode, false, false);
@@ -1520,9 +1595,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateStateMachine(const TSharedPtr<F
 	CompileAndSave(AnimBP);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("graphName"), GraphName);
+	// No rollback: no paired remove_state_machine handler.
 
 	return MCPResult(Result);
 }
@@ -1556,10 +1633,20 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 		return MCPError(TEXT("State machine has no editor graph"));
 	}
 
-	// Check for duplicate
+	// Idempotency: existing state with this name short-circuits
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	if (FindStateNode(SMGraph, StateName))
 	{
-		return MCPError(FString::Printf(TEXT("State '%s' already exists"), *StateName));
+		if (OnConflict == TEXT("error"))
+		{
+			return MCPError(FString::Printf(TEXT("State '%s' already exists"), *StateName));
+		}
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("assetPath"), AssetPath);
+		Existed->SetStringField(TEXT("stateMachineName"), SMName);
+		Existed->SetStringField(TEXT("stateName"), StateName);
+		return MCPResult(Existed);
 	}
 
 	// Create state node
@@ -1584,9 +1671,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 	CompileAndSave(AnimBP);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
 	Result->SetStringField(TEXT("stateName"), StateName);
+	// No rollback: no paired remove_state handler.
 
 	return MCPResult(Result);
 }
@@ -1629,6 +1718,33 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddTransition(const TSharedPtr<FJsonO
 		return MCPError(FString::Printf(TEXT("State '%s' not found"), *ToState));
 	}
 
+	// Idempotency: check if a transition From→To already exists
+	UEdGraphPin* FromOutPin = From->GetOutputPin();
+	if (FromOutPin)
+	{
+		for (UEdGraphPin* Linked : FromOutPin->LinkedTo)
+		{
+			if (!Linked || !Linked->GetOwningNode()) continue;
+			UAnimStateTransitionNode* ExistingTrans = Cast<UAnimStateTransitionNode>(Linked->GetOwningNode());
+			if (!ExistingTrans) continue;
+			UEdGraphPin* ExistingTransOut = ExistingTrans->GetOutputPin();
+			if (!ExistingTransOut) continue;
+			for (UEdGraphPin* ToLinked : ExistingTransOut->LinkedTo)
+			{
+				if (ToLinked && ToLinked->GetOwningNode() == To)
+				{
+					auto ExistedRes = MCPSuccess();
+					MCPSetExisted(ExistedRes);
+					ExistedRes->SetStringField(TEXT("assetPath"), AssetPath);
+					ExistedRes->SetStringField(TEXT("stateMachineName"), SMName);
+					ExistedRes->SetStringField(TEXT("fromState"), FromState);
+					ExistedRes->SetStringField(TEXT("toState"), ToState);
+					return MCPResult(ExistedRes);
+				}
+			}
+		}
+	}
+
 	// Create transition node
 	UAnimStateTransitionNode* TransNode = NewObject<UAnimStateTransitionNode>(SMGraph);
 	SMGraph->AddNode(TransNode, false, false);
@@ -1658,10 +1774,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddTransition(const TSharedPtr<FJsonO
 	CompileAndSave(AnimBP);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
 	Result->SetStringField(TEXT("fromState"), FromState);
 	Result->SetStringField(TEXT("toState"), ToState);
+	// No rollback: no paired remove_transition handler.
 
 	return MCPResult(Result);
 }
@@ -2053,15 +2171,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddCurve(const TSharedPtr<FJsonObject
 
 	if (!bAdded)
 	{
-		// Curve may already exist – not necessarily an error
-		Result->SetStringField(TEXT("warning"), FString::Printf(TEXT("Curve '%s' may already exist"), *CurveName));
+		// Curve already exists — idempotent replay
+		MCPSetExisted(Result);
+		Result->SetStringField(TEXT("assetPath"), AssetPath);
+		Result->SetStringField(TEXT("curveName"), CurveName);
+		return MCPResult(Result);
 	}
+
+	MCPSetCreated(Result);
 
 	AnimSeq->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("curveName"), CurveName);
+	// No rollback: no paired remove_curve handler.
 
 	return MCPResult(Result);
 }
@@ -2090,15 +2214,36 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSlot(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("trackIndex %d out of range (0..%d)"), TrackIndex, Montage->SlotAnimTracks.Num() - 1));
 	}
 
-	Montage->SlotAnimTracks[TrackIndex].SlotName = FName(*SlotName);
+	// Capture previous slot name for rollback and idempotency
+	const FName PrevSlot = Montage->SlotAnimTracks[TrackIndex].SlotName;
+	const FName NewSlotFName(*SlotName);
+	if (PrevSlot == NewSlotFName)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("assetPath"), AssetPath);
+		Noop->SetStringField(TEXT("slotName"), SlotName);
+		Noop->SetNumberField(TEXT("trackIndex"), TrackIndex);
+		return MCPResult(Noop);
+	}
+
+	Montage->SlotAnimTracks[TrackIndex].SlotName = NewSlotFName;
 
 	Montage->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("slotName"), SlotName);
 	Result->SetNumberField(TEXT("trackIndex"), TrackIndex);
+
+	// Rollback: self-inverse with previous slot name
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("slotName"), PrevSlot.ToString());
+	Payload->SetNumberField(TEXT("trackIndex"), TrackIndex);
+	MCPSetRollback(Result, TEXT("set_montage_slot"), Payload);
 
 	return MCPResult(Result);
 }
@@ -2123,11 +2268,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSection(const TSharedPtr<FJ
 		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
 	}
 
-	// Check if section already exists
+	// Idempotency: existing section short-circuits
 	int32 ExistingIdx = Montage->GetSectionIndex(FName(*SectionName));
 	if (ExistingIdx != INDEX_NONE)
 	{
-		return MCPError(FString::Printf(TEXT("Section '%s' already exists at index %d"), *SectionName, ExistingIdx));
+		const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+		if (OnConflict == TEXT("error"))
+		{
+			return MCPError(FString::Printf(TEXT("Section '%s' already exists at index %d"), *SectionName, ExistingIdx));
+		}
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("assetPath"), AssetPath);
+		Existed->SetStringField(TEXT("sectionName"), SectionName);
+		Existed->SetNumberField(TEXT("sectionIndex"), ExistingIdx);
+		return MCPResult(Existed);
 	}
 
 	// Add the composite section
@@ -2145,6 +2300,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSection(const TSharedPtr<FJ
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("sectionName"), SectionName);
 	Result->SetNumberField(TEXT("startTime"), StartTime);
@@ -2153,6 +2309,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSection(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("linkedSection"), LinkedSection);
 	}
 	Result->SetNumberField(TEXT("totalSections"), Montage->CompositeSections.Num());
+	// No rollback: no paired remove_montage_section handler.
 
 	return MCPResult(Result);
 }
@@ -2168,6 +2325,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 	if (auto Err = RequireString(Params, TEXT("skeletalMeshPath"), SkeletalMeshPath)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Hit = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("IKRigDefinition")))
+	{
+		return Hit;
+	}
 
 	// Load the skeletal mesh to get the skeleton
 	USkeletalMesh* SkelMesh = LoadObject<USkeletalMesh>(nullptr, *SkeletalMeshPath);
@@ -2198,9 +2361,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 	UEditorAssetLibrary::SaveAsset(IKRig->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), IKRig->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("skeletalMeshPath"), SkeletalMeshPath);
+	MCPSetDeleteAssetRollback(Result, IKRig->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -2432,16 +2597,33 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveVirtualBone(const TSharedPtr<FJ
 	USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 
+	// Idempotency: check if virtual bone exists
+	const FName BoneFName(*BoneName);
+	bool bFound = false;
+	for (const FVirtualBone& VB : Skeleton->GetVirtualBones())
+	{
+		if (VB.VirtualBoneName == BoneFName) { bFound = true; break; }
+	}
+	if (!bFound)
+	{
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("skeletonPath"), SkeletonPath);
+		Noop->SetStringField(TEXT("virtualBoneName"), BoneName);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
+	}
+
 	Skeleton->Modify();
-	TArray<FName> ToRemove = { FName(*BoneName) };
+	TArray<FName> ToRemove = { BoneFName };
 	Skeleton->RemoveVirtualBones(ToRemove);
 	Skeleton->PostEditChange();
 	UEditorAssetLibrary::SaveLoadedAsset(Skeleton);
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
-	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
 	Result->SetStringField(TEXT("removed"), BoneName);
+	Result->SetBoolField(TEXT("deleted"), true);
+	// No rollback: removal of a virtual bone is not reversible without source/target capture.
 	return MCPResult(Result);
 }
 

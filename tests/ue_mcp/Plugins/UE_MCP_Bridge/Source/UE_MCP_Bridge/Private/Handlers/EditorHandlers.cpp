@@ -245,14 +245,41 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetConfig(const TSharedPtr<FJsonObject>&
 	FString ConfigDir = FPaths::ProjectConfigDir();
 	FString IniPath = FPaths::Combine(ConfigDir, ConfigName);
 
+	// Capture previous value for rollback and idempotency
+	FString PrevValue;
+	bool bHadPrev = GConfig->GetString(*Section, *Key, PrevValue, IniPath);
+	if (bHadPrev && PrevValue == Value)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("configFile"), ConfigName);
+		Noop->SetStringField(TEXT("section"), Section);
+		Noop->SetStringField(TEXT("key"), Key);
+		Noop->SetStringField(TEXT("value"), Value);
+		return MCPResult(Noop);
+	}
+
 	GConfig->SetString(*Section, *Key, *Value, IniPath);
 	GConfig->Flush(false, IniPath);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("configFile"), ConfigName);
 	Result->SetStringField(TEXT("section"), Section);
 	Result->SetStringField(TEXT("key"), Key);
 	Result->SetStringField(TEXT("value"), Value);
+
+	// Rollback: self-inverse with previous value (only if we had a previous value)
+	if (bHadPrev)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("configFile"), ConfigName);
+		Payload->SetStringField(TEXT("section"), Section);
+		Payload->SetStringField(TEXT("key"), Key);
+		Payload->SetStringField(TEXT("value"), PrevValue);
+		MCPSetRollback(Result, TEXT("set_config"), Payload);
+	}
+
 	return MCPResult(Result);
 }
 
@@ -1179,6 +1206,20 @@ TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObj
 		return MCPError(TEXT("LevelEditorSubsystem not available"));
 	}
 
+	// Idempotency: level at LevelPath already exists?
+	if (!LevelPath.IsEmpty() && UEditorAssetLibrary::DoesAssetExist(LevelPath))
+	{
+		const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+		if (OnConflict == TEXT("error"))
+		{
+			return MCPError(FString::Printf(TEXT("Level already exists: %s"), *LevelPath));
+		}
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("levelPath"), LevelPath);
+		return MCPResult(Existed);
+	}
+
 	bool bSuccess = false;
 	if (TemplateLevel.IsEmpty())
 	{
@@ -1195,6 +1236,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObj
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 
 	// Get info about the new world
 	UWorld* World = GetEditorWorld();
@@ -1206,6 +1248,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::CreateNewLevel(const TSharedPtr<FJsonObj
 
 	Result->SetStringField(TEXT("levelPath"), LevelPath);
 	Result->SetStringField(TEXT("message"), TEXT("New level created"));
+	if (!LevelPath.IsEmpty())
+	{
+		MCPSetDeleteAssetRollback(Result, LevelPath);
+	}
 	return MCPResult(Result);
 }
 

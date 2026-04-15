@@ -199,10 +199,12 @@ TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJso
 		Params->TryGetNumberField(TEXT("pitchMultiplier"), Pitch);
 	}
 
-	// Play the sound at the specified location
+	// No rollback: destructive/external — playing a one-shot sound has no inverse.
+	// Replays produce a new audible event; not natural-key idempotent.
 	UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, static_cast<float>(Volume), static_cast<float>(Pitch));
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), SoundPath);
 
 	return MCPResult(Result);

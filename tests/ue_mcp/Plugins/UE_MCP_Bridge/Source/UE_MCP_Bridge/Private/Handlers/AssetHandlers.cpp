@@ -813,9 +813,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportDataTableJson(const TSharedPtr<FJso
 	DataTable->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
 	Result->SetStringField(TEXT("message"), TEXT("DataTable imported successfully from JSON"));
+	// No rollback: destructive — import replaces table contents.
 
 	return MCPResult(Result);
 }
@@ -1682,9 +1684,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetArrayField(TEXT("meshes"), ResultArray);
 	Result->SetStringField(TEXT("offsetApplied"), FString::Printf(TEXT("(%.2f, %.2f, %.2f)"), Center.X, Center.Y, Center.Z));
 	Result->SetNumberField(TEXT("meshCount"), Meshes.Num());
+	// No rollback: destructive/external — vertex offsets applied non-idempotently;
+	// re-running shifts the pivot again. Not natural-key idempotent.
 
 	return MCPResult(Result);
 }
@@ -1917,9 +1922,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 	DataTable->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
 	Result->SetStringField(TEXT("message"), TEXT("DataTable reimported successfully from JSON"));
+	// No rollback: destructive/external — reimport replaces table contents.
 
 	return MCPResult(Result);
 }
@@ -1976,6 +1983,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	bool bSuccess = FReimportManager::Instance()->Reimport(Asset, /*bAskForNewFileIfMissing=*/false, /*bShowNotification=*/false);
 
 	auto Result = MCPSuccess();
+	if (bSuccess) MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
 	Result->SetBoolField(TEXT("success"), bSuccess);
@@ -1983,6 +1991,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Reimport failed -- check that the asset has a valid source file"));
 	}
+	// No rollback: destructive/external — reimport pulls fresh from source file.
 
 	return MCPResult(Result);
 }

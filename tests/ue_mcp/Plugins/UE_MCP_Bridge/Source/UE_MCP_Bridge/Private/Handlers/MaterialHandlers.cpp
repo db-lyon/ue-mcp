@@ -467,17 +467,29 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialShadingModel(const TSharedP
 	}
 
 	EMaterialShadingModel NewShadingModel = ParseShadingModel(ShadingModelStr);
-
-	Material->PreEditChange(nullptr);
-	Material->SetShadingModel(NewShadingModel);
-	Material->PostEditChange();
-
-	// Mark dirty and save
-	Material->MarkPackageDirty();
+	const EMaterialShadingModel PrevShadingModel = Material->GetShadingModels().GetFirstShadingModel();
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), Material->GetPathName());
 	Result->SetStringField(TEXT("shadingModel"), ShadingModelToString(NewShadingModel));
+
+	if (PrevShadingModel == NewShadingModel)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
+	Material->PreEditChange(nullptr);
+	Material->SetShadingModel(NewShadingModel);
+	Material->PostEditChange();
+	Material->MarkPackageDirty();
+
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), Material->GetPathName());
+	Payload->SetStringField(TEXT("shadingModel"), ShadingModelToString(PrevShadingModel));
+	MCPSetRollback(Result, TEXT("set_material_shading_model"), Payload);
 
 	return MCPResult(Result);
 }
@@ -509,14 +521,41 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBlendMode(const TSharedPtr<
 		return MCPError(FString::Printf(TEXT("Unknown blend mode: '%s'. Use Opaque, Masked, Translucent, Additive, Modulate, AlphaComposite, or AlphaHoldout"), *BlendModeStr));
 	}
 
+	const EBlendMode PrevBlendMode = Material->BlendMode;
+	FString PrevBlendModeStr;
+	switch (PrevBlendMode)
+	{
+	case BLEND_Opaque: PrevBlendModeStr = TEXT("Opaque"); break;
+	case BLEND_Masked: PrevBlendModeStr = TEXT("Masked"); break;
+	case BLEND_Translucent: PrevBlendModeStr = TEXT("Translucent"); break;
+	case BLEND_Additive: PrevBlendModeStr = TEXT("Additive"); break;
+	case BLEND_Modulate: PrevBlendModeStr = TEXT("Modulate"); break;
+	case BLEND_AlphaComposite: PrevBlendModeStr = TEXT("AlphaComposite"); break;
+	case BLEND_AlphaHoldout: PrevBlendModeStr = TEXT("AlphaHoldout"); break;
+	default: PrevBlendModeStr = TEXT("Opaque"); break;
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), Material->GetPathName());
+	Result->SetStringField(TEXT("blendMode"), BlendModeStr);
+
+	if (PrevBlendMode == NewBlendMode)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
 	Material->PreEditChange(nullptr);
 	Material->BlendMode = NewBlendMode;
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("path"), Material->GetPathName());
-	Result->SetStringField(TEXT("blendMode"), BlendModeStr);
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), Material->GetPathName());
+	Payload->SetStringField(TEXT("blendMode"), PrevBlendModeStr);
+	MCPSetRollback(Result, TEXT("set_material_blend_mode"), Payload);
 
 	return MCPResult(Result);
 }
@@ -544,6 +583,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBaseColor(const TSharedPtr<
 		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
 	}
 
+	// No rollback: this adds a new Constant3Vector expression each call (not natural-key idempotent).
+	// Caller should use set_material_parameter with a named scalar/vector parameter for true idempotency.
 	Material->PreEditChange(nullptr);
 
 	// Create a Constant3Vector expression for the base color
@@ -560,6 +601,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBaseColor(const TSharedPtr<
 	Material->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	TSharedPtr<FJsonObject> ColorResult = MakeShared<FJsonObject>();
 	ColorResult->SetNumberField(TEXT("r"), R);
 	ColorResult->SetNumberField(TEXT("g"), G);
@@ -692,12 +734,19 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	int32 NodeIndex = Material->GetExpressions().Num() - 1;
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("expressionType"), ExpressionType);
 	Result->SetStringField(TEXT("expressionClass"), NewExpression->GetClass()->GetName());
 	Result->SetStringField(TEXT("nodeId"), FString::FromInt(NodeIndex));
 	Result->SetStringField(TEXT("description"), NewExpression->GetDescription());
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetNumberField(TEXT("expressionCount"), Material->GetExpressions().Num());
+
+	// Rollback: remove the expression by nodeId
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("materialPath"), Material->GetPathName());
+	Payload->SetStringField(TEXT("nodeId"), FString::FromInt(NodeIndex));
+	MCPSetRollback(Result, TEXT("delete_material_expression"), Payload);
 
 	return MCPResult(Result);
 }
@@ -988,14 +1037,35 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 			return MCPError(TEXT("Missing 'value' number field for scalar parameter"));
 		}
 
-		MaterialInstance->SetScalarParameterValueEditorOnly(FName(*ParameterName), static_cast<float>(ScalarValue));
-		MaterialInstance->MarkPackageDirty();
+		float PrevScalar = 0.0f;
+		const bool bHadPrev = MaterialInstance->GetScalarParameterValue(FName(*ParameterName), PrevScalar);
 
 		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("parameterName"), ParameterName);
 		Result->SetStringField(TEXT("parameterType"), TEXT("scalar"));
 		Result->SetNumberField(TEXT("value"), ScalarValue);
 		Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
+
+		if (bHadPrev && FMath::IsNearlyEqual(PrevScalar, (float)ScalarValue))
+		{
+			MCPSetExisted(Result);
+			Result->SetBoolField(TEXT("updated"), false);
+			return MCPResult(Result);
+		}
+
+		MaterialInstance->SetScalarParameterValueEditorOnly(FName(*ParameterName), static_cast<float>(ScalarValue));
+		MaterialInstance->MarkPackageDirty();
+
+		MCPSetUpdated(Result);
+		if (bHadPrev)
+		{
+			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+			Payload->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
+			Payload->SetStringField(TEXT("parameterName"), ParameterName);
+			Payload->SetStringField(TEXT("parameterType"), TEXT("scalar"));
+			Payload->SetNumberField(TEXT("value"), PrevScalar);
+			MCPSetRollback(Result, TEXT("set_material_parameter"), Payload);
+		}
 
 		return MCPResult(Result);
 	}
@@ -1014,8 +1084,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 		(*ValueObj)->TryGetNumberField(TEXT("a"), A);
 
 		FLinearColor ColorValue(R, G, B, A);
-		MaterialInstance->SetVectorParameterValueEditorOnly(FName(*ParameterName), ColorValue);
-		MaterialInstance->MarkPackageDirty();
+		FLinearColor PrevColor;
+		const bool bHadPrev = MaterialInstance->GetVectorParameterValue(FName(*ParameterName), PrevColor);
 
 		TSharedPtr<FJsonObject> ValueResult = MakeShared<FJsonObject>();
 		ValueResult->SetNumberField(TEXT("r"), R);
@@ -1028,6 +1098,32 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 		Result->SetStringField(TEXT("parameterType"), TEXT("vector"));
 		Result->SetObjectField(TEXT("value"), ValueResult);
 		Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
+
+		if (bHadPrev && PrevColor.Equals(ColorValue))
+		{
+			MCPSetExisted(Result);
+			Result->SetBoolField(TEXT("updated"), false);
+			return MCPResult(Result);
+		}
+
+		MaterialInstance->SetVectorParameterValueEditorOnly(FName(*ParameterName), ColorValue);
+		MaterialInstance->MarkPackageDirty();
+
+		MCPSetUpdated(Result);
+		if (bHadPrev)
+		{
+			TSharedPtr<FJsonObject> PrevValueObj = MakeShared<FJsonObject>();
+			PrevValueObj->SetNumberField(TEXT("r"), PrevColor.R);
+			PrevValueObj->SetNumberField(TEXT("g"), PrevColor.G);
+			PrevValueObj->SetNumberField(TEXT("b"), PrevColor.B);
+			PrevValueObj->SetNumberField(TEXT("a"), PrevColor.A);
+			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+			Payload->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
+			Payload->SetStringField(TEXT("parameterName"), ParameterName);
+			Payload->SetStringField(TEXT("parameterType"), TEXT("vector"));
+			Payload->SetObjectField(TEXT("value"), PrevValueObj);
+			MCPSetRollback(Result, TEXT("set_material_parameter"), Payload);
+		}
 
 		return MCPResult(Result);
 	}
@@ -1050,14 +1146,35 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 			return MCPError(FString::Printf(TEXT("Failed to load texture at '%s'"), *TexturePath));
 		}
 
-		MaterialInstance->SetTextureParameterValueEditorOnly(FName(*ParameterName), Texture);
-		MaterialInstance->MarkPackageDirty();
+		UTexture* PrevTexture = nullptr;
+		const bool bHadPrev = MaterialInstance->GetTextureParameterValue(FName(*ParameterName), PrevTexture);
 
 		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("parameterName"), ParameterName);
 		Result->SetStringField(TEXT("parameterType"), TEXT("texture"));
 		Result->SetStringField(TEXT("value"), Texture->GetPathName());
 		Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
+
+		if (bHadPrev && PrevTexture == Texture)
+		{
+			MCPSetExisted(Result);
+			Result->SetBoolField(TEXT("updated"), false);
+			return MCPResult(Result);
+		}
+
+		MaterialInstance->SetTextureParameterValueEditorOnly(FName(*ParameterName), Texture);
+		MaterialInstance->MarkPackageDirty();
+
+		MCPSetUpdated(Result);
+		if (bHadPrev && PrevTexture)
+		{
+			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+			Payload->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
+			Payload->SetStringField(TEXT("parameterName"), ParameterName);
+			Payload->SetStringField(TEXT("parameterType"), TEXT("texture"));
+			Payload->SetStringField(TEXT("value"), PrevTexture->GetPathName());
+			MCPSetRollback(Result, TEXT("set_material_parameter"), Payload);
+		}
 
 		return MCPResult(Result);
 	}
@@ -1128,6 +1245,19 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectExpression(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("Target input index %d is out of range"), TargetInputIndex));
 	}
 
+	// Idempotency: check if input is already wired to the same source
+	if (TargetInput->Expression == SourceExpression && TargetInput->OutputIndex == SourceOutputIndex)
+	{
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("materialPath"), Material->GetPathName());
+		Existed->SetNumberField(TEXT("sourceIndex"), SourceIndex);
+		Existed->SetNumberField(TEXT("targetIndex"), TargetIndex);
+		Existed->SetNumberField(TEXT("sourceOutputIndex"), SourceOutputIndex);
+		Existed->SetNumberField(TEXT("targetInputIndex"), TargetInputIndex);
+		return MCPResult(Existed);
+	}
+
 	Material->PreEditChange(nullptr);
 	TargetInput->Connect(SourceOutputIndex, SourceExpression);
 
@@ -1135,6 +1265,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectExpression(const TSharedPtr<FJs
 	Material->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetNumberField(TEXT("sourceIndex"), SourceIndex);
 	Result->SetStringField(TEXT("sourceClass"), SourceExpression->GetClass()->GetName());
@@ -1142,6 +1273,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectExpression(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("targetClass"), TargetExpression->GetClass()->GetName());
 	Result->SetNumberField(TEXT("sourceOutputIndex"), SourceOutputIndex);
 	Result->SetNumberField(TEXT("targetInputIndex"), TargetInputIndex);
+	// No rollback: no paired disconnect_expression handler.
 
 	return MCPResult(Result);
 }
@@ -1223,17 +1355,36 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialProperty(const TSharedP
 		return MCPError(FString::Printf(TEXT("Material property '%s' is not supported for direct connection"), *PropertyName));
 	}
 
+	// Idempotency: check if already connected to this expression with same output index
+	if (PropertyInput->Expression == Expression && PropertyInput->OutputIndex == OutputIndex)
+	{
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("materialPath"), Material->GetPathName());
+		Existed->SetNumberField(TEXT("expressionIndex"), ExpressionIndex);
+		Existed->SetStringField(TEXT("property"), PropertyName);
+		Existed->SetNumberField(TEXT("outputIndex"), OutputIndex);
+		return MCPResult(Existed);
+	}
+
 	PropertyInput->Connect(OutputIndex, Expression);
 
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetNumberField(TEXT("expressionIndex"), ExpressionIndex);
 	Result->SetStringField(TEXT("expressionClass"), Expression->GetClass()->GetName());
 	Result->SetStringField(TEXT("property"), PropertyName);
 	Result->SetNumberField(TEXT("outputIndex"), OutputIndex);
+
+	// Rollback: disconnect_material_property
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("materialPath"), Material->GetPathName());
+	Payload->SetStringField(TEXT("property"), PropertyName);
+	MCPSetRollback(Result, TEXT("disconnect_material_property"), Payload);
 
 	return MCPResult(Result);
 }
@@ -1290,6 +1441,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteExpression(const TSharedPtr<FJso
 	Result->SetNumberField(TEXT("deletedIndex"), ExpressionIndex);
 	Result->SetStringField(TEXT("deletedClass"), DeletedClass);
 	Result->SetNumberField(TEXT("expressionCount"), Material->GetExpressions().Num());
+	Result->SetBoolField(TEXT("deleted"), true);
+	// No rollback: deletion is destructive (would need to snapshot expression + connections to reverse).
 
 	return MCPResult(Result);
 }
@@ -1555,9 +1708,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetNumberField(TEXT("expressionIndex"), ExpressionIndex);
 	Result->SetStringField(TEXT("expressionClass"), ExpressionClass);
+	// No rollback: would require per-expression-type before-state capture across many expression variants.
 
 	return MCPResult(Result);
 }
@@ -1844,7 +1999,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 
 	Material->PreEditChange(nullptr);
 
-	// Create a TextureSample expression
+	// Create a TextureSample expression.
+	// Note: connect_texture_to_material adds a new TextureSample node every call
+	// (not natural-key idempotent). Use connect_material_expressions with named
+	// source/target expressions if idempotency is required.
 	UMaterialExpressionTextureSample* TextureSampleExpr = NewObject<UMaterialExpressionTextureSample>(Material);
 	TextureSampleExpr->Texture = Texture;
 	TextureSampleExpr->MaterialExpressionEditorX = -400;
@@ -1886,6 +2044,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 	Material->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("texturePath"), Texture->GetPathName());
 	Result->SetStringField(TEXT("property"), PropertyName);
@@ -1989,17 +2148,32 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TShar
 		return MCPError(FString::Printf(TEXT("Target input index %d is out of range"), TargetInputIndex));
 	}
 
+	// Idempotency: already wired?
+	if (TargetInput->Expression == SourceExpression && TargetInput->OutputIndex == SourceOutputIndex)
+	{
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("materialPath"), Material->GetPathName());
+		Existed->SetStringField(TEXT("sourceExpression"), SourceExpressionName);
+		Existed->SetStringField(TEXT("targetExpression"), TargetExpressionName);
+		Existed->SetNumberField(TEXT("sourceOutputIndex"), SourceOutputIndex);
+		Existed->SetNumberField(TEXT("targetInputIndex"), TargetInputIndex);
+		return MCPResult(Existed);
+	}
+
 	Material->PreEditChange(nullptr);
 	TargetInput->Connect(SourceOutputIndex, SourceExpression);
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("sourceExpression"), SourceExpression->GetClass()->GetName());
 	Result->SetStringField(TEXT("targetExpression"), TargetExpression->GetClass()->GetName());
 	Result->SetNumberField(TEXT("sourceOutputIndex"), SourceOutputIndex);
 	Result->SetNumberField(TEXT("targetInputIndex"), TargetInputIndex);
+	// No rollback: no paired disconnect handler by names.
 
 	return MCPResult(Result);
 }
@@ -2092,17 +2266,36 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectToMaterialProperty(const TShare
 		return MCPError(FString::Printf(TEXT("Material property '%s' is not supported for direct connection"), *PropertyName));
 	}
 
+	// Idempotency
+	if (PropertyInput->Expression == Expression && PropertyInput->OutputIndex == OutputIndex)
+	{
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("materialPath"), Material->GetPathName());
+		Existed->SetStringField(TEXT("expressionName"), ExpressionName);
+		Existed->SetStringField(TEXT("property"), PropertyName);
+		Existed->SetNumberField(TEXT("outputIndex"), OutputIndex);
+		return MCPResult(Existed);
+	}
+
 	PropertyInput->Connect(OutputIndex, Expression);
 
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("expressionName"), ExpressionName);
 	Result->SetStringField(TEXT("expressionClass"), Expression->GetClass()->GetName());
 	Result->SetStringField(TEXT("property"), PropertyName);
 	Result->SetNumberField(TEXT("outputIndex"), OutputIndex);
+
+	// Rollback: disconnect_material_property
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("materialPath"), Material->GetPathName());
+	Payload->SetStringField(TEXT("property"), PropertyName);
+	MCPSetRollback(Result, TEXT("disconnect_material_property"), Payload);
 
 	return MCPResult(Result);
 }
@@ -2132,7 +2325,12 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TShared
 	UMaterialExpression* Expression = FindExpressionByName(Material, ExpressionName);
 	if (!Expression)
 	{
-		return MCPError(FString::Printf(TEXT("Expression '%s' not found"), *ExpressionName));
+		// Idempotent: already deleted
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("materialPath"), Material->GetPathName());
+		Noop->SetStringField(TEXT("expressionName"), ExpressionName);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
 	}
 
 	FString DeletedClass = Expression->GetClass()->GetName();
@@ -2193,6 +2391,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TShared
 	Result->SetStringField(TEXT("deletedExpression"), ExpressionName);
 	Result->SetStringField(TEXT("deletedClass"), DeletedClass);
 	Result->SetNumberField(TEXT("expressionCount"), Material->GetExpressions().Num());
+	Result->SetBoolField(TEXT("deleted"), true);
+	// No rollback: would require snapshotting the expression and all its connections.
 
 	return MCPResult(Result);
 }
@@ -2260,8 +2460,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DisconnectMaterialProperty(const TShar
 	Material->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("property"), PropertyName);
+	// No rollback: we don't capture the previous expression binding before clearing.
 
 	return MCPResult(Result);
 }
@@ -2625,6 +2827,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RenderMaterialPreview(const TSharedPtr
 	Result->SetNumberField(TEXT("width"), Width);
 	Result->SetNumberField(TEXT("height"), Height);
 	Result->SetStringField(TEXT("mode"), TEXT("base_color_approximation"));
+	// No rollback: destructive/external (writes a file to disk).
 	return MCPResult(Result);
 }
 
@@ -2632,6 +2835,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BeginMaterialTransaction(const TShared
 {
 	const FString Label = OptionalString(Params, TEXT("label"), TEXT("MCP Material Edit"));
 	if (!GEditor) return MCPError(TEXT("GEditor not available"));
+	// No rollback: transaction lifecycle; paired end_material_transaction is the natural counterpart.
 	GEditor->BeginTransaction(FText::FromString(Label));
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	Result->SetStringField(TEXT("label"), Label);
@@ -2641,6 +2845,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BeginMaterialTransaction(const TShared
 TSharedPtr<FJsonValue> FMaterialHandlers::EndMaterialTransaction(const TSharedPtr<FJsonObject>& Params)
 {
 	if (!GEditor) return MCPError(TEXT("GEditor not available"));
+	// No rollback: lifecycle op.
 	const int32 Idx = GEditor->EndTransaction();
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	Result->SetNumberField(TEXT("transactionIndex"), Idx);

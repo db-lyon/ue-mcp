@@ -1038,9 +1038,11 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityWidget(const TSharedPtr<
 		return MCPError(TEXT("EditorUtilitySubsystem not available"));
 	}
 
+	// No rollback: destructive/external — opens a dockable tab in the editor.
 	Subsystem->SpawnAndRegisterTab(EUWidget);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), EUWidget->GetName());
 
@@ -1065,9 +1067,11 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityBlueprint(const TSharedP
 		return MCPError(TEXT("EditorUtilitySubsystem not available"));
 	}
 
+	// No rollback: destructive/external — runs an editor utility script.
 	Subsystem->TryRun(LoadedAsset);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("name"), EUBlueprint->GetName());
 
@@ -1158,6 +1162,25 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 		return MCPError(TEXT("WidgetTree is null"));
 	}
 
+	// Idempotency: if widget with this name already exists, return existed
+	if (!WidgetName.IsEmpty())
+	{
+		UWidget* Existing = nullptr;
+		WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
+		{
+			if (Widget && Widget->GetName() == WidgetName) Existing = Widget;
+		});
+		if (Existing)
+		{
+			auto ExistingResult = MCPSuccess();
+			MCPSetExisted(ExistingResult);
+			ExistingResult->SetStringField(TEXT("widgetName"), WidgetName);
+			ExistingResult->SetStringField(TEXT("widgetClass"), Existing->GetClass()->GetName());
+			ExistingResult->SetStringField(TEXT("assetPath"), AssetPath);
+			return MCPResult(ExistingResult);
+		}
+	}
+
 	// ── Resolve the UClass ──
 	UClass* WClass = ResolveWidgetClass(WidgetClassName);
 	if (!WClass)
@@ -1235,6 +1258,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("widgetName"), NewWidget->GetName());
 	Result->SetStringField(TEXT("widgetClass"), WClass->GetName());
 	Result->SetBoolField(TEXT("isRoot"), bIsRoot);
@@ -1242,6 +1266,11 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	{
 		Result->SetStringField(TEXT("parentWidgetName"), ParentWidgetName);
 	}
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("widgetName"), NewWidget->GetName());
+	MCPSetRollback(Result, TEXT("remove_widget"), Payload);
 
 	return MCPResult(Result);
 }
@@ -1278,7 +1307,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 
 	if (!FoundWidget)
 	{
-		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
+		// Idempotent: nothing to delete
+		auto AlreadyResult = MCPSuccess();
+		AlreadyResult->SetBoolField(TEXT("alreadyDeleted"), true);
+		AlreadyResult->SetStringField(TEXT("widgetName"), WidgetName);
+		AlreadyResult->SetStringField(TEXT("assetPath"), AssetPath);
+		return MCPResult(AlreadyResult);
 	}
 
 	FString RemovedClass = FoundWidget->GetClass()->GetName();
@@ -1304,8 +1338,10 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RemoveWidget(const TSharedPtr<FJsonObjec
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("deleted"), true);
 	Result->SetStringField(TEXT("widgetName"), WidgetName);
 	Result->SetStringField(TEXT("widgetClass"), RemovedClass);
+	// No rollback: remove_widget is destructive (would need to snapshot widget tree to reverse).
 
 	return MCPResult(Result);
 }
@@ -1353,9 +1389,20 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 		return MCPError(FString::Printf(TEXT("New parent '%s' (%s) is not a panel widget"), *NewParentName, *NewParentRaw->GetClass()->GetName()));
 	}
 
-	// Remove from current parent
+	// Idempotency: already child of the target parent?
 	UPanelWidget* OldParent = WidgetToMove->GetParent();
 	FString OldParentName = OldParent ? OldParent->GetName() : TEXT("(root)");
+	if (OldParent == NewParentPanel)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("widgetName"), WidgetName);
+		Noop->SetStringField(TEXT("oldParent"), OldParentName);
+		Noop->SetStringField(TEXT("newParent"), NewParentName);
+		return MCPResult(Noop);
+	}
+
+	// Remove from current parent
 	if (OldParent)
 	{
 		OldParent->RemoveChild(WidgetToMove);
@@ -1375,9 +1422,20 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("widgetName"), WidgetName);
 	Result->SetStringField(TEXT("oldParent"), OldParentName);
 	Result->SetStringField(TEXT("newParent"), NewParentName);
+
+	// Rollback: move back to old parent if it was a panel
+	if (OldParent)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("widgetName"), WidgetName);
+		Payload->SetStringField(TEXT("newParentWidgetName"), OldParentName);
+		MCPSetRollback(Result, TEXT("move_widget"), Payload);
+	}
 
 	return MCPResult(Result);
 }

@@ -103,14 +103,28 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetReplicates(const TSharedPtr<FJson
 	if (!CDO) return MCPResult(Result);
 
 	bool bReplicates = OptionalBool(Params, TEXT("replicates"), false);
-	CDO->SetReplicates(bReplicates);
-
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	SaveBlueprint(Blueprint);
+	const bool bPrev = CDO->GetIsReplicated();
 
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("replicates"), bReplicates);
 	Result->SetBoolField(TEXT("success"), true);
+
+	if (bPrev == bReplicates)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
+	CDO->SetReplicates(bReplicates);
+	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
+	SaveBlueprint(Blueprint);
+
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Payload->SetBoolField(TEXT("replicates"), bPrev);
+	MCPSetRollback(Result, TEXT("set_replicates"), Payload);
 	return MCPResult(Result);
 }
 
@@ -144,6 +158,19 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetUpdateFrequency(const TS
 	return MCPResult(Result);
 }
 
+static FString DormancyToString(ENetDormancy D)
+{
+	switch (D)
+	{
+	case DORM_Never: return TEXT("DORM_Never");
+	case DORM_Awake: return TEXT("DORM_Awake");
+	case DORM_DormantAll: return TEXT("DORM_DormantAll");
+	case DORM_DormantPartial: return TEXT("DORM_DormantPartial");
+	case DORM_Initial: return TEXT("DORM_Initial");
+	default: return TEXT("DORM_Awake");
+	}
+}
+
 TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetDormancy(const TSharedPtr<FJsonObject>& Params)
 {
 	FString BlueprintPath;
@@ -154,26 +181,38 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetDormancy(const TSharedPtr<FJso
 	if (!CDO) return MCPResult(Result);
 
 	FString Dormancy = OptionalString(Params, TEXT("dormancy"));
+	const ENetDormancy PrevDormancy = CDO->NetDormancy;
+	const FString PrevDormStr = DormancyToString(PrevDormancy);
+	ENetDormancy NewDormancy = PrevDormancy;
 	if (!Dormancy.IsEmpty())
 	{
-		if (Dormancy == TEXT("DORM_Never"))
-			CDO->NetDormancy = DORM_Never;
-		else if (Dormancy == TEXT("DORM_Awake"))
-			CDO->NetDormancy = DORM_Awake;
-		else if (Dormancy == TEXT("DORM_DormantAll"))
-			CDO->NetDormancy = DORM_DormantAll;
-		else if (Dormancy == TEXT("DORM_DormantPartial"))
-			CDO->NetDormancy = DORM_DormantPartial;
-		else if (Dormancy == TEXT("DORM_Initial"))
-			CDO->NetDormancy = DORM_Initial;
+		if (Dormancy == TEXT("DORM_Never")) NewDormancy = DORM_Never;
+		else if (Dormancy == TEXT("DORM_Awake")) NewDormancy = DORM_Awake;
+		else if (Dormancy == TEXT("DORM_DormantAll")) NewDormancy = DORM_DormantAll;
+		else if (Dormancy == TEXT("DORM_DormantPartial")) NewDormancy = DORM_DormantPartial;
+		else if (Dormancy == TEXT("DORM_Initial")) NewDormancy = DORM_Initial;
 	}
 
+	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Result->SetNumberField(TEXT("netDormancy"), (int32)NewDormancy);
+	Result->SetBoolField(TEXT("success"), true);
+
+	if (NewDormancy == PrevDormancy)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
+	CDO->NetDormancy = NewDormancy;
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
 	SaveBlueprint(Blueprint);
 
-	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Result->SetNumberField(TEXT("netDormancy"), (int32)CDO->NetDormancy);
-	Result->SetBoolField(TEXT("success"), true);
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Payload->SetStringField(TEXT("dormancy"), PrevDormStr);
+	MCPSetRollback(Result, TEXT("set_net_dormancy"), Payload);
 	return MCPResult(Result);
 }
 
@@ -187,14 +226,28 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetAlwaysRelevant(const TSharedPtr<F
 	if (!CDO) return MCPResult(Result);
 
 	bool bAlwaysRelevant = OptionalBool(Params, TEXT("alwaysRelevant"), false);
-	CDO->bAlwaysRelevant = bAlwaysRelevant;
-
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	SaveBlueprint(Blueprint);
+	const bool bPrev = CDO->bAlwaysRelevant;
 
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("alwaysRelevant"), bAlwaysRelevant);
 	Result->SetBoolField(TEXT("success"), true);
+
+	if (bPrev == bAlwaysRelevant)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
+	CDO->bAlwaysRelevant = bAlwaysRelevant;
+	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
+	SaveBlueprint(Blueprint);
+
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Payload->SetBoolField(TEXT("alwaysRelevant"), bPrev);
+	MCPSetRollback(Result, TEXT("set_always_relevant"), Payload);
 	return MCPResult(Result);
 }
 
@@ -208,14 +261,28 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetPriority(const TSharedPtr<FJso
 	if (!CDO) return MCPResult(Result);
 
 	double NetPriority = OptionalNumber(Params, TEXT("netPriority"), 1.0);
-	CDO->NetPriority = (float)NetPriority;
+	const float fPrev = CDO->NetPriority;
 
+	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Result->SetNumberField(TEXT("netPriority"), NetPriority);
+	Result->SetBoolField(TEXT("success"), true);
+
+	if (FMath::IsNearlyEqual(fPrev, (float)NetPriority))
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
+	CDO->NetPriority = (float)NetPriority;
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
 	SaveBlueprint(Blueprint);
 
-	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Result->SetNumberField(TEXT("netPriority"), CDO->NetPriority);
-	Result->SetBoolField(TEXT("success"), true);
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Payload->SetNumberField(TEXT("netPriority"), fPrev);
+	MCPSetRollback(Result, TEXT("set_net_priority"), Payload);
 	return MCPResult(Result);
 }
 
@@ -229,14 +296,28 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetReplicateMovement(const TSharedPt
 	if (!CDO) return MCPResult(Result);
 
 	bool bReplicateMovement = OptionalBool(Params, TEXT("replicateMovement"), false);
-	CDO->SetReplicatingMovement(bReplicateMovement);
-
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	SaveBlueprint(Blueprint);
+	const bool bPrev = CDO->IsReplicatingMovement();
 
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("replicateMovement"), bReplicateMovement);
 	Result->SetBoolField(TEXT("success"), true);
+
+	if (bPrev == bReplicateMovement)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
+	CDO->SetReplicatingMovement(bReplicateMovement);
+	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
+	SaveBlueprint(Blueprint);
+
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Payload->SetBoolField(TEXT("replicateMovement"), bPrev);
+	MCPSetRollback(Result, TEXT("set_replicate_movement"), Payload);
 	return MCPResult(Result);
 }
 
@@ -273,6 +354,25 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetVariableReplication(const TShared
 		return MCPError(FString::Printf(TEXT("Variable '%s' not found in blueprint"), *VariableName));
 	}
 
+	// Capture previous state
+	const bool bWasNet = (VarDesc->PropertyFlags & CPF_Net) != 0;
+	const bool bWasRepNotify = (VarDesc->PropertyFlags & CPF_RepNotify) != 0;
+	FString PrevType = TEXT("None");
+	if (bWasNet && bWasRepNotify) PrevType = TEXT("RepNotify");
+	else if (bWasNet) PrevType = TEXT("Replicated");
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Result->SetStringField(TEXT("variableName"), VariableName);
+	Result->SetStringField(TEXT("replicationType"), ReplicationType);
+
+	if (PrevType == ReplicationType)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
 	// Set the replication condition
 	if (ReplicationType == TEXT("Replicated"))
 	{
@@ -294,10 +394,12 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetVariableReplication(const TShared
 
 	SaveBlueprint(Blueprint);
 
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Result->SetStringField(TEXT("variableName"), VariableName);
-	Result->SetStringField(TEXT("replicationType"), ReplicationType);
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Payload->SetStringField(TEXT("variableName"), VariableName);
+	Payload->SetStringField(TEXT("replicationType"), PrevType);
+	MCPSetRollback(Result, TEXT("set_variable_replication"), Payload);
 	return MCPResult(Result);
 }
 
@@ -397,14 +499,28 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetOwnerOnlyRelevant(const TSharedPt
 	if (!CDO) return MCPResult(Result);
 
 	bool bOnlyRelevantToOwner = OptionalBool(Params, TEXT("onlyRelevantToOwner"), false);
-	CDO->bOnlyRelevantToOwner = bOnlyRelevantToOwner;
-
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	SaveBlueprint(Blueprint);
+	const bool bPrev = CDO->bOnlyRelevantToOwner;
 
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("onlyRelevantToOwner"), bOnlyRelevantToOwner);
 	Result->SetBoolField(TEXT("success"), true);
+
+	if (bPrev == bOnlyRelevantToOwner)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
+	CDO->bOnlyRelevantToOwner = bOnlyRelevantToOwner;
+	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
+	SaveBlueprint(Blueprint);
+
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Payload->SetBoolField(TEXT("onlyRelevantToOwner"), bPrev);
+	MCPSetRollback(Result, TEXT("set_owner_only_relevant"), Payload);
 	return MCPResult(Result);
 }
 
@@ -418,6 +534,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetLoadOnClient(const TSharedPtr<
 	if (!CDO) return MCPResult(Result);
 
 	bool bLoadOnClient = OptionalBool(Params, TEXT("loadOnClient"), true);
+	bool bPrev = bLoadOnClient;
 
 	FProperty* Prop = CDO->GetClass()->FindPropertyByName(TEXT("bNetLoadOnClient"));
 	if (Prop)
@@ -425,16 +542,35 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::SetNetLoadOnClient(const TSharedPtr<
 		bool* ValPtr = Prop->ContainerPtrToValuePtr<bool>(CDO);
 		if (ValPtr)
 		{
-			*ValPtr = bLoadOnClient;
+			bPrev = *ValPtr;
 		}
+	}
+
+	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Result->SetBoolField(TEXT("loadOnClient"), bLoadOnClient);
+	Result->SetBoolField(TEXT("success"), true);
+
+	if (bPrev == bLoadOnClient)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
+	if (Prop)
+	{
+		bool* ValPtr = Prop->ContainerPtrToValuePtr<bool>(CDO);
+		if (ValPtr) { *ValPtr = bLoadOnClient; }
 	}
 
 	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(BlueprintPath));
 	if (BP) SaveBlueprint(BP);
 
-	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Result->SetBoolField(TEXT("loadOnClient"), bLoadOnClient);
-	Result->SetBoolField(TEXT("success"), true);
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Payload->SetBoolField(TEXT("loadOnClient"), bPrev);
+	MCPSetRollback(Result, TEXT("set_net_load_on_client"), Payload);
 	return MCPResult(Result);
 }
 

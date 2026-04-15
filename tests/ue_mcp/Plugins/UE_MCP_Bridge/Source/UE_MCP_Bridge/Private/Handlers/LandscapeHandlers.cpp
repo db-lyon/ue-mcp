@@ -345,6 +345,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SculptLandscape(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("operation"), Operation);
 	Result->SetNumberField(TEXT("falloff"), Falloff);
 	Result->SetStringField(TEXT("note"), TEXT("Executed via console command. Verify visually. If the console command is not supported, use execute_python with unreal.LandscapeEditorLibrary.sculpt() instead."));
+	// No rollback: destructive/external — sculpting permanently alters heightmap.
 
 	return MCPResult(Result);
 }
@@ -526,6 +527,17 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetLandscapeMaterial(const TSharedPtr
 		return MCPError(FString::Printf(TEXT("Material not found: %s"), *MaterialPath));
 	}
 
+	// Capture previous material for rollback and idempotency
+	UMaterialInterface* PrevMaterial = TargetLandscape->LandscapeMaterial;
+	if (PrevMaterial == Material)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("landscapeName"), TargetLandscape->GetName());
+		Noop->SetStringField(TEXT("materialPath"), MaterialPath);
+		return MCPResult(Noop);
+	}
+
 	// Set the landscape material
 	TargetLandscape->LandscapeMaterial = Material;
 
@@ -545,10 +557,20 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetLandscapeMaterial(const TSharedPtr
 	TargetLandscape->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("landscapeName"), TargetLandscape->GetName());
 	Result->SetStringField(TEXT("materialPath"), MaterialPath);
 	Result->SetStringField(TEXT("materialName"), Material->GetName());
 	Result->SetNumberField(TEXT("componentsUpdated"), LandscapeComponents.Num());
+
+	// Rollback: restore previous material path if any
+	if (PrevMaterial)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("landscapeName"), TargetLandscape->GetName());
+		Payload->SetStringField(TEXT("materialPath"), PrevMaterial->GetPathName());
+		MCPSetRollback(Result, TEXT("set_landscape_material"), Payload);
+	}
 
 	return MCPResult(Result);
 }

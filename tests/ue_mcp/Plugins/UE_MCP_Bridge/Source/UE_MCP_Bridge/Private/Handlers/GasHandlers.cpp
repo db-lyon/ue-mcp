@@ -390,6 +390,17 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilityTag(const TSharedPtr<FJsonObject>
 		return MCPError(TEXT("Could not access AbilityTags container on CDO"));
 	}
 
+	// Idempotency: tag already present?
+	if (TagContainer->HasTagExact(Tag))
+	{
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+		Existed->SetStringField(TEXT("tag"), TagString);
+		Existed->SetNumberField(TEXT("totalTags"), TagContainer->Num());
+		return MCPResult(Existed);
+	}
+
 	TagContainer->AddTag(Tag);
 
 	// Compile and save
@@ -406,9 +417,11 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilityTag(const TSharedPtr<FJsonObject>
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetStringField(TEXT("tag"), TagString);
 	Result->SetNumberField(TEXT("totalTags"), TagContainer->Num());
+	// No rollback: no paired remove_ability_tag handler.
 	return MCPResult(Result);
 }
 
@@ -500,6 +513,24 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilitySystemComponent(const TSharedPtr<
 
 	FString CompName = OptionalString(Params, TEXT("componentName"), TEXT("AbilitySystemComp"));
 
+	// Idempotency: existing ASC on the blueprint?
+	if (BP->SimpleConstructionScript)
+	{
+		const FName CompFName(*CompName);
+		for (USCS_Node* N : BP->SimpleConstructionScript->GetAllNodes())
+		{
+			if (!N || !N->ComponentTemplate) continue;
+			if (N->ComponentTemplate->GetClass() == ASCClass || N->GetVariableName() == CompFName)
+			{
+				auto Existed = MCPSuccess();
+				MCPSetExisted(Existed);
+				Existed->SetStringField(TEXT("blueprintPath"), BPPath);
+				Existed->SetStringField(TEXT("component"), N->GetVariableName().ToString());
+				return MCPResult(Existed);
+			}
+		}
+	}
+
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(ASCClass, *CompName);
 	if (NewNode)
 	{
@@ -518,8 +549,16 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilitySystemComponent(const TSharedPtr<
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), CompName);
+
+	// Rollback: remove_component
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), BPPath);
+	Payload->SetStringField(TEXT("componentName"), CompName);
+	MCPSetRollback(Result, TEXT("remove_component"), Payload);
+
 	return MCPResult(Result);
 }
 
@@ -537,6 +576,20 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAttribute(const TSharedPtr<FJsonObject>&
 		return MCPError(FString::Printf(TEXT("AttributeSet Blueprint not found: %s"), *BPPath));
 	}
 
+	// Idempotency: member variable with this name already present?
+	const FName AttrFName(*AttrName);
+	for (const FBPVariableDescription& V : BP->NewVariables)
+	{
+		if (V.VarName == AttrFName)
+		{
+			auto Existed = MCPSuccess();
+			MCPSetExisted(Existed);
+			Existed->SetStringField(TEXT("attributeSetPath"), BPPath);
+			Existed->SetStringField(TEXT("attributeName"), AttrName);
+			return MCPResult(Existed);
+		}
+	}
+
 	// Add a FGameplayAttributeData variable
 	FEdGraphPinType PinType;
 	PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
@@ -546,7 +599,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAttribute(const TSharedPtr<FJsonObject>&
 		PinType.PinSubCategoryObject = AttrStruct;
 	}
 
-	FBlueprintEditorUtils::AddMemberVariable(BP, FName(*AttrName), PinType);
+	FBlueprintEditorUtils::AddMemberVariable(BP, AttrFName, PinType);
 	FKismetEditorUtilities::CompileBlueprint(BP);
 
 	UPackage* Pkg = BP->GetOutermost();
@@ -560,8 +613,16 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAttribute(const TSharedPtr<FJsonObject>&
 	}
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("attributeSetPath"), BPPath);
 	Result->SetStringField(TEXT("attributeName"), AttrName);
+
+	// Rollback: delete_variable
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), BPPath);
+	Payload->SetStringField(TEXT("name"), AttrName);
+	MCPSetRollback(Result, TEXT("delete_variable"), Payload);
+
 	return MCPResult(Result);
 }
 

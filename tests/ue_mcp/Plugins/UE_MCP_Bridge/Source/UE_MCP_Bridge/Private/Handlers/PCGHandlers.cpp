@@ -220,10 +220,19 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
-	Result->SetStringField(TEXT("nodeName"), NewNode->GetName());
+	const FString NewNodeName = NewNode->GetName();
+	Result->SetStringField(TEXT("nodeName"), NewNodeName);
 	Result->SetStringField(TEXT("nodeType"), NodeType);
 	Result->SetStringField(TEXT("nodeTitle"), NewNode->GetNodeTitle(EPCGNodeTitleType::ListView).ToString());
+
+	// Rollback: remove_pcg_node
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("nodeName"), NewNodeName);
+	MCPSetRollback(Result, TEXT("remove_pcg_node"), Payload);
+
 	return MCPResult(Result);
 }
 
@@ -380,7 +389,12 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 
 	if (!FoundNode)
 	{
-		return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeName));
+		// Idempotent: node already absent
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("assetPath"), AssetPath);
+		Noop->SetStringField(TEXT("nodeName"), NodeName);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
 	}
 
 	// Remove the node from the graph
@@ -392,6 +406,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("removedNodeName"), NodeName);
+	Result->SetBoolField(TEXT("deleted"), true);
+	// No rollback: removal of PCG node not reversible without snapshotting settings + connections.
 	return MCPResult(Result);
 }
 
