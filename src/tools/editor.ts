@@ -78,6 +78,7 @@ export const editorTool: ToolDef = categoryTool(
     run_stat: bp("Run stat command. Params: command", "run_stat_command"),
     set_scalability: bp("Set quality. Params: level", "set_scalability"),
     capture_screenshot: bp("Screenshot. Params: filename?, resolution?", "capture_screenshot"),
+    capture_scene_png: bp("Headless PNG screenshot via SceneCapture2D (works unfocused, guaranteed RGBA8 LDR). Params: outputPath, location?, rotation?, width? (default 1280), height? (default 720), fov? (default 90) (#148)", "capture_scene_png", (p) => ({ outputPath: p.outputPath, location: p.location, rotation: p.rotation, width: p.width, height: p.height, fov: p.fov })),
     get_viewport: bp("Get viewport camera", "get_viewport_info"),
     set_viewport: bp("Set viewport camera. Params: location?, rotation?", "set_viewport_camera"),
     focus_on_actor: bp("Focus on actor. Params: actorLabel", "focus_viewport_on_actor"),
@@ -140,5 +141,9 @@ export const editorTool: ToolDef = categoryTool(
     buttonLabel: z.string().optional().describe("Label of button to click in active dialog"),
     factor: z.number().optional().describe("Time-scale factor for set_pie_time_scale (e.g. 500)"),
     includeSectionDetails: z.boolean().optional().describe("Include attach sockets + first-key transform values in get_sequence_info"),
+    outputPath: z.string().optional().describe("Absolute or project-relative output path for capture_scene_png (e.g. \"Saved/Screenshots/cap.png\")"),
+    width: z.number().optional().describe("Capture width in pixels"),
+    height: z.number().optional().describe("Capture height in pixels"),
+    fov: z.number().optional().describe("Capture FOV in degrees"),
   },
 );
