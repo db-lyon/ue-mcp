@@ -13,6 +13,14 @@ export interface UeMcpConfig {
   contentRoots?: string[];
   /** Tool categories to disable (e.g. ["gas", "networking", "pcg"]) */
   disable?: string[];
+  /** Optional HTTP surface for flow.run (#144). Disabled by default. */
+  http?: {
+    enabled?: boolean;
+    /** Default 7723. Bound to 127.0.0.1 only. */
+    port?: number;
+    /** Override bind host. Defaults to 127.0.0.1 — do not expose externally. */
+    host?: string;
+  };
 }
 
 export class ProjectContext {

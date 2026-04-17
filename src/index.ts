@@ -11,6 +11,7 @@ import { McpError } from "./errors.js";
 import { buildFlowRegistry } from "./flow/registry.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
+import { startFlowHttpServer } from "./flow/http-server.js";
 import type { FlowContext } from "./flow/context.js";
 import type { FlowConfig } from "./flow/schema.js";
 
@@ -169,6 +170,20 @@ async function main() {
       return { content: [{ type: "text" as const, text: `Error: ${msg}` }], isError: true };
     }
   });
+
+  // ── Optional HTTP surface for flow.run (#144) ───────────────────
+  // Off by default; opt-in via ".ue-mcp.json" { "http": { "enabled": true, "port": 7723 } }.
+  // Binds to 127.0.0.1 only — do NOT expose to the network without adding auth.
+  if (project.config.http?.enabled) {
+    try {
+      startFlowHttpServer(flowTool, ctx, reloadConfig, {
+        port: project.config.http.port,
+        host: project.config.http.host,
+      });
+    } catch (e) {
+      console.error(`[ue-mcp] Failed to start HTTP server: ${e instanceof Error ? e.message : e}`);
+    }
+  }
 
   // ── Bridge connection ────────────────────────────────────────────
   try {
