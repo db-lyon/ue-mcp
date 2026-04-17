@@ -20,6 +20,9 @@
 #include "PCGPin.h"
 #include "PCGEdge.h"
 #include "PCGVolume.h"
+#include "Elements/PCGStaticMeshSpawner.h"
+#include "MeshSelectors/PCGMeshSelectorWeighted.h"
+#include "Engine/StaticMesh.h"
 #include "UObject/Package.h"
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
@@ -40,6 +43,7 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_pcg_volume"), &SpawnPCGVolume);
 	Registry.RegisterHandler(TEXT("read_pcg_node_settings"), &ReadPCGNodeSettings);
 	Registry.RegisterHandler(TEXT("get_pcg_component_details"), &GetPCGComponentDetails);
+	Registry.RegisterHandler(TEXT("set_static_mesh_spawner_meshes"), &SetStaticMeshSpawnerMeshes);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::ListPCGGraphs(const TSharedPtr<FJsonObject>& Params)
@@ -909,5 +913,109 @@ TSharedPtr<FJsonValue> FPCGHandlers::GetPCGComponentDetails(const TSharedPtr<FJs
 
 	Result->SetArrayField(TEXT("components"), ComponentsArray);
 	Result->SetNumberField(TEXT("componentCount"), ComponentsArray.Num());
+	return MCPResult(Result);
+}
+
+// ─── #145 set_static_mesh_spawner_meshes ────────────────────────────
+// Populates the MeshEntries array on a PCGStaticMeshSpawner node's
+// weighted mesh selector. set_pcg_node_settings can't reach into
+// instanced subobject properties (MeshSelectorParameters.MeshEntries),
+// so this dedicated helper handles the common scatter-graph authoring case.
+TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	FString NodeName;
+	if (auto Err = RequireString(Params, TEXT("nodeName"), NodeName)) return Err;
+
+	const TArray<TSharedPtr<FJsonValue>>* EntriesArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("entries"), EntriesArr) || !EntriesArr)
+	{
+		return MCPError(TEXT("Missing 'entries' array — each item should be {mesh: <path>, weight?: <int>}"));
+	}
+
+	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
+	if (!Graph) return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
+
+	UPCGNode* FoundNode = nullptr;
+	for (UPCGNode* Node : Graph->GetNodes())
+	{
+		if (Node && Node->GetName() == NodeName)
+		{
+			FoundNode = Node;
+			break;
+		}
+	}
+	if (!FoundNode) return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeName));
+
+	UPCGStaticMeshSpawnerSettings* SpawnerSettings = Cast<UPCGStaticMeshSpawnerSettings>(const_cast<UPCGSettings*>(FoundNode->GetSettings()));
+	if (!SpawnerSettings)
+	{
+		return MCPError(FString::Printf(TEXT("Node '%s' is not a PCGStaticMeshSpawner"), *NodeName));
+	}
+
+	// Ensure the selector is UPCGMeshSelectorWeighted; instantiate if missing/mismatched.
+	UPCGMeshSelectorWeighted* WeightedSelector = Cast<UPCGMeshSelectorWeighted>(SpawnerSettings->MeshSelectorParameters);
+	if (!WeightedSelector)
+	{
+		SpawnerSettings->SetMeshSelectorType(UPCGMeshSelectorWeighted::StaticClass());
+		WeightedSelector = Cast<UPCGMeshSelectorWeighted>(SpawnerSettings->MeshSelectorParameters);
+	}
+	if (!WeightedSelector)
+	{
+		return MCPError(TEXT("Failed to configure UPCGMeshSelectorWeighted on spawner"));
+	}
+
+	const bool bReplace = OptionalBool(Params, TEXT("replace"), true);
+	TArray<FPCGMeshSelectorWeightedEntry> Rebuilt;
+	if (!bReplace)
+	{
+		Rebuilt = WeightedSelector->MeshEntries;
+	}
+
+	int32 Added = 0;
+	for (const TSharedPtr<FJsonValue>& V : *EntriesArr)
+	{
+		const TSharedPtr<FJsonObject>* EObj = nullptr;
+		if (!V.IsValid() || !V->TryGetObject(EObj) || !EObj) continue;
+		FString MeshPath;
+		if (!(*EObj)->TryGetStringField(TEXT("mesh"), MeshPath) || MeshPath.IsEmpty()) continue;
+
+		int32 Weight = 1;
+		double WeightD = 1.0;
+		if ((*EObj)->TryGetNumberField(TEXT("weight"), WeightD)) Weight = FMath::Max(0, (int32)WeightD);
+
+		TSoftObjectPtr<UStaticMesh> MeshRef;
+		MeshRef = FSoftObjectPath(MeshPath);
+		FPCGMeshSelectorWeightedEntry Entry(MeshRef, Weight);
+		Rebuilt.Add(MoveTemp(Entry));
+		Added++;
+	}
+
+	WeightedSelector->Modify();
+	WeightedSelector->MeshEntries = MoveTemp(Rebuilt);
+#if WITH_EDITOR
+	WeightedSelector->RefreshDisplayNames();
+#endif
+
+	SpawnerSettings->Modify();
+
+	// Persist the asset
+	UPackage* Pkg = Graph->GetOutermost();
+	if (Pkg)
+	{
+		Pkg->MarkPackageDirty();
+		FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs; SaveArgs.TopLevelFlags = RF_Standalone;
+		UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("nodeName"), NodeName);
+	Result->SetNumberField(TEXT("entriesAdded"), Added);
+	Result->SetNumberField(TEXT("totalEntries"), WeightedSelector->MeshEntries.Num());
+	Result->SetBoolField(TEXT("replaced"), bReplace);
 	return MCPResult(Result);
 }

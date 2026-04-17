@@ -22,4 +22,7 @@ private:
 	static TSharedPtr<FJsonValue> SpawnPCGVolume(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadPCGNodeSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetPCGComponentDetails(const TSharedPtr<FJsonObject>& Params);
+
+	// v0.7.18 issue #145 — populate MeshEntries on a PCGStaticMeshSpawner node
+	static TSharedPtr<FJsonValue> SetStaticMeshSpawnerMeshes(const TSharedPtr<FJsonObject>& Params);
 };
