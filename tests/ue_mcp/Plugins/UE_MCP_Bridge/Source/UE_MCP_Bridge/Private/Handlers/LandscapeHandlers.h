@@ -21,4 +21,6 @@ private:
 	static TSharedPtr<FJsonValue> SetLandscapeMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetLandscapeBounds(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddLandscapeLayerInfo(const TSharedPtr<FJsonObject>& Params);
+	// v0.7.19 issue #150 — concise material + component count summary per proxy
+	static TSharedPtr<FJsonValue> GetMaterialUsageSummary(const TSharedPtr<FJsonObject>& Params);
 };

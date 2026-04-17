@@ -26,6 +26,11 @@
 #include "Misc/App.h"
 #include "Logging/MessageLog.h"
 #include "HighResScreenshot.h"
+#include "Engine/SceneCapture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Kismet/KismetRenderingLibrary.h"
+#include "Subsystems/EditorActorSubsystem.h"
 #include "Misc/OutputDeviceRedirector.h"
 #include "FileHelpers.h"
 #include "Misc/DateTime.h"
@@ -96,6 +101,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("generate_project_files"), &GenerateProjectFiles);
 	// #126: fast-forward PIE game time
 	Registry.RegisterHandler(TEXT("set_pie_time_scale"), &SetPieTimeScale);
+	Registry.RegisterHandler(TEXT("capture_scene_png"), &CaptureScenePng);
 }
 
 TSharedPtr<FJsonValue> FEditorHandlers::ExecuteCommand(const TSharedPtr<FJsonObject>& Params)
@@ -1862,5 +1868,106 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetPieTimeScale(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("maxCap"), WS->MaxGlobalTimeDilation);
 	Result->SetNumberField(TEXT("minCap"), WS->MinGlobalTimeDilation);
 	Result->SetStringField(TEXT("world"), World->GetName());
+	return MCPResult(Result);
+}
+
+// ─── #148 capture_scene_png ────────────────────────────────────────
+// Headless PNG screenshot via a reusable hidden SceneCapture2D actor.
+// Works when the editor window is not focused (unlike viewport
+// screenshots) and guarantees RGBA8 LDR PNG output suitable for image
+// readers that reject HDR/EXR.
+TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	FString OutputPath;
+	if (auto Err = RequireString(Params, TEXT("outputPath"), OutputPath)) return Err;
+
+	// Resolution
+	int32 Width = OptionalInt(Params, TEXT("width"), 1280);
+	int32 Height = OptionalInt(Params, TEXT("height"), 720);
+	Width = FMath::Clamp(Width, 16, 8192);
+	Height = FMath::Clamp(Height, 16, 8192);
+
+	const double Fov = OptionalNumber(Params, TEXT("fov"), 90.0);
+
+	// Location / rotation
+	FVector Location = FVector::ZeroVector;
+	if (const TSharedPtr<FJsonObject>* LocObj = nullptr; Params->TryGetObjectField(TEXT("location"), LocObj) && LocObj && LocObj->IsValid())
+	{
+		(*LocObj)->TryGetNumberField(TEXT("x"), Location.X);
+		(*LocObj)->TryGetNumberField(TEXT("y"), Location.Y);
+		(*LocObj)->TryGetNumberField(TEXT("z"), Location.Z);
+	}
+	FRotator Rotation = FRotator::ZeroRotator;
+	if (const TSharedPtr<FJsonObject>* RotObj = nullptr; Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && RotObj->IsValid())
+	{
+		(*RotObj)->TryGetNumberField(TEXT("pitch"), Rotation.Pitch);
+		(*RotObj)->TryGetNumberField(TEXT("yaw"), Rotation.Yaw);
+		(*RotObj)->TryGetNumberField(TEXT("roll"), Rotation.Roll);
+	}
+
+	// Find or spawn the reusable capture actor.
+	static const FString CaptureLabel = TEXT("__ClaudeSceneCapture");
+	ASceneCapture2D* CaptureActor = nullptr;
+	for (TActorIterator<ASceneCapture2D> It(World); It; ++It)
+	{
+		if (It->GetActorLabel() == CaptureLabel)
+		{
+			CaptureActor = *It;
+			break;
+		}
+	}
+	if (!CaptureActor)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.ObjectFlags |= RF_Transient;
+		CaptureActor = World->SpawnActor<ASceneCapture2D>(ASceneCapture2D::StaticClass(), Location, Rotation, SpawnParams);
+		if (!CaptureActor) return MCPError(TEXT("Failed to spawn SceneCapture2D actor"));
+		CaptureActor->SetActorLabel(CaptureLabel);
+		CaptureActor->SetActorHiddenInGame(true);
+	}
+	CaptureActor->SetActorLocationAndRotation(Location, Rotation);
+
+	USceneCaptureComponent2D* Comp = CaptureActor->GetCaptureComponent2D();
+	if (!Comp) return MCPError(TEXT("SceneCapture2D has no capture component"));
+	Comp->FOVAngle = (float)Fov;
+	Comp->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+	Comp->bCaptureEveryFrame = false;
+	Comp->bCaptureOnMovement = false;
+
+	// Transient render target
+	UTextureRenderTarget2D* RT = UKismetRenderingLibrary::CreateRenderTarget2D(
+		World, Width, Height, ETextureRenderTargetFormat::RTF_RGBA8_SRGB, FLinearColor::Black, false);
+	if (!RT) return MCPError(TEXT("Failed to create RenderTarget2D"));
+	Comp->TextureTarget = RT;
+
+	Comp->CaptureScene();
+
+	// Split outputPath into directory + filename for ExportRenderTarget.
+	FString AbsPath = OutputPath;
+	if (FPaths::IsRelative(AbsPath))
+	{
+		AbsPath = FPaths::Combine(FPaths::ProjectDir(), AbsPath);
+	}
+	if (!AbsPath.EndsWith(TEXT(".png"))) AbsPath += TEXT(".png");
+	FString OutDir = FPaths::GetPath(AbsPath);
+	FString OutName = FPaths::GetCleanFilename(AbsPath);
+	IFileManager::Get().MakeDirectory(*OutDir, /*Tree*/ true);
+
+	UKismetRenderingLibrary::ExportRenderTarget(World, RT, OutDir, OutName);
+
+	const int64 Size = IFileManager::Get().FileSize(*AbsPath);
+	if (Size < 0)
+	{
+		return MCPError(FString::Printf(TEXT("Export did not produce a file at %s"), *AbsPath));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), AbsPath);
+	Result->SetNumberField(TEXT("width"), Width);
+	Result->SetNumberField(TEXT("height"), Height);
+	Result->SetNumberField(TEXT("sizeBytes"), (double)Size);
+	Result->SetStringField(TEXT("actorLabel"), CaptureLabel);
 	return MCPResult(Result);
 }

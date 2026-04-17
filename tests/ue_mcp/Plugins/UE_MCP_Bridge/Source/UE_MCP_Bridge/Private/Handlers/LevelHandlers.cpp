@@ -73,6 +73,9 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_world_settings"), &SetWorldSettings);
 	Registry.RegisterHandler(TEXT("set_fog_properties"), &SetFogProperties);
 	Registry.RegisterHandler(TEXT("get_actors_by_class"), &GetActorsByClass);
+	Registry.RegisterHandler(TEXT("count_actors_by_class"), &CountActorsByClass);
+	Registry.RegisterHandler(TEXT("get_runtime_virtual_texture_summary"), &GetRVTSummary);
+	Registry.RegisterHandler(TEXT("set_water_body_property"), &SetWaterBodyProperty);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>& Params)
@@ -1761,5 +1764,194 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByClass(const TSharedPtr<FJsonOb
 	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("actors"), Out);
 	Result->SetNumberField(TEXT("count"), Out.Num());
+	return MCPResult(Result);
+}
+
+// #146: histogram of actors by class name. Cheaper than get_outliner when
+// the caller only needs counts (e.g. "how many PCGVolume are loaded?").
+TSharedPtr<FJsonValue> FLevelHandlers::CountActorsByClass(const TSharedPtr<FJsonObject>& Params)
+{
+	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	const int32 TopN = OptionalInt(Params, TEXT("topN"), 0);
+
+	TMap<FString, int32> Counts;
+	int32 Total = 0;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* A = *It;
+		if (!A) continue;
+		const FString CName = A->GetClass()->GetName();
+		int32& Ref = Counts.FindOrAdd(CName);
+		Ref++;
+		Total++;
+	}
+
+	// Sort by count desc
+	TArray<TPair<FString, int32>> Sorted;
+	Sorted.Reserve(Counts.Num());
+	for (const auto& Pair : Counts) { Sorted.Emplace(Pair.Key, Pair.Value); }
+	Sorted.Sort([](const TPair<FString, int32>& A, const TPair<FString, int32>& B) { return A.Value > B.Value; });
+
+	if (TopN > 0 && Sorted.Num() > TopN)
+	{
+		Sorted.SetNum(TopN);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Out;
+	for (const auto& Pair : Sorted)
+	{
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("class"), Pair.Key);
+		Entry->SetNumberField(TEXT("count"), Pair.Value);
+		Out.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("classes"), Out);
+	Result->SetNumberField(TEXT("uniqueClasses"), Counts.Num());
+	Result->SetNumberField(TEXT("totalActors"), Total);
+	return MCPResult(Result);
+}
+
+// #150: compact RVT volume summary. Returns each RuntimeVirtualTextureVolume
+// actor with its RVT component's bound VirtualTexture asset path. Avoids the
+// Python workaround that ranged across 'virtual_texture' / 'VirtualTexture'
+// property-name variants and reflected get_editor_property by class name.
+TSharedPtr<FJsonValue> FLevelHandlers::GetRVTSummary(const TSharedPtr<FJsonObject>& Params)
+{
+	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	TArray<TSharedPtr<FJsonValue>> VolumesArr;
+	TSet<FString> UniqueTextures;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* A = *It;
+		if (!A) continue;
+		const FString ClassName = A->GetClass()->GetName();
+		if (!ClassName.Contains(TEXT("RuntimeVirtualTexture"))) continue;
+
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("label"), A->GetActorLabel());
+		Entry->SetStringField(TEXT("class"), ClassName);
+		Entry->SetStringField(TEXT("path"), A->GetPathName());
+
+		// Reflectively walk components for a RuntimeVirtualTextureComponent
+		TArray<UActorComponent*> Comps;
+		A->GetComponents(Comps);
+		TArray<TSharedPtr<FJsonValue>> CompArr;
+		for (UActorComponent* C : Comps)
+		{
+			if (!C) continue;
+			const FString CName = C->GetClass()->GetName();
+			if (!CName.Contains(TEXT("RuntimeVirtualTexture"))) continue;
+
+			TSharedPtr<FJsonObject> CObj = MakeShared<FJsonObject>();
+			CObj->SetStringField(TEXT("name"), C->GetName());
+			CObj->SetStringField(TEXT("class"), CName);
+			// Try both common property names — UE has renamed this across versions.
+			if (FObjectProperty* VT = CastField<FObjectProperty>(C->GetClass()->FindPropertyByName(TEXT("VirtualTexture"))))
+			{
+				if (UObject* Asset = VT->GetObjectPropertyValue_InContainer(C))
+				{
+					CObj->SetStringField(TEXT("virtualTexture"), Asset->GetPathName());
+					UniqueTextures.Add(Asset->GetPathName());
+				}
+			}
+			CompArr.Add(MakeShared<FJsonValueObject>(CObj));
+		}
+		Entry->SetArrayField(TEXT("components"), CompArr);
+
+		const FVector Loc = A->GetActorLocation();
+		TSharedPtr<FJsonObject> LocObj = MakeShared<FJsonObject>();
+		LocObj->SetNumberField(TEXT("x"), Loc.X);
+		LocObj->SetNumberField(TEXT("y"), Loc.Y);
+		LocObj->SetNumberField(TEXT("z"), Loc.Z);
+		Entry->SetObjectField(TEXT("location"), LocObj);
+
+		VolumesArr.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> UniqueTexArr;
+	for (const FString& T : UniqueTextures) UniqueTexArr.Add(MakeShared<FJsonValueString>(T));
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("volumes"), VolumesArr);
+	Result->SetNumberField(TEXT("volumeCount"), VolumesArr.Num());
+	Result->SetArrayField(TEXT("uniqueVirtualTextures"), UniqueTexArr);
+	return MCPResult(Result);
+}
+
+// ─── #151 set_water_body_property ───────────────────────────────────
+// Set a property on the first UWaterBodyComponent of an actor (ShapeDilation,
+// WaterLevel, etc.). Uses runtime class lookup so the Water plugin is not a
+// hard build dependency — if the plugin isn't loaded, the handler returns
+// a clear error rather than failing to link.
+TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+	FString PropertyName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
+
+	FString ValueStr;
+	bool bHaveValue = false;
+	TSharedPtr<FJsonValue> V = Params->TryGetField(TEXT("value"));
+	if (V.IsValid())
+	{
+		if (V->TryGetString(ValueStr)) bHaveValue = true;
+		else if (V->Type == EJson::Number) { ValueStr = FString::SanitizeFloat(V->AsNumber()); bHaveValue = true; }
+		else if (V->Type == EJson::Boolean) { ValueStr = V->AsBool() ? TEXT("true") : TEXT("false"); bHaveValue = true; }
+	}
+	if (!bHaveValue) return MCPError(TEXT("Missing or non-coerceable 'value' parameter"));
+
+	REQUIRE_EDITOR_WORLD(World);
+
+	AActor* Actor = nullptr;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (*It && (*It)->GetActorLabel() == ActorLabel) { Actor = *It; break; }
+	}
+	if (!Actor) return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+
+	UClass* WBClass = LoadClass<UActorComponent>(nullptr, TEXT("/Script/Water.WaterBodyComponent"));
+	if (!WBClass)
+	{
+		return MCPError(TEXT("WaterBodyComponent class not available — enable the Water plugin"));
+	}
+
+	UActorComponent* WBComp = nullptr;
+	TArray<UActorComponent*> Comps;
+	Actor->GetComponents(Comps);
+	for (UActorComponent* C : Comps)
+	{
+		if (C && C->GetClass()->IsChildOf(WBClass)) { WBComp = C; break; }
+	}
+	if (!WBComp) return MCPError(FString::Printf(TEXT("Actor '%s' has no WaterBodyComponent"), *ActorLabel));
+
+	FProperty* Prop = WBComp->GetClass()->FindPropertyByName(FName(*PropertyName));
+	if (!Prop) return MCPError(FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName, *WBComp->GetClass()->GetName()));
+
+	WBComp->Modify();
+	void* Addr = Prop->ContainerPtrToValuePtr<void>(WBComp);
+	const TCHAR* R = Prop->ImportText_Direct(*ValueStr, Addr, WBComp, PPF_None);
+	if (R == nullptr) return MCPError(FString::Printf(TEXT("ImportText failed for '%s'"), *ValueStr));
+
+	// Fire PostEditChangeProperty so the water body rebuilds / re-renders.
+	FPropertyChangedEvent Evt(Prop);
+	WBComp->PostEditChangeProperty(Evt);
+	Actor->MarkPackageDirty();
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("componentName"), WBComp->GetName());
+	Result->SetStringField(TEXT("componentClass"), WBComp->GetClass()->GetName());
+	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("value"), ValueStr);
 	return MCPResult(Result);
 }

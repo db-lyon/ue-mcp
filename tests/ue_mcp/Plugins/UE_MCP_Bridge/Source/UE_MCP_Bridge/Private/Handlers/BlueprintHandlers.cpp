@@ -1,6 +1,7 @@
 #include "BlueprintHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerJsonProperty.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "BlueprintEditorLibrary.h"
@@ -1923,6 +1924,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		K2->ReconstructNode();
 	}
 
+	// #152: function graphs need the structural-modification signal for the
+	// skeleton class to pick up new nodes. MarkBlueprintAsStructurallyModified
+	// triggers that plus invalidates cached CDO info; CompileBlueprint alone
+	// was leaving nodes in newly-created function graphs in a half-initialized
+	// state where pins appeared but the underlying function binding didn't.
+	TargetGraph->NotifyGraphChanged();
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 	UPackage* Package = Blueprint->GetOutermost();
@@ -3029,8 +3038,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
-	FString Value;
-	if (auto Err = RequireString(Params, TEXT("value"), Value)) return Err;
+	// #152: accept any JSON value type — scalars, numbers, booleans, or structured
+	// objects like {x,y,z} for FVector. Previous impl only accepted strings, so
+	// RelativeLocation etc. couldn't be set without pre-formatting "(X=1,Y=2,Z=3)".
+	TSharedPtr<FJsonValue> ValueField = Params->TryGetField(TEXT("value"));
+	if (!ValueField.IsValid())
+	{
+		return MCPError(TEXT("Missing 'value' parameter"));
+	}
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -3050,7 +3065,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 			*ComponentName, *FString::Join(Available, TEXT(", "))));
 	}
 
-	// Navigate dotted property paths (e.g. "RelativeLocation.X")
+	// Walk dotted path to the final property. The helper from HandlerJsonProperty.h
+	// does the assignment (handles FVector objects, object refs, arrays, etc.);
+	// here we duplicate the walk once so we can also capture PrevValue for rollback.
 	TArray<FString> PathParts;
 	PropertyName.ParseIntoArray(PathParts, TEXT("."));
 
@@ -3078,7 +3095,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 
 	if (!FinalProp)
 	{
-		// List available properties for error message
 		TArray<FString> PropNames;
 		for (TFieldIterator<FProperty> It(Template->GetClass()); It; ++It)
 		{
@@ -3090,50 +3106,31 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 			*FString::Join(PropNames, TEXT(", "))));
 	}
 
-	// For object reference properties, try loading the asset by path first
 	void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
 
-	// Capture previous value for rollback (generic via ExportText)
+	// Capture previous value for rollback via ExportText (always a string).
 	FString PrevValue;
 	FinalProp->ExportText_Direct(PrevValue, ValuePtr, ValuePtr, nullptr, PPF_None);
-	if (PrevValue == Value)
+
+	Template->Modify();
+	FString SetErr;
+	if (!MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, ValueField, SetErr))
+	{
+		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
+	}
+
+	// Re-export for the rollback payload and no-op detection.
+	FString NewValue;
+	FinalProp->ExportText_Direct(NewValue, ValuePtr, ValuePtr, nullptr, PPF_None);
+	if (NewValue == PrevValue)
 	{
 		auto Noop = MCPSuccess();
 		MCPSetExisted(Noop);
 		Noop->SetStringField(TEXT("path"), AssetPath);
 		Noop->SetStringField(TEXT("componentName"), ComponentName);
 		Noop->SetStringField(TEXT("propertyName"), PropertyName);
-		Noop->SetStringField(TEXT("value"), Value);
+		Noop->SetStringField(TEXT("value"), NewValue);
 		return MCPResult(Noop);
-	}
-
-	if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(FinalProp))
-	{
-		UObject* LoadedObj = LoadObject<UObject>(nullptr, *Value);
-		if (!LoadedObj)
-		{
-			// Try with common prefixes stripped
-			LoadedObj = LoadObject<UObject>(nullptr, *Value);
-		}
-		if (LoadedObj)
-		{
-			ObjProp->SetObjectPropertyValue(ValuePtr, LoadedObj);
-		}
-		else
-		{
-			return MCPError(FString::Printf(
-				TEXT("Could not load object at '%s' for property '%s'"), *Value, *PropertyName));
-		}
-	}
-	else if (FSoftObjectProperty* SoftProp = CastField<FSoftObjectProperty>(FinalProp))
-	{
-		FSoftObjectPath SoftPath(Value);
-		SoftProp->SetPropertyValue(ValuePtr, FSoftObjectPtr(SoftPath));
-	}
-	else
-	{
-		// Generic: use ImportText for value types (int, float, bool, FVector, FName, etc.)
-		FinalProp->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
 	}
 
 	Template->PostEditChange();
@@ -3155,7 +3152,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
-	Result->SetStringField(TEXT("value"), Value);
+	Result->SetStringField(TEXT("value"), NewValue);
 	Result->SetBoolField(TEXT("inherited"), bIsInherited);
 
 	// Rollback: self-inverse with previous value

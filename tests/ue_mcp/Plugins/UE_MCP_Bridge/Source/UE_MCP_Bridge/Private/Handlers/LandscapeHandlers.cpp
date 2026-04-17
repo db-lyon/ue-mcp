@@ -39,6 +39,7 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_landscape_bounds"), &GetLandscapeBounds);
 	Registry.RegisterHandler(TEXT("add_landscape_layer_info"), &AddLandscapeLayerInfo);
 	Registry.RegisterHandler(TEXT("import_landscape_heightmap"), &ImportHeightmap);
+	Registry.RegisterHandler(TEXT("get_landscape_material_usage_summary"), &GetMaterialUsageSummary);
 }
 
 TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeInfo(const TSharedPtr<FJsonObject>& Params)
@@ -759,5 +760,86 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	Result->SetNumberField(TEXT("layerIndex"), LayerIndex);
 	Result->SetBoolField(TEXT("weightBlended"), true);
 
+	return MCPResult(Result);
+}
+
+// ─── #150 get_landscape_material_usage_summary ──────────────────────
+// Compact per-proxy dump: class, label, material paths, grass / Nanite /
+// landscape component counts. Avoids the big "get all components" blob
+// get_actor_details produces when you only need materials + counts.
+TSharedPtr<FJsonValue> FLandscapeHandlers::GetMaterialUsageSummary(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	TArray<TSharedPtr<FJsonValue>> ProxyArray;
+	TSet<FString> UniqueMaterials;
+	int32 TotalComponents = 0, TotalGrass = 0, TotalNanite = 0;
+
+	for (TActorIterator<ALandscapeProxy> It(World); It; ++It)
+	{
+		ALandscapeProxy* Proxy = *It;
+		if (!Proxy) continue;
+
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("label"), Proxy->GetActorLabel());
+		Obj->SetStringField(TEXT("name"), Proxy->GetName());
+		Obj->SetStringField(TEXT("class"), Proxy->GetClass()->GetName());
+		Obj->SetStringField(TEXT("path"), Proxy->GetPathName());
+
+		if (UMaterialInterface* Mat = Proxy->LandscapeMaterial)
+		{
+			Obj->SetStringField(TEXT("landscapeMaterial"), Mat->GetPathName());
+			UniqueMaterials.Add(Mat->GetPathName());
+		}
+		if (UMaterialInterface* HoleMat = Proxy->LandscapeHoleMaterial)
+		{
+			Obj->SetStringField(TEXT("landscapeHoleMaterial"), HoleMat->GetPathName());
+		}
+
+		// Histogram components by class (grass / Nanite / regular landscape comps)
+		int32 LandscapeComps = 0, GrassComps = 0, NaniteComps = 0;
+		TArray<UActorComponent*> Comps;
+		Proxy->GetComponents(Comps);
+		for (UActorComponent* C : Comps)
+		{
+			if (!C) continue;
+			const FString CName = C->GetClass()->GetName();
+			if (CName == TEXT("LandscapeComponent")) LandscapeComps++;
+			else if (CName == TEXT("GrassInstancedStaticMeshComponent")) GrassComps++;
+			else if (CName == TEXT("LandscapeNaniteComponent")) NaniteComps++;
+		}
+		Obj->SetNumberField(TEXT("landscapeComponentCount"), LandscapeComps);
+		Obj->SetNumberField(TEXT("grassComponentCount"), GrassComps);
+		Obj->SetNumberField(TEXT("naniteComponentCount"), NaniteComps);
+		TotalComponents += LandscapeComps;
+		TotalGrass += GrassComps;
+		TotalNanite += NaniteComps;
+
+		const FVector Loc = Proxy->GetActorLocation();
+		const FVector Scale = Proxy->GetActorScale3D();
+		TSharedPtr<FJsonObject> LocObj = MakeShared<FJsonObject>();
+		LocObj->SetNumberField(TEXT("x"), Loc.X);
+		LocObj->SetNumberField(TEXT("y"), Loc.Y);
+		LocObj->SetNumberField(TEXT("z"), Loc.Z);
+		Obj->SetObjectField(TEXT("location"), LocObj);
+		TSharedPtr<FJsonObject> ScaleObj = MakeShared<FJsonObject>();
+		ScaleObj->SetNumberField(TEXT("x"), Scale.X);
+		ScaleObj->SetNumberField(TEXT("y"), Scale.Y);
+		ScaleObj->SetNumberField(TEXT("z"), Scale.Z);
+		Obj->SetObjectField(TEXT("scale"), ScaleObj);
+
+		ProxyArray.Add(MakeShared<FJsonValueObject>(Obj));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> UniqueMatsArr;
+	for (const FString& M : UniqueMaterials) UniqueMatsArr.Add(MakeShared<FJsonValueString>(M));
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("proxies"), ProxyArray);
+	Result->SetNumberField(TEXT("proxyCount"), ProxyArray.Num());
+	Result->SetArrayField(TEXT("uniqueLandscapeMaterials"), UniqueMatsArr);
+	Result->SetNumberField(TEXT("totalLandscapeComponents"), TotalComponents);
+	Result->SetNumberField(TEXT("totalGrassComponents"), TotalGrass);
+	Result->SetNumberField(TEXT("totalNaniteComponents"), TotalNanite);
 	return MCPResult(Result);
 }

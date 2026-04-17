@@ -104,6 +104,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// v0.7.8 stubs — FTS5-backed asset search
 	Registry.RegisterHandler(TEXT("search_assets_fts"), &SearchAssetsFTS);
 	Registry.RegisterHandler(TEXT("reindex_assets_fts"), &ReindexAssetsFTS);
+
+	// v0.7.19 #150 — AssetRegistry referencers
+	Registry.RegisterHandler(TEXT("get_asset_referencers"), &GetReferencers);
 }
 
 // ---------------------------------------------------------------------------
@@ -2683,5 +2686,47 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("outputPath"), OutputPath);
 	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
+	return MCPResult(Result);
+}
+
+// ─── #150 asset(get_referencers) ────────────────────────────────────
+// Reverse dependency lookup per package. Feeds the common "what uses this
+// texture / material?" question without dropping into Python.
+TSharedPtr<FJsonValue> FAssetHandlers::GetReferencers(const TSharedPtr<FJsonObject>& Params)
+{
+	TArray<FString> Packages;
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (Params->TryGetArrayField(TEXT("packages"), Arr) && Arr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Arr)
+		{
+			FString S; if (V.IsValid() && V->TryGetString(S) && !S.IsEmpty()) Packages.Add(S);
+		}
+	}
+	else
+	{
+		FString Single;
+		if (Params->TryGetStringField(TEXT("packagePath"), Single)) Packages.Add(Single);
+	}
+	if (Packages.Num() == 0) return MCPError(TEXT("Supply 'packages' (array) or 'packagePath'"));
+
+	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+
+	TSharedPtr<FJsonObject> ByPkg = MakeShared<FJsonObject>();
+	int32 TotalRefs = 0;
+	for (const FString& Pkg : Packages)
+	{
+		TArray<FName> Refs;
+		AR.GetReferencers(FName(*Pkg), Refs, UE::AssetRegistry::EDependencyCategory::Package);
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FName& R : Refs) Out.Add(MakeShared<FJsonValueString>(R.ToString()));
+		ByPkg->SetArrayField(Pkg, Out);
+		TotalRefs += Refs.Num();
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetObjectField(TEXT("referencersByPackage"), ByPkg);
+	Result->SetNumberField(TEXT("totalReferencers"), TotalRefs);
+	Result->SetNumberField(TEXT("queriedPackages"), Packages.Num());
 	return MCPResult(Result);
 }

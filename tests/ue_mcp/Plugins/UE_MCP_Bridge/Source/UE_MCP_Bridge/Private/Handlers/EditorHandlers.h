@@ -157,4 +157,6 @@ private:
 	static TSharedPtr<FJsonValue> GenerateProjectFiles(const TSharedPtr<FJsonObject>& Params);
 	// #126: Fast-forward PIE game time
 	static TSharedPtr<FJsonValue> SetPieTimeScale(const TSharedPtr<FJsonObject>& Params);
+	// #148: Headless SceneCapture2D → PNG (works when editor is unfocused)
+	static TSharedPtr<FJsonValue> CaptureScenePng(const TSharedPtr<FJsonObject>& Params);
 };

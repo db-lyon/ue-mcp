@@ -25,4 +25,9 @@ private:
 
 	// v0.7.18 issue #145 — populate MeshEntries on a PCGStaticMeshSpawner node
 	static TSharedPtr<FJsonValue> SetStaticMeshSpawnerMeshes(const TSharedPtr<FJsonObject>& Params);
+
+	// v0.7.19 issue #146 — PCG component (re)generation and cleanup
+	static TSharedPtr<FJsonValue> ForceRegeneratePCG(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CleanupPCG(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ToggleGraphPCG(const TSharedPtr<FJsonObject>& Params);
 };
