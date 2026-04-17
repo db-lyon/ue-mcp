@@ -129,7 +129,8 @@ namespace
 			FString Path;
 			if (Value->TryGetString(Path))
 			{
-				FSoftObjectPtr Ptr(FSoftObjectPath(Path));
+				FSoftObjectPath PathObj(Path);
+				FSoftObjectPtr Ptr(PathObj);
 				SoftObjProp->SetPropertyValue(ValueAddr, Ptr);
 				return true;
 			}
@@ -1217,10 +1218,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::ForceRegeneratePCG(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("PCGComponent on '%s' has no graph assigned"), *ActorLabel));
 	}
 
-	// Full reset: clear → re-assign → cleanup → generate.
+	// Full reset: clear → re-assign → cleanup → generate. UE 5.7's
+	// UPCGComponent::Cleanup takes a single bRemoveComponents arg.
 	PCGComp->SetGraph(nullptr);
 	PCGComp->SetGraph(OriginalGraph);
-	PCGComp->Cleanup(/*bRemoveComponents*/ true, /*bSave*/ false);
+	PCGComp->Cleanup(/*bRemoveComponents*/ true);
 	PCGComp->Generate(/*bForce*/ true);
 
 	auto Result = MCPSuccess();
@@ -1241,7 +1243,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::CleanupPCG(const TSharedPtr<FJsonObject>& P
 	if (auto Err = FindPCGComponentByLabel(ActorLabel, PCGComp, Actor)) return Err;
 
 	const bool bRemoveComponents = OptionalBool(Params, TEXT("removeComponents"), true);
-	PCGComp->Cleanup(bRemoveComponents, /*bSave*/ false);
+	PCGComp->Cleanup(bRemoveComponents);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);

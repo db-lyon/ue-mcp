@@ -108,7 +108,8 @@ namespace MCPJsonProperty
 			FString Path;
 			if (Value->TryGetString(Path))
 			{
-				FSoftObjectPtr Ptr(FSoftObjectPath(Path));
+				FSoftObjectPath PathObj(Path);
+				FSoftObjectPtr Ptr(PathObj);
 				SoftObjProp->SetPropertyValue(ValueAddr, Ptr);
 				return true;
 			}
