@@ -37,6 +37,8 @@ export const gameplayTool: ToolDef = categoryTool(
     add_smart_object_component: bp("Add SmartObjectComponent. Params: blueprintPath", "add_smart_object_component"),
     inspect_pie:            bp("Inspect PIE runtime. Params: actorLabel?", "inspect_pie"),
     get_pie_anim_state:     bp("Get PIE anim instance state. Params: actorLabel", "get_pie_anim_state"),
+    get_pie_anim_properties: bp("Read arbitrary UPROPERTY values on a PIE actor's AnimInstance (#139). Params: actorLabel, propertyNames? (omit = dump all)", "get_pie_anim_properties", (p) => ({ actorLabel: p.actorLabel, propertyNames: p.propertyNames })),
+    get_pie_subsystem_state: bp("Read UPROPERTY values on a running subsystem in PIE (#139). Params: subsystemClass, scope? (game|world|engine|localplayer), propertyNames?", "get_pie_subsystem_state", (p) => ({ subsystemClass: p.subsystemClass, scope: p.scope, propertyNames: p.propertyNames })),
     create_game_mode:       bp("Create GameMode BP. Params: name, packagePath?, parentClass?, defaults?", "create_game_mode"),
     create_game_state:      bp("Create GameState BP. Params: name, packagePath?, parentClass?", "create_game_state"),
     create_player_controller: bp("Create PlayerController BP. Params: name, packagePath?, parentClass?", "create_player_controller"),
@@ -78,5 +80,8 @@ export const gameplayTool: ToolDef = categoryTool(
     mappingIndex: z.number().optional().describe("Index of mapping in IMC (default 0)"),
     modifiers: z.array(z.record(z.unknown())).optional().describe("Array of modifier objects: {type, ...props}"),
     triggers: z.array(z.record(z.unknown())).optional().describe("Array of trigger objects: {type, ...props}"),
+    propertyNames: z.array(z.string()).optional().describe("Property names to read for get_pie_anim_properties/get_pie_subsystem_state"),
+    subsystemClass: z.string().optional().describe("Subsystem class path or short name for get_pie_subsystem_state"),
+    scope: z.enum(["game", "world", "engine", "localplayer"]).optional().describe("Subsystem scope for get_pie_subsystem_state (default: game)"),
   },
 );
