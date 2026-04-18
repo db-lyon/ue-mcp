@@ -107,6 +107,10 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// v0.7.19 #150 — AssetRegistry referencers
 	Registry.RegisterHandler(TEXT("get_asset_referencers"), &GetReferencers);
+
+	// v1.0.0-rc.2 — #155 (asset gaps)
+	Registry.RegisterHandler(TEXT("set_sk_material_slots"), &SetSkeletalMeshMaterialSlots);
+	Registry.RegisterHandler(TEXT("diagnose_registry"), &DiagnoseRegistry);
 }
 
 // ---------------------------------------------------------------------------
@@ -2728,5 +2732,166 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetReferencers(const TSharedPtr<FJsonObje
 	Result->SetObjectField(TEXT("referencersByPackage"), ByPkg);
 	Result->SetNumberField(TEXT("totalReferencers"), TotalRefs);
 	Result->SetNumberField(TEXT("queriedPackages"), Packages.Num());
+	return MCPResult(Result);
+}
+
+// ─── #155 asset(set_sk_material_slots) ──────────────────────────────
+// Blueprint component property writes to SkeletalMeshComponent.OverrideMaterials
+// are silently reverted by UE's ICH pipeline; the reliable path is to mutate
+// USkeletalMesh.Materials directly. Accepts either slotName or slotIndex per
+// entry. Missing slot names are reported, not skipped silently.
+TSharedPtr<FJsonValue> FAssetHandlers::SetSkeletalMeshMaterialSlots(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	const TArray<TSharedPtr<FJsonValue>>* SlotsArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("slots"), SlotsArr))
+	{
+		return MCPError(TEXT("Missing 'slots' array parameter"));
+	}
+
+	USkeletalMesh* Mesh = Cast<USkeletalMesh>(StaticLoadObject(USkeletalMesh::StaticClass(), nullptr, *AssetPath));
+	if (!Mesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *AssetPath));
+
+	Mesh->Modify();
+	TArray<FSkeletalMaterial> Materials = Mesh->GetMaterials();
+
+	TArray<TSharedPtr<FJsonValue>> Applied;
+	TArray<FString> Errors;
+
+	for (const TSharedPtr<FJsonValue>& SlotVal : *SlotsArr)
+	{
+		const TSharedPtr<FJsonObject>* SlotObjPtr = nullptr;
+		if (!SlotVal.IsValid() || !SlotVal->TryGetObject(SlotObjPtr)) continue;
+		const TSharedPtr<FJsonObject>& Slot = *SlotObjPtr;
+
+		FString MaterialPath;
+		if (!Slot->TryGetStringField(TEXT("materialPath"), MaterialPath))
+		{
+			Errors.Add(TEXT("slot entry missing 'materialPath'"));
+			continue;
+		}
+
+		UMaterialInterface* Material = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, *MaterialPath));
+		if (!Material)
+		{
+			Errors.Add(FString::Printf(TEXT("material not found: %s"), *MaterialPath));
+			continue;
+		}
+
+		int32 Index = INDEX_NONE;
+		double SlotIdxNum = 0;
+		if (Slot->TryGetNumberField(TEXT("slotIndex"), SlotIdxNum))
+		{
+			Index = (int32)SlotIdxNum;
+		}
+		else
+		{
+			FString SlotName;
+			if (Slot->TryGetStringField(TEXT("slotName"), SlotName))
+			{
+				const FName Target(*SlotName);
+				for (int32 I = 0; I < Materials.Num(); ++I)
+				{
+					if (Materials[I].MaterialSlotName == Target)
+					{
+						Index = I; break;
+					}
+				}
+				if (Index == INDEX_NONE)
+				{
+					Errors.Add(FString::Printf(TEXT("slotName '%s' not found on %s"), *SlotName, *AssetPath));
+					continue;
+				}
+			}
+		}
+
+		if (Index < 0 || Index >= Materials.Num())
+		{
+			Errors.Add(FString::Printf(TEXT("slotIndex %d out of range (mesh has %d slots)"), Index, Materials.Num()));
+			continue;
+		}
+
+		Materials[Index].MaterialInterface = Material;
+
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetNumberField(TEXT("slotIndex"), Index);
+		Entry->SetStringField(TEXT("slotName"), Materials[Index].MaterialSlotName.ToString());
+		Entry->SetStringField(TEXT("materialPath"), MaterialPath);
+		Applied.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	Mesh->SetMaterials(Materials);
+	Mesh->PostEditChange();
+	Mesh->MarkPackageDirty();
+	UEditorAssetLibrary::SaveLoadedAsset(Mesh, /*bOnlyIfIsDirty=*/false);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("slotCount"), Materials.Num());
+	Result->SetArrayField(TEXT("applied"), Applied);
+	if (Errors.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> ErrArr;
+		for (const FString& E : Errors) ErrArr.Add(MakeShared<FJsonValueString>(E));
+		Result->SetArrayField(TEXT("errors"), ErrArr);
+	}
+	return MCPResult(Result);
+}
+
+// ─── #155 asset(diagnose_registry) ──────────────────────────────────
+// Explains the gap between disk state and the in-memory AssetRegistry.
+// Returns on-disk vs registry-including-memory counts so callers can
+// recognise pending-kill ghost entries after delete(). reconcile=true
+// forces a synchronous rescan (matches the Python workaround).
+TSharedPtr<FJsonValue> FAssetHandlers::DiagnoseRegistry(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Path;
+	if (auto Err = RequireString(Params, TEXT("path"), Path)) return Err;
+
+	const bool bReconcile = OptionalBool(Params, TEXT("reconcile"), false);
+	const bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
+
+	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+
+	if (bReconcile)
+	{
+		AR.ScanPathsSynchronous({ Path }, /*bForceRescan=*/true, /*bIgnoreDenyListScanFilters=*/true);
+	}
+
+	FARFilter FilterDisk;
+	FilterDisk.PackagePaths.Add(FName(*Path));
+	FilterDisk.bRecursivePaths = bRecursive;
+	FilterDisk.bIncludeOnlyOnDiskAssets = true;
+	TArray<FAssetData> OnDisk;
+	AR.GetAssets(FilterDisk, OnDisk);
+
+	FARFilter FilterAll = FilterDisk;
+	FilterAll.bIncludeOnlyOnDiskAssets = false;
+	TArray<FAssetData> InMemoryIncluded;
+	AR.GetAssets(FilterAll, InMemoryIncluded);
+
+	TSet<FName> DiskSet;
+	for (const FAssetData& D : OnDisk) DiskSet.Add(D.PackageName);
+
+	TArray<TSharedPtr<FJsonValue>> GhostArr;
+	for (const FAssetData& A : InMemoryIncluded)
+	{
+		if (!DiskSet.Contains(A.PackageName))
+		{
+			GhostArr.Add(MakeShared<FJsonValueString>(A.GetObjectPathString()));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), Path);
+	Result->SetBoolField(TEXT("recursive"), bRecursive);
+	Result->SetBoolField(TEXT("reconciled"), bReconcile);
+	Result->SetNumberField(TEXT("onDiskCount"), OnDisk.Num());
+	Result->SetNumberField(TEXT("inMemoryIncludedCount"), InMemoryIncluded.Num());
+	Result->SetNumberField(TEXT("ghostCount"), GhostArr.Num());
+	Result->SetArrayField(TEXT("ghostPaths"), GhostArr);
 	return MCPResult(Result);
 }

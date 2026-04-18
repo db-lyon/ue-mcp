@@ -110,6 +110,9 @@ export const assetTool: ToolDef = categoryTool(
     search_fts:           bp("Ranked asset search (token-scored over name/class/path). Params: query, maxResults?, classFilter?", "search_assets_fts", (p) => ({ query: p.query, maxResults: p.maxResults, classFilter: p.classFilter })),
     reindex_fts:          bp("Rebuild the SQLite FTS5 asset index. Params: directory?", "reindex_assets_fts", (p) => ({ directory: p.directory })),
     get_referencers:      bp("Reverse dependency lookup. Params: packages[] OR packagePath (#150). Returns {referencersByPackage, totalReferencers}.", "get_asset_referencers", (p) => ({ packages: p.packages, packagePath: p.packagePath })),
+    // v1.0.0-rc.2 — #155 (asset gaps)
+    set_sk_material_slots: bp("Set materials on a USkeletalMesh by slot name or slotIndex (bypasses the blueprint override-materials path that UE's ICH silently reverts). Params: assetPath, slots[{slotName?|slotIndex?, materialPath}]", "set_sk_material_slots"),
+    diagnose_registry:    bp("Scan a content path and compare disk vs AssetRegistry (including in-memory pending-kill entries). Returns onDiskCount, inMemoryIncludedCount, ghostCount and paths. Params: path, recursive? (default true), reconcile? (forceRescan=true)", "diagnose_registry"),
   },
   undefined,
   {
@@ -150,5 +153,13 @@ export const assetTool: ToolDef = categoryTool(
     className: z.string().optional().describe("UClass path (/Script/Module.ClassName) or loaded class name for create_data_asset"),
     properties: z.record(z.unknown()).optional().describe("Key/value property overrides for create_data_asset"),
     packages: z.array(z.string()).optional().describe("Package paths for get_referencers"),
+    // #155
+    slots: z.array(z.object({
+      slotName: z.string().optional(),
+      slotIndex: z.number().optional(),
+      materialPath: z.string(),
+    })).optional().describe("Per-slot material assignments for set_sk_material_slots"),
+    path: z.string().optional().describe("Content path for diagnose_registry (e.g. /Game/Foo)"),
+    reconcile: z.boolean().optional().describe("diagnose_registry: force synchronous rescan (evicts pending-kill ghosts)"),
   },
 );
