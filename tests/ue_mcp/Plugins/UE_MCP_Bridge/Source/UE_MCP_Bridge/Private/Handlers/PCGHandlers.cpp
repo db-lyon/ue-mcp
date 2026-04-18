@@ -30,6 +30,7 @@
 #include "UObject/UnrealType.h"
 #include "UObject/PropertyPortFlags.h"
 #include "UObject/SoftObjectPtr.h"
+#include "ScopedTransaction.h"
 
 namespace
 {
@@ -274,7 +275,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::CreatePCGGraph(const TSharedPtr<FJsonObject
 		return MCPError(TEXT("Failed to create PCGGraph"));
 	}
 
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveLoadedAsset(NewAsset, /*bOnlyIfIsDirty=*/false);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -350,37 +351,38 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 		return MCPError(FString::Printf(TEXT("PCG settings class not found or invalid: %s"), *NodeType));
 	}
 
-	// #147: outer settings in the graph (not transient) so they serialize with
-	// the package. The old code created settings under GetTransientPackage(),
-	// which meant the settings object was garbage-collected on editor restart
-	// — nodes came back referencing null and the executor never dispatched.
+	// #157: wrap mutation in a scoped transaction, outer settings to the graph
+	// (so they serialize with the package), and force SaveLoadedAsset on the
+	// exact Graph instance. The prior AddNode + SaveAsset(path) combination
+	// could silently drop mutations when save-by-path resolved to a different
+	// loaded instance than the one we mutated.
+	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "AddPCGNode", "Add PCG Node"));
+	Graph->Modify();
+
 	UPCGSettings* DefaultSettings = NewObject<UPCGSettings>(Graph, SettingsClass, NAME_None, RF_Transactional);
 	if (!DefaultSettings)
 	{
 		return MCPError(TEXT("Failed to create PCG settings instance"));
 	}
 
-	// Add node to graph
-	UPCGNode* NewNode = Graph->AddNode(DefaultSettings);
+	// AddNodeInstance matches the proven Python path: wraps settings in a
+	// UPCGSettingsInstance parented to the new node. AddNode(UPCGSettings*)
+	// still persists but diverges from how the PCG editor authors nodes.
+	UPCGNode* NewNode = Graph->AddNodeInstance(DefaultSettings);
 	if (!NewNode)
 	{
 		return MCPError(TEXT("Failed to add node to PCG graph"));
 	}
 
-	// #147: Ensure settings outer is the new node (matches the proven Python
-	// workaround `s.rename(None, n)`) so renaming/duplicating the graph keeps
-	// settings attached. AddNode may already do this; re-parenting is idempotent.
-	if (UPCGSettings* NodeSettings = const_cast<UPCGSettings*>(NewNode->GetSettings()))
+	// Keep settings parented to the node so duplicate/rename of the graph
+	// carries settings with it. AddNodeInstance already does this for the
+	// SettingsInstance wrapper; we also reparent the underlying settings.
+	if (DefaultSettings->GetOuter() != NewNode && !DefaultSettings->GetOuter()->IsA<UPackage>())
 	{
-		UObject* Outer = NodeSettings->GetOuter();
-		if (Outer != NewNode && Outer != nullptr && !Outer->IsA<UPackage>())
-		{
-			NodeSettings->Rename(nullptr, NewNode, REN_DontCreateRedirectors | REN_DoNotDirty);
-		}
-		NodeSettings->PostEditChange();
+		DefaultSettings->Rename(nullptr, NewNode, REN_DontCreateRedirectors | REN_DoNotDirty);
 	}
+	DefaultSettings->PostEditChange();
 
-	// Set position if provided
 	double PosX = 0, PosY = 0;
 	if (Params->TryGetNumberField(TEXT("posX"), PosX) || Params->TryGetNumberField(TEXT("posY"), PosY))
 	{
@@ -388,15 +390,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 		NewNode->PositionY = (int32)PosY;
 	}
 
-	// Notify open editor tabs and mark package dirty so Ctrl+S / autosave picks it up (#108)
-	// UE 5.7: NotifyGraphChanged is private. MarkPackageDirty + SaveAsset
-	// still persist changes; open editor tabs may need a reopen to refresh.
 	NewNode->PostEditChange();
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
 
-	// Save the graph asset
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -522,18 +520,19 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 		return MCPError(TEXT("No suitable input pin found on target node"));
 	}
 
+	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "ConnectPCGNodes", "Connect PCG Nodes"));
+	Graph->Modify();
+
 	UPCGNode* ResultNode = Graph->AddEdge(SourceNode, ResolvedSourcePinLabel, TargetNode, ResolvedTargetPinLabel);
 	if (!ResultNode)
 	{
 		return MCPError(TEXT("Failed to connect pins - connection may already exist or be incompatible"));
 	}
 
-	// Notify editor and mark dirty (#108)
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
 
-	// Save the graph asset
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -580,17 +579,15 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 		return MCPResult(Noop);
 	}
 
-	// Remove the node from the graph
+	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "RemovePCGNode", "Remove PCG Node"));
+	Graph->Modify();
+
 	Graph->RemoveNode(FoundNode);
 
-	// Notify editor and mark dirty (#108)
-	// UE 5.7: NotifyGraphChanged is private. MarkPackageDirty + SaveAsset
-	// still persist changes; open editor tabs may need a reopen to refresh.
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
 
-	// Save the graph asset
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -692,12 +689,10 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 
 	Settings->PostEditChange();
 
-	// Notify editor and mark dirty (#108)
 	Graph->PostEditChange();
 	if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
 
-	// Save the graph asset
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
