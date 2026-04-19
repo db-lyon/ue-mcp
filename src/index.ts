@@ -16,7 +16,8 @@ import type { FlowContext } from "./flow/context.js";
 import type { FlowConfig } from "./flow/schema.js";
 
 import * as path from "node:path";
-import { OntologyRegistry, createHandlerRegistryProjector } from "./ontology/index.js";
+import { OntologyRegistry, createHandlerRegistryProjector, createWorkaroundProjector } from "./ontology/index.js";
+import { getWorkarounds } from "./workaround-tracker.js";
 import { createOntologyTool } from "./tools/ontology.js";
 
 import { projectTool } from "./tools/project.js";
@@ -96,6 +97,10 @@ async function main() {
   ALL_TOOLS.push(ontologyTool);
   ontologyRegistry.register(
     createHandlerRegistryProjector(ALL_TOOLS),
+    () => undefined,
+  );
+  ontologyRegistry.register(
+    createWorkaroundProjector(getWorkarounds),
     () => undefined,
   );
 
