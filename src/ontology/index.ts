@@ -172,11 +172,58 @@ export class OntologyRegistry {
     const matches = select(view.root, selector);
     return { selector, matches };
   }
+
+  /**
+   * Check whether an action's declared `requires` are satisfied by the
+   * composed Plugin catalog. Returns a structured result the caller
+   * can use to short-circuit dispatch when prerequisites are missing.
+   */
+  checkRequires(tool: string, actionName: string): {
+    tool: string;
+    actionName: string;
+    declared: readonly string[];
+    missing: readonly string[];
+    disabled: readonly string[];
+    ok: boolean;
+  } {
+    const actionHits = this.query(
+      `/UE/Mediation/Registry/Tools/${tool}/Actions/${actionName}`,
+    ).matches;
+    if (actionHits.length === 0) {
+      return { tool, actionName, declared: [], missing: [], disabled: [], ok: true };
+    }
+    const requires = Object.keys(actionHits[0].point.children?.requires?.children ?? {});
+    if (requires.length === 0) {
+      return { tool, actionName, declared: [], missing: [], disabled: [], ok: true };
+    }
+    const missing: string[] = [];
+    const disabled: string[] = [];
+    for (const dep of requires) {
+      const hits = this.query(`/UE/Plugins/Catalog/${dep}`).matches;
+      if (hits.length === 0) {
+        missing.push(dep);
+        continue;
+      }
+      const enabledField = hits[0].point.fields?.enabled;
+      if (typeof enabledField === "object" && enabledField && "value" in enabledField) {
+        if ((enabledField as { value: number }).value !== 1) disabled.push(dep);
+      }
+    }
+    return {
+      tool,
+      actionName,
+      declared: requires,
+      missing,
+      disabled,
+      ok: missing.length === 0 && disabled.length === 0,
+    };
+  }
 }
 
 export type { Projector, KantFragment, ProjectorEvent } from "./types.js";
 export { createHandlerRegistryProjector } from "./projectors/handler-registry.js";
 export { createWorkaroundProjector } from "./projectors/workarounds.js";
+export { createPluginProjector, type PluginProjectorInput } from "./projectors/plugins.js";
 export { parseKant, parseKantFile, type ParsedFragment } from "./parse.js";
 export { compose, type ComposedView, type Layer } from "./compose.js";
 export { select, parseSelector, type MatchResult } from "./select.js";

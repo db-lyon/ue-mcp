@@ -12,6 +12,7 @@ export enum ErrorCode {
   PROJECT_NOT_LOADED = "PROJECT_NOT_LOADED",
   NOT_FOUND = "NOT_FOUND",
   INVALID_PARAMS = "INVALID_PARAMS",
+  REQUIRES_UNMET = "REQUIRES_UNMET",
 }
 
 export class McpError extends Error {

@@ -16,8 +16,9 @@ import type { FlowContext } from "./flow/context.js";
 import type { FlowConfig } from "./flow/schema.js";
 
 import * as path from "node:path";
-import { OntologyRegistry, createHandlerRegistryProjector, createWorkaroundProjector } from "./ontology/index.js";
+import { OntologyRegistry, createHandlerRegistryProjector, createWorkaroundProjector, createPluginProjector } from "./ontology/index.js";
 import { getWorkarounds } from "./workaround-tracker.js";
+import { findEngineInstall } from "./deployer.js";
 import { createOntologyTool } from "./tools/ontology.js";
 
 import { projectTool } from "./tools/project.js";
@@ -103,6 +104,23 @@ async function main() {
     createWorkaroundProjector(getWorkarounds),
     () => undefined,
   );
+  ontologyRegistry.register(
+    createPluginProjector(),
+    () => ({
+      engineRoot: findEngineInstall(project.engineAssociation ?? null),
+      projectDir: project.projectDir,
+    }),
+  );
+
+  // Prime the ontology cache so the dispatch-layer preflight can
+  // consult it from the first tool call. Projection is cheap for the
+  // TS-side projectors registered here (no bridge calls). Agents can
+  // force a refresh via ontology(project_all).
+  try {
+    ontologyRegistry.projectAll();
+  } catch (e) {
+    console.error(`[ue-mcp] ontology projection at startup failed: ${e instanceof Error ? e.message : e}`);
+  }
 
   const disabled = new Set(project.config.disable ?? []);
   const tools = ALL_TOOLS.filter((t) => !disabled.has(t.name));
@@ -121,6 +139,24 @@ async function main() {
       const flowCtx: FlowContext = { bridge, project };
 
       try {
+        // Ontology-backed preflight: if the action declared `requires`
+        // and the resolved Plugin catalog says any of them are missing
+        // or disabled, fail early with a structured error instead of
+        // blowing up deep in the bridge.
+        const pre = ontologyRegistry.checkRequires(tool.name, action);
+        if (!pre.ok) {
+          const parts: string[] = [];
+          if (pre.missing.length > 0) parts.push(`missing plugins: ${pre.missing.join(", ")}`);
+          if (pre.disabled.length > 0) parts.push(`disabled plugins: ${pre.disabled.join(", ")}`);
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Error [REQUIRES_UNMET]: ${tool.name}.${action} requires ${pre.declared.join(", ")}; ${parts.join("; ")}. Enable the plugin(s) in your project and restart the editor.`,
+            }],
+            isError: true,
+          };
+        }
+
         const task = await registry.create(taskName, flowCtx, taskParams);
         const result = await task.run();
 
