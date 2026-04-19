@@ -83,10 +83,24 @@ export function serializeFragment(fragment: KantFragment): string {
     serializeMeaningBlock(point, `/${name}`, fragment.basePath, meaningLines);
   }
 
-  const rootAnchor = fragment.basePath.split("/").filter(Boolean).pop() ?? "root";
-  const contextLines: string[] = [`${rootAnchor}@${rootAnchor}:`];
+  // Instance tree is always rooted at UE@UE: with fragment.points nested
+  // under fragment.basePath. This keeps composition trivial - every
+  // projected layer and every hand-authored layer attaches at a real
+  // path in the /UE address space, no anchor-to-path lookup required.
+  const baseSegments = fragment.basePath.split("/").filter(Boolean);
+  if (baseSegments[0] !== "UE") {
+    throw new Error(`basePath must be rooted at /UE, got '${fragment.basePath}'`);
+  }
+  const pathSegments = baseSegments.slice(1);
+
+  const contextLines: string[] = ["UE@UE:"];
+  let depth = 1;
+  for (const seg of pathSegments) {
+    contextLines.push(`${INDENT.repeat(depth)}${seg}:`);
+    depth += 1;
+  }
   for (const [name, point] of Object.entries(fragment.points)) {
-    contextLines.push(serializePoint(name, point, 1));
+    contextLines.push(serializePoint(name, point, depth));
   }
 
   return [header, meaningLines.join("\n"), "", contextLines.join("\n"), ""].join("\n");

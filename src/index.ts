@@ -78,8 +78,19 @@ async function main() {
   });
 
   // ── Ontology registry: projects live state into .kant fragments ──
-  const ontologyRegistry = new OntologyRegistry(() =>
-    path.join(project.projectDir ?? process.cwd(), ".ue-mcp", "ontology", "projected"),
+  const packageRoot = path.dirname(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")));
+  const resolveProjectedDir = () =>
+    path.join(project.projectDir ?? process.cwd(), ".ue-mcp", "ontology", "projected");
+  const ontologyRegistry = new OntologyRegistry(
+    resolveProjectedDir,
+    () => ({
+      kernel: { priority: 0, paths: [path.join(packageRoot, "ontology", "kernel")] },
+      projected: { priority: 1, paths: [resolveProjectedDir()] },
+      repoLocal: {
+        priority: 2,
+        paths: project.projectDir ? [path.join(project.projectDir, ".ue-mcp")] : [],
+      },
+    }),
   );
   const ontologyTool = createOntologyTool(ontologyRegistry);
   ALL_TOOLS.push(ontologyTool);

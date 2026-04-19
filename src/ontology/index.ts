@@ -1,18 +1,22 @@
 /**
  * Ontology registry.
  *
- * Owns the set of registered projectors and the output directory
- * where projected .kant fragments are written.
- *
- * Kantext sidecar integration is deferred: today we emit fragments
- * and list them. Once the sidecar is wired, the same registry will
- * drive composition and HQL queries.
+ * Owns projector registrations, projected-layer emission, kernel +
+ * repo-local layer discovery, composition into a single view, and
+ * selector queries. Everything except projection is an in-process
+ * TS walker over a strict subset of kantext's .kant shape. When the
+ * kantext binary is available we swap these in-process walkers for
+ * calls into it; the emitted .kant files and the projector surface
+ * do not change.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { KantFragment, Projector, ProjectorEvent } from "./types.js";
 import { writeFragment } from "./emit.js";
+import { parseKantFile, type ParsedFragment } from "./parse.js";
+import { compose, type ComposedView, type Layer } from "./compose.js";
+import { select, type MatchResult } from "./select.js";
 
 export interface ProjectionResult {
   readonly projector: string;
@@ -43,10 +47,24 @@ function countPoints(fragment: KantFragment): number {
   return n;
 }
 
+export interface LayerSource {
+  readonly priority: number;
+  readonly paths: readonly string[];
+}
+
+export interface LayerSources {
+  readonly kernel: LayerSource;
+  readonly projected: LayerSource;
+  readonly repoLocal: LayerSource;
+}
+
 export class OntologyRegistry {
   private readonly projectors: RegisteredProjector[] = [];
 
-  constructor(private readonly resolveOutputDir: () => string) {}
+  constructor(
+    private readonly resolveOutputDir: () => string,
+    private readonly resolveLayerSources: () => LayerSources,
+  ) {}
 
   register<T>(projector: Projector<T>, input: () => T): void {
     this.projectors.push({
@@ -119,7 +137,45 @@ export class OntologyRegistry {
   get outputDirectory(): string {
     return this.resolveOutputDir();
   }
+
+  private loadLayers(): Layer[] {
+    const sources = this.resolveLayerSources();
+    const layers: Layer[] = [];
+    for (const group of [sources.kernel, sources.projected, sources.repoLocal]) {
+      for (const p of group.paths) {
+        if (!fs.existsSync(p)) continue;
+        const stat = fs.statSync(p);
+        if (stat.isDirectory()) {
+          const files = fs.readdirSync(p).filter((f) => f.endsWith(".kant") && f !== "stack.kant");
+          for (const f of files) {
+            layers.push({
+              priority: group.priority,
+              fragment: parseKantFile(path.join(p, f)),
+            });
+          }
+        } else if (p.endsWith(".kant")) {
+          layers.push({ priority: group.priority, fragment: parseKantFile(p) });
+        }
+      }
+    }
+    return layers;
+  }
+
+  composeView(): ComposedView & { layerCount: number } {
+    const layers = this.loadLayers();
+    const view = compose(layers);
+    return { ...view, layerCount: layers.length };
+  }
+
+  query(selector: string): { selector: string; matches: MatchResult[] } {
+    const view = this.composeView();
+    const matches = select(view.root, selector);
+    return { selector, matches };
+  }
 }
 
 export type { Projector, KantFragment, ProjectorEvent } from "./types.js";
 export { createHandlerRegistryProjector } from "./projectors/handler-registry.js";
+export { parseKant, parseKantFile, type ParsedFragment } from "./parse.js";
+export { compose, type ComposedView, type Layer } from "./compose.js";
+export { select, parseSelector, type MatchResult } from "./select.js";
