@@ -16,6 +16,18 @@ export interface ToolDef {
   actions: Record<string, ActionSpec>;
 }
 
+/**
+ * Operational classification for an action.
+ * Projects into /UE/Signals/Classification as a gradient marker.
+ */
+export type ActionClassification = "read" | "introspect" | "mutate" | "create" | "destructive";
+
+/** Approval policy. Projects into /UE/Signals/Approval. */
+export type ActionApproval = "auto" | "advisory" | "required" | "explicit";
+
+/** Risk signal. Projects into /UE/Signals/Risk. */
+export type ActionRisk = "trivial" | "minor" | "significant" | "severe" | "catastrophic";
+
 export interface ActionSpec {
   description?: string;
   bridge?: string;
@@ -23,6 +35,23 @@ export interface ActionSpec {
   handler?: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
   /** Override the bridge call timeout in milliseconds. Defaults to 30s. */
   timeoutMs?: number;
+  /**
+   * Declared operational classification. When present, the ontology
+   * projector uses this value instead of the name-prefix heuristic.
+   * Set this on any action whose side-effect profile is surprising.
+   */
+  classification?: ActionClassification;
+  /** Declared approval policy. Overrides classification-derived default. */
+  approval?: ActionApproval;
+  /** Declared risk. Overrides classification-derived default. */
+  risk?: ActionRisk;
+  /**
+   * Plugins or modules that must be available for this action to
+   * succeed. Projected into the point's `requires` subtree as named
+   * children (one child per dependency). Category-level defaults
+   * (passed to categoryTool) apply unless overridden here.
+   */
+  requires?: readonly string[];
 }
 
 export function categoryTool(
@@ -31,8 +60,21 @@ export function categoryTool(
   actions: Record<string, ActionSpec>,
   actionDocs?: string,
   extraSchema?: Record<string, z.ZodType>,
+  defaults?: Partial<Pick<ActionSpec, "classification" | "approval" | "risk" | "requires">>,
 ): ToolDef {
   const actionNames = Object.keys(actions) as [string, ...string[]];
+
+  // Apply category-level defaults to actions that did not declare
+  // their own. Per-action declarations always win.
+  if (defaults) {
+    for (const key of actionNames) {
+      const spec = actions[key];
+      if (defaults.classification && spec.classification === undefined) spec.classification = defaults.classification;
+      if (defaults.approval && spec.approval === undefined) spec.approval = defaults.approval;
+      if (defaults.risk && spec.risk === undefined) spec.risk = defaults.risk;
+      if (defaults.requires && spec.requires === undefined) spec.requires = defaults.requires;
+    }
+  }
 
   // Auto-generate action docs from per-action descriptions if not provided
   const docs = actionDocs ?? actionNames

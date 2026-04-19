@@ -33,6 +33,13 @@ export const editorTool: ToolDef = categoryTool(
     execute_command: bp("Run console command. Params: command", "execute_command"),
     execute_python: {
       description: "Run Python in editor. Params: code",
+      // Declared metadata: python is an unbounded escape hatch. Treat
+      // as destructive with explicit approval regardless of what the
+      // name-prefix heuristic would say.
+      classification: "destructive",
+      approval: "explicit",
+      risk: "catastrophic",
+      requires: ["PythonScriptPlugin"],
       handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
         const code = (params.code as string) ?? "";
         const result = await ctx.bridge.call("execute_python", { code });

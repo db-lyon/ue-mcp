@@ -39,4 +39,5 @@ export const pcgTool: ToolDef = categoryTool(
     extent: Vec3.optional(),
     removeComponents: z.boolean().optional().describe("cleanup: remove managed spawned components (default true)"),
   },
+  { requires: ["PCG"] },
 );

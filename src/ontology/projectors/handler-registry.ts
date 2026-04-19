@@ -15,14 +15,14 @@
  * explicit metadata in a follow-up pass.
  */
 
-import type { ActionSpec, ToolDef } from "../../types.js";
+import type { ActionApproval, ActionClassification, ActionRisk, ActionSpec, ToolDef } from "../../types.js";
 import type { KantFragment, KantPoint, KantSignal, Projector } from "../types.js";
 
 const MEDIATION_BASE = "/UE/Mediation/Registry";
 
-type Classification = "read" | "introspect" | "mutate" | "create" | "destructive";
-type Approval = "auto" | "advisory" | "required" | "explicit";
-type Risk = "trivial" | "minor" | "significant" | "severe" | "catastrophic";
+type Classification = ActionClassification;
+type Approval = ActionApproval;
+type Risk = ActionRisk;
 
 const CLASSIFICATION_SCORE: Record<Classification, number> = {
   read: 0.0,
@@ -95,23 +95,43 @@ function riskFor(c: Classification): Risk {
 }
 
 function actionPoint(actionName: string, spec: ActionSpec): KantPoint {
-  const classification = classifyAction(actionName);
-  const approval = approvalFor(classification);
-  const risk = riskFor(classification);
+  // Declared > heuristic. Agents can trust what they read.
+  const classification: Classification = spec.classification ?? classifyAction(actionName);
+  const approval: Approval = spec.approval ?? approvalFor(classification);
+  const risk: Risk = spec.risk ?? riskFor(classification);
+  const metadataSource = spec.classification ? "declared" : "heuristic";
 
   const fields: Record<string, string | KantSignal> = {
     classification: signal(CLASSIFICATION_SCORE[classification], classification),
     approval: signal(APPROVAL_SCORE[approval], approval),
     risk: signal(RISK_SCORE[risk], risk),
+    metadataSource,
   };
   if (spec.bridge) fields.bridge = spec.bridge;
   if (spec.timeoutMs !== undefined) fields.timeoutMs = String(spec.timeoutMs);
   fields.handlerKind = spec.handler ? "ts" : spec.bridge ? "bridge" : "none";
 
+  const children: Record<string, KantPoint> = {};
+  if (spec.requires && spec.requires.length > 0) {
+    const requiresChildren: Record<string, KantPoint> = {};
+    for (const dep of spec.requires) {
+      requiresChildren[dep] = {
+        meaning: `Dependency ${dep}`,
+        purpose: `Plugin or module required for this action`,
+      };
+    }
+    children.requires = {
+      meaning: "Requirements",
+      purpose: "Plugins or modules the action depends on",
+      children: requiresChildren,
+    };
+  }
+
   return {
     meaning: `Action ${actionName}`,
     purpose: spec.description ?? `Action ${actionName}`,
     fields,
+    children: Object.keys(children).length > 0 ? children : undefined,
   };
 }
 

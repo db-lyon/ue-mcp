@@ -87,4 +87,5 @@ export const niagaraTool: ToolDef = categoryTool(
     outputs: z.array(z.record(z.unknown())).optional().describe("For create_module_from_hlsl: [{name, type}]"),
     ops: z.array(z.record(z.unknown())).optional().describe("For batch: [{action, params}]"),
   },
+  { requires: ["Niagara"] },
 );

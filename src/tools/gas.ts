@@ -38,4 +38,5 @@ export const gasTool: ToolDef = categoryTool(
     durationPolicy: z.string().optional(),
     cueType: z.string().optional(),
   },
+  { requires: ["GameplayAbilities"] },
 );
