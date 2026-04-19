@@ -16,7 +16,7 @@ import type { FlowContext } from "./flow/context.js";
 import type { FlowConfig } from "./flow/schema.js";
 
 import * as path from "node:path";
-import { OntologyRegistry, createHandlerRegistryProjector, createWorkaroundProjector, createPluginProjector } from "./ontology/index.js";
+import { OntologyRegistry, createHandlerRegistryProjector, createWorkaroundProjector, createPluginProjector, createEngineSymbolProjector } from "./ontology/index.js";
 import { getWorkarounds } from "./workaround-tracker.js";
 import { findEngineInstall } from "./deployer.js";
 import { createOntologyTool } from "./tools/ontology.js";
@@ -111,13 +111,22 @@ async function main() {
       projectDir: project.projectDir,
     }),
   );
+  ontologyRegistry.register(
+    createEngineSymbolProjector(),
+    () => ({
+      engineRoot: findEngineInstall(project.engineAssociation ?? null),
+      trees: ["Runtime"] as const,
+      includePlugins: false,
+    }),
+  );
 
   // Prime the ontology cache so the dispatch-layer preflight can
-  // consult it from the first tool call. Projection is cheap for the
-  // TS-side projectors registered here (no bridge calls). Agents can
-  // force a refresh via ontology(project_all).
+  // consult it from the first tool call. We fire startup-subscribed
+  // projectors only so expensive ones (EngineSymbolProjector) do not
+  // block server ready-up. Agents can run ontology(project_by_event,
+  // event="manual") to build the symbol index on demand.
   try {
-    ontologyRegistry.projectAll();
+    ontologyRegistry.projectByEvent("startup");
   } catch (e) {
     console.error(`[ue-mcp] ontology projection at startup failed: ${e instanceof Error ? e.message : e}`);
   }

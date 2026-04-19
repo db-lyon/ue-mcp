@@ -224,6 +224,11 @@ export type { Projector, KantFragment, ProjectorEvent } from "./types.js";
 export { createHandlerRegistryProjector } from "./projectors/handler-registry.js";
 export { createWorkaroundProjector } from "./projectors/workarounds.js";
 export { createPluginProjector, type PluginProjectorInput } from "./projectors/plugins.js";
+export {
+  createEngineSymbolProjector,
+  type EngineSymbolProjectorInput,
+  type EngineTree,
+} from "./projectors/engine-symbols.js";
 export { parseKant, parseKantFile, type ParsedFragment } from "./parse.js";
 export { compose, type ComposedView, type Layer } from "./compose.js";
 export { select, parseSelector, type MatchResult } from "./select.js";
