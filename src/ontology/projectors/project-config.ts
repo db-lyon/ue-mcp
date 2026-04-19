@@ -9,7 +9,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { KantFragment, KantPoint, Projector } from "../types.js";
+import type { EmittedFragment, Point, Projector } from "@db-lyon/cairn";
 
 export interface ProjectConfigProjectorInput {
   projectDir: string | null;
@@ -36,7 +36,7 @@ function signalBool(b: boolean | undefined, t: string, f: string) {
   return { kind: "signal" as const, value: b === true ? 1 : 0, marker: b === true ? t : f };
 }
 
-function uprojectPoint(projectPath: string): KantPoint | null {
+function uprojectPoint(projectPath: string): Point | null {
   let descriptor: UProjectDescriptor;
   try {
     descriptor = JSON.parse(fs.readFileSync(projectPath, "utf-8")) as UProjectDescriptor;
@@ -55,10 +55,10 @@ function uprojectPoint(projectPath: string): KantPoint | null {
   const desc = sanitize(descriptor.Description);
   if (desc) fields.description = desc;
 
-  const children: Record<string, KantPoint> = {};
+  const children: Record<string, Point> = {};
 
   if (descriptor.Modules && descriptor.Modules.length > 0) {
-    const modChildren: Record<string, KantPoint> = {};
+    const modChildren: Record<string, Point> = {};
     for (const mod of descriptor.Modules) {
       const name = sanitize(mod.Name);
       if (!name) continue;
@@ -83,7 +83,7 @@ function uprojectPoint(projectPath: string): KantPoint | null {
   }
 
   if (descriptor.Plugins && descriptor.Plugins.length > 0) {
-    const plugChildren: Record<string, KantPoint> = {};
+    const plugChildren: Record<string, Point> = {};
     for (const plug of descriptor.Plugins) {
       const name = sanitize(plug.Name);
       if (!name) continue;
@@ -113,7 +113,7 @@ function uprojectPoint(projectPath: string): KantPoint | null {
   };
 }
 
-function mcpConfigPoint(projectDir: string): KantPoint | null {
+function mcpConfigPoint(projectDir: string): Point | null {
   const configPath = path.join(projectDir, ".ue-mcp.json");
   if (!fs.existsSync(configPath)) return null;
   let parsed: Record<string, unknown>;
@@ -142,8 +142,8 @@ export function createProjectConfigProjector(): Projector<ProjectConfigProjector
     name: "project-config",
     basePath: CONFIG_BASE,
     triggerEvents: ["startup", "manual"],
-    project(input: ProjectConfigProjectorInput): KantFragment {
-      const children: Record<string, KantPoint> = {};
+    project(input: ProjectConfigProjectorInput): EmittedFragment {
+      const children: Record<string, Point> = {};
       if (input.projectPath && fs.existsSync(input.projectPath)) {
         const p = uprojectPoint(input.projectPath);
         if (p) children.UProject = p;

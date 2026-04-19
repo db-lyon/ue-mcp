@@ -2,15 +2,15 @@ import { describe, it, expect } from "vitest";
 import type { InvocationEntry } from "../../src/invocation-tracker.js";
 import {
   createInvocationProjector,
-  parseKant,
+  parse,
   compose,
   select,
 } from "../../src/ontology/index.js";
-import { serializeFragment } from "../../src/ontology/emit.js";
+import { serializeFragment } from "../../src/ontology/index.js";
 
 function projectAndCompose(entries: InvocationEntry[]) {
   const proj = createInvocationProjector(() => entries);
-  const parsed = parseKant(serializeFragment(proj.project(undefined as never)), "proj");
+  const parsed = parse(serializeFragment(proj.project(undefined as never)), "proj");
   return compose([{ priority: 1, fragment: parsed }]);
 }
 

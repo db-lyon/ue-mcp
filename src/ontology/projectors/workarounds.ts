@@ -13,7 +13,7 @@
  */
 
 import type { WorkaroundEntry } from "../../workaround-tracker.js";
-import type { KantFragment, KantPoint, Projector } from "../types.js";
+import type { EmittedFragment, Point, Projector } from "@db-lyon/cairn";
 
 const AUDIT_BASE = "/UE/Audit/Workarounds";
 
@@ -33,13 +33,13 @@ export function createWorkaroundProjector(
     name: "workarounds",
     basePath: AUDIT_BASE,
     triggerEvents: ["manual", "flow-completed"],
-    project(): KantFragment {
+    project(): EmittedFragment {
       const entries = getWorkarounds();
-      const entryChildren: Record<string, KantPoint> = {};
+      const entryChildren: Record<string, Point> = {};
 
       entries.forEach((entry, i) => {
         const seq = i + 1;
-        const point: KantPoint = {
+        const point: Point = {
           meaning: `Workaround ${seq}`,
           purpose: "execute_python call recorded as a gap in native tool coverage",
           fields: {

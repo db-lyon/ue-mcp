@@ -2,16 +2,16 @@ import { describe, it, expect } from "vitest";
 import { categoryTool, bp, type ToolDef } from "../../src/types.js";
 import {
   createHandlerRegistryProjector,
-  parseKant,
+  parse,
   compose,
   select,
 } from "../../src/ontology/index.js";
-import { serializeFragment } from "../../src/ontology/emit.js";
+import { serializeFragment } from "../../src/ontology/index.js";
 
 function buildProjectedView(tools: ToolDef[]) {
   const proj = createHandlerRegistryProjector(tools);
   const text = serializeFragment(proj.project(undefined as never));
-  const frag = parseKant(text, "projected");
+  const frag = parse(text, "projected");
   return compose([{ priority: 1, fragment: frag }]);
 }
 

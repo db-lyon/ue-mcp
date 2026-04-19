@@ -7,11 +7,11 @@ import {
   OntologyRegistry,
   createHandlerRegistryProjector,
   createPluginProjector,
-  parseKant,
+  parse,
   compose,
   select,
 } from "../../src/ontology/index.js";
-import { serializeFragment } from "../../src/ontology/emit.js";
+import { serializeFragment } from "../../src/ontology/index.js";
 
 function writePlugin(dir: string, name: string, descriptor: Record<string, unknown>): void {
   const sub = path.join(dir, name);
@@ -54,7 +54,7 @@ describe("ontology: PluginProjector", () => {
 
     const proj = createPluginProjector();
     const frag = proj.project({ engineRoot, projectDir });
-    const parsed = parseKant(serializeFragment(frag), "projected");
+    const parsed = parse(serializeFragment(frag), "projected");
     const view = compose([{ priority: 1, fragment: parsed }]);
 
     const catalog = view.root.children!.Plugins.children!.Catalog;
@@ -79,7 +79,7 @@ describe("ontology: PluginProjector", () => {
 
     const proj = createPluginProjector();
     const frag = proj.project({ engineRoot, projectDir });
-    const view = compose([{ priority: 1, fragment: parseKant(serializeFragment(frag), "x") }]);
+    const view = compose([{ priority: 1, fragment: parse(serializeFragment(frag), "x") }]);
 
     const disabled = select(view.root, "/UE/Plugins/Catalog/*@enabled=disabled");
     expect(disabled.map((m) => m.path.split("/").pop()).sort()).toEqual(["B", "C"]);

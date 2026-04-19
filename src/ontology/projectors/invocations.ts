@@ -12,7 +12,7 @@
  */
 
 import type { InvocationEntry, InvocationStatus } from "../../invocation-tracker.js";
-import type { KantFragment, KantPoint, KantSignal, Projector } from "../types.js";
+import type { EmittedFragment, Point, Signal, Projector } from "@db-lyon/cairn";
 
 const AUDIT_BASE = "/UE/Audit/Invocations";
 
@@ -22,7 +22,7 @@ const STATUS_SCORE: Record<InvocationStatus, number> = {
   requires_unmet: 0.5,
 };
 
-function statusSignal(s: InvocationStatus): KantSignal {
+function statusSignal(s: InvocationStatus): Signal {
   return { kind: "signal", value: STATUS_SCORE[s], marker: s };
 }
 
@@ -38,9 +38,9 @@ export function createInvocationProjector(
     name: "invocations",
     basePath: AUDIT_BASE,
     triggerEvents: ["manual", "flow-completed"],
-    project(): KantFragment {
+    project(): EmittedFragment {
       const entries = getInvocations();
-      const children: Record<string, KantPoint> = {};
+      const children: Record<string, Point> = {};
 
       let okCount = 0;
       let errCount = 0;
@@ -50,7 +50,7 @@ export function createInvocationProjector(
         else if (e.status === "error") errCount += 1;
         else if (e.status === "requires_unmet") reqCount += 1;
 
-        const fields: Record<string, string | number | KantSignal> = {
+        const fields: Record<string, string | number | Signal> = {
           sequence: e.sequence,
           tool: e.tool,
           actionName: e.action,

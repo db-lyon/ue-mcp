@@ -26,7 +26,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { KantFragment, KantPoint, Projector } from "../types.js";
+import type { EmittedFragment, Point, Projector } from "@db-lyon/cairn";
 
 export interface EngineSymbolProjectorInput {
   engineRoot: string | null;
@@ -176,7 +176,7 @@ export function extractSymbols(
   return { symbols, truncated, scannedFiles };
 }
 
-function symbolPoint(sym: ExtractedSymbol, engineRoot: string): KantPoint {
+function symbolPoint(sym: ExtractedSymbol, engineRoot: string): Point {
   const relFile = path.relative(engineRoot, sym.file).replace(/\\/g, "/");
   const fields: Record<string, string | number | { kind: "signal"; value: number; marker?: string }> = {
     name: sym.name,
@@ -198,7 +198,7 @@ export function createEngineSymbolProjector(): Projector<EngineSymbolProjectorIn
     name: "engine-symbols",
     basePath: SYMBOL_BASE,
     triggerEvents: ["manual"],
-    project(input: EngineSymbolProjectorInput): KantFragment {
+    project(input: EngineSymbolProjectorInput): EmittedFragment {
       if (!input.engineRoot) {
         return {
           basePath: SYMBOL_BASE,
@@ -234,7 +234,7 @@ export function createEngineSymbolProjector(): Projector<EngineSymbolProjectorIn
         dedup[sym.name] = sym;
       }
 
-      const children: Record<string, KantPoint> = {};
+      const children: Record<string, Point> = {};
       for (const [name, sym] of Object.entries(dedup)) {
         children[name] = symbolPoint(sym, input.engineRoot);
       }

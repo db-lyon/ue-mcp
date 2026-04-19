@@ -2,16 +2,16 @@ import { describe, it, expect } from "vitest";
 import type { WorkaroundEntry } from "../../src/workaround-tracker.js";
 import {
   createWorkaroundProjector,
-  parseKant,
+  parse,
   compose,
   select,
 } from "../../src/ontology/index.js";
-import { serializeFragment } from "../../src/ontology/emit.js";
+import { serializeFragment } from "../../src/ontology/index.js";
 
 function projectAndCompose(entries: WorkaroundEntry[]) {
   const proj = createWorkaroundProjector(() => entries);
   const text = serializeFragment(proj.project(undefined as never));
-  const parsed = parseKant(text, "projected");
+  const parsed = parse(text, "projected");
   return compose([{ priority: 1, fragment: parsed }]);
 }
 

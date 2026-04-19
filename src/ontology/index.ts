@@ -1,182 +1,32 @@
 /**
- * Ontology registry.
+ * ue-mcp ontology adapter.
  *
- * Owns projector registrations, projected-layer emission, kernel +
- * repo-local layer discovery, composition into a single view, and
- * selector queries. Everything except projection is an in-process
- * TS walker over a strict subset of kantext's .kant shape. When the
- * kantext binary is available we swap these in-process walkers for
- * calls into it; the emitted .kant files and the projector surface
- * do not change.
+ * Thin wrapper around cairn's generic Registry that adds the
+ * UE-specific semantics ue-mcp relies on in the dispatch layer:
+ *   - checkRequires: preflight plugin-availability gate
+ *   - resolveApproval: declared approval marker for auto-directive
+ *
+ * The core engine (parse/compose/select/emit/types/Registry) lives
+ * in @db-lyon/cairn. Everything in this file is UE-specific.
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-import type { KantFragment, Projector, ProjectorEvent } from "./types.js";
-import { writeFragment } from "./emit.js";
-import { parseKantFile, type ParsedFragment } from "./parse.js";
-import { compose, type ComposedView, type Layer } from "./compose.js";
-import { select, type MatchResult } from "./select.js";
+import { Registry, type LayerSources } from "@db-lyon/cairn";
 
-export interface ProjectionResult {
-  readonly projector: string;
-  readonly basePath: string;
-  readonly outputPath: string;
-  readonly pointCount: number;
-  readonly producedAt: string;
-}
-
-interface RegisteredProjector {
-  readonly projector: Projector<unknown>;
-  readonly input: () => unknown;
-}
-
-function countPoints(fragment: KantFragment): number {
-  let n = 0;
-  function walk(point: { children?: Record<string, unknown> }): void {
-    n += 1;
-    if (point.children) {
-      for (const child of Object.values(point.children)) {
-        walk(child as { children?: Record<string, unknown> });
-      }
-    }
-  }
-  for (const point of Object.values(fragment.points)) {
-    walk(point);
-  }
-  return n;
-}
-
-export interface LayerSource {
-  readonly priority: number;
-  readonly paths: readonly string[];
-}
-
-export interface LayerSources {
-  readonly kernel: LayerSource;
-  readonly projected: LayerSource;
-  readonly repoLocal: LayerSource;
-}
-
-export class OntologyRegistry {
-  private readonly projectors: RegisteredProjector[] = [];
-
+export class OntologyRegistry extends Registry {
   constructor(
-    private readonly resolveOutputDir: () => string,
-    private readonly resolveLayerSources: () => LayerSources,
-  ) {}
-
-  register<T>(projector: Projector<T>, input: () => T): void {
-    this.projectors.push({
-      projector: projector as Projector<unknown>,
-      input: input as () => unknown,
-    });
-  }
-
-  get projectorCount(): number {
-    return this.projectors.length;
-  }
-
-  listProjectors(): ReadonlyArray<{ name: string; basePath: string; triggerEvents: readonly ProjectorEvent[] }> {
-    return this.projectors.map((r) => ({
-      name: r.projector.name,
-      basePath: r.projector.basePath,
-      triggerEvents: r.projector.triggerEvents,
-    }));
-  }
-
-  projectAll(): ProjectionResult[] {
-    const outputDir = this.resolveOutputDir();
-    const results: ProjectionResult[] = [];
-    for (const { projector, input } of this.projectors) {
-      const fragment = projector.project(input());
-      const outputPath = writeFragment(fragment, outputDir);
-      results.push({
-        projector: projector.name,
-        basePath: fragment.basePath,
-        outputPath,
-        pointCount: countPoints(fragment),
-        producedAt: fragment.producedAt,
-      });
-    }
-    return results;
-  }
-
-  projectByEvent(event: ProjectorEvent): ProjectionResult[] {
-    const outputDir = this.resolveOutputDir();
-    const results: ProjectionResult[] = [];
-    for (const { projector, input } of this.projectors) {
-      if (!projector.triggerEvents.includes(event)) continue;
-      const fragment = projector.project(input());
-      const outputPath = writeFragment(fragment, outputDir);
-      results.push({
-        projector: projector.name,
-        basePath: fragment.basePath,
-        outputPath,
-        pointCount: countPoints(fragment),
-        producedAt: fragment.producedAt,
-      });
-    }
-    return results;
-  }
-
-  listLayers(): Array<{ file: string; size: number; mtime: string }> {
-    const outputDir = this.resolveOutputDir();
-    if (!fs.existsSync(outputDir)) return [];
-    return fs
-      .readdirSync(outputDir, { withFileTypes: true })
-      .filter((d) => d.isFile() && d.name.endsWith(".kant"))
-      .map((d) => {
-        const full = path.join(outputDir, d.name);
-        const stat = fs.statSync(full);
-        return { file: d.name, size: stat.size, mtime: stat.mtime.toISOString() };
-      })
-      .sort((a, b) => a.file.localeCompare(b.file));
-  }
-
-  get outputDirectory(): string {
-    return this.resolveOutputDir();
-  }
-
-  private loadLayers(): Layer[] {
-    const sources = this.resolveLayerSources();
-    const layers: Layer[] = [];
-    for (const group of [sources.kernel, sources.projected, sources.repoLocal]) {
-      for (const p of group.paths) {
-        if (!fs.existsSync(p)) continue;
-        const stat = fs.statSync(p);
-        if (stat.isDirectory()) {
-          const files = fs.readdirSync(p).filter((f) => f.endsWith(".kant") && f !== "stack.kant");
-          for (const f of files) {
-            layers.push({
-              priority: group.priority,
-              fragment: parseKantFile(path.join(p, f)),
-            });
-          }
-        } else if (p.endsWith(".kant")) {
-          layers.push({ priority: group.priority, fragment: parseKantFile(p) });
-        }
-      }
-    }
-    return layers;
-  }
-
-  composeView(): ComposedView & { layerCount: number } {
-    const layers = this.loadLayers();
-    const view = compose(layers);
-    return { ...view, layerCount: layers.length };
-  }
-
-  query(selector: string): { selector: string; matches: MatchResult[] } {
-    const view = this.composeView();
-    const matches = select(view.root, selector);
-    return { selector, matches };
+    resolveOutputDir: () => string,
+    resolveSources: () => LayerSources,
+  ) {
+    super(
+      resolveOutputDir,
+      resolveSources,
+      { rootAnchor: "UE", extension: ".cairn", ignoreFiles: ["stack.cairn"] },
+    );
   }
 
   /**
    * Resolve the declared approval marker for an action, or undefined
-   * if the action is unknown or has no approval field. Used by the
-   * dispatch layer to emit an auto-directive on explicit actions.
+   * if the action is unknown or has no approval field.
    */
   resolveApproval(tool: string, actionName: string): string | undefined {
     const hits = this.query(
@@ -192,8 +42,7 @@ export class OntologyRegistry {
 
   /**
    * Check whether an action's declared `requires` are satisfied by the
-   * composed Plugin catalog. Returns a structured result the caller
-   * can use to short-circuit dispatch when prerequisites are missing.
+   * composed /UE/Plugins/Catalog view.
    */
   checkRequires(tool: string, actionName: string): {
     tool: string;
@@ -237,7 +86,43 @@ export class OntologyRegistry {
   }
 }
 
-export type { Projector, KantFragment, ProjectorEvent } from "./types.js";
+// Re-export cairn primitives that ue-mcp code and tests need.
+export type {
+  Point,
+  Signal,
+  Scalar,
+  EmittedFragment,
+  Projector,
+  ProjectorEvent,
+  Fragment,
+  Layer,
+  ComposedView,
+  MatchResult,
+} from "@db-lyon/cairn";
+export { parse, parseFile, parseSelector, serializeFragment, write } from "@db-lyon/cairn";
+
+// ue-mcp always composes against the /UE address space. Wrap cairn's
+// compose/select with the UE rootAnchor as the default so callers
+// do not have to pass it every time.
+import {
+  compose as cairnCompose,
+  select as cairnSelect,
+  type ComposeOptions,
+  type SelectOptions,
+  type Layer as CairnLayer,
+  type Point as CairnPoint,
+  type ComposedView as CairnComposedView,
+  type MatchResult as CairnMatchResult,
+} from "@db-lyon/cairn";
+
+export function compose(layers: readonly CairnLayer[], options?: ComposeOptions): CairnComposedView {
+  return cairnCompose(layers, { rootAnchor: "UE", ...options });
+}
+export function select(root: CairnPoint, selector: string, options?: SelectOptions): CairnMatchResult[] {
+  return cairnSelect(root, selector, { rootAnchor: "UE", ...options });
+}
+
+// Projector factories (ue-mcp specific).
 export { createHandlerRegistryProjector } from "./projectors/handler-registry.js";
 export { createWorkaroundProjector } from "./projectors/workarounds.js";
 export { createPluginProjector, type PluginProjectorInput } from "./projectors/plugins.js";
@@ -251,6 +136,5 @@ export {
   createProjectConfigProjector,
   type ProjectConfigProjectorInput,
 } from "./projectors/project-config.js";
-export { parseKant, parseKantFile, type ParsedFragment } from "./parse.js";
-export { compose, type ComposedView, type Layer } from "./compose.js";
-export { select, parseSelector, type MatchResult } from "./select.js";
+
+export { Registry, type LayerSources, type LayerSource, type ProjectionResult, type RegistryOptions } from "@db-lyon/cairn";

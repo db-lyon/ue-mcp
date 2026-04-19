@@ -14,9 +14,9 @@ import {
   createEngineSymbolProjector,
   createInvocationProjector,
   createProjectConfigProjector,
-  parseKant,
+  parse,
 } from "../../src/ontology/index.js";
-import { serializeFragment } from "../../src/ontology/emit.js";
+import { serializeFragment } from "../../src/ontology/index.js";
 import type { WorkaroundEntry } from "../../src/workaround-tracker.js";
 import type { InvocationEntry } from "../../src/invocation-tracker.js";
 
@@ -58,36 +58,36 @@ describe("ontology round-trip contract", () => {
   it("HandlerRegistryProjector output parses", () => {
     const proj = createHandlerRegistryProjector(fakeTools());
     const text = serializeFragment(proj.project(undefined as never));
-    expect(() => parseKant(text, "handler-registry")).not.toThrow();
+    expect(() => parse(text, "handler-registry")).not.toThrow();
   });
 
   it("WorkaroundProjector output parses", () => {
     const proj = createWorkaroundProjector(workarounds);
     const text = serializeFragment(proj.project(undefined as never));
-    expect(() => parseKant(text, "workarounds")).not.toThrow();
+    expect(() => parse(text, "workarounds")).not.toThrow();
   });
 
   it("PluginProjector output parses (null engine root)", () => {
     const proj = createPluginProjector();
     const text = serializeFragment(proj.project({ engineRoot: null, projectDir: null }));
-    expect(() => parseKant(text, "plugins")).not.toThrow();
+    expect(() => parse(text, "plugins")).not.toThrow();
   });
 
   it("EngineSymbolProjector output parses (null engine root)", () => {
     const proj = createEngineSymbolProjector();
     const text = serializeFragment(proj.project({ engineRoot: null }));
-    expect(() => parseKant(text, "engine-symbols")).not.toThrow();
+    expect(() => parse(text, "engine-symbols")).not.toThrow();
   });
 
   it("InvocationProjector output parses", () => {
     const proj = createInvocationProjector(invocations);
     const text = serializeFragment(proj.project(undefined as never));
-    expect(() => parseKant(text, "invocations")).not.toThrow();
+    expect(() => parse(text, "invocations")).not.toThrow();
   });
 
   it("ProjectConfigProjector output parses (no project)", () => {
     const proj = createProjectConfigProjector();
     const text = serializeFragment(proj.project({ projectDir: null, projectPath: null }));
-    expect(() => parseKant(text, "project-config")).not.toThrow();
+    expect(() => parse(text, "project-config")).not.toThrow();
   });
 });

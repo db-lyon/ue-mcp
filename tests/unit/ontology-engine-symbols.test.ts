@@ -4,11 +4,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   createEngineSymbolProjector,
-  parseKant,
+  parse,
   compose,
   select,
 } from "../../src/ontology/index.js";
-import { serializeFragment } from "../../src/ontology/emit.js";
+import { serializeFragment } from "../../src/ontology/index.js";
 
 function writeHeader(engineRoot: string, relPath: string, content: string): void {
   const full = path.join(engineRoot, "Engine", "Source", relPath);
@@ -19,7 +19,7 @@ function writeHeader(engineRoot: string, relPath: string, content: string): void
 function project(engineRoot: string | null, input: Partial<Parameters<ReturnType<typeof createEngineSymbolProjector>["project"]>[0]> = {}) {
   const proj = createEngineSymbolProjector();
   const frag = proj.project({ engineRoot, ...input });
-  const parsed = parseKant(serializeFragment(frag), "engine-symbols");
+  const parsed = parse(serializeFragment(frag), "engine-symbols");
   return compose([{ priority: 1, fragment: parsed }]);
 }
 

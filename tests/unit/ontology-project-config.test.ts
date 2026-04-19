@@ -4,16 +4,16 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   createProjectConfigProjector,
-  parseKant,
+  parse,
   compose,
   select,
 } from "../../src/ontology/index.js";
-import { serializeFragment } from "../../src/ontology/emit.js";
+import { serializeFragment } from "../../src/ontology/index.js";
 
 function projectAndCompose(projectPath: string | null, projectDir: string | null) {
   const proj = createProjectConfigProjector();
   const frag = proj.project({ projectPath, projectDir });
-  const parsed = parseKant(serializeFragment(frag), "proj-config");
+  const parsed = parse(serializeFragment(frag), "proj-config");
   return compose([{ priority: 1, fragment: parsed }]);
 }
 

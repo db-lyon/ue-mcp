@@ -16,7 +16,7 @@
  */
 
 import type { ActionApproval, ActionClassification, ActionRisk, ActionSpec, ToolDef } from "../../types.js";
-import type { KantFragment, KantPoint, KantSignal, Projector } from "../types.js";
+import type { EmittedFragment, Point, Signal, Projector } from "@db-lyon/cairn";
 
 const MEDIATION_BASE = "/UE/Mediation/Registry";
 
@@ -47,7 +47,7 @@ const RISK_SCORE: Record<Risk, number> = {
   catastrophic: 1.0,
 };
 
-function signal(value: number, marker: string): KantSignal {
+function signal(value: number, marker: string): Signal {
   return { kind: "signal", value, marker };
 }
 
@@ -94,14 +94,14 @@ function riskFor(c: Classification): Risk {
   }
 }
 
-function actionPoint(actionName: string, spec: ActionSpec): KantPoint {
+function actionPoint(actionName: string, spec: ActionSpec): Point {
   // Declared > heuristic. Agents can trust what they read.
   const classification: Classification = spec.classification ?? classifyAction(actionName);
   const approval: Approval = spec.approval ?? approvalFor(classification);
   const risk: Risk = spec.risk ?? riskFor(classification);
   const metadataSource = spec.classification ? "declared" : "heuristic";
 
-  const fields: Record<string, string | KantSignal> = {
+  const fields: Record<string, string | Signal> = {
     classification: signal(CLASSIFICATION_SCORE[classification], classification),
     approval: signal(APPROVAL_SCORE[approval], approval),
     risk: signal(RISK_SCORE[risk], risk),
@@ -111,9 +111,9 @@ function actionPoint(actionName: string, spec: ActionSpec): KantPoint {
   if (spec.timeoutMs !== undefined) fields.timeoutMs = String(spec.timeoutMs);
   fields.handlerKind = spec.handler ? "ts" : spec.bridge ? "bridge" : "none";
 
-  const children: Record<string, KantPoint> = {};
+  const children: Record<string, Point> = {};
   if (spec.requires && spec.requires.length > 0) {
-    const requiresChildren: Record<string, KantPoint> = {};
+    const requiresChildren: Record<string, Point> = {};
     for (const dep of spec.requires) {
       requiresChildren[dep] = {
         meaning: `Dependency ${dep}`,
@@ -135,8 +135,8 @@ function actionPoint(actionName: string, spec: ActionSpec): KantPoint {
   };
 }
 
-function toolPoint(tool: ToolDef): KantPoint {
-  const actionChildren: Record<string, KantPoint> = {};
+function toolPoint(tool: ToolDef): Point {
+  const actionChildren: Record<string, Point> = {};
   for (const [actionName, spec] of Object.entries(tool.actions)) {
     actionChildren[actionName] = actionPoint(actionName, spec);
   }
@@ -163,8 +163,8 @@ export function createHandlerRegistryProjector(tools: readonly ToolDef[]): Proje
     name: "handler-registry",
     basePath: MEDIATION_BASE,
     triggerEvents: ["startup", "handler-registry-changed"],
-    project(): KantFragment {
-      const toolsChildren: Record<string, KantPoint> = {};
+    project(): EmittedFragment {
+      const toolsChildren: Record<string, Point> = {};
       for (const tool of tools) {
         toolsChildren[tool.name] = toolPoint(tool);
       }

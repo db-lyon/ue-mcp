@@ -65,6 +65,7 @@
     "prepublishOnly": "npx tsc && tsx scripts/generate-default-config.ts"
   },
   "dependencies": {
+    "@db-lyon/cairn": "file:../cairn",
     "@db-lyon/flowkit": "^0.5.2",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "ws": "^8.18.0",

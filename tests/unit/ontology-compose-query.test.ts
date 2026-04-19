@@ -6,13 +6,13 @@ import { categoryTool, bp, type ToolDef } from "../../src/types.js";
 import {
   OntologyRegistry,
   createHandlerRegistryProjector,
-  parseKant,
-  parseKantFile,
+  parse,
+  parseFile,
   compose,
   select,
   parseSelector,
 } from "../../src/ontology/index.js";
-import { serializeFragment } from "../../src/ontology/emit.js";
+import { serializeFragment } from "../../src/ontology/index.js";
 
 function fakeTools(): ToolDef[] {
   const blueprint = categoryTool("blueprint", "BP authoring.", {
@@ -32,7 +32,7 @@ describe("ontology parser: strict .kant subset", () => {
     const proj = createHandlerRegistryProjector(tools);
     const frag = proj.project(undefined as never);
     const text = serializeFragment(frag);
-    const parsed = parseKant(text, "test");
+    const parsed = parse(text, "test");
 
     expect(parsed.blocks.UE).toBeDefined();
     const ue = parsed.blocks.UE;
@@ -49,15 +49,15 @@ describe("ontology parser: strict .kant subset", () => {
   });
 
   it("rejects booleans, nulls, and inline arrays", () => {
-    expect(() => parseKant("root:\n  enabled: true\n", "x")).toThrow(/booleans/);
-    expect(() => parseKant("root:\n  value: null\n", "x")).toThrow(/nulls/);
-    expect(() => parseKant("root:\n  items: [1,2]\n", "x")).toThrow(/inline/);
+    expect(() => parse("root:\n  enabled: true\n", "x")).toThrow(/booleans/);
+    expect(() => parse("root:\n  value: null\n", "x")).toThrow(/nulls/);
+    expect(() => parse("root:\n  items: [1,2]\n", "x")).toThrow(/inline/);
   });
 
   it("parses the committed kernel files", () => {
     const repoRoot = path.resolve(__dirname, "..", "..");
-    const root = parseKantFile(path.join(repoRoot, "ontology", "kernel", "root.kant"));
-    const mediation = parseKantFile(path.join(repoRoot, "ontology", "kernel", "mediation.kant"));
+    const root = parseFile(path.join(repoRoot, "ontology", "kernel", "root.cairn"));
+    const mediation = parseFile(path.join(repoRoot, "ontology", "kernel", "mediation.cairn"));
     expect(root.meanings.UE.meaning).toBe("Unreal Engine");
     expect(root.blocks.UE.children!.Mediation).toBeDefined();
     expect(mediation.meanings.Registry.category).toBe("/UE/Mediation");
@@ -66,11 +66,11 @@ describe("ontology parser: strict .kant subset", () => {
 
 describe("ontology composer: priority + deep merge", () => {
   it("later layers override earlier at matching paths; non-overridden children fall through", () => {
-    const base = parseKant(
+    const base = parse(
       ["root@UE:", "  Mediation:", "    meaning: \"Mediation\"", "    Registry:", "      meaning: \"Registry\""].join("\n"),
       "base",
     );
-    const overlay = parseKant(
+    const overlay = parse(
       ["root@UE:", "  Mediation:", "    Registry:", "      meaning: \"Overridden Registry\"", "      note: \"added by overlay\""].join("\n"),
       "overlay",
     );
@@ -88,12 +88,12 @@ describe("ontology composer: priority + deep merge", () => {
 
   it("composes kernel + projected fragment into a walkable tree", () => {
     const repoRoot = path.resolve(__dirname, "..", "..");
-    const kernelRoot = parseKantFile(path.join(repoRoot, "ontology", "kernel", "root.kant"));
-    const kernelMed = parseKantFile(path.join(repoRoot, "ontology", "kernel", "mediation.kant"));
+    const kernelRoot = parseFile(path.join(repoRoot, "ontology", "kernel", "root.cairn"));
+    const kernelMed = parseFile(path.join(repoRoot, "ontology", "kernel", "mediation.cairn"));
 
     const proj = createHandlerRegistryProjector(fakeTools());
     const projText = serializeFragment(proj.project(undefined as never));
-    const projected = parseKant(projText, "projected");
+    const projected = parse(projText, "projected");
 
     const view = compose([
       { priority: 0, fragment: kernelRoot },
@@ -107,10 +107,10 @@ describe("ontology composer: priority + deep merge", () => {
 describe("ontology selector: path walks and predicates", () => {
   function setupView() {
     const repoRoot = path.resolve(__dirname, "..", "..");
-    const kernelRoot = parseKantFile(path.join(repoRoot, "ontology", "kernel", "root.kant"));
-    const kernelMed = parseKantFile(path.join(repoRoot, "ontology", "kernel", "mediation.kant"));
+    const kernelRoot = parseFile(path.join(repoRoot, "ontology", "kernel", "root.cairn"));
+    const kernelMed = parseFile(path.join(repoRoot, "ontology", "kernel", "mediation.cairn"));
     const proj = createHandlerRegistryProjector(fakeTools());
-    const projected = parseKant(serializeFragment(proj.project(undefined as never)), "projected");
+    const projected = parse(serializeFragment(proj.project(undefined as never)), "projected");
     return compose([
       { priority: 0, fragment: kernelRoot },
       { priority: 0, fragment: kernelMed },
@@ -206,7 +206,7 @@ describe("ontology registry: composeView + query end-to-end", () => {
     // A repo-local layer that overrides one action's purpose. All
     // layers root at UE@UE: so paths compose cleanly.
     fs.writeFileSync(
-      path.join(repoLocalDir, "override.kant"),
+      path.join(repoLocalDir, "override.cairn"),
       [
         "UE@UE:",
         "  Mediation:",

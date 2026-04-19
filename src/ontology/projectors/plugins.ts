@@ -15,7 +15,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { KantFragment, KantPoint, Projector } from "../types.js";
+import type { EmittedFragment, Point, Projector } from "@db-lyon/cairn";
 
 export interface PluginProjectorInput {
   engineRoot: string | null;
@@ -87,7 +87,7 @@ function signalBool(b: boolean | undefined, trueMarker: string, falseMarker: str
   return { kind: "signal" as const, value, marker };
 }
 
-function pluginPoint(filePath: string, source: "engine" | "project"): { name: string; point: KantPoint } | null {
+function pluginPoint(filePath: string, source: "engine" | "project"): { name: string; point: Point } | null {
   const descriptor = readUplugin(filePath);
   if (!descriptor) return null;
   const pluginName = path.basename(filePath, ".uplugin");
@@ -107,9 +107,9 @@ function pluginPoint(filePath: string, source: "engine" | "project"): { name: st
   const category = sanitize(descriptor.Category);
   if (category) fields.category = category;
 
-  const children: Record<string, KantPoint> = {};
+  const children: Record<string, Point> = {};
   if (descriptor.Modules && descriptor.Modules.length > 0) {
-    const moduleChildren: Record<string, KantPoint> = {};
+    const moduleChildren: Record<string, Point> = {};
     for (const mod of descriptor.Modules) {
       const modName = sanitize(mod.Name);
       if (!modName) continue;
@@ -149,8 +149,8 @@ export function createPluginProjector(): Projector<PluginProjectorInput> {
     name: "plugins",
     basePath: PLUGIN_BASE,
     triggerEvents: ["startup", "manual"],
-    project(input: PluginProjectorInput): KantFragment {
-      const pluginChildren: Record<string, KantPoint> = {};
+    project(input: PluginProjectorInput): EmittedFragment {
+      const pluginChildren: Record<string, Point> = {};
       const roots: Array<{ dir: string; source: "engine" | "project" }> = [];
 
       if (input.engineRoot) {

@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { categoryTool, bp, type ToolDef } from "../../src/types.js";
 import { OntologyRegistry, createHandlerRegistryProjector } from "../../src/ontology/index.js";
-import { serializeFragment } from "../../src/ontology/emit.js";
+import { serializeFragment } from "../../src/ontology/index.js";
 
 function buildFakeTools(): ToolDef[] {
   const blueprintTool = categoryTool(
@@ -102,7 +102,7 @@ describe("ontology: HandlerRegistryProjector", () => {
     expect(fs.existsSync(results[0].outputPath)).toBe(true);
 
     const layers = registry.listLayers();
-    expect(layers.map((l) => l.file)).toContain("handler-registry.kant");
+    expect(layers.map((l) => l.file)).toContain("handler-registry.cairn");
   });
 
   it("projectByEvent filters projectors by their triggerEvents", () => {
