@@ -26,6 +26,10 @@ private:
 	static TSharedPtr<FJsonValue> MoveWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListWidgetClasses(const TSharedPtr<FJsonObject>& Params);
 
+	// Runtime (PIE) widget inspection (#160)
+	static TSharedPtr<FJsonValue> ListRuntimeWidgets(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetRuntimeWidget(const TSharedPtr<FJsonObject>& Params);
+
 	// Helper: recursively search for a widget by name in the tree
 	static class UWidget* FindWidgetByNameRecursive(class UWidget* Root, const FString& WidgetName);
 };

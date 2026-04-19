@@ -49,10 +49,13 @@ private:
 	static TSharedPtr<FJsonValue> AddStateTreeComponent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddSmartObjectComponent(const TSharedPtr<FJsonObject>& Params);
 
-	// IMC read/write (#57 / #60 / #75)
+	// IMC read/write (#57 / #60 / #75 / #158)
 	static TSharedPtr<FJsonValue> ReadImc(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddImcMapping(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMappingModifiers(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveImcMapping(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetImcMappingKey(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetImcMappingAction(const TSharedPtr<FJsonObject>& Params);
 
 	// PIE inspection (#54 / #89 / #90)
 	static TSharedPtr<FJsonValue> InspectPie(const TSharedPtr<FJsonObject>& Params);

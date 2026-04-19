@@ -53,6 +53,9 @@
 #include "EditorUtilityWidgetBlueprint.h"
 #include "EditorUtilityBlueprint.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Engine/Texture2D.h"
+#include "Materials/MaterialInterface.h"
+#include "EngineUtils.h"
 
 void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -72,6 +75,8 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_widget"), &RemoveWidget);
 	Registry.RegisterHandler(TEXT("move_widget"), &MoveWidget);
 	Registry.RegisterHandler(TEXT("list_widget_classes"), &ListWidgetClasses);
+	Registry.RegisterHandler(TEXT("list_runtime_widgets"), &ListRuntimeWidgets);
+	Registry.RegisterHandler(TEXT("get_runtime_widget"), &GetRuntimeWidget);
 }
 
 UWidget* FWidgetHandlers::FindWidgetByNameRecursive(UWidget* Root, const FString& WidgetName)
@@ -671,6 +676,99 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 				float A = Components.Num() >= 4 ? FCString::Atof(*Components[3]) : 1.0f;
 				Image->SetColorAndOpacity(FLinearColor(R, G, B, A));
 				bPropertySet = true;
+			}
+		}
+		// (#159) Brush fields — ImageSize, Tint, DrawAs, Tiling, Margin, ResourceObject
+		else if (PropertyName.StartsWith(TEXT("brush.")))
+		{
+			FString Field = PropertyName.Mid(6); // strip "brush."
+			FSlateBrush Brush = Image->GetBrush();
+			if (Field == TEXT("imageSize") || Field == TEXT("ImageSize"))
+			{
+				TArray<FString> Parts;
+				PropertyValue.ParseIntoArray(Parts, TEXT(","));
+				if (Parts.Num() >= 2)
+				{
+					Brush.ImageSize = FVector2D(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]));
+					Image->SetBrush(Brush);
+					bPropertySet = true;
+				}
+			}
+			else if (Field == TEXT("tint") || Field == TEXT("Tint") || Field == TEXT("tintColor"))
+			{
+				TArray<FString> Parts;
+				PropertyValue.ParseIntoArray(Parts, TEXT(","));
+				if (Parts.Num() >= 3)
+				{
+					float R = FCString::Atof(*Parts[0]);
+					float G = FCString::Atof(*Parts[1]);
+					float B = FCString::Atof(*Parts[2]);
+					float A = Parts.Num() >= 4 ? FCString::Atof(*Parts[3]) : 1.0f;
+					Brush.TintColor = FSlateColor(FLinearColor(R, G, B, A));
+					Image->SetBrush(Brush);
+					bPropertySet = true;
+				}
+			}
+			else if (Field == TEXT("drawAs") || Field == TEXT("DrawAs"))
+			{
+				const FString V = PropertyValue.ToLower();
+				if (V == TEXT("image"))         { Brush.DrawAs = ESlateBrushDrawType::Image; bPropertySet = true; }
+				else if (V == TEXT("box"))      { Brush.DrawAs = ESlateBrushDrawType::Box;   bPropertySet = true; }
+				else if (V == TEXT("border"))   { Brush.DrawAs = ESlateBrushDrawType::Border; bPropertySet = true; }
+				else if (V == TEXT("noddrawtype") || V == TEXT("none") || V == TEXT("notype")) { Brush.DrawAs = ESlateBrushDrawType::NoDrawType; bPropertySet = true; }
+				if (bPropertySet) Image->SetBrush(Brush);
+			}
+			else if (Field == TEXT("tiling") || Field == TEXT("Tiling"))
+			{
+				const FString V = PropertyValue.ToLower();
+				if (V == TEXT("notile") || V == TEXT("none")) { Brush.Tiling = ESlateBrushTileType::NoTile; bPropertySet = true; }
+				else if (V == TEXT("horizontal") || V == TEXT("h")) { Brush.Tiling = ESlateBrushTileType::Horizontal; bPropertySet = true; }
+				else if (V == TEXT("vertical") || V == TEXT("v"))   { Brush.Tiling = ESlateBrushTileType::Vertical;   bPropertySet = true; }
+				else if (V == TEXT("both") || V == TEXT("xy"))      { Brush.Tiling = ESlateBrushTileType::Both;       bPropertySet = true; }
+				if (bPropertySet) Image->SetBrush(Brush);
+			}
+			else if (Field == TEXT("margin") || Field == TEXT("Margin"))
+			{
+				TArray<FString> Parts;
+				PropertyValue.ParseIntoArray(Parts, TEXT(","));
+				if (Parts.Num() == 1)
+				{
+					float V = FCString::Atof(*Parts[0]);
+					Brush.Margin = FMargin(V);
+					Image->SetBrush(Brush);
+					bPropertySet = true;
+				}
+				else if (Parts.Num() >= 4)
+				{
+					Brush.Margin = FMargin(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]),
+					                        FCString::Atof(*Parts[2]), FCString::Atof(*Parts[3]));
+					Image->SetBrush(Brush);
+					bPropertySet = true;
+				}
+			}
+			else if (Field == TEXT("resourceObject") || Field == TEXT("ResourceObject") || Field == TEXT("texture"))
+			{
+				// Accept a texture/material asset path.
+				UObject* Resource = LoadObject<UObject>(nullptr, *PropertyValue);
+				if (Resource)
+				{
+					if (UTexture2D* Tex = Cast<UTexture2D>(Resource))
+					{
+						Image->SetBrushFromTexture(Tex, false);
+						bPropertySet = true;
+					}
+					else if (UMaterialInterface* Mat = Cast<UMaterialInterface>(Resource))
+					{
+						Image->SetBrushFromMaterial(Mat);
+						bPropertySet = true;
+					}
+					else
+					{
+						Brush.SetResourceObject(Resource);
+						Image->SetBrush(Brush);
+						bPropertySet = true;
+					}
+				}
 			}
 		}
 	}
@@ -1561,6 +1659,252 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetClasses(const TSharedPtr<FJson
 	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("classes"), ClassesArray);
 	Result->SetNumberField(TEXT("count"), ClassesArray.Num());
+
+	return MCPResult(Result);
+}
+
+// ─────────────────────────────────────────────────────────────
+// #160  Runtime widget inspection — live PIE UUserWidget probing
+// ─────────────────────────────────────────────────────────────
+namespace WidgetRuntime_Internal
+{
+	static UWorld* ResolveRuntimeWorld()
+	{
+		if (!GEditor) return nullptr;
+		FWorldContext* PIE = GEditor->GetPIEWorldContext();
+		return PIE ? PIE->World() : nullptr;
+	}
+
+	static FString SafeGetText(UWidget* Widget)
+	{
+		if (UTextBlock* T = Cast<UTextBlock>(Widget))       return T->GetText().ToString();
+		if (URichTextBlock* R = Cast<URichTextBlock>(Widget)) return R->GetText().ToString();
+		if (UEditableTextBox* E = Cast<UEditableTextBox>(Widget)) return E->GetText().ToString();
+		if (UButton* B = Cast<UButton>(Widget))
+		{
+			if (B->GetChildrenCount() > 0)
+			{
+				return SafeGetText(B->GetChildAt(0));
+			}
+		}
+		return FString();
+	}
+
+	static FString VisibilityToString(ESlateVisibility V)
+	{
+		switch (V)
+		{
+			case ESlateVisibility::Visible: return TEXT("Visible");
+			case ESlateVisibility::Collapsed: return TEXT("Collapsed");
+			case ESlateVisibility::Hidden: return TEXT("Hidden");
+			case ESlateVisibility::HitTestInvisible: return TEXT("HitTestInvisible");
+			case ESlateVisibility::SelfHitTestInvisible: return TEXT("SelfHitTestInvisible");
+		}
+		return TEXT("Unknown");
+	}
+
+	static TSharedPtr<FJsonObject> BuildRuntimeNode(UWidget* Widget, int32 Depth, int32 MaxDepth)
+	{
+		if (!Widget) return nullptr;
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Widget->GetName());
+		Obj->SetStringField(TEXT("class"), Widget->GetClass()->GetName());
+		Obj->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
+		Obj->SetBoolField(TEXT("isVisible"), Widget->IsVisible());
+
+		FString Text = SafeGetText(Widget);
+		if (!Text.IsEmpty())
+		{
+			Obj->SetStringField(TEXT("text"), Text);
+		}
+
+		if (UImage* Image = Cast<UImage>(Widget))
+		{
+			const FSlateBrush& Brush = Image->GetBrush();
+			TSharedPtr<FJsonObject> BrushObj = MakeShared<FJsonObject>();
+			BrushObj->SetNumberField(TEXT("imageSizeX"), Brush.ImageSize.X);
+			BrushObj->SetNumberField(TEXT("imageSizeY"), Brush.ImageSize.Y);
+			if (UObject* Resource = Brush.GetResourceObject())
+			{
+				BrushObj->SetStringField(TEXT("resource"), Resource->GetPathName());
+			}
+			Obj->SetObjectField(TEXT("brush"), BrushObj);
+		}
+		else if (UProgressBar* PB = Cast<UProgressBar>(Widget))
+		{
+			Obj->SetNumberField(TEXT("percent"), PB->GetPercent());
+		}
+		else if (UCheckBox* CB = Cast<UCheckBox>(Widget))
+		{
+			Obj->SetBoolField(TEXT("isChecked"), CB->IsChecked());
+		}
+		else if (USlider* Slider = Cast<USlider>(Widget))
+		{
+			Obj->SetNumberField(TEXT("value"), Slider->GetValue());
+		}
+
+		if (Depth >= MaxDepth) return Obj;
+
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
+		{
+			TArray<TSharedPtr<FJsonValue>> ChildrenArr;
+			for (int32 i = 0; i < Panel->GetChildrenCount(); ++i)
+			{
+				TSharedPtr<FJsonObject> ChildObj = BuildRuntimeNode(Panel->GetChildAt(i), Depth + 1, MaxDepth);
+				if (ChildObj.IsValid())
+				{
+					ChildrenArr.Add(MakeShared<FJsonValueObject>(ChildObj));
+				}
+			}
+			Obj->SetArrayField(TEXT("children"), ChildrenArr);
+		}
+		else if (UUserWidget* User = Cast<UUserWidget>(Widget))
+		{
+			// Nested UUserWidget: descend into its WidgetTree's root.
+			if (User->WidgetTree && User->WidgetTree->RootWidget)
+			{
+				TSharedPtr<FJsonObject> RootObj = BuildRuntimeNode(User->WidgetTree->RootWidget, Depth + 1, MaxDepth);
+				if (RootObj.IsValid())
+				{
+					Obj->SetObjectField(TEXT("root"), RootObj);
+				}
+			}
+		}
+
+		return Obj;
+	}
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::ListRuntimeWidgets(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace WidgetRuntime_Internal;
+
+	UWorld* World = ResolveRuntimeWorld();
+	if (!World)
+	{
+		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+	}
+
+	// Optional filter: class name (contains) / name prefix
+	const FString ClassFilter = OptionalString(Params, TEXT("classFilter"), TEXT(""));
+	const FString NamePrefix  = OptionalString(Params, TEXT("namePrefix"), TEXT(""));
+	const bool bInViewportOnly = OptionalBool(Params, TEXT("viewportOnly"), false);
+
+	TArray<TSharedPtr<FJsonValue>> WidgetsArr;
+	for (TObjectIterator<UUserWidget> It; It; ++It)
+	{
+		UUserWidget* Widget = *It;
+		if (!IsValid(Widget)) continue;
+		if (Widget->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject)) continue;
+
+		UWorld* WidgetWorld = Widget->GetWorld();
+		if (WidgetWorld != World) continue;
+
+		const FString ClassName = Widget->GetClass()->GetName();
+		const FString Name = Widget->GetName();
+		if (!ClassFilter.IsEmpty() && !ClassName.Contains(ClassFilter)) continue;
+		if (!NamePrefix.IsEmpty()  && !Name.StartsWith(NamePrefix)) continue;
+		if (bInViewportOnly && !Widget->IsInViewport()) continue;
+
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Name);
+		Obj->SetStringField(TEXT("class"), ClassName);
+		Obj->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
+		Obj->SetBoolField(TEXT("isVisible"), Widget->IsVisible());
+		Obj->SetBoolField(TEXT("inViewport"), Widget->IsInViewport());
+		if (Widget->WidgetTree && Widget->WidgetTree->RootWidget)
+		{
+			Obj->SetStringField(TEXT("rootWidgetName"), Widget->WidgetTree->RootWidget->GetName());
+			Obj->SetStringField(TEXT("rootWidgetClass"), Widget->WidgetTree->RootWidget->GetClass()->GetName());
+		}
+		WidgetsArr.Add(MakeShared<FJsonValueObject>(Obj));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("world"), World->GetName());
+	Result->SetArrayField(TEXT("widgets"), WidgetsArr);
+	Result->SetNumberField(TEXT("count"), WidgetsArr.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace WidgetRuntime_Internal;
+
+	UWorld* World = ResolveRuntimeWorld();
+	if (!World)
+	{
+		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+	}
+
+	FString WidgetName;
+	Params->TryGetStringField(TEXT("widgetName"), WidgetName);
+	FString ClassFilter;
+	Params->TryGetStringField(TEXT("className"), ClassFilter);
+	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
+	{
+		return MCPError(TEXT("Provide widgetName (exact instance name) or className (first match)."));
+	}
+
+	const int32 MaxDepth = OptionalInt(Params, TEXT("maxDepth"), 6);
+	const FString ChildName = OptionalString(Params, TEXT("childName"), TEXT(""));
+
+	UUserWidget* Found = nullptr;
+	for (TObjectIterator<UUserWidget> It; It; ++It)
+	{
+		UUserWidget* Widget = *It;
+		if (!IsValid(Widget) || Widget->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject)) continue;
+		if (Widget->GetWorld() != World) continue;
+
+		if (!WidgetName.IsEmpty() && Widget->GetName() != WidgetName) continue;
+		if (!ClassFilter.IsEmpty() && !Widget->GetClass()->GetName().Contains(ClassFilter)) continue;
+
+		Found = Widget;
+		break;
+	}
+
+	if (!Found)
+	{
+		return MCPError(TEXT("Runtime widget not found. Try list_runtime_widgets to see available instances."));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("name"), Found->GetName());
+	Result->SetStringField(TEXT("class"), Found->GetClass()->GetName());
+	Result->SetStringField(TEXT("visibility"), VisibilityToString(Found->GetVisibility()));
+	Result->SetBoolField(TEXT("inViewport"), Found->IsInViewport());
+
+	if (Found->WidgetTree && Found->WidgetTree->RootWidget)
+	{
+		UWidget* ScanRoot = Found->WidgetTree->RootWidget;
+		if (!ChildName.IsEmpty())
+		{
+			// Search the widget tree for the named child.
+			UWidget* Target = nullptr;
+			Found->WidgetTree->ForEachWidget([&](UWidget* W)
+			{
+				if (W && W->GetName() == ChildName && !Target)
+				{
+					Target = W;
+				}
+			});
+			if (!Target)
+			{
+				return MCPError(FString::Printf(TEXT("Child widget '%s' not found inside '%s'"), *ChildName, *Found->GetName()));
+			}
+			ScanRoot = Target;
+		}
+
+		TSharedPtr<FJsonObject> Tree = BuildRuntimeNode(ScanRoot, 0, MaxDepth);
+		if (Tree.IsValid())
+		{
+			Result->SetObjectField(TEXT("tree"), Tree);
+		}
+	}
+	else
+	{
+		Result->SetStringField(TEXT("tree"), TEXT("empty"));
+	}
 
 	return MCPResult(Result);
 }

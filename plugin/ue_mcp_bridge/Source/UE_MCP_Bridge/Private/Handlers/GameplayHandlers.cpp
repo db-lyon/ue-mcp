@@ -123,6 +123,9 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_imc_mappings"), &ReadImc);
 	Registry.RegisterHandler(TEXT("add_imc_mapping"), &AddImcMapping);
 	Registry.RegisterHandler(TEXT("set_mapping_modifiers"), &SetMappingModifiers);
+	Registry.RegisterHandler(TEXT("remove_imc_mapping"), &RemoveImcMapping);
+	Registry.RegisterHandler(TEXT("set_imc_mapping_key"), &SetImcMappingKey);
+	Registry.RegisterHandler(TEXT("set_imc_mapping_action"), &SetImcMappingAction);
 	Registry.RegisterHandler(TEXT("inspect_pie"), &InspectPie);
 	Registry.RegisterHandler(TEXT("get_pie_anim_state"), &GetPieAnimState);
 	Registry.RegisterHandler(TEXT("get_pie_anim_properties"), &GetPieAnimProperties);
@@ -2437,6 +2440,181 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 	Result->SetNumberField(TEXT("mappingIndex"), MappingIndex);
 	Result->SetNumberField(TEXT("modifierCount"), Mapping.Modifiers.Num());
 	Result->SetNumberField(TEXT("triggerCount"), Mapping.Triggers.Num());
+	return MCPResult(Result);
+}
+
+// ─────────────────────────────────────────────────────────────
+// #158  remove_imc_mapping / set_imc_mapping_key / set_imc_mapping_action
+// ─────────────────────────────────────────────────────────────
+namespace ImcEdit_Internal
+{
+	static int32 ResolveMappingIndex(UInputMappingContext* IMC, const TSharedPtr<FJsonObject>& Params, FString& OutError)
+	{
+		const TArray<FEnhancedActionKeyMapping>& Mappings = IMC->GetMappings();
+
+		int32 Idx = INDEX_NONE;
+		double NumIdx = 0;
+		if (Params->TryGetNumberField(TEXT("mappingIndex"), NumIdx))
+		{
+			Idx = static_cast<int32>(NumIdx);
+			if (!Mappings.IsValidIndex(Idx))
+			{
+				OutError = FString::Printf(TEXT("Mapping index %d out of range (count %d)"), Idx, Mappings.Num());
+				return INDEX_NONE;
+			}
+			return Idx;
+		}
+
+		FString ActionPath, KeyName;
+		const bool bHasAction = Params->TryGetStringField(TEXT("inputActionPath"), ActionPath) && !ActionPath.IsEmpty();
+		const bool bHasKey    = Params->TryGetStringField(TEXT("key"), KeyName) && !KeyName.IsEmpty();
+		if (!bHasAction && !bHasKey)
+		{
+			OutError = TEXT("Provide mappingIndex or (inputActionPath + key) to identify the mapping.");
+			return INDEX_NONE;
+		}
+
+		UInputAction* Action = bHasAction ? LoadObject<UInputAction>(nullptr, *ActionPath) : nullptr;
+		FKey Key = bHasKey ? FKey(*KeyName) : FKey();
+
+		for (int32 i = 0; i < Mappings.Num(); ++i)
+		{
+			const FEnhancedActionKeyMapping& M = Mappings[i];
+			if (bHasAction && M.Action != Action) continue;
+			if (bHasKey && M.Key != Key) continue;
+			return i;
+		}
+
+		OutError = TEXT("No mapping matched the given inputActionPath/key.");
+		return INDEX_NONE;
+	}
+
+	static bool SaveImc(UInputMappingContext* IMC)
+	{
+		UPackage* Pkg = IMC->GetOutermost();
+		if (!Pkg) return false;
+		Pkg->MarkPackageDirty();
+		const FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		return UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
+	}
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::RemoveImcMapping(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ImcPath;
+	if (auto Err = RequireString(Params, TEXT("imcPath"), ImcPath)) return Err;
+
+	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
+	if (!IMC)
+	{
+		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
+	}
+
+	FString ResolveError;
+	int32 Idx = ImcEdit_Internal::ResolveMappingIndex(IMC, Params, ResolveError);
+	if (Idx == INDEX_NONE)
+	{
+		return MCPError(ResolveError);
+	}
+
+	TArray<FEnhancedActionKeyMapping>& Mappings = const_cast<TArray<FEnhancedActionKeyMapping>&>(IMC->GetMappings());
+	const FEnhancedActionKeyMapping Removed = Mappings[Idx];
+	Mappings.RemoveAt(Idx);
+
+	ImcEdit_Internal::SaveImc(IMC);
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("imcPath"), IMC->GetPathName());
+	Result->SetNumberField(TEXT("mappingIndex"), Idx);
+	Result->SetStringField(TEXT("removedInputAction"), Removed.Action ? Removed.Action->GetPathName() : TEXT("None"));
+	Result->SetStringField(TEXT("removedKey"), Removed.Key.GetFName().ToString());
+	Result->SetNumberField(TEXT("count"), Mappings.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::SetImcMappingKey(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ImcPath;
+	if (auto Err = RequireString(Params, TEXT("imcPath"), ImcPath)) return Err;
+
+	FString NewKeyName;
+	if (auto Err = RequireString(Params, TEXT("newKey"), NewKeyName)) return Err;
+
+	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
+	if (!IMC)
+	{
+		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
+	}
+
+	FKey NewKey(*NewKeyName);
+	if (!NewKey.IsValid())
+	{
+		return MCPError(FString::Printf(TEXT("Invalid key name: %s"), *NewKeyName));
+	}
+
+	// Selector: mappingIndex | inputActionPath | key (current key). ResolveMappingIndex handles combinations.
+	FString ResolveError;
+	int32 Idx = ImcEdit_Internal::ResolveMappingIndex(IMC, Params, ResolveError);
+	if (Idx == INDEX_NONE)
+	{
+		return MCPError(ResolveError);
+	}
+
+	TArray<FEnhancedActionKeyMapping>& Mappings = const_cast<TArray<FEnhancedActionKeyMapping>&>(IMC->GetMappings());
+	const FKey PrevKey = Mappings[Idx].Key;
+	Mappings[Idx].Key = NewKey;
+
+	ImcEdit_Internal::SaveImc(IMC);
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("imcPath"), IMC->GetPathName());
+	Result->SetNumberField(TEXT("mappingIndex"), Idx);
+	Result->SetStringField(TEXT("previousKey"), PrevKey.GetFName().ToString());
+	Result->SetStringField(TEXT("newKey"), NewKey.GetFName().ToString());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::SetImcMappingAction(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ImcPath;
+	if (auto Err = RequireString(Params, TEXT("imcPath"), ImcPath)) return Err;
+
+	FString NewActionPath;
+	if (auto Err = RequireString(Params, TEXT("newInputActionPath"), NewActionPath)) return Err;
+
+	UInputMappingContext* IMC = LoadObject<UInputMappingContext>(nullptr, *ImcPath);
+	if (!IMC)
+	{
+		return MCPError(FString::Printf(TEXT("InputMappingContext not found: %s"), *ImcPath));
+	}
+
+	UInputAction* NewAction = LoadObject<UInputAction>(nullptr, *NewActionPath);
+	if (!NewAction)
+	{
+		return MCPError(FString::Printf(TEXT("InputAction not found: %s"), *NewActionPath));
+	}
+
+	// Selector: mappingIndex | key | inputActionPath (current action).
+	FString ResolveError;
+	int32 Idx = ImcEdit_Internal::ResolveMappingIndex(IMC, Params, ResolveError);
+	if (Idx == INDEX_NONE)
+	{
+		return MCPError(ResolveError);
+	}
+
+	TArray<FEnhancedActionKeyMapping>& Mappings = const_cast<TArray<FEnhancedActionKeyMapping>&>(IMC->GetMappings());
+	const UInputAction* PrevAction = Mappings[Idx].Action;
+	Mappings[Idx].Action = NewAction;
+
+	ImcEdit_Internal::SaveImc(IMC);
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("imcPath"), IMC->GetPathName());
+	Result->SetNumberField(TEXT("mappingIndex"), Idx);
+	Result->SetStringField(TEXT("previousInputAction"), PrevAction ? PrevAction->GetPathName() : TEXT("None"));
+	Result->SetStringField(TEXT("newInputAction"), NewAction->GetPathName());
 	return MCPResult(Result);
 }
 

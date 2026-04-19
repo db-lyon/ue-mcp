@@ -19,6 +19,8 @@ export const widgetTool: ToolDef = categoryTool(
     remove_widget:            bp("Remove widget from tree. Params: assetPath, widgetName", "remove_widget"),
     move_widget:              bp("Reparent widget. Params: assetPath, widgetName, newParentWidgetName", "move_widget"),
     list_classes:             bp("List available widget classes", "list_widget_classes"),
+    list_runtime:             bp("(#160) List live UUserWidget instances in the PIE world. Params: classFilter?, namePrefix?, viewportOnly?", "list_runtime_widgets"),
+    get_runtime:              bp("(#160) Inspect a live PIE widget tree with text/visibility/brush/percent values. Params: widgetName? | className?, childName?, maxDepth?", "get_runtime_widget"),
   },
   undefined,
   {
@@ -34,5 +36,11 @@ export const widgetTool: ToolDef = categoryTool(
     name: z.string().optional(),
     packagePath: z.string().optional(),
     parentClass: z.string().optional(),
+    classFilter: z.string().optional().describe("Class name substring filter for list_runtime"),
+    className: z.string().optional().describe("Widget class name for get_runtime (first match wins)"),
+    namePrefix: z.string().optional().describe("Instance name prefix filter for list_runtime"),
+    viewportOnly: z.boolean().optional().describe("list_runtime: only return widgets currently added to the viewport"),
+    childName: z.string().optional().describe("get_runtime: restrict the tree walk to the named child inside the UserWidget"),
+    maxDepth: z.number().optional().describe("get_runtime: max widget-tree depth to walk (default 6)"),
   },
 );
