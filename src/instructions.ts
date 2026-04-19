@@ -1,4 +1,4 @@
-export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) — 19 category tools covering 425+ actions.
+export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) - 20 category tools covering 425+ actions.
 
 Every tool takes an "action" parameter that selects the operation. Call project(action="get_status") first.
 
@@ -126,6 +126,10 @@ demo — Neon Shrine demo scene
 feedback — Agent feedback submission
   submit
 
+ontology - Kantext-shaped context substrate: projected live state + repo-local layers + HQL queries
+  project_all, project_by_event, compose, query, describe_action,
+  list_projectors, list_layers
+
 ═══ TIPS ═══
 • Start with level(action="get_outliner") or asset(action="list") to discover what's in the project.
 • Use reflection(action="reflect_class") to understand any UE class's properties.
@@ -137,6 +141,30 @@ feedback — Agent feedback submission
 • editor(action="hot_reload") triggers Live Coding compilation without restarting the editor.
 • editor(action="focus_on_actor", actorLabel="MyActor") snaps the viewport to any actor.
 • Log output: editor(action="get_log", category="LogMCPBridge") to see bridge-specific logs.
+
+═══ ONTOLOGY ═══
+The ontology tool projects ue-mcp's state (tool metadata, plugin catalog,
+engine symbols, session workarounds) into a path-addressable tree under
+/UE. You query it with path selectors (HQL) and consult it before acting.
+
+Common patterns:
+• Before using a destructive tool, call ontology(action="describe_action",
+  tool="editor", actionName="execute_python") to see its declared
+  classification, approval policy, risk, and required plugins.
+• Find every action with a given side-effect profile:
+    ontology(action="query",
+      selector="/UE/Mediation/Registry/Tools/**/Actions/*@classification=destructive")
+• Check which plugins are enabled:
+    ontology(action="query", selector="/UE/Plugins/Catalog/*@enabled=enabled")
+• Build the engine C++ symbol index (one-time, opt-in) to replace
+  grep-style engine header search:
+    ontology(action="project_by_event", event="manual")
+  then query it with:
+    ontology(action="query", selector="/UE/Engine/Symbols/Index/*@parent=AActor")
+
+Dispatch-layer preflight: if an action declares required plugins and
+they are missing or disabled, the call fails early with a structured
+REQUIRES_UNMET error naming the exact plugin(s) to enable.
 
 ═══ FEEDBACK ═══
 If you had to use editor(action="execute_python") as a workaround because a native tool
