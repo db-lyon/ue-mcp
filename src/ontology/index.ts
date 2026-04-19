@@ -174,6 +174,23 @@ export class OntologyRegistry {
   }
 
   /**
+   * Resolve the declared approval marker for an action, or undefined
+   * if the action is unknown or has no approval field. Used by the
+   * dispatch layer to emit an auto-directive on explicit actions.
+   */
+  resolveApproval(tool: string, actionName: string): string | undefined {
+    const hits = this.query(
+      `/UE/Mediation/Registry/Tools/${tool}/Actions/${actionName}`,
+    ).matches;
+    if (hits.length === 0) return undefined;
+    const field = hits[0].point.fields?.approval;
+    if (typeof field === "object" && field && "marker" in field) {
+      return (field as { marker?: string }).marker;
+    }
+    return undefined;
+  }
+
+  /**
    * Check whether an action's declared `requires` are satisfied by the
    * composed Plugin catalog. Returns a structured result the caller
    * can use to short-circuit dispatch when prerequisites are missing.

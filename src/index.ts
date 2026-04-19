@@ -210,12 +210,29 @@ async function main() {
         const stringify = (v: unknown) =>
           typeof v === "string" ? v : JSON.stringify(v, null, 2);
 
+        // Auto-directive: declared approval="explicit" actions emit a
+        // structured warning as a separate content block regardless of
+        // whether the handler attached its own directive. Agents see
+        // the approval policy at call time, not buried in docs.
+        const approval = ontologyRegistry.resolveApproval(tool.name, action);
+        const autoDirective = approval === "explicit"
+          ? `[AGENT DIRECTIVE - MANDATORY]\n${tool.name}.${action} is declared approval="explicit". This action is recorded to /UE/Audit/Invocations. Confirm with the user before chaining further explicit actions.`
+          : undefined;
+
         // Preserve directive responses (execute_python workaround tracking)
         if (result.data?.__directive) {
+          const blocks: Array<{ type: "text"; text: string }> = [];
+          if (autoDirective) blocks.push({ type: "text", text: autoDirective });
+          blocks.push({ type: "text", text: result.data.directive as string });
+          blocks.push({ type: "text", text: stringify(result.data.result) });
+          return { content: blocks };
+        }
+
+        if (autoDirective) {
           return {
             content: [
-              { type: "text" as const, text: result.data.directive as string },
-              { type: "text" as const, text: stringify(result.data.result) },
+              { type: "text" as const, text: autoDirective },
+              { type: "text" as const, text: stringify(result.data) },
             ],
           };
         }
