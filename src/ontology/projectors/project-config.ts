@@ -127,7 +127,7 @@ function mcpConfigPoint(projectDir: string): Point | null {
   for (const [k, v] of Object.entries(parsed)) {
     if (typeof v === "string") fields[k] = v;
     else if (typeof v === "number") fields[k] = v;
-    // Arrays/objects/booleans skipped - repo-local .kant layers can
+    // Arrays/objects/booleans skipped - repo-local .cairn layers can
     // express richer overrides if needed.
   }
   return {

@@ -126,7 +126,7 @@ demo — Neon Shrine demo scene
 feedback — Agent feedback submission
   submit
 
-ontology - Kantext-shaped context substrate: projected live state + repo-local layers + HQL queries
+ontology - cairn-shaped context substrate: projected live state + repo-local layers + HQL queries
   project_all, project_by_event, compose, query, describe_action,
   list_projectors, list_layers
 

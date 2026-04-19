@@ -4,11 +4,11 @@
 # Defines the shape of tool and action points that the
 # HandlerRegistryProjector populates from our 425 handlers.
 #
-# Intentionally mirrors kantext's busbar mediation pattern: servers,
-# tools, capabilities, and signals - but adapted for ue-mcp's shape
-# (one server - the bridge - many category tools, many actions per tool).
+# Mediation pattern: servers, tools, capabilities, and signals -
+# adapted for ue-mcp's shape (one server - the bridge - many category
+# tools, many actions per tool).
 #
-# DRAFT. Co-design target with Jason.
+# DRAFT. Stabilize before v2.0 freeze.
 
 ⛩️:
   # ---------------------------------------------------------------------------

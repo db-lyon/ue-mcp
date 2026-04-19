@@ -3,14 +3,14 @@
 # Canonical /UE root for the ue-mcp ontology. Establishes the stable
 # anchors under the universal address space /UE.
 #
-# Design constraints (from kantext kernel discipline):
+# Design constraints (cairn discipline):
 # - No lists, no nulls, no booleans. Multiplicity = named children.
 # - Boolean-ish state = Signals (gradient mappings with marker neighborhoods).
 # - Every structural primitive has Meaning and purpose.
 # - Layering is core: projected, repo-local, and distributed layers stack.
 # - Universal addressability: every point identified by its path.
 #
-# DRAFT. To be reviewed and stabilized with Jason Lantz before v2.0 freeze.
+# DRAFT. Stabilize before v2.0 freeze.
 
 ⛩️:
   # ---------------------------------------------------------------------------

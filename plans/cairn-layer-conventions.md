@@ -1,29 +1,29 @@
-# Repo-local .kant layer conventions
+# Repo-local .cairn layer conventions
 
-How to author `.ue-mcp/*.kant` files that compose with the projected
+How to author `.ue-mcp/*.cairn` files that compose with the projected
 ontology.
 
 ## Where they live
 
-At the root of your UE project: `<projectDir>/.ue-mcp/*.kant`. Every
-`.kant` file in that directory is picked up and composed at priority 2
-(above projected layers at priority 1, which are above distributed
-kernel at priority 0).
+At the root of your UE project: `<projectDir>/.ue-mcp/*.cairn`. Every
+`.cairn` file in that directory is picked up and composed at priority 2
+(above projected layers at priority 1, which are above the kernel at
+priority 0).
 
 Any file is valid; the convention below is to keep intent discoverable.
 
 | File | Intent | Typical paths it writes |
 |---|---|---|
-| `policy.kant` | Per-project overrides on tool metadata | `/UE/Mediation/Registry/Tools/*/Actions/*` |
-| `feedback.kant` | Known workarounds, agent hints | `/UE/Audit/Workarounds/**`, `/UE/Mediation/**` |
-| `intent.kant` | Project-specific vocabulary, naming rules | `/UE/Project/**` |
+| `policy.cairn` | Per-project overrides on tool metadata | `/UE/Mediation/Registry/Tools/*/Actions/*` |
+| `feedback.cairn` | Known workarounds, agent hints | `/UE/Audit/Workarounds/**`, `/UE/Mediation/**` |
+| `intent.cairn` | Project-specific vocabulary, naming rules | `/UE/Project/**` |
 
 ## The one hard rule: root at `UE@UE:`
 
 Every layer file must have a top-level `UE@UE:` block and express its
 contribution as nested children at real `/UE/...` paths.
 
-```kant
+```cairn
 UE@UE:
   Mediation:
     Registry:
@@ -39,7 +39,7 @@ This attaches at `/UE/Mediation/Registry/Tools/editor/Actions/execute_python`
 and deep-merges with the projected point. Fields you declare override;
 fields you omit fall through from the projected layer.
 
-## The other rules inherited from kantext
+## Discipline (inherited from cairn)
 
 - **No lists.** Multiplicity is a named children space. See the
   `Modules` subtree under a plugin point for the pattern.
@@ -57,9 +57,9 @@ fields you omit fall through from the projected layer.
 
 ## Example: project-specific override of tool metadata
 
-`/projectDir/.ue-mcp/policy.kant`:
+`/projectDir/.ue-mcp/policy.cairn`:
 
-```kant
+```cairn
 # My project forbids execute_python in automated flows; agents must
 # confirm any invocation with the user.
 
@@ -71,23 +71,22 @@ UE@UE:
           Actions:
             execute_python:
               purpose: "Requires user confirmation in this repo"
-              # Category-level category default would otherwise say 'explicit';
-              # we pin it here so overrides upstream cannot soften it.
+              # Category default would say 'explicit'; pin here so
+              # upstream changes cannot soften it.
               approval: 1 # explicit
               risk: 1 # catastrophic
 ```
 
 An agent calling `ontology(describe_action, tool="editor",
 actionName="execute_python")` sees the overridden `purpose` and the
-pinned signals. The composer does not know which layer contributed
-each field today; that will come when we route composition through
-the kantext binary and get per-field provenance.
+pinned signals. The composer does not track which layer contributed
+each field today; per-field provenance is a future enhancement.
 
 ## Example: project intent vocabulary
 
-`/projectDir/.ue-mcp/intent.kant`:
+`/projectDir/.ue-mcp/intent.cairn`:
 
-```kant
+```cairn
 # Declares conventions the agent should respect in this project.
 
 UE@UE:
@@ -123,8 +122,8 @@ and cite it before creating a new ability asset.
 - Projected layers regenerate when an agent calls
   `ontology(project_all)` or `ontology(project_by_event, event=<name>)`.
 - Repo-local layers are read fresh on every `ontology(query)` or
-  `ontology(compose)` call. Editing a `.kant` file and re-querying is
+  `ontology(compose)` call. Editing a `.cairn` file and re-querying is
   enough; no restart.
 - Startup primes only projectors subscribed to the `startup` event
-  (handler-registry and plugins today). The engine symbol index is
-  `manual` so it does not block ready-up.
+  (handler-registry, plugins, project-config today). The engine
+  symbol index is `manual` so it does not block ready-up.

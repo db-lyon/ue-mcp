@@ -3,15 +3,15 @@
 # Stable stack root for the ue-mcp kernel vocabulary.
 # Composes kernel modules into a single substrate via k-way merge.
 #
-# Repo-local layers (.ue-mcp/*.kant) and projected layers
+# Repo-local layers (.ue-mcp/*.cairn) and projected layers
 # (cached under .ue-mcp/ontology/projected/) stack on top of this.
 
 ⛩️:
   Stack:
     0.1:
       Source: Repo
-      path: ontology/kernel/root.kant
+      path: ontology/kernel/root.cairn
 
     0.2:
       Source: Repo
-      path: ontology/kernel/mediation.kant
+      path: ontology/kernel/mediation.cairn

@@ -80,7 +80,7 @@ async function main() {
     instructions: SERVER_INSTRUCTIONS,
   });
 
-  // ── Ontology registry: projects live state into .kant fragments ──
+  // ── Ontology registry: projects live state into .cairn fragments ──
   const packageRoot = path.dirname(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")));
   const resolveProjectedDir = () =>
     path.join(project.projectDir ?? process.cwd(), ".ue-mcp", "ontology", "projected");

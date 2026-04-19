@@ -21,7 +21,6 @@ mkdocs.yml
 .idea/
 .cursor/
 .claude/
-.kantext/
 
 # Dev config
 .mcp.json

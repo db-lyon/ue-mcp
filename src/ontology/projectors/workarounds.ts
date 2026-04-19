@@ -8,7 +8,7 @@
  * and the result snippet if captured.
  *
  * This is ue-mcp's first audit projector. The pattern generalizes: a
- * session-local in-memory log becomes a queryable .kant layer,
+ * session-local in-memory log becomes a queryable .cairn layer,
  * replacing ad-hoc state readout with composable context.
  */
 

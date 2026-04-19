@@ -2,7 +2,7 @@
  * Session-level tracker for MCP tool invocations.
  *
  * Every category-tool dispatch appends one entry; the ontology
- * InvocationProjector renders the accumulated log as a .kant audit
+ * InvocationProjector renders the accumulated log as a .cairn audit
  * layer at /UE/Audit/Invocations. A bounded ring (newest N kept) so
  * long-running sessions do not grow unbounded.
  */

@@ -27,10 +27,6 @@ obj/
 ## Test-project Claude Code artifacts (ephemeral — installed by `ue-mcp init` / skills dry-runs)
 tests/ue_mcp/.claude/
 
-## Kantext
-.kantext/
-kantext-mcp-*
-
 ## Claude / Cursor local settings
 .claude/settings.local.json
 

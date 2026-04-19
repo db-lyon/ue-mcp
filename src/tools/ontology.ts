@@ -17,7 +17,7 @@ const VALID_EVENTS: ReadonlyArray<ProjectorEvent> = [
 export function createOntologyTool(registry: OntologyRegistry): ToolDef {
   return categoryTool(
     "ontology",
-    "Kantext-shaped ontology: project live ue-mcp state into .kant layers, compose kernel + projected + repo-local, query with path selectors.",
+    "cairn-shaped ontology: project live ue-mcp state into .cairn layers, compose kernel + projected + repo-local, query with path selectors.",
     {
       project_all: {
         description: "Run every registered projector and write fragments to the ontology cache",
@@ -134,7 +134,7 @@ export function createOntologyTool(registry: OntologyRegistry): ToolDef {
         },
       },
       list_layers: {
-        description: "List emitted .kant fragments in the ontology cache",
+        description: "List emitted .cairn fragments in the ontology cache",
         handler: async (_ctx: ToolContext) => {
           return {
             outputDir: registry.outputDirectory,
