@@ -62,6 +62,38 @@ export function createOntologyTool(registry: OntologyRegistry): ToolDef {
           };
         },
       },
+      describe_action: {
+        description: "Resolve an ontology point for a specific action and return its declared metadata (classification, approval, risk, requires). Params: tool, actionName",
+        handler: async (_ctx: ToolContext, params: Record<string, unknown>) => {
+          const tool = params.tool as string;
+          const actionName = params.actionName as string;
+          if (!tool || !actionName) {
+            throw new McpError(ErrorCode.INVALID_PARAMS, "Missing required parameters 'tool' and 'actionName'");
+          }
+          const path = `/UE/Mediation/Registry/Tools/${tool}/Actions/${actionName}`;
+          const result = registry.query(path);
+          if (result.matches.length === 0) {
+            throw new McpError(
+              ErrorCode.NOT_FOUND,
+              `No ontology point for ${tool}.${actionName}. Run project_all first, or check that the tool/actionName match.`,
+            );
+          }
+          const point = result.matches[0].point;
+          const requires = Object.keys(point.children?.requires?.children ?? {});
+          return {
+            path: result.matches[0].path,
+            meaning: point.meaning,
+            purpose: point.purpose,
+            classification: point.fields?.classification,
+            approval: point.fields?.approval,
+            risk: point.fields?.risk,
+            metadataSource: point.fields?.metadataSource,
+            bridge: point.fields?.bridge,
+            handlerKind: point.fields?.handlerKind,
+            requires,
+          };
+        },
+      },
       project_by_event: {
         description: "Run projectors subscribed to a specific event. Params: event",
         handler: async (_ctx: ToolContext, params: Record<string, unknown>) => {
@@ -110,6 +142,8 @@ export function createOntologyTool(registry: OntologyRegistry): ToolDef {
         .string()
         .optional()
         .describe("Path selector for query action (e.g. '/UE/Mediation/Registry/Tools/**')"),
+      tool: z.string().optional().describe("Category tool name for describe_action (e.g. 'gas')"),
+      actionName: z.string().optional().describe("Action name for describe_action (e.g. 'create_ability')"),
     },
   );
 }
