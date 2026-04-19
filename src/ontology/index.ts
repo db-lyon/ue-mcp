@@ -229,6 +229,7 @@ export {
   type EngineSymbolProjectorInput,
   type EngineTree,
 } from "./projectors/engine-symbols.js";
+export { createInvocationProjector } from "./projectors/invocations.js";
 export { parseKant, parseKantFile, type ParsedFragment } from "./parse.js";
 export { compose, type ComposedView, type Layer } from "./compose.js";
 export { select, parseSelector, type MatchResult } from "./select.js";

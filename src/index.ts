@@ -16,8 +16,9 @@ import type { FlowContext } from "./flow/context.js";
 import type { FlowConfig } from "./flow/schema.js";
 
 import * as path from "node:path";
-import { OntologyRegistry, createHandlerRegistryProjector, createWorkaroundProjector, createPluginProjector, createEngineSymbolProjector } from "./ontology/index.js";
+import { OntologyRegistry, createHandlerRegistryProjector, createWorkaroundProjector, createPluginProjector, createEngineSymbolProjector, createInvocationProjector } from "./ontology/index.js";
 import { getWorkarounds } from "./workaround-tracker.js";
+import { getInvocations, pushInvocation } from "./invocation-tracker.js";
 import { findEngineInstall } from "./deployer.js";
 import { createOntologyTool } from "./tools/ontology.js";
 
@@ -119,6 +120,10 @@ async function main() {
       includePlugins: false,
     }),
   );
+  ontologyRegistry.register(
+    createInvocationProjector(getInvocations),
+    () => undefined,
+  );
 
   // Prime the ontology cache so the dispatch-layer preflight can
   // consult it from the first tool call. We fire startup-subscribed
@@ -146,6 +151,7 @@ async function main() {
       const taskName = `${tool.name}.${action}`;
       const { action: _, ...taskParams } = params;
       const flowCtx: FlowContext = { bridge, project };
+      const started = Date.now();
 
       try {
         // Ontology-backed preflight: if the action declared `requires`
@@ -157,11 +163,18 @@ async function main() {
           const parts: string[] = [];
           if (pre.missing.length > 0) parts.push(`missing plugins: ${pre.missing.join(", ")}`);
           if (pre.disabled.length > 0) parts.push(`disabled plugins: ${pre.disabled.join(", ")}`);
+          const errText = `${tool.name}.${action} requires ${pre.declared.join(", ")}; ${parts.join("; ")}. Enable the plugin(s) in your project and restart the editor.`;
+          pushInvocation({
+            tool: tool.name,
+            action,
+            status: "requires_unmet",
+            durationMs: Date.now() - started,
+            timestamp: new Date().toISOString(),
+            errorCode: "REQUIRES_UNMET",
+            errorSnippet: errText,
+          });
           return {
-            content: [{
-              type: "text" as const,
-              text: `Error [REQUIRES_UNMET]: ${tool.name}.${action} requires ${pre.declared.join(", ")}; ${parts.join("; ")}. Enable the plugin(s) in your project and restart the editor.`,
-            }],
+            content: [{ type: "text" as const, text: `Error [REQUIRES_UNMET]: ${errText}` }],
             isError: true,
           };
         }
@@ -171,11 +184,28 @@ async function main() {
 
         if (!result.success) {
           const msg = result.error?.message ?? `Task ${taskName} failed`;
+          pushInvocation({
+            tool: tool.name,
+            action,
+            status: "error",
+            durationMs: Date.now() - started,
+            timestamp: new Date().toISOString(),
+            errorCode: "TASK_FAILED",
+            errorSnippet: msg,
+          });
           return {
             content: [{ type: "text" as const, text: `Error [TASK_FAILED]: ${msg}` }],
             isError: true,
           };
         }
+
+        pushInvocation({
+          tool: tool.name,
+          action,
+          status: "ok",
+          durationMs: Date.now() - started,
+          timestamp: new Date().toISOString(),
+        });
 
         const stringify = (v: unknown) =>
           typeof v === "string" ? v : JSON.stringify(v, null, 2);
@@ -196,6 +226,15 @@ async function main() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         const code = e instanceof McpError ? e.code : "UNKNOWN";
+        pushInvocation({
+          tool: tool.name,
+          action,
+          status: "error",
+          durationMs: Date.now() - started,
+          timestamp: new Date().toISOString(),
+          errorCode: code,
+          errorSnippet: msg,
+        });
         return {
           content: [{ type: "text" as const, text: `Error [${code}]: ${msg}` }],
           isError: true,
