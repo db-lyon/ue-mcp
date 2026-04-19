@@ -15,6 +15,10 @@ import { startFlowHttpServer } from "./flow/http-server.js";
 import type { FlowContext } from "./flow/context.js";
 import type { FlowConfig } from "./flow/schema.js";
 
+import * as path from "node:path";
+import { OntologyRegistry, createHandlerRegistryProjector } from "./ontology/index.js";
+import { createOntologyTool } from "./tools/ontology.js";
+
 import { projectTool } from "./tools/project.js";
 import { assetTool } from "./tools/asset.js";
 import { blueprintTool } from "./tools/blueprint.js";
@@ -72,6 +76,17 @@ async function main() {
   }, {
     instructions: SERVER_INSTRUCTIONS,
   });
+
+  // ── Ontology registry: projects live state into .kant fragments ──
+  const ontologyRegistry = new OntologyRegistry(() =>
+    path.join(project.projectDir ?? process.cwd(), ".ue-mcp", "ontology", "projected"),
+  );
+  const ontologyTool = createOntologyTool(ontologyRegistry);
+  ALL_TOOLS.push(ontologyTool);
+  ontologyRegistry.register(
+    createHandlerRegistryProjector(ALL_TOOLS),
+    () => undefined,
+  );
 
   const disabled = new Set(project.config.disable ?? []);
   const tools = ALL_TOOLS.filter((t) => !disabled.has(t.name));
