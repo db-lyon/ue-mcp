@@ -80,6 +80,15 @@ export function createOntologyTool(registry: OntologyRegistry): ToolDef {
           }
           const point = result.matches[0].point;
           const requires = Object.keys(point.children?.requires?.children ?? {});
+          // Enrich with live preflight status so agents see not just
+          // "requires GameplayAbilities" but "requires GameplayAbilities
+          // (enabled)" or "...(MISSING)" in one call.
+          const preflight = registry.checkRequires(tool, actionName);
+          const requiresStatus = requires.map((dep) => {
+            if (preflight.missing.includes(dep)) return { plugin: dep, state: "missing" };
+            if (preflight.disabled.includes(dep)) return { plugin: dep, state: "disabled" };
+            return { plugin: dep, state: "ok" };
+          });
           return {
             path: result.matches[0].path,
             meaning: point.meaning,
@@ -91,6 +100,8 @@ export function createOntologyTool(registry: OntologyRegistry): ToolDef {
             bridge: point.fields?.bridge,
             handlerKind: point.fields?.handlerKind,
             requires,
+            requiresStatus,
+            preflightOk: preflight.ok,
           };
         },
       },

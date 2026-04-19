@@ -13,6 +13,7 @@ import {
   createPluginProjector,
   createEngineSymbolProjector,
   createInvocationProjector,
+  createProjectConfigProjector,
   parseKant,
 } from "../../src/ontology/index.js";
 import { serializeFragment } from "../../src/ontology/emit.js";
@@ -82,5 +83,11 @@ describe("ontology round-trip contract", () => {
     const proj = createInvocationProjector(invocations);
     const text = serializeFragment(proj.project(undefined as never));
     expect(() => parseKant(text, "invocations")).not.toThrow();
+  });
+
+  it("ProjectConfigProjector output parses (no project)", () => {
+    const proj = createProjectConfigProjector();
+    const text = serializeFragment(proj.project({ projectDir: null, projectPath: null }));
+    expect(() => parseKant(text, "project-config")).not.toThrow();
   });
 });

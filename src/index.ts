@@ -16,7 +16,7 @@ import type { FlowContext } from "./flow/context.js";
 import type { FlowConfig } from "./flow/schema.js";
 
 import * as path from "node:path";
-import { OntologyRegistry, createHandlerRegistryProjector, createWorkaroundProjector, createPluginProjector, createEngineSymbolProjector, createInvocationProjector } from "./ontology/index.js";
+import { OntologyRegistry, createHandlerRegistryProjector, createWorkaroundProjector, createPluginProjector, createEngineSymbolProjector, createInvocationProjector, createProjectConfigProjector } from "./ontology/index.js";
 import { getWorkarounds } from "./workaround-tracker.js";
 import { getInvocations, pushInvocation } from "./invocation-tracker.js";
 import { findEngineInstall } from "./deployer.js";
@@ -123,6 +123,13 @@ async function main() {
   ontologyRegistry.register(
     createInvocationProjector(getInvocations),
     () => undefined,
+  );
+  ontologyRegistry.register(
+    createProjectConfigProjector(),
+    () => ({
+      projectDir: project.projectDir,
+      projectPath: project.projectPath,
+    }),
   );
 
   // Prime the ontology cache so the dispatch-layer preflight can
