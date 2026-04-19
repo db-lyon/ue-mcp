@@ -1,0 +1,140 @@
+# UE Kernel - Root Vocabulary
+#
+# Canonical /UE root for the ue-mcp ontology. Establishes the stable
+# anchors under the universal address space /UE.
+#
+# Design constraints (from kantext kernel discipline):
+# - No lists, no nulls, no booleans. Multiplicity = named children.
+# - Boolean-ish state = Signals (gradient mappings with marker neighborhoods).
+# - Every structural primitive has Meaning and purpose.
+# - Layering is core: projected, repo-local, and distributed layers stack.
+# - Universal addressability: every point identified by its path.
+#
+# DRAFT. To be reviewed and stabilized with Jason Lantz before v2.0 freeze.
+
+⛩️:
+  # ---------------------------------------------------------------------------
+  # Root: UE
+  # ---------------------------------------------------------------------------
+
+  Meaning@UE:
+    Category: /UE
+    meaning: Unreal Engine
+    purpose: Canonical root for all ue-mcp ontology context
+
+  Space@UE:
+    Classes:
+    Modules:
+    Plugins:
+    Assets:
+    Mediation:
+    Project:
+    Audit:
+    Signals:
+
+  # ---------------------------------------------------------------------------
+  # Anchor meanings
+  # ---------------------------------------------------------------------------
+
+  Meaning@Classes:
+    Category: /UE/Classes
+    meaning: UClass Tree
+    purpose: Reflection-projected UClass hierarchy with UProperty children and UFUNCTION metadata
+
+  Meaning@Modules:
+    Category: /UE/Modules
+    meaning: Module Registry
+    purpose: Loaded engine and project modules, their dependencies and export surface
+
+  Meaning@Plugins:
+    Category: /UE/Plugins
+    meaning: Plugin Availability
+    purpose: Which plugins are enabled, their versions, their provided modules
+
+  Meaning@Assets:
+    Category: /UE/Assets
+    meaning: Asset Registry
+    purpose: Project asset registry projection - class path, outer, package, thumbnail metadata
+
+  Meaning@Mediation:
+    Category: /UE/Mediation
+    meaning: Mediation
+    purpose: Tool and server brokering substrate - how agents discover and invoke ue-mcp capabilities
+
+  Meaning@Project:
+    Category: /UE/Project
+    meaning: Project Intent
+    purpose: User-project-specific vocabulary - gameplay tags, attribute sets, BP subclasses, datatables
+
+  Meaning@Audit:
+    Category: /UE/Audit
+    meaning: Audit
+    purpose: Immutable records of flow runs, tool invocations, and state transitions sealed to commits
+
+  Meaning@Signals:
+    Category: /UE/Signals
+    meaning: Signal Spaces
+    purpose: Gradient signal neighborhoods used across the ontology - classification, approval, risk, trust
+
+  # ---------------------------------------------------------------------------
+  # Anchor spaces
+  # ---------------------------------------------------------------------------
+
+  Space@Mediation:
+    Registry:
+
+  Space@Project:
+    GameplayTags:
+    Attributes:
+    Content:
+    DataTables:
+
+  Space@Audit:
+    Flows:
+    Invocations:
+
+  Space@Signals:
+    Classification:
+    Approval:
+    Risk:
+    Trust:
+
+# ---------------------------------------------------------------------------
+# Kernel context root
+# ---------------------------------------------------------------------------
+
+UE@UE:
+  meaning: Unreal Engine
+  purpose: Canonical root for all ue-mcp ontology context
+
+  Classes:
+    meaning: UClass Tree
+    purpose: Anchor for reflection-projected class hierarchy
+
+  Modules:
+    meaning: Module Registry
+    purpose: Anchor for module projection
+
+  Plugins:
+    meaning: Plugin Availability
+    purpose: Anchor for plugin projection
+
+  Assets:
+    meaning: Asset Registry
+    purpose: Anchor for asset registry projection
+
+  Mediation:
+    meaning: Mediation
+    purpose: Anchor for tool/server registry and brokering
+
+  Project:
+    meaning: Project Intent
+    purpose: Anchor for user-project-specific declared vocabulary
+
+  Audit:
+    meaning: Audit
+    purpose: Anchor for immutable operational records
+
+  Signals:
+    meaning: Signal Spaces
+    purpose: Anchor for gradient signal neighborhoods

@@ -1,0 +1,93 @@
+# UE Mediation Registry - Kernel Module
+#
+# Declared language for the /UE/Mediation/Registry address space.
+# Defines the shape of tool and action points that the
+# HandlerRegistryProjector populates from our 425 handlers.
+#
+# Intentionally mirrors kantext's busbar mediation pattern: servers,
+# tools, capabilities, and signals - but adapted for ue-mcp's shape
+# (one server - the bridge - many category tools, many actions per tool).
+#
+# DRAFT. Co-design target with Jason.
+
+⛩️:
+  # ---------------------------------------------------------------------------
+  # Meanings
+  # ---------------------------------------------------------------------------
+
+  Meaning@Registry:
+    Category: /UE/Mediation
+    meaning: Registry
+    purpose: Canonical registry of ue-mcp category tools and their actions as addressable context points
+
+  Meaning@Tool:
+    Category: /UE/Mediation/Registry
+    meaning: Category Tool
+    purpose: A ue-mcp category tool (e.g. blueprint, material, gameplay) that dispatches to actions
+
+  Meaning@Action:
+    Category: /UE/Mediation/Registry/Tool
+    meaning: Action
+    purpose: An individual action on a category tool with bridge binding and declared params
+
+  Meaning@name:
+    Category: /UE/Mediation/Registry/Tool
+    meaning: Tool Name
+    purpose: Canonical tool name as presented to MCP clients
+
+  Meaning@summary:
+    Category: /UE/Mediation/Registry/Tool
+    meaning: Tool Summary
+    purpose: One-line description of the tool's domain
+
+  Meaning@description:
+    Category: /UE/Mediation/Registry/Tool/Action
+    meaning: Action Description
+    purpose: Human-readable description of what the action does
+
+  Meaning@bridge:
+    Category: /UE/Mediation/Registry/Tool/Action
+    meaning: Bridge Method
+    purpose: C++ bridge method name this action dispatches to (absent if handler is TS-only)
+
+  Meaning@classification:
+    Category: /UE/Signals/Classification
+    meaning: Operational Classification
+    purpose: Side-effect classification signal - read-only through destructive
+
+  Meaning@approval:
+    Category: /UE/Signals/Approval
+    meaning: Required Approval
+    purpose: Approval requirement signal - auto through explicit
+
+  Meaning@risk:
+    Category: /UE/Signals/Risk
+    meaning: Risk
+    purpose: Irreversibility or harm potential signal
+
+  Meaning@requires:
+    Category: /UE/Mediation/Registry/Tool/Action
+    meaning: Plugin Requirements
+    purpose: Named space of plugins or modules that must be available for this action to succeed
+
+  # ---------------------------------------------------------------------------
+  # Signal neighborhoods (gradient markers)
+  # ---------------------------------------------------------------------------
+
+  Mapping@Classification:
+    Category: /UE/Signals/Classification
+    meaning: Classification Marker Space
+    purpose: Gradient from read-only to destructive
+    # Markers: read, introspect, mutate, create, destructive
+
+  Mapping@Approval:
+    Category: /UE/Signals/Approval
+    meaning: Approval Marker Space
+    purpose: Gradient from auto to explicit
+    # Markers: auto, advisory, required, explicit
+
+  Mapping@Risk:
+    Category: /UE/Signals/Risk
+    meaning: Risk Marker Space
+    purpose: Gradient from trivial to catastrophic
+    # Markers: trivial, minor, significant, severe, catastrophic
