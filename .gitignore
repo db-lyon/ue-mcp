@@ -156,3 +156,4 @@ tests/**/Content/*Test*.umap
 # - Content/**/*.uasset, *.umap (content assets) - EXCEPT test-generated ones above
 # - Plugins/**/*.uplugin (plugin files)
 # - Any other project source files
+ISSUE-AUDIT.md
