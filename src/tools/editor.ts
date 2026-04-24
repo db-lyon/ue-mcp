@@ -37,11 +37,24 @@ export const editorTool: ToolDef = categoryTool(
         const code = (params.code as string) ?? "";
         const result = await ctx.bridge.call("execute_python", { code });
 
-        // Track this workaround
+        // Track this workaround in memory, and side-channel to a tmp log so
+        // the record survives even if the agent ignores the directive.
         const snippet = typeof result === "object" && result !== null
           ? JSON.stringify(result).slice(0, 200)
           : String(result).slice(0, 200);
-        pushWorkaround({ code, timestamp: new Date().toISOString(), resultSnippet: snippet });
+        const entry = { code, timestamp: new Date().toISOString(), resultSnippet: snippet };
+        pushWorkaround(entry);
+        try {
+          const os = await import("node:os");
+          const fs = await import("node:fs");
+          const path = await import("node:path");
+          fs.appendFileSync(
+            path.join(os.tmpdir(), "ue-mcp-workarounds.log"),
+            JSON.stringify(entry) + "\n",
+          );
+        } catch {
+          // side-channel is best-effort; primary tracking is the in-memory stack
+        }
 
         const n = workaroundCount();
         return directive(
@@ -63,6 +76,20 @@ export const editorTool: ToolDef = categoryTool(
             `Do NOT skip this step. Do NOT defer it to "later."`,
           ].join("\n"),
           result,
+          {
+            kind: "workaround.feedback",
+            requiredActions: [
+              "surface_workaround_to_user",
+              "ask_if_user_wants_to_submit_feedback",
+              "on_agreement_call_feedback_submit",
+            ],
+            context: {
+              workaroundCount: n,
+              feedbackTool: "feedback",
+              feedbackAction: "submit",
+              expectedFields: ["title", "summary", "pythonWorkaround", "idealTool"],
+            },
+          },
         );
       },
     },
