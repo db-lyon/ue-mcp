@@ -623,8 +623,12 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBaseColor(const TSharedPtr<
 	// Add expression to material
 	Material->GetExpressionCollection().AddExpression(ColorExpression);
 
-	// Connect to base color input
-	Material->GetEditorOnlyData()->BaseColor.Connect(0, ColorExpression);
+	// Connect to base color input (guarded: GetEditorOnlyData can return null
+	// on unsupported material domains, which would otherwise null-deref here)
+	if (UMaterialEditorOnlyData* EOD = Material->GetEditorOnlyData())
+	{
+		EOD->BaseColor.Connect(0, ColorExpression);
+	}
 
 	Material->PostEditChange();
 	Material->MarkPackageDirty();
@@ -1865,7 +1869,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFromTexture(const TShare
 	NewMaterial->GetExpressionCollection().AddExpression(TextureSampleExpr);
 
 	// Connect the RGB output (index 0) to the BaseColor input
-	NewMaterial->GetEditorOnlyData()->BaseColor.Connect(0, TextureSampleExpr);
+	if (UMaterialEditorOnlyData* EOD = NewMaterial->GetEditorOnlyData())
+	{
+		EOD->BaseColor.Connect(0, TextureSampleExpr);
+	}
 
 	NewMaterial->PostEditChange();
 

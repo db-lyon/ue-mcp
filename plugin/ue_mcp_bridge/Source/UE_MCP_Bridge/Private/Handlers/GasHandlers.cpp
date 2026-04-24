@@ -36,39 +36,42 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_effect_modifier"), &SetEffectModifier);
 }
 
-TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJsonObject>& Params)
+TSharedPtr<FJsonValue> FGasHandlers::CreateGasBlueprint(
+	const TSharedPtr<FJsonObject>& Params,
+	const FString& DefaultPackagePath,
+	UClass* ParentClass,
+	const FString& FriendlyType,
+	TFunction<void(TSharedPtr<FJsonObject>&)> ExtraResultFields)
 {
 	FString Name;
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] CreateGameplayEffect called with name: %s"), *Name);
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Effects"));
-	FString DurationPolicy = OptionalString(Params, TEXT("durationPolicy"), TEXT("Instant"));
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), DefaultPackagePath);
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("GameplayEffect")))
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, FriendlyType))
 	{
 		return Existing;
 	}
 
-	UClass* GameplayEffectClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayEffect"));
-	if (!GameplayEffectClass)
+	if (!ParentClass)
 	{
-		return MCPError(TEXT("GameplayEffect class not found. Enable GameplayAbilities plugin."));
+		return MCPError(FString::Printf(TEXT("%s parent class not found. Enable GameplayAbilities plugin."), *FriendlyType));
 	}
 
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
+	BlueprintFactory->ParentClass = ParentClass;
+
 	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
 	if (!NewBlueprint)
 	{
-		return MCPError(TEXT("Failed to create GameplayEffect Blueprint"));
+		return MCPError(FString::Printf(TEXT("Failed to create %s Blueprint"), *FriendlyType));
 	}
 
-	NewBlueprint->ParentClass = GameplayEffectClass;
+	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
 	SaveAssetPackage(NewBlueprint);
@@ -77,10 +80,25 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJson
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("durationPolicy"), DurationPolicy);
+	if (ExtraResultFields) ExtraResultFields(Result);
 	MCPSetDeleteAssetRollback(Result, NewBlueprint->GetPathName());
 
 	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJsonObject>& Params)
+{
+	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] CreateGameplayEffect called"));
+
+	const FString DurationPolicy = OptionalString(Params, TEXT("durationPolicy"), TEXT("Instant"));
+	UClass* Cls = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayEffect"));
+
+	return CreateGasBlueprint(
+		Params, TEXT("/Game/GAS/Effects"), Cls, TEXT("GameplayEffect"),
+		[&DurationPolicy](TSharedPtr<FJsonObject>& R)
+		{
+			R->SetStringField(TEXT("durationPolicy"), DurationPolicy);
+		});
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::GetGasInfo(const TSharedPtr<FJsonObject>& Params)
@@ -161,146 +179,30 @@ TSharedPtr<FJsonValue> FGasHandlers::GetGasInfo(const TSharedPtr<FJsonObject>& P
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayAbility(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Abilities"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("GameplayAbility")))
-	{
-		return Existing;
-	}
-
-	UClass* GAClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayAbility"));
-	if (!GAClass)
-	{
-		return MCPError(TEXT("GameplayAbility class not found. Enable GameplayAbilities plugin."));
-	}
-
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
-	BlueprintFactory->ParentClass = GAClass;
-
-	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
-	if (!NewBlueprint)
-	{
-		return MCPError(TEXT("Failed to create GameplayAbility Blueprint"));
-	}
-
-	NewBlueprint->ParentClass = GAClass;
-	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
-
-	SaveAssetPackage(NewBlueprint);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, NewBlueprint->GetPathName());
-	return MCPResult(Result);
+	UClass* Cls = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayAbility"));
+	return CreateGasBlueprint(Params, TEXT("/Game/GAS/Abilities"), Cls, TEXT("GameplayAbility"));
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateAttributeSet(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Attributes"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("AttributeSet")))
-	{
-		return Existing;
-	}
-
-	UClass* AttrSetClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AttributeSet"));
-	if (!AttrSetClass)
-	{
-		return MCPError(TEXT("AttributeSet class not found. Enable GameplayAbilities plugin."));
-	}
-
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
-	BlueprintFactory->ParentClass = AttrSetClass;
-
-	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
-	if (!NewBlueprint)
-	{
-		return MCPError(TEXT("Failed to create AttributeSet Blueprint"));
-	}
-
-	NewBlueprint->ParentClass = AttrSetClass;
-	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
-
-	SaveAssetPackage(NewBlueprint);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, NewBlueprint->GetPathName());
-	return MCPResult(Result);
+	UClass* Cls = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.AttributeSet"));
+	return CreateGasBlueprint(Params, TEXT("/Game/GAS/Attributes"), Cls, TEXT("AttributeSet"));
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	const FString CueType = OptionalString(Params, TEXT("cueType"), TEXT("Static"));
+	const TCHAR* ParentPath = CueType == TEXT("Actor")
+		? TEXT("/Script/GameplayAbilities.GameplayCueNotify_Actor")
+		: TEXT("/Script/GameplayAbilities.GameplayCueNotify_Static");
+	UClass* Cls = FindObject<UClass>(nullptr, ParentPath);
 
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/Cues"));
-	FString CueType = OptionalString(Params, TEXT("cueType"), TEXT("Static"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("GameplayCue")))
-	{
-		return Existing;
-	}
-
-	FString ParentClassPath;
-	if (CueType == TEXT("Actor"))
-	{
-		ParentClassPath = TEXT("/Script/GameplayAbilities.GameplayCueNotify_Actor");
-	}
-	else
-	{
-		ParentClassPath = TEXT("/Script/GameplayAbilities.GameplayCueNotify_Static");
-	}
-
-	UClass* ParentClass = FindObject<UClass>(nullptr, *ParentClassPath);
-	if (!ParentClass)
-	{
-		return MCPError(FString::Printf(TEXT("GameplayCue parent class not found: %s. Enable GameplayAbilities plugin."), *ParentClassPath));
-	}
-
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
-	BlueprintFactory->ParentClass = ParentClass;
-
-	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
-	if (!NewBlueprint)
-	{
-		return MCPError(TEXT("Failed to create GameplayCue Blueprint"));
-	}
-
-	NewBlueprint->ParentClass = ParentClass;
-	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
-
-	SaveAssetPackage(NewBlueprint);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("cueType"), CueType);
-	MCPSetDeleteAssetRollback(Result, NewBlueprint->GetPathName());
-	return MCPResult(Result);
+	return CreateGasBlueprint(
+		Params, TEXT("/Game/GAS/Cues"), Cls, TEXT("GameplayCue"),
+		[&CueType](TSharedPtr<FJsonObject>& R)
+		{
+			R->SetStringField(TEXT("cueType"), CueType);
+		});
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::AddAbilityTag(const TSharedPtr<FJsonObject>& Params)
@@ -387,63 +289,29 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilityTag(const TSharedPtr<FJsonObject>
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/GAS/CueNotifies"));
-	FString NotifyType = OptionalString(Params, TEXT("notifyType"), TEXT("Actor"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("GameplayCueNotify")))
-	{
-		return Existing;
-	}
-
-	FString ParentClassPath;
-	FString FriendlyName;
+	const FString NotifyType = OptionalString(Params, TEXT("notifyType"), TEXT("Actor"));
+	const TCHAR* ParentPath;
+	const TCHAR* FriendlyName;
 	if (NotifyType == TEXT("Static"))
 	{
-		ParentClassPath = TEXT("/Script/GameplayAbilities.GameplayCueNotify_Static");
+		ParentPath = TEXT("/Script/GameplayAbilities.GameplayCueNotify_Static");
 		FriendlyName = TEXT("GameplayCueNotify_Static");
 	}
 	else
 	{
-		// Default to Actor variant
-		ParentClassPath = TEXT("/Script/GameplayAbilities.GameplayCueNotify_Actor");
+		ParentPath = TEXT("/Script/GameplayAbilities.GameplayCueNotify_Actor");
 		FriendlyName = TEXT("GameplayCueNotify_Actor");
 	}
+	UClass* Cls = FindObject<UClass>(nullptr, ParentPath);
 
-	UClass* ParentClass = FindObject<UClass>(nullptr, *ParentClassPath);
-	if (!ParentClass)
-	{
-		return MCPError(FString::Printf(TEXT("%s class not found: %s. Enable GameplayAbilities plugin."), *FriendlyName, *ParentClassPath));
-	}
-
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
-	BlueprintFactory->ParentClass = ParentClass;
-
-	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
-	if (!NewBlueprint)
-	{
-		return MCPError(FString::Printf(TEXT("Failed to create %s Blueprint"), *FriendlyName));
-	}
-
-	NewBlueprint->ParentClass = ParentClass;
-	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
-
-	SaveAssetPackage(NewBlueprint);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewBlueprint->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	Result->SetStringField(TEXT("notifyType"), NotifyType);
-	Result->SetStringField(TEXT("parentClass"), FriendlyName);
-	MCPSetDeleteAssetRollback(Result, NewBlueprint->GetPathName());
-	return MCPResult(Result);
+	FString FriendlyCopy(FriendlyName);
+	return CreateGasBlueprint(
+		Params, TEXT("/Game/GAS/CueNotifies"), Cls, TEXT("GameplayCueNotify"),
+		[&NotifyType, &FriendlyCopy](TSharedPtr<FJsonObject>& R)
+		{
+			R->SetStringField(TEXT("notifyType"), NotifyType);
+			R->SetStringField(TEXT("parentClass"), FriendlyCopy);
+		});
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::AddAbilitySystemComponent(const TSharedPtr<FJsonObject>& Params)

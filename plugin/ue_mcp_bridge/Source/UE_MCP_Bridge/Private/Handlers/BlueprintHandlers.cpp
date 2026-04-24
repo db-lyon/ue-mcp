@@ -2843,7 +2843,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 		if (FinalProp)
 		{
 			void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
-			FinalProp->ImportText_Direct(*DefaultValue, ValuePtr, nullptr, PPF_None);
+			// ImportText_Direct returns nullptr on parse failure. Previously we
+			// ignored that - a malformed DefaultValue silently corrupted the
+			// node's default. Now we surface the failure as an error so callers
+			// see the bad input immediately rather than at compile time.
+			const TCHAR* Parsed = FinalProp->ImportText_Direct(*DefaultValue, ValuePtr, nullptr, PPF_None);
+			if (Parsed == nullptr)
+			{
+				return MCPError(FString::Printf(
+					TEXT("DefaultValue '%s' is not valid for property '%s' (type %s). Use UE's text format (e.g. `(X=1,Y=2,Z=3)` for FVector)."),
+					*DefaultValue, *FinalProp->GetName(), *FinalProp->GetCPPType()));
+			}
 			TargetNode->PostEditChange();
 			bSetViaProperty = true;
 		}
@@ -3698,12 +3708,22 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 				}
 				else if (FArrayProperty* ArrayProp = CastField<FArrayProperty>(Prop))
 				{
-					// For arrays (including TArray<TSubclassOf<>>), use ImportText
-					Prop->ImportText_Direct(*Value, ValuePtr, CDO, PPF_None);
+					// For arrays (including TArray<TSubclassOf<>>), use ImportText.
+					// A parse failure here just means the CDO mirror did not take;
+					// the authoritative string default set on FoundVar->DefaultValue
+					// above still applies on the next compile, so we do not reject
+					// the whole request, but the caller gets a warning.
+					if (!Prop->ImportText_Direct(*Value, ValuePtr, CDO, PPF_None))
+					{
+						UE_LOG(LogTemp, Warning, TEXT("set_blueprint_variable_default_value: ImportText_Direct failed for array property '%s' value '%s' - default string was still written and will take effect on recompile."), *VarName, *Value);
+					}
 				}
 				else
 				{
-					Prop->ImportText_Direct(*Value, ValuePtr, CDO, PPF_None);
+					if (!Prop->ImportText_Direct(*Value, ValuePtr, CDO, PPF_None))
+					{
+						UE_LOG(LogTemp, Warning, TEXT("set_blueprint_variable_default_value: ImportText_Direct failed for property '%s' value '%s' - default string was still written and will take effect on recompile."), *VarName, *Value);
+					}
 				}
 
 				CDO->PostEditChange();
