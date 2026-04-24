@@ -4,6 +4,9 @@
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
 #include "UObject/UObjectIterator.h"
+#include "UObject/Package.h"
+#include "UObject/SavePackage.h"
+#include "Misc/PackageName.h"
 
 // ── Quick result builders ────────────────────────────────────────────────────
 
@@ -251,3 +254,77 @@ T* LoadAssetByPath(const FString& AssetPath)
 #define REQUIRE_ASSET(Type, OutVar, AssetPath) \
 	Type* OutVar = LoadAssetByPath<Type>(AssetPath); \
 	if (!OutVar) return MCPError(FString::Printf(TEXT("%s not found: %s"), TEXT(#Type), *AssetPath));
+
+// ── Package save ─────────────────────────────────────────────────────────────
+
+/** Mark the asset's package dirty and save it to disk. Used by every create/
+ *  mutate handler that wants changes persisted across editor restarts.
+ *  No-op if Asset or its package is null. Returns true on successful save. */
+inline bool SaveAssetPackage(UObject* Asset)
+{
+	if (!Asset) return false;
+	UPackage* Package = Asset->GetOutermost();
+	if (!Package) return false;
+	Package->MarkPackageDirty();
+	const FString PackageFileName = FPackageName::LongPackageNameToFilename(
+		Package->GetName(), FPackageName::GetAssetPackageExtension());
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Standalone;
+	return UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
+}
+
+// ── GC root RAII ─────────────────────────────────────────────────────────────
+
+/** RAII: root a UObject on construction, unroot on scope exit. Prevents the
+ *  AddToRoot/RemoveFromRoot pairs from leaking when an early return (validation
+ *  error, import failure) sneaks into the middle of the pair. */
+class FGCRootScope
+{
+public:
+	explicit FGCRootScope(UObject* InObject) : Object(InObject)
+	{
+		if (Object) Object->AddToRoot();
+	}
+	~FGCRootScope()
+	{
+		if (Object && Object->IsRooted()) Object->RemoveFromRoot();
+	}
+	FGCRootScope(const FGCRootScope&) = delete;
+	FGCRootScope& operator=(const FGCRootScope&) = delete;
+private:
+	UObject* Object = nullptr;
+};
+
+// ── Reflection helpers ───────────────────────────────────────────────────────
+
+/** Find a property by name and error out cleanly if missing. Returns nullptr
+ *  and writes an error JSON to OutError when the property does not exist on
+ *  the class, so callers get a typed response instead of a null deref. */
+inline FProperty* FindPropertyChecked(
+	UClass* Cls,
+	const TCHAR* PropertyName,
+	TSharedPtr<FJsonValue>& OutError)
+{
+	if (!Cls)
+	{
+		OutError = MCPError(FString::Printf(TEXT("FindPropertyChecked('%s'): null class"), PropertyName));
+		return nullptr;
+	}
+	FProperty* Prop = Cls->FindPropertyByName(FName(PropertyName));
+	if (!Prop)
+	{
+		OutError = MCPError(FString::Printf(
+			TEXT("Property '%s' not found on class '%s' - engine version drift?"),
+			PropertyName, *Cls->GetName()));
+	}
+	return Prop;
+}
+
+// ── Thread context ───────────────────────────────────────────────────────────
+
+/** Defence-in-depth: assert we are on the game thread. UObject API calls from
+ *  a non-game thread can corrupt engine state. Handlers are dispatched from
+ *  GameThreadExecutor, so this should always hold; when it doesn't, the
+ *  assertion surfaces the bug loudly rather than producing a silent race. */
+#define MCP_CHECK_GAME_THREAD() \
+	checkf(IsInGameThread(), TEXT("MCP handler ran off the game thread - UObject access would be racy"))

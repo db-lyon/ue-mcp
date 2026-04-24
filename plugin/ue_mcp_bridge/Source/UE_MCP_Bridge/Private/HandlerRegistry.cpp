@@ -85,10 +85,17 @@ void FMCPHandlerRegistry::Clear()
 	HandlerTimeouts.Empty();
 }
 
-TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecutePythonHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)
+TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecutePythonHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& /*Params*/)
 {
-	// TODO: Implement Python handler execution
-	// For now, return empty result
-	// Will be implemented when Python plugin system is added
-	return MakeShared<FJsonValueObject>(MakeShared<FJsonObject>());
+	// Python handler dispatch is not implemented. Prior behaviour returned an
+	// empty JSON object, which callers could not distinguish from a real
+	// empty-success result. Return a typed error instead so callers see the
+	// gap clearly; use `execute_python` for ad-hoc Python until the dispatch
+	// pipeline lands.
+	TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
+	Err->SetBoolField(TEXT("success"), false);
+	Err->SetStringField(TEXT("error"), FString::Printf(
+		TEXT("Python handler '%s' is registered but Python dispatch is not implemented. Use the 'execute_python' action instead."),
+		*MethodName));
+	return MakeShared<FJsonValueObject>(Err);
 }

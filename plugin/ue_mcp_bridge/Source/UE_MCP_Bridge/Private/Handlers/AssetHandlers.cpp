@@ -1198,7 +1198,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 	}
 
 	UFbxFactory* FbxFactory = NewObject<UFbxFactory>();
-	FbxFactory->AddToRoot();
+	FGCRootScope FactoryRoot(FbxFactory);
 
 	UFbxImportUI* ImportUI = NewObject<UFbxImportUI>();
 	ImportUI->bImportMesh = true;
@@ -1233,7 +1233,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 	FbxFactory->ImportUI = ImportUI;
 
 	UAssetImportTask* Task = NewObject<UAssetImportTask>();
-	Task->AddToRoot();
+	FGCRootScope TaskRoot(Task);
 	Task->bAutomated = true;
 	Task->bReplaceExisting = true;
 	Task->bSave = false;
@@ -1290,9 +1290,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
 	}
 
-	Task->RemoveFromRoot();
-	FbxFactory->RemoveFromRoot();
-
 	return MCPResult(Result);
 }
 
@@ -1314,7 +1311,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	}
 
 	UFbxFactory* FbxFactory = NewObject<UFbxFactory>();
-	FbxFactory->AddToRoot();
+	FGCRootScope FactoryRoot(FbxFactory);
 
 	UFbxImportUI* ImportUI = NewObject<UFbxImportUI>();
 	ImportUI->bImportMesh = true;
@@ -1356,7 +1353,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	FbxFactory->ImportUI = ImportUI;
 
 	UAssetImportTask* Task = NewObject<UAssetImportTask>();
-	Task->AddToRoot();
+	FGCRootScope TaskRoot(Task);
 	Task->bAutomated = true;
 	Task->bReplaceExisting = true;
 	Task->bSave = false;
@@ -1412,9 +1409,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
 	}
 
-	Task->RemoveFromRoot();
-	FbxFactory->RemoveFromRoot();
-
 	return MCPResult(Result);
 }
 
@@ -1445,7 +1439,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 	}
 
 	UFbxFactory* FbxFactory = NewObject<UFbxFactory>();
-	FbxFactory->AddToRoot();
+	FGCRootScope FactoryRoot(FbxFactory);
 
 	UFbxImportUI* ImportUI = NewObject<UFbxImportUI>();
 	ImportUI->bImportMesh = false;
@@ -1471,7 +1465,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 	FbxFactory->ImportUI = ImportUI;
 
 	UAssetImportTask* Task = NewObject<UAssetImportTask>();
-	Task->AddToRoot();
+	FGCRootScope TaskRoot(Task);
 	Task->bAutomated = true;
 	Task->bReplaceExisting = true;
 	Task->bSave = false;
@@ -1527,9 +1521,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
 		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
 	}
-
-	Task->RemoveFromRoot();
-	FbxFactory->RemoveFromRoot();
 
 	return MCPResult(Result);
 }
@@ -1840,7 +1831,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 	}
 
 	UTextureFactory* TextureFactory = NewObject<UTextureFactory>();
-	TextureFactory->AddToRoot();
+	FGCRootScope FactoryRoot(TextureFactory);
 
 	// Apply optional settings
 	bool bNoCompression = false;
@@ -1855,7 +1846,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 	}
 
 	UAssetImportTask* Task = NewObject<UAssetImportTask>();
-	Task->AddToRoot();
+	FGCRootScope TaskRoot(Task);
 	Task->bAutomated = true;
 	Task->bReplaceExisting = true;
 	Task->bSave = false;
@@ -1910,9 +1901,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
 		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
 	}
-
-	Task->RemoveFromRoot();
-	TextureFactory->RemoveFromRoot();
 
 	return MCPResult(Result);
 }
