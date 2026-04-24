@@ -4,17 +4,34 @@ import { spawn, execSync } from "child_process";
 import * as net from "net";
 import type { ProjectContext } from "./project.js";
 
+// editor-control relies on Windows-only tools (tasklist/taskkill, Build.bat).
+// The MCP server itself is cross-platform; only process control is gated.
+const IS_WINDOWS = process.platform === "win32";
+
+const WINDOWS_ONLY_MSG =
+  "editor start/stop/restart is Windows-only. On macOS/Linux, start and stop the Unreal Editor manually; ue-mcp will reconnect when the bridge is reachable.";
+
 function findUEBuildTool(): string | null {
   const envPath = process.env.UE_BUILD_TOOL_PATH;
   if (envPath) return envPath;
 
+  // Preserve order: 5.7 first (newest likely to be used), fall back down.
   const versions = ["5.7", "5.6", "5.5", "5.4", "5.3"];
-  const basePath = "C:/Program Files/Epic Games";
+  const searchRoots = [
+    "C:/Program Files/Epic Games",
+    "D:/Program Files/Epic Games",
+    "E:/Program Files/Epic Games",
+    "C:/Epic Games",
+    "D:/Epic Games",
+    "E:/Epic Games",
+  ];
 
-  for (const version of versions) {
-    const buildToolPath = path.join(basePath, `UE_${version}`, "Engine", "Build", "BatchFiles", "Build.bat");
-    if (fs.existsSync(buildToolPath)) {
-      return buildToolPath;
+  for (const basePath of searchRoots) {
+    for (const version of versions) {
+      const buildToolPath = path.join(basePath, `UE_${version}`, "Engine", "Build", "BatchFiles", "Build.bat");
+      if (fs.existsSync(buildToolPath)) {
+        return buildToolPath;
+      }
     }
   }
 
@@ -39,6 +56,7 @@ function findEditorExecutable(): string | null {
 }
 
 function isEditorRunning(): boolean {
+  if (!IS_WINDOWS) return false;
   try {
     // Use /NH (no header) and check output directly — avoids pipe/find issues
     const output = execSync('tasklist /NH /FI "IMAGENAME eq UnrealEditor.exe"', {
@@ -101,6 +119,7 @@ async function waitForBridge(maxWaitSeconds = 120, checkIntervalMs = 2000): Prom
 }
 
 export async function startEditor(project: ProjectContext): Promise<{ success: boolean; message: string }> {
+  if (!IS_WINDOWS) return { success: false, message: WINDOWS_ONLY_MSG };
   if (isEditorRunning()) {
     return { success: false, message: "Editor is already running" };
   }
@@ -144,6 +163,7 @@ export async function startEditor(project: ProjectContext): Promise<{ success: b
 }
 
 export async function stopEditor(force = false): Promise<{ success: boolean; message: string }> {
+  if (!IS_WINDOWS) return { success: false, message: WINDOWS_ONLY_MSG };
   const processRunning = isEditorRunning();
   const bridgeUp = await isBridgeAvailable();
 
