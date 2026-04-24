@@ -415,15 +415,7 @@ static UMaterial* CreateSimpleMaterial(const FString& Name, const FString& Packa
 	Mat->MarkPackageDirty();
 
 	// Save
-	UPackage* Package = Mat->GetOutermost();
-	if (Package)
-	{
-		FString FileName = FPackageName::LongPackageNameToFilename(
-			Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *FileName, SaveArgs);
-	}
+	SaveAssetPackage(Mat);
 
 	return Mat;
 }

@@ -60,15 +60,7 @@ void FNetworkingHandlers::SaveBlueprint(UBlueprint* Blueprint)
 {
 	if (!Blueprint) return;
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 }
 
 TSharedPtr<FJsonValue> FNetworkingHandlers::GetNetworkingInfo(const TSharedPtr<FJsonObject>& Params)

@@ -290,15 +290,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterial(const TSharedPtr<FJsonO
 		return MCPError(TEXT("Created asset is not a material"));
 	}
 
-	UPackage* Package = NewMaterial->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(NewMaterial);
 
 	const FString AssetPath = NewMaterial->GetPathName();
 
@@ -757,15 +749,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	Material->PostEditChange();
 
 	// Save the package so subsequent list/connect calls see the expression
-	UPackage* Package = Material->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Material);
 
 	// Return the index as nodeId for use with connect_expressions and other operations
 	int32 NodeIndex = Material->GetExpressions().Num() - 1;
@@ -985,15 +969,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPt
 	}
 
 	// Save the package
-	UPackage* Package = MaterialInstance->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(MaterialInstance);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -1894,15 +1870,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFromTexture(const TShare
 	NewMaterial->PostEditChange();
 
 	// Save the package
-	UPackage* Package = NewMaterial->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(NewMaterial);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);

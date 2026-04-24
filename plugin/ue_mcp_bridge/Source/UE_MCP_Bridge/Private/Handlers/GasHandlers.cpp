@@ -71,15 +71,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayEffect(const TSharedPtr<FJson
 	NewBlueprint->ParentClass = GameplayEffectClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	UPackage* Package = NewBlueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(NewBlueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -201,15 +193,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayAbility(const TSharedPtr<FJso
 	NewBlueprint->ParentClass = GAClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	UPackage* Package = NewBlueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(NewBlueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -253,15 +237,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateAttributeSet(const TSharedPtr<FJsonOb
 	NewBlueprint->ParentClass = AttrSetClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	UPackage* Package = NewBlueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(NewBlueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -316,15 +292,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObj
 	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	UPackage* Package = NewBlueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(NewBlueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -406,15 +374,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilityTag(const TSharedPtr<FJsonObject>
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -474,15 +434,7 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJ
 	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	UPackage* Package = NewBlueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(NewBlueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -537,15 +489,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAbilitySystemComponent(const TSharedPtr<
 		BP->SimpleConstructionScript->AddNode(NewNode);
 		FKismetEditorUtilities::CompileBlueprint(BP);
 
-		UPackage* Pkg = BP->GetOutermost();
-		if (Pkg)
-		{
-			Pkg->MarkPackageDirty();
-			FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
-			FSavePackageArgs SaveArgs;
-			SaveArgs.TopLevelFlags = RF_Standalone;
-			UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
-		}
+		SaveAssetPackage(BP);
 	}
 
 	auto Result = MCPSuccess();
@@ -602,15 +546,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AddAttribute(const TSharedPtr<FJsonObject>&
 	FBlueprintEditorUtils::AddMemberVariable(BP, AttrFName, PinType);
 	FKismetEditorUtilities::CompileBlueprint(BP);
 
-	UPackage* Pkg = BP->GetOutermost();
-	if (Pkg)
-	{
-		Pkg->MarkPackageDirty();
-		FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
-	}
+	SaveAssetPackage(BP);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);

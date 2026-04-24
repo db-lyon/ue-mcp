@@ -695,15 +695,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlueprintWithParent(const FStrin
 	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
 
-	UPackage* Package = NewBlueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(NewBlueprint);
 
 	const FString CreatedPath = NewBlueprint->GetPathName();
 
@@ -1377,15 +1369,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateAiPerceptionConfig(const TShared
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
@@ -1932,15 +1916,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 		BP->SimpleConstructionScript->AddNode(NewNode);
 		FKismetEditorUtilities::CompileBlueprint(BP);
 
-		UPackage* Pkg = BP->GetOutermost();
-		if (Pkg)
-		{
-			Pkg->MarkPackageDirty();
-			FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
-			FSavePackageArgs SaveArgs;
-			SaveArgs.TopLevelFlags = RF_Standalone;
-			UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
-		}
+		SaveAssetPackage(BP);
 	}
 
 	auto Result = MCPSuccess();
@@ -2025,15 +2001,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddStateTreeComponent(const TSharedPtr
 		BP->SimpleConstructionScript->AddNode(NewNode);
 		FKismetEditorUtilities::CompileBlueprint(BP);
 
-		UPackage* Pkg = BP->GetOutermost();
-		if (Pkg)
-		{
-			Pkg->MarkPackageDirty();
-			FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
-			FSavePackageArgs SaveArgs;
-			SaveArgs.TopLevelFlags = RF_Standalone;
-			UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
-		}
+		SaveAssetPackage(BP);
 	}
 
 	auto Result = MCPSuccess();
@@ -2089,15 +2057,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectComponent(const TSharedP
 		BP->SimpleConstructionScript->AddNode(NewNode);
 		FKismetEditorUtilities::CompileBlueprint(BP);
 
-		UPackage* Pkg = BP->GetOutermost();
-		if (Pkg)
-		{
-			Pkg->MarkPackageDirty();
-			FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
-			FSavePackageArgs SaveArgs;
-			SaveArgs.TopLevelFlags = RF_Standalone;
-			UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
-		}
+		SaveAssetPackage(BP);
 	}
 
 	auto Result = MCPSuccess();

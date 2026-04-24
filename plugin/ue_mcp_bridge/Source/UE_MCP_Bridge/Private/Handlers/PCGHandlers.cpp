@@ -1144,14 +1144,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 	SpawnerSettings->Modify();
 
 	// Persist the asset
-	UPackage* Pkg = Graph->GetOutermost();
-	if (Pkg)
-	{
-		Pkg->MarkPackageDirty();
-		FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs; SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
-	}
+	SaveAssetPackage(Graph);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);

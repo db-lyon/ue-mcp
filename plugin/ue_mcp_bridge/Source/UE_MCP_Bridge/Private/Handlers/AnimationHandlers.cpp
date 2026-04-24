@@ -1553,15 +1553,7 @@ static UAnimStateNode* FindStateNode(UAnimationStateMachineGraph* SMGraph, const
 static void CompileAndSave(UBlueprint* BP)
 {
 	FKismetEditorUtilities::CompileBlueprint(BP);
-	UPackage* Package = BP->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString FileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *FileName, SaveArgs);
-	}
+	SaveAssetPackage(BP);
 }
 
 // ─── State Machine Handlers ──────────────────────────────────────

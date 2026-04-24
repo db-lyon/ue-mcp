@@ -978,15 +978,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 	if (bSuccess)
 	{
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		UPackage* Package = Blueprint->GetOutermost();
-		if (Package)
-		{
-			Package->MarkPackageDirty();
-			FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-			FSavePackageArgs SaveArgs;
-			SaveArgs.TopLevelFlags = RF_Standalone;
-			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-		}
+		SaveAssetPackage(Blueprint);
 
 		auto Result = MCPSuccess();
 		MCPSetCreated(Result);
@@ -1124,15 +1116,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 	{
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
 		// Save asset
-		UPackage* Package = Blueprint->GetOutermost();
-		if (Package)
-		{
-			Package->MarkPackageDirty();
-			FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-			FSavePackageArgs SaveArgs;
-			SaveArgs.TopLevelFlags = RF_Standalone;
-			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-		}
+		SaveAssetPackage(Blueprint);
 
 		auto Result = MCPSuccess();
 		MCPSetCreated(Result);
@@ -1192,15 +1176,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddBlueprintInterface(const TSharedPt
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 	// Save asset
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -1521,15 +1497,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1596,15 +1564,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 	FBlueprintEditorUtils::AddFunctionGraph<UClass>(Blueprint, NewGraph, /*bIsUserCreated=*/true, /*SignatureFromObject=*/nullptr);
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -2032,15 +1992,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -2192,15 +2144,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 	{
 		// Compile and save
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		UPackage* Package = Blueprint->GetOutermost();
-		if (Package)
-		{
-			Package->MarkPackageDirty();
-			FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-			FSavePackageArgs SaveArgs;
-			SaveArgs.TopLevelFlags = RF_Standalone;
-			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-		}
+		SaveAssetPackage(Blueprint);
 
 		auto Result = MCPSuccess();
 		MCPSetCreated(Result);
@@ -2257,15 +2201,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJson
 	FBlueprintEditorUtils::RenameGraph(FoundGraph, NewName);
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -2320,15 +2256,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteFunction(const TSharedPtr<FJson
 	FBlueprintEditorUtils::RemoveGraph(Blueprint, FoundGraph);
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
@@ -2730,15 +2658,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	{
 		// Compile and save
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		UPackage* Package = Blueprint->GetOutermost();
-		if (Package)
-		{
-			Package->MarkPackageDirty();
-			FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-			FSavePackageArgs SaveArgs;
-			SaveArgs.TopLevelFlags = RF_Standalone;
-			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-		}
+		SaveAssetPackage(Blueprint);
 
 		auto Result = MCPSuccess();
 		MCPSetCreated(Result);
@@ -2801,15 +2721,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	TargetGraph->RemoveNode(NodeToDelete);
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
@@ -2959,15 +2871,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -3235,15 +3139,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -3371,15 +3267,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 	CDO->PostEditChange();
 
 	// Save
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -3477,15 +3365,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 	{
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		UPackage* Package = Blueprint->GetOutermost();
-		if (Package)
-		{
-			Package->MarkPackageDirty();
-			FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-			FSavePackageArgs SaveArgs;
-			SaveArgs.TopLevelFlags = RF_Standalone;
-			UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-		}
+		SaveAssetPackage(Blueprint);
 
 		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
@@ -3542,15 +3422,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
@@ -3728,15 +3600,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -3850,15 +3714,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 	// Compile and save
 	FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -4196,14 +4052,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentComponent(const TSharedPtr<FJ
 	Parent->AddChildNode(Child);
 
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Pkg = Blueprint->GetOutermost();
-	if (Pkg)
-	{
-		Pkg->MarkPackageDirty();
-		FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs; SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -4269,14 +4118,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentBlueprint(const TSharedPtr<FJ
 	UBlueprintEditorLibrary::ReparentBlueprint(Blueprint, NewParent);
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 
-	UPackage* Pkg = Blueprint->GetOutermost();
-	if (Pkg)
-	{
-		Pkg->MarkPackageDirty();
-		FString FileName = FPackageName::LongPackageNameToFilename(Pkg->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs; SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Pkg, nullptr, *FileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -4575,15 +4417,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 
 	// Compile and save
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-	UPackage* Package = Blueprint->GetOutermost();
-	if (Package)
-	{
-		Package->MarkPackageDirty();
-		FString PackageFileName = FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Standalone;
-		UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
-	}
+	SaveAssetPackage(Blueprint);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
