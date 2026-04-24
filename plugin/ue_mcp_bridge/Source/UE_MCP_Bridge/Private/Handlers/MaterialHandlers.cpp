@@ -132,26 +132,63 @@ FString FMaterialHandlers::ShadingModelToString(EMaterialShadingModel ShadingMod
 
 bool FMaterialHandlers::ParseMaterialProperty(const FString& PropertyName, EMaterialProperty& OutProperty)
 {
-	FString Lower = PropertyName.ToLower();
-	if (Lower == TEXT("basecolor"))              { OutProperty = MP_BaseColor; return true; }
-	if (Lower == TEXT("metallic"))               { OutProperty = MP_Metallic; return true; }
-	if (Lower == TEXT("specular"))               { OutProperty = MP_Specular; return true; }
-	if (Lower == TEXT("roughness"))              { OutProperty = MP_Roughness; return true; }
-	if (Lower == TEXT("anisotropy"))             { OutProperty = MP_Anisotropy; return true; }
-	if (Lower == TEXT("emissivecolor"))          { OutProperty = MP_EmissiveColor; return true; }
-	if (Lower == TEXT("emissive"))               { OutProperty = MP_EmissiveColor; return true; }
-	if (Lower == TEXT("opacity"))                { OutProperty = MP_Opacity; return true; }
-	if (Lower == TEXT("opacitymask"))            { OutProperty = MP_OpacityMask; return true; }
-	if (Lower == TEXT("normal"))                 { OutProperty = MP_Normal; return true; }
-	if (Lower == TEXT("tangent"))                { OutProperty = MP_Tangent; return true; }
-	if (Lower == TEXT("worldpositionoffset"))    { OutProperty = MP_WorldPositionOffset; return true; }
-	if (Lower == TEXT("subsurfacecolor"))        { OutProperty = MP_SubsurfaceColor; return true; }
-	if (Lower == TEXT("ambientocclusion"))       { OutProperty = MP_AmbientOcclusion; return true; }
-	if (Lower == TEXT("ao"))                     { OutProperty = MP_AmbientOcclusion; return true; }
-	if (Lower == TEXT("refraction"))             { OutProperty = MP_Refraction; return true; }
-	if (Lower == TEXT("pixeldepthoffset"))       { OutProperty = MP_PixelDepthOffset; return true; }
-	if (Lower == TEXT("shadingmodel"))           { OutProperty = MP_ShadingModel; return true; }
+	// Static lookup table built once on first call. The lowercased input is
+	// looked up directly; aliases ("emissive" -> MP_EmissiveColor, "ao" ->
+	// MP_AmbientOcclusion) are separate entries so the reverse direction is
+	// unambiguous when we ever need it.
+	static const TMap<FString, EMaterialProperty> Table = {
+		{ TEXT("basecolor"),           MP_BaseColor           },
+		{ TEXT("metallic"),            MP_Metallic            },
+		{ TEXT("specular"),            MP_Specular            },
+		{ TEXT("roughness"),           MP_Roughness           },
+		{ TEXT("anisotropy"),          MP_Anisotropy          },
+		{ TEXT("emissivecolor"),       MP_EmissiveColor       },
+		{ TEXT("emissive"),            MP_EmissiveColor       },
+		{ TEXT("opacity"),             MP_Opacity             },
+		{ TEXT("opacitymask"),         MP_OpacityMask         },
+		{ TEXT("normal"),              MP_Normal              },
+		{ TEXT("tangent"),             MP_Tangent             },
+		{ TEXT("worldpositionoffset"), MP_WorldPositionOffset },
+		{ TEXT("subsurfacecolor"),     MP_SubsurfaceColor     },
+		{ TEXT("ambientocclusion"),    MP_AmbientOcclusion    },
+		{ TEXT("ao"),                  MP_AmbientOcclusion    },
+		{ TEXT("refraction"),          MP_Refraction          },
+		{ TEXT("pixeldepthoffset"),    MP_PixelDepthOffset    },
+		{ TEXT("shadingmodel"),        MP_ShadingModel        },
+	};
+	if (const EMaterialProperty* Found = Table.Find(PropertyName.ToLower()))
+	{
+		OutProperty = *Found;
+		return true;
+	}
 	return false;
+}
+
+FExpressionInput* FMaterialHandlers::GetMaterialPropertyInput(
+	UMaterialEditorOnlyData* EditorOnlyData,
+	EMaterialProperty MatProperty)
+{
+	if (!EditorOnlyData) return nullptr;
+	switch (MatProperty)
+	{
+	case MP_BaseColor:            return &EditorOnlyData->BaseColor;
+	case MP_Metallic:             return &EditorOnlyData->Metallic;
+	case MP_Specular:             return &EditorOnlyData->Specular;
+	case MP_Roughness:            return &EditorOnlyData->Roughness;
+	case MP_Anisotropy:           return &EditorOnlyData->Anisotropy;
+	case MP_EmissiveColor:        return &EditorOnlyData->EmissiveColor;
+	case MP_Opacity:              return &EditorOnlyData->Opacity;
+	case MP_OpacityMask:          return &EditorOnlyData->OpacityMask;
+	case MP_Normal:               return &EditorOnlyData->Normal;
+	case MP_Tangent:              return &EditorOnlyData->Tangent;
+	case MP_WorldPositionOffset:  return &EditorOnlyData->WorldPositionOffset;
+	case MP_SubsurfaceColor:      return &EditorOnlyData->SubsurfaceColor;
+	case MP_AmbientOcclusion:     return &EditorOnlyData->AmbientOcclusion;
+	case MP_Refraction:           return &EditorOnlyData->Refraction;
+	case MP_PixelDepthOffset:     return &EditorOnlyData->PixelDepthOffset;
+	case MP_ShadingModel:         return &EditorOnlyData->ShadingModelFromMaterialExpression;
+	default:                      return nullptr;
+	}
 }
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ListExpressionTypes(const TSharedPtr<FJsonObject>& Params)
@@ -1331,27 +1368,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialProperty(const TSharedP
 
 	// Get the editor-only data to access the material property inputs
 	UMaterialEditorOnlyData* EditorOnlyData = Material->GetEditorOnlyData();
-	FExpressionInput* PropertyInput = nullptr;
-
-	switch (MatProperty)
+	if (!EditorOnlyData)
 	{
-	case MP_BaseColor:            PropertyInput = &EditorOnlyData->BaseColor; break;
-	case MP_Metallic:             PropertyInput = &EditorOnlyData->Metallic; break;
-	case MP_Specular:             PropertyInput = &EditorOnlyData->Specular; break;
-	case MP_Roughness:            PropertyInput = &EditorOnlyData->Roughness; break;
-	case MP_Anisotropy:           PropertyInput = &EditorOnlyData->Anisotropy; break;
-	case MP_EmissiveColor:        PropertyInput = &EditorOnlyData->EmissiveColor; break;
-	case MP_Opacity:              PropertyInput = &EditorOnlyData->Opacity; break;
-	case MP_OpacityMask:          PropertyInput = &EditorOnlyData->OpacityMask; break;
-	case MP_Normal:               PropertyInput = &EditorOnlyData->Normal; break;
-	case MP_Tangent:              PropertyInput = &EditorOnlyData->Tangent; break;
-	case MP_WorldPositionOffset:  PropertyInput = &EditorOnlyData->WorldPositionOffset; break;
-	case MP_SubsurfaceColor:      PropertyInput = &EditorOnlyData->SubsurfaceColor; break;
-	case MP_AmbientOcclusion:     PropertyInput = &EditorOnlyData->AmbientOcclusion; break;
-	case MP_Refraction:           PropertyInput = &EditorOnlyData->Refraction; break;
-	case MP_PixelDepthOffset:     PropertyInput = &EditorOnlyData->PixelDepthOffset; break;
-	case MP_ShadingModel:         PropertyInput = &EditorOnlyData->ShadingModelFromMaterialExpression; break;
-	default:
+		return MCPError(TEXT("Material has no editor-only data (is this material domain supported?)"));
+	}
+	FExpressionInput* PropertyInput = GetMaterialPropertyInput(EditorOnlyData, MatProperty);
+	if (!PropertyInput)
+	{
 		return MCPError(FString::Printf(TEXT("Material property '%s' is not supported for direct connection"), *PropertyName));
 	}
 
@@ -2097,30 +2120,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 
 	// Connect RGB output (index 0) to the requested material property
 	UMaterialEditorOnlyData* EditorOnlyData = Material->GetEditorOnlyData();
-	FExpressionInput* PropertyInput = nullptr;
-
-	switch (MatProperty)
-	{
-	case MP_BaseColor:            PropertyInput = &EditorOnlyData->BaseColor; break;
-	case MP_Metallic:             PropertyInput = &EditorOnlyData->Metallic; break;
-	case MP_Specular:             PropertyInput = &EditorOnlyData->Specular; break;
-	case MP_Roughness:            PropertyInput = &EditorOnlyData->Roughness; break;
-	case MP_Anisotropy:           PropertyInput = &EditorOnlyData->Anisotropy; break;
-	case MP_EmissiveColor:        PropertyInput = &EditorOnlyData->EmissiveColor; break;
-	case MP_Opacity:              PropertyInput = &EditorOnlyData->Opacity; break;
-	case MP_OpacityMask:          PropertyInput = &EditorOnlyData->OpacityMask; break;
-	case MP_Normal:               PropertyInput = &EditorOnlyData->Normal; break;
-	case MP_Tangent:              PropertyInput = &EditorOnlyData->Tangent; break;
-	case MP_WorldPositionOffset:  PropertyInput = &EditorOnlyData->WorldPositionOffset; break;
-	case MP_SubsurfaceColor:      PropertyInput = &EditorOnlyData->SubsurfaceColor; break;
-	case MP_AmbientOcclusion:     PropertyInput = &EditorOnlyData->AmbientOcclusion; break;
-	case MP_Refraction:           PropertyInput = &EditorOnlyData->Refraction; break;
-	case MP_PixelDepthOffset:     PropertyInput = &EditorOnlyData->PixelDepthOffset; break;
-	case MP_ShadingModel:         PropertyInput = &EditorOnlyData->ShadingModelFromMaterialExpression; break;
-	default: break;
-	}
-
-	if (PropertyInput)
+	if (FExpressionInput* PropertyInput = GetMaterialPropertyInput(EditorOnlyData, MatProperty))
 	{
 		PropertyInput->Connect(0, TextureSampleExpr);
 	}
@@ -2327,27 +2327,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectToMaterialProperty(const TShare
 	Material->PreEditChange(nullptr);
 
 	UMaterialEditorOnlyData* EditorOnlyData = Material->GetEditorOnlyData();
-	FExpressionInput* PropertyInput = nullptr;
-
-	switch (MatProperty)
+	if (!EditorOnlyData)
 	{
-	case MP_BaseColor:            PropertyInput = &EditorOnlyData->BaseColor; break;
-	case MP_Metallic:             PropertyInput = &EditorOnlyData->Metallic; break;
-	case MP_Specular:             PropertyInput = &EditorOnlyData->Specular; break;
-	case MP_Roughness:            PropertyInput = &EditorOnlyData->Roughness; break;
-	case MP_Anisotropy:           PropertyInput = &EditorOnlyData->Anisotropy; break;
-	case MP_EmissiveColor:        PropertyInput = &EditorOnlyData->EmissiveColor; break;
-	case MP_Opacity:              PropertyInput = &EditorOnlyData->Opacity; break;
-	case MP_OpacityMask:          PropertyInput = &EditorOnlyData->OpacityMask; break;
-	case MP_Normal:               PropertyInput = &EditorOnlyData->Normal; break;
-	case MP_Tangent:              PropertyInput = &EditorOnlyData->Tangent; break;
-	case MP_WorldPositionOffset:  PropertyInput = &EditorOnlyData->WorldPositionOffset; break;
-	case MP_SubsurfaceColor:      PropertyInput = &EditorOnlyData->SubsurfaceColor; break;
-	case MP_AmbientOcclusion:     PropertyInput = &EditorOnlyData->AmbientOcclusion; break;
-	case MP_Refraction:           PropertyInput = &EditorOnlyData->Refraction; break;
-	case MP_PixelDepthOffset:     PropertyInput = &EditorOnlyData->PixelDepthOffset; break;
-	case MP_ShadingModel:         PropertyInput = &EditorOnlyData->ShadingModelFromMaterialExpression; break;
-	default:
+		return MCPError(TEXT("Material has no editor-only data (is this material domain supported?)"));
+	}
+	FExpressionInput* PropertyInput = GetMaterialPropertyInput(EditorOnlyData, MatProperty);
+	if (!PropertyInput)
+	{
 		return MCPError(FString::Printf(TEXT("Material property '%s' is not supported for direct connection"), *PropertyName));
 	}
 

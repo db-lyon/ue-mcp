@@ -2,6 +2,7 @@
 #include "HAL/PlatformFileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "HandlerUtils.h"
 
 FMCPHandlerRegistry::FMCPHandlerRegistry()
 {
@@ -45,6 +46,12 @@ void FMCPHandlerRegistry::RegisterPythonHandler(const FString& MethodName, const
 
 TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)
 {
+	// Single-point defence-in-depth: every handler must run on the game thread.
+	// GameThreadExecutor already dispatches here from the game thread, so this
+	// should always hold; if it ever doesn't (async/timer regression), we'd
+	// rather assert here than silently corrupt UObject state per-handler.
+	MCP_CHECK_GAME_THREAD();
+
 	// Try C++ handler first
 	if (CppHandlers.Contains(MethodName))
 	{

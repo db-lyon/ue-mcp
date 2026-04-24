@@ -49,6 +49,14 @@ private:
 	// Helper to map material property name string to EMaterialProperty enum
 	static bool ParseMaterialProperty(const FString& PropertyName, EMaterialProperty& OutProperty);
 
+	// Resolve an EMaterialProperty to its backing FExpressionInput* on the
+	// material's editor-only data. Returns nullptr when the property is not
+	// one of the supported direct-connection slots. Centralises the switch
+	// that previously lived verbatim in three places.
+	static FExpressionInput* GetMaterialPropertyInput(
+		class UMaterialEditorOnlyData* EditorOnlyData,
+		EMaterialProperty MatProperty);
+
 	// Helper to find an expression by name (description or class) within a material
 	static UMaterialExpression* FindExpressionByName(UMaterial* Material, const FString& ExpressionName);
 
