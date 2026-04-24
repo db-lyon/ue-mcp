@@ -615,12 +615,7 @@ FEdGraphPinType FBlueprintHandlers::MakePinType(const FString& TypeStr)
 		{
 			// (#140) Last-ditch: treat as a bare class name (e.g. "Actor", "Pawn", "PlayerController").
 		}
-		else
-		{
-			// Default to real/float
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
-			PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double;
-		}
+		// else: PinCategory remains NAME_None — caller must check for unresolved type (#181)
 	}
 
 	return PinType;
@@ -965,6 +960,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 	}
 
 	FEdGraphPinType PinType = MakePinType(VarType);
+
+	if (PinType.PinCategory == NAME_None)
+	{
+		return MCPError(FString::Printf(TEXT("Unrecognized variable type: '%s'. Use a known type (Bool, Int, Float, String, Name, Text, Byte, Object, Vector, Rotator, Transform, GameplayTag, etc.) or a full class/struct path."), *VarType));
+	}
 
 	bool bSuccess = FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarNameFName, PinType);
 
@@ -3620,6 +3620,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 
 	FEdGraphPinType PinType = MakePinType(ParamType);
 
+	if (PinType.PinCategory == NAME_None)
+	{
+		return MCPError(FString::Printf(TEXT("Unrecognized parameter type: '%s'. Use a known type (Bool, Int, Float, String, Name, Text, Byte, Object, Vector, Rotator, Transform, GameplayTag, etc.) or a full class/struct path."), *ParamType));
+	}
+
 	if (bIsOutput)
 	{
 		// For output parameters, find or create the function result node
@@ -3894,6 +3899,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddLocalVariable(const TSharedPtr<FJs
 	}
 
 	FEdGraphPinType PinType = MakePinType(TypeStr);
+
+	if (PinType.PinCategory == NAME_None)
+	{
+		return MCPError(FString::Printf(TEXT("Unrecognized variable type: '%s'. Use a known type (Bool, Int, Float, String, Name, Text, Byte, Object, Vector, Rotator, Transform, GameplayTag, etc.) or a full class/struct path."), *TypeStr));
+	}
+
 	FBPVariableDescription NewVar;
 	NewVar.VarName = VarFName;
 	NewVar.VarGuid = FGuid::NewGuid();
