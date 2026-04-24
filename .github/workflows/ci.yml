@@ -6,8 +6,16 @@ on:
   pull_request:
     branches: [main]
 
+# Prevent two concurrent publish/docs runs from racing on the same main.
+# Do not cancel in-progress publishes - canceling mid-npm-publish leaves
+# a half-published version.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+# Default to least-privilege. Individual jobs escalate only what they need.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -21,23 +29,40 @@ jobs:
           cache: "npm"
 
       - name: Install
-        run: npm install
+        run: npm ci || npm install
 
-      - name: Build
-        run: npx tsc
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Audit (high+ only, production deps)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: false
 
   publish:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write   # for git tag push and gh-release
+      id-token: write   # for npm provenance
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # needed for tag push
 
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
           cache: "npm"
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Check if version changed
         id: version
@@ -54,23 +79,42 @@ jobs:
 
       - name: Install & Build
         if: steps.version.outputs.changed == 'true'
-        run: npm install && npx tsc
+        run: |
+          npm ci || npm install
+          npx tsc
+
+      - name: Verify build output
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          # Fail loud if prepublishOnly's output is missing or empty - a
+          # broken publish is very hard to retract, so we stop here.
+          test -s dist/index.js || (echo "dist/index.js missing or empty" && exit 1)
+          test -s dist/init.js || (echo "dist/init.js missing or empty" && exit 1)
+          test -s dist/update.js || (echo "dist/update.js missing or empty" && exit 1)
+
+      - name: Tag release (before publish)
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          # Create and push the tag BEFORE publishing to npm. If the tag push
+          # fails (network / permissions), we have not yet stranded a live
+          # npm version without a corresponding tag.
+          TAG="v${{ steps.version.outputs.local }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists locally; skipping creation"
+          else
+            git tag "$TAG"
+          fi
+          git push origin "$TAG"
 
       - name: Publish to npm
         if: steps.version.outputs.changed == 'true'
-        run: npm publish --access public
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Package tarball
         if: steps.version.outputs.changed == 'true'
         run: tar czf ue-mcp.tar.gz dist/ plugin/ package.json package-lock.json README.md LICENSE
-
-      - name: Tag release
-        if: steps.version.outputs.changed == 'true'
-        run: |
-          git tag "v${{ steps.version.outputs.local }}"
-          git push origin "v${{ steps.version.outputs.local }}"
 
       - name: Create GitHub Release
         if: steps.version.outputs.changed == 'true'
@@ -85,6 +129,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write   # gh-deploy pushes to gh-pages
     steps:
       - uses: actions/checkout@v4
 
@@ -94,6 +140,11 @@ jobs:
 
       - name: Install mkdocs-material
         run: pip install mkdocs-material
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Deploy to GitHub Pages
         run: mkdocs gh-deploy --force
