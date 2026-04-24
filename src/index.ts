@@ -16,47 +16,7 @@ import { startFlowHttpServer } from "./flow/http-server.js";
 import type { FlowContext } from "./flow/context.js";
 import type { FlowConfig } from "./flow/schema.js";
 
-import { projectTool } from "./tools/project.js";
-import { assetTool } from "./tools/asset.js";
-import { blueprintTool } from "./tools/blueprint.js";
-import { levelTool } from "./tools/level.js";
-import { materialTool } from "./tools/material.js";
-import { animationTool } from "./tools/animation.js";
-import { landscapeTool } from "./tools/landscape.js";
-import { pcgTool } from "./tools/pcg.js";
-import { foliageTool } from "./tools/foliage.js";
-import { niagaraTool } from "./tools/niagara.js";
-import { audioTool } from "./tools/audio.js";
-import { widgetTool } from "./tools/widget.js";
-import { editorTool } from "./tools/editor.js";
-import { reflectionTool } from "./tools/reflection.js";
-import { gameplayTool } from "./tools/gameplay.js";
-import { gasTool } from "./tools/gas.js";
-import { networkingTool } from "./tools/networking.js";
-import { demoTool } from "./tools/demo.js";
-import { feedbackTool } from "./tools/feedback.js";
-
-const ALL_TOOLS: ToolDef[] = [
-  projectTool,
-  assetTool,
-  blueprintTool,
-  levelTool,
-  materialTool,
-  animationTool,
-  landscapeTool,
-  pcgTool,
-  foliageTool,
-  niagaraTool,
-  audioTool,
-  widgetTool,
-  editorTool,
-  reflectionTool,
-  gameplayTool,
-  gasTool,
-  networkingTool,
-  demoTool,
-  feedbackTool,
-];
+import { ALL_TOOLS } from "./tools.js";
 
 async function main() {
   const bridge = new EditorBridge();
@@ -105,14 +65,23 @@ async function main() {
         const stringify = (v: unknown) =>
           typeof v === "string" ? v : JSON.stringify(v, null, 2);
 
-        // Preserve directive responses (execute_python workaround tracking)
+        // Preserve directive responses (execute_python workaround tracking).
+        // Emit three blocks: (1) prose directive, (2) machine-readable JSON
+        // so clients that strip prose still see the intent, (3) the actual
+        // tool result. Block 2 is tagged with MACHINE_DIRECTIVE and a stable
+        // JSON envelope.
         if (result.data?.__directive) {
-          return {
-            content: [
-              { type: "text" as const, text: result.data.directive as string },
-              { type: "text" as const, text: stringify(result.data.result) },
-            ],
-          };
+          const blocks: Array<{ type: "text"; text: string }> = [
+            { type: "text" as const, text: result.data.directive as string },
+          ];
+          if (result.data.machine) {
+            blocks.push({
+              type: "text" as const,
+              text: "MACHINE_DIRECTIVE=" + JSON.stringify(result.data.machine),
+            });
+          }
+          blocks.push({ type: "text" as const, text: stringify(result.data.result) });
+          return { content: blocks };
         }
 
         return {
