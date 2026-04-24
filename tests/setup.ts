@@ -2,9 +2,12 @@ import { EditorBridge } from "../src/bridge.js";
 
 let _bridge: EditorBridge | null = null;
 
+const TEST_BRIDGE_HOST = process.env.UE_MCP_TEST_HOST ?? "localhost";
+const TEST_BRIDGE_PORT = Number(process.env.UE_MCP_TEST_PORT ?? 9877);
+
 export async function getBridge(): Promise<EditorBridge> {
   if (_bridge?.isConnected) return _bridge;
-  _bridge = new EditorBridge("localhost", 9877);
+  _bridge = new EditorBridge(TEST_BRIDGE_HOST, TEST_BRIDGE_PORT);
   await _bridge.connect(5000);
   return _bridge;
 }

@@ -43,6 +43,7 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
     "test:watch": "vitest",
     "test:level": "vitest run tests/smoke/level.test.ts",
     "test:asset": "vitest run tests/smoke/asset.test.ts",
