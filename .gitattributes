@@ -133,5 +133,7 @@
 *.yaml text eol=lf
 *.yml text eol=lf
 
-# Ensure consistent line endings for Windows
-* text=auto eol=crlf
+# Default: auto-detect text, preserve native line endings on checkout.
+# Per-extension rules above take precedence (json/md/sh/py stay LF;
+# cpp/cs/ini/bat stay CRLF for editor tooling).
+* text=auto

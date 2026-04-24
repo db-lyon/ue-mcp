@@ -3,6 +3,8 @@ node_modules/
 
 ## TypeScript build output
 dist/
+dist/*.js.map
+dist/**/*.js.map
 
 ## .NET (legacy)
 bin/
@@ -157,3 +159,4 @@ tests/**/Content/*Test*.umap
 # - Plugins/**/*.uplugin (plugin files)
 # - Any other project source files
 ISSUE-AUDIT.md
+CODE-SMELLS.md
