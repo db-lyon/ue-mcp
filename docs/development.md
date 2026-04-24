@@ -17,10 +17,11 @@ npm install
 ## Building
 
 ```bash
-npm run build          # esbuild → dist/
+npx tsc                # TypeScript -> dist/ (what the server ships as)
+npm run build          # UE C++ plugin build (requires editor closed)
 ```
 
-The build uses esbuild to compile TypeScript to JavaScript in `dist/`.
+`npx tsc` emits the TypeScript server into `dist/`. `npm run build` is the C++ plugin build that runs Unreal's `Build.bat` against the test project and requires the editor to be closed first. Use `npm run up:build` to chain stop-build-start during plugin iteration.
 
 ## Running
 

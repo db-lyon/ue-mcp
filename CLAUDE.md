@@ -4,7 +4,7 @@ Operating guide for Claude Code (and any AI agent) working in this repo. Shared 
 
 ## Repo at a glance
 
-- **TS server** (`src/`) — the MCP server. Wraps the UE bridge over WebSocket, exposes 19 category tools with 450+ actions.
+- **TS server** (`src/`) — the MCP server. Wraps the UE bridge over WebSocket, exposes 19 category tools with 440+ actions.
 - **C++ plugin** (`plugin/ue_mcp_bridge/`) — the editor-side bridge. Lives in `Private/Handlers/*.cpp`, registers actions with `FMCPHandlerRegistry`.
 - **Test project** (`tests/ue_mcp/`) — the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
 - **Docs** (`docs/`) — MkDocs site. `docs/release-notes-X.Y.Z.md` is the canonical release body.
@@ -39,7 +39,7 @@ Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plu
 
 - Target **only** `tests/ue_mcp/ue_mcp.uproject`. Confirm the MCP connection via `project(get_status)` before running. If the editor is connected to anything else (the user's real project, another workspace), abort.
 - Smoke tests execute real mutations (create blueprints, delete assets, modify levels). A misrouted run against a real project can corrupt an active editor session.
-- 425+ handlers. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
+- 440+ handlers. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
 
 ### Clean plugin rebuild recipe
 
