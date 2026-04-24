@@ -42,15 +42,32 @@ void FUE_MCP_BridgeModule::StartupModule()
 		UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to start bridge server"));
 	}
 
-	// Defer the editor-ready signal until GEditor and the editor world are available.
-	// Use a repeating ticker that checks each frame until ready.
+	// Defer the editor-ready signal until GEditor is available and has at least one world.
+	// GetEditorWorldContext(false) can fail if no editor world context exists yet,
+	// so we iterate all world contexts instead (#162).
 	FTSTicker::GetCoreTicker().AddTicker(
 		FTickerDelegate::CreateLambda([](float) -> bool
 		{
-			if (!GEditor || !GEditor->GetEditorWorldContext(false).World())
+			if (!GEditor)
 			{
 				return true; // keep ticking — not ready yet
 			}
+
+			// Accept any world context (editor or PIE) as proof the editor is usable.
+			bool bHasWorld = false;
+			for (const FWorldContext& Context : GEngine->GetWorldContexts())
+			{
+				if (Context.World())
+				{
+					bHasWorld = true;
+					break;
+				}
+			}
+			if (!bHasWorld)
+			{
+				return true; // keep ticking
+			}
+
 			if (G_BridgeServer.IsValid())
 			{
 				G_BridgeServer->GetGameThreadExecutor().SetEditorReady();

@@ -72,8 +72,8 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 				return false;
 			}
 
-			// Safety: verify GEditor and world are available before running handlers
-			if (!GEditor || !GEditor->GetEditorWorldContext(false).World())
+			// Safety: verify GEditor is available before running handlers
+			if (!GEditor)
 			{
 				TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
 				ErrorObject->SetStringField(TEXT("error"), TEXT("Editor world not ready yet. Retry in a moment."));
