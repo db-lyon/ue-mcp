@@ -105,6 +105,11 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListNiagaraSystems(const TSharedPtr<FJs
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::ListNiagaraModules(const TSharedPtr<FJsonObject>& Params)
 {
+	// Default 200 keeps response small; engine ships ~200 NiagaraScripts. Use
+	// pathFilter to narrow results, or pass a higher limit for full sweep.
+	const int32 Limit = OptionalInt(Params, TEXT("limit"), 200);
+	const FString PathFilter = OptionalString(Params, TEXT("pathFilter"));
+
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/Niagara"), TEXT("NiagaraScript")), Assets, true);
@@ -112,15 +117,20 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListNiagaraModules(const TSharedPtr<FJs
 	TArray<TSharedPtr<FJsonValue>> AssetArray;
 	for (const FAssetData& Asset : Assets)
 	{
+		if (AssetArray.Num() >= Limit) break;
+		const FString PathStr = Asset.GetObjectPathString();
+		if (!PathFilter.IsEmpty() && !PathStr.Contains(PathFilter)) continue;
+
 		TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
 		AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
-		AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
+		AssetObj->SetStringField(TEXT("path"), PathStr);
 		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
 	}
 
 	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("modules"), AssetArray);
 	Result->SetNumberField(TEXT("count"), AssetArray.Num());
+	Result->SetNumberField(TEXT("totalAvailable"), Assets.Num());
 	return MCPResult(Result);
 }
 

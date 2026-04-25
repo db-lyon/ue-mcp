@@ -88,10 +88,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 
 	FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
 	FString NameFilter = OptionalString(Params, TEXT("nameFilter"));
-	int32 Limit = OptionalInt(Params, TEXT("limit"), 500);
+	// Default 50 keeps us snappy on World Partition projects whose levels
+	// contain hundreds of streaming-proxy / HLOD actors. Callers who need the
+	// full list can pass a larger limit explicitly.
+	int32 Limit = OptionalInt(Params, TEXT("limit"), 50);
+	bool bIncludeStreaming = OptionalBool(Params, TEXT("includeStreaming"), false);
 
 	TArray<TSharedPtr<FJsonValue>> ActorsArray;
 	int32 TotalCount = 0;
+	int32 StreamingSkipped = 0;
 	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
 	{
 		AActor* Actor = *ActorIt;
@@ -100,6 +105,18 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 
 		FString ActorClass = Actor->GetClass()->GetName();
 		FString ActorName = Actor->GetName();
+
+		// World Partition spawns large numbers of LandscapeStreamingProxy and
+		// WorldPartitionHLOD actors whose component graphs are expensive to
+		// walk. Skip by default; callers can opt in via includeStreaming=true.
+		if (!bIncludeStreaming &&
+			(ActorClass == TEXT("LandscapeStreamingProxy") ||
+			 ActorClass == TEXT("WorldPartitionHLOD")))
+		{
+			StreamingSkipped++;
+			continue;
+		}
+
 		FString ActorLabel = Actor->GetActorLabel();
 
 		if (!ClassFilter.IsEmpty() && !ActorClass.Contains(ClassFilter))
@@ -153,6 +170,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 	Result->SetStringField(TEXT("worldName"), World->GetName());
 	Result->SetNumberField(TEXT("totalActors"), TotalCount);
 	Result->SetNumberField(TEXT("returnedActors"), ActorsArray.Num());
+	Result->SetNumberField(TEXT("streamingSkipped"), StreamingSkipped);
 	Result->SetArrayField(TEXT("actors"), ActorsArray);
 
 	return MCPResult(Result);

@@ -107,9 +107,47 @@ function connect(url) {
   });
 }
 
+// Per-method param overrides for handlers that, called with empty params,
+// do something inherently slow (full registry walk, project-wide save, full
+// build). Empty-params smoke would time out on these AND clog the editor's
+// game-thread queue, cascading every later handler into a false-FAILURE.
+//
+// The intent of smoke is "did the handler register and respond at all" - so
+// we send the cheapest valid params we can to keep work small. Real param
+// validation lives in the per-category vitest suites.
+const PARAM_OVERRIDES = {
+  // Asset registry walks
+  list_assets:                 { query: "__smoke_no_match__" },
+  search_assets:               { query: "__smoke_no_match__", maxResults: 1 },
+  search_assets_fts:           { query: "__smoke_no_match__", maxResults: 1 },
+  list_textures:               { directory: "/Game/MCPTest", maxResults: 1 },
+  list_anim_assets:            { directory: "/Game/MCPTest", maxResults: 1 },
+  list_skeletal_meshes:        { directory: "/Game/MCPTest", maxResults: 1 },
+  list_behavior_trees:         { directory: "/Game/MCPTest" },
+  list_eqs_queries:            { directory: "/Game/MCPTest" },
+  list_state_trees:            { directory: "/Game/MCPTest" },
+  list_input_assets:           { directory: "/Game/MCPTest" },
+  diagnose_registry:           { directory: "/Game/MCPTest" },
+  validate_assets:             { directory: "/Game/MCPTest" },
+  reindex_assets_fts:          { directory: "/Game/MCPTest", maxAssets: 1 },
+  // Level walks
+  get_world_outliner:          { maxActors: 1 },
+  list_actors_in_level:        { maxActors: 1 },
+  list_streaming_levels:       { maxLevels: 1 },
+  list_sublevels:              { maxLevels: 1 },
+  // Long-running editor ops
+  save_all:                    { dryRun: true },
+  build_lighting:              { dryRun: true },
+  build_all:                   { dryRun: true },
+  build_project:               { dryRun: true },
+  read_editor_log:             { tailLines: 1 },
+  get_crash_reports:           { maxReports: 1 },
+};
+
 function rpcCall(ws, method, id) {
   return new Promise((resolve) => {
-    const payload = JSON.stringify({ method, params: {}, id });
+    const params = PARAM_OVERRIDES[method] ?? {};
+    const payload = JSON.stringify({ method, params, id });
 
     const timer = setTimeout(() => {
       resolve({ status: "FAILURE", reason: "timeout" });
@@ -183,7 +221,13 @@ async function main() {
 
   console.log(`${GREEN}Connected to ${WS_URL}${RESET}\n`);
 
-  // Run calls sequentially to avoid flooding the bridge
+  // Run calls sequentially to avoid flooding the bridge.
+  //
+  // After any FAILURE (which is almost always a timeout), the editor's game
+  // thread is still working through the late request. Sleeping + reconnecting
+  // the WebSocket here lets that work drain before we queue the next call -
+  // otherwise one slow handler cascades into 50+ false-FAILUREs as everything
+  // queues behind it and also hits the per-call timeout.
   const results = [];
   let nextId = 1;
 
@@ -202,8 +246,18 @@ async function main() {
         : result.status === "EXPECTED_ERROR"
           ? `${YELLOW}EXPECTED_ERROR${RESET}`
           : `${RED}FAILURE${RESET}`;
-    // Clear line, reprint
     process.stdout.write(`\r  [${id}/${handlers.length}] ${method} ${tag}\n`);
+
+    if (result.status === "FAILURE" && result.reason === "timeout") {
+      try { ws.terminate(); } catch {}
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        ws = await connect(WS_URL);
+      } catch (err) {
+        console.error(`${RED}Reconnect after timeout failed: ${err.message}${RESET}`);
+        break;
+      }
+    }
   }
 
   ws.close();
