@@ -9,6 +9,7 @@ import { SERVER_INSTRUCTIONS } from "./instructions.js";
 import { isDirectiveResponse, type ToolDef, type ToolContext } from "./types.js";
 import { McpError } from "./errors.js";
 import { info } from "./log.js";
+import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
@@ -18,10 +19,24 @@ import type { FlowConfig } from "./flow/schema.js";
 
 import { ALL_TOOLS } from "./tools.js";
 
+type TextBlock = { type: "text"; text: string };
+
+function withUpgradeNotice(content: TextBlock[]): TextBlock[] {
+  const notice = consumeUpgradeNotice();
+  return notice ? [{ type: "text" as const, text: notice }, ...content] : content;
+}
+
 async function main() {
   const bridge = new EditorBridge();
   const project = new ProjectContext();
   const ctx: ToolContext = { bridge, project };
+
+  // Kick off the npm registry check in the background; the next tool response
+  // injects the notice if a newer version is published.
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const pkg = require("../package.json") as { version: string };
+  startVersionCheck(pkg.version);
 
   // ── Flow engine: task registry ──────────────────────────────────
   const registry = buildFlowRegistry(ALL_TOOLS);
@@ -57,7 +72,7 @@ async function main() {
         if (!result.success) {
           const msg = result.error?.message ?? `Task ${taskName} failed`;
           return {
-            content: [{ type: "text" as const, text: `Error [TASK_FAILED]: ${msg}` }],
+            content: withUpgradeNotice([{ type: "text" as const, text: `Error [TASK_FAILED]: ${msg}` }]),
             isError: true,
           };
         }
@@ -81,17 +96,17 @@ async function main() {
             });
           }
           blocks.push({ type: "text" as const, text: stringify(result.data.result) });
-          return { content: blocks };
+          return { content: withUpgradeNotice(blocks) };
         }
 
         return {
-          content: [{ type: "text" as const, text: stringify(result.data) }],
+          content: withUpgradeNotice([{ type: "text" as const, text: stringify(result.data) }]),
         };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         const code = e instanceof McpError ? e.code : "UNKNOWN";
         return {
-          content: [{ type: "text" as const, text: `Error [${code}]: ${msg}` }],
+          content: withUpgradeNotice([{ type: "text" as const, text: `Error [${code}]: ${msg}` }]),
           isError: true,
         };
       }
@@ -134,10 +149,10 @@ async function main() {
     try {
       const result = await flowTool.handler(ctx, params);
       const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-      return { content: [{ type: "text" as const, text }] };
+      return { content: withUpgradeNotice([{ type: "text" as const, text }]) };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      return { content: [{ type: "text" as const, text: `Error: ${msg}` }], isError: true };
+      return { content: withUpgradeNotice([{ type: "text" as const, text: `Error: ${msg}` }]), isError: true };
     }
   });
 
