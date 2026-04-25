@@ -85,43 +85,26 @@ jobs:
           fi
 
       - name: Validate release inputs
-        # Required pre-publish inputs for vX.Y.Z, posted after the bump push:
-        #   1. A 'landing/headline' commit status with state=success and a
-        #      non-empty description (<=140 chars, the GitHub status limit).
-        #   2. A draft release tagged vX.Y.Z with a non-empty body.
-        # Both are polled for up to ~60s to absorb the small race between
-        # 'git push' and the user posting the status / creating the draft.
+        # Single required pre-publish input: a draft release tagged vX.Y.Z
+        # whose body begins with YAML frontmatter containing a `headline:`
+        # array. The script enforces format (1-6 items, each 3-60 chars,
+        # restricted character set, no sentence punctuation) and fails
+        # publish before npm if anything is off.
+        #
+        # Polled for up to ~60s to absorb the small race between 'git push'
+        # and 'gh release create --draft'.
+        #
+        # Outputs:
+        #   HEADLINE  - the joined ` · ` string posted as the landing/headline status
+        #   BODY_PATH - path to a temp file containing the frontmatter-stripped body,
+        #               used by the Promote step to update the published release body
         if: steps.version.outputs.changed == 'true'
         id: release_inputs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
           VERSION: ${{ steps.version.outputs.local }}
         run: |
           set -euo pipefail
-
-          HEADLINE=""
-          for i in $(seq 1 30); do
-            HEADLINE=$(gh api "repos/$REPO/commits/$SHA/statuses" \
-              --jq '[.[] | select(.context=="landing/headline" and .state=="success")][0].description // ""')
-            if [ -n "$HEADLINE" ]; then break; fi
-            sleep 2
-          done
-          if [ -z "$HEADLINE" ]; then
-            echo "::error::Missing 'landing/headline' commit status on $SHA."
-            echo "Post it with:"
-            echo "  gh api -X POST repos/$REPO/statuses/$SHA \\"
-            echo "    -f state=success -f context=landing/headline \\"
-            echo "    -f description='<2-3 features separated by middle-dot, ~70 chars>' \\"
-            echo "    -f target_url=https://github.com/$REPO/releases/tag/v$VERSION"
-            exit 1
-          fi
-          if [ "${#HEADLINE}" -gt 140 ]; then
-            echo "::error::Headline is ${#HEADLINE} chars; GitHub status descriptions cap at 140."
-            exit 1
-          fi
-          echo "Headline (${#HEADLINE} chars): $HEADLINE"
 
           DRAFT_BODY=""
           for i in $(seq 1 30); do
@@ -134,9 +117,19 @@ jobs:
             echo "::error::No draft release v$VERSION with non-empty body found."
             echo "Create it with:"
             echo "  gh release create v$VERSION --draft --notes-file <path/to/notes.md>"
+            echo "The notes file must start with frontmatter:"
+            echo "  ---"
+            echo "  headline:"
+            echo "    - First feature"
+            echo "    - Second feature"
+            echo "  ---"
             exit 1
           fi
           echo "Draft release v$VERSION present (${#DRAFT_BODY} chars of body)."
+
+          # Parse + validate the headline frontmatter; step outputs go to
+          # $GITHUB_OUTPUT in the standard key=value form.
+          printf '%s' "$DRAFT_BODY" | node scripts/release-headline.mjs >> "$GITHUB_OUTPUT"
 
       - name: Install & Build
         if: steps.version.outputs.changed == 'true'
@@ -181,17 +174,36 @@ jobs:
         run: tar czf ue-mcp.tar.gz dist/ plugin/ package.json package-lock.json README.md LICENSE
 
       - name: Promote draft release
-        # The release was authored as a draft before the bump push (see the
-        # 'Validate release inputs' step). Here we attach the tarball and flip
-        # draft=false so the release goes live. Body is left untouched.
+        # The draft was authored before the bump push and validated by the
+        # 'Validate release inputs' step. Here we:
+        #   1. Attach the tarball.
+        #   2. Replace the body with the frontmatter-stripped version so the
+        #      published release page renders clean markdown.
+        #   3. Flip draft=false to publish.
+        #   4. Post the landing/headline commit status using the validated,
+        #      ` · `-joined string from the step output. CI authors the
+        #      status itself - releasers no longer post it manually.
         if: steps.version.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
           VERSION: ${{ steps.version.outputs.local }}
+          HEADLINE: ${{ steps.release_inputs.outputs.HEADLINE }}
+          BODY_PATH: ${{ steps.release_inputs.outputs.BODY_PATH }}
         run: |
           set -euo pipefail
           gh release upload "v$VERSION" ue-mcp.tar.gz --clobber
-          gh release edit "v$VERSION" --draft=false --tag "v$VERSION"
+          gh release edit "v$VERSION" \
+            --notes-file "$BODY_PATH" \
+            --draft=false \
+            --tag "v$VERSION"
+          gh api -X POST "repos/$REPO/statuses/$SHA" \
+            -f state=success \
+            -f context=landing/headline \
+            -f description="$HEADLINE" \
+            -f target_url="https://github.com/$REPO/releases/tag/v$VERSION"
+          echo "Posted landing/headline: $HEADLINE"
 
   docs:
     needs: build

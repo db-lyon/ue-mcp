@@ -53,25 +53,41 @@ UBT's incremental build + Live Coding can mask registration failures from earlie
 
 ## Release process
 
-CI **gates the publish job** on two pre-staged inputs against the release commit. If either is missing or malformed, the publish job fails before npm publish runs. Both must be in place before pushing the bump (CI polls each for ~60s after push to absorb the race).
+CI **gates the publish job** on a single pre-staged input: the draft GitHub release for `vX.Y.Z`. The draft body must begin with YAML frontmatter declaring a `headline:` array. CI parses, validates against the regex enforced by `scripts/release-headline.mjs`, joins with ` · `, posts the `landing/headline` commit status itself, strips the frontmatter from the body, then promotes the draft. No manual `gh api ... statuses` step.
 
-1. **Author the release notes as a GitHub draft release.** No file is committed to the repo. The notes file lives anywhere local (gitignored, scratch dir, /tmp).
+1. **Author release notes locally** with frontmatter. Notes file lives anywhere (gitignored, scratch, /tmp). The frontmatter must be the first thing in the file:
+   ```yaml
+   ---
+   headline:
+     - First feature noun phrase
+     - Second feature noun phrase
+     - Third feature noun phrase
+   ---
+
+   ## vX.Y.Z
+
+   One-line summary.
+
+   ### Server / Bug fixes / Internals
+   ...
+   ```
+   **Headline rules** (enforced by CI; format violations fail the publish job):
+   - 1-6 items, each 3-60 chars.
+   - Allowed characters: letters, digits, spaces, `_ - / ( ) . , +`.
+   - **Forbidden:** `:`, `;`, `?`, `!`, the `·` joiner, leading/trailing whitespace.
+   - Joined string (`items.join(" · ")`) must be ≤140 chars.
+   - Style: concrete noun phrases naming features. **No sentences. No editorializing the value.** Match the historical voice (see prior releases on the GitHub releases page).
+
+2. **Create the draft release:**
    ```bash
    gh release create vX.Y.Z --draft --notes-file /path/to/local-notes.md
    ```
-2. **Bump `package.json` version, commit, push.** Capture the SHA: `git rev-parse HEAD`.
-3. **Post the `landing/headline` commit status** on the bump SHA. The [ue-mcp-landing](https://github.com/db-lyon/ue-mcp-landing) site reads this to render the latest-version badge.
-   ```bash
-   gh api -X POST repos/db-lyon/ue-mcp/statuses/<FULL_SHA> \
-     -f state=success \
-     -f context=landing/headline \
-     -f description="2-3 headline features separated by middle-dot (<=140 chars, aim ~70)" \
-     -f target_url=https://github.com/db-lyon/ue-mcp/releases/tag/vX.Y.Z
-   ```
-   Use the full SHA — the API rejects short SHAs. The description field is hard-capped at 140 chars by GitHub; CI rejects anything longer.
-4. **Wait for CI.** It validates both inputs, publishes to npm, tags the release, attaches the tarball, and flips the draft to published. No manual `gh release edit` needed.
 
-Release notes structure: one-line summary, then `## New actions` / `## Bug fixes` / `## Internals` sections. See `docs/release-notes-0.7.18.md` and `docs/release-notes-0.7.19.md` for the style. (Older release-notes files in `docs/` predate the draft-release flow and are kept as references.)
+3. **Bump `package.json` version, commit, push.** That's it - CI takes over.
+
+4. **CI validates → publishes → promotes.** If the headline frontmatter is missing or malformed, the publish job fails with a pointer to the offending item *before* npm publish runs. On success, the published release page shows the body with frontmatter stripped, and the `landing/headline` commit status is posted automatically.
+
+Release notes structure (below the frontmatter): one-line summary, then `### Server` / `### Bug fixes` / `### Internals` sections. See prior releases on GitHub for the style. (The `docs/release-notes-*.md` files in the repo predate this flow and are kept as references only.)
 
 ## Issue handling
 
@@ -115,7 +131,8 @@ node scripts/deploy.mjs # Sync plugin/ → tests/ue_mcp/Plugins/
 ## Don'ts
 
 - Don't create git tags; CI handles releases from version bumps on main.
-- Don't push a version bump without first creating the draft release and posting the `landing/headline` commit status. CI fails the publish job if either is missing.
+- Don't push a version bump without first creating the draft release. CI fails the publish job if it's missing or its body lacks valid `headline:` frontmatter.
+- Don't post the `landing/headline` commit status manually anymore - CI authors it from the validated frontmatter array. Manual posts are overwritten and waste an API call.
 - Don't manually copy plugin files to `tests/ue_mcp/`. The deployer does it.
 - Don't use `TaskOutput` with `block=true` on long-running background tasks; it freezes the conversation. Background + poll or notify.
 - Don't run live tests without verifying the MCP target first.
