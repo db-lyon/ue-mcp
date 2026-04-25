@@ -29,7 +29,14 @@ jobs:
           cache: "npm"
 
       - name: Install
-        run: npm ci || npm install
+        # The committed package-lock.json was generated on Windows; npm has a
+        # known optional-deps bug (npm/cli#4828) where Linux-native rollup
+        # binaries are skipped when the lockfile is from another platform.
+        # Drop the lockfile and reinstall with --include=optional so vitest
+        # can load @rollup/rollup-linux-x64-gnu on the Ubuntu runner.
+        run: |
+          rm -f package-lock.json
+          npm install --include=optional
 
       - name: Type-check
         run: npx tsc --noEmit
@@ -79,8 +86,11 @@ jobs:
 
       - name: Install & Build
         if: steps.version.outputs.changed == 'true'
+        # See note on the build job's Install step re: the rollup
+        # optional-deps bug.
         run: |
-          npm ci || npm install
+          rm -f package-lock.json
+          npm install --include=optional
           npx tsc
 
       - name: Verify build output
