@@ -152,8 +152,8 @@ sequence yourself.
 Examples:
   User asks                          | Look for a flow like
   ---------------------------------- | ------------------------------
-  "rebuild and relaunch the editor"  | rebuild, up:build
-  "run the smoke tests"              | smoke, test:smoke
+  "rebuild and relaunch the editor"  | rebuild
+  "run the smoke tests"              | smoke
   "redeploy the plugin"              | deploy, redeploy
   "package the project"              | package
 
