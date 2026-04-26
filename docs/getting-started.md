@@ -1,8 +1,9 @@
 # Getting Started
 
-UE-MCP lets you tell an AI assistant what you want done in Unreal, and it actually does it - placing actors, writing blueprints, authoring materials, configuring Niagara, building lighting, all by driving the editor for you.
+!!! tip "⏱ ~5 minutes once prerequisites are installed"
+    Add 30-60 seconds the first time Unreal compiles the bridge plugin.
 
-This page gets you from nothing to your AI making changes in your project. It should take about five minutes once the prerequisites are in place.
+UE-MCP lets you tell an AI assistant what you want done in Unreal, and it actually does it - placing actors, writing blueprints, authoring materials, configuring Niagara, building lighting, all by driving the editor for you.
 
 ## Prerequisites
 
