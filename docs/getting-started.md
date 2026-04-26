@@ -1,90 +1,127 @@
 # Getting Started
 
-UE-MCP lets an AI assistant (Claude Code, Claude Desktop, Cursor) drive the Unreal Editor. The TypeScript MCP server runs on your machine and talks over WebSocket to a C++ plugin inside the editor.
+UE-MCP lets you tell an AI assistant what you want done in Unreal, and it actually does it - placing actors, writing blueprints, authoring materials, configuring Niagara, building lighting, all by driving the editor for you.
 
-## Prerequisites
+This page gets you from nothing to your AI making changes in your project. It should take ~5 minutes once the prerequisites are in place.
 
-- **Unreal Engine 5.4-5.7**, with a `.uproject` to attach to
-- **Node.js 18+** ([nodejs.org](https://nodejs.org/) - LTS is fine). Verify with `node --version`.
-- **An MCP client** - one of [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Claude Desktop](https://claude.ai/download), or [Cursor](https://cursor.com)
+## What you need
+
+Three things. If any of them are unfamiliar, the one-line gloss is below the table.
+
+| Thing | Version | Where |
+|---|---|---|
+| Unreal Engine | 5.4 - 5.7 | [unrealengine.com](https://www.unrealengine.com/en-US/download) |
+| Node.js | 18 or newer | [nodejs.org](https://nodejs.org/) (LTS is fine) |
+| An MCP-capable AI client | latest | [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Claude Desktop](https://claude.ai/download), or [Cursor](https://cursor.com) |
+
+- **Node.js** is a JavaScript runtime. UE-MCP runs on top of it. You don't have to *use* Node.js - just install it. After installing, run `node --version` in a terminal to confirm.
+- **MCP** (Model Context Protocol) is the way AI clients talk to external tools. Your AI client is the *MCP client*; UE-MCP is an *MCP server*. You point one at the other and they connect.
+- You also need a **`.uproject`** to attach to. Any UE project will do - a brand new "Blank" template works fine.
+
+If you're picking an AI client fresh, **Claude Code** is the best fit for UE-MCP and the one most of the docs assume.
 
 ## 1. Install
 
-Close the editor first (the installer deploys a plugin into your project), then:
+Close the Unreal Editor first - the installer deploys a C++ plugin into your project, and the editor needs to be closed to pick it up.
+
+Open a terminal and run:
 
 ```bash
 npx ue-mcp init
 ```
 
-This will:
+`npx` ships with Node.js. It downloads `ue-mcp` from npm and runs the interactive setup. The first run takes ~30 seconds; after that it's cached.
 
-1. Auto-detect or ask for your `.uproject` path
-2. Let you toggle which tool categories to enable (default: all)
-3. Deploy the C++ bridge plugin into `<YourProject>/Plugins/UE_MCP_Bridge/`
-4. Enable required UE plugins (Niagara, PCG, GAS, Enhanced Input) in your `.uproject`
-5. Detect installed MCP clients and write their config
-
-You can pass the path inline:
+If you run the command from inside your project folder it auto-detects the `.uproject`. Otherwise pass it directly:
 
 ```bash
 npx ue-mcp init C:/path/to/MyGame.uproject
 ```
 
-!!! tip "Forward slashes on Windows"
-    Use `/` even on Windows. Backslashes need escaping in JSON and break things.
+!!! tip "Use forward slashes on Windows"
+    `C:/Users/...`, not `C:\Users\...`. Backslashes need escaping inside JSON config and tend to bite later. Forward slashes work everywhere.
+
+### What the installer does
+
+1. Asks for your `.uproject` path (or auto-detects).
+2. Asks which **tool categories** to enable (`level`, `blueprint`, `material`, `niagara`, etc.). Default is all on - you can turn things off later.
+3. Copies the C++ bridge plugin into `<YourProject>/Plugins/UE_MCP_Bridge/`.
+4. Edits your `.uproject` to enable the bridge plugin and the UE plugins it depends on (Niagara, PCG, GameplayAbilities, Enhanced Input).
+5. Detects which MCP clients you have installed (Claude Code, Claude Desktop, Cursor) and writes the config for each one.
+6. **Claude Code only**: optionally installs a hook that nudges agents to report tool gaps when they fall back to raw Python.
+
+When it finishes you'll see a summary of what was deployed.
 
 ## 2. Restart the Editor
 
-Open your project. The editor will compile the new plugin (~30-60s, first time only). When loaded, the bridge listens on `ws://localhost:9877`.
+Open your project. The editor will detect the new plugin (`UE_MCP_Bridge`) and ask whether to compile it. Say yes. Compilation takes ~30-60 seconds the first time; after that the binary is cached.
 
-Verify in **Window → Output Log**, filter on `LogMCPBridge`:
+Once the editor finishes loading, the bridge starts automatically and listens on `ws://localhost:9877`.
+
+### Verify the bridge
+
+Open **Window → Output Log**. In the filter box at the top, type `LogMCPBridge`. You should see:
 
 ```
 LogMCPBridge: UE-MCP Bridge server started on ws://localhost:9877
 ```
 
-If you don't see that line, see [Troubleshooting](troubleshooting.md).
+If that line is there, the editor side is ready. If it isn't, jump to [Troubleshooting](troubleshooting.md).
 
-## 3. Verify Connection
+## 3. Verify the connection
 
-Your MCP client launches the server on demand - nothing to start manually. Ask the AI:
+You don't start the MCP server yourself - your AI client launches it the first time you use a UE-MCP tool. Open your client and ask:
 
 > Run `project(action="get_status")`.
 
-You should get back `bridgeConnected: true` along with project name and engine version.
+You should get a result that includes `"bridgeConnected": true`, your project name, and the engine version. That's the green light.
 
-## 4. First Prompts
+## 4. Try things
+
+Some good first prompts. The AI translates these into the right tool calls:
+
+> What's in my level right now?
+
+> List all blueprints under `/Game/Blueprints`.
+
+> Place a directional light at (0, 0, 500), a SkyLight at the origin, then build lighting at preview quality.
+
+> Run the Neon Shrine demo so I can see what you can build.
+
+> Read the Blueprint at `/Game/Blueprints/BP_Player` and explain what it does.
+
+Direct tool-call syntax also works:
 
 ```
-level(action="get_outliner")               — list every actor in the level
-asset(action="list", directory="/Game/")   — browse project assets
-demo(action="step", stepIndex=1)           — run the Neon Shrine demo
+level(action="get_outliner")
+asset(action="list", directory="/Game/")
+demo(action="step", stepIndex=1)
 reflection(action="reflect_class", className="StaticMeshActor")
 ```
 
-Or in plain language: "Place a directional light at (0, 0, 500) and a SkyLight at the origin."
+See the [Tool Reference](tool-reference.md) for everything available.
 
 ## Updating
+
+When a new UE-MCP version is released:
 
 ```bash
 npx ue-mcp update
 ```
 
-Run from your project directory. Redeploys the C++ bridge plugin and tells you if a restart is needed. Idempotent.
+Run it from your project directory. It redeploys the C++ bridge plugin and tells you whether you need to restart the editor. Safe to re-run.
 
-## Switching Projects
+## Switching projects
 
-To attach to a different project at runtime:
+To attach to a different `.uproject` without restarting your AI client, ask:
 
-```
-project(action="set_project", projectPath="C:/path/to/Other.uproject")
-```
+> Switch to the project at `C:/path/to/Other.uproject`.
 
-UE-MCP redeploys the bridge into the new project and reconnects.
+That's `project(action="set_project", projectPath="...")` under the hood. UE-MCP redeploys the bridge into the new project and reconnects.
 
-## Manual Configuration
+## Manual configuration
 
-If you'd rather skip `npx ue-mcp init`, write the MCP client config yourself:
+If you'd rather skip `npx ue-mcp init`, edit the MCP client config yourself:
 
 === "Claude Code"
 
@@ -128,9 +165,9 @@ If you'd rather skip `npx ue-mcp init`, write the MCP client config yourself:
     }
     ```
 
-The first run against a project auto-deploys the C++ plugin. To deploy explicitly: `npx ue-mcp update <path>`. Restart the editor after.
+The first run against a project auto-deploys the C++ plugin, but you can deploy it explicitly with `npx ue-mcp update <path>`. Restart the editor afterward.
 
-## Resolving Issues
+## Resolving GitHub issues
 
 Anyone can let Claude Code take a swing at an open issue:
 
@@ -138,12 +175,13 @@ Anyone can let Claude Code take a swing at an open issue:
 npx ue-mcp resolve 16
 ```
 
-Fetches the issue, creates a `resolve/` branch, runs Claude Code with the issue context, opens a PR. Requires `claude` and `gh` CLIs.
+This fetches issue #16, creates a `resolve/<n>` branch, runs Claude Code with the issue body as context, then opens a PR. Requires the `claude` and `gh` CLIs.
 
-## Next
+## Where to next
 
-- **[Tool Reference](tool-reference.md)** — every tool and action
-- **[Flows](flows.md)** — chain actions into reusable YAML workflows
-- **[Architecture](architecture.md)** — what's actually happening
-- **[Neon Shrine Demo](neon-shrine-demo.md)** — guided 19-step scene
-- **[Troubleshooting](troubleshooting.md)** — when something's broken
+- **[Tool Reference](tool-reference.md)** - every tool and every action
+- **[Flows](flows.md)** - chain actions into reusable YAML workflows with rollback and retries
+- **[Architecture](architecture.md)** - what's actually happening when you call a tool
+- **[Configuration](configuration.md)** - `.ue-mcp.json` options and per-client config
+- **[Neon Shrine Demo](neon-shrine-demo.md)** - guided 19-step procedural scene build
+- **[Troubleshooting](troubleshooting.md)** - connection errors, build errors, asset path errors
