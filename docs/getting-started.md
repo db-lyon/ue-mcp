@@ -60,9 +60,11 @@ If that line is there, the editor side is ready. If it isn't, jump to [Troublesh
 
 ## 3. Verify the connection
 
-You don't start the MCP server yourself - your AI client launches it the first time you use a UE-MCP tool. Open your client and ask:
+You don't start the MCP server yourself - your AI client launches it the first time you use a UE-MCP tool. Open your client and paste:
 
-> Run `project(action="get_status")`.
+```text
+Run project(action="get_status").
+```
 
 You should get a result that includes `"bridgeConnected": true`, your project name, and the engine version. That's the green light.
 
@@ -70,19 +72,29 @@ You should get a result that includes `"bridgeConnected": true`, your project na
 
 Some good first prompts. The AI translates these into the right tool calls:
 
-> What's in my level right now?
+```text
+What's in my level right now?
+```
 
-> List all blueprints under `/Game/Blueprints`.
+```text
+List all blueprints under /Game/Blueprints.
+```
 
-> Place a directional light at (0, 0, 500), a SkyLight at the origin, then build lighting at preview quality.
+```text
+Place a directional light at (0, 0, 500), a SkyLight at the origin, then build lighting at preview quality.
+```
 
-> Run the Neon Shrine demo so I can see what you can build.
+```text
+Run the Neon Shrine demo so I can see what you can build.
+```
 
-> Read the Blueprint at `/Game/Blueprints/BP_Player` and explain what it does.
+```text
+Read the Blueprint at /Game/Blueprints/BP_Player and explain what it does.
+```
 
 Direct tool-call syntax also works:
 
-```
+```text
 level(action="get_outliner")
 asset(action="list", directory="/Game/")
 demo(action="step", stepIndex=1)
@@ -105,7 +117,9 @@ Run it from your project directory. It redeploys the C++ bridge plugin and tells
 
 To attach to a different `.uproject` without restarting your AI client, ask:
 
-> Switch to the project at `C:/path/to/Other.uproject`.
+```text
+Switch to the project at C:/path/to/Other.uproject.
+```
 
 That's `project(action="set_project", projectPath="...")` under the hood. UE-MCP redeploys the bridge into the new project and reconnects.
 
