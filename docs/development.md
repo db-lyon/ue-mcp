@@ -114,7 +114,7 @@ Smoke tests run against a **live editor** and verify tool functionality end-to-e
 npm run test:level
 npm run test:blueprint
 npm run test:material
-# ... 17 suites total — see scripts in package.json
+# ... 16 suites total — see scripts in package.json
 
 # All suites (Vitest)
 npm test
