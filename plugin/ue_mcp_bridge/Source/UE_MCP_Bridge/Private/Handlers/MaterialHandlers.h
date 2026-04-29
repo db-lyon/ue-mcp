@@ -70,4 +70,8 @@ private:
 	static TSharedPtr<FJsonValue> RenderMaterialPreview(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BeginMaterialTransaction(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> EndMaterialTransaction(const TSharedPtr<FJsonObject>& Params);
+
+	// #225: single-call simple material authoring + EMaterialUsage flag
+	static TSharedPtr<FJsonValue> CreateMaterialSimple(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetMaterialUsage(const TSharedPtr<FJsonObject>& Params);
 };

@@ -73,6 +73,9 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("render_material_preview"), &RenderMaterialPreview);
 	Registry.RegisterHandler(TEXT("begin_material_transaction"), &BeginMaterialTransaction);
 	Registry.RegisterHandler(TEXT("end_material_transaction"), &EndMaterialTransaction);
+
+	Registry.RegisterHandler(TEXT("create_material_simple"), &CreateMaterialSimple);
+	Registry.RegisterHandler(TEXT("set_material_usage"), &SetMaterialUsage);
 }
 
 UMaterial* FMaterialHandlers::LoadMaterialFromPath(const FString& AssetPath)
@@ -2424,5 +2427,203 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DisconnectMaterialProperty(const TShar
 	Result->SetStringField(TEXT("property"), PropertyName);
 	// No rollback: we don't capture the previous expression binding before clearing.
 
+	return MCPResult(Result);
+}
+
+// #225: parse a string usage flag into EMaterialUsage. Mirrors the
+// MATUSAGE_* enum names but accepts shorter aliases too.
+namespace
+{
+	static bool ParseMaterialUsage(const FString& In, EMaterialUsage& OutUsage)
+	{
+		const FString S = In.ToLower();
+		auto Hit = [&](const TCHAR* Pat) { return S.Contains(Pat); };
+		if (Hit(TEXT("instanced_static_meshes")) || Hit(TEXT("instancedstatic")) || Hit(TEXT("ism"))) { OutUsage = MATUSAGE_InstancedStaticMeshes; return true; }
+		if (Hit(TEXT("skeletalmesh")) || Hit(TEXT("skeletal_mesh"))) { OutUsage = MATUSAGE_SkeletalMesh; return true; }
+		if (Hit(TEXT("particle_sprites")) || Hit(TEXT("particlesprite"))) { OutUsage = MATUSAGE_ParticleSprites; return true; }
+		if (Hit(TEXT("beam_trails")) || Hit(TEXT("beamtrails"))) { OutUsage = MATUSAGE_BeamTrails; return true; }
+		if (Hit(TEXT("mesh_particles")) || Hit(TEXT("meshparticles"))) { OutUsage = MATUSAGE_MeshParticles; return true; }
+		if (Hit(TEXT("static_lighting")) || Hit(TEXT("staticlighting"))) { OutUsage = MATUSAGE_StaticLighting; return true; }
+		if (Hit(TEXT("morphtargets")) || Hit(TEXT("morph_targets"))) { OutUsage = MATUSAGE_MorphTargets; return true; }
+		if (Hit(TEXT("splinemesh")) || Hit(TEXT("spline_mesh"))) { OutUsage = MATUSAGE_SplineMesh; return true; }
+		if (Hit(TEXT("niagara_sprites")) || Hit(TEXT("niagarasprite"))) { OutUsage = MATUSAGE_NiagaraSprites; return true; }
+		if (Hit(TEXT("niagara_ribbons")) || Hit(TEXT("niagararibbon"))) { OutUsage = MATUSAGE_NiagaraRibbons; return true; }
+		if (Hit(TEXT("niagara_meshparticles")) || Hit(TEXT("niagaramesh"))) { OutUsage = MATUSAGE_NiagaraMeshParticles; return true; }
+		if (Hit(TEXT("geometrycache")) || Hit(TEXT("geometry_cache"))) { OutUsage = MATUSAGE_GeometryCache; return true; }
+		if (Hit(TEXT("nanite"))) { OutUsage = MATUSAGE_Nanite; return true; }
+		if (Hit(TEXT("watersurface")) || Hit(TEXT("water_surface"))) { OutUsage = MATUSAGE_Water; return true; }
+		if (Hit(TEXT("hairstrands")) || Hit(TEXT("hair_strands"))) { OutUsage = MATUSAGE_HairStrands; return true; }
+		if (Hit(TEXT("lidarpointcloud")) || Hit(TEXT("lidar"))) { OutUsage = MATUSAGE_LidarPointCloud; return true; }
+		if (Hit(TEXT("virtualheightfieldmesh")) || Hit(TEXT("vhfm"))) { OutUsage = MATUSAGE_VirtualHeightfieldMesh; return true; }
+		if (Hit(TEXT("clothing"))) { OutUsage = MATUSAGE_Clothing; return true; }
+		if (Hit(TEXT("geometrycollections")) || Hit(TEXT("geometry_collections"))) { OutUsage = MATUSAGE_GeometryCollections; return true; }
+		return false;
+	}
+}
+
+TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialUsage(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	UMaterial* Material = LoadMaterialFromPath(AssetPath);
+	if (!Material) return MCPError(FString::Printf(TEXT("Material not found: %s"), *AssetPath));
+
+	TArray<FString> UsagesIn;
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (Params->TryGetArrayField(TEXT("usages"), Arr) && Arr)
+	{
+		for (const auto& V : *Arr)
+		{
+			FString S; if (V.IsValid() && V->TryGetString(S)) UsagesIn.Add(S);
+		}
+	}
+	FString Single;
+	if (Params->TryGetStringField(TEXT("usage"), Single)) UsagesIn.Add(Single);
+	if (UsagesIn.Num() == 0) return MCPError(TEXT("Missing 'usage' or 'usages' array"));
+
+	const bool bEnabled = OptionalBool(Params, TEXT("enabled"), true);
+
+	TArray<FString> Applied, Unknown;
+	for (const FString& U : UsagesIn)
+	{
+		EMaterialUsage Usage;
+		if (!ParseMaterialUsage(U, Usage))
+		{
+			Unknown.Add(U);
+			continue;
+		}
+		Material->SetMaterialUsage(/*bNeedsRecompile*/ const_cast<bool&>(bEnabled), Usage);
+		Material->SetUsageByFlag(Usage, bEnabled);
+		Applied.Add(U);
+	}
+
+	Material->PreEditChange(nullptr);
+	Material->PostEditChange();
+	Material->MarkPackageDirty();
+	UEditorAssetLibrary::SaveLoadedAsset(Material, /*bOnlyIfIsDirty=*/false);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), Material->GetPathName());
+	TArray<TSharedPtr<FJsonValue>> AppliedJ, UnknownJ;
+	for (const FString& S : Applied)  AppliedJ.Add(MakeShared<FJsonValueString>(S));
+	for (const FString& S : Unknown)  UnknownJ.Add(MakeShared<FJsonValueString>(S));
+	Result->SetArrayField(TEXT("applied"), AppliedJ);
+	if (Unknown.Num() > 0) Result->SetArrayField(TEXT("unknown"), UnknownJ);
+	Result->SetBoolField(TEXT("enabled"), bEnabled);
+	return MCPResult(Result);
+}
+
+// #225: single-call simple material authoring. Creates the asset, wires
+// constant base color / metallic / specular / roughness / emissive, sets
+// any requested usage flags, recompiles, and saves - replaces the
+// 5+ round-trip create/add_expression/connect/recompile sequence that
+// drove repeated 30s timeouts.
+TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialSimple(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Materials"));
+
+	const FString FullPath = PackagePath + TEXT("/") + Name;
+	if (UEditorAssetLibrary::DoesAssetExist(FullPath))
+	{
+		const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+		if (OnConflict == TEXT("error"))
+		{
+			return MCPError(FString::Printf(TEXT("Material already exists: %s"), *FullPath));
+		}
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetStringField(TEXT("assetPath"), FullPath);
+		return MCPResult(Existed);
+	}
+
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+	UMaterialFactoryNew* Factory = NewObject<UMaterialFactoryNew>();
+	UObject* Created = AssetTools.CreateAsset(Name, PackagePath, UMaterial::StaticClass(), Factory);
+	UMaterial* Material = Cast<UMaterial>(Created);
+	if (!Material) return MCPError(TEXT("Failed to create material asset"));
+
+	auto AddConstant3 = [Material](double R, double G, double B) -> UMaterialExpressionConstant3Vector*
+	{
+		UMaterialExpressionConstant3Vector* Expr = NewObject<UMaterialExpressionConstant3Vector>(Material);
+		Expr->Constant = FLinearColor((float)R, (float)G, (float)B, 1.0f);
+		Material->GetExpressionCollection().AddExpression(Expr);
+		return Expr;
+	};
+	auto AddConstant = [Material](double V) -> UMaterialExpressionConstant*
+	{
+		UMaterialExpressionConstant* Expr = NewObject<UMaterialExpressionConstant>(Material);
+		Expr->R = (float)V;
+		Material->GetExpressionCollection().AddExpression(Expr);
+		return Expr;
+	};
+
+	UMaterialEditorOnlyData* EOD = Material->GetEditorOnlyData();
+
+	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("baseColor"), ColorObj))
+	{
+		double R = 0.5, G = 0.5, B = 0.5;
+		(*ColorObj)->TryGetNumberField(TEXT("r"), R);
+		(*ColorObj)->TryGetNumberField(TEXT("g"), G);
+		(*ColorObj)->TryGetNumberField(TEXT("b"), B);
+		UMaterialExpressionConstant3Vector* C = AddConstant3(R, G, B);
+		if (EOD) EOD->BaseColor.Connect(0, C);
+	}
+	double Roughness = -1, Metallic = -1, Specular = -1, Emissive = -1;
+	if (Params->TryGetNumberField(TEXT("roughness"), Roughness))
+	{
+		UMaterialExpressionConstant* Expr = AddConstant(Roughness);
+		if (EOD) EOD->Roughness.Connect(0, Expr);
+	}
+	if (Params->TryGetNumberField(TEXT("metallic"), Metallic))
+	{
+		UMaterialExpressionConstant* Expr = AddConstant(Metallic);
+		if (EOD) EOD->Metallic.Connect(0, Expr);
+	}
+	if (Params->TryGetNumberField(TEXT("specular"), Specular))
+	{
+		UMaterialExpressionConstant* Expr = AddConstant(Specular);
+		if (EOD) EOD->Specular.Connect(0, Expr);
+	}
+	if (Params->TryGetNumberField(TEXT("emissive"), Emissive))
+	{
+		UMaterialExpressionConstant3Vector* Expr = AddConstant3(Emissive, Emissive, Emissive);
+		if (EOD) EOD->EmissiveColor.Connect(0, Expr);
+	}
+
+	// Usage flags
+	const TArray<TSharedPtr<FJsonValue>>* UsagesArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("usages"), UsagesArr) && UsagesArr)
+	{
+		for (const auto& V : *UsagesArr)
+		{
+			FString S; if (V.IsValid() && V->TryGetString(S))
+			{
+				EMaterialUsage U;
+				if (ParseMaterialUsage(S, U))
+				{
+					bool bNeeds = false;
+					Material->SetMaterialUsage(bNeeds, U);
+				}
+			}
+		}
+	}
+
+	Material->PreEditChange(nullptr);
+	Material->PostEditChange();
+	Material->MarkPackageDirty();
+	UEditorAssetLibrary::SaveLoadedAsset(Material, /*bOnlyIfIsDirty=*/false);
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("assetPath"), Material->GetPathName());
+	Result->SetStringField(TEXT("name"), Name);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), Material->GetPathName());
+	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
 	return MCPResult(Result);
 }
