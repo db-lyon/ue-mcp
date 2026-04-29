@@ -28,6 +28,8 @@
 #include "Factories/BlueprintFactory.h"
 #include "EdGraph/EdGraph.h"
 #include "K2Node_CallFunction.h"
+#include "AnimStateTransitionNode.h"
+#include "AnimStateNodeBase.h"
 #include "K2Node_Event.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_EditablePinBase.h"
@@ -636,6 +638,42 @@ UEdGraph* FBlueprintHandlers::FindGraph(UBlueprint* Blueprint, const FString& Gr
 	// Search ALL graphs (UbergraphPages, FunctionGraphs, AnimGraphs, etc.)
 	TArray<UEdGraph*> AllGraphs;
 	Blueprint->GetAllGraphs(AllGraphs);
+
+	// #209: state-pair addressing "Idle to Resting" / "Idle->Resting" for
+	// AnimBP transition condition graphs. The internal graph name is always
+	// "Transition" so callers couldn't target a specific transition by name.
+	auto SplitStatePair = [](const FString& In, FString& OutFrom, FString& OutTo) -> bool
+	{
+		const TCHAR* Seps[] = { TEXT(" to "), TEXT("->"), TEXT("→"), TEXT(" -> ") };
+		for (const TCHAR* Sep : Seps)
+		{
+			int32 At = In.Find(Sep);
+			if (At != INDEX_NONE)
+			{
+				OutFrom = In.Left(At).TrimStartAndEnd();
+				OutTo = In.Mid(At + FCString::Strlen(Sep)).TrimStartAndEnd();
+				return !OutFrom.IsEmpty() && !OutTo.IsEmpty();
+			}
+		}
+		return false;
+	};
+	FString FromState, ToState;
+	if (SplitStatePair(GraphName, FromState, ToState))
+	{
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (!Graph) continue;
+			if (UAnimStateTransitionNode* Trans = Cast<UAnimStateTransitionNode>(Graph->GetOuter()))
+			{
+				const FString PrevName = Trans->GetPreviousState() ? Trans->GetPreviousState()->GetStateName() : FString();
+				const FString NextName = Trans->GetNextState() ? Trans->GetNextState()->GetStateName() : FString();
+				if (PrevName.Equals(FromState, ESearchCase::IgnoreCase) && NextName.Equals(ToState, ESearchCase::IgnoreCase))
+				{
+					return Graph;
+				}
+			}
+		}
+	}
 
 	// #119: support indexed addressing "Transition[4]" for disambiguating the N'th graph
 	// with that name (AnimBP state-machine transition graphs all share name "Transition")
