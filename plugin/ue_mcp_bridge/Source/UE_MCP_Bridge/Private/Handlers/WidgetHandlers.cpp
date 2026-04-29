@@ -846,6 +846,15 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 		UPanelSlot* Slot = FoundWidget->Slot;
 		if (Slot)
 		{
+			// #200: slot mutations were getting overwritten when the
+			// subsequent CompileBlueprint regenerated the widget tree without
+			// the source slot ever being marked dirty. Modify() the chain so
+			// the transaction system records the slot before we touch it.
+			WidgetBP->Modify();
+			if (WidgetBP->WidgetTree) WidgetBP->WidgetTree->Modify();
+			FoundWidget->Modify();
+			Slot->Modify();
+
 			FString SlotPropName = PropertyName.Mid(5); // strip "slot."
 
 			// Well-known CanvasPanelSlot properties
@@ -1012,6 +1021,38 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 						FSlateChildSize Size = VSlot->GetSize();
 						Size.Value = Value;
 						VSlot->SetSize(Size);
+					}
+					else return false;
+					return true;
+				}
+				// #200: combined size accessor for box slots. Accepts either a
+				// "value,rule" string ("1,fill" / "1.5,automatic") or an
+				// "automatic"/"fill" word for "value=1, rule=...".
+				if (SlotPropName == TEXT("size") || SlotPropName == TEXT("Size"))
+				{
+					FString RuleText = PropertyValue.ToLower();
+					float Value = 1.0f;
+					if (PropertyValue.Contains(TEXT(",")))
+					{
+						TArray<FString> Parts;
+						PropertyValue.ParseIntoArray(Parts, TEXT(","));
+						if (Parts.Num() >= 2)
+						{
+							Value = FCString::Atof(*Parts[0]);
+							RuleText = Parts[1].ToLower().TrimStartAndEnd();
+						}
+					}
+					ESlateSizeRule::Type Rule = (RuleText.Contains(TEXT("fill"))) ? ESlateSizeRule::Fill : ESlateSizeRule::Automatic;
+					FSlateChildSize NewSize;
+					NewSize.SizeRule = Rule;
+					NewSize.Value = Value;
+					if (UHorizontalBoxSlot* HSlot = Cast<UHorizontalBoxSlot>(BoxSlot))
+					{
+						HSlot->SetSize(NewSize);
+					}
+					else if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(BoxSlot))
+					{
+						VSlot->SetSize(NewSize);
 					}
 					else return false;
 					return true;
