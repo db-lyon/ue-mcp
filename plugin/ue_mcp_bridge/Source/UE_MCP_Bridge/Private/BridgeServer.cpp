@@ -382,7 +382,31 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	}
 	else
 	{
-		return CreateJsonRpcError(Request, -32601, FString::Printf(TEXT("Unknown method: %s"), *Method));
+		// #233: a stale plugin build can dispatch a method that the TS schema
+		// advertises but the C++ side hasn't registered yet. The bare
+		// "Unknown method" error gave callers no way to tell that apart from
+		// a typo. List a few near-matches so it's obvious when the deployed
+		// plugin is behind the schema.
+		FString Detail = FString::Printf(TEXT("Unknown method: %s"), *Method);
+		const TArray<FString> All = HandlerRegistry.GetHandlerNames();
+		TArray<FString> Hints;
+		for (const FString& Name : All)
+		{
+			if (Name.Contains(Method, ESearchCase::IgnoreCase) || Method.Contains(Name, ESearchCase::IgnoreCase))
+			{
+				Hints.Add(Name);
+				if (Hints.Num() >= 5) break;
+			}
+		}
+		if (Hints.Num() == 0 && !All.IsEmpty())
+		{
+			Detail += FString::Printf(TEXT(" (no near-matches in %d registered handlers - the deployed plugin may be behind the TS schema; try a clean rebuild + redeploy)."), All.Num());
+		}
+		else if (Hints.Num() > 0)
+		{
+			Detail += FString::Printf(TEXT(" (did you mean: %s)"), *FString::Join(Hints, TEXT(", ")));
+		}
+		return CreateJsonRpcError(Request, -32601, Detail);
 	}
 }
 
