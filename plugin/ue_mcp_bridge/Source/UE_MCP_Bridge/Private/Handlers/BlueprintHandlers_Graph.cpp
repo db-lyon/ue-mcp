@@ -28,6 +28,7 @@
 #include "K2Node_DynamicCast.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_CallDelegate.h"
+#include "K2Node_ConstructObjectFromClass.h"
 #include "UObject/UnrealType.h"
 #include "UObject/Package.h"
 #include "UObject/TopLevelAssetPath.h"
@@ -412,7 +413,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		}
 	}
 
-	// Common initialization (works for all UEdGraphNode subclasses -- K2, AnimGraph, etc.)
+	// #201/#231: K2Node_ConstructObjectFromClass-derived nodes (SpawnActorFromClass,
+	// ConstructObject, AddComponent, etc.) assert in PostPlacedNewNode if the
+	// owning graph has not been Modify()'d first - the assert lives in
+	// EdGraphNode.h around the schema lookup that PostPlacedNewNode triggers.
+	// FEdGraphSchemaAction_K2NewNode::PerformAction does this Modify; mirror it
+	// here so any K2 node derived from ConstructObjectFromClass is placeable.
+	TargetGraph->Modify();
 	TargetGraph->AddNode(NewNode, false, false);
 	NewNode->CreateNewGuid();
 	NewNode->PostPlacedNewNode();
@@ -420,9 +427,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 
 	// #101/#118: after AllocateDefaultPins, force ReconstructNode so typed output pin
 	// ("As ClassName") appears for DynamicCast and typed pins appear for VariableGet.
+	// Skip ReconstructNode for ConstructObjectFromClass: at this point the Class
+	// pin is unset and ReconstructNode for SpawnActor walks pin defaults that
+	// expect a non-null class, asserting before AutowireNewNode would fix it.
 	if (UK2Node* K2 = Cast<UK2Node>(NewNode))
 	{
-		K2->ReconstructNode();
+		if (!K2->IsA<UK2Node_ConstructObjectFromClass>())
+		{
+			K2->ReconstructNode();
+		}
 	}
 
 	// #152: function graphs need the structural-modification signal for the
