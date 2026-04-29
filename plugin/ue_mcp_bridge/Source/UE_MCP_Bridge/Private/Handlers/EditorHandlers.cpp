@@ -49,6 +49,8 @@
 #include "Misc/MonitoredProcess.h"
 #include "HandlerJsonProperty.h"
 #include "Engine/Blueprint.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
 
 void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -104,6 +106,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #126: fast-forward PIE game time
 	Registry.RegisterHandler(TEXT("set_pie_time_scale"), &SetPieTimeScale);
 	Registry.RegisterHandler(TEXT("capture_scene_png"), &CaptureScenePng);
+	Registry.RegisterHandler(TEXT("get_pie_pawn"), &GetPiePawn);
+	Registry.RegisterHandler(TEXT("invoke_function"), &InvokeFunction);
 }
 
 TSharedPtr<FJsonValue> FEditorHandlers::ExecuteCommand(const TSharedPtr<FJsonObject>& Params)
@@ -2037,5 +2041,142 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("height"), Height);
 	Result->SetNumberField(TEXT("sizeBytes"), (double)Size);
 	Result->SetStringField(TEXT("actorLabel"), CaptureLabel);
+	return MCPResult(Result);
+}
+
+// #228/#229: PIE pawn lookup. Resolves the controlled pawn for a given
+// player index against the live PIE world; PIE pawns spawn with runtime
+// labels not addressable through the editor outliner.
+TSharedPtr<FJsonValue> FEditorHandlers::GetPiePawn(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return MCPError(TEXT("Editor not available"));
+
+	FWorldContext* PieCtx = GEditor->GetPIEWorldContext();
+	UWorld* PieWorld = PieCtx ? PieCtx->World() : nullptr;
+	if (!PieWorld)
+	{
+		return MCPError(TEXT("PIE not running - start PIE before resolving the player pawn"));
+	}
+
+	const int32 PlayerIndex = OptionalInt(Params, TEXT("playerIndex"), 0);
+	APlayerController* PC = UGameplayStatics::GetPlayerController(PieWorld, PlayerIndex);
+	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	if (!Pawn) return MCPError(FString::Printf(TEXT("No controlled pawn for player index %d"), PlayerIndex));
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Pawn->GetActorLabel());
+	Result->SetStringField(TEXT("actorName"), Pawn->GetName());
+	Result->SetStringField(TEXT("class"), Pawn->GetClass()->GetPathName());
+	Result->SetStringField(TEXT("path"), Pawn->GetPathName());
+	const FVector L = Pawn->GetActorLocation();
+	TSharedPtr<FJsonObject> LocO = MakeShared<FJsonObject>();
+	LocO->SetNumberField(TEXT("x"), L.X);
+	LocO->SetNumberField(TEXT("y"), L.Y);
+	LocO->SetNumberField(TEXT("z"), L.Z);
+	Result->SetObjectField(TEXT("location"), LocO);
+	const FRotator R = Pawn->GetActorRotation();
+	TSharedPtr<FJsonObject> RotO = MakeShared<FJsonObject>();
+	RotO->SetNumberField(TEXT("pitch"), R.Pitch);
+	RotO->SetNumberField(TEXT("yaw"), R.Yaw);
+	RotO->SetNumberField(TEXT("roll"), R.Roll);
+	Result->SetObjectField(TEXT("rotation"), RotO);
+	return MCPResult(Result);
+}
+
+// #228/#229: invoke a BlueprintCallable / Exec UFUNCTION on a target.
+// Target resolution: actorLabel against the chosen world (editor by
+// default; world="pie" for PIE). The 'args' object maps parameter names
+// to JSON values which are converted via FProperty ImportText. Out
+// parameters and return values are read back via the same export path.
+TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObject>& Params)
+{
+	FString FunctionName;
+	if (auto Err = RequireString(Params, TEXT("functionName"), FunctionName)) return Err;
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor")).ToLower();
+	UWorld* World = nullptr;
+	if (WorldScope == TEXT("pie"))
+	{
+		FWorldContext* PieCtx = GEditor ? GEditor->GetPIEWorldContext() : nullptr;
+		World = PieCtx ? PieCtx->World() : nullptr;
+		if (!World) return MCPError(TEXT("PIE not running - cannot invoke against PIE world"));
+	}
+	else
+	{
+		World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+		if (!World) return MCPError(TEXT("No editor world available"));
+	}
+
+	AActor* Target = nullptr;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (It->GetActorLabel() == ActorLabel) { Target = *It; break; }
+	}
+	if (!Target)
+	{
+		return MCPError(FString::Printf(TEXT("Actor not found in %s world: %s"), WorldScope == TEXT("pie") ? TEXT("PIE") : TEXT("editor"), *ActorLabel));
+	}
+
+	UFunction* Func = Target->FindFunction(FName(*FunctionName));
+	if (!Func) return MCPError(FString::Printf(TEXT("Function '%s' not found on %s"), *FunctionName, *Target->GetClass()->GetName()));
+
+	TArray<uint8> ParamBuf;
+	ParamBuf.SetNumZeroed(Func->ParmsSize);
+	// Initialise default param values
+	for (TFieldIterator<FProperty> It(Func); It && (It->PropertyFlags & CPF_Parm); ++It)
+	{
+		It->InitializeValue_InContainer(ParamBuf.GetData());
+	}
+
+	const TSharedPtr<FJsonObject>* ArgObj = nullptr;
+	Params->TryGetObjectField(TEXT("args"), ArgObj);
+
+	if (ArgObj && (*ArgObj).IsValid())
+	{
+		for (TFieldIterator<FProperty> It(Func); It && (It->PropertyFlags & CPF_Parm); ++It)
+		{
+			FProperty* P = *It;
+			if (P->PropertyFlags & CPF_ReturnParm) continue;
+			if ((P->PropertyFlags & CPF_OutParm) && !(P->PropertyFlags & CPF_ReferenceParm)) continue;
+			TSharedPtr<FJsonValue> Val = (*ArgObj)->TryGetField(P->GetName());
+			if (!Val.IsValid()) continue;
+			void* PtrAddr = P->ContainerPtrToValuePtr<void>(ParamBuf.GetData());
+			FString E;
+			if (!MCPJsonProperty::SetJsonOnProperty(P, PtrAddr, Val, E))
+			{
+				for (TFieldIterator<FProperty> CleanupIt(Func); CleanupIt && (CleanupIt->PropertyFlags & CPF_Parm); ++CleanupIt)
+				{
+					CleanupIt->DestroyValue_InContainer(ParamBuf.GetData());
+				}
+				return MCPError(FString::Printf(TEXT("Argument '%s': %s"), *P->GetName(), *E));
+			}
+		}
+	}
+
+	Target->ProcessEvent(Func, ParamBuf.GetData());
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("functionName"), FunctionName);
+
+	TSharedPtr<FJsonObject> OutVals = MakeShared<FJsonObject>();
+	for (TFieldIterator<FProperty> It(Func); It && (It->PropertyFlags & CPF_Parm); ++It)
+	{
+		FProperty* P = *It;
+		if (P->PropertyFlags & (CPF_ReturnParm | CPF_OutParm))
+		{
+			FString S;
+			P->ExportTextItem_Direct(S, P->ContainerPtrToValuePtr<void>(ParamBuf.GetData()), nullptr, Target, PPF_None);
+			OutVals->SetStringField(P->GetName(), S);
+		}
+	}
+	Result->SetObjectField(TEXT("returnValues"), OutVals);
+
+	for (TFieldIterator<FProperty> It(Func); It && (It->PropertyFlags & CPF_Parm); ++It)
+	{
+		It->DestroyValue_InContainer(ParamBuf.GetData());
+	}
 	return MCPResult(Result);
 }

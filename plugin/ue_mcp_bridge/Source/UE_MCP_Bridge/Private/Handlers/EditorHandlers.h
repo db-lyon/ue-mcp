@@ -159,4 +159,7 @@ private:
 	static TSharedPtr<FJsonValue> SetPieTimeScale(const TSharedPtr<FJsonObject>& Params);
 	// #148: Headless SceneCapture2D → PNG (works when editor is unfocused)
 	static TSharedPtr<FJsonValue> CaptureScenePng(const TSharedPtr<FJsonObject>& Params);
+	// #228/#229: PIE pawn lookup + UFUNCTION invocation for PIE actors
+	static TSharedPtr<FJsonValue> GetPiePawn(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> InvokeFunction(const TSharedPtr<FJsonObject>& Params);
 };
