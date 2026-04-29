@@ -908,8 +908,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 		bAnyChange = true;
 	}
 
-	// #94: SkyLight recapture after intensity/color change
-	if (USkyLightComponent* Sky = Cast<USkyLightComponent>(LightComponent))
+	// #94: SkyLight recapture after intensity/color change.
+	// USkyLightComponent does not inherit from ULightComponent, so look up
+	// directly on the actor instead of casting from LightComponent (#207).
+	if (USkyLightComponent* Sky = Actor->FindComponentByClass<USkyLightComponent>())
 	{
 		bool bRecapture = false;
 		Params->TryGetBoolField(TEXT("recaptureSky"), bRecapture);
@@ -1801,7 +1803,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByClass(const TSharedPtr<FJsonOb
 		AActor* A = *It;
 		if (!A) continue;
 		FString CName = A->GetClass()->GetName();
-		if (CName == ClassName || A->GetClass()->IsChildOf(AActor::StaticClass()) && CName.Contains(ClassName))
+		if (CName == ClassName || (A->GetClass()->IsChildOf(AActor::StaticClass()) && CName.Contains(ClassName)))
 		{
 			TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
 			E->SetStringField(TEXT("label"), A->GetActorLabel());
