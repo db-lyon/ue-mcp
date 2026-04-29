@@ -715,6 +715,38 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		return MCPError(TEXT("Editor not available"));
 	}
 
+	// #226: target=pie (or auto-detect when PIE is running) routes through
+	// HighResShot in the active PIE world so we capture the player viewport
+	// instead of whatever the editor camera was last looking at.
+	const FString Target = OptionalString(Params, TEXT("target"), TEXT("auto")).ToLower();
+	UWorld* PieWorld = nullptr;
+	if (FWorldContext* PieCtx = GEditor->GetPIEWorldContext())
+	{
+		PieWorld = PieCtx->World();
+	}
+	const bool bUsePie = (Target == TEXT("pie")) || (Target == TEXT("auto") && PieWorld);
+
+	if (bUsePie && PieWorld)
+	{
+		int32 Width = OptionalInt(Params, TEXT("width"), 1920);
+		int32 Height = OptionalInt(Params, TEXT("height"), 1080);
+		// Some callers pass a single 'resolution' (long edge); honour it as width.
+		double ResolutionScalar = 0.0;
+		if (Params->TryGetNumberField(TEXT("resolution"), ResolutionScalar) && ResolutionScalar > 0)
+		{
+			Width = (int32)ResolutionScalar;
+			Height = (int32)(ResolutionScalar * 9.0 / 16.0);
+		}
+		const FString ConsoleCmd = FString::Printf(TEXT("HighResShot %dx%d"), Width, Height);
+		GEngine->Exec(PieWorld, *ConsoleCmd);
+		auto Result = MCPSuccess();
+		Result->SetStringField(TEXT("filename"), Filename);
+		Result->SetStringField(TEXT("target"), TEXT("pie"));
+		Result->SetStringField(TEXT("consoleCommand"), ConsoleCmd);
+		Result->SetStringField(TEXT("note"), TEXT("HighResShot dispatched into PIE world; output lands in Saved/Screenshots/<map>/."));
+		return MCPResult(Result);
+	}
+
 	FLevelEditorViewportClient* ViewportClient = GCurrentLevelEditingViewportClient;
 	if (!ViewportClient)
 	{
@@ -749,6 +781,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("filename"), FullPath);
+	Result->SetStringField(TEXT("target"), TEXT("editor"));
 	Result->SetStringField(TEXT("note"), TEXT("Screenshot queued. The file will be written asynchronously by the renderer."));
 	return MCPResult(Result);
 }
