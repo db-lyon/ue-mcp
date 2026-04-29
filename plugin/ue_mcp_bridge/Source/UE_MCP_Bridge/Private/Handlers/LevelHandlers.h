@@ -47,4 +47,6 @@ private:
 	static TSharedPtr<FJsonValue> GetActorBounds(const TSharedPtr<FJsonObject>& Params);
 	// #178: resolve actor by internal/runtime UObject name
 	static TSharedPtr<FJsonValue> ResolveActor(const TSharedPtr<FJsonObject>& Params);
+	// #202/#230: generic per-instance UPROPERTY writer for level actors
+	static TSharedPtr<FJsonValue> SetActorProperty(const TSharedPtr<FJsonObject>& Params);
 };

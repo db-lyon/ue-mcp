@@ -38,6 +38,7 @@ export const levelTool: ToolDef = categoryTool(
     set_world_settings: bp("Set world settings. Params: defaultGameMode?, killZ?, globalGravityZ?, enableWorldBoundsChecks?", "set_world_settings"),
     get_actor_bounds:   bp("Get actor AABB. Params: actorLabel. Returns origin + extent (#188)", "get_actor_bounds"),
     resolve_actor:      bp("Resolve internal/runtime actor name to editor label. Params: internalName (e.g. StaticMeshActor_141). Returns actorLabel, actorPath, className, location (#178)", "resolve_actor"),
+    set_actor_property: bp("Set per-instance UPROPERTY on a level actor. Params: actorLabel ('WorldSettings' targets the world settings actor), propertyName (dotted paths like 'Foo.Bar' supported), value (string/number/bool/object/array; an actor label resolves to AActor* refs), force? (bypass EditDefaultsOnly), world? (editor|pie) (#202/#230)", "set_actor_property", (p) => ({ actorLabel: p.actorLabel, propertyName: p.propertyName, value: p.value, force: p.force, world: p.world })),
   },
   undefined,  // actionDocs auto-generated from descriptions
   {
@@ -81,5 +82,6 @@ export const levelTool: ToolDef = categoryTool(
     globalGravityZ: z.number().optional(),
     enableWorldBoundsChecks: z.boolean().optional(),
     internalName: z.string().optional().describe("Internal/runtime UObject name for resolve_actor (e.g. StaticMeshActor_141)"),
+    force: z.boolean().optional().describe("set_actor_property: bypass EditDefaultsOnly to write per-instance overrides"),
   },
 );

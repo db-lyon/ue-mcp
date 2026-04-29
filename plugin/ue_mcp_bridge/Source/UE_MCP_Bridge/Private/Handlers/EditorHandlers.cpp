@@ -47,6 +47,8 @@
 #include "DesktopPlatformModule.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/MonitoredProcess.h"
+#include "HandlerJsonProperty.h"
+#include "Engine/Blueprint.h"
 
 void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -228,64 +230,71 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 
 TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject>& Params)
 {
+	// #221/#230: TS schema documents `objectPath` but the dispatcher only
+	// accepted `path`/`assetPath`. Take any of the three so callers using the
+	// schema as written don't bounce off "missing required parameter".
 	FString AssetPath;
-	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	if (!Params->TryGetStringField(TEXT("objectPath"), AssetPath))
+	{
+		if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	}
 
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
-	// Load asset
+	// Load asset (works for /Game/X.X full paths or short /Game/X paths).
 	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	if (!Asset)
+	{
+		// Try the LoadAsset fallback so /Game/Foo (no .Foo suffix) resolves.
+		Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	}
 	if (!Asset)
 	{
 		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
-	// Get property
+	// #210/#211: many data assets are edited via their CDO when assetPath is a
+	// Blueprint generated class (e.g. /Game/Foo/BP_Bar.BP_Bar_C). If the loaded
+	// object is a UClass, redirect to its default object so set-property writes
+	// to the per-class defaults the user expects.
+	if (UClass* Cls = Cast<UClass>(Asset))
+	{
+		Asset = Cls->GetDefaultObject();
+	}
+	else if (UBlueprint* BP = Cast<UBlueprint>(Asset))
+	{
+		if (BP->GeneratedClass) Asset = BP->GeneratedClass->GetDefaultObject();
+	}
+
 	FProperty* Property = Asset->GetClass()->FindPropertyByName(*PropertyName);
 	if (!Property)
 	{
-		return MCPError(FString::Printf(TEXT("Property not found: %s"), *PropertyName));
+		return MCPError(FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName, *Asset->GetClass()->GetName()));
 	}
 
-	// Get value from params
 	TSharedPtr<FJsonValue> ValueJsonRef = Params->TryGetField(TEXT("value"));
 	if (!ValueJsonRef.IsValid())
 	{
 		return MCPError(TEXT("Missing 'value' parameter"));
 	}
 
-	// Set property value — use ImportText_Direct for full UE text format support (#29)
-	// This handles nested struct arrays, FVector, FGameplayTag, TArray<>, etc.
 	void* PropertyValue = Property->ContainerPtrToValuePtr<void>(Asset);
+	Asset->Modify();
 
-	FString ValueStr;
-	if (ValueJsonRef->Type == EJson::String)
+	// #210/#221: route through the recursive setter so JSON objects, arrays,
+	// asset-path strings (FObjectProperty), and nested structs all apply
+	// without callers having to pre-format UE text.
+	FString SetErr;
+	if (!MCPJsonProperty::SetJsonOnProperty(Property, PropertyValue, ValueJsonRef, SetErr))
 	{
-		ValueStr = ValueJsonRef->AsString();
-	}
-	else if (ValueJsonRef->Type == EJson::Boolean)
-	{
-		ValueStr = ValueJsonRef->AsBool() ? TEXT("true") : TEXT("false");
-	}
-	else if (ValueJsonRef->Type == EJson::Number)
-	{
-		ValueStr = FString::SanitizeFloat(ValueJsonRef->AsNumber());
-	}
-	else
-	{
-		// For objects/arrays, serialize back to string for ImportText
-		// This lets callers pass UE text format as a string value
-		return MCPError(TEXT("Value must be a string (UE text format), number, or boolean. For complex types, pass UE text format as a string (e.g. '((Key=1,Value=\"Hello\"))' for struct arrays)."));
+		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
 	}
 
-	const TCHAR* ImportResult = Property->ImportText_Direct(*ValueStr, PropertyValue, Asset, PPF_None);
-	if (!ImportResult)
-	{
-		return MCPError(FString::Printf(TEXT("ImportText failed for property '%s' with value '%s'. Check UE text format."), *PropertyName, *ValueStr));
-	}
-
+	FPropertyChangedEvent ChangeEvent(Property);
+	Asset->PostEditChangeProperty(ChangeEvent);
 	Asset->MarkPackageDirty();
+	UEditorAssetLibrary::SaveLoadedAsset(Asset, /*bOnlyIfIsDirty=*/true);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);

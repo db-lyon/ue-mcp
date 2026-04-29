@@ -79,6 +79,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_water_body_property"), &SetWaterBodyProperty);
 	Registry.RegisterHandler(TEXT("get_actor_bounds"), &GetActorBounds);
 	Registry.RegisterHandler(TEXT("resolve_actor"), &ResolveActor);
+	Registry.RegisterHandler(TEXT("set_actor_property"), &SetActorProperty);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>& Params)
@@ -2131,5 +2132,150 @@ TSharedPtr<FJsonValue> FLevelHandlers::ResolveActor(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("className"), Actor->GetClass()->GetName());
 	Result->SetObjectField(TEXT("location"), LocationObj);
+	return MCPResult(Result);
+}
+
+// #202/#230: generic per-instance UPROPERTY writer for level actors. Resolves
+// the actor by label, walks dotted property paths, and routes the value
+// through the recursive JSON setter so object refs / vectors / nested
+// structs all apply. The optional `force` flag flips off the EditDefaultsOnly
+// gate so per-instance overrides on EditDefaultsOnly properties go through
+// (the per-instance value always existed - the editor UI just hides it).
+TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+
+	FString PropertyName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
+
+	const TSharedPtr<FJsonValue>* ValueField = Params->Values.Find(TEXT("value"));
+	if (!ValueField || !(*ValueField).IsValid())
+	{
+		return MCPError(TEXT("Missing 'value' parameter"));
+	}
+
+	const bool bForce = OptionalBool(Params, TEXT("force"), false);
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World)
+	{
+		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+	}
+
+	AActor* TargetActor = nullptr;
+	const bool bWorldSettings = ActorLabel.Equals(TEXT("WorldSettings"), ESearchCase::IgnoreCase);
+	if (bWorldSettings)
+	{
+		TargetActor = World->GetWorldSettings();
+	}
+	else
+	{
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->GetActorLabel() == ActorLabel)
+			{
+				TargetActor = *It;
+				break;
+			}
+		}
+	}
+
+	if (!TargetActor)
+	{
+		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+	}
+
+	TArray<FString> PathParts;
+	PropertyName.ParseIntoArray(PathParts, TEXT("."));
+	if (PathParts.Num() == 0) return MCPError(TEXT("Empty propertyName"));
+
+	UStruct* CurrentStruct = TargetActor->GetClass();
+	void* CurrentContainer = TargetActor;
+	FProperty* Prop = nullptr;
+	for (int32 i = 0; i < PathParts.Num(); ++i)
+	{
+		FProperty* Seg = CurrentStruct->FindPropertyByName(FName(*PathParts[i]));
+		if (!Seg) return MCPError(FString::Printf(TEXT("Property '%s' not found at '%s'"), *PathParts[i], *PropertyName));
+		if (i < PathParts.Num() - 1)
+		{
+			FStructProperty* SP = CastField<FStructProperty>(Seg);
+			if (!SP) return MCPError(FString::Printf(TEXT("'%s' is not a struct - cannot descend"), *PathParts[i]));
+			CurrentContainer = SP->ContainerPtrToValuePtr<void>(CurrentContainer);
+			CurrentStruct = SP->Struct;
+		}
+		else
+		{
+			Prop = Seg;
+		}
+	}
+
+	// Strip the EditDefaultsOnly gate locally for the duration of the write,
+	// then restore. Other UPROPERTY flags stay untouched.
+	const EPropertyFlags OriginalFlags = Prop->PropertyFlags;
+	if (bForce)
+	{
+		Prop->PropertyFlags &= ~CPF_DisableEditOnInstance;
+	}
+
+	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(CurrentContainer);
+
+	FString PrevValue;
+	Prop->ExportText_Direct(PrevValue, ValuePtr, ValuePtr, TargetActor, PPF_None);
+
+	TargetActor->Modify();
+
+	// If the JSON value is a string and the property is an object reference,
+	// try resolving the string as an actor label first so callers can write
+	// {value: "Hopper_01"} for AHopper* references.
+	TSharedPtr<FJsonValue> Value = *ValueField;
+	if (Value->Type == EJson::String)
+	{
+		FString S = Value->AsString();
+		if (FObjectProperty* OP = CastField<FObjectProperty>(Prop))
+		{
+			AActor* RefActor = nullptr;
+			for (TActorIterator<AActor> It(World); It; ++It)
+			{
+				if (It->GetActorLabel() == S) { RefActor = *It; break; }
+			}
+			if (RefActor && RefActor->IsA(OP->PropertyClass))
+			{
+				OP->SetObjectPropertyValue(ValuePtr, RefActor);
+				goto WriteDone;
+			}
+		}
+	}
+
+	{
+		FString SetErr;
+		if (!MCPJsonProperty::SetJsonOnProperty(Prop, ValuePtr, Value, SetErr))
+		{
+			Prop->PropertyFlags = OriginalFlags;
+			return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
+		}
+	}
+
+WriteDone:
+	Prop->PropertyFlags = OriginalFlags;
+
+	FPropertyChangedEvent ChangeEvent(Prop);
+	TargetActor->PostEditChangeProperty(ChangeEvent);
+	TargetActor->MarkPackageDirty();
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("previousValue"), PrevValue);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Payload->SetStringField(TEXT("propertyName"), PropertyName);
+	Payload->SetStringField(TEXT("value"), PrevValue);
+	if (bForce) Payload->SetBoolField(TEXT("force"), true);
+	MCPSetRollback(Result, TEXT("set_actor_property"), Payload);
+
 	return MCPResult(Result);
 }
