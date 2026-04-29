@@ -34,6 +34,7 @@
 #include "UObject/PropertyPortFlags.h"
 #include "UObject/SoftObjectPtr.h"
 #include "ScopedTransaction.h"
+#include <functional>
 
 namespace
 {
@@ -985,6 +986,61 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGNodeSettings(const TSharedPtr<FJsonO
 
 	Result->SetStringField(TEXT("settingsClass"), Settings->GetClass()->GetName());
 
+	// #214 / #215: also emit a fully-keyed structured form alongside the
+	// ExportText round-trip. UScriptStruct::ExportText skips fields equal to
+	// the struct's CDO, so callers that diffed write/read couldn't see whether
+	// a key was actually applied (e.g. ActorSelection=ByTag, bMustOverlapSelf=false).
+	// The structured form recurses into struct fields and emits every key.
+	std::function<TSharedPtr<FJsonValue>(FProperty*, const void*)> SerializeProp;
+	SerializeProp = [&SerializeProp](FProperty* Prop, const void* Addr) -> TSharedPtr<FJsonValue>
+	{
+		if (!Prop || !Addr) return MakeShared<FJsonValueNull>();
+
+		if (FStructProperty* SP = CastField<FStructProperty>(Prop))
+		{
+			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+			for (TFieldIterator<FProperty> It(SP->Struct); It; ++It)
+			{
+				FProperty* Inner = *It;
+				if (!Inner) continue;
+				const void* InnerAddr = Inner->ContainerPtrToValuePtr<void>(Addr);
+				Obj->SetField(Inner->GetName(), SerializeProp(Inner, InnerAddr));
+			}
+			return MakeShared<FJsonValueObject>(Obj);
+		}
+		if (FArrayProperty* AP = CastField<FArrayProperty>(Prop))
+		{
+			TArray<TSharedPtr<FJsonValue>> Items;
+			FScriptArrayHelper H(AP, Addr);
+			for (int32 i = 0; i < H.Num(); ++i)
+			{
+				Items.Add(SerializeProp(AP->Inner, H.GetRawPtr(i)));
+			}
+			return MakeShared<FJsonValueArray>(Items);
+		}
+		if (FBoolProperty* BP = CastField<FBoolProperty>(Prop))
+		{
+			return MakeShared<FJsonValueBoolean>(BP->GetPropertyValue(Addr));
+		}
+		if (FNumericProperty* NP = CastField<FNumericProperty>(Prop))
+		{
+			if (NP->IsFloatingPoint())
+			{
+				return MakeShared<FJsonValueNumber>(NP->GetFloatingPointPropertyValue(Addr));
+			}
+			return MakeShared<FJsonValueNumber>((double)NP->GetSignedIntPropertyValue(Addr));
+		}
+		if (FObjectProperty* OP = CastField<FObjectProperty>(Prop))
+		{
+			UObject* Ref = OP->GetObjectPropertyValue(Addr);
+			return MakeShared<FJsonValueString>(Ref ? Ref->GetPathName() : TEXT(""));
+		}
+		// Enums and remaining scalars: ExportTextItem with no Defaults emits the literal.
+		FString Out;
+		Prop->ExportTextItem_Direct(Out, Addr, nullptr, nullptr, PPF_None);
+		return MakeShared<FJsonValueString>(Out);
+	};
+
 	// Enumerate all editable properties on the settings
 	TSharedPtr<FJsonObject> PropertiesObj = MakeShared<FJsonObject>();
 	for (TFieldIterator<FProperty> PropIt(Settings->GetClass()); PropIt; ++PropIt)
@@ -1003,6 +1059,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ReadPCGNodeSettings(const TSharedPtr<FJsonO
 		TSharedPtr<FJsonObject> PropObj = MakeShared<FJsonObject>();
 		PropObj->SetStringField(TEXT("value"), PropertyValue);
 		PropObj->SetStringField(TEXT("type"), Property->GetCPPType());
+		PropObj->SetField(TEXT("structured"), SerializeProp(Property, PropertyAddr));
 		PropertiesObj->SetObjectField(PropertyName, PropObj);
 	}
 
