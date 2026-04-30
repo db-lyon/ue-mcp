@@ -29,6 +29,9 @@ obj/
 ## Test-project Claude Code artifacts (ephemeral — installed by `ue-mcp init` / skills dry-runs)
 tests/ue_mcp/.claude/
 
+## Deployed bridge plugin (source of truth lives in plugin/; scripts/deploy.mjs regenerates this on every build)
+tests/ue_mcp/Plugins/UE_MCP_Bridge/
+
 ## Kantext
 .kantext/
 kantext-mcp-*
