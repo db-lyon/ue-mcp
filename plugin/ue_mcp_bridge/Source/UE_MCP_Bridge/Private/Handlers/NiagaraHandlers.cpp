@@ -25,6 +25,7 @@
 #include "NiagaraNodeCustomHlsl.h"
 #include "NiagaraScriptFactoryNew.h"
 #include "NiagaraEmitterHandle.h"
+#include "NiagaraEditorUtilities.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -544,7 +545,14 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromEmitter(const TS
 	}
 
 	NewSystem->MarkPackageDirty();
-	FNiagaraEmitterHandle EmitterHandle = NewSystem->AddEmitterHandle(*Emitter, Emitter->GetFName(), FGuid::NewGuid());
+	// #275: same crash-on-zero-emitters pattern as add_emitter_to_system.
+	// Route through the editor helper instead of raw AddEmitterHandle.
+	const FGuid HandleId = FNiagaraEditorUtilities::AddEmitterToSystem(*NewSystem, *Emitter, Emitter->GetExposedVersion().VersionGuid);
+	FName HandleName = NAME_None;
+	for (const FNiagaraEmitterHandle& H : NewSystem->GetEmitterHandles())
+	{
+		if (H.GetId() == HandleId) { HandleName = H.GetName(); break; }
+	}
 
 	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
 
@@ -553,7 +561,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromEmitter(const TS
 	Result->SetStringField(TEXT("systemPath"), NewAsset->GetPathName());
 	Result->SetStringField(TEXT("systemName"), SystemName);
 	Result->SetStringField(TEXT("emitterPath"), EmitterPath);
-	Result->SetStringField(TEXT("emitterHandleName"), EmitterHandle.GetName().ToString());
+	Result->SetStringField(TEXT("emitterHandleName"), HandleName.ToString());
 	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 	return MCPResult(Result);
 }
@@ -607,9 +615,21 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJs
 		}
 	}
 
-	// Actually add the emitter to the system (#69)
-	System->Modify();
-	FNiagaraEmitterHandle Handle = System->AddEmitterHandle(*Emitter, Emitter->GetFName(), FGuid::NewGuid());
+	// #275: the original implementation called System->AddEmitterHandle
+	// directly, which crashed the editor when the parent system had zero
+	// emitters (live system instances were not killed before mutating the
+	// handle list, the overview graph wasn't rebuilt, and name collisions
+	// against the system's outer triggered a checkSlow). Use the canonical
+	// NiagaraEditor helper instead - it kills system instances, resolves a
+	// unique handle name, calls RebuildEmitterNodes, and synchronizes the
+	// system's overview graph. This is the same path the editor uses for
+	// "Add Emitter to System" in the Niagara System editor.
+	const FGuid EmitterVersion = Emitter->GetExposedVersion().VersionGuid;
+	const FGuid HandleId = FNiagaraEditorUtilities::AddEmitterToSystem(*System, *Emitter, EmitterVersion);
+	if (!HandleId.IsValid())
+	{
+		return MCPError(FString::Printf(TEXT("FNiagaraEditorUtilities::AddEmitterToSystem returned invalid handle for %s"), *EmitterPath));
+	}
 
 	// #223: SaveAsset by path resolved a different in-memory instance and
 	// dropped the new handle. Save the loaded system object directly.
@@ -617,11 +637,24 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJs
 	System->MarkPackageDirty();
 	UEditorAssetLibrary::SaveLoadedAsset(System, /*bOnlyIfIsDirty=*/false);
 
+	// Re-find the handle by id so the response reports the actual stored name
+	// (AddEmitterToSystem deduplicates / renumbers when there's a collision).
+	FName StoredHandleName = NAME_None;
+	for (const FNiagaraEmitterHandle& H : System->GetEmitterHandles())
+	{
+		if (H.GetId() == HandleId)
+		{
+			StoredHandleName = H.GetName();
+			break;
+		}
+	}
+
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("systemPath"), SystemPath);
 	Result->SetStringField(TEXT("emitterPath"), EmitterPath);
-	Result->SetStringField(TEXT("emitterHandleName"), Handle.GetName().ToString());
+	Result->SetStringField(TEXT("emitterHandleName"), StoredHandleName.ToString());
+	Result->SetStringField(TEXT("emitterHandleId"), HandleId.ToString());
 	Result->SetNumberField(TEXT("emitterCount"), System->GetEmitterHandles().Num());
 	// No rollback: no paired remove_emitter_from_system handler.
 	return MCPResult(Result);
@@ -1074,8 +1107,11 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromSpec(const TShar
 			if (!Source) Source = Cast<UNiagaraEmitter>(UEditorAssetLibrary::LoadAsset(EmitterPath));
 			if (!Source) continue;
 			const FGuid Version = Source->GetExposedVersion().VersionGuid;
-			System->AddEmitterHandle(*Source, FName(*Source->GetName()), Version);
-			++AddedEmitters;
+			// #275: route through FNiagaraEditorUtilities so we get
+			// KillSystemInstances + RebuildEmitterNodes + unique-name
+			// resolution instead of mutating the handle list raw.
+			const FGuid HandleId = FNiagaraEditorUtilities::AddEmitterToSystem(*System, *Source, Version);
+			if (HandleId.IsValid()) ++AddedEmitters;
 		}
 	}
 
