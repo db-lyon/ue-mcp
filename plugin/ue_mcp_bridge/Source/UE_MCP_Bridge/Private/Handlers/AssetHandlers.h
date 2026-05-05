@@ -79,4 +79,8 @@ private:
 	static TSharedPtr<FJsonValue> SetMeshNav(const TSharedPtr<FJsonObject>& Params);
 	// #212: create empty content browser folders
 	static TSharedPtr<FJsonValue> CreateFolder(const TSharedPtr<FJsonObject>& Params);
+
+	// #279: detect stuck-unloadable assets and recover without editor restart
+	static TSharedPtr<FJsonValue> HealthCheck(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ForceReload(const TSharedPtr<FJsonObject>& Params);
 };

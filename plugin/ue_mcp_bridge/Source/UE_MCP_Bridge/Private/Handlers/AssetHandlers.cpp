@@ -4,6 +4,10 @@
 #include "HandlerJsonProperty.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
+#include "Subsystems/AssetEditorSubsystem.h"
+#include "Editor.h"
+#include "FileHelpers.h"
+#include "ObjectTools.h"
 #include "Exporters/Exporter.h"
 #include "AssetExportTask.h"
 #include "UObject/UObjectGlobals.h"
@@ -96,6 +100,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_socket"), &RemoveSocket);
 	Registry.RegisterHandler(TEXT("list_sockets"), &ListSockets);
 	Registry.RegisterHandler(TEXT("reload_package"), &ReloadPackage);
+	// #279: detect/recover stuck-unloadable assets
+	Registry.RegisterHandler(TEXT("asset_health_check"), &HealthCheck);
+	Registry.RegisterHandler(TEXT("force_reload_asset"), &ForceReload);
 
 	// Additional DataTable handlers
 	Registry.RegisterHandler(TEXT("create_datatable"), &CreateDataTable);
@@ -717,10 +724,92 @@ TSharedPtr<FJsonValue> FAssetHandlers::MoveAsset(const TSharedPtr<FJsonObject>& 
 	return RenameAsset(Params);
 }
 
+// ─── #278: structured delete diagnostics ────────────────────────────
+// UEditorAssetLibrary::DeleteAsset returns a bare bool with no reason on
+// failure, leaving callers to guess. Wrap it: detect open editors first
+// (and close them when force=true), and on failure report referencers
+// from the asset registry so the agent has something to act on.
+namespace
+{
+	struct FDeleteDiagnostics
+	{
+		bool bOpenInEditor = false;
+		TArray<FString> Referencers;
+		FString Reason;     // open_in_editor | has_referencers | unknown
+	};
+
+	bool TryCloseAssetEditors(const FString& AssetPath, bool& bOutHadOpenEditor)
+	{
+		bOutHadOpenEditor = false;
+		if (!GEditor) return false;
+		UAssetEditorSubsystem* AES = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+		if (!AES) return false;
+
+		UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
+		if (!Asset) return false;
+
+		const TArray<IAssetEditorInstance*> Editors = AES->FindEditorsForAsset(Asset);
+		bOutHadOpenEditor = Editors.Num() > 0;
+		if (bOutHadOpenEditor)
+		{
+			AES->CloseAllEditorsForAsset(Asset);
+		}
+		return true;
+	}
+
+	FDeleteDiagnostics DiagnoseDeleteFailure(const FString& AssetPath)
+	{
+		FDeleteDiagnostics Diag;
+
+		if (GEditor)
+		{
+			if (UAssetEditorSubsystem* AES = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
+			{
+				if (UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath))
+				{
+					Diag.bOpenInEditor = AES->FindEditorsForAsset(Asset).Num() > 0;
+				}
+			}
+		}
+
+		// AssetRegistry referencers - filtered to non-self.
+		FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+		const FName PackageFName = *FPackageName::ObjectPathToPackageName(AssetPath);
+		TArray<FName> Refs;
+		ARM.Get().GetReferencers(PackageFName, Refs);
+		for (const FName& R : Refs)
+		{
+			if (R != PackageFName)
+			{
+				Diag.Referencers.Add(R.ToString());
+			}
+		}
+
+		if (Diag.bOpenInEditor)         Diag.Reason = TEXT("open_in_editor");
+		else if (Diag.Referencers.Num()) Diag.Reason = TEXT("has_referencers");
+		else                             Diag.Reason = TEXT("unknown");
+		return Diag;
+	}
+
+	void ApplyDiagnosticsToJson(const TSharedPtr<FJsonObject>& Out, const FDeleteDiagnostics& Diag)
+	{
+		Out->SetStringField(TEXT("reason"), Diag.Reason);
+		Out->SetBoolField(TEXT("openInEditor"), Diag.bOpenInEditor);
+		TArray<TSharedPtr<FJsonValue>> RefsJson;
+		for (const FString& R : Diag.Referencers)
+		{
+			RefsJson.Add(MakeShared<FJsonValueString>(R));
+		}
+		Out->SetArrayField(TEXT("referencers"), RefsJson);
+	}
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+
+	const bool bForce = OptionalBool(Params, TEXT("force"), false);
 
 	// Idempotent: if the asset doesn't exist, treat as already-deleted.
 	if (!UEditorAssetLibrary::DoesAssetExist(AssetPath))
@@ -731,13 +820,28 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 		return MCPResult(Result);
 	}
 
-	bool bSuccess = UEditorAssetLibrary::DeleteAsset(AssetPath);
+	bool bClosedEditor = false;
+	if (bForce)
+	{
+		TryCloseAssetEditors(AssetPath, bClosedEditor);
+	}
+
+	const bool bSuccess = UEditorAssetLibrary::DeleteAsset(AssetPath);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("deleted"), bSuccess);
-	// Delete is non-reversible by default.
+	if (bClosedEditor)
+	{
+		Result->SetBoolField(TEXT("closedOpenEditor"), true);
+	}
 
+	if (!bSuccess)
+	{
+		ApplyDiagnosticsToJson(Result, DiagnoseDeleteFailure(AssetPath));
+	}
+
+	// Delete is non-reversible by default.
 	return MCPResult(Result);
 }
 
@@ -749,10 +853,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("Missing 'assetPaths' array parameter"));
 	}
 
+	const bool bForce = OptionalBool(Params, TEXT("force"), false);
+
 	TArray<TSharedPtr<FJsonValue>> PerPath;
 	int32 Deleted = 0;
 	int32 Absent = 0;
 	int32 Failed = 0;
+	int32 ClosedEditors = 0;
 
 	for (const TSharedPtr<FJsonValue>& V : *PathsArr)
 	{
@@ -770,15 +877,26 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 			Entry->SetStringField(TEXT("status"), TEXT("absent"));
 			Absent++;
 		}
-		else if (UEditorAssetLibrary::DeleteAsset(Path))
-		{
-			Entry->SetStringField(TEXT("status"), TEXT("deleted"));
-			Deleted++;
-		}
 		else
 		{
-			Entry->SetStringField(TEXT("status"), TEXT("failed"));
-			Failed++;
+			bool bClosed = false;
+			if (bForce)
+			{
+				TryCloseAssetEditors(Path, bClosed);
+				if (bClosed) ClosedEditors++;
+			}
+			if (UEditorAssetLibrary::DeleteAsset(Path))
+			{
+				Entry->SetStringField(TEXT("status"), TEXT("deleted"));
+				if (bClosed) Entry->SetBoolField(TEXT("closedOpenEditor"), true);
+				Deleted++;
+			}
+			else
+			{
+				Entry->SetStringField(TEXT("status"), TEXT("failed"));
+				ApplyDiagnosticsToJson(Entry, DiagnoseDeleteFailure(Path));
+				Failed++;
+			}
 		}
 		PerPath.Add(MakeShared<FJsonValueObject>(Entry));
 	}
@@ -789,6 +907,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("absent"), Absent);
 	Result->SetNumberField(TEXT("failed"), Failed);
 	Result->SetNumberField(TEXT("total"), PerPath.Num());
+	if (ClosedEditors > 0) Result->SetNumberField(TEXT("closedEditors"), ClosedEditors);
 	return MCPResult(Result);
 }
 
@@ -2070,5 +2189,119 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateFolder(const TSharedPtr<FJsonObject
 	Result->SetNumberField(TEXT("existedCount"), Existed.Num());
 	Result->SetNumberField(TEXT("failedCount"), Failed.Num());
 	Result->SetBoolField(TEXT("allSucceeded"), Failed.Num() == 0);
+	return MCPResult(Result);
+}
+
+// ─── #279: health_check + force_reload ──────────────────────────────
+// Agents hit a state where WidgetBlueprint / asset loads quietly return
+// nullptr while the file exists on disk and AssetRegistry knows about it
+// - only an editor restart unsticks it. health_check exposes the four
+// flags an agent needs to detect the half-shutdown (onDisk, inRegistry,
+// isLoaded, canLoad). force_reload bypasses the in-memory cache by
+// resetting the package loader and forcing a fresh load.
+
+TSharedPtr<FJsonValue> FAssetHandlers::HealthCheck(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetPath);
+
+	// On disk?
+	FString PackageFileName;
+	const bool bOnDisk = FPackageName::DoesPackageExist(PackageName, &PackageFileName);
+
+	// In AssetRegistry?
+	FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+	TArray<FAssetData> AssetsForPackage;
+	ARM.Get().GetAssetsByPackageName(*PackageName, AssetsForPackage);
+	const bool bInRegistry = AssetsForPackage.Num() > 0;
+
+	// Already loaded?
+	UPackage* ExistingPkg = FindPackage(nullptr, *PackageName);
+	const bool bPackageLoaded = ExistingPkg != nullptr;
+	UObject* InMemory = bPackageLoaded ? StaticFindObject(UObject::StaticClass(), ExistingPkg, *FPackageName::GetShortName(PackageName)) : nullptr;
+	const bool bIsLoaded = InMemory != nullptr;
+
+	// Can load? Try a non-destructive load attempt only if we don't already have it.
+	bool bCanLoad = bIsLoaded;
+	if (!bIsLoaded)
+	{
+		UObject* Probe = UEditorAssetLibrary::LoadAsset(AssetPath);
+		bCanLoad = Probe != nullptr;
+		if (Probe) InMemory = Probe;
+	}
+
+	const bool bIsStuck = bOnDisk && bInRegistry && !bCanLoad;
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("packageName"), PackageName);
+	Result->SetBoolField(TEXT("onDisk"), bOnDisk);
+	Result->SetBoolField(TEXT("inRegistry"), bInRegistry);
+	Result->SetBoolField(TEXT("isLoaded"), bIsLoaded);
+	Result->SetBoolField(TEXT("canLoad"), bCanLoad);
+	Result->SetBoolField(TEXT("isStuck"), bIsStuck);
+	if (bOnDisk) Result->SetStringField(TEXT("packageFile"), PackageFileName);
+	if (InMemory) Result->SetStringField(TEXT("class"), InMemory->GetClass()->GetName());
+	if (bIsStuck)
+	{
+		Result->SetStringField(TEXT("hint"), TEXT("Asset on disk + in registry but cannot load. Try force_reload."));
+	}
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::ForceReload(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	const FString PackageName = FPackageName::ObjectPathToPackageName(AssetPath);
+	FString PackageFileName;
+	if (!FPackageName::DoesPackageExist(PackageName, &PackageFileName))
+	{
+		return MCPError(FString::Printf(TEXT("Package not found on disk: %s"), *PackageName));
+	}
+
+	// Close any open asset editors so they don't pin stale references.
+	bool bClosedEditor = false;
+	if (GEditor)
+	{
+		if (UAssetEditorSubsystem* AES = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
+		{
+			if (UObject* Existing = StaticFindObject(UObject::StaticClass(), nullptr, *AssetPath))
+			{
+				if (AES->FindEditorsForAsset(Existing).Num() > 0)
+				{
+					AES->CloseAllEditorsForAsset(Existing);
+					bClosedEditor = true;
+				}
+			}
+		}
+	}
+
+	// Reset loaders on the existing package (if any) and force a GC pass so
+	// the in-memory pointer is genuinely released before reload. Without
+	// this, LoadObject hands back the same broken instance.
+	if (UPackage* ExistingPkg = FindPackage(nullptr, *PackageName))
+	{
+		ResetLoaders(ExistingPkg);
+		ExistingPkg->ClearFlags(RF_WasLoaded);
+	}
+	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+
+	UObject* Reloaded = LoadObject<UObject>(nullptr, *AssetPath, nullptr, LOAD_None);
+	const bool bSuccess = Reloaded != nullptr;
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("packageName"), PackageName);
+	Result->SetBoolField(TEXT("reloaded"), bSuccess);
+	if (bClosedEditor) Result->SetBoolField(TEXT("closedOpenEditor"), true);
+	if (Reloaded) Result->SetStringField(TEXT("class"), Reloaded->GetClass()->GetName());
+	if (!bSuccess)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("LoadObject returned null after reset; the package file may be corrupt or contain a class the editor cannot resolve."));
+	}
 	return MCPResult(Result);
 }
