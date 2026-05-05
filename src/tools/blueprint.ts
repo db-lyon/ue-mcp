@@ -36,7 +36,7 @@ export const blueprintTool: ToolDef = categoryTool(
     create_interface:  bp("Create BP Interface. Params: assetPath", "create_blueprint_interface", (p) => ({ path: p.assetPath })),
     add_interface:     bp("Implement interface. Params: blueprintPath, interfacePath", "add_blueprint_interface"),
     list_graphs:       bp("List all graphs in a blueprint. Params: assetPath", "list_blueprint_graphs", (p) => ({ path: p.assetPath })),
-    add_event_dispatcher: bp("Add event dispatcher. Params: blueprintPath, name", "add_event_dispatcher"),
+    add_event_dispatcher: bp("Add event dispatcher (multicast delegate variable + signature graph + UFunction). Without parameters, broadcasters fire void(). With parameters, the signature graph gets typed user pins so K2Node_CallDelegate compiles cleanly (#276). Params: blueprintPath, name, parameters?: [{name, type}] where type is bool/int/float/string/name/text/vector/rotator/transform/object:/Script/Module.Class/struct:/Script/Module.Struct", "add_event_dispatcher"),
     duplicate:         bp("Duplicate blueprint asset. Params: sourcePath, destinationPath", "duplicate_blueprint"),
     add_local_variable: bp("Add function-scope local variable. Params: assetPath, functionName, name, varType?", "add_local_variable"),
     list_local_variables: bp("List local variables in a function. Params: assetPath, functionName", "list_local_variables"),
@@ -88,5 +88,9 @@ export const blueprintTool: ToolDef = categoryTool(
     propertyNames: z.array(z.string()).optional().describe("Property names to read for get_cdo_properties (omit = all)"),
     posX: z.number().optional().describe("Re-center pasted nodes around this X (with posY)"),
     posY: z.number().optional().describe("Re-center pasted nodes around this Y (with posX)"),
+    parameters: z.array(z.object({
+      name: z.string(),
+      type: z.string().optional(),
+    })).optional().describe("add_event_dispatcher: typed signature parameters [{name, type}]. type is bool/int/float/string/name/text/vector/rotator/transform/object:/Script/Module.Class/struct:/Script/Module.Struct"),
   },
 );

@@ -1528,9 +1528,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintPath));
 	}
 
-	FName DispatcherFName(*DispatcherName);
+	const FName DispatcherFName(*DispatcherName);
 
-	// Idempotency: if a variable with this name already exists, short-circuit
+	// Idempotency: if a variable with this name already exists, short-circuit.
 	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
 	{
 		if (Var.VarName == DispatcherFName)
@@ -1543,53 +1543,119 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 		}
 	}
 
-	// Create the delegate signature graph so the compiler has a function to reference.
-	// Convention: "<Name>__DelegateSignature"
-	FString SigGraphName = DispatcherName + TEXT("__DelegateSignature");
-	UEdGraph* SigGraph = FBlueprintEditorUtils::CreateNewGraph(
-		Blueprint, FName(*SigGraphName),
+	// #276: Mirror BlueprintEditor.cpp's "Add New Event Dispatcher" path
+	// exactly. The previous implementation created the variable with a
+	// MemberReference pointing at the signature graph's GUID and skipped
+	// CreateFunctionGraphTerminators / AddExtraFunctionFlags / MarkFunctionEntryAsEditable.
+	// Result: the BP compiler had no UFunction to bind to the multicast
+	// delegate property, so any K2Node_CallDelegate referencing it failed
+	// to compile with "No SignatureFunction in MulticastDelegateProperty".
+	// The canonical pattern (UnrealEngine BlueprintEditor.cpp:9620) is:
+	//   1. AddMemberVariable with bare PC_MCDelegate type (no GUID link)
+	//   2. CreateNewGraph
+	//   3. CreateDefaultNodesForGraph + CreateFunctionGraphTerminators
+	//   4. AddExtraFunctionFlags(Callable | Event | Public)
+	//   5. MarkFunctionEntryAsEditable
+	//   6. Add to DelegateSignatureGraphs
+	//   7. MarkBlueprintAsStructurallyModified
+
+	FEdGraphPinType DelegateType;
+	DelegateType.PinCategory = UEdGraphSchema_K2::PC_MCDelegate;
+
+	const bool bVarOk = FBlueprintEditorUtils::AddMemberVariable(Blueprint, DispatcherFName, DelegateType);
+	if (!bVarOk)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to add event dispatcher variable: %s"), *DispatcherName));
+	}
+
+	UEdGraph* NewGraph = FBlueprintEditorUtils::CreateNewGraph(
+		Blueprint, DispatcherFName,
 		UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
-	if (SigGraph)
+	if (!NewGraph)
 	{
-		Blueprint->DelegateSignatureGraphs.AddUnique(SigGraph);
-		SigGraph->SetFlags(RF_Transactional);
-		// Schema creates the proper function entry node for us
-		SigGraph->GetSchema()->CreateDefaultNodesForGraph(*SigGraph);
+		// Roll the variable creation back so we don't leave a dangling delegate
+		// without a signature graph (which is exactly the bug we're fixing).
+		FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, DispatcherFName);
+		return MCPError(FString::Printf(TEXT("Failed to create signature graph for: %s"), *DispatcherName));
 	}
 
-	FEdGraphPinType PinType;
-	PinType.PinCategory = UEdGraphSchema_K2::PC_MCDelegate;
-	if (SigGraph)
+	NewGraph->bEditable = false;
+
+	const UEdGraphSchema_K2* K2Schema = GetDefault<UEdGraphSchema_K2>();
+	K2Schema->CreateDefaultNodesForGraph(*NewGraph);
+	K2Schema->CreateFunctionGraphTerminators(*NewGraph, (UClass*)nullptr);
+	K2Schema->AddExtraFunctionFlags(NewGraph, (FUNC_BlueprintCallable | FUNC_BlueprintEvent | FUNC_Public));
+	K2Schema->MarkFunctionEntryAsEditable(NewGraph, true);
+
+	Blueprint->DelegateSignatureGraphs.Add(NewGraph);
+
+	// Optional: declare typed parameters on the dispatcher signature.
+	// Params: parameters: [{ name, type }] where type is a K2 pin category
+	// shorthand ("bool", "int", "float", "string", "name", "vector",
+	// "rotator", "object:/Script/Module.ClassName", "struct:/Script/...").
+	const TArray<TSharedPtr<FJsonValue>>* ParamsArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("parameters"), ParamsArr) && ParamsArr)
 	{
-		PinType.PinSubCategoryMemberReference.MemberName = SigGraph->GetFName();
-		PinType.PinSubCategoryMemberReference.MemberGuid = SigGraph->GraphGuid;
+		for (const TSharedPtr<FJsonValue>& V : *ParamsArr)
+		{
+			const TSharedPtr<FJsonObject>* Obj = nullptr;
+			if (!V.IsValid() || !V->TryGetObject(Obj) || !Obj || !Obj->IsValid()) continue;
+			FString PName, PType;
+			if (!(*Obj)->TryGetStringField(TEXT("name"), PName) || PName.IsEmpty()) continue;
+			(*Obj)->TryGetStringField(TEXT("type"), PType);
+
+			FEdGraphPinType PinType;
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Wildcard;
+			const FString T = PType.ToLower();
+			if (T == TEXT("bool"))                 PinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
+			else if (T == TEXT("int") || T == TEXT("integer")) PinType.PinCategory = UEdGraphSchema_K2::PC_Int;
+			else if (T == TEXT("float") || T == TEXT("real"))  { PinType.PinCategory = UEdGraphSchema_K2::PC_Real; PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double; }
+			else if (T == TEXT("string"))          PinType.PinCategory = UEdGraphSchema_K2::PC_String;
+			else if (T == TEXT("name"))            PinType.PinCategory = UEdGraphSchema_K2::PC_Name;
+			else if (T == TEXT("text"))            PinType.PinCategory = UEdGraphSchema_K2::PC_Text;
+			else if (T == TEXT("vector"))          { PinType.PinCategory = UEdGraphSchema_K2::PC_Struct; PinType.PinSubCategoryObject = TBaseStructure<FVector>::Get(); }
+			else if (T == TEXT("rotator"))         { PinType.PinCategory = UEdGraphSchema_K2::PC_Struct; PinType.PinSubCategoryObject = TBaseStructure<FRotator>::Get(); }
+			else if (T == TEXT("transform"))       { PinType.PinCategory = UEdGraphSchema_K2::PC_Struct; PinType.PinSubCategoryObject = TBaseStructure<FTransform>::Get(); }
+			else if (T.StartsWith(TEXT("object:")))
+			{
+				PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
+				const FString ClassPath = PType.Mid(7);
+				PinType.PinSubCategoryObject = LoadObject<UClass>(nullptr, *ClassPath);
+				if (!PinType.PinSubCategoryObject.IsValid()) PinType.PinSubCategoryObject = UObject::StaticClass();
+			}
+			else if (T.StartsWith(TEXT("struct:")))
+			{
+				PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
+				PinType.PinSubCategoryObject = LoadObject<UScriptStruct>(nullptr, *PType.Mid(7));
+			}
+
+			// Pin is added to the function entry node's user-defined pin list.
+			// Nodes were created above by CreateFunctionGraphTerminators.
+			TArray<UK2Node_EditablePinBase*> EntryNodes;
+			NewGraph->GetNodesOfClass(EntryNodes);
+			if (EntryNodes.Num() > 0 && EntryNodes[0])
+			{
+				EntryNodes[0]->CreateUserDefinedPin(FName(*PName), PinType, EGPD_Output);
+			}
+		}
 	}
 
-	bool bSuccess = FBlueprintEditorUtils::AddMemberVariable(Blueprint, DispatcherFName, PinType);
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	SaveAssetPackage(Blueprint);
 
-	if (bSuccess)
-	{
-		// Compile and save
-		FKismetEditorUtilities::CompileBlueprint(Blueprint);
-		SaveAssetPackage(Blueprint);
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+	Result->SetStringField(TEXT("name"), DispatcherName);
+	Result->SetStringField(TEXT("signatureGraph"), NewGraph->GetName());
 
-		auto Result = MCPSuccess();
-		MCPSetCreated(Result);
-		Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-		Result->SetStringField(TEXT("name"), DispatcherName);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), BlueprintPath);
+	Payload->SetStringField(TEXT("name"), DispatcherName);
+	MCPSetRollback(Result, TEXT("delete_variable"), Payload);
 
-		// Rollback: delete_variable (dispatcher is a member variable under the hood)
-		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetStringField(TEXT("path"), BlueprintPath);
-		Payload->SetStringField(TEXT("name"), DispatcherName);
-		MCPSetRollback(Result, TEXT("delete_variable"), Payload);
-
-		return MCPResult(Result);
-	}
-	else
-	{
-		return MCPError(FString::Printf(TEXT("Failed to add event dispatcher: %s"), *DispatcherName));
-	}
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::RenameFunction(const TSharedPtr<FJsonObject>& Params)
