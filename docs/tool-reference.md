@@ -1,528 +1,618 @@
 # Tool Reference
 
-UE-MCP exposes **19 category tools** covering **440+ actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering **<!-- count:actions -->438+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
 
 !!! info "How to read this page"
-    Each row lists a single action and its key parameters. Optional params are marked with `?`. For full schemas (types, descriptions, defaults), every action also surfaces its description through the MCP schema — your AI client can introspect them at runtime.
+    Each row lists a single action and its key parameters. Optional params are marked with `?`. For full schemas (types, descriptions, defaults), every action also surfaces its description through the MCP schema - your AI client can introspect them at runtime.
 
 ---
 
-## project — Project Status, Config INI, C++ Source
+## project
 
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `get_status` | Server mode and editor connection status | |
-| `set_project` | Switch to a different UE project (auto-deploys bridge) | `projectPath` |
-| `get_info` | Read `.uproject` file details | |
-| `read_config` | Parse an INI config file | `configName` |
-| `search_config` | Search all INI files for a string | `query` |
-| `list_config_tags` | Extract gameplay tags from config | |
-| `set_config` | Write to an INI file | `configName`, `section`, `key`, `value` |
-| `read_cpp_header` | Parse a `.h` file for UCLASS/USTRUCT/UENUM/UPROPERTY/UFUNCTION | `headerPath` |
-| `read_module` | Read C++ module structure and Build.cs | `moduleName` |
-| `list_modules` | List all C++ modules in Source/ | |
-| `search_cpp` | Search `.h`/`.cpp` files for text | `query`, `directory?` |
-| `build` | Launch UnrealBuildTool to build C++ | `configuration?`, `platform?`, `clean?` |
-| `generate_project_files` | Generate IDE project files (VS, Xcode) | |
-| `read_engine_header` | Parse a `.h` from the engine source tree | `headerPath` (absolute or relative to `Engine/Source`) |
-| `find_engine_symbol` | Grep engine `.h`/`.inl` files under `Engine/Source/Runtime` for a symbol | `symbol`, `maxResults?` |
-| `list_engine_modules` | List modules under `Engine/Source/Runtime` | |
+*Project status, config INI files, and C++ source inspection.*
 
-!!! note
-    `read_config`, `read_cpp_header`, `list_modules`, `search_cpp`, and the `*_engine_*` actions work without the editor (filesystem only).
-    Engine actions resolve the engine install via `engineAssociation` in the `.uproject`.
-
----
-
-## asset — Asset Management, Import, DataTables, Textures
-
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `list` | List assets in a directory | `directory?`, `typeFilter?`, `recursive?` |
-| `search` | Search by name/class/path (supports wildcards) | `query`, `directory?`, `maxResults?` |
-| `read` | Read asset via reflection | `assetPath` |
-| `read_properties` | Read asset properties with values | `assetPath`, `propertyName?`, `includeValues?` |
-| `duplicate` | Duplicate an asset | `sourcePath`, `destinationPath` |
-| `rename` | Rename an asset | `assetPath`, `newName` |
-| `move` | Move an asset to a new path | `sourcePath`, `destinationPath` |
-| `delete` | Delete an asset | `assetPath` |
-| `save` | Save asset(s) to disk | `assetPath?` (omit to save all) |
-| `import_static_mesh` | Import static mesh from FBX/OBJ | `filePath`, `name?`, `packagePath?` |
-| `import_skeletal_mesh` | Import skeletal mesh from FBX | `filePath`, `skeletonPath?` |
-| `import_animation` | Import animation from FBX | `filePath`, `skeletonPath?` |
-| `import_texture` | Import texture from PNG/TGA/EXR/HDR | `filePath` |
-| `read_datatable` | Read DataTable rows | `assetPath`, `rowFilter?` |
-| `create_datatable` | Create a DataTable | `name`, `rowStruct` |
-| `reimport_datatable` | Reimport DataTable from JSON | `assetPath`, `jsonPath?`, `jsonString?` |
-| `list_textures` | List texture assets | `directory?`, `recursive?` |
-| `get_texture_info` | Get texture details (size, format, etc.) | `assetPath` |
-| `set_texture_settings` | Set texture properties | `assetPath`, `settings` |
-| `set_mesh_material` | Assign material to a static mesh slot | `assetPath`, `materialPath`, `slotIndex?` |
-| `recenter_pivot` | Move static mesh pivot to geometry center | `assetPath` or `assetPaths[]` (first mesh sets reference pivot) |
-| `add_socket` | Add socket to StaticMesh or SkeletalMesh | `assetPath`, `socketName`, `boneName?`, `relativeLocation?`, `relativeRotation?`, `relativeScale?` |
-| `remove_socket` | Remove socket by name | `assetPath`, `socketName` |
-| `list_sockets` | List sockets on a mesh | `assetPath` |
-| `reload_package` | Force reload an asset package from disk | `assetPath` |
-| `export` | Export asset to disk file (Texture2D → PNG, StaticMesh → FBX, etc.) | `assetPath`, `outputPath` |
-| `search_fts` | Ranked token search over asset name/class/path (replaces wildcard search for agent use) | `query`, `maxResults?`, `classFilter?` |
-| `reindex_fts` | Force AssetRegistry rescan to refresh FTS search coverage | `directory?` |
-| `move_folder` | Move an entire content folder with redirector fixup | `sourcePath`, `destinationPath` |
-| `create_folder` | Create empty content browser folders (#212) | `path` or `paths[]` |
-
-!!! note
-    `search` auto-searches all configured content roots (see [Configuration](configuration.md)).
-    `search_fts` is preferred for agent-driven lookups: tokenized, ranked, and returns a score so the LLM can reason about match quality.
+| Action | Description |
+|--------|-------------|
+| `get_status` | Check server mode and editor connection |
+| `set_project` | Switch project. Params: `projectPath` |
+| `get_info` | Read .uproject file details |
+| `read_config` | Read INI config. Params: `configName (e.g. 'Engine', 'Game')` |
+| `search_config` | Search INI files. Params: `query` |
+| `list_config_tags` | Extract gameplay tags from config |
+| `read_cpp_header` | Parse a .h file. Params: `headerPath` |
+| `read_module` | Read module source. Params: `moduleName` |
+| `list_modules` | List C++ modules |
+| `search_cpp` | Search .h/.cpp files. Params: `query, directory?` |
+| `read_engine_header` | Parse a .h file from the engine source tree. Params: `headerPath (relative to Engine/Source, or absolute)` |
+| `find_engine_symbol` | Grep engine headers for a symbol. Params: `symbol, maxResults?` |
+| `list_engine_modules` | List modules in Engine/Source/Runtime |
+| `search_engine_cpp` | Search engine .h/.cpp/.inl files across Runtime/Editor/Developer/Plugins. Params: `query, tree? (Runtime\\|Editor\\|Developer\\|Plugins\\|all - default Runtime), subdirectory?, maxResults? (default 500)` |
+| `set_config` | Write to INI. Params: `configName, section, key, value` |
+| `build` | Build C++ project. Params: `configuration?, platform?, clean?` |
+| `generate_project_files` | Generate IDE project files (Visual Studio, Xcode, etc.) |
+| `create_cpp_class` | Create a new native UCLASS in a project module. Uses the same engine template path as File → New C++ Class. Writes .h + .cpp; returns both paths plus needsEditorRestart (true unless Live Coding successfully hot-reloaded). Params: `className (no prefix), parentClass? (default UObject; accepts short names like 'Actor' or /Script/<Module>.<Class> paths), moduleName? (default: first project module, use list_project_modules to pick), classDomain? ('public'\\|'private'\\|'classes', default public), subPath?` |
+| `list_project_modules` | List native modules in the current project (name, host type, source path). Feed moduleName from here into create_cpp_class |
+| `live_coding_compile` | Trigger a Live Coding compile (Windows only). Hot-patches method bodies of existing UCLASSes without editor restart - the fast inner loop for UFUNCTION implementations. Does NOT reliably register brand-new UCLASSes; use build_project + editor restart for those. Params: `wait? (default false - fire and return 'in_progress')` |
+| `live_coding_status` | Report Live Coding availability/state (available, started, enabledForSession, compiling). Helps choose between live_coding_compile and build_project |
+| `write_cpp_file` | Write a .h / .cpp / .inl file under the project's Source/ tree. Used to append UPROPERTYs/UFUNCTIONs or method bodies after create_cpp_class. Writes are scoped to Source/ for safety. Params: `path (relative to Source/ or absolute within Source/), content (full file contents)` |
+| `read_cpp_source` | Read a .cpp file from the project Source/ tree. Companion to read_cpp_header for round-trip edits. Params: `sourcePath (relative to Source/ or absolute)` |
+| `add_module_dependency` | Add a module to a target module's Build.cs dependency array. Params: `moduleName (the Build.cs to edit - must exist in the project), dependency (module name to add, e.g. 'UMG'), access? ('public'\\|'private', default 'private')` |
 
 ---
 
-## blueprint — Reading, Authoring, Compilation
+## asset
 
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `read` | Read Blueprint structure incl. SCS components (name, class, mesh, materials, transform) | `assetPath` |
-| `list_variables` | List variables with types and flags | `assetPath` |
-| `list_functions` | List functions and graphs | `assetPath` |
-| `list_graphs` | List all graphs in a blueprint (EventGraph, AnimGraph, etc.) | `assetPath` |
-| `read_graph` | Read graph nodes and connections | `assetPath`, `graphName` |
-| `create` | Create a new Blueprint | `assetPath`, `parentClass?` |
-| `add_variable` | Add a variable | `assetPath`, `name`, `varType` |
-| `set_variable_properties` | Edit variable flags | `assetPath`, `name`, `instanceEditable?`, `category?` |
-| `create_function` | Create a function graph | `assetPath`, `functionName` |
-| `delete_function` | Delete a function | `assetPath`, `functionName` |
-| `rename_function` | Rename a function | `assetPath`, `oldName`, `newName` |
-| `add_node` | Add a graph node (any UEdGraphNode subclass). Aliases: `CallFunction`, `Event`, `CustomEvent`, `GetVar`, `SetVar`, `Branch`. | `assetPath`, `nodeClass`, `graphName?`, `nodeParams?` |
-| `delete_node` | Remove a node | `assetPath`, `graphName`, `nodeName` |
-| `set_node_property` | Set pin default or struct property (supports dot paths) | `assetPath`, `graphName`, `nodeName`, `propertyName`, `value` |
-| `connect_pins` | Wire two node pins together | `assetPath`, `sourceNode`, `sourcePin`, `targetNode`, `targetPin` |
-| `add_component` | Add a component to the BP | `assetPath`, `componentClass` |
-| `remove_component` | Remove an SCS component | `assetPath`, `componentName` |
-| `set_component_property` | Set property on SCS or inherited component template (dot paths, asset paths) | `assetPath`, `componentName`, `propertyName`, `value` |
-| `set_class_default` | Set UPROPERTY on CDO (TSubclassOf, object refs, TArray, FGameplayTagContainer via ImportText) | `assetPath`, `propertyName`, `value` |
-| `delete_variable` | Delete a member variable | `assetPath`, `name` |
-| `add_function_parameter` | Add input or output parameter to a function | `assetPath`, `functionName`, `parameterName`, `parameterType?`, `isOutput?` |
-| `set_variable_default` | Set default value on a BP variable (bypasses CDO restrictions) | `assetPath`, `name`, `value` |
-| `compile` | Compile the Blueprint | `assetPath` |
-| `list_node_types` | List available node types by category | `category?` |
-| `search_node_types` | Search for node types | `query` |
-| `create_interface` | Create a Blueprint Interface | `assetPath` |
-| `add_interface` | Implement an interface on a BP | `blueprintPath`, `interfacePath` |
-| `add_event_dispatcher` | Add an event dispatcher | `blueprintPath`, `name` |
-| `read_graph_summary` | Lightweight graph summary: nodes + exec/data edges only, no pin defaults. Target ~10KB vs ~170KB from `read_graph`. | `assetPath`, `graphName?` |
-| `get_execution_flow` | Trace exec pins BFS from an entry point (Event / FunctionEntry / CustomEvent); returns ordered steps with branch information. | `assetPath`, `graphName?`, `entryPoint?` |
-| `get_dependencies` | Forward (`classes`, `functions`, `assets`) or reverse (`referencers`) dependency set via AssetRegistry + graph walk. | `assetPath`, `reverse?` |
-| `duplicate` | Duplicate a Blueprint asset (rollback via `delete_asset`). | `sourcePath`, `destinationPath` |
-| `add_local_variable` | Add a function-scope local variable to a function's entry node. | `assetPath`, `functionName`, `name`, `varType?` |
-| `list_local_variables` | List local variables for a function. | `assetPath`, `functionName` |
-| `validate` | Compile without saving and collect compiler diagnostics (errors + warnings). | `assetPath` |
-| `export_nodes_t3d` | Export graph nodes as T3D text (Ctrl+C equivalent). Omit `nodeIds` to export the whole graph. Pair with `import_nodes_t3d` for bulk authoring (#130). | `assetPath`, `graphName?`, `nodeIds?` |
-| `import_nodes_t3d` | Paste a T3D node blob into a graph (Ctrl+V equivalent). Returns new node guids. Optional `posX`/`posY` re-centers pasted nodes (#130). | `assetPath`, `graphName?`, `t3d`, `posX?`, `posY?` |
-| `reparent` | Change a Blueprint's `ParentClass` and recompile. Resolves short names, full paths, and engine-module short names (#138). | `assetPath`, `parentClass` |
+*Asset management: list, search, read, CRUD, import meshes/textures, datatables.*
 
-!!! tip "Agent-friendly introspection"
-    Prefer `read_graph_summary` over `read_graph` for LLM use: the summary strips pin defaults, positions, and comments, keeping only what's needed to reason about structure. Use `get_execution_flow` to follow event-driven logic and `get_dependencies` (reverse) before renaming/deleting shared assets.
-
-!!! tip "Graph Scripting Workflow"
-    `search_node_types` → `add_node` → `connect_pins` is the standard flow for graph scripting.
-    For AnimBPs: `list_graphs` → `read_graph` (with `graphName: "AnimGraph"`) → `add_node` (with `nodeClass: "AnimGraphNode_TwoBoneIK"`, etc.) → `connect_pins`.
-
-!!! info "nodeParams by node type"
-    - **CallFunction**: `{functionName, targetClass?}` — targetClass defaults to blueprint's parent class
-    - **Event**: `{eventName, eventClass?}` — with eventClass binds an engine event override; without it creates a custom event
-    - **GetVar / SetVar**: `{variableName}` — references a blueprint variable
-    - Aliases: `memberName`/`memberParent` accepted as alternatives to `functionName`/`targetClass`/`eventClass`
+| Action | Description |
+|--------|-------------|
+| `list` | List assets in directory. Params: `directory?, typeFilter?, recursive?` |
+| `search` | Search by name/class/path. Params: `query, directory?, maxResults?, searchAll?` |
+| `read` | Read asset via reflection. Params: `assetPath` |
+| `read_properties` | Read asset properties with values. Params: `assetPath, propertyName?, includeValues?` |
+| `duplicate` | Duplicate asset. Params: `sourcePath, destinationPath` |
+| `rename` | Rename asset. Params: `assetPath, newName` |
+| `bulk_rename` | Batched rename using IAssetTools::RenameAssets - single transaction with one redirector-fixup pass (matches Content Browser drag). Use this over looped rename for scene-referenced assets. Params: `renames[] where each entry is {sourcePath, destinationPath} OR {assetPath, newName}` |
+| `move` | Move asset. Params: `sourcePath, destinationPath` |
+| `delete` | Delete asset. Params: `assetPath` |
+| `delete_batch` | Batch-delete assets. Params: `assetPaths[]` |
+| `create_data_asset` | Create UDataAsset instance of custom class. Params: `name, className (/Script/Module.ClassName or loaded name), packagePath?, properties? (key/value map)` |
+| `save` | Save asset(s). Params: `assetPath?` |
+| `set_mesh_material` | Assign material to static mesh slot. Params: `assetPath, materialPath, slotIndex?` |
+| `recenter_pivot` | Move static mesh pivot to geometry center. Params: `assetPath OR assetPaths` |
+| `import_static_mesh` | Import from FBX/OBJ. Params: `filePath, name?, packagePath?, combineMeshes?, importMaterials?, importTextures?, generateLightmapUVs?` |
+| `import_skeletal_mesh` | Import skeletal mesh from FBX. Params: `filePath, name?, packagePath?, skeletonPath?, importMaterials?, importTextures?` |
+| `import_animation` | Import anim from FBX. Params: `filePath, name?, packagePath?, skeletonPath` |
+| `import_texture` | Import image. Params: `filePath, name?, packagePath?` |
+| `reimport` | Reimport asset from source file. Params: `assetPath, filePath?` |
+| `read_datatable` | Read DataTable rows. Params: `assetPath, rowFilter?` |
+| `create_datatable` | Create DataTable. Params: `name, packagePath?, rowStruct` |
+| `reimport_datatable` | Reimport DataTable from JSON. Params: `assetPath, jsonPath?, jsonString?` |
+| `list_textures` | List textures. Params: `directory?, recursive?` |
+| `get_texture_info` | Get texture details. Params: `assetPath` |
+| `set_texture_settings` | Set texture settings. Params: `assetPath, settings (object with compressionSettings?, lodGroup?, sRGB?, neverStream?)` |
+| `add_socket` | Add socket to StaticMesh or SkeletalMesh. Params: `assetPath, socketName, boneName?, relativeLocation?, relativeRotation?, relativeScale?` |
+| `remove_socket` | Remove socket by name. Params: `assetPath, socketName` |
+| `list_sockets` | List sockets on a mesh. Params: `assetPath` |
+| `reload_package` | Force reload an asset package from disk. Params: `assetPath` |
+| `export` | Export asset to disk file (Texture2D → PNG, StaticMesh → FBX, etc.). Params: `assetPath, outputPath` |
+| `search_fts` | Ranked asset search (token-scored over name/class/path). Params: `query, maxResults?, classFilter?` |
+| `reindex_fts` | Rebuild the SQLite FTS5 asset index. Params: `directory?` |
+| `get_referencers` | Reverse dependency lookup. Params: `packages[] OR packagePath (#150)` |
+| `set_sk_material_slots` | Set materials on a USkeletalMesh by slot name or slotIndex (bypasses the blueprint override-materials path that UE's ICH silently reverts). Params: `assetPath, slots[{slotName?\\|slotIndex?, materialPath}]` |
+| `diagnose_registry` | Scan a content path and compare disk vs AssetRegistry (including in-memory pending-kill entries). Returns onDiskCount, inMemoryIncludedCount, ghostCount and paths. Params: `path, recursive? (default true), reconcile? (forceRescan=true)` |
+| `get_mesh_bounds` | Get StaticMesh bounding box. Params: `assetPath` |
+| `get_mesh_collision` | Inspect StaticMesh collision setup. Params: `assetPath` |
+| `move_folder` | Move/rename entire content folder with redirector fixup in one transaction. Params: `sourcePath, destinationPath (#192)` |
+| `create_folder` | Create empty content browser folder(s). Params: `path OR paths[] (e.g. /Game/Foo, /Game/Bar/Baz)` |
+| `set_mesh_nav` | Set StaticMesh nav contribution. Params: `assetPath, bHasNavigationData?, clearNavCollision? (#167)` |
 
 ---
 
-## level — Actors, Selection, Components, Volumes, Lights, Splines
+## blueprint
 
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `get_outliner` | List all actors in the level | `classFilter?`, `nameFilter?` |
-| `place_actor` | Spawn an actor | `actorClass`, `location?`, `rotation?`, `label?` |
-| `delete_actor` | Remove an actor | `actorLabel` |
-| `get_actor_details` | Inspect an actor's properties | `actorLabel` |
-| `move_actor` | Transform an actor | `actorLabel`, `location?`, `rotation?`, `scale?` |
-| `select` | Select actors in the editor | `actorLabels[]` |
-| `get_selected` | Get current selection | |
-| `add_component` | Add a component to an actor | `actorLabel`, `componentClass` |
-| `set_component_property` | Set a component property | `actorLabel`, `componentName`, `propertyName`, `value` |
-| `get_current` | Get current level info | |
-| `load` | Open a level | `levelPath` |
-| `save` | Save the current level | |
-| `list` | List map assets | |
-| `create` | Create an empty level | |
-| `spawn_volume` | Place a volume. Builds a real cube brush (FBSPOps prep) so AVolume bounds match the requested extent. Optional `graphPath` binds a PCG graph when `volumeType:"PCGVolume"`. | `volumeType`, `location?`, `extent?`, `graphPath?` |
-| `list_volumes` | List volumes in the level | `volumeType?` |
-| `set_volume_properties` | Edit volume properties. Synthetic `BrushExtent: {X,Y,Z}` rebuilds the cube brush; unknown property names are returned in `skipped` instead of silently no-op'ing. | `actorLabel`, `properties` |
-| `spawn_light` | Place a light | `lightType`, `location?`, `intensity?`, `color?` |
-| `set_light_properties` | Edit light properties | `actorLabel`, `intensity?`, `color?`, `temperature?` |
-| `build_lighting` | Build lighting | `quality?` |
-| `get_world_settings` | Read WorldSettings (GameMode, KillZ, gravity) | |
-| `set_world_settings` | Set DefaultGameMode and other world settings | `gameModePath?`, `killZ?`, `globalGravityZ?` |
-| `get_spline_info` | Read spline component data | `actorLabel` |
-| `set_spline_points` | Set spline points | `actorLabel`, `points[]`, `closedLoop?` |
-| `set_actor_property` | Set per-instance UPROPERTY on a level actor (`actorLabel="WorldSettings"` to target the world settings actor; `force=true` bypasses EditDefaultsOnly) (#202/#230) | `actorLabel`, `propertyName`, `value`, `force?`, `world?` |
-| `delete_actors` | Bulk-delete by `labelPrefix` / `className` / `tag` with optional `dryRun` (#220) | filter + `dryRun?` |
-| `add_actor_tag` / `remove_actor_tag` / `set_actor_tags` / `list_actor_tags` | Manage actor `Tags` array (#219) | `actorLabel`, `tag` or `tags[]` |
-| `attach_actor` / `detach_actor` | Reparent an actor's root component (#205) | `childLabel`, `parentLabel`, `attachRule?`, `socketName?` |
-| `set_actor_mobility` | Set root-component mobility (`static`/`stationary`/`movable`) (#205) | `actorLabel`, `mobility` |
-| `get_current_edit_level` / `set_current_edit_level` | Read or set the active edit-target sub-level so spawns land in the right place (#204) | `levelName` |
-| `list_streaming_sublevels` | List streaming sub-levels with transform + flags (#206) | |
-| `add_streaming_sublevel` | Add a streaming sub-level | `levelPath`, `streamingClass?`, `location?`, `initiallyLoaded?`, `initiallyVisible?` |
-| `remove_streaming_sublevel` | Remove a streaming sub-level | `levelName` |
-| `set_streaming_sublevel_properties` | Update sub-level transform / load / visibility flags | `levelName`, `location?`, `initiallyLoaded?`, `initiallyVisible?`, `editorVisible?` |
-| `spawn_grid` | Batch-spawn StaticMeshActors on a 3D grid with optional jitter (#203) | `staticMesh`, `min`, `max`, `countX/Y/Z?`, `jitter?`, `labelPrefix?` |
-| `batch_translate` | Translate a set of actors (by labels or tag) by an offset (#203) | `offset`, `actorLabels[]` or `tag` |
+*Blueprint reading, authoring, and compilation. Covers variables, functions, graphs, nodes, components, interfaces, and event dispatchers.*
 
----
-
-## material — Materials, Instances, Shading, Graph Authoring
-
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `read` | Read material structure | `assetPath` |
-| `list_parameters` | List overridable parameters | `assetPath` |
-| `set_parameter` | Set scalar/vector/texture parameter on MaterialInstance | `assetPath`, `parameterName`, `parameterType?`, `value` |
-| `set_expression_value` | Set value on expression node (Constant, Constant3Vector, etc.) | `materialPath`, `expressionIndex`, `value` |
-| `disconnect_property` | Clear a material property input connection | `materialPath`, `property` |
-| `create_instance` | Create a material instance | `parentPath`, `name?` |
-| `create` | Create a new material | `name`, `packagePath?` |
-| `set_shading_model` | Set shading model | `assetPath`, `shadingModel` |
-| `set_base_color` | Set base color | `assetPath`, `color {r,g,b}` |
-| `connect_texture` | Wire a texture to a material property | `materialPath`, `texturePath`, `property` |
-| `add_expression` | Add a material expression node | `assetPath`, `expressionType`, `name?` |
-| `connect_expressions` | Connect two expression nodes | `assetPath`, `sourceExpression`, `sourceOutput`, `destExpression`, `destInput` |
-| `connect_to_property` | Connect expression to a material property | `assetPath`, `expressionName`, `outputIndex?`, `property` |
-| `list_expressions` | List expressions in a material | `assetPath` |
-| `delete_expression` | Delete an expression node | `assetPath`, `expressionName` |
-| `list_expression_types` | List available expression types | `filter?` |
-| `recompile` | Recompile the material | `assetPath` |
-| `duplicate` | Duplicate a material asset (rollback via `delete_asset`). | `sourcePath`, `destinationPath` |
-| `validate` | Walk expressions from material property roots; report orphans and null texture refs. | `assetPath` |
-| `get_shader_stats` | Texture-sample count, scalar/vector/texture parameter counts, shading model. | `assetPath` |
-| `export_graph` | Export material expression graph as JSON (nodes + property connections). | `assetPath` |
-| `import_graph` | Build a material graph from a JSON spec (alias of `build_graph`). | `assetPath`, `nodes`, `propertyConnections?` |
-| `build_graph` | Declarative graph builder: `{nodes: [{name, class, posX, posY, value?}], propertyConnections: [{property, from, outputIndex}]}`. | `assetPath`, `nodes`, `propertyConnections?` |
-| `render_preview` | Render a preview PNG of the material (base color approximation in v0.7.8). | `assetPath`, `outputPath`, `width?`, `height?` |
-| `begin_transaction` / `end_transaction` | Bracket multi-step edits in a single undo transaction. | `label?` |
-| `create_simple` | Single-call simple material: create + base/metallic/specular/roughness/emissive constants + usage flags + recompile + save (#225) | `name`, `packagePath?`, `baseColor?`, `metallic?`, `specular?`, `roughness?`, `emissive?`, `usages?[]` |
-| `set_usage` | Set EMaterialUsage flag(s) (`InstancedStaticMeshes`, `Nanite`, `NiagaraSprites`, ...) (#225) | `assetPath`, `usage` or `usages[]`, `enabled?` |
+| Action | Description |
+|--------|-------------|
+| `read` | Read BP structure incl. SCS components. Params: `assetPath` |
+| `list_variables` | List variables. Params: `assetPath` |
+| `list_functions` | List functions/graphs. Params: `assetPath` |
+| `read_graph` | Read graph nodes. Params: `assetPath, graphName` |
+| `read_graph_summary` | Lightweight graph summary (nodes+edges only, ~10KB). Params: `assetPath, graphName?` |
+| `get_execution_flow` | Trace exec pins from an entry point. Params: `assetPath, graphName?, entryPoint?` |
+| `get_dependencies` | Forward (classes/functions/assets) or reverse (referencers) deps. Params: `assetPath, reverse?` |
+| `create` | Create Blueprint. Params: `assetPath, parentClass?` |
+| `add_variable` | Add variable. Params: `assetPath, name, varType` |
+| `set_variable_properties` | Edit variable properties. Params: `assetPath, name, instanceEditable?, blueprintReadOnly?, category?, tooltip?, replicationType?, exposeOnSpawn?` |
+| `create_function` | Create function. Params: `assetPath, functionName` |
+| `delete_function` | Delete function. Params: `assetPath, functionName` |
+| `rename_function` | Rename function. Params: `assetPath, oldName, newName` |
+| `add_node` | Add graph node. Params: `assetPath, graphName?, nodeClass, nodeParams?` |
+| `delete_node` | Delete node. Params: `assetPath, graphName, nodeName` |
+| `set_node_property` | Set node pin default or struct property. Params: `assetPath, graphName, nodeName, propertyName, value` |
+| `connect_pins` | Wire nodes. Params: `sourceNode, sourcePin, targetNode, targetPin, assetPath, graphName?` |
+| `add_component` | Add BP component. Params: `assetPath, componentClass, componentName?, parentComponent? (SCS parent for hierarchy - #115)` |
+| `remove_component` | Remove SCS component. Params: `assetPath, componentName` |
+| `set_component_property` | Set property on SCS or inherited component. Inherited components go through the child BP's InheritableComponentHandler override template so the parent stays untouched. Params: `assetPath, componentName, propertyName, value` |
+| `get_component_property` | Read a single property value from an SCS or inherited component template. Returns the ICH override value for child BPs if one exists. Params: `assetPath, componentName, propertyName` |
+| `set_class_default` | Set UPROPERTY on Blueprint CDO. Params: `assetPath, propertyName, value` |
+| `delete_variable` | Delete a member variable. Params: `assetPath, name` |
+| `add_function_parameter` | Add input or output parameter to a function. Params: `assetPath, functionName, parameterName, parameterType?, isOutput?` |
+| `set_variable_default` | Set default value on a BP variable. Params: `assetPath, name, value` |
+| `compile` | Compile Blueprint. Params: `assetPath` |
+| `list_node_types` | List node types. Params: `category?, includeFunctions?` |
+| `search_node_types` | Search nodes. Params: `query` |
+| `create_interface` | Create BP Interface. Params: `assetPath` |
+| `add_interface` | Implement interface. Params: `blueprintPath, interfacePath` |
+| `list_graphs` | List all graphs in a blueprint. Params: `assetPath` |
+| `add_event_dispatcher` | Add event dispatcher. Params: `blueprintPath, name` |
+| `duplicate` | Duplicate blueprint asset. Params: `sourcePath, destinationPath` |
+| `add_local_variable` | Add function-scope local variable. Params: `assetPath, functionName, name, varType?` |
+| `list_local_variables` | List local variables in a function. Params: `assetPath, functionName` |
+| `validate` | Validate blueprint without saving (compile + collect diagnostics). Params: `assetPath` |
+| `read_component_properties` | Dump ALL UPROPERTYs on a BP component template incl. array contents (#105). Params: `assetPath, componentName` |
+| `read_node_property` | Read a node pin default OR a reflected node property for verification (#102). Params: `assetPath, graphName?, nodeName, propertyName` |
+| `reparent_component` | Reparent an SCS component under a new parent (#115). Params: `assetPath, componentName, newParent` |
+| `reparent` | Change a Blueprint's ParentClass and recompile (#138). Params: `assetPath, parentClass (short name or full path)` |
+| `set_actor_tick_settings` | Set actor CDO tick settings (#116). Params: `assetPath, bCanEverTick?, bStartWithTickEnabled?, TickInterval?` |
+| `export_nodes_t3d` | Export graph nodes as T3D text (Ctrl+C equivalent) for bulk round-trip (#130). Params: `assetPath, graphName?, nodeIds? (omit = whole graph)` |
+| `import_nodes_t3d` | Paste a T3D node blob into a graph (Ctrl+V equivalent) for bulk authoring (#130). Params: `assetPath, graphName?, t3d, posX?, posY?` |
+| `set_cdo_property` | Set UPROPERTY on any C++ class CDO (not just Blueprints). Params: `className, propertyName, value (#182/#183)` |
+| `get_cdo_properties` | Read UPROPERTY values from any C++ class CDO. Params: `className, propertyNames? (#183)` |
+| `run_construction_script` | Spawn temp actor, run construction script, return generated components and transforms. Params: `assetPath, location? (#195)` |
 
 ---
 
-## animation — Anim Assets, Skeletons, Montages, Blendspaces
+## level
 
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `read_anim_blueprint` | Read AnimBP structure | `assetPath` |
-| `read_montage` | Read montage sections and notifies | `assetPath` |
-| `read_sequence` | Read animation sequence | `assetPath` |
-| `read_blendspace` | Read blendspace samples | `assetPath` |
-| `list` | List animation assets | `directory?`, `recursive?` |
-| `create_montage` | Create montage from a sequence | `animSequencePath` |
-| `create_anim_blueprint` | Create an AnimBP | `skeletonPath`, `parentClass?` |
-| `create_blendspace` | Create a blendspace | `skeletonPath` |
-| `add_notify` | Add a notify event | `assetPath`, `notifyName`, `triggerTime` |
-| `get_skeleton_info` | Read skeleton bone hierarchy | `assetPath` |
-| `list_sockets` | List skeleton sockets | `assetPath` |
-| `list_skeletal_meshes` | List skeletal meshes in project | `directory?` |
-| `get_physics_asset` | Read physics asset bodies | `assetPath` |
-| `create_sequence` | Create blank AnimSequence | `name`, `skeletonPath`, `packagePath?`, `numFrames?`, `frameRate?` |
-| `set_bone_keyframes` | Set bone transform keyframes | `assetPath`, `boneName`, `keyframes` |
-| `get_bone_transforms` | Read reference pose transforms | `skeletonPath`, `boneNames?` |
-| `set_montage_sequence` | Replace animation in a montage (auto-updates duration) | `assetPath`, `animSequencePath`, `slotIndex?` |
-| `set_montage_properties` | Set montage duration, rate, and blending | `assetPath`, `sequenceLength?`, `rateScale?`, `blendIn?`, `blendOut?` |
-| `read_anim_graph` | Read AnimBP AnimGraph nodes with properties via reflection | `assetPath`, `graphName?` |
-| `add_curve` | Add float curve to AnimSequence | `assetPath`, `curveName` |
-| `set_montage_slot` | Set SlotAnimTrack slot name | `assetPath`, `slotName`, `trackIndex?` |
-| `add_montage_section` | Add composite section to montage | `assetPath`, `sectionName`, `startTime?` |
-| `create_ik_rig` | Create IKRigDefinition asset | `name`, `skeletalMeshPath`, `packagePath?` |
-| `read_ik_rig` | Read IK Rig chains and solvers | `assetPath` |
-| `list_control_rig_variables` | Read ControlRig blueprint variables and graphs | `assetPath` |
-| `set_root_motion` | Set `bEnableRootMotion`, `bForceRootLock`, `RootMotionRootLock` on AnimSequence. | `assetPath`, `enableRootMotion?`, `forceRootLock?`, `rootMotionRootLock?` |
-| `add_virtual_bone` / `remove_virtual_bone` | Add or remove virtual bones on a skeleton. | `skeletonPath`, `sourceBone`/`targetBone` or `virtualBoneName` |
-| `create_composite` | Create an AnimComposite asset bound to a skeleton. | `name`, `skeletonPath`, `packagePath?` |
-| `list_modifiers` | List applied animation modifiers on a sequence. | `assetPath` |
+*Level actors, selection, components, level management, volumes, lights, and splines.*
 
-!!! note
-    Most animation tools need a skeleton path — use `list_skeletal_meshes` to find it.
-
----
-
-## landscape — Terrain Sculpting, Painting, Layers
-
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `get_info` | Get landscape setup (size, scale, layers) | |
-| `list_layers` | List paint layers | |
-| `sample` | Sample height and layer weights at a point | `x`, `y` |
-| `list_splines` | Read landscape splines | |
-| `get_component` | Inspect a landscape component | `componentIndex` |
-| `sculpt` | Sculpt the heightmap | `x`, `y`, `radius`, `strength` |
-| `paint_layer` | Paint a weight layer | `layerName`, `x`, `y`, `radius` |
-| `set_material` | Set the landscape material | `materialPath` |
-| `add_layer_info` | Register a paint layer | `layerName` |
-| `import_heightmap` | Import a heightmap file | `filePath` |
-
----
-
-## pcg — Procedural Content Generation
-
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `list_graphs` | List PCG graph assets | `directory?` |
-| `read_graph` | Read graph structure (nodes and edges, including implicit `inputNode` / `outputNode`) | `assetPath` |
-| `read_node_settings` | Read a node's settings | `assetPath`, `nodeName` |
-| `import_graph` | Bulk-author a PCG graph from a JSON spec - replaces N add_node + M connect_nodes + K set_node_settings round-trips. Operates on the runtime `UPCGGraph` directly. | `assetPath`, `nodes=[{name,class,posX?,posY?,settings?}]`, `connections=[{from,fromPin?,to,toPin?}]`, `replace?` |
-| `export_graph` | Read a PCG graph back as the same JSON spec. Round-trips with `import_graph`; layout is read from the editor graph when present. | `assetPath`, `includeSettings?` |
-| `get_components` | List PCG components in the level | |
-| `get_component_details` | Inspect a PCG component | `actorLabel` |
-| `create_graph` | Create a new PCG graph | `name` |
-| `add_node` | Add a node to the graph | `assetPath`, `nodeType` |
-| `connect_nodes` | Wire two nodes | `assetPath`, `sourceNode`, `sourcePin`, `targetNode`, `targetPin` |
-| `set_node_settings` | Set node parameters | `assetPath`, `nodeName`, `settings` |
-| `set_static_mesh_spawner_meshes` | Populate weighted `MeshEntries` on a `PCGStaticMeshSpawner` node (auto-instantiates `UPCGMeshSelectorWeighted` when needed). Pass `replace=false` to append (#145). | `assetPath`, `nodeName`, `entries=[{mesh, weight?}]`, `replace?` |
-| `remove_node` | Remove a node | `assetPath`, `nodeName` |
-| `execute` | Regenerate PCG output | `actorLabel` |
-| `add_volume` | Place a PCG volume in the level | `graphPath`, `location?`, `extent?` |
+| Action | Description |
+|--------|-------------|
+| `get_outliner` | List actors. Params: `classFilter?, nameFilter?, world? (editor\\|pie\\|auto), limit?` |
+| `place_actor` | Spawn actor. Params: `actorClass, label?, location?, rotation?, scale?, staticMesh?, material?` |
+| `delete_actor` | Remove actor. Params: `actorLabel` |
+| `get_actor_details` | Inspect actor. Params: `actorLabel OR actorPath, includeProperties?, propertyName?, world? (editor\\|pie)` |
+| `move_actor` | Transform actor. Params: `actorLabel, location?, rotation?, scale?` |
+| `select` | Select actors. Params: `actorLabels[]` |
+| `get_selected` | Get selection |
+| `add_component` | Add component to actor. Params: `actorLabel, componentClass, componentName?` |
+| `set_component_property` | Set component prop. Params: `actorLabel, componentName, propertyName, value` |
+| `get_current` | Get current level name and path |
+| `load` | Load level. Params: `levelPath` |
+| `save` | Save current level |
+| `list` | List levels. Params: `directory?, recursive?` |
+| `create` | Create new level. Params: `levelPath?, templateLevel?` |
+| `spawn_volume` | Place volume. Params: `volumeType, location?, extent?, label?` |
+| `list_volumes` | List volumes. Params: `volumeType?` |
+| `set_volume_properties` | Edit volume. Params: `actorLabel, properties` |
+| `spawn_light` | Place light. Params: `lightType, location?, rotation?, intensity?, color?, label?` |
+| `set_light_properties` | Edit light. Params: `actorLabel, intensity?, color?, rotation? (DirectionalLight sun angle), recaptureSky?, temperature?, castShadows?, attenuationRadius?` |
+| `set_fog_properties` | Edit ExponentialHeightFog. Params: `actorLabel?, fogDensity?, fogHeightFalloff?, startDistance?, fogInscatteringColor?` |
+| `get_actors_by_class` | List actors by class name. Params: `className, world? (editor\\|pie)` |
+| `count_actors_by_class` | Histogram of actor classes in the level (sorted desc). Params: `world? (editor\\|pie), topN? (#146)` |
+| `get_runtime_virtual_texture_summary` | List RuntimeVirtualTextureVolume actors + their bound VirtualTexture assets (#150) |
+| `set_water_body_property` | Set a property on an actor's WaterBodyComponent (ShapeDilation, WaterLevel, etc.). Params: `actorLabel, propertyName, value` |
+| `build_lighting` | Build lights. Params: `quality?` |
+| `get_spline_info` | Read spline. Params: `actorLabel` |
+| `set_spline_points` | Set spline points. Params: `actorLabel, points[], closedLoop?` |
+| `set_actor_material` | Set material on actor. Params: `actorLabel, materialPath, slotIndex?` |
+| `get_world_settings` | Read world settings (GameMode, KillZ, gravity, etc.) |
+| `set_world_settings` | Set world settings. Params: `defaultGameMode?, killZ?, globalGravityZ?, enableWorldBoundsChecks?` |
+| `get_actor_bounds` | Get actor AABB. Params: `actorLabel` |
+| `resolve_actor` | Resolve internal/runtime actor name to editor label. Params: `internalName (e.g. StaticMeshActor_141)` |
+| `set_actor_property` | Set per-instance UPROPERTY on a level actor. Params: `actorLabel ('WorldSettings' targets the world settings actor), propertyName (dotted paths like 'Foo.Bar' supported), value (string/number/bool/object/array; an actor label resolves to AActor* refs), force? (bypass EditDefaultsOnly), world? (editor\\|pie) (#202/#230)` |
+| `delete_actors` | Bulk-delete actors. Params: `at least one of labelPrefix, className, tag; dryRun? to preview` |
+| `add_actor_tag` | Append a tag to an actor's Tags array. Params: `actorLabel, tag (#219)` |
+| `remove_actor_tag` | Remove a tag from an actor's Tags array. Params: `actorLabel, tag (#219)` |
+| `set_actor_tags` | Replace an actor's Tags array. Params: `actorLabel, tags[] (#219)` |
+| `list_actor_tags` | List an actor's Tags. Params: `actorLabel (#219)` |
+| `attach_actor` | Attach actor as child. Params: `childLabel, parentLabel, attachRule? (KeepWorld\\|KeepRelative\\|SnapToTarget; default KeepWorld), socketName? (#205)` |
+| `detach_actor` | Detach actor from parent. Params: `childLabel (#205)` |
+| `set_actor_mobility` | Set actor root component Mobility. Params: `actorLabel, mobility (static\\|stationary\\|movable) (#205)` |
+| `get_current_edit_level` | Read the active edit-target sub-level (#204) |
+| `set_current_edit_level` | Set the active edit-target sub-level so subsequent spawns land in it. Params: `levelName (e.g. SubLevel_A) (#204)` |
+| `list_streaming_sublevels` | List streaming sub-levels with transform + initially-loaded/visible flags (#206) |
+| `add_streaming_sublevel` | Add a streaming sub-level. Params: `levelPath, streamingClass? (LevelStreamingDynamic\\|LevelStreamingAlwaysLoaded), location?, initiallyLoaded?, initiallyVisible? (#206)` |
+| `remove_streaming_sublevel` | Remove a streaming sub-level. Params: `levelName \\| levelPath (#206)` |
+| `set_streaming_sublevel_properties` | Update sub-level transform/visibility flags. Params: `levelName \\| levelPath, location?, initiallyLoaded?, initiallyVisible?, editorVisible? (#206)` |
+| `spawn_grid` | Batch-spawn StaticMeshActors on a grid. Params: `staticMesh, min, max (Vec3 bounds), countX?, countY?, countZ?, jitter?, labelPrefix? (#203)` |
+| `batch_translate` | Translate a set of actors by an offset. Params: `offset (Vec3), actorLabels[] OR tag (#203)` |
 
 ---
 
-## foliage — Foliage Painting and Types
+## material
 
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `list_types` | List foliage types in the level | |
-| `get_settings` | Read foliage type settings | `foliageTypeName` |
-| `sample` | Query foliage instances in a region | `center {x,y,z}`, `radius` |
-| `paint` | Add foliage instances | `foliageType`, `center`, `radius` |
-| `erase` | Remove foliage instances | `center`, `radius` |
-| `create_type` | Create a foliage type from a StaticMesh | `meshPath` |
-| `set_settings` | Modify foliage type settings | `foliageTypeName`, `settings` |
+*Materials: create, read, parameters, shading, textures, and graph authoring (expression nodes, connections).*
 
----
-
-## niagara — VFX Systems and Graph Authoring
-
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `list` | List Niagara assets | `directory?` |
-| `get_info` | Inspect a Niagara system | `assetPath` |
-| `spawn` | Spawn VFX at a location | `systemPath`, `location` |
-| `set_parameter` | Set parameter on a spawned component | `actorLabel`, `parameterName`, `value` |
-| `create` | Create a new Niagara System | `name` |
-| `create_emitter` | Create a Niagara Emitter | `name` |
-| `add_emitter` | Add an emitter to a system | `systemPath`, `emitterPath` |
-| `list_emitters` | List emitters in a system | `assetPath` |
-| `set_emitter_property` | Set emitter property | `assetPath`, `emitterName`, `propertyName`, `value` |
-| `list_modules` | List modules in an emitter | `assetPath`, `emitterName` |
-| `get_emitter_info` | Get detailed emitter info | `assetPath`, `emitterName` |
-| `list_renderers` | List renderers on an emitter (class + enabled state). | `systemPath`, `emitterName?`/`emitterIndex?` |
-| `add_renderer` | Add sprite/mesh/ribbon (or custom class) renderer to an emitter. | `systemPath`, `rendererType`, `emitterName?` |
-| `remove_renderer` | Remove a renderer by index. | `systemPath`, `rendererIndex`, `emitterName?` |
-| `set_renderer_property` | Set bool/number/string renderer property via reflection. | `systemPath`, `rendererIndex`, `propertyName`, `value` |
-| `inspect_data_interfaces` | List user-scope data interfaces bound to the system. | `systemPath` |
-| `create_system_from_spec` | Declaratively create a NiagaraSystem and add emitter handles from a list. | `name`, `packagePath?`, `emitters?:[{path}]` |
-| `get_compiled_hlsl` | Inspect the GPU compute script when SimTarget=GPU. | `systemPath`, `emitterName?`/`emitterIndex?` |
-| `list_system_parameters` | List user-exposed system parameters with type info. | `systemPath` |
+| Action | Description |
+|--------|-------------|
+| `read` | Read material structure. Params: `assetPath` |
+| `list_parameters` | List overridable parameters. Params: `assetPath` |
+| `set_parameter` | Set parameter on MaterialInstance. Params: `assetPath, parameterName, parameterType, value` |
+| `set_expression_value` | Set value on expression node. Params: `materialPath, expressionIndex, value` |
+| `disconnect_property` | Disconnect a material property input. Params: `materialPath, property` |
+| `create_instance` | Create material instance. Params: `parentPath, name?, packagePath?` |
+| `create` | Create material. Params: `name, packagePath?` |
+| `create_simple` | Single-call simple material. Params: `name, packagePath?, baseColor? ({r,g,b}), metallic?, specular?, roughness?, emissive?, usages?[] (e.g. InstancedStaticMeshes, Nanite, NiagaraSprites)` |
+| `set_usage` | Set EMaterialUsage flag(s) on a material. Params: `assetPath, usage OR usages[], enabled? (default true)` |
+| `set_shading_model` | Set shading model. Params: `assetPath, shadingModel` |
+| `set_blend_mode` | Set blend mode. Params: `assetPath, blendMode` |
+| `set_base_color` | Set base color. Params: `assetPath, color` |
+| `connect_texture` | Connect texture to property. Params: `materialPath, texturePath, property` |
+| `add_expression` | Add expression node. Params: `materialPath, expressionType, name?, parameterName?` |
+| `connect_expressions` | Wire two expressions. Params: `materialPath, sourceExpression, sourceOutput?, targetExpression, targetInput?` |
+| `connect_to_property` | Wire expression to material output. Params: `materialPath, expressionName, outputName?, property` |
+| `list_expressions` | List expression nodes. Params: `materialPath` |
+| `delete_expression` | Remove expression. Params: `materialPath, expressionName` |
+| `list_expression_types` | List available expression types |
+| `recompile` | Recompile material. Params: `materialPath` |
+| `duplicate` | Duplicate material asset. Params: `sourcePath, destinationPath` |
+| `validate` | Validate material graph - find orphans, broken refs. Params: `assetPath` |
+| `get_shader_stats` | Shader compile stats, sampler+param counts. Params: `assetPath` |
+| `export_graph` | Export material graph as JSON. Params: `assetPath` |
+| `import_graph` | Rebuild graph from JSON. Params: `assetPath, nodes, propertyConnections?` |
+| `build_graph` | Build graph from spec. Params: `assetPath, nodes, propertyConnections?` |
+| `render_preview` | Render preview PNG. Params: `assetPath, outputPath, width?, height?` |
+| `begin_transaction` | Begin undo transaction. Params: `label?` |
+| `end_transaction` | End undo transaction |
 
 ---
 
-## audio — Sound Assets and Playback
+## animation
 
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `list` | List sound assets | `directory?` |
-| `play_at_location` | Play a sound at a world location | `soundPath`, `location` |
-| `spawn_ambient` | Place an ambient sound actor | `soundPath`, `location` |
-| `create_cue` | Create a SoundCue | `name`, `soundWavePath?` |
-| `create_metasound` | Create a MetaSoundSource | `name` |
+*Animation assets, skeletons, montages, blendspaces, anim blueprints, physics assets.*
 
----
-
-## widget — UMG Widgets and Editor Utilities
-
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `read_tree` | Read widget hierarchy | `assetPath` |
-| `get_details` | Inspect a specific widget | `assetPath`, `widgetName` |
-| `set_property` | Set widget or slot property. Use `slot.` prefix for layout (e.g. `slot.anchors`, `slot.hAlign`, `slot.padding`) | `assetPath`, `widgetName`, `propertyName`, `value` |
-| `list` | List Widget Blueprints | `directory?` |
-| `read_animations` | Read UMG animations | `assetPath` |
-| `create` | Create a Widget Blueprint | `name` |
-| `add_widget` | Add widget to tree (TextBlock, CanvasPanel, VerticalBox, Button, Image, etc.) | `assetPath`, `widgetClass`, `widgetName?`, `parentWidgetName?` |
-| `remove_widget` | Remove widget from tree | `assetPath`, `widgetName` |
-| `move_widget` | Reparent widget to a different panel | `assetPath`, `widgetName`, `newParentWidgetName` |
-| `list_classes` | List available widget classes with slot property hints | — |
-| `create_utility_widget` | Create an Editor Utility Widget | `name` |
-| `run_utility_widget` | Open an Editor Utility Widget panel | `assetPath` |
-| `create_utility_blueprint` | Create an Editor Utility Blueprint | `name` |
-| `run_utility_blueprint` | Run an Editor Utility Blueprint | `assetPath` |
-
----
-
-## editor — Console, Python, PIE, Viewport, Sequencer, Build, Logs
-
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `execute_command` | Run a console command | `command` |
-| `execute_python` | Run Python in the editor (escape hatch) | `code` |
-| `run_python_file` | Execute a Python file from disk with `__file__`/`__name__` populated. Append positional `args[]` to the script (#142). | `filePath`, `args?` |
-| `set_property` | Set a UObject property by path | `objectPath`, `propertyName`, `value` |
-| `play_in_editor` | PIE control | `pieAction` (start/stop/status) |
-| `get_runtime_value` | Read a PIE actor property value | `actorLabel`, `propertyName` |
-| `hot_reload` | Trigger Live Coding hot reload | |
-| `undo` | Undo last editor transaction | |
-| `redo` | Redo | |
-| `get_perf_stats` | Get editor performance stats | |
-| `run_stat` | Toggle stat overlay | `command` |
-| `set_scalability` | Set quality/scalability level | `level` |
-| `capture_screenshot` | Capture a viewport screenshot. `target=auto` routes to the PIE viewport while PIE is running (#226) | `filename?`, `resolution?`, `target? (auto\|pie\|editor)` |
-| `get_viewport` | Get viewport camera transform | |
-| `set_viewport` | Set viewport camera transform | `location?`, `rotation?` |
-| `focus_on_actor` | Focus viewport on an actor | `actorLabel` |
-| `create_sequence` | Create a Level Sequence | `name` |
-| `get_sequence_info` | Read sequence tracks and keyframes | `assetPath` |
-| `add_sequence_track` | Add a track to a sequence | `assetPath`, `trackType`, `actorLabel?` |
-| `play_sequence` | Play/stop/pause a sequence | `assetPath`, `sequenceAction` |
-| `build_all` | Run full build (geometry + lighting + navigation) | |
-| `build_geometry` | Build geometry only | |
-| `build_hlod` | Build HLODs | |
-| `validate_assets` | Run data validation | |
-| `get_build_status` | Check build status | |
-| `cook_content` | Cook content for target platform | |
-| `get_log` | Get output log entries (ring buffer, 4096 lines) | `maxLines?`, `filter?`, `category?` |
-| `search_log` | Search log entries | `query` |
-| `get_message_log` | Get message log | |
-| `set_dialog_policy` | Auto-respond to modal dialogs | `dialogTitle`, `response` |
-| `clear_dialog_policy` | Clear dialog auto-response | `dialogTitle?` |
-| `get_dialog_policy` | Get current dialog policies | |
-| `list_dialogs` | List pending modal dialogs | |
-| `respond_to_dialog` | Respond to a specific dialog | `dialogId`, `response` |
-| `get_pie_pawn` | Resolve the controlled pawn in the active PIE world (#228/#229) | `playerIndex?` |
-| `invoke_function` | Call a BlueprintCallable / Exec UFUNCTION on a target actor in editor or PIE (#228/#229) | `actorLabel`, `functionName`, `args?` (object), `world?` |
-
-!!! tip
-    - `execute_python` is the escape hatch for anything not covered by dedicated tools.
-    - `hot_reload` triggers Live Coding — no editor restart needed.
-    - `get_log(category="LogMCPBridge")` shows bridge-specific logs.
-    - Dialog management lets you suppress "Are you sure?" prompts during batch operations.
+| Action | Description |
+|--------|-------------|
+| `read_anim_blueprint` | Read AnimBP structure. Params: `assetPath` |
+| `read_montage` | Read montage. Params: `assetPath` |
+| `read_sequence` | Read anim sequence. Params: `assetPath` |
+| `read_blendspace` | Read blendspace. Params: `assetPath` |
+| `list` | List anim assets. Params: `directory?, recursive?` |
+| `create_montage` | Create montage. Params: `animSequencePath, name?, packagePath?` |
+| `create_anim_blueprint` | Create AnimBP. Params: `skeletonPath, name?, packagePath?, parentClass?` |
+| `create_blendspace` | Create blendspace. Params: `skeletonPath, name?, packagePath?, axisHorizontal?, axisVertical?` |
+| `add_notify` | Add notify. Params: `assetPath, notifyName, triggerTime, notifyClass?` |
+| `get_skeleton_info` | Read skeleton. Params: `assetPath` |
+| `list_sockets` | List sockets. Params: `assetPath` |
+| `list_skeletal_meshes` | List skeletal meshes. Params: `directory?, recursive?` |
+| `get_physics_asset` | Read physics asset. Params: `assetPath` |
+| `create_sequence` | Create blank AnimSequence. Params: `name, skeletonPath, packagePath?, numFrames?, frameRate?` |
+| `set_bone_keyframes` | Set bone transform keyframes. Params: `assetPath, boneName, keyframes` |
+| `get_bone_transforms` | Read reference pose transforms. Params: `skeletonPath, boneNames?` |
+| `set_montage_sequence` | Replace animation sequence in a montage. Params: `assetPath, animSequencePath, slotIndex?` |
+| `set_montage_properties` | Set montage properties. Params: `assetPath, sequenceLength?, rateScale?, blendIn?, blendOut?` |
+| `create_state_machine` | Create state machine in AnimBP. Params: `assetPath, name?, graphName?` |
+| `add_state` | Add state to a state machine. Params: `assetPath, stateMachineName, stateName` |
+| `add_transition` | Add directed transition between states. Params: `assetPath, stateMachineName, fromState, toState` |
+| `set_state_animation` | Assign anim asset to state. Params: `assetPath, stateMachineName, stateName, animAssetPath` |
+| `set_transition_blend` | Set blend type/duration on transition. Params: `assetPath, stateMachineName, fromState, toState, blendDuration?, blendLogic?` |
+| `read_state_machine` | Read state machine topology. Params: `assetPath, stateMachineName` |
+| `read_anim_graph` | Read AnimBP AnimGraph nodes with properties & pins. Params: `assetPath, graphName?` |
+| `add_curve` | Add float curve to AnimSequence. Params: `assetPath, curveName, curveType?` |
+| `set_montage_slot` | Set slot name on a montage track. Params: `assetPath, slotName, trackIndex?` |
+| `add_montage_section` | Add composite section to montage. Params: `assetPath, sectionName, startTime?, linkedSection?` |
+| `create_ik_rig` | Create IKRigDefinition asset, optionally with retargetRoot + chains[]. Params: `name, skeletalMeshPath, packagePath?, retargetRoot?, chains?: [{name, startBone, endBone, goal?}]` |
+| `read_ik_rig` | Read IK Rig chains, solvers, skeleton. Params: `assetPath` |
+| `list_control_rig_variables` | List ControlRig variables and hierarchy. Params: `assetPath` |
+| `set_root_motion` | Set root motion settings on AnimSequence. Params: `assetPath, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?` |
+| `add_virtual_bone` | Add virtual bone. Params: `skeletonPath, sourceBone, targetBone` |
+| `remove_virtual_bone` | Remove virtual bone. Params: `skeletonPath, virtualBoneName` |
+| `create_composite` | Create AnimComposite. Params: `name, skeletonPath, packagePath?` |
+| `list_modifiers` | List applied animation modifiers. Params: `assetPath` |
+| `create_ik_retargeter` | Create IKRetargeter asset. Params: `name, packagePath?, sourceRig?, targetRig?` |
+| `set_anim_blueprint_skeleton` | Set target skeleton on AnimBP. Params: `assetPath, skeletonPath` |
+| `read_bone_track` | Read bone transform samples from AnimSequence. Params: `assetPath, boneName, frames?: [int]` |
+| `create_pose_search_database` | Create a PoseSearchDatabase asset (motion matching). Params: `name, packagePath?, schemaPath?` |
+| `set_pose_search_schema` | Set the Schema on an existing PoseSearchDatabase. Params: `assetPath, schemaPath` |
+| `add_pose_search_sequence` | Append an AnimSequence/AnimComposite/AnimMontage/BlendSpace to a PoseSearchDatabase. Params: `assetPath, sequencePath` |
+| `build_pose_search_index` | Build (or rebuild) the search index. Params: `assetPath, wait? (default true)` |
+| `read_pose_search_database` | Inspect a PoseSearchDatabase: schema, animation entries, cost biases, tags. Params: `assetPath` |
+| `set_sequence_properties` | Batch-set properties on AnimSequence assets. If a path is a Montage and resolveFromMontages is true (default), resolves to its first AnimSequence. Params: `assetPaths[], properties{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?}, resolveFromMontages?` |
+| `bake_root_motion_from_bone` | Bake delta translation from a source bone (e.g. pelvis) onto the root bone across the whole sequence; compensates the source bone so world-space position is unchanged. Params: `assetPath, sourceBone, rootBone? (default 'root'), axes? (default ['x','y']), interpolation? ('linear'\\|'per_frame', default 'linear')` |
 
 ---
 
-## reflection — UE Class/Struct/Enum Reflection, Gameplay Tags
+## landscape
 
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `reflect_class` | Reflect a UClass (properties, functions, metadata) | `className`, `includeInherited?` |
-| `reflect_struct` | Reflect a UScriptStruct | `structName` |
-| `reflect_enum` | Reflect a UEnum | `enumName` |
-| `list_classes` | List registered classes | `parentFilter?`, `limit?` |
-| `list_tags` | List gameplay tags | `filter?` |
-| `create_tag` | Create a gameplay tag | `tag`, `comment?` |
+*Landscape terrain: info, layers, sculpting, painting, materials, heightmap import.*
 
-!!! tip
-    Use `reflect_class` to understand any UE class's properties before working with it.
-
----
-
-## gameplay — Physics, Collision, Navigation, Input, AI, Game Framework
-
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `set_collision_profile` | Set collision preset on an actor | `actorLabel`, `profileName` |
-| `set_simulate_physics` | Toggle physics simulation | `actorLabel`, `simulate` |
-| `set_collision_enabled` | Set collision mode | `actorLabel`, `collisionEnabled` |
-| `set_physics_properties` | Set mass, damping, gravity | `actorLabel`, `mass?`, `linearDamping?` |
-| `rebuild_navigation` | Rebuild the navigation mesh | |
-| `get_navmesh_info` | Query navigation system info | |
-| `project_to_nav` | Project a point onto the navmesh | `location` |
-| `spawn_nav_modifier` | Place a nav modifier volume | `location`, `extent?`, `areaClass?` |
-| `create_input_action` | Create an Enhanced Input Action | `name`, `valueType?` (Boolean/Axis1D/Axis2D/Axis3D) |
-| `create_input_mapping` | Create an Input Mapping Context | `name` |
-| `read_imc` | Read IMC mappings (keys, triggers, modifiers) | `imcPath` |
-| `add_imc_mapping` | Add key mapping to an IMC | `imcPath`, `inputActionPath`, `key` |
-| `set_mapping_modifiers` | Set modifiers/triggers on an IMC mapping (persists on save) | `imcPath`, `mappingIndex?`, `modifiers?`, `triggers?` |
-| `inspect_pie` | Inspect PIE world actors and components at runtime | `actorLabel?` |
-| `get_pie_anim_state` | Read runtime AnimInstance state (montages, state machines) | `actorLabel` |
-| `get_pie_anim_properties` | Read named UPROPERTY values on a PIE actor's AnimInstance (omit `propertyNames` to dump all) (#139). | `actorLabel`, `propertyNames?` |
-| `get_pie_subsystem_state` | Read UPROPERTY values on a running subsystem (`game`/`world`/`engine`/`localplayer` scope) (#139). | `subsystemClass`, `scope?`, `propertyNames?` |
-| `list_input_assets` | List input-related assets | `directory?` |
-| `list_behavior_trees` | List Behavior Trees and Blackboards | `directory?` |
-| `get_behavior_tree_info` | Inspect a Behavior Tree | `assetPath` |
-| `create_blackboard` | Create a Blackboard Data asset | `name` |
-| `create_behavior_tree` | Create a Behavior Tree | `name`, `blackboardPath?` |
-| `create_eqs_query` | Create an EQS query | `name` |
-| `list_eqs_queries` | List EQS queries | |
-| `add_perception` | Add AI Perception component | `blueprintPath` |
-| `configure_sense` | Configure a perception sense | `blueprintPath`, `senseClass`, `settings` |
-| `create_state_tree` | Create a State Tree | `name` |
-| `list_state_trees` | List State Trees | |
-| `add_state_tree_component` | Add State Tree component to an actor | `actorLabel` |
-| `create_smart_object_def` | Create a Smart Object Definition | `name` |
-| `add_smart_object_component` | Add Smart Object component | `actorLabel` |
-| `create_game_mode` | Create a Game Mode BP | `name` |
-| `create_game_state` | Create a Game State BP | `name` |
-| `create_player_controller` | Create a Player Controller BP | `name` |
-| `create_player_state` | Create a Player State BP | `name` |
-| `create_hud` | Create a HUD BP | `name` |
-| `set_world_game_mode` | Set the world's game mode | `gameModePath` |
-| `get_framework_info` | Get game framework class assignments | |
+| Action | Description |
+|--------|-------------|
+| `get_info` | Get landscape setup |
+| `list_layers` | List paint layers |
+| `sample` | Sample height/layers. Params: `x, y` |
+| `list_splines` | Read landscape splines |
+| `get_component` | Inspect component. Params: `componentIndex` |
+| `sculpt` | Sculpt heightmap. Params: `x, y, radius, strength, falloff?` |
+| `paint_layer` | Paint weight layer. Params: `layerName, x, y, radius, strength?` |
+| `set_material` | Set landscape material. Params: `materialPath` |
+| `add_layer_info` | Register paint layer. Params: `layerName` |
+| `import_heightmap` | Import heightmap file. Params: `filePath` |
+| `get_material_usage_summary` | Per-proxy summary: landscape/hole material paths + component/grass/nanite counts (#150) |
 
 ---
 
-## gas — Gameplay Ability System
+## pcg
 
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `add_asc` | Add AbilitySystemComponent to a BP | `blueprintPath` |
-| `create_attribute_set` | Create an AttributeSet Blueprint | `name`, `packagePath?` |
-| `add_attribute` | Add an attribute to a set | `attributeSetPath`, `attributeName` |
-| `create_ability` | Create a GameplayAbility Blueprint | `name`, `parentClass?` |
-| `set_ability_tags` | Set activation/cancel/block tags | `abilityPath`, `ability_tags?`, `activation_required_tags?` |
-| `create_effect` | Create a GameplayEffect Blueprint | `name`, `durationPolicy?` |
-| `set_effect_modifier` | Add a modifier to an effect | `effectPath`, `attribute`, `operation?`, `magnitude?` |
-| `create_cue` | Create a GameplayCue notify | `name`, `cueType?` (Static/Actor) |
-| `get_info` | Inspect GAS setup on a Blueprint | `blueprintPath` |
+*Procedural Content Generation: graphs, nodes, connections, execution, volumes.*
 
----
-
-## networking — Replication and Networking
-
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `set_replicates` | Enable/disable actor replication | `blueprintPath`, `replicates?` |
-| `set_property_replicated` | Mark a variable as replicated | `blueprintPath`, `propertyName` |
-| `configure_net_frequency` | Set net update frequency | `blueprintPath`, `netUpdateFrequency?` |
-| `set_dormancy` | Set net dormancy mode | `blueprintPath`, `dormancy` |
-| `set_net_load_on_client` | Control client loading | `blueprintPath`, `loadOnClient?` |
-| `set_always_relevant` | Always network relevant | `blueprintPath`, `alwaysRelevant?` |
-| `set_only_relevant_to_owner` | Only relevant to owning connection | `blueprintPath`, `onlyRelevantToOwner?` |
-| `configure_cull_distance` | Set net cull distance | `blueprintPath`, `netCullDistanceSquared?` |
-| `set_priority` | Set net priority | `blueprintPath`, `netPriority?` |
-| `set_replicate_movement` | Enable/disable movement replication | `blueprintPath`, `replicateMovement?` |
-| `get_info` | Get current networking config | `blueprintPath` |
+| Action | Description |
+|--------|-------------|
+| `list_graphs` | List PCG graphs. Params: `directory?, recursive?` |
+| `read_graph` | Read graph structure. Params: `assetPath` |
+| `read_node_settings` | Read node settings. Params: `assetPath, nodeName` |
+| `get_components` | List PCG components in level |
+| `get_component_details` | Inspect PCG component. Params: `actorLabel` |
+| `create_graph` | Create graph. Params: `name, packagePath?` |
+| `add_node` | Add node. Params: `assetPath, nodeType, nodeName?` |
+| `connect_nodes` | Wire nodes. Params: `assetPath, sourceNode, sourcePin, targetNode, targetPin` |
+| `set_node_settings` | Set node params. Params: `assetPath, nodeName, settings` |
+| `set_static_mesh_spawner_meshes` | Populate weighted MeshEntries on a PCGStaticMeshSpawner node (#145). Params: `assetPath, nodeName, entries=[{mesh, weight?}], replace? (default true)` |
+| `remove_node` | Remove node. Params: `assetPath, nodeName` |
+| `execute` | Regenerate PCG. Params: `actorLabel` |
+| `force_regenerate` | Force a stuck PCG component to regenerate (clears graph ref, re-sets, cleanup+generate). Params: `actorLabel (#146)` |
+| `cleanup` | Cleanup a PCG component (remove spawned content). Params: `actorLabel, removeComponents? (default true) (#146)` |
+| `toggle_graph` | Toggle a PCG component's graph assignment to force reinit (no generate). Params: `actorLabel, graphPath? (#146)` |
+| `add_volume` | Place PCG volume. Params: `graphPath, location?, extent?` |
+| `import_graph` | Bulk-author a PCG graph from JSON. Params: `assetPath, nodes=[{name,class,posX?,posY?,settings?}], connections=[{from,fromPin?,to,toPin?}], replace? (default false)` |
+| `export_graph` | Export a PCG graph as JSON. Params: `assetPath, includeSettings? (default true)` |
 
 ---
 
-## demo — Neon Shrine Demo Scene
+## foliage
 
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `step` | Execute a demo step (omit stepIndex for step list) | `stepIndex?` |
-| `cleanup` | Remove all demo assets and actors | |
+*Foliage painting, types, sampling, and settings.*
 
-See **[Neon Shrine Demo](neon-shrine-demo.md)** for a full walkthrough.
+| Action | Description |
+|--------|-------------|
+| `list_types` | List foliage types in level |
+| `get_settings` | Read foliage type settings. Params: `foliageTypeName` |
+| `sample` | Query instances in region. Params: `center, radius, foliageType?` |
+| `paint` | Add foliage. Params: `foliageType, center, radius, count?, density?` |
+| `erase` | Remove foliage. Params: `center, radius, foliageType?` |
+| `create_type` | Create foliage type from mesh. Params: `meshPath, name?, packagePath?` |
+| `set_settings` | Modify type settings. Params: `foliageTypeName, settings` |
 
 ---
 
-## feedback — Agent Feedback Submission
+## niagara
 
-| Action | Description | Key Params |
-|--------|-------------|------------|
-| `submit` | Submit feedback about a tool gap | `title`, `summary`, `pythonWorkaround?`, `idealTool?` |
+*Niagara VFX: systems, emitters, spawning, parameters, and graph authoring.*
 
-See **[Feedback](feedback.md)** for details on how the feedback system works.
+| Action | Description |
+|--------|-------------|
+| `list` | List Niagara assets. Params: `directory?, recursive?` |
+| `get_info` | Inspect system. Params: `assetPath` |
+| `spawn` | Spawn VFX. Params: `systemPath, location, rotation?, label?` |
+| `set_parameter` | Set parameter. Params: `actorLabel, parameterName, value, parameterType?` |
+| `create` | Create system. Params: `name, packagePath?` |
+| `create_emitter` | Create Niagara emitter. Params: `name, packagePath?, templatePath?` |
+| `add_emitter` | Add emitter to system. Params: `systemPath, emitterPath` |
+| `list_emitters` | List emitters in system. Params: `systemPath` |
+| `set_emitter_property` | Set emitter property. Params: `systemPath, emitterName?, propertyName, value` |
+| `list_modules` | List Niagara modules. Params: `directory?` |
+| `get_emitter_info` | Inspect emitter. Params: `assetPath` |
+| `list_renderers` | List renderers on an emitter. Params: `systemPath, emitterName?, emitterIndex?` |
+| `add_renderer` | Add renderer (sprite/mesh/ribbon or full class). Params: `systemPath, rendererType, emitterName?, emitterIndex?` |
+| `remove_renderer` | Remove renderer by index. Params: `systemPath, rendererIndex, emitterName?, emitterIndex?` |
+| `set_renderer_property` | Set renderer bool/number/string property. Params: `systemPath, rendererIndex, propertyName, value, emitterName?, emitterIndex?` |
+| `inspect_data_interfaces` | List user-scope data interfaces. Params: `systemPath` |
+| `create_system_from_spec` | Declaratively create a system + emitters. Params: `name, packagePath?, emitters?:[{path}]` |
+| `get_compiled_hlsl` | Read GPU compute script info for an emitter. Params: `systemPath, emitterName?, emitterIndex?` |
+| `list_system_parameters` | List user-exposed system parameters. Params: `systemPath` |
+| `list_module_inputs` | List modules + their input pins for an emitter. Params: `systemPath, emitterName?, emitterIndex?, stackContext? (ParticleSpawn\\|ParticleUpdate\\|EmitterSpawn\\|EmitterUpdate\\|all - default all)` |
+| `set_module_input` | Set literal default on a module input pin. Params: `systemPath, moduleName, inputName, value, emitterName?, emitterIndex?, stackContext?` |
+| `list_static_switches` | List static switch inputs on a module. Params: `systemPath, moduleName, emitterName?, emitterIndex?, stackContext?` |
+| `set_static_switch` | Set static switch value on a module's function call node. Params: `systemPath, moduleName, switchName, value, emitterName?, emitterIndex?, stackContext?` |
+| `create_module_from_hlsl` | Create a NiagaraScript module backed by a custom HLSL node. Params: `name, hlsl, packagePath?, inputs?:[{name,type}], outputs?:[{name,type}]` |
+| `create_scratch_module` | Create empty Niagara scratch module. Params: `name, packagePath?, inputs?:[{name,type}], outputs?:[{name,type}] (#185)` |
+| `batch` | Run a sequence of niagara operations against the bridge in order. Fails fast on the first error (returns results up to that point + error). Params: `ops:[{action, params}] where action is any niagara subaction listed above` |
+
+---
+
+## audio
+
+*Audio: sound assets, playback, ambient sounds, SoundCues, MetaSounds.*
+
+| Action | Description |
+|--------|-------------|
+| `list` | List sound assets. Params: `directory?, recursive?` |
+| `play_at_location` | Play sound. Params: `soundPath, location, volumeMultiplier?, pitchMultiplier?` |
+| `spawn_ambient` | Place ambient sound. Params: `soundPath, location, label?` |
+| `create_cue` | Create SoundCue. Params: `name, packagePath?, soundWavePath?` |
+| `create_metasound` | Create MetaSoundSource. Params: `name, packagePath?` |
+
+---
+
+## widget
+
+*UMG Widget Blueprints, Editor Utility Widgets, and Editor Utility Blueprints.*
+
+| Action | Description |
+|--------|-------------|
+| `read_tree` | Read widget hierarchy. Params: `assetPath` |
+| `get_details` | Inspect widget. Params: `assetPath, widgetName` |
+| `set_property` | Set widget property. Params: `assetPath, widgetName, propertyName, value` |
+| `list` | List Widget BPs. Params: `directory?, recursive?` |
+| `read_animations` | Read UMG animations. Params: `assetPath` |
+| `create` | Create Widget BP. Params: `name, packagePath?, parentClass?` |
+| `create_utility_widget` | Create editor utility widget. Params: `name, packagePath?` |
+| `run_utility_widget` | Open editor utility widget. Params: `assetPath` |
+| `create_utility_blueprint` | Create editor utility blueprint. Params: `name, packagePath?` |
+| `run_utility_blueprint` | Run editor utility blueprint. Params: `assetPath` |
+| `add_widget` | Add widget to widget tree. Params: `assetPath, widgetClass, widgetName?, parentWidgetName?` |
+| `remove_widget` | Remove widget from tree. Params: `assetPath, widgetName` |
+| `move_widget` | Reparent widget. Params: `assetPath, widgetName, newParentWidgetName` |
+| `list_classes` | List available widget classes |
+| `list_runtime` | (#160) List live UUserWidget instances in the PIE world. Params: `classFilter?, namePrefix?, viewportOnly?` |
+| `get_runtime` | (#160) Inspect a live PIE widget tree with text/visibility/brush/percent values. Params: `widgetName? \\| className?, childName?, maxDepth?` |
+| `get_runtime_delegates` | (#161) Read delegate binding state on a live PIE widget. Params: `widgetName, className?` |
+
+---
+
+## editor
+
+*Editor commands, Python execution, PIE, undo/redo, hot reload, viewport, performance, sequencer, build pipeline, logs, editor control.*
+
+| Action | Description |
+|--------|-------------|
+| `start_editor` | Launch Unreal Editor with the current project and reconnect bridge |
+| `stop_editor` | Close Unreal Editor gracefully |
+| `restart_editor` | Stop then start the editor |
+| `execute_command` | Run console command. Params: `command` |
+| `execute_python` | Run Python in editor. Params: `code` |
+| `run_python_file` | Run a Python file from disk with __file__/__name__ populated (#142). Params: `filePath, args?` |
+| `set_property` | Set UObject property. Params: `objectPath, propertyName, value` |
+| `play_in_editor` | PIE control. Params: `pieAction (start\\|stop\\|status)` |
+| `get_runtime_value` | Read PIE actor value. Params: `actorLabel, propertyName` |
+| `get_pie_pawn` | Resolve the controlled pawn in the active PIE world. Params: `playerIndex? (default 0)` |
+| `invoke_function` | Call a BlueprintCallable / Exec UFUNCTION on a target actor. Params: `actorLabel, functionName, args? (object), world? (editor\\|pie)` |
+| `set_pie_time_scale` | Fast-forward PIE game time. Params: `factor (>0)` |
+| `hot_reload` | Hot reload C++ |
+| `undo` | Undo last transaction |
+| `redo` | Redo last transaction |
+| `get_perf_stats` | Editor performance stats |
+| `run_stat` | Run stat command. Params: `command` |
+| `set_scalability` | Set quality. Params: `level` |
+| `capture_screenshot` | Screenshot. Params: `filename?, resolution?, target? (auto\\|pie\\|editor; auto routes to PIE viewport when PIE is running) (#226)` |
+| `capture_scene_png` | Headless PNG screenshot via SceneCapture2D (works unfocused, guaranteed RGBA8 LDR). Params: `outputPath, location?, rotation?, width? (default 1280), height? (default 720), fov? (default 90) (#148)` |
+| `get_viewport` | Get viewport camera |
+| `set_viewport` | Set viewport camera. Params: `location?, rotation?` |
+| `focus_on_actor` | Focus on actor. Params: `actorLabel` |
+| `create_sequence` | Create Level Sequence. Params: `name, packagePath?` |
+| `get_sequence_info` | Read sequence. Params: `assetPath, includeSectionDetails? (attach sockets, first transform key values per track)` |
+| `add_sequence_track` | Add track. Params: `assetPath, trackType, actorLabel?` |
+| `play_sequence` | Play/stop/pause sequence. Params: `assetPath, sequenceAction` |
+| `build_all` | Build all (geometry, lighting, paths, HLOD) |
+| `build_geometry` | Rebuild BSP geometry |
+| `build_hlod` | Build HLODs |
+| `validate_assets` | Run data validation. Params: `directory?` |
+| `get_build_status` | Get build/map status |
+| `cook_content` | Cook content. Params: `platform?` |
+| `get_log` | Read output log. Params: `maxLines?, filter?, category?` |
+| `search_log` | Search log. Params: `query` |
+| `get_message_log` | Read message log. Params: `logName?` |
+| `list_crashes` | List crash reports |
+| `get_crash_info` | Get crash details. Params: `crashFolder` |
+| `check_for_crashes` | Check for recent crashes |
+| `set_dialog_policy` | Auto-respond to dialogs matching a pattern. Params: `pattern, response` |
+| `clear_dialog_policy` | Clear dialog policies. Params: `pattern?` |
+| `get_dialog_policy` | Get current dialog policies |
+| `list_dialogs` | List active modal dialogs |
+| `respond_to_dialog` | Click a button on the active modal dialog. Params: `buttonIndex?, buttonLabel?` |
+| `open_asset` | Open asset in its editor. Params: `assetPath` |
+| `reload_bridge` | Hot-reload Python bridge handlers from disk |
+
+---
+
+## reflection
+
+*UE reflection: classes, structs, enums, gameplay tags.*
+
+| Action | Description |
+|--------|-------------|
+| `reflect_class` | Reflect UClass. Params: `className, includeInherited?` |
+| `reflect_struct` | Reflect UScriptStruct. Params: `structName` |
+| `reflect_enum` | Reflect UEnum. Params: `enumName` |
+| `list_classes` | List classes. Params: `parentFilter?, limit?` |
+| `list_tags` | List gameplay tags. Params: `filter?` |
+| `create_tag` | Create gameplay tag. Params: `tag, comment?` |
+
+---
+
+## gameplay
+
+*Gameplay systems: physics, collision, navigation, input, behavior trees, AI (EQS, perception, State Trees, Smart Objects), game framework.*
+
+| Action | Description |
+|--------|-------------|
+| `set_collision_profile` | Set collision preset. Params: `actorLabel, profileName` |
+| `set_simulate_physics` | Toggle physics. Params: `actorLabel, simulate` |
+| `set_collision_enabled` | Set collision mode. Params: `actorLabel, collisionEnabled` |
+| `set_physics_properties` | Set mass/damping/gravity. Params: `actorLabel, mass?, linearDamping?, angularDamping?, enableGravity?` |
+| `rebuild_navigation` | Rebuild navmesh |
+| `get_navmesh_info` | Query nav system |
+| `project_to_nav` | Project point to navmesh. Params: `location, extent?` |
+| `spawn_nav_modifier` | Place nav modifier. Params: `location, extent?, areaClass?` |
+| `create_input_action` | Create InputAction. Params: `name, packagePath?, valueType?` |
+| `create_input_mapping` | Create InputMappingContext. Params: `name, packagePath?` |
+| `list_input_assets` | List input assets. Params: `directory?, recursive?` |
+| `read_imc` | Read InputMappingContext mappings. Params: `imcPath` |
+| `list_input_mappings` | Alias for read_imc. List key→action bindings with triggers/modifiers. Params: `imcPath` |
+| `add_imc_mapping` | Add key mapping to IMC. Params: `imcPath, inputActionPath, key` |
+| `set_mapping_modifiers` | Set modifiers/triggers on an IMC mapping. Params: `imcPath, mappingIndex?, modifiers?, triggers?` |
+| `remove_imc_mapping` | (#158) Remove an IMC mapping. Params: `imcPath, mappingIndex? \\| (inputActionPath? + key?)` |
+| `set_imc_mapping_key` | (#158) Rebind an IMC mapping to a new key. Params: `imcPath, newKey, mappingIndex? \\| key? \\| inputActionPath?` |
+| `set_imc_mapping_action` | (#158) Retarget an IMC mapping to a different InputAction. Params: `imcPath, newInputActionPath, mappingIndex? \\| key? \\| inputActionPath?` |
+| `list_behavior_trees` | List behavior trees. Params: `directory?, recursive?` |
+| `get_behavior_tree_info` | Inspect behavior tree (top-level + blackboard). Params: `assetPath` |
+| `read_behavior_tree_graph` | Walk BT tree: composites, tasks, decorators, services with blackboard keys. Params: `assetPath` |
+| `create_blackboard` | Create Blackboard. Params: `name, packagePath?` |
+| `create_behavior_tree` | Create behavior tree. Params: `name, packagePath?, blackboardPath?` |
+| `create_eqs_query` | Create EQS query. Params: `name, packagePath?` |
+| `list_eqs_queries` | List EQS queries. Params: `directory?` |
+| `add_perception` | Add AIPerceptionComponent. Params: `blueprintPath, senses?` |
+| `configure_sense` | Configure perception sense. Params: `blueprintPath, senseType, settings?` |
+| `create_state_tree` | Create StateTree. Params: `name, packagePath?` |
+| `list_state_trees` | List StateTrees. Params: `directory?` |
+| `add_state_tree_component` | Add StateTreeComponent. Params: `blueprintPath` |
+| `create_smart_object_def` | Create SmartObjectDefinition. Params: `name, packagePath?` |
+| `add_smart_object_component` | Add SmartObjectComponent. Params: `blueprintPath` |
+| `inspect_pie` | Inspect PIE runtime. Params: `actorLabel?` |
+| `get_pie_anim_state` | Get PIE anim instance state. Params: `actorLabel` |
+| `get_pie_anim_properties` | Read arbitrary UPROPERTY values on a PIE actor's AnimInstance (#139). Params: `actorLabel, propertyNames? (omit = dump all)` |
+| `get_pie_subsystem_state` | Read UPROPERTY values on a running subsystem in PIE (#139). Params: `subsystemClass, scope? (game\\|world\\|engine\\|localplayer), propertyNames?` |
+| `create_game_mode` | Create GameMode BP. Params: `name, packagePath?, parentClass?, defaults?` |
+| `create_game_state` | Create GameState BP. Params: `name, packagePath?, parentClass?` |
+| `create_player_controller` | Create PlayerController BP. Params: `name, packagePath?, parentClass?` |
+| `create_player_state` | Create PlayerState BP. Params: `name, packagePath?` |
+| `create_hud` | Create HUD BP. Params: `name, packagePath?` |
+| `set_world_game_mode` | Set level GameMode override. Params: `gameModePath` |
+| `get_framework_info` | Get level framework classes |
+| `get_navmesh_details` | Read RecastNavMesh generation params (cellSize, agentHeight, maxStepHeight, etc.) (#163) |
+| `apply_damage_in_pie` | Apply damage to PIE actor. Params: `actorLabel, baseDamage?, damageTypeClass? (#186)` |
+
+---
+
+## gas
+
+*Gameplay Ability System: abilities, effects, attribute sets, cues.*
+
+| Action | Description |
+|--------|-------------|
+| `add_asc` | Add AbilitySystemComponent. Params: `blueprintPath, componentName?` |
+| `create_attribute_set` | Create AttributeSet BP. Params: `name, packagePath?` |
+| `add_attribute` | Add attribute to set. Params: `attributeSetPath, attributeName, defaultValue?` |
+| `create_ability` | Create GameplayAbility BP. Params: `name, packagePath?, parentClass?` |
+| `set_ability_tags` | Set tags on ability. Params: `abilityPath, ability_tags?, cancel_abilities_with_tag?, activation_required_tags?, activation_blocked_tags?` |
+| `create_effect` | Create GameplayEffect BP. Params: `name, packagePath?, durationPolicy?` |
+| `set_effect_modifier` | Add modifier. Params: `effectPath, attribute, operation?, magnitude?` |
+| `create_cue` | Create GameplayCue. Params: `name, packagePath?, cueType?` |
+| `get_info` | Inspect GAS setup. Params: `blueprintPath` |
+
+---
+
+## networking
+
+*Networking and replication: actor replication, property replication, net relevancy, dormancy.*
+
+| Action | Description |
+|--------|-------------|
+| `set_replicates` | Enable actor replication. Params: `blueprintPath, replicates?` |
+| `set_property_replicated` | Mark variable as replicated. Params: `blueprintPath, propertyName, replicated?, replicationCondition?, repNotify?` |
+| `configure_net_frequency` | Set update frequency. Params: `blueprintPath, netUpdateFrequency?, minNetUpdateFrequency?` |
+| `set_dormancy` | Set net dormancy. Params: `blueprintPath, dormancy` |
+| `set_net_load_on_client` | Control client loading. Params: `blueprintPath, loadOnClient?` |
+| `set_always_relevant` | Always network relevant. Params: `blueprintPath, alwaysRelevant?` |
+| `set_only_relevant_to_owner` | Only relevant to owner. Params: `blueprintPath, onlyRelevantToOwner?` |
+| `configure_cull_distance` | Net cull distance. Params: `blueprintPath, netCullDistanceSquared?` |
+| `set_priority` | Net priority. Params: `blueprintPath, netPriority?` |
+| `set_replicate_movement` | Replicate movement. Params: `blueprintPath, replicateMovement?` |
+| `get_info` | Get networking info. Params: `blueprintPath` |
+
+---
+
+## demo
+
+*Neon Shrine demo scene builder and cleanup.*
+
+| Action | Description |
+|--------|-------------|
+| `step` | Execute demo step. Params: `stepIndex?` |
+| `cleanup` | Remove demo assets and actors |
+
+---
+
+## feedback
+
+*Submit feedback to improve ue-mcp when native tools fall short and execute_python was used as a workaround.*
+
+| Action | Description |
+|--------|-------------|
+| `submit` | Submit feedback about a tool gap. Params: `title, summary, pythonWorkaround?, idealTool?` |

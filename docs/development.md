@@ -75,7 +75,7 @@ src/
 ├── github-app.ts         # GitHub App auth for feedback submission
 ├── init.ts / update.ts / resolve.ts / hook-handler.ts  # CLI subcommands
 ├── flow/                 # Flow engine (registry, loader, task factory, HTTP)
-└── tools/                # 19 tool category implementations
+└── tools/                # <!-- count:tools -->19<!-- /count --> tool category implementations
     ├── project.ts
     ├── asset.ts
     ├── blueprint.ts

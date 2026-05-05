@@ -1,7 +1,7 @@
 {
   "name": "ue-mcp",
   "version": "1.0.0-rc.13",
-  "description": "Unreal Engine MCP server - 19 tools, 440+ actions for AI-driven editor control",
+  "description": "Unreal Engine MCP server - 19 tools, 438+ actions for AI-driven editor control",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -63,7 +63,8 @@
     "test:gas": "vitest run tests/smoke/gas.test.ts",
     "test:smoke": "node scripts/smoke-test.js",
     "generate": "tsx scripts/generate-default-config.ts",
-    "prepublishOnly": "npx tsc && tsx scripts/generate-default-config.ts"
+    "generate:metadata": "tsx scripts/generate-tool-metadata.ts",
+    "prepublishOnly": "npx tsc && tsx scripts/generate-default-config.ts && tsx scripts/generate-tool-metadata.ts"
   },
   "dependencies": {
     "@db-lyon/flowkit": "~0.5.2",
