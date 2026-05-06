@@ -157,6 +157,12 @@ tests/**/Content/*SmokeTest*.umap
 tests/**/Content/*Test*.uasset
 tests/**/Content/*Test*.umap
 
+# Smoke + demo runtime artifacts (recreated on every run; never source-of-truth)
+tests/**/Content/MCP_Home.umap
+tests/**/Content/MCP_SmokeScratch.umap
+tests/**/Content/Demo/**/*.uasset
+tests/**/Content/Demo/**/*.umap
+
 # Note: The following WILL be tracked (as they should be):
 # - *.uproject (project files)
 # - Source/**/*.cpp, *.h, *.Build.cs, *.Target.cs (source code)

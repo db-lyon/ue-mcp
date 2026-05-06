@@ -144,6 +144,60 @@ const PARAM_OVERRIDES = {
   get_crash_reports:           { maxReports: 1 },
 };
 
+// Direct RPC helper for setup/teardown (separate from rpcCall which classifies
+// for smoke summary). Returns {result, error} from the JSON-RPC frame; resolves
+// even on RPC errors so the caller can sequence cleanly.
+function rpcRaw(ws, method, params, id) {
+  return new Promise((resolve) => {
+    const payload = JSON.stringify({ method, params: params ?? {}, id });
+    const timer = setTimeout(() => resolve({ error: { message: "timeout" } }), TIMEOUT_MS);
+    const onMessage = (data) => {
+      let msg;
+      try { msg = JSON.parse(data.toString()); } catch { return; }
+      if (msg.id !== id) return;
+      clearTimeout(timer);
+      ws.removeListener("message", onMessage);
+      resolve(msg);
+    };
+    ws.on("message", onMessage);
+    ws.send(payload);
+  });
+}
+
+const SCRATCH_LEVEL = "/Game/MCP_SmokeScratch";
+const HOME_LEVEL = "/Game/MCP_Home";
+
+// Pre-flight: park the editor on a brand-new blank scratch level so every
+// spawn handler in the smoke run lands there and not in MCP_Home (the
+// editor's anchor) or DemoLevel or whatever the user had open. Idempotent
+// across crashed previous runs - we anchor on MCP_Home first to ensure
+// we're not currently sitting on the scratch we're about to delete.
+async function preFlight(ws, idGen) {
+  console.log(`${DIM}  preflight: anchor MCP_Home + create blank ${SCRATCH_LEVEL}${RESET}`);
+  await rpcRaw(ws, "demo_go_home", {}, idGen());
+  await rpcRaw(ws, "delete_asset", { assetPath: SCRATCH_LEVEL, force: true }, idGen());
+  const r = await rpcRaw(ws, "create_new_level", { levelPath: SCRATCH_LEVEL }, idGen());
+  if (r.error) {
+    console.error(`${YELLOW}  preflight warning: create_new_level failed: ${r.error.message}${RESET}`);
+  }
+}
+
+// Teardown: wipe every test artifact and leave the editor on a freshly-created
+// blank MCP_Home so closing the editor never spawns a save-dialog and the
+// next smoke run starts from a clean slate.
+async function teardown(ws, idGen) {
+  console.log(`${DIM}  teardown: reset MCP_Home + delete ${SCRATCH_LEVEL}${RESET}`);
+  // We're currently on SCRATCH (full of smoke spawns). Delete MCP_Home from
+  // disk so we can recreate it blank. Safe because we're not on it.
+  await rpcRaw(ws, "delete_asset", { assetPath: HOME_LEVEL, force: true }, idGen());
+  // Create a fresh blank MCP_Home; this also switches the editor to it,
+  // unloading SCRATCH.
+  await rpcRaw(ws, "create_new_level", { levelPath: HOME_LEVEL }, idGen());
+  await rpcRaw(ws, "save_current_level", {}, idGen());
+  // SCRATCH now unloaded; safe to delete.
+  await rpcRaw(ws, "delete_asset", { assetPath: SCRATCH_LEVEL, force: true }, idGen());
+}
+
 function rpcCall(ws, method, id) {
   return new Promise((resolve) => {
     const params = PARAM_OVERRIDES[method] ?? {};
@@ -230,6 +284,11 @@ async function main() {
   // queues behind it and also hits the per-call timeout.
   const results = [];
   let nextId = 1;
+  const idGen = () => nextId++;
+
+  // Pre-flight: anchor every spawn into a throwaway scratch level so the
+  // anchor (MCP_Home) and any other map the user was on stays untouched.
+  await preFlight(ws, idGen);
 
   for (const { method, file } of handlers) {
     const id = nextId++;
@@ -258,6 +317,15 @@ async function main() {
         break;
       }
     }
+  }
+
+  // Teardown ALWAYS runs - even on partial failures - so the editor never
+  // exits with unsaved spawns or a dirty MCP_Home. Errors here are surfaced
+  // but don't fail the smoke summary.
+  try {
+    await teardown(ws, idGen);
+  } catch (e) {
+    console.error(`${YELLOW}Teardown encountered an error: ${e.message}${RESET}`);
   }
 
   ws.close();
