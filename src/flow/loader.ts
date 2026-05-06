@@ -234,6 +234,17 @@ function defaultFlows(): Record<string, unknown> {
     rotation: { pitch: -15, yaw: 30 },
   });
 
+  // Neon Shrine — wraps the C++ demo handlers (demo.step / demo.cleanup /
+  // demo.go_home). These ship with the bridge so every project gets the
+  // flow surface for free.
+  const neonShrineSteps: Record<string, unknown> = {};
+  for (let i = 1; i <= 19; i++) {
+    neonShrineSteps[String(i)] = {
+      task: "demo.step",
+      options: { stepIndex: i },
+    };
+  }
+
   return {
     beacon: {
       description:
@@ -241,6 +252,19 @@ function defaultFlows(): Record<string, unknown> {
         "four materials (dark stone, brushed metal, warm stone, parameterized emissive), " +
         "colored lights, and atmosphere",
       steps,
+    },
+    neon_shrine: {
+      description:
+        "Build the full Neon Shrine demo scene end-to-end (19 steps). Driven by the " +
+        "demo.step handler shipped with the bridge plugin. Leaves the editor on " +
+        "/Game/Demo/DemoLevel; run neon_shrine_cleanup to wipe it.",
+      steps: neonShrineSteps,
+    },
+    neon_shrine_cleanup: {
+      description:
+        "Wipe the Neon Shrine demo content. Switches the editor to /Game/MCP_Home " +
+        "first so you don't get stranded on Untitled.",
+      steps: { 1: { task: "demo.cleanup" } },
     },
   };
 }
