@@ -51,6 +51,11 @@ export const blueprintTool: ToolDef = categoryTool(
     set_cdo_property:  bp("Set UPROPERTY on any C++ class CDO (not just Blueprints). Params: className, propertyName, value (#182/#183)", "set_cdo_property"),
     get_cdo_properties: bp("Read UPROPERTY values from any C++ class CDO. Params: className, propertyNames? (#183)", "get_cdo_properties"),
     run_construction_script: bp("Spawn temp actor, run construction script, return generated components and transforms. Params: assetPath, location? (#195)", "run_construction_script", (p) => ({ path: p.assetPath, location: p.location })),
+    compile_all: bp("Batch compile + save Blueprints. Params: assetPaths[], save? (default true). Returns per-path status (compiled/failed/not_found) (#284)", "compile_blueprints", (p) => ({ assetPaths: p.assetPaths, save: p.save })),
+    cleanup_graph: bp("Remove orphan/corrupted nodes (no class, blank title+no pins, missing target UFunction). Params: assetPath, graphName? (default: every graph) (#285)", "cleanup_graph", (p) => ({ assetPath: p.assetPath, graphName: p.graphName })),
+    connect_pins_batch: bp("Apply many pin connections in one call (single compile + save). Params: assetPath, graphName?, connections[]: [{sourceNode, sourcePin, targetNode, targetPin}] (#267)", "connect_pins_batch", (p) => ({ assetPath: p.assetPath, graphName: p.graphName, connections: p.connections })),
+    set_node_position: bp("Move a graph node to (posX, posY). Params: assetPath, graphName?, nodeId, posX, posY (#277)", "set_node_position", (p) => ({ assetPath: p.assetPath, graphName: p.graphName, nodeId: p.nodeId, posX: p.posX, posY: p.posY })),
+    auto_layout: bp("Topological layered layout for a graph. Eliminates the (0,0) stack from programmatic add_node. Params: assetPath, graphName?, columnGap? (default 360), rowGap? (default 200) (#277)", "auto_layout_graph", (p) => ({ assetPath: p.assetPath, graphName: p.graphName, columnGap: p.columnGap, rowGap: p.rowGap })),
   },
   undefined,
   {
@@ -92,5 +97,14 @@ export const blueprintTool: ToolDef = categoryTool(
       name: z.string(),
       type: z.string().optional(),
     })).optional().describe("add_event_dispatcher: typed signature parameters [{name, type}]. type is bool/int/float/string/name/text/vector/rotator/transform/object:/Script/Module.Class/struct:/Script/Module.Struct"),
+    assetPaths: z.array(z.string()).optional().describe("Asset paths for compile_all"),
+    save: z.boolean().optional().describe("compile_all: persist on success (default true)"),
+    nodeId: z.string().optional().describe("Node guid or name (set_node_position)"),
+    columnGap: z.number().optional().describe("auto_layout: horizontal spacing between columns (default 360)"),
+    rowGap: z.number().optional().describe("auto_layout: vertical spacing between rows (default 200)"),
+    connections: z.array(z.object({
+      sourceNode: z.string(), sourcePin: z.string(),
+      targetNode: z.string(), targetPin: z.string(),
+    })).optional().describe("connect_pins_batch: per-connection records"),
   },
 );

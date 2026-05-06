@@ -129,6 +129,13 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// issue #195: run construction script and inspect resulting components
 	Registry.RegisterHandler(TEXT("run_construction_script"), &RunConstructionScript);
+
+	// v1.0.0-rc.15 — agent-friendly BP authoring
+	Registry.RegisterHandler(TEXT("compile_blueprints"), &CompileBlueprints);
+	Registry.RegisterHandler(TEXT("cleanup_graph"), &CleanupGraph);
+	Registry.RegisterHandler(TEXT("connect_pins_batch"), &ConnectPinsBatch);
+	Registry.RegisterHandler(TEXT("set_node_position"), &SetNodePosition);
+	Registry.RegisterHandler(TEXT("auto_layout_graph"), &AutoLayoutGraph);
 }
 
 // ---------------------------------------------------------------------------
@@ -564,8 +571,46 @@ FEdGraphPinType FBlueprintHandlers::MakePinType(const FString& TypeStr)
 	{
 		PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
 	}
+	// (#286) Resolve named enums by full path (/Script/Module.EEnumName) or
+	// short name (EMyEnum / E_MyEnum). UE pin types for enums use PC_Byte with
+	// PinSubCategoryObject = UEnum*.
+	else if (TypeStr.StartsWith(TEXT("/Script/")) && TypeStr.Contains(TEXT(".")))
+	{
+		if (UEnum* Enum = LoadObject<UEnum>(nullptr, *TypeStr))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+			PinType.PinSubCategoryObject = Enum;
+		}
+		// fall through to default-handling below if it's not actually an enum;
+		// LoadObject returning nullptr leaves PinCategory NAME_None which the
+		// next branch can still try as a struct or class.
+		else if (TryResolveObjectPin(TypeStr))
+		{
+			// resolved as object/class
+		}
+	}
 	else
 	{
+		// Try short-name enum lookup before the struct resolver — many engine
+		// enums (EAttachmentRule, EMovementMode) match the convention E* but
+		// would otherwise fall through and return an empty PinType. (#286)
+		auto TryResolveEnumShort = [&](const FString& Name) -> UEnum*
+		{
+			if (Name.Len() < 2) return nullptr;
+			if (Name[0] != 'E') return nullptr;
+			for (TObjectIterator<UEnum> It; It; ++It)
+			{
+				if (It->GetName() == Name) return *It;
+			}
+			return nullptr;
+		};
+		if (UEnum* ShortEnum = TryResolveEnumShort(TypeStr))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+			PinType.PinSubCategoryObject = ShortEnum;
+			return PinType;
+		}
+
 		// Try to resolve as a struct type (FVector, FRotator, FTransform, FLinearColor, FGameplayTag, etc.)
 		// Strip leading 'F' for lookup if present
 		FString StructName = TypeStr;
