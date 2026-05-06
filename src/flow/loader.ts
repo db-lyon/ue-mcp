@@ -14,14 +14,18 @@ export function buildDefaults(tools: ToolDef[]): Record<string, unknown> {
   for (const tool of tools) {
     for (const [actionName, spec] of Object.entries(tool.actions)) {
       const taskName = `${tool.name}.${actionName}`;
-      const isBridge = !!spec.bridge;
 
+      // class_path always matches the task name so the per-action factory
+      // class (registered in registry.ts with mapParams baked in) is the one
+      // that runs. The previous default of class_path: "ue-mcp.bridge" routed
+      // every bridge action through the generic BridgeTask which silently
+      // dropped mapParams — so YAML callers had to know each handler's exact
+      // C++-side param names instead of the documented TS-side ones.
       const taskDef: Record<string, unknown> = {
-        class_path: isBridge ? "ue-mcp.bridge" : taskName,
+        class_path: taskName,
         group: tool.name,
       };
       if (spec.description) taskDef.description = spec.description;
-      if (isBridge) taskDef.options = { method: spec.bridge };
 
       tasks[taskName] = taskDef;
     }
