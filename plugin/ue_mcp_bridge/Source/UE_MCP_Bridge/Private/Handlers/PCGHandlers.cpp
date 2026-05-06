@@ -1,6 +1,7 @@
 #include "PCGHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "VolumeHelpers_Internal.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -183,43 +184,6 @@ namespace
 		}
 		void* ValueAddr = Prop->ContainerPtrToValuePtr<void>(Container);
 		return SetJsonOnProperty(Prop, ValueAddr, Value, OutError);
-	}
-
-	// #238: AVolumes spawned via SpawnActor have Brush=nullptr, which makes
-	// UEditorBrushBuilder::EndBrush silently no-op (it returns true without
-	// populating polys). Initialize the UModel + UPolys + BrushComponent->Brush
-	// in the editor's documented order, then run UCubeBuilder + csgPrepMovingBrush.
-	// Mirrors UActorFactoryVolume's flow so the resulting volume reports real
-	// bounds to GetActorBounds() and downstream samplers.
-	static void BuildVolumeAsCube(UWorld* World, AVolume* Volume, const FVector& HalfExtent)
-	{
-		if (!World || !Volume) return;
-
-		Volume->PreEditChange(nullptr);
-
-		if (!Volume->Brush)
-		{
-			const EObjectFlags ObjectFlags = Volume->GetFlags() & (RF_Transient | RF_Transactional);
-			Volume->PolyFlags = 0;
-			Volume->Brush = NewObject<UModel>(Volume, NAME_None, ObjectFlags);
-			Volume->Brush->Initialize(nullptr, true);
-			Volume->Brush->Polys = NewObject<UPolys>(Volume->Brush, NAME_None, ObjectFlags);
-			if (UBrushComponent* BC = Volume->GetBrushComponent())
-			{
-				BC->Brush = Volume->Brush;
-			}
-		}
-
-		UCubeBuilder* CubeBuilder = NewObject<UCubeBuilder>(GetTransientPackage(), UCubeBuilder::StaticClass());
-		CubeBuilder->X = HalfExtent.X * 2.0;
-		CubeBuilder->Y = HalfExtent.Y * 2.0;
-		CubeBuilder->Z = HalfExtent.Z * 2.0;
-		CubeBuilder->Build(World, Volume);
-
-		Volume->BrushBuilder = CubeBuilder;
-		Volume->SetActorScale3D(FVector::OneVector);
-
-		FBSPOps::csgPrepMovingBrush(Volume);
 	}
 
 	// #213: shared class lookup. Mirrors AddPCGNode's tolerant resolver — accepts
@@ -1042,7 +1006,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject
 		return MCPError(TEXT("Failed to spawn PCGVolume actor"));
 	}
 
-	BuildVolumeAsCube(World, PCGVolumeActor, Extent);
+	UEMCP::BuildVolumeAsCube(World, PCGVolumeActor, Extent);
 
 	if (!Label.IsEmpty())
 	{

@@ -1,6 +1,7 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "VolumeHelpers_Internal.h"
 #include "EditorScriptingUtilities/Public/EditorLevelLibrary.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
@@ -987,44 +988,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	return MCPResult(Result);
 }
 
-namespace
-{
-	// #238: AVolumes spawned via SpawnActor have Brush=nullptr, which makes
-	// UEditorBrushBuilder::EndBrush silently no-op. Initialize the UModel +
-	// UPolys + BrushComponent->Brush in the editor's documented order, then
-	// run UCubeBuilder + csgPrepMovingBrush. Mirrors UActorFactoryVolume.
-	static void BuildVolumeAsCube(UWorld* World, AVolume* Volume, const FVector& HalfExtent)
-	{
-		if (!World || !Volume) return;
-
-		Volume->PreEditChange(nullptr);
-
-		if (!Volume->Brush)
-		{
-			const EObjectFlags ObjectFlags = Volume->GetFlags() & (RF_Transient | RF_Transactional);
-			Volume->PolyFlags = 0;
-			Volume->Brush = NewObject<UModel>(Volume, NAME_None, ObjectFlags);
-			Volume->Brush->Initialize(nullptr, true);
-			Volume->Brush->Polys = NewObject<UPolys>(Volume->Brush, NAME_None, ObjectFlags);
-			if (UBrushComponent* BC = Volume->GetBrushComponent())
-			{
-				BC->Brush = Volume->Brush;
-			}
-		}
-
-		UCubeBuilder* CubeBuilder = NewObject<UCubeBuilder>(GetTransientPackage(), UCubeBuilder::StaticClass());
-		CubeBuilder->X = HalfExtent.X * 2.0;
-		CubeBuilder->Y = HalfExtent.Y * 2.0;
-		CubeBuilder->Z = HalfExtent.Z * 2.0;
-		CubeBuilder->Build(World, Volume);
-
-		Volume->BrushBuilder = CubeBuilder;
-		Volume->SetActorScale3D(FVector::OneVector);
-
-		FBSPOps::csgPrepMovingBrush(Volume);
-	}
-}
-
 TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>& Params)
 {
 	FString VolumeType;
@@ -1139,7 +1102,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>
 	// Non-Volume actors keep the old scale-based behavior.
 	if (AVolume* Volume = Cast<AVolume>(NewVolume))
 	{
-		BuildVolumeAsCube(World, Volume, Extent);
+		UEMCP::BuildVolumeAsCube(World, Volume, Extent);
 	}
 	else
 	{
@@ -1671,7 +1634,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 				Skipped.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%s: expected {X,Y,Z} object with positive values"), *Pair.Key)));
 				continue;
 			}
-			BuildVolumeAsCube(World, Volume, NewExtent);
+			UEMCP::BuildVolumeAsCube(World, Volume, NewExtent);
 			Changes.Add(MakeShared<FJsonValueString>(Pair.Key));
 			continue;
 		}
