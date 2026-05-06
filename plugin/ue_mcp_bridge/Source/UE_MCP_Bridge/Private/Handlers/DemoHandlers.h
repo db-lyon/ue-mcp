@@ -25,6 +25,12 @@ private:
 	static TSharedPtr<FJsonValue> DemoStep(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DemoGetSteps(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DemoCleanup(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DemoGoHome(const TSharedPtr<FJsonObject>& Params);
+
+	// Ensures /Game/MCP_Home exists on disk and loads it. Used by cleanup +
+	// go_home to keep the editor anchored to a saved level instead of an
+	// auto-generated Untitled (which traps the editor in a save dialog).
+	static bool EnsureHomeLevelLoaded(FString& OutError);
 
 	// ---- Individual step implementations (19 steps) ----
 	static TSharedPtr<FJsonObject> StepCreateLevel();

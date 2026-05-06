@@ -84,6 +84,7 @@ namespace DemoConstants
 	static const FString FOLDER      = TEXT("Demo_Scene");
 	static const FString MAT_DIR     = TEXT("/Game/Demo");
 	static const FString DEMO_LEVEL  = TEXT("/Game/Demo/DemoLevel");
+	static const FString HOME_LEVEL  = TEXT("/Game/MCP_Home");
 	static const FString CUBE_MESH   = TEXT("/Engine/BasicShapes/Cube.Cube");
 	static const FString SPHERE_MESH = TEXT("/Engine/BasicShapes/Sphere.Sphere");
 	static const FString CYLINDER_MESH = TEXT("/Engine/BasicShapes/Cylinder.Cylinder");
@@ -97,6 +98,44 @@ void FDemoHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("demo_step"),      &DemoStep);
 	Registry.RegisterHandler(TEXT("demo_get_steps"), &DemoGetSteps);
 	Registry.RegisterHandler(TEXT("demo_cleanup"),   &DemoCleanup);
+	Registry.RegisterHandler(TEXT("demo_go_home"),   &DemoGoHome);
+}
+
+// Ensures /Game/MCP_Home exists on disk and loads it. Idempotent.
+bool FDemoHandlers::EnsureHomeLevelLoaded(FString& OutError)
+{
+	ULevelEditorSubsystem* LevelSub = GEditor ? GEditor->GetEditorSubsystem<ULevelEditorSubsystem>() : nullptr;
+	if (!LevelSub) { OutError = TEXT("LevelEditorSubsystem not available"); return false; }
+
+	if (!UEditorAssetLibrary::DoesAssetExist(DemoConstants::HOME_LEVEL))
+	{
+		// Create + save a blank level on disk so subsequent loads have a
+		// real package to anchor on (no Untitled state).
+		if (!LevelSub->NewLevel(DemoConstants::HOME_LEVEL))
+		{
+			OutError = FString::Printf(TEXT("NewLevel failed for %s"), *DemoConstants::HOME_LEVEL);
+			return false;
+		}
+		LevelSub->SaveCurrentLevel();
+	}
+	else
+	{
+		LevelSub->LoadLevel(DemoConstants::HOME_LEVEL);
+	}
+	return true;
+}
+
+// demo_go_home: switch the editor to /Game/MCP_Home (creating it on first use).
+TSharedPtr<FJsonValue> FDemoHandlers::DemoGoHome(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Err;
+	if (!EnsureHomeLevelLoaded(Err))
+	{
+		return MCPError(Err);
+	}
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("levelPath"), DemoConstants::HOME_LEVEL);
+	return MCPResult(Result);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +252,14 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoStep(const TSharedPtr<FJsonObject>& Pa
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>& Params)
 {
+	// Anchor the editor to the saved home level FIRST. Otherwise deleting
+	// the demo level under it leaves the editor on an Untitled map and
+	// every subsequent action triggers a "save Untitled?" dialog.
+	{
+		FString HomeErr;
+		EnsureHomeLevelLoaded(HomeErr);
+	}
+
 	UWorld* World = GetEditorWorld();
 
 	// 1) Destroy actors whose label starts with "Demo_"
@@ -438,13 +485,25 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepCreateLevel()
 		return Result;
 	}
 
-	// Create a new map via the editor
 	UEditorAssetLibrary::MakeDirectory(DemoConstants::MAT_DIR);
-	bool bCreated = LevelSub->NewLevel(DemoConstants::DEMO_LEVEL);
+
+	// Idempotent: load the existing demo level on re-runs instead of
+	// calling NewLevel (which on an existing path lands the editor on an
+	// Untitled map and triggers a save-prompt loop).
+	bool bCreated = false;
+	if (UEditorAssetLibrary::DoesAssetExist(DemoConstants::DEMO_LEVEL))
+	{
+		LevelSub->LoadLevel(DemoConstants::DEMO_LEVEL);
+	}
+	else
+	{
+		bCreated = LevelSub->NewLevel(DemoConstants::DEMO_LEVEL);
+		if (bCreated) LevelSub->SaveCurrentLevel();
+	}
 
 	Result->SetStringField(TEXT("levelPath"), DemoConstants::DEMO_LEVEL);
 	Result->SetBoolField(TEXT("created"), bCreated);
-	Result->SetBoolField(TEXT("success"), bCreated);
+	Result->SetBoolField(TEXT("success"), true);
 	return Result;
 }
 
