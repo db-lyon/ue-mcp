@@ -6,6 +6,12 @@
 #include "UObject/UnrealType.h"
 #include "UObject/UObjectIterator.h"
 #include "Engine/Engine.h"
+#include "Engine/UserDefinedEnum.h"
+#include "Kismet2/EnumEditorUtils.h"
+#include "AssetToolsModule.h"
+#include "IAssetTools.h"
+#include "Factories/Factory.h"
+#include "EditorAssetLibrary.h"
 #include "GameplayTagsManager.h"
 #include "GameplayTagsSettings.h"
 #include "GameplayTagContainer.h"
@@ -25,6 +31,8 @@ void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_classes"), &ListClasses);
 	Registry.RegisterHandler(TEXT("list_gameplay_tags"), &ListGameplayTags);
 	Registry.RegisterHandler(TEXT("create_gameplay_tag"), &CreateGameplayTag);
+	Registry.RegisterHandler(TEXT("create_enum"), &CreateEnum);
+	Registry.RegisterHandler(TEXT("set_enum_entries"), &SetEnumEntries);
 }
 
 TSharedPtr<FJsonValue> FReflectionHandlers::ReflectClass(const TSharedPtr<FJsonObject>& Params)
@@ -450,4 +458,139 @@ TSharedPtr<FJsonValue> FReflectionHandlers::SerializeProperty(FProperty* Prop, v
 		return MakeShared<FJsonValueBoolean>(CastField<FBoolProperty>(Prop)->GetPropertyValue(Data));
 	}
 	return MakeShared<FJsonValueString>(TEXT("(unserializable)"));
+}
+
+// ─── #274  create_enum  ────────────────────────────────────────────────
+// Creates a UUserDefinedEnum asset and (optionally) populates entries.
+TSharedPtr<FJsonValue> FReflectionHandlers::CreateEnum(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Hit = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("UserDefinedEnum"))) return Hit;
+
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
+	UClass* FactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/UnrealEd.EnumFactory"));
+	if (!FactoryClass)
+	{
+		// fallback name some UE versions use
+		FactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/UnrealEd.UserDefinedEnumFactory"));
+	}
+	if (!FactoryClass)
+	{
+		return MCPError(TEXT("EnumFactory not found in /Script/UnrealEd"));
+	}
+	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
+	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UUserDefinedEnum::StaticClass(), Factory);
+	if (!NewAsset)
+	{
+		return MCPError(TEXT("Failed to create UserDefinedEnum"));
+	}
+	UUserDefinedEnum* Enum = Cast<UUserDefinedEnum>(NewAsset);
+	if (!Enum)
+	{
+		return MCPError(TEXT("CreateAsset returned non-UUserDefinedEnum"));
+	}
+
+	// Optional entries[] — array of strings or {name, displayName?}.
+	const TArray<TSharedPtr<FJsonValue>>* EntriesArr = nullptr;
+	int32 Added = 0;
+	if (Params->TryGetArrayField(TEXT("entries"), EntriesArr) && EntriesArr)
+	{
+		for (const TSharedPtr<FJsonValue>& Entry : *EntriesArr)
+		{
+			FString EntryName;
+			FString DisplayName;
+			if (Entry->Type == EJson::String)
+			{
+				EntryName = Entry->AsString();
+				DisplayName = EntryName;
+			}
+			else if (TSharedPtr<FJsonObject> Obj = Entry->AsObject())
+			{
+				Obj->TryGetStringField(TEXT("name"), EntryName);
+				if (!Obj->TryGetStringField(TEXT("displayName"), DisplayName))
+				{
+					DisplayName = EntryName;
+				}
+			}
+			if (EntryName.IsEmpty()) continue;
+			FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(Enum);
+			int32 NewIndex = Enum->NumEnums() - 2; // -1 is the auto MAX entry
+			if (NewIndex >= 0)
+			{
+				FEnumEditorUtils::SetEnumeratorDisplayName(Enum, NewIndex, FText::FromString(DisplayName));
+			}
+			Added++;
+		}
+	}
+
+	Enum->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(Enum->GetPathName());
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("assetPath"), Enum->GetPathName());
+	Result->SetStringField(TEXT("name"), Name);
+	Result->SetNumberField(TEXT("entriesAdded"), Added);
+	MCPSetDeleteAssetRollback(Result, Enum->GetPathName());
+	return MCPResult(Result);
+}
+
+// ─── #274  set_enum_entries  ───────────────────────────────────────────
+// Replace the entry list on an existing UUserDefinedEnum.
+TSharedPtr<FJsonValue> FReflectionHandlers::SetEnumEntries(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+
+	UUserDefinedEnum* Enum = Cast<UUserDefinedEnum>(LoadObject<UObject>(nullptr, *AssetPath));
+	if (!Enum) return MCPError(FString::Printf(TEXT("UserDefinedEnum not found: %s"), *AssetPath));
+
+	const TArray<TSharedPtr<FJsonValue>>* EntriesArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("entries"), EntriesArr) || !EntriesArr)
+	{
+		return MCPError(TEXT("Missing 'entries' (array of strings or {name, displayName})"));
+	}
+
+	// Clear existing entries (UE editor utils does this safely).
+	while (Enum->NumEnums() > 1)
+	{
+		FEnumEditorUtils::RemoveEnumeratorFromUserDefinedEnum(Enum, 0);
+	}
+
+	int32 Added = 0;
+	for (const TSharedPtr<FJsonValue>& Entry : *EntriesArr)
+	{
+		FString EntryName, DisplayName;
+		if (Entry->Type == EJson::String)
+		{
+			EntryName = Entry->AsString();
+			DisplayName = EntryName;
+		}
+		else if (TSharedPtr<FJsonObject> Obj = Entry->AsObject())
+		{
+			Obj->TryGetStringField(TEXT("name"), EntryName);
+			if (!Obj->TryGetStringField(TEXT("displayName"), DisplayName)) DisplayName = EntryName;
+		}
+		if (EntryName.IsEmpty()) continue;
+		FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(Enum);
+		int32 NewIndex = Enum->NumEnums() - 2;
+		if (NewIndex >= 0)
+		{
+			FEnumEditorUtils::SetEnumeratorDisplayName(Enum, NewIndex, FText::FromString(DisplayName));
+		}
+		Added++;
+	}
+
+	Enum->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(Enum->GetPathName());
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("entries"), Added);
+	return MCPResult(Result);
 }

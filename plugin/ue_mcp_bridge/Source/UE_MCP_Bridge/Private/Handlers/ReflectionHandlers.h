@@ -18,6 +18,8 @@ private:
 	static TSharedPtr<FJsonValue> ListClasses(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListGameplayTags(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateGameplayTag(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CreateEnum(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetEnumEntries(const TSharedPtr<FJsonObject>& Params);
 
 	// Helper functions
 	static UClass* FindClass(const FString& ClassName);
