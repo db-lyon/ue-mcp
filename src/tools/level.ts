@@ -23,7 +23,7 @@ export const levelTool: ToolDef = categoryTool(
     spawn_volume:       bp("Place volume. Params: volumeType, location?, extent?, label?", "spawn_volume"),
     list_volumes:       bp("List volumes. Params: volumeType?", "list_volumes"),
     set_volume_properties: bp("Edit volume. Params: actorLabel, properties", "set_volume_properties"),
-    spawn_light:        bp("Place light. Params: lightType, location?, rotation?, intensity?, color?, label?", "spawn_light"),
+    spawn_light:        bp("Place light. Params: lightType (point|spot|directional|rect|sky), location?, rotation?, intensity?, color?, label?", "spawn_light"),
     set_light_properties: bp("Edit light. Params: actorLabel, intensity?, color?, rotation? (DirectionalLight sun angle), recaptureSky?, temperature?, castShadows?, attenuationRadius?", "set_light_properties"),
     set_fog_properties: bp("Edit ExponentialHeightFog. Params: actorLabel?, fogDensity?, fogHeightFalloff?, startDistance?, fogInscatteringColor?", "set_fog_properties"),
     get_actors_by_class: bp("List actors by class name. Params: className, world? (editor|pie)", "get_actors_by_class"),
@@ -55,6 +55,7 @@ export const levelTool: ToolDef = categoryTool(
     set_streaming_sublevel_properties: bp("Update sub-level transform/visibility flags. Params: levelName | levelPath, location?, initiallyLoaded?, initiallyVisible?, editorVisible? (#206)", "set_streaming_sublevel_properties", (p) => ({ levelName: p.levelName, levelPath: p.levelPath, location: p.location, initiallyLoaded: p.initiallyLoaded, initiallyVisible: p.initiallyVisible, editorVisible: p.editorVisible })),
     spawn_grid: bp("Batch-spawn StaticMeshActors on a grid. Params: staticMesh, min, max (Vec3 bounds), countX?, countY?, countZ?, jitter?, labelPrefix? (#203)", "spawn_grid", (p) => ({ staticMesh: p.staticMesh, min: p.min, max: p.max, countX: p.countX, countY: p.countY, countZ: p.countZ, jitter: p.jitter, labelPrefix: p.labelPrefix })),
     batch_translate: bp("Translate a set of actors by an offset. Params: offset (Vec3), actorLabels[] OR tag (#203)", "batch_translate", (p) => ({ offset: p.offset, actorLabels: p.actorLabels, tag: p.tag })),
+    place_actors_batch: bp("Bulk-spawn StaticMeshActors with per-instance mesh + transform. Params: actors[]: [{staticMesh, location?, rotation?, scale?, label?}]. Mesh loads cached per path. Returns spawned/failedMesh/failedSpawn counts + labels (#264)", "place_actors_batch", (p) => ({ actors: p.actors })),
   },
   undefined,  // actionDocs auto-generated from descriptions
   {
@@ -120,5 +121,12 @@ export const levelTool: ToolDef = categoryTool(
     countZ: z.number().optional(),
     jitter: z.number().optional().describe("spawn_grid: per-axis location jitter"),
     offset: Vec3.optional(),
+    actors: z.array(z.object({
+      staticMesh: z.string(),
+      location: Vec3.optional(),
+      rotation: Rotator.optional(),
+      scale: Vec3.optional(),
+      label: z.string().optional(),
+    })).optional().describe("place_actors_batch: per-instance mesh+transform records"),
   },
 );

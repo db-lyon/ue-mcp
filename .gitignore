@@ -26,6 +26,9 @@ obj/
 ## MCP config (contains absolute local paths)
 .mcp.json
 
+## Local planning artifacts (release-note drafts, ship-list scratch)
+plans/
+
 ## Test-project Claude Code artifacts (ephemeral — installed by `ue-mcp init` / skills dry-runs)
 tests/ue_mcp/.claude/
 

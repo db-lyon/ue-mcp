@@ -1,6 +1,6 @@
 # Tool Reference
 
-UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering **<!-- count:actions -->438+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering **<!-- count:actions -->449+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -57,8 +57,8 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `rename` | Rename asset. Params: `assetPath, newName` |
 | `bulk_rename` | Batched rename using IAssetTools::RenameAssets - single transaction with one redirector-fixup pass (matches Content Browser drag). Use this over looped rename for scene-referenced assets. Params: `renames[] where each entry is {sourcePath, destinationPath} OR {assetPath, newName}` |
 | `move` | Move asset. Params: `sourcePath, destinationPath` |
-| `delete` | Delete asset. Params: `assetPath` |
-| `delete_batch` | Batch-delete assets. Params: `assetPaths[]` |
+| `delete` | Delete asset. On failure returns reason (open_in_editor / has_referencers / unknown) plus referencer list. Pass force=true to auto-close any open asset editors before deleting (#278). Params: `assetPath, force?` |
+| `delete_batch` | Batch-delete assets. Per-path status (deleted/absent/failed) plus reason+referencers on failed entries (#278). Params: `assetPaths[], force?` |
 | `create_data_asset` | Create UDataAsset instance of custom class. Params: `name, className (/Script/Module.ClassName or loaded name), packagePath?, properties? (key/value map)` |
 | `save` | Save asset(s). Params: `assetPath?` |
 | `set_mesh_material` | Assign material to static mesh slot. Params: `assetPath, materialPath, slotIndex?` |
@@ -78,6 +78,8 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `remove_socket` | Remove socket by name. Params: `assetPath, socketName` |
 | `list_sockets` | List sockets on a mesh. Params: `assetPath` |
 | `reload_package` | Force reload an asset package from disk. Params: `assetPath` |
+| `health_check` | Diagnose stuck-unloadable asset. Returns onDisk/inRegistry/isLoaded/canLoad/isStuck flags so an agent can detect the half-shutdown state where load returns null but the file exists (#279). Params: `assetPath` |
+| `force_reload` | Aggressive reload that resets package loaders + GCs + LoadObject. Recovers from the half-shutdown state without an editor restart (#279). Closes any open editors first. Params: `assetPath` |
 | `export` | Export asset to disk file (Texture2D → PNG, StaticMesh → FBX, etc.). Params: `assetPath, outputPath` |
 | `search_fts` | Ranked asset search (token-scored over name/class/path). Params: `query, maxResults?, classFilter?` |
 | `reindex_fts` | Rebuild the SQLite FTS5 asset index. Params: `directory?` |
@@ -129,7 +131,7 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `create_interface` | Create BP Interface. Params: `assetPath` |
 | `add_interface` | Implement interface. Params: `blueprintPath, interfacePath` |
 | `list_graphs` | List all graphs in a blueprint. Params: `assetPath` |
-| `add_event_dispatcher` | Add event dispatcher. Params: `blueprintPath, name` |
+| `add_event_dispatcher` | Add event dispatcher (multicast delegate variable + signature graph + UFunction). Without parameters, broadcasters fire void(). With parameters, the signature graph gets typed user pins so K2Node_CallDelegate compiles cleanly (#276). Params: `blueprintPath, name, parameters?: [{name, type}] where type is bool/int/float/string/name/text/vector/rotator/transform/object:/Script/Module.Class/struct:/Script/Module.Struct` |
 | `duplicate` | Duplicate blueprint asset. Params: `sourcePath, destinationPath` |
 | `add_local_variable` | Add function-scope local variable. Params: `assetPath, functionName, name, varType?` |
 | `list_local_variables` | List local variables in a function. Params: `assetPath, functionName` |
@@ -144,6 +146,11 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `set_cdo_property` | Set UPROPERTY on any C++ class CDO (not just Blueprints). Params: `className, propertyName, value (#182/#183)` |
 | `get_cdo_properties` | Read UPROPERTY values from any C++ class CDO. Params: `className, propertyNames? (#183)` |
 | `run_construction_script` | Spawn temp actor, run construction script, return generated components and transforms. Params: `assetPath, location? (#195)` |
+| `compile_all` | Batch compile + save Blueprints. Params: `assetPaths[], save? (default true)` |
+| `cleanup_graph` | Remove orphan/corrupted nodes (no class, blank title+no pins, missing target UFunction). Params: `assetPath, graphName? (default: every graph) (#285)` |
+| `connect_pins_batch` | Apply many pin connections in one call (single compile + save). Params: `assetPath, graphName?, connections[]: [{sourceNode, sourcePin, targetNode, targetPin}] (#267)` |
+| `set_node_position` | Move a graph node to (posX, posY). Params: `assetPath, graphName?, nodeId, posX, posY (#277)` |
+| `auto_layout` | Topological layered layout for a graph. Eliminates the (0,0) stack from programmatic add_node. Params: `assetPath, graphName?, columnGap? (default 360), rowGap? (default 200) (#277)` |
 
 ---
 
@@ -170,7 +177,7 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `spawn_volume` | Place volume. Params: `volumeType, location?, extent?, label?` |
 | `list_volumes` | List volumes. Params: `volumeType?` |
 | `set_volume_properties` | Edit volume. Params: `actorLabel, properties` |
-| `spawn_light` | Place light. Params: `lightType, location?, rotation?, intensity?, color?, label?` |
+| `spawn_light` | Place light. Params: `lightType (point\\|spot\\|directional\\|rect\\|sky), location?, rotation?, intensity?, color?, label?` |
 | `set_light_properties` | Edit light. Params: `actorLabel, intensity?, color?, rotation? (DirectionalLight sun angle), recaptureSky?, temperature?, castShadows?, attenuationRadius?` |
 | `set_fog_properties` | Edit ExponentialHeightFog. Params: `actorLabel?, fogDensity?, fogHeightFalloff?, startDistance?, fogInscatteringColor?` |
 | `get_actors_by_class` | List actors by class name. Params: `className, world? (editor\\|pie)` |
@@ -202,6 +209,7 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `set_streaming_sublevel_properties` | Update sub-level transform/visibility flags. Params: `levelName \\| levelPath, location?, initiallyLoaded?, initiallyVisible?, editorVisible? (#206)` |
 | `spawn_grid` | Batch-spawn StaticMeshActors on a grid. Params: `staticMesh, min, max (Vec3 bounds), countX?, countY?, countZ?, jitter?, labelPrefix? (#203)` |
 | `batch_translate` | Translate a set of actors by an offset. Params: `offset (Vec3), actorLabels[] OR tag (#203)` |
+| `place_actors_batch` | Bulk-spawn StaticMeshActors with per-instance mesh + transform. Params: `actors[]: [{staticMesh, location?, rotation?, scale?, label?}]` |
 
 ---
 
@@ -285,7 +293,8 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `remove_virtual_bone` | Remove virtual bone. Params: `skeletonPath, virtualBoneName` |
 | `create_composite` | Create AnimComposite. Params: `name, skeletonPath, packagePath?` |
 | `list_modifiers` | List applied animation modifiers. Params: `assetPath` |
-| `create_ik_retargeter` | Create IKRetargeter asset. Params: `name, packagePath?, sourceRig?, targetRig?` |
+| `create_ik_retargeter` | Create IKRetargeter asset and (default) initialize the UE 5.7 ops stack: assigns sourceRig+targetRig to all ops, runs AutoMapChains. Returns chainsMapped count. Params: `name, packagePath?, sourceRig?, targetRig?, autoMapChains? (default true) (#246)` |
+| `read_ik_retargeter` | Read IKRetargeter: source/target rigs and chain mappings. Params: `assetPath (#246)` |
 | `set_anim_blueprint_skeleton` | Set target skeleton on AnimBP. Params: `assetPath, skeletonPath` |
 | `read_bone_track` | Read bone transform samples from AnimSequence. Params: `assetPath, boneName, frames?: [int]` |
 | `create_pose_search_database` | Create a PoseSearchDatabase asset (motion matching). Params: `name, packagePath?, schemaPath?` |
@@ -503,6 +512,8 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `list_classes` | List classes. Params: `parentFilter?, limit?` |
 | `list_tags` | List gameplay tags. Params: `filter?` |
 | `create_tag` | Create gameplay tag. Params: `tag, comment?` |
+| `create_enum` | Create UUserDefinedEnum asset, optionally seeded with entries. Params: `name, packagePath?, entries?: (string\\|{name, displayName?})[], onConflict? (#274)` |
+| `set_enum_entries` | Replace entries on an existing UUserDefinedEnum. Params: `assetPath, entries[] (#274)` |
 
 ---
 

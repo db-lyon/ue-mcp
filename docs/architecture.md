@@ -100,7 +100,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 
 ### Handler Categories
 
-22 C++ handler groups are registered in `BridgeServer.cpp`. Together they expose <!-- count:actions -->438+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
+22 C++ handler groups are registered in `BridgeServer.cpp`. Together they expose <!-- count:actions -->449+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
 
 | Handler group | Coverage |
 |---------|----------|
