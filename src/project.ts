@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { McpError, ErrorCode } from "./errors.js";
 import { info, warn } from "./log.js";
 import { UProjectSchema, UeMcpConfigSchema } from "./schemas.js";
+import { findEngineInstall } from "./deployer.js";
 
 export interface PluginInfo {
   name: string;
@@ -124,27 +125,43 @@ export class ProjectContext {
     return this.projectDir ? path.join(this.projectDir, "Plugins") : null;
   }
 
+  /**
+   * Cache for discoverPlugins(). Engine-tree scans walk hundreds of dirs;
+   * caching for the lifetime of the server is fine because plugin layouts
+   * don't change while the editor is running.
+   */
+  private _pluginCache: PluginInfo[] | null = null;
+
   discoverPlugins(): PluginInfo[] {
-    if (!this.pluginsDir || !fs.existsSync(this.pluginsDir)) return [];
+    if (this._pluginCache) return this._pluginCache;
     const plugins: PluginInfo[] = [];
+    const seen = new Set<string>();
     function scan(dir: string): void {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const full = path.join(dir, entry.name);
-        const contentDir = path.join(full, "Content");
-        const hasUplugin = fs.readdirSync(full).some((f) => f.endsWith(".uplugin"));
-        if (hasUplugin && fs.existsSync(contentDir)) {
-          plugins.push({
-            name: entry.name,
-            contentDir,
-            mountPoint: `/${entry.name}/`,
-          });
-        } else if (!hasUplugin) {
-          scan(full);
+      let entries: fs.Dirent[];
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      const hasUplugin = entries.some((f) => f.isFile() && f.name.endsWith(".uplugin"));
+      if (hasUplugin) {
+        const upluginEntry = entries.find((f) => f.isFile() && f.name.endsWith(".uplugin"))!;
+        const pluginName = path.basename(upluginEntry.name, ".uplugin");
+        const contentDir = path.join(dir, "Content");
+        if (fs.existsSync(contentDir) && !seen.has(pluginName)) {
+          seen.add(pluginName);
+          plugins.push({ name: pluginName, contentDir, mountPoint: `/${pluginName}/` });
         }
+        return; // don't recurse into a plugin directory
+      }
+      for (const entry of entries) {
+        if (entry.isDirectory()) scan(path.join(dir, entry.name));
       }
     }
-    scan(this.pluginsDir);
+    if (this.pluginsDir && fs.existsSync(this.pluginsDir)) scan(this.pluginsDir);
+    // Engine plugins (PCGBiomeCore, Niagara extras, etc.) — required for #253.
+    const engineRoot = findEngineInstall(this.engineAssociation);
+    if (engineRoot) {
+      const enginePluginsRoot = path.join(engineRoot, "Engine", "Plugins");
+      if (fs.existsSync(enginePluginsRoot)) scan(enginePluginsRoot);
+    }
+    this._pluginCache = plugins;
     return plugins;
   }
 

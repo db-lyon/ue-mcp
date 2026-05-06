@@ -309,101 +309,59 @@ TSharedPtr<FJsonValue> FAssetHandlers::SearchAssets(const TSharedPtr<FJsonObject
 	int32 MaxResults = OptionalInt(Params, TEXT("maxResults"), 50);
 	bool bSearchAll = OptionalBool(Params, TEXT("searchAll"));
 
-	// Use AssetRegistry for global search when searchAll is true or directory contains wildcards
-	if (bSearchAll || (!bHasDirectory && !Query.IsEmpty() && Query.Contains(TEXT("*"))))
+	// Unified path: always use IAssetRegistry::GetAssets (with PackagePaths) so
+	// substring matches hit AssetName + ObjectPath consistently. The previous
+	// default branch leaned on UEditorAssetLibrary::ListAssets which returned
+	// false negatives for assets that were indexed but not yet visible to that
+	// API path (#256).
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	FARFilter Filter;
+	Filter.bRecursivePaths = true;
+	if (!bSearchAll)
 	{
-		// Use the AssetRegistry for indexed search across all content roots
-		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-		FARFilter Filter;
-		Filter.bRecursivePaths = true;
+		Filter.PackagePaths.Add(FName(*Directory));
+	}
+	else if (bHasDirectory)
+	{
+		// searchAll + directory = scope to that directory across mounted roots.
+		Filter.PackagePaths.Add(FName(*Directory));
+	}
 
-		// If a directory is explicitly provided with searchAll, scope to that directory
-		if (bHasDirectory)
+	TArray<FAssetData> AllAssets;
+	AssetRegistry.GetAssets(Filter, AllAssets);
+
+	TArray<TSharedPtr<FJsonValue>> ResultsArray;
+	FString QueryLower = Query.ToLower();
+	for (const FAssetData& AssetData : AllAssets)
+	{
+		if (ResultsArray.Num() >= MaxResults) break;
+		FString AssetPath = AssetData.GetObjectPathString();
+		FString AssetName = AssetData.AssetName.ToString();
+		if (!Query.IsEmpty())
 		{
-			Filter.PackagePaths.Add(FName(*Directory));
-		}
-
-		TArray<FAssetData> AllAssets;
-		AssetRegistry.GetAssets(Filter, AllAssets);
-
-		TArray<TSharedPtr<FJsonValue>> ResultsArray;
-		FString QueryLower = Query.ToLower();
-		for (const FAssetData& AssetData : AllAssets)
-		{
-			if (ResultsArray.Num() >= MaxResults) break;
-			FString AssetPath = AssetData.GetObjectPathString();
-			FString AssetName = AssetData.AssetName.ToString();
-			if (!Query.IsEmpty())
+			if (Query.Contains(TEXT("*")))
 			{
-				// Support wildcard matching
-				if (Query.Contains(TEXT("*")))
-				{
-					if (!AssetPath.MatchesWildcard(Query))
-					{
-						continue;
-					}
-				}
-				else if (!AssetPath.ToLower().Contains(QueryLower) && !AssetName.ToLower().Contains(QueryLower))
+				if (!AssetPath.MatchesWildcard(Query) && !AssetName.MatchesWildcard(Query))
 				{
 					continue;
 				}
 			}
-
-			TSharedPtr<FJsonObject> Item = MakeShared<FJsonObject>();
-			Item->SetStringField(TEXT("path"), AssetData.PackageName.ToString());
-			Item->SetStringField(TEXT("name"), AssetName);
-			Item->SetStringField(TEXT("className"), AssetData.AssetClassPath.GetAssetName().ToString());
-			ResultsArray.Add(MakeShared<FJsonValueObject>(Item));
-		}
-
-		auto Result = MCPSuccess();
-		Result->SetStringField(TEXT("query"), Query);
-		Result->SetStringField(TEXT("searchScope"), bHasDirectory ? Directory : TEXT("all"));
-		Result->SetNumberField(TEXT("resultCount"), ResultsArray.Num());
-		Result->SetArrayField(TEXT("results"), ResultsArray);
-		return MCPResult(Result);
-	}
-
-	// Default: directory-based search (original behavior)
-	TArray<FString> AssetPaths = UEditorAssetLibrary::ListAssets(Directory, true, false);
-
-	TArray<TSharedPtr<FJsonValue>> ResultsArray;
-	FString QueryLower = Query.ToLower();
-	for (const FString& AssetPath : AssetPaths)
-	{
-		if (ResultsArray.Num() >= MaxResults) break;
-		if (!Query.IsEmpty() && !AssetPath.ToLower().Contains(QueryLower)) continue;
-
-		TSharedPtr<FJsonObject> Item = MakeShared<FJsonObject>();
-		Item->SetStringField(TEXT("path"), AssetPath);
-		FString Name;
-		int32 SlashIdx = 0;
-		if (AssetPath.FindLastChar(TEXT('/'), SlashIdx))
-		{
-			Name = AssetPath.Mid(SlashIdx + 1);
-			int32 DotIdx = 0;
-			if (Name.FindChar(TEXT('.'), DotIdx))
+			else if (!AssetPath.ToLower().Contains(QueryLower) && !AssetName.ToLower().Contains(QueryLower))
 			{
-				Name = Name.Left(DotIdx);
+				continue;
 			}
 		}
-		else
-		{
-			Name = AssetPath;
-		}
-		Item->SetStringField(TEXT("name"), Name);
 
-		FAssetData AssetData = UEditorAssetLibrary::FindAssetData(AssetPath);
-		if (AssetData.IsValid())
-		{
-			Item->SetStringField(TEXT("className"), AssetData.AssetClassPath.GetAssetName().ToString());
-		}
+		TSharedPtr<FJsonObject> Item = MakeShared<FJsonObject>();
+		Item->SetStringField(TEXT("path"), AssetData.PackageName.ToString());
+		Item->SetStringField(TEXT("name"), AssetName);
+		Item->SetStringField(TEXT("className"), AssetData.AssetClassPath.GetAssetName().ToString());
 		ResultsArray.Add(MakeShared<FJsonValueObject>(Item));
 	}
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("query"), Query);
-	Result->SetStringField(TEXT("directory"), Directory);
+	Result->SetStringField(TEXT("searchScope"), bSearchAll ? (bHasDirectory ? Directory : TEXT("all")) : Directory);
 	Result->SetNumberField(TEXT("resultCount"), ResultsArray.Num());
 	Result->SetArrayField(TEXT("results"), ResultsArray);
 
