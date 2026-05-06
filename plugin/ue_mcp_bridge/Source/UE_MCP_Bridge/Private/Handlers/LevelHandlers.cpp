@@ -105,6 +105,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_streaming_sublevel_properties"), &SetStreamingSublevelProperties);
 	Registry.RegisterHandler(TEXT("spawn_grid"), &SpawnGrid);
 	Registry.RegisterHandler(TEXT("batch_translate"), &BatchTranslate);
+	Registry.RegisterHandler(TEXT("place_actors_batch"), &PlaceActorsBatch);
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>& Params)
@@ -831,9 +832,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 	{
 		LightClass = ARectLight::StaticClass();
 	}
+	else if (LightType.Equals(TEXT("sky"), ESearchCase::IgnoreCase) || LightType.Equals(TEXT("skylight"), ESearchCase::IgnoreCase))
+	{
+		LightClass = ASkyLight::StaticClass();
+	}
 	else
 	{
-		return MCPError(FString::Printf(TEXT("Unknown light type: %s. Use point, spot, directional, or rect."), *LightType));
+		return MCPError(FString::Printf(TEXT("Unknown light type: %s. Use point, spot, directional, rect, or sky."), *LightType));
 	}
 
 	FTransform LightTransform(FRotator::ZeroRotator, Location);
@@ -848,10 +853,16 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 		NewLight->SetActorLabel(Label);
 	}
 
-	ULightComponent* LightComponent = NewLight->FindComponentByClass<ULightComponent>();
-	if (LightComponent)
+	if (ULightComponent* LightComponent = NewLight->FindComponentByClass<ULightComponent>())
 	{
 		LightComponent->SetIntensity(Intensity);
+	}
+	else if (USkyLightComponent* SkyComp = NewLight->FindComponentByClass<USkyLightComponent>())
+	{
+		// SkyLight has no ULightComponent — set intensity on USkyLightComponent
+		// directly and recapture so the change takes effect.
+		SkyComp->SetIntensity(Intensity);
+		SkyComp->RecaptureSky();
 	}
 
 	const FString FinalLabel = NewLight->GetActorLabel();
@@ -3038,5 +3049,114 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchTranslate(const TSharedPtr<FJsonObje
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
 	Result->SetNumberField(TEXT("count"), Targets.Num());
+	return MCPResult(Result);
+}
+
+// #264 — place_actors_batch: spawn many StaticMeshActors with per-instance
+// mesh + transform. Avoids the chatty place_actor-per-row pattern that filled
+// up the workaround log for procedural placement scripts.
+TSharedPtr<FJsonValue> FLevelHandlers::PlaceActorsBatch(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	const TArray<TSharedPtr<FJsonValue>>* ActorsArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("actors"), ActorsArr) || !ActorsArr)
+	{
+		return MCPError(TEXT("Missing 'actors' (array of {staticMesh, location?, rotation?, scale?, label?})"));
+	}
+
+	auto ReadVec = [](const TSharedPtr<FJsonObject>& Obj, FVector Default) -> FVector
+	{
+		if (!Obj.IsValid()) return Default;
+		FVector V = Default;
+		double X = 0; if (Obj->TryGetNumberField(TEXT("x"), X)) V.X = X;
+		double Y = 0; if (Obj->TryGetNumberField(TEXT("y"), Y)) V.Y = Y;
+		double Z = 0; if (Obj->TryGetNumberField(TEXT("z"), Z)) V.Z = Z;
+		return V;
+	};
+	auto ReadRot = [](const TSharedPtr<FJsonObject>& Obj) -> FRotator
+	{
+		if (!Obj.IsValid()) return FRotator::ZeroRotator;
+		FRotator R(0, 0, 0);
+		double V = 0; if (Obj->TryGetNumberField(TEXT("pitch"), V)) R.Pitch = V;
+		if (Obj->TryGetNumberField(TEXT("yaw"), V)) R.Yaw = V;
+		if (Obj->TryGetNumberField(TEXT("roll"), V)) R.Roll = V;
+		return R;
+	};
+
+	// Cache mesh loads by path so a 1000-row batch with 5 unique meshes only
+	// does 5 LoadObject calls.
+	TMap<FString, UStaticMesh*> MeshCache;
+	auto ResolveMesh = [&MeshCache](const FString& Path) -> UStaticMesh*
+	{
+		if (Path.IsEmpty()) return nullptr;
+		if (UStaticMesh** Cached = MeshCache.Find(Path)) return *Cached;
+		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *Path);
+		MeshCache.Add(Path, Mesh);
+		return Mesh;
+	};
+
+	int32 Spawned = 0, FailedMesh = 0, FailedSpawn = 0;
+	TArray<TSharedPtr<FJsonValue>> Labels;
+	TArray<TSharedPtr<FJsonValue>> Errors;
+
+	for (int32 i = 0; i < ActorsArr->Num(); i++)
+	{
+		const TSharedPtr<FJsonValue>& Entry = (*ActorsArr)[i];
+		const TSharedPtr<FJsonObject> Row = Entry.IsValid() ? Entry->AsObject() : nullptr;
+		if (!Row.IsValid()) { FailedSpawn++; continue; }
+
+		FString MeshPath;
+		Row->TryGetStringField(TEXT("staticMesh"), MeshPath);
+		UStaticMesh* Mesh = ResolveMesh(MeshPath);
+		if (!Mesh)
+		{
+			FailedMesh++;
+			TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
+			Err->SetNumberField(TEXT("index"), i);
+			Err->SetStringField(TEXT("staticMesh"), MeshPath);
+			Err->SetStringField(TEXT("reason"), TEXT("static_mesh_not_found"));
+			Errors.Add(MakeShared<FJsonValueObject>(Err));
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject>* LocObj = nullptr;
+		const TSharedPtr<FJsonObject>* RotObj = nullptr;
+		const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
+		Row->TryGetObjectField(TEXT("location"), LocObj);
+		Row->TryGetObjectField(TEXT("rotation"), RotObj);
+		Row->TryGetObjectField(TEXT("scale"), ScaleObj);
+
+		const FVector Loc   = LocObj ? ReadVec(*LocObj, FVector::ZeroVector) : FVector::ZeroVector;
+		const FRotator Rot  = RotObj ? ReadRot(*RotObj) : FRotator::ZeroRotator;
+		const FVector Scale = ScaleObj ? ReadVec(*ScaleObj, FVector::OneVector) : FVector::OneVector;
+
+		FActorSpawnParameters SpawnParams;
+		AStaticMeshActor* SMA = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Loc, Rot, SpawnParams);
+		if (!SMA) { FailedSpawn++; continue; }
+		SMA->SetMobility(EComponentMobility::Movable);
+		if (UStaticMeshComponent* SMC = SMA->GetStaticMeshComponent())
+		{
+			SMC->SetStaticMesh(Mesh);
+			SMC->SetWorldScale3D(Scale);
+		}
+
+		FString Label;
+		if (Row->TryGetStringField(TEXT("label"), Label) && !Label.IsEmpty())
+		{
+			SMA->SetActorLabel(Label);
+		}
+		Labels.Add(MakeShared<FJsonValueString>(SMA->GetActorLabel()));
+		Spawned++;
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetNumberField(TEXT("requested"), ActorsArr->Num());
+	Result->SetNumberField(TEXT("spawned"), Spawned);
+	Result->SetNumberField(TEXT("failedMesh"), FailedMesh);
+	Result->SetNumberField(TEXT("failedSpawn"), FailedSpawn);
+	Result->SetArrayField(TEXT("labels"), Labels);
+	if (Errors.Num() > 0) Result->SetArrayField(TEXT("errors"), Errors);
 	return MCPResult(Result);
 }
