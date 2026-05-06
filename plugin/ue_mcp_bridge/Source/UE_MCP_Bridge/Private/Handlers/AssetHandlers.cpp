@@ -57,6 +57,41 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "AI/Navigation/NavCollisionBase.h"
 
+// ─── Protected mount guardrail ──────────────────────────────────────────
+// Engine-shipped content (/Engine/, /Script/, /Memory/, /Temp/) and Verse
+// runtime classes must never be mutated through the bridge. UE's
+// UEditorAssetLibrary::DeleteAsset will happily destroy files under
+// <engineRoot>/Engine/Content/ if not stopped — verified the hard way.
+// Apply this check to every handler that deletes, moves, or renames an
+// asset. Plugin content roots (mounted under /<PluginName>/) are NOT
+// protected here; per-project plugin content is expected to be writable.
+namespace
+{
+	bool IsProtectedAssetPath(const FString& Path)
+	{
+		FString P = Path;
+		P.TrimStartAndEndInline();
+		if (P.IsEmpty()) return false;
+		// Tolerate leading whitespace and the surface form (no leading slash).
+		if (!P.StartsWith(TEXT("/"))) P = TEXT("/") + P;
+		const FString L = P.ToLower();
+		if (L.StartsWith(TEXT("/engine/"))) return true;
+		if (L.StartsWith(TEXT("/script/"))) return true;
+		if (L.StartsWith(TEXT("/memory/"))) return true;
+		if (L.StartsWith(TEXT("/temp/"))) return true;
+		// Verse runtime objects surface as /Script/CoreUObject.* etc.
+		if (L.Contains(TEXT("/script/"))) return true;
+		return false;
+	}
+
+	TSharedPtr<FJsonValue> MakeProtectedPathError(const FString& Path)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/, /Temp/ are read-only via the bridge."),
+			*Path));
+	}
+}
+
 void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("list_assets"), &ListAssets);
@@ -269,12 +304,28 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReindexAssetsFTS(const TSharedPtr<FJsonOb
 TSharedPtr<FJsonValue> FAssetHandlers::ListAssets(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Query = OptionalString(Params, TEXT("query"), TEXT("*"));
+	// Default scope: /Game/ only. Explicit empty string or "*" passed as
+	// directory means "all mounted roots" — agents must opt in deliberately.
+	FString Directory = OptionalString(Params, TEXT("directory"), TEXT("/Game"));
+	const bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
 
-	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
-	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
 	TArray<FAssetData> AssetDataList;
-	AssetRegistry.GetAllAssets(AssetDataList);
+	if (Directory.IsEmpty() || Directory == TEXT("*") || Directory == TEXT("/"))
+	{
+		// Explicit all-mounts request — mirror prior behavior.
+		AssetRegistry.GetAllAssets(AssetDataList);
+	}
+	else
+	{
+		// Strip a trailing slash so "/Game/Foo/" and "/Game/Foo" are equivalent.
+		while (Directory.Len() > 1 && Directory.EndsWith(TEXT("/"))) Directory = Directory.LeftChop(1);
+		FARFilter Filter;
+		Filter.bRecursivePaths = bRecursive;
+		Filter.PackagePaths.Add(FName(*Directory));
+		AssetRegistry.GetAssets(Filter, AssetDataList);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> AssetsArray;
 	for (const FAssetData& AssetData : AssetDataList)
@@ -291,6 +342,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListAssets(const TSharedPtr<FJsonObject>&
 	}
 
 	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("directory"), Directory);
 	Result->SetArrayField(TEXT("assets"), AssetsArray);
 	Result->SetNumberField(TEXT("count"), AssetsArray.Num());
 
@@ -632,6 +684,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>
 		return MCPError(TEXT("Missing 'sourcePath'+'destinationPath' or 'assetPath'+'newName'"));
 	}
 
+	if (IsProtectedAssetPath(SourcePath)) return MakeProtectedPathError(SourcePath);
+	if (IsProtectedAssetPath(DestPath))   return MakeProtectedPathError(DestPath);
+
 	// Idempotency: if already at destination, no-op.
 	if (SourcePath == DestPath)
 	{
@@ -767,6 +822,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
+	if (IsProtectedAssetPath(AssetPath)) return MakeProtectedPathError(AssetPath);
+
 	const bool bForce = OptionalBool(Params, TEXT("force"), false);
 
 	// Idempotent: if the asset doesn't exist, treat as already-deleted.
@@ -819,6 +876,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 	int32 Failed = 0;
 	int32 ClosedEditors = 0;
 
+	int32 Protected = 0;
 	for (const TSharedPtr<FJsonValue>& V : *PathsArr)
 	{
 		FString Path;
@@ -830,7 +888,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 		Entry->SetStringField(TEXT("path"), Path);
 
-		if (!UEditorAssetLibrary::DoesAssetExist(Path))
+		if (IsProtectedAssetPath(Path))
+		{
+			Entry->SetStringField(TEXT("status"), TEXT("protected"));
+			Entry->SetStringField(TEXT("reason"), TEXT("Engine/Script/Memory/Temp mounts are read-only via the bridge"));
+			Protected++;
+		}
+		else if (!UEditorAssetLibrary::DoesAssetExist(Path))
 		{
 			Entry->SetStringField(TEXT("status"), TEXT("absent"));
 			Absent++;
@@ -864,6 +928,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("deleted"), Deleted);
 	Result->SetNumberField(TEXT("absent"), Absent);
 	Result->SetNumberField(TEXT("failed"), Failed);
+	if (Protected > 0) Result->SetNumberField(TEXT("protected"), Protected);
 	Result->SetNumberField(TEXT("total"), PerPath.Num());
 	if (ClosedEditors > 0) Result->SetNumberField(TEXT("closedEditors"), ClosedEditors);
 	return MCPResult(Result);
@@ -947,6 +1012,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkRename(const TSharedPtr<FJsonObject>&
 		if (SourcePath.IsEmpty() || NewName.IsEmpty() || NewPackagePath.IsEmpty())
 		{
 			Record->SetStringField(TEXT("status"), TEXT("invalid"));
+			PerItem.Add(MakeShared<FJsonValueObject>(Record));
+			Skipped++;
+			continue;
+		}
+
+		if (IsProtectedAssetPath(SourcePath) || IsProtectedAssetPath(NewPackagePath))
+		{
+			Record->SetStringField(TEXT("status"), TEXT("protected"));
+			Record->SetStringField(TEXT("reason"), TEXT("Engine/Script/Memory/Temp mounts are read-only via the bridge"));
 			PerItem.Add(MakeShared<FJsonValueObject>(Record));
 			Skipped++;
 			continue;
@@ -2020,6 +2094,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::MoveFolder(const TSharedPtr<FJsonObject>&
 	// Ensure paths don't have trailing slashes for consistent prefix replacement
 	SourcePath.RemoveFromEnd(TEXT("/"));
 	DestinationPath.RemoveFromEnd(TEXT("/"));
+
+	if (IsProtectedAssetPath(SourcePath))      return MakeProtectedPathError(SourcePath);
+	if (IsProtectedAssetPath(DestinationPath)) return MakeProtectedPathError(DestinationPath);
 
 	// Scan source path to discover all assets
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
