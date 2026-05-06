@@ -1,6 +1,6 @@
 # Tool Reference
 
-UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering **<!-- count:actions -->449+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering **<!-- count:actions -->450+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -616,7 +616,8 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | Action | Description |
 |--------|-------------|
 | `step` | Execute demo step. Params: `stepIndex?` |
-| `cleanup` | Remove demo assets and actors |
+| `cleanup` | Remove demo assets and actors. Switches editor to /Game/MCP_Home before deleting so the editor is never left on an Untitled map |
+| `go_home` | Switch the editor to /Game/MCP_Home (creating it on first use). Use this before any operation that would leave the editor on an Untitled map |
 
 ---
 
