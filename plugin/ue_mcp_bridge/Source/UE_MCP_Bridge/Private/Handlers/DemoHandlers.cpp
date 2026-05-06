@@ -1168,11 +1168,57 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepTuningPanel()
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
-	// This step is a placeholder - creating EditorUtilityWidgets programmatically
-	// requires careful factory setup. Mark as success with a note.
-	Result->SetStringField(TEXT("note"),
-		TEXT("Tuning panel step skipped - create EUW_DemoTuning manually in /Game/Demo/ for a custom control panel. "
-		     "Use the widget tool's create_widget action to build one interactively."));
+	const FString PackagePath = DemoConstants::MAT_DIR;        // /Game/Demo
+	const FString AssetName   = TEXT("EUW_DemoTuning");
+	const FString FullPath    = PackagePath / AssetName;
+
+	// Idempotent: if it already exists, return existed.
+	if (UEditorAssetLibrary::DoesAssetExist(FullPath))
+	{
+		Result->SetStringField(TEXT("assetPath"), FullPath);
+		Result->SetBoolField(TEXT("success"), true);
+		Result->SetStringField(TEXT("status"), TEXT("existed"));
+		return Result;
+	}
+
+	UClass* EUWBClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityWidgetBlueprint"));
+	if (!EUWBClass)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("EditorUtilityWidgetBlueprint class not found - Blutility plugin disabled?"));
+		Result->SetBoolField(TEXT("success"), false);
+		return Result;
+	}
+
+	UClass* FactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/UMGEditor.WidgetBlueprintFactory"));
+	if (!FactoryClass)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("WidgetBlueprintFactory not found"));
+		Result->SetBoolField(TEXT("success"), false);
+		return Result;
+	}
+
+	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
+	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
+	// ParentClass / BlueprintType are public on UWidgetBlueprintFactory; set via reflection
+	// to avoid a hard UMGEditor dependency in this file.
+	if (FProperty* ParentProp = Factory->GetClass()->FindPropertyByName(TEXT("ParentClass")))
+	{
+		FString ParentRef = TEXT("/Script/Blutility.EditorUtilityWidget");
+		ParentProp->ImportText_Direct(*ParentRef, ParentProp->ContainerPtrToValuePtr<void>(Factory), Factory, PPF_None);
+	}
+
+	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, EUWBClass, Factory);
+	if (!NewAsset)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("CreateAsset returned null for EUW_DemoTuning"));
+		Result->SetBoolField(TEXT("success"), false);
+		return Result;
+	}
+
+	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+
+	Result->SetStringField(TEXT("assetPath"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("status"), TEXT("created"));
 	Result->SetBoolField(TEXT("success"), true);
 	return Result;
 }
