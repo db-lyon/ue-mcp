@@ -42,7 +42,8 @@ export const animationTool: ToolDef = categoryTool(
     remove_virtual_bone: bp("Remove virtual bone. Params: skeletonPath, virtualBoneName", "remove_virtual_bone"),
     create_composite:   bp("Create AnimComposite. Params: name, skeletonPath, packagePath?", "create_anim_composite"),
     list_modifiers:     bp("List applied animation modifiers. Params: assetPath", "list_anim_modifiers", (p) => ({ path: p.assetPath })),
-    create_ik_retargeter: bp("Create IKRetargeter asset. Params: name, packagePath?, sourceRig?, targetRig?", "create_ik_retargeter"),
+    create_ik_retargeter: bp("Create IKRetargeter asset and (default) initialize the UE 5.7 ops stack: assigns sourceRig+targetRig to all ops, runs AutoMapChains. Returns chainsMapped count. Params: name, packagePath?, sourceRig?, targetRig?, autoMapChains? (default true) (#246)", "create_ik_retargeter", (p) => ({ name: p.name, packagePath: p.packagePath, sourceRig: p.sourceRig, targetRig: p.targetRig, autoMapChains: p.autoMapChains, onConflict: p.onConflict })),
+    read_ik_retargeter: bp("Read IKRetargeter: source/target rigs and chain mappings. Params: assetPath (#246)", "read_ik_retargeter", (p) => ({ assetPath: p.assetPath })),
     set_anim_blueprint_skeleton: bp("Set target skeleton on AnimBP. Params: assetPath, skeletonPath", "set_anim_blueprint_skeleton"),
     read_bone_track:    bp("Read bone transform samples from AnimSequence. Params: assetPath, boneName, frames?: [int]", "read_bone_track"),
     create_pose_search_database: bp("Create a PoseSearchDatabase asset (motion matching). Params: name, packagePath?, schemaPath?", "create_pose_search_database"),
@@ -108,6 +109,8 @@ export const animationTool: ToolDef = categoryTool(
     retargetRoot: z.string().optional().describe("Retarget root bone name for IK Rig"),
     sourceRig: z.string().optional().describe("Source IKRig path for create_ik_retargeter"),
     targetRig: z.string().optional().describe("Target IKRig path for create_ik_retargeter"),
+    autoMapChains: z.boolean().optional().describe("create_ik_retargeter: assign rigs to ops + AutoMapChains after creation (default true)"),
+    onConflict: z.string().optional().describe("Asset-creation conflict policy: skip (default) | error | overwrite"),
     frames: z.array(z.number()).optional().describe("Specific frames to sample for read_bone_track"),
     chains: z.array(z.object({
       name: z.string(),

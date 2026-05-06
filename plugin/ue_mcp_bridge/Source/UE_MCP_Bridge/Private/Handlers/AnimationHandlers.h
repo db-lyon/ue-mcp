@@ -76,6 +76,7 @@ private:
 
 	// v0.7.11 — issue fixes
 	static TSharedPtr<FJsonValue> CreateIKRetargeter(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadIKRetargeter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetAnimBlueprintSkeleton(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadBoneTrack(const TSharedPtr<FJsonObject>& Params);
 
