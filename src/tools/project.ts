@@ -93,6 +93,32 @@ function collectFiles(dir: string, headers: string[], sources: string[]): void {
   }
 }
 
+/**
+ * Returns every Source/ directory under projectDir that holds at least one
+ * <Module>.Build.cs file. Handles both the standard <ProjectDir>/Source/
+ * layout and the nested <ProjectDir>/<ProjectName>/Source/ layout (#257).
+ */
+function findSourceRoots(projectDir: string, projectName: string | null): string[] {
+  const roots: string[] = [];
+  const candidates = [
+    path.join(projectDir, "Source"),
+    projectName ? path.join(projectDir, projectName, "Source") : null,
+  ].filter((c): c is string => c !== null);
+  for (const c of candidates) {
+    if (fs.existsSync(c) && fs.statSync(c).isDirectory()) roots.push(c);
+  }
+  return roots;
+}
+
+/** Find the source root that owns a given moduleName (a subdir holding <module>.Build.cs). */
+function resolveModuleDir(projectDir: string, projectName: string | null, moduleName: string): string | null {
+  for (const root of findSourceRoots(projectDir, projectName)) {
+    const modDir = path.join(root, moduleName);
+    if (fs.existsSync(path.join(modDir, `${moduleName}.Build.cs`))) return modDir;
+  }
+  return null;
+}
+
 export const projectTool: ToolDef = categoryTool(
   "project",
   "Project status, config INI files, and C++ source inspection.",
@@ -182,7 +208,12 @@ export const projectTool: ToolDef = categoryTool(
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
         const headerPath = p.headerPath as string;
-        const resolved = path.isAbsolute(headerPath) ? headerPath : path.join(ctx.project.projectDir!, "Source", headerPath);
+        let resolved = headerPath;
+        if (!path.isAbsolute(headerPath)) {
+          const roots = findSourceRoots(ctx.project.projectDir!, ctx.project.projectName);
+          const candidate = roots.map(r => path.join(r, headerPath)).find(c => fs.existsSync(c));
+          resolved = candidate ?? path.join(ctx.project.projectDir!, "Source", headerPath);
+        }
         if (!fs.existsSync(resolved)) throw new Error(`Header not found: ${resolved}`);
         return parseHeader(fs.readFileSync(resolved, "utf-8"), resolved);
       },
@@ -191,10 +222,12 @@ export const projectTool: ToolDef = categoryTool(
       description: "Read module source. Params: moduleName",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
-        const sourceDir = path.join(ctx.project.projectDir!, "Source");
         const moduleName = p.moduleName as string;
-        const moduleDir = path.join(sourceDir, moduleName);
-        if (!fs.existsSync(moduleDir)) throw new Error(`Module directory not found: ${moduleDir}`);
+        const moduleDir = resolveModuleDir(ctx.project.projectDir!, ctx.project.projectName, moduleName);
+        if (!moduleDir) {
+          const tried = findSourceRoots(ctx.project.projectDir!, ctx.project.projectName);
+          throw new Error(`Module '${moduleName}' not found. Searched: ${tried.length ? tried.join(", ") : "(no Source/ directories)"}`);
+        }
         const headers: string[] = [], sources: string[] = [];
         collectFiles(moduleDir, headers, sources);
         const buildCs = path.join(moduleDir, `${moduleName}.Build.cs`);
@@ -205,34 +238,63 @@ export const projectTool: ToolDef = categoryTool(
       description: "List C++ modules",
       handler: async (ctx) => {
         ctx.project.ensureLoaded();
-        const sourceDir = path.join(ctx.project.projectDir!, "Source");
-        if (!fs.existsSync(sourceDir)) throw new Error(`Source directory not found: ${sourceDir}`);
-        const modules = fs.readdirSync(sourceDir, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => ({ name: e.name, path: path.join(sourceDir, e.name), hasBuildCs: fs.existsSync(path.join(sourceDir, e.name, `${e.name}.Build.cs`)) }));
-        return { sourceDir, moduleCount: modules.length, modules };
+        const roots = findSourceRoots(ctx.project.projectDir!, ctx.project.projectName);
+        if (roots.length === 0) throw new Error(`No Source/ directory found under ${ctx.project.projectDir}`);
+        const modules: Array<{ name: string; path: string; hasBuildCs: boolean; sourceRoot: string }> = [];
+        for (const root of roots) {
+          for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
+            const modDir = path.join(root, entry.name);
+            modules.push({ name: entry.name, path: modDir, hasBuildCs: fs.existsSync(path.join(modDir, `${entry.name}.Build.cs`)), sourceRoot: root });
+          }
+        }
+        return { sourceRoots: roots, moduleCount: modules.length, modules };
       },
     },
     search_cpp: {
       description: "Search .h/.cpp files. Params: query, directory?",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
-        const sourceDir = path.join(ctx.project.projectDir!, "Source");
-        const searchDir = p.directory ? path.join(sourceDir, p.directory as string) : sourceDir;
-        if (!fs.existsSync(searchDir)) throw new Error(`Directory not found: ${searchDir}`);
+        const roots = findSourceRoots(ctx.project.projectDir!, ctx.project.projectName);
+        if (roots.length === 0) throw new Error(`No Source/ directory found under ${ctx.project.projectDir}`);
+        // If directory is provided, resolve it relative to whichever root contains it.
+        let searchDirs: string[] = roots;
+        if (p.directory) {
+          const sub = p.directory as string;
+          if (path.isAbsolute(sub)) {
+            if (!fs.existsSync(sub)) throw new Error(`Directory not found: ${sub}`);
+            searchDirs = [sub];
+          } else {
+            const matches = roots.map(r => path.join(r, sub)).filter(d => fs.existsSync(d));
+            if (matches.length === 0) throw new Error(`Directory '${sub}' not found under any source root: ${roots.join(", ")}`);
+            searchDirs = matches;
+          }
+        }
         const query = (p.query as string).toLowerCase();
-        const results: Array<{ file: string; line: number; content: string }> = [];
-        function search(dir: string): void {
+        const results: Array<{ file: string; line: number; content: string; sourceRoot: string }> = [];
+        let stopped = false;
+        function search(dir: string, root: string): void {
+          if (stopped) return;
           for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (stopped) return;
             const full = path.join(dir, entry.name);
-            if (entry.isDirectory()) search(full);
+            if (entry.isDirectory()) search(full, root);
             else if (/\.(h|cpp|inl)$/i.test(entry.name)) {
               const lines = fs.readFileSync(full, "utf-8").split(/\r?\n/);
               for (let i = 0; i < lines.length; i++) {
-                if (lines[i].toLowerCase().includes(query)) { results.push({ file: path.relative(sourceDir, full).replace(/\\/g, "/"), line: i + 1, content: lines[i].trimEnd() }); if (results.length >= 500) return; }
+                if (lines[i].toLowerCase().includes(query)) {
+                  results.push({ file: path.relative(root, full).replace(/\\/g, "/"), line: i + 1, content: lines[i].trimEnd(), sourceRoot: root });
+                  if (results.length >= 500) { stopped = true; return; }
+                }
               }
             }
           }
         }
-        search(searchDir);
+        for (const d of searchDirs) {
+          // Find which root this dir belongs to for relative-path reporting.
+          const owningRoot = roots.find(r => d === r || d.startsWith(r + path.sep)) ?? d;
+          search(d, owningRoot);
+        }
         return { query: p.query, directory: p.directory ?? "(all)", resultCount: results.length, results };
       },
     },
@@ -428,10 +490,14 @@ export const projectTool: ToolDef = categoryTool(
       description: "Read a .cpp file from the project Source/ tree. Companion to read_cpp_header for round-trip edits. Params: sourcePath (relative to Source/ or absolute).",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
-        const sourceDir = path.join(ctx.project.projectDir!, "Source");
         const sp = p.sourcePath as string;
         if (!sp) throw new Error("Missing 'sourcePath' parameter");
-        const resolved = path.isAbsolute(sp) ? sp : path.join(sourceDir, sp);
+        let resolved = sp;
+        if (!path.isAbsolute(sp)) {
+          const roots = findSourceRoots(ctx.project.projectDir!, ctx.project.projectName);
+          const candidate = roots.map(r => path.join(r, sp)).find(c => fs.existsSync(c));
+          resolved = candidate ?? path.join(ctx.project.projectDir!, "Source", sp);
+        }
         if (!fs.existsSync(resolved)) throw new Error(`File not found: ${resolved}`);
         const content = fs.readFileSync(resolved, "utf-8");
         return { path: resolved, bytes: content.length, content };
