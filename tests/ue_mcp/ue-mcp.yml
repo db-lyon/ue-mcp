@@ -29,3 +29,27 @@ flows:
     description: Wipe the Neon Shrine demo content. Switches the editor to /Game/MCP_Home first so you don't get stranded on Untitled.
     steps:
       1: { task: demo.cleanup }
+
+  neon_shrine_play:
+    description: Build the Neon Shrine and launch PIE. Use neon_shrine first if you want to inspect the scene before play.
+    steps:
+      1:  { task: demo.step, options: { stepIndex: 1  } }
+      2:  { task: demo.step, options: { stepIndex: 2  } }
+      3:  { task: demo.step, options: { stepIndex: 3  } }
+      4:  { task: demo.step, options: { stepIndex: 4  } }
+      5:  { task: demo.step, options: { stepIndex: 5  } }
+      6:  { task: demo.step, options: { stepIndex: 6  } }
+      7:  { task: demo.step, options: { stepIndex: 7  } }
+      8:  { task: demo.step, options: { stepIndex: 8  } }
+      9:  { task: demo.step, options: { stepIndex: 9  } }
+      10: { task: demo.step, options: { stepIndex: 10 } }
+      11: { task: demo.step, options: { stepIndex: 11 } }
+      12: { task: demo.step, options: { stepIndex: 12 } }
+      13: { task: demo.step, options: { stepIndex: 13 } }
+      14: { task: demo.step, options: { stepIndex: 14 } }
+      15: { task: demo.step, options: { stepIndex: 15 } }
+      16: { task: demo.step, options: { stepIndex: 16 } }
+      17: { task: demo.step, options: { stepIndex: 17 } }
+      18: { task: demo.step, options: { stepIndex: 18 } }
+      19: { task: demo.step, options: { stepIndex: 19 } }
+      20: { task: editor.play_in_editor, options: { pieAction: start } }
