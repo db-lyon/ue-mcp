@@ -373,6 +373,10 @@ AActor* FDemoHandlers::SpawnPointLight(const FString& Label, FVector Location,
 	UPointLightComponent* Comp = Light->PointLightComponent;
 	if (Comp)
 	{
+		// Movable mobility — purely dynamic light, no lightmap bake required.
+		// Without this UE flags every spawned light as "lighting needs to be
+		// rebuilt" because Static is the default and the demo never bakes.
+		Comp->SetMobility(EComponentMobility::Movable);
 		Comp->SetIntensity(Intensity);
 		Comp->SetLightColor(FLinearColor(Color));
 	}
@@ -786,6 +790,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepMoonlight()
 	UDirectionalLightComponent* Comp = DirLight->GetComponent();
 	if (Comp)
 	{
+		Comp->SetMobility(EComponentMobility::Movable);
 		Comp->SetIntensity(3.0f);
 		Comp->SetLightColor(FLinearColor(FColor(100, 120, 200)));
 	}
@@ -823,7 +828,9 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepSkyLight()
 	USkyLightComponent* Comp = Sky->GetLightComponent();
 	if (Comp)
 	{
+		Comp->SetMobility(EComponentMobility::Movable);
 		Comp->SetIntensity(0.3f);
+		Comp->RecaptureSky();
 	}
 
 	Result->SetStringField(TEXT("actorLabel"), Sky->GetActorLabel());
