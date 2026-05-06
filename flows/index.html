@@ -1,0 +1,2134 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for UE-MCP — Unreal Engine Model Context Protocol Server">
+      
+      
+      
+        <link rel="canonical" href="https://db-lyon.github.io/ue-mcp/flows/">
+      
+      
+        <link rel="prev" href="../handler-conventions/">
+      
+      
+        <link rel="next" href="../configuration/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Flows - UE-MCP Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#flows" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="UE-MCP Documentation" class="md-header__button md-logo" aria-label="UE-MCP Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            UE-MCP Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Flows
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/db-lyon/ue-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    db-lyon/ue-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="UE-MCP Documentation" class="md-nav__button md-logo" aria-label="UE-MCP Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    UE-MCP Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/db-lyon/ue-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    db-lyon/ue-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tool-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../handler-conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Handler Conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flows
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#concepts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Concepts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Concepts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flows_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flows
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-merging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option Merging
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-in-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in Tasks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Built-in Tasks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#task-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtime-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtime Parameters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step References
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#flow-level-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flow-level Hooks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-step-retry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-step Retry
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rollback-on-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rollback on Failure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#git-snapshot-safety-net" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Git Snapshot Safety Net
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#skipping-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Skipping Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#execution-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Execution Plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-in-flows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in Flows
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Built-in Flows">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#beacon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Beacon
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#customization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Customization
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Customization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#overriding-a-built-in-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overriding a Built-in Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#writing-a-custom-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing a Custom Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#extending-a-bridge-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extending a Bridge Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#composing-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composing Tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#wrapping-a-task-programmatic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wrapping a Task (Programmatic)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#config-layering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config Layering
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Config Layering">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#environment-overlays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Overlays
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hot-reload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hot Reload
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynamic-class-loading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dynamic Class Loading
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basetask-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BaseTask Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BaseTask Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#taskresult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TaskResult
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#taskcontext" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TaskContext
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../neon-shrine-demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Neon Shrine Demo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../feedback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#concepts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Concepts
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Concepts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flows_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flows
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#step-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-merging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Option Merging
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-in-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in Tasks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Built-in Tasks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#task-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtime-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtime Parameters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step References
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#flow-level-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flow-level Hooks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-step-retry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-step Retry
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rollback-on-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rollback on Failure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#git-snapshot-safety-net" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Git Snapshot Safety Net
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#skipping-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Skipping Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#execution-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Execution Plan
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-in-flows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in Flows
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Built-in Flows">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#beacon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Beacon
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#customization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Customization
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Customization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#overriding-a-built-in-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overriding a Built-in Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#writing-a-custom-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing a Custom Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#extending-a-bridge-task" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extending a Bridge Task
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#composing-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composing Tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#wrapping-a-task-programmatic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wrapping a Task (Programmatic)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#config-layering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config Layering
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Config Layering">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#environment-overlays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Overlays
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hot-reload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hot Reload
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dynamic-class-loading" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dynamic Class Loading
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basetask-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BaseTask Reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="BaseTask Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#taskresult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TaskResult
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#taskcontext" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TaskContext
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="flows">Flows<a class="headerlink" href="#flows" title="Permanent link">&para;</a></h1>
+<p>Flows let you define multi-step workflows in YAML and run them as a single operation. They're powered by <a href="https://github.com/db-lyon/flowkit"><code>@db-lyon/flowkit</code></a> and are fully customizable — you can chain built-in tasks, run shell commands, override tasks with your own implementations, or compose tasks together.</p>
+<h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
+<p>Create a <code>ue-mcp.yml</code> in your Unreal project root (next to the <code>.uproject</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">ue-mcp</span><span class="p">:</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nt">flows</span><span class="p">:</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">build_and_check</span><span class="p">:</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build the project and verify the editor is connected</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="nt">1</span><span class="p">:</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">project.build</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">          </span><span class="nt">configuration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Development</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">      </span><span class="nt">2</span><span class="p">:</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">project.get_status</span>
+</code></pre></div>
+<p>Run it from the AI:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>flow(action=&quot;run&quot;, flowName=&quot;build_and_check&quot;)
+</code></pre></div>
+<p>That's it. The config is <strong>hot-reloaded on every call</strong> — edit the YAML and run again without restarting the MCP server.</p>
+<h2 id="concepts">Concepts<a class="headerlink" href="#concepts" title="Permanent link">&para;</a></h2>
+<h3 id="tasks">Tasks<a class="headerlink" href="#tasks" title="Permanent link">&para;</a></h3>
+<p>A task is a named unit of work. UE-MCP ships with <strong><!-- count:actions -->450+<!-- /count --> built-in tasks</strong> across <!-- count:tools -->19<!-- /count --> categories - every action available through the MCP tools is also a flow task.</p>
+<p>Tasks are defined in the <code>tasks:</code> section of your config:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">tasks</span><span class="p">:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">project.build</span><span class="p">:</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">class_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ue-mcp.bridge</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nt">group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">project</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Build</span><span class="nv"> </span><span class="s">C++</span><span class="nv"> </span><span class="s">project.</span><span class="nv"> </span><span class="s">Params:</span><span class="nv"> </span><span class="s">configuration?,</span><span class="nv"> </span><span class="s">platform?,</span><span class="nv"> </span><span class="s">clean?&quot;</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build_project</span>
+</code></pre></div>
+<p>The fields:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>class_path</code></td>
+<td>Yes</td>
+<td>How the task is resolved — a registered name, a built-in class path, or a path to your own <code>.js</code>/<code>.ts</code> file</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>No</td>
+<td>Human-readable description</td>
+</tr>
+<tr>
+<td><code>group</code></td>
+<td>No</td>
+<td>Category for organization</td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>No</td>
+<td>Default options passed to the task (can be overridden per-step)</td>
+</tr>
+</tbody>
+</table>
+<p>You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->450+<!-- /count --> actions. You define tasks when you want to <strong>override</strong> or <strong>add</strong> custom ones.</p>
+<h3 id="flows_1">Flows<a class="headerlink" href="#flows_1" title="Permanent link">&para;</a></h3>
+<p>A flow is an ordered sequence of steps. Each step runs a task or a nested flow:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">flows</span><span class="p">:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">setup_scene</span><span class="p">:</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Create a basic lit scene</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">      </span><span class="nt">1</span><span class="p">:</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">level.place_actor</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">          </span><span class="nt">className</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DirectionalLight</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">          </span><span class="nt">location</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> x</span><span class="p">:</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="nt"> y</span><span class="p">:</span><span class="w"> </span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="nt"> z</span><span class="p">:</span><span class="w"> </span><span class="nv">500</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">      </span><span class="nt">2</span><span class="p">:</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">level.place_actor</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">          </span><span class="nt">className</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SkyAtmosphere</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">      </span><span class="nt">3</span><span class="p">:</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">level.place_actor</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="w">          </span><span class="nt">className</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ExponentialHeightFog</span>
+</code></pre></div>
+<p>Steps execute in numeric order. If a step fails, the flow stops.</p>
+<h3 id="step-types">Step Types<a class="headerlink" href="#step-types" title="Permanent link">&para;</a></h3>
+<p>A step must have exactly one of <code>task</code> or <code>flow</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">1</span><span class="p">:</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">asset.list</span><span class="w">                   </span><span class="c1"># Run a task</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">      </span><span class="nt">directory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/Game/</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="nt">2</span><span class="p">:</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="nt">flow</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">setup_scene</span><span class="w">                  </span><span class="c1"># Run another flow (nested)</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">  </span><span class="nt">3</span><span class="p">:</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shell</span><span class="w">                        </span><span class="c1"># Run a shell command</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">npm run build</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">  </span><span class="nt">4</span><span class="p">:</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">    </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">None</span><span class="w">                         </span><span class="c1"># Skip marker (no-op)</span>
+</code></pre></div>
+<h3 id="option-merging">Option Merging<a class="headerlink" href="#option-merging" title="Permanent link">&para;</a></h3>
+<p>Options are merged in two layers:</p>
+<ol>
+<li><strong>Task definition</strong> — default options in the <code>tasks:</code> section</li>
+<li><strong>Step</strong> — per-step overrides in the <code>flows:</code> section</li>
+</ol>
+<p>Step options win:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">tasks</span><span class="p">:</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">asset.list</span><span class="p">:</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">class_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">asset.list</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">      </span><span class="nt">recursive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">        </span><span class="c1"># default</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="nt">flows</span><span class="p">:</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span><span class="nt">quick_scan</span><span class="p">:</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">List top-level game assets</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">      </span><span class="nt">1</span><span class="p">:</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">asset.list</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">          </span><span class="nt">directory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/Game/</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">          </span><span class="nt">recursive</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">    </span><span class="c1"># overrides the default</span>
+</code></pre></div>
+<h2 id="built-in-tasks">Built-in Tasks<a class="headerlink" href="#built-in-tasks" title="Permanent link">&para;</a></h2>
+<p>Every MCP action is registered as a task using its <code>category.action</code> name. Some examples:</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>project.get_status</code></td>
+<td>Check server mode and editor connection</td>
+</tr>
+<tr>
+<td><code>project.build</code></td>
+<td>Build the C++ project</td>
+</tr>
+<tr>
+<td><code>asset.list</code></td>
+<td>List assets in a directory</td>
+</tr>
+<tr>
+<td><code>asset.search</code></td>
+<td>Search by name, class, or path</td>
+</tr>
+<tr>
+<td><code>blueprint.read</code></td>
+<td>Read a blueprint's structure</td>
+</tr>
+<tr>
+<td><code>blueprint.compile</code></td>
+<td>Compile a blueprint</td>
+</tr>
+<tr>
+<td><code>level.place_actor</code></td>
+<td>Spawn an actor in the level</td>
+</tr>
+<tr>
+<td><code>material.create</code></td>
+<td>Create a material asset</td>
+</tr>
+<tr>
+<td><code>editor.execute_console</code></td>
+<td>Run a console command</td>
+</tr>
+<tr>
+<td><code>editor.start_editor</code></td>
+<td>Launch the Unreal Editor</td>
+</tr>
+<tr>
+<td><code>shell</code></td>
+<td>Run a shell command</td>
+</tr>
+</tbody>
+</table>
+<p>See the full list in <code>dist/ue-mcp.default.yml</code> or run <code>flow(action="list")</code>.</p>
+<h3 id="task-types">Task Types<a class="headerlink" href="#task-types" title="Permanent link">&para;</a></h3>
+<p>Built-in tasks fall into two categories:</p>
+<ul>
+<li><strong>Bridge tasks</strong> — forwarded to the C++ plugin over WebSocket. Defined with <code>class_path: ue-mcp.bridge</code> and a <code>method</code> option.</li>
+<li><strong>Handler tasks</strong> — executed locally in Node.js (filesystem operations like config parsing, asset directory scanning).</li>
+</ul>
+<p>The <code>shell</code> task is also built in — it runs a command via <code>child_process</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">1</span><span class="p">:</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shell</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">      </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">npm run lint</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">      </span><span class="nt">cwd</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/project</span><span class="w">      </span><span class="c1"># optional, defaults to cwd</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300000</span><span class="w">             </span><span class="c1"># optional, defaults to 5 minutes</span>
+</code></pre></div>
+<h2 id="runtime-parameters">Runtime Parameters<a class="headerlink" href="#runtime-parameters" title="Permanent link">&para;</a></h2>
+<p>Hardcoding every option in YAML gets tedious. Pass <code>params</code> at call time to override step options for that run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>flow(action=&quot;run&quot;, flowName=&quot;beacon&quot;, params={
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>  levelPath: &quot;/Game/MyCustomLevel&quot;,
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>  configuration: &quot;Shipping&quot;
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>})
+</code></pre></div>
+<p>Runtime <code>params</code> merge into every step's options with <strong>highest priority</strong>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>taskDef.options  &lt;  step.options  &lt;  runtime params
+</code></pre></div>
+<p>So a step with <code>options: { levelPath: "/Game/Flows/Beacon" }</code> in the YAML will use <code>/Game/MyCustomLevel</code> if you pass <code>params: { levelPath: "/Game/MyCustomLevel" }</code> at runtime.</p>
+<p>Params apply to every step — steps that don't use a given key simply ignore it. This makes flows fully parameterizable without templating syntax.</p>
+<h2 id="step-references">Step References<a class="headerlink" href="#step-references" title="Permanent link">&para;</a></h2>
+<p>When one step needs the output of an earlier step, reference it with <code>${steps.&lt;id&gt;.&lt;path&gt;}</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">flows</span><span class="p">:</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">build_and_open</span><span class="p">:</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build, then open the packaged artifact</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">      </span><span class="nt">1</span><span class="p">:</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">project.build</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">          </span><span class="nt">configuration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Development</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">      </span><span class="nt">2</span><span class="p">:</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">asset.list</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="w">          </span><span class="nt">directory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${steps.1.outputDir}</span><span class="w">       </span><span class="c1"># whole-value → raw type preserved</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="w">      </span><span class="nt">3</span><span class="p">:</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">editor.execute_console</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="w">          </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">built</span><span class="nv"> </span><span class="s">${steps.project.build.version}&quot;</span><span class="w">  </span><span class="c1"># embedded → stringified</span>
+</code></pre></div>
+<ul>
+<li><strong><code>&lt;id&gt;</code></strong> — step number (<code>1</code>) or task name (<code>project.build</code>). For task names that contain dots, the longest prefix that matches a step wins.</li>
+<li><strong><code>&lt;path&gt;</code></strong> — dot path into that step's <code>result.data</code>.</li>
+<li>If a task name appears in multiple steps, references resolve to the <strong>most recently completed</strong> one.</li>
+<li>If the whole option value is a single <code>${...}</code> reference, the raw value is substituted (objects and arrays round-trip). Embedded references inside a larger string are stringified.</li>
+<li>References that can't be resolved fail the step.</li>
+</ul>
+<p>Precedence (highest wins):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>taskDef.options  &lt;  step.options  &lt;  runtime params
+</code></pre></div>
+<p>References in any of those layers resolve at step-execution time against already-completed steps in the same flow. Nested flows have their own scope — a nested step cannot reference a step in the enclosing flow.</p>
+<h2 id="flow-level-hooks">Flow-level Hooks<a class="headerlink" href="#flow-level-hooks" title="Permanent link">&para;</a></h2>
+<p>A flow can attach steps that run around the main sequence, keyed by outcome:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nt">flows</span><span class="p">:</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="nt">deploy</span><span class="p">:</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build and push the plugin</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span><span class="nt">on_start</span><span class="p">:</span><span class="w">   </span><span class="p p-Indicator">[</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> task</span><span class="p">:</span><span class="w"> </span><span class="nv">editor.execute_console</span><span class="p p-Indicator">,</span><span class="nt"> options</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">starting&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">]</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">    </span><span class="nt">on_success</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> task</span><span class="p">:</span><span class="w"> </span><span class="nv">editor.execute_console</span><span class="p p-Indicator">,</span><span class="nt"> options</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">done</span><span class="nv"> </span><span class="s">${steps.build.version}&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">]</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span><span class="nt">on_failure</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> task</span><span class="p">:</span><span class="w"> </span><span class="nv">editor.execute_console</span><span class="p p-Indicator">,</span><span class="nt"> options</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> command</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;echo</span><span class="nv"> </span><span class="s">failed:</span><span class="nv"> </span><span class="s">${error.message}&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">]</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">    </span><span class="nt">finally</span><span class="p">:</span><span class="w">    </span><span class="p p-Indicator">[</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> task</span><span class="p">:</span><span class="w"> </span><span class="nv">project.get_status</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">]</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">      </span><span class="nt">1</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> task</span><span class="p">:</span><span class="w"> </span><span class="nv">project.build</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">      </span><span class="nt">2</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> task</span><span class="p">:</span><span class="w"> </span><span class="nv">asset.save</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<ul>
+<li><strong><code>on_start</code></strong> — before the first step. Failure aborts the flow.</li>
+<li><strong><code>on_success</code></strong> — after all steps succeed.</li>
+<li><strong><code>on_failure</code></strong> — after any step fails. The <code>${error.message|name|stack|step}</code> namespace resolves inside this phase.</li>
+<li><strong><code>finally</code></strong> — after <code>on_success</code> / <code>on_failure</code>, regardless of outcome.</li>
+</ul>
+<p>Hook steps share the full execution model — same references, same option merging, same runtime params. Hook failures appear in <code>result.hookErrors</code> but don't change the primary success/failure outcome.</p>
+<h2 id="per-step-retry">Per-step Retry<a class="headerlink" href="#per-step-retry" title="Permanent link">&para;</a></h2>
+<p>A step can retry itself on failure:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="nt">1</span><span class="p">:</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">project.build</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">    </span><span class="nt">retries</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span><span class="w">            </span><span class="c1"># up to 3 total attempts</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">    </span><span class="nt">retryDelay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000</span><span class="w">      </span><span class="c1"># ms between attempts</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">    </span><span class="nt">retryOn</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;timeout&quot;</span><span class="w">    </span><span class="c1"># only retry when error message contains this substring</span>
+</code></pre></div>
+<p>Omit <code>retryOn</code> to retry on any error. The actual attempt count surfaces on <code>result.steps[i].attempts</code>.</p>
+<h2 id="rollback-on-failure">Rollback on Failure<a class="headerlink" href="#rollback-on-failure" title="Permanent link">&para;</a></h2>
+<p>Mutating bridge handlers emit a <code>rollback: { method, payload }</code> record on success. When a flow sets <code>rollback_on_failure: true</code> (or the caller passes it) and a later step fails, the runner invokes the collected inverses <strong>in reverse order</strong>, best-effort, and reports the outcome in <code>result.rollback</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nt">flows</span><span class="p">:</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">safe_scene</span><span class="p">:</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Place pillars with automatic cleanup on failure</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">    </span><span class="nt">rollback_on_failure</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">      </span><span class="nt">1</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> task</span><span class="p">:</span><span class="w"> </span><span class="nv">level.place_actor</span><span class="p p-Indicator">,</span><span class="nt"> options</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> actorClass</span><span class="p">:</span><span class="w"> </span><span class="nv">StaticMeshActor</span><span class="p p-Indicator">,</span><span class="nt"> label</span><span class="p">:</span><span class="w"> </span><span class="nv">A</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">      </span><span class="nt">2</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> task</span><span class="p">:</span><span class="w"> </span><span class="nv">level.place_actor</span><span class="p p-Indicator">,</span><span class="nt"> options</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> actorClass</span><span class="p">:</span><span class="w"> </span><span class="nv">StaticMeshActor</span><span class="p p-Indicator">,</span><span class="nt"> label</span><span class="p">:</span><span class="w"> </span><span class="nv">B</span><span class="w"> </span><span class="p p-Indicator">}</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">      </span><span class="nt">3</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> task</span><span class="p">:</span><span class="w"> </span><span class="nv">some_fragile_step</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</code></pre></div>
+<p>If step 3 fails: the <code>delete_actor</code> inverses for B and A run, leaving the level as it was. Handlers without an inverse (<code>execute_console</code>, <code>shell</code>, some deletes) simply don't contribute records; their steps are left as-is when rollback runs.</p>
+<p>Conventions for handlers — natural keys, the <code>onConflict: skip|update|error</code> option, and rollback record shape — live in <a href="../handler-conventions/">docs/handler-conventions.md</a>.</p>
+<h2 id="git-snapshot-safety-net">Git Snapshot Safety Net<a class="headerlink" href="#git-snapshot-safety-net" title="Permanent link">&para;</a></h2>
+<p>Per-handler rollback covers in-memory state (selection, PIE, unsaved actors). For anything that touched disk (new <code>.uasset</code> files, modified <code>.ini</code> config, deleted packages), enable the opt-in git snapshot. On flow start the runner snapshots <code>Content/</code> and <code>Config/</code> into a shadow bare git repo, and on failure runs <code>git read-tree --reset -u</code> to restore, then asks the editor to reload affected packages.</p>
+<p>Enable it in <code>ue-mcp.yml</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nt">git_snapshot</span><span class="p">:</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">paths</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Content</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Config</span><span class="p p-Indicator">]</span><span class="w">          </span><span class="c1"># defaults shown</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="nt">snapshot_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.ue-mcp/snapshot.git</span><span class="w"> </span><span class="c1"># relative to project root</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="nt">max_age_hours</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">24</span><span class="w">                  </span><span class="c1"># prune older snapshot refs on each run</span>
+</code></pre></div>
+<p>The shadow repo is completely separate from any project-level git — your real history isn't touched. Snapshot failure doesn't fail the flow; handler-level rollbacks still apply. Restore outcomes surface in <code>result.snapshotRestore</code>.</p>
+<h2 id="skipping-steps">Skipping Steps<a class="headerlink" href="#skipping-steps" title="Permanent link">&para;</a></h2>
+<p>Pass step names or numbers in the <code>skip</code> array:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>flow(action=&quot;run&quot;, flowName=&quot;setup_scene&quot;, skip=[&quot;2&quot;, &quot;SkyAtmosphere&quot;])
+</code></pre></div>
+<h2 id="execution-plan">Execution Plan<a class="headerlink" href="#execution-plan" title="Permanent link">&para;</a></h2>
+<p>Preview what a flow will do without running it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>flow(action=&quot;plan&quot;, flowName=&quot;setup_scene&quot;)
+</code></pre></div>
+<p>Returns each step with its task name, type, and skip status.</p>
+<h2 id="built-in-flows">Built-in Flows<a class="headerlink" href="#built-in-flows" title="Permanent link">&para;</a></h2>
+<p>UE-MCP ships with a default flow you can run out of the box.</p>
+<h3 id="beacon">Beacon<a class="headerlink" href="#beacon" title="Permanent link">&para;</a></h3>
+<p>A 56-step demo that builds a complete shrine scene from scratch — geometry, materials, lighting, atmosphere, and camera.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>flow(action=&quot;run&quot;, flowName=&quot;beacon&quot;)
+</code></pre></div>
+<p>What it creates:</p>
+<table>
+<thead>
+<tr>
+<th>Steps</th>
+<th>Category</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1–4</td>
+<td>level</td>
+<td>New level, SkyAtmosphere, ExponentialHeightFog, SkyLight</td>
+</tr>
+<tr>
+<td>5–7</td>
+<td>material</td>
+<td><strong>M_Floor</strong> — dark stone base color</td>
+</tr>
+<tr>
+<td>8–16</td>
+<td>material</td>
+<td><strong>M_Pillar</strong> — brushed metallic (Metallic=1, Roughness=0.3)</td>
+</tr>
+<tr>
+<td>17–19</td>
+<td>material</td>
+<td><strong>M_Pedestal</strong> — warm stone</td>
+</tr>
+<tr>
+<td>20–28</td>
+<td>material</td>
+<td><strong>M_Glow</strong> — parameterized emissive (VectorParameter × 50 → EmissiveColor)</td>
+</tr>
+<tr>
+<td>29</td>
+<td>level</td>
+<td>Floor slab (scaled Cube with M_Floor)</td>
+</tr>
+<tr>
+<td>30</td>
+<td>level</td>
+<td>Center pedestal (Cylinder with M_Pedestal)</td>
+</tr>
+<tr>
+<td>31</td>
+<td>level</td>
+<td>Glowing orb (Sphere with M_Glow)</td>
+</tr>
+<tr>
+<td>32–36</td>
+<td>level</td>
+<td>5 pillars in a pentagon (Cubes with M_Pillar)</td>
+</tr>
+<tr>
+<td>37–39</td>
+<td>level</td>
+<td>Sunset directional light</td>
+</tr>
+<tr>
+<td>40–49</td>
+<td>level</td>
+<td>5 colored point lights at pillar tops (cyan, magenta, gold, green, violet)</td>
+</tr>
+<tr>
+<td>50–51</td>
+<td>level</td>
+<td>Center spotlight pointing down at orb</td>
+</tr>
+<tr>
+<td>52–55</td>
+<td>level</td>
+<td>Warm and cool fill lights</td>
+</tr>
+<tr>
+<td>56</td>
+<td>editor</td>
+<td>Viewport camera framing the scene</td>
+</tr>
+</tbody>
+</table>
+<p>Preview the execution plan without running:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>flow(action=&quot;plan&quot;, flowName=&quot;beacon&quot;)
+</code></pre></div>
+<p>The beacon flow is defined in <code>dist/ue-mcp.default.yml</code>. Users can override any of its steps by redefining the <code>beacon</code> flow in their project's <code>ue-mcp.yml</code>.</p>
+<hr />
+<h2 id="customization">Customization<a class="headerlink" href="#customization" title="Permanent link">&para;</a></h2>
+<h3 id="overriding-a-built-in-task">Overriding a Built-in Task<a class="headerlink" href="#overriding-a-built-in-task" title="Permanent link">&para;</a></h3>
+<p>To change how a built-in task behaves, redefine it in your <code>ue-mcp.yml</code>. Your definition merges on top of the defaults (your fields win):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nt">tasks</span><span class="p">:</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span><span class="nt">asset.list</span><span class="p">:</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">    </span><span class="nt">class_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./tasks/FilteredAssetList.js</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Asset list with custom filtering</span>
+</code></pre></div>
+<p>The built-in <code>asset.list</code> is now replaced by your class. The dynamic loader will import <code>./tasks/FilteredAssetList.js</code> from your project root.</p>
+<h3 id="writing-a-custom-task">Writing a Custom Task<a class="headerlink" href="#writing-a-custom-task" title="Permanent link">&para;</a></h3>
+<p>Create a file that exports a class extending <code>BaseTask</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1">// tasks/FilteredAssetList.ts</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">BaseTask</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="nx">TaskResult</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@db-lyon/flowkit&#39;</span><span class="p">;</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="kd">class</span><span class="w"> </span><span class="nx">FilteredAssetList</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="nx">BaseTask</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="w">  </span><span class="nx">get</span><span class="w"> </span><span class="nx">taskName</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="s1">&#39;asset.filtered_list&#39;</span><span class="p">;</span>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>
+<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a><span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">execute</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="nb">Promise</span><span class="o">&lt;</span><span class="nx">TaskResult</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a><span class="w">    </span><span class="c1">// Call the original asset.list via the registry</span>
+<a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="s1">&#39;asset.list&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-20-12" name="__codelineno-20-12" href="#__codelineno-20-12"></a><span class="w">      </span><span class="nx">directory</span><span class="o">:</span><span class="w"> </span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">options</span><span class="w"> </span><span class="kr">as</span><span class="w"> </span><span class="nx">any</span><span class="p">).</span><span class="nx">directory</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s1">&#39;/Game/&#39;</span><span class="p">,</span>
+<a id="__codelineno-20-13" name="__codelineno-20-13" href="#__codelineno-20-13"></a><span class="w">      </span><span class="nx">recursive</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span>
+<a id="__codelineno-20-14" name="__codelineno-20-14" href="#__codelineno-20-14"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-20-15" name="__codelineno-20-15" href="#__codelineno-20-15"></a>
+<a id="__codelineno-20-16" name="__codelineno-20-16" href="#__codelineno-20-16"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">result</span><span class="p">.</span><span class="nx">success</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">result</span><span class="p">.</span><span class="nx">data</span><span class="o">?</span><span class="p">.</span><span class="nx">assets</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-20-17" name="__codelineno-20-17" href="#__codelineno-20-17"></a><span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">options</span><span class="w"> </span><span class="kr">as</span><span class="w"> </span><span class="nx">any</span><span class="p">).</span><span class="nx">excludePrefix</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s1">&#39;/Game/Developers/&#39;</span><span class="p">;</span>
+<a id="__codelineno-20-18" name="__codelineno-20-18" href="#__codelineno-20-18"></a><span class="w">      </span><span class="nx">result</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">assets</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="nx">result</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">assets</span><span class="w"> </span><span class="kr">as</span><span class="w"> </span><span class="nx">any</span><span class="p">[])</span>
+<a id="__codelineno-20-19" name="__codelineno-20-19" href="#__codelineno-20-19"></a><span class="w">        </span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="nx">a</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="o">!</span><span class="nx">a</span><span class="p">.</span><span class="nx">path</span><span class="o">?</span><span class="p">.</span><span class="nx">startsWith</span><span class="p">(</span><span class="nx">exclude</span><span class="p">));</span>
+<a id="__codelineno-20-20" name="__codelineno-20-20" href="#__codelineno-20-20"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-20-21" name="__codelineno-20-21" href="#__codelineno-20-21"></a>
+<a id="__codelineno-20-22" name="__codelineno-20-22" href="#__codelineno-20-22"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">result</span><span class="p">;</span>
+<a id="__codelineno-20-23" name="__codelineno-20-23" href="#__codelineno-20-23"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-20-24" name="__codelineno-20-24" href="#__codelineno-20-24"></a><span class="p">}</span>
+</code></pre></div>
+<p>Register it in your config:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nt">tasks</span><span class="p">:</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span><span class="nt">asset.list</span><span class="p">:</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">    </span><span class="nt">class_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./tasks/FilteredAssetList</span>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Asset list that filters out developer content</span>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="w">    </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="w">      </span><span class="nt">excludePrefix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/Game/Developers/</span>
+</code></pre></div>
+<p>Key points:</p>
+<ul>
+<li><strong>Export as default</strong> — the loader looks for a default export, or a named export matching the filename.</li>
+<li><strong>Must extend <code>BaseTask</code></strong> — the registry validates this at load time.</li>
+<li><strong><code>this.options</code></strong> — receives the merged options (task defaults + step overrides).</li>
+<li><strong><code>this.ctx</code></strong> — the shared context with <code>bridge</code> (editor WebSocket) and <code>project</code> (path resolution).</li>
+<li><strong><code>this.call(name, opts)</code></strong> — resolve and execute another task by name. The original built-in task is still in the registry even when you override it via YAML <code>class_path</code>.</li>
+<li><strong><code>this.resolve(name, opts)</code></strong> — like <code>call()</code> but returns the task instance without running it, in case you need to inspect or configure it first.</li>
+</ul>
+<h3 id="extending-a-bridge-task">Extending a Bridge Task<a class="headerlink" href="#extending-a-bridge-task" title="Permanent link">&para;</a></h3>
+<p>If your custom task needs to call the editor, extend <code>BridgeTask</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="c1">// tasks/SafeBuild.ts</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">BaseTask</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="nx">TaskResult</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@db-lyon/flowkit&#39;</span><span class="p">;</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="kd">class</span><span class="w"> </span><span class="nx">SafeBuild</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="nx">BaseTask</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="w">  </span><span class="nx">get</span><span class="w"> </span><span class="nx">taskName</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="s1">&#39;safe_build&#39;</span><span class="p">;</span>
+<a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a>
+<a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a><span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">execute</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="nb">Promise</span><span class="o">&lt;</span><span class="nx">TaskResult</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a><span class="w">    </span><span class="c1">// Check status first</span>
+<a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="s1">&#39;project.get_status&#39;</span><span class="p">);</span>
+<a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">status</span><span class="p">.</span><span class="nx">success</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="o">!</span><span class="nx">status</span><span class="p">.</span><span class="nx">data</span><span class="o">?</span><span class="p">.</span><span class="nx">connected</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a><span class="w">      </span><span class="k">return</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-22-14" name="__codelineno-22-14" href="#__codelineno-22-14"></a><span class="w">        </span><span class="nx">success</span><span class="o">:</span><span class="w"> </span><span class="kt">false</span><span class="p">,</span>
+<a id="__codelineno-22-15" name="__codelineno-22-15" href="#__codelineno-22-15"></a><span class="w">        </span><span class="nx">error</span><span class="o">:</span><span class="w"> </span><span class="kt">new</span><span class="w"> </span><span class="ne">Error</span><span class="p">(</span><span class="s1">&#39;Editor not connected — cannot build&#39;</span><span class="p">),</span>
+<a id="__codelineno-22-16" name="__codelineno-22-16" href="#__codelineno-22-16"></a><span class="w">      </span><span class="p">};</span>
+<a id="__codelineno-22-17" name="__codelineno-22-17" href="#__codelineno-22-17"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-22-18" name="__codelineno-22-18" href="#__codelineno-22-18"></a>
+<a id="__codelineno-22-19" name="__codelineno-22-19" href="#__codelineno-22-19"></a><span class="w">    </span><span class="c1">// Run the actual build</span>
+<a id="__codelineno-22-20" name="__codelineno-22-20" href="#__codelineno-22-20"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="s1">&#39;project.build&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-22-21" name="__codelineno-22-21" href="#__codelineno-22-21"></a><span class="w">      </span><span class="nx">configuration</span><span class="o">:</span><span class="w"> </span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">options</span><span class="w"> </span><span class="kr">as</span><span class="w"> </span><span class="nx">any</span><span class="p">).</span><span class="nx">configuration</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="s1">&#39;Development&#39;</span><span class="p">,</span>
+<a id="__codelineno-22-22" name="__codelineno-22-22" href="#__codelineno-22-22"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-22-23" name="__codelineno-22-23" href="#__codelineno-22-23"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-22-24" name="__codelineno-22-24" href="#__codelineno-22-24"></a><span class="p">}</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="nt">tasks</span><span class="p">:</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="w">  </span><span class="nt">safe_build</span><span class="p">:</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="w">    </span><span class="nt">class_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./tasks/SafeBuild</span>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Build with connection check</span>
+<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a>
+<a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a><span class="nt">flows</span><span class="p">:</span>
+<a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a><span class="w">  </span><span class="nt">safe_build_flow</span><span class="p">:</span>
+<a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Safely build the project</span>
+<a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a><span class="w">      </span><span class="nt">1</span><span class="p">:</span>
+<a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">safe_build</span>
+<a id="__codelineno-23-12" name="__codelineno-23-12" href="#__codelineno-23-12"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-23-13" name="__codelineno-23-13" href="#__codelineno-23-13"></a><span class="w">          </span><span class="nt">configuration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Shipping</span>
+</code></pre></div>
+<h3 id="composing-tasks">Composing Tasks<a class="headerlink" href="#composing-tasks" title="Permanent link">&para;</a></h3>
+<p>A custom task can orchestrate multiple tasks:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="c1">// tasks/FullSetup.ts</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">BaseTask</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="nx">TaskResult</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;@db-lyon/flowkit&#39;</span><span class="p">;</span>
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>
+<a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="kd">class</span><span class="w"> </span><span class="nx">FullSetup</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="nx">BaseTask</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="w">  </span><span class="nx">get</span><span class="w"> </span><span class="nx">taskName</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="s1">&#39;full_setup&#39;</span><span class="p">;</span>
+<a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a>
+<a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a><span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">execute</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="nb">Promise</span><span class="o">&lt;</span><span class="nx">TaskResult</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a><span class="w">    </span><span class="c1">// Place a bunch of actors</span>
+<a id="__codelineno-24-11" name="__codelineno-24-11" href="#__codelineno-24-11"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">actors</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-24-12" name="__codelineno-24-12" href="#__codelineno-24-12"></a><span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">className</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;DirectionalLight&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">location</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">x</span><span class="o">:</span><span class="w"> </span><span class="kt">0</span><span class="p">,</span><span class="w"> </span><span class="nx">y</span><span class="o">:</span><span class="w"> </span><span class="kt">0</span><span class="p">,</span><span class="w"> </span><span class="nx">z</span><span class="o">:</span><span class="w"> </span><span class="kt">500</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-24-13" name="__codelineno-24-13" href="#__codelineno-24-13"></a><span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">className</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;SkyAtmosphere&#39;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-24-14" name="__codelineno-24-14" href="#__codelineno-24-14"></a><span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">className</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;ExponentialHeightFog&#39;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-24-15" name="__codelineno-24-15" href="#__codelineno-24-15"></a><span class="w">      </span><span class="p">{</span><span class="w"> </span><span class="nx">className</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;SkyLight&#39;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-24-16" name="__codelineno-24-16" href="#__codelineno-24-16"></a><span class="w">    </span><span class="p">];</span>
+<a id="__codelineno-24-17" name="__codelineno-24-17" href="#__codelineno-24-17"></a>
+<a id="__codelineno-24-18" name="__codelineno-24-18" href="#__codelineno-24-18"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">placed</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[];</span>
+<a id="__codelineno-24-19" name="__codelineno-24-19" href="#__codelineno-24-19"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">actor</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">actors</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-24-20" name="__codelineno-24-20" href="#__codelineno-24-20"></a><span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="s1">&#39;level.place_actor&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">actor</span><span class="p">);</span>
+<a id="__codelineno-24-21" name="__codelineno-24-21" href="#__codelineno-24-21"></a><span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">result</span><span class="p">.</span><span class="nx">success</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nx">result</span><span class="p">;</span>
+<a id="__codelineno-24-22" name="__codelineno-24-22" href="#__codelineno-24-22"></a><span class="w">      </span><span class="nx">placed</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">result</span><span class="p">.</span><span class="nx">data</span><span class="p">);</span>
+<a id="__codelineno-24-23" name="__codelineno-24-23" href="#__codelineno-24-23"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-24-24" name="__codelineno-24-24" href="#__codelineno-24-24"></a>
+<a id="__codelineno-24-25" name="__codelineno-24-25" href="#__codelineno-24-25"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-24-26" name="__codelineno-24-26" href="#__codelineno-24-26"></a><span class="w">      </span><span class="nx">success</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span>
+<a id="__codelineno-24-27" name="__codelineno-24-27" href="#__codelineno-24-27"></a><span class="w">      </span><span class="nx">data</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">placed</span><span class="p">,</span><span class="w"> </span><span class="nx">count</span><span class="o">:</span><span class="w"> </span><span class="kt">placed.length</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-24-28" name="__codelineno-24-28" href="#__codelineno-24-28"></a><span class="w">    </span><span class="p">};</span>
+<a id="__codelineno-24-29" name="__codelineno-24-29" href="#__codelineno-24-29"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-24-30" name="__codelineno-24-30" href="#__codelineno-24-30"></a><span class="p">}</span>
+</code></pre></div>
+<h3 id="wrapping-a-task-programmatic">Wrapping a Task (Programmatic)<a class="headerlink" href="#wrapping-a-task-programmatic" title="Permanent link">&para;</a></h3>
+<p>If you're building on top of ue-mcp in code, the registry supports wrapping any registered task:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">buildFlowRegistry</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;ue-mcp&#39;</span><span class="p">;</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">registry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">buildFlowRegistry</span><span class="p">(</span><span class="nx">tools</span><span class="p">);</span>
+<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>
+<a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a><span class="c1">// Wrap asset.list with logging</span>
+<a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a><span class="nx">registry</span><span class="p">.</span><span class="nx">wrap</span><span class="p">(</span><span class="s1">&#39;asset.list&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">Original</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a><span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="kd">class</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="nx">Original</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-8" name="__codelineno-25-8" href="#__codelineno-25-8"></a><span class="w">    </span><span class="nx">get</span><span class="w"> </span><span class="nx">taskName</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="s1">&#39;asset.list:logged&#39;</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-25-9" name="__codelineno-25-9" href="#__codelineno-25-9"></a>
+<a id="__codelineno-25-10" name="__codelineno-25-10" href="#__codelineno-25-10"></a><span class="w">    </span><span class="k">async</span><span class="w"> </span><span class="nx">execute</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-25-11" name="__codelineno-25-11" href="#__codelineno-25-11"></a><span class="w">      </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`Listing assets with options:`</span><span class="p">,</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">options</span><span class="p">);</span>
+<a id="__codelineno-25-12" name="__codelineno-25-12" href="#__codelineno-25-12"></a><span class="w">      </span><span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="k">super</span><span class="p">.</span><span class="nx">execute</span><span class="p">();</span>
+<a id="__codelineno-25-13" name="__codelineno-25-13" href="#__codelineno-25-13"></a><span class="w">      </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`Found </span><span class="si">${</span><span class="nx">result</span><span class="p">.</span><span class="nx">data</span><span class="o">?</span><span class="p">.</span><span class="nx">assets</span><span class="o">?</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="mf">0</span><span class="si">}</span><span class="sb"> assets`</span><span class="p">);</span>
+<a id="__codelineno-25-14" name="__codelineno-25-14" href="#__codelineno-25-14"></a><span class="w">      </span><span class="k">return</span><span class="w"> </span><span class="nx">result</span><span class="p">;</span>
+<a id="__codelineno-25-15" name="__codelineno-25-15" href="#__codelineno-25-15"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-25-16" name="__codelineno-25-16" href="#__codelineno-25-16"></a><span class="w">  </span><span class="p">};</span>
+<a id="__codelineno-25-17" name="__codelineno-25-17" href="#__codelineno-25-17"></a><span class="p">});</span>
+</code></pre></div>
+<p>Multiple wraps compose — each layer sees the previously wrapped version as its parent:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="c1">// First wrap adds logging</span>
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a><span class="nx">registry</span><span class="p">.</span><span class="nx">wrap</span><span class="p">(</span><span class="s1">&#39;asset.list&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">Original</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="kd">class</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="nx">Original</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* log */</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>
+<a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a><span class="c1">// Second wrap adds caching — it wraps the logged version</span>
+<a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a><span class="nx">registry</span><span class="p">.</span><span class="nx">wrap</span><span class="p">(</span><span class="s1">&#39;asset.list&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">Original</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="kd">class</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="nx">Original</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* cache */</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<hr />
+<h2 id="config-layering">Config Layering<a class="headerlink" href="#config-layering" title="Permanent link">&para;</a></h2>
+<p>Configuration is loaded with <a href="https://github.com/db-lyon/flowkit"><code>@db-lyon/flowkit</code>'s config loader</a>, which supports layered YAML files:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (base)</td>
+<td>Built-in defaults</td>
+<td>All <!-- count:actions -->450+<!-- /count --> tasks, no flows</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>ue-mcp.yml</code></td>
+<td>Your project config</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>ue-mcp.{env}.yml</code></td>
+<td>Environment overlay (set <code>UE_MCP_ENV</code>)</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>ue-mcp.local.yml</code></td>
+<td>Local-only overrides (gitignore this)</td>
+</tr>
+</tbody>
+</table>
+<p>Each layer deep-merges on top of the previous. Later layers win for scalar values; objects merge recursively.</p>
+<p><strong>Example:</strong> keep your shared flows in <code>ue-mcp.yml</code> and machine-specific overrides in <code>ue-mcp.local.yml</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="c1"># ue-mcp.local.yml — not committed</span>
+<a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="nt">tasks</span><span class="p">:</span>
+<a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="w">  </span><span class="nt">shell</span><span class="p">:</span>
+<a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a><span class="w">    </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a><span class="w">      </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">600000</span><span class="w">    </span><span class="c1"># slow machine, need longer builds</span>
+</code></pre></div>
+<h3 id="environment-overlays">Environment Overlays<a class="headerlink" href="#environment-overlays" title="Permanent link">&para;</a></h3>
+<p>Set the <code>UE_MCP_ENV</code> environment variable to load an environment-specific layer:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="nv">UE_MCP_ENV</span><span class="o">=</span>ci<span class="w"> </span>npx<span class="w"> </span>ue-mcp<span class="w"> </span>/path/to/project.uproject
+</code></pre></div>
+<p>This loads <code>ue-mcp.ci.yml</code> on top of <code>ue-mcp.yml</code>.</p>
+<h2 id="hot-reload">Hot Reload<a class="headerlink" href="#hot-reload" title="Permanent link">&para;</a></h2>
+<p>The config is <strong>reloaded from disk on every flow call</strong>. Edit <code>ue-mcp.yml</code>, save, and run the flow again — no server restart needed. This makes it easy to iterate on flow definitions.</p>
+<h2 id="dynamic-class-loading">Dynamic Class Loading<a class="headerlink" href="#dynamic-class-loading" title="Permanent link">&para;</a></h2>
+<p>When you set <code>class_path</code> to a file path (e.g., <code>./tasks/MyTask</code>), the registry resolves it relative to the current working directory. It tries these candidates in order:</p>
+<ol>
+<li><code>{cwd}/tasks/MyTask.ts</code></li>
+<li><code>{cwd}/tasks/MyTask.js</code></li>
+<li><code>{cwd}/tasks/MyTask/index.ts</code></li>
+<li><code>{cwd}/tasks/MyTask/index.js</code></li>
+</ol>
+<p>The loaded module must export a class that extends <code>BaseTask</code>, either as the default export or as a named export matching the filename.</p>
+<p>Dynamically loaded classes are cached — the file is only imported once per class path per session.</p>
+<h2 id="basetask-reference">BaseTask Reference<a class="headerlink" href="#basetask-reference" title="Permanent link">&para;</a></h2>
+<p>All custom tasks extend <code>BaseTask</code> from <code>@db-lyon/flowkit</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="k">abstract</span><span class="w"> </span><span class="kd">class</span><span class="w"> </span><span class="nx">BaseTask</span><span class="o">&lt;</span><span class="nx">TOpts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">unknown</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a><span class="w">  </span><span class="k">protected</span><span class="w"> </span><span class="nx">ctx</span><span class="o">:</span><span class="w"> </span><span class="kt">TaskContext</span><span class="p">;</span><span class="w">           </span><span class="c1">// Shared context (bridge, project, registry)</span>
+<a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a><span class="w">  </span><span class="k">protected</span><span class="w"> </span><span class="nx">options</span><span class="o">:</span><span class="w"> </span><span class="kt">TOpts</span><span class="p">;</span><span class="w">             </span><span class="c1">// Merged options for this execution</span>
+<a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a><span class="w">  </span><span class="k">protected</span><span class="w"> </span><span class="nx">logger</span><span class="o">:</span><span class="w"> </span><span class="kt">Logger</span><span class="p">;</span><span class="w">             </span><span class="c1">// Scoped logger</span>
+<a id="__codelineno-29-5" name="__codelineno-29-5" href="#__codelineno-29-5"></a>
+<a id="__codelineno-29-6" name="__codelineno-29-6" href="#__codelineno-29-6"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="nx">get</span><span class="w"> </span><span class="nx">taskName</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span><span class="w">      </span><span class="c1">// Descriptive name for logging</span>
+<a id="__codelineno-29-7" name="__codelineno-29-7" href="#__codelineno-29-7"></a><span class="w">  </span><span class="k">abstract</span><span class="w"> </span><span class="nx">execute</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="nb">Promise</span><span class="o">&lt;</span><span class="nx">TaskResult</span><span class="o">&gt;</span><span class="p">;</span><span class="w">  </span><span class="c1">// Your task logic</span>
+<a id="__codelineno-29-8" name="__codelineno-29-8" href="#__codelineno-29-8"></a>
+<a id="__codelineno-29-9" name="__codelineno-29-9" href="#__codelineno-29-9"></a><span class="w">  </span><span class="k">protected</span><span class="w"> </span><span class="nx">validate</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="ow">void</span><span class="p">;</span><span class="w">           </span><span class="c1">// Option validation (override, called before execute)</span>
+<a id="__codelineno-29-10" name="__codelineno-29-10" href="#__codelineno-29-10"></a>
+<a id="__codelineno-29-11" name="__codelineno-29-11" href="#__codelineno-29-11"></a><span class="w">  </span><span class="c1">// Composition — resolve/run other tasks from within your task</span>
+<a id="__codelineno-29-12" name="__codelineno-29-12" href="#__codelineno-29-12"></a><span class="w">  </span><span class="k">protected</span><span class="w"> </span><span class="nx">resolve</span><span class="p">(</span><span class="nx">taskName</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">options?</span><span class="o">:</span><span class="w"> </span><span class="kt">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">unknown</span><span class="o">&gt;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nb">Promise</span><span class="o">&lt;</span><span class="nx">BaseTask</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-29-13" name="__codelineno-29-13" href="#__codelineno-29-13"></a><span class="w">  </span><span class="k">protected</span><span class="w"> </span><span class="nx">call</span><span class="p">(</span><span class="nx">taskName</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">options?</span><span class="o">:</span><span class="w"> </span><span class="kt">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">unknown</span><span class="o">&gt;</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nb">Promise</span><span class="o">&lt;</span><span class="nx">TaskResult</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-29-14" name="__codelineno-29-14" href="#__codelineno-29-14"></a>
+<a id="__codelineno-29-15" name="__codelineno-29-15" href="#__codelineno-29-15"></a><span class="w">  </span><span class="c1">// Lifecycle — called by the engine, not by you</span>
+<a id="__codelineno-29-16" name="__codelineno-29-16" href="#__codelineno-29-16"></a><span class="w">  </span><span class="nx">run</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="nb">Promise</span><span class="o">&lt;</span><span class="nx">TaskResult</span><span class="o">&gt;</span><span class="p">;</span><span class="w">           </span><span class="c1">// validate → execute → catch errors → return result</span>
+<a id="__codelineno-29-17" name="__codelineno-29-17" href="#__codelineno-29-17"></a><span class="p">}</span>
+</code></pre></div>
+<h3 id="taskresult">TaskResult<a class="headerlink" href="#taskresult" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="kd">interface</span><span class="w"> </span><span class="nx">TaskResult</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="w">  </span><span class="nx">success</span><span class="o">:</span><span class="w"> </span><span class="kt">boolean</span><span class="p">;</span>
+<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a><span class="w">  </span><span class="nx">data?</span><span class="o">:</span><span class="w"> </span><span class="kt">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">unknown</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a><span class="w">  </span><span class="nx">error?</span><span class="o">:</span><span class="w"> </span><span class="kt">Error</span><span class="p">;</span>
+<a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a><span class="w">  </span><span class="nx">duration?</span><span class="o">:</span><span class="w"> </span><span class="kt">number</span><span class="p">;</span><span class="w">      </span><span class="c1">// Set automatically by run()</span>
+<a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a><span class="p">}</span>
+</code></pre></div>
+<h3 id="taskcontext">TaskContext<a class="headerlink" href="#taskcontext" title="Permanent link">&para;</a></h3>
+<p>In ue-mcp, the context includes:</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bridge</code></td>
+<td><code>IBridge</code></td>
+<td>WebSocket connection to the Unreal Editor</td>
+</tr>
+<tr>
+<td><code>project</code></td>
+<td><code>ProjectContext</code></td>
+<td>Path resolution, project info</td>
+</tr>
+<tr>
+<td><code>registry</code></td>
+<td><code>TaskRegistry</code></td>
+<td>Task registry for resolving other tasks</td>
+</tr>
+<tr>
+<td><code>logger</code></td>
+<td><code>Logger</code></td>
+<td>Structured logger</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
