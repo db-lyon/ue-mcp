@@ -62,6 +62,14 @@
 		{
 			"Name": "PoseSearch",
 			"Enabled": true
+		},
+		{
+			"Name": "PropertyBindingUtils",
+			"Enabled": true
+		},
+		{
+			"Name": "StateTree",
+			"Enabled": true
 		}
 	]
 }

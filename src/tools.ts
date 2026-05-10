@@ -26,6 +26,7 @@ import { gasTool } from "./tools/gas.js";
 import { networkingTool } from "./tools/networking.js";
 import { demoTool } from "./tools/demo.js";
 import { feedbackTool } from "./tools/feedback.js";
+import { statetreeTool } from "./tools/statetree.js";
 
 export const ALL_TOOLS: ToolDef[] = [
   projectTool,
@@ -47,6 +48,7 @@ export const ALL_TOOLS: ToolDef[] = [
   networkingTool,
   demoTool,
   feedbackTool,
+  statetreeTool,
 ];
 
 /** Flatten to (toolName, actionName, bridgeMethod) triples for every action

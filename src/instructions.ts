@@ -120,6 +120,13 @@ networking — Replication and networking
   set_only_relevant_to_owner, configure_cull_distance,
   set_priority, set_replicate_movement, get_info
 
+statetree — StateTree asset editing: read, modify states/tasks/conditions/transitions/bindings, compile
+  read, list_states, add_state, remove_state, set_state_property, clear_state_nodes,
+  add_task, add_enter_condition, remove_task, set_task_instance_property,
+  add_transition, add_transition_condition, remove_transition,
+  add_binding, remove_binding, list_bindings,
+  set_root_parameters, compile, validate
+
 demo — Neon Shrine demo scene
   step, cleanup
 
