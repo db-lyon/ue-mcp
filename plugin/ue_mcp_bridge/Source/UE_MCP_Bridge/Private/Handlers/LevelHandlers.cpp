@@ -1506,13 +1506,30 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 		}
 		if (i < PathParts.Num() - 1)
 		{
-			FStructProperty* SP = CastField<FStructProperty>(SegmentProp);
-			if (!SP)
+			if (FStructProperty* SP = CastField<FStructProperty>(SegmentProp))
 			{
-				return MCPError(FString::Printf(TEXT("'%s' is not a struct - cannot descend"), *PathParts[i]));
+				CurrentContainer = SP->ContainerPtrToValuePtr<void>(CurrentContainer);
+				CurrentStruct = SP->Struct;
 			}
-			CurrentContainer = SP->ContainerPtrToValuePtr<void>(CurrentContainer);
-			CurrentStruct = SP->Struct;
+			else if (FObjectProperty* OP = CastField<FObjectProperty>(SegmentProp))
+			{
+				// #305: descend through Instanced UObject sub-objects.
+				UObject* SubObject = OP->GetObjectPropertyValue(OP->ContainerPtrToValuePtr<void>(CurrentContainer));
+				if (!SubObject)
+				{
+					return MCPError(FString::Printf(
+						TEXT("Cannot descend into '%s' - the sub-object reference is null"),
+						*PathParts[i]));
+				}
+				SubObject->Modify();
+				CurrentContainer = SubObject;
+				CurrentStruct = SubObject->GetClass();
+			}
+			else
+			{
+				return MCPError(FString::Printf(
+					TEXT("'%s' is not a struct or sub-object - cannot descend"), *PathParts[i]));
+			}
 		}
 		else
 		{
@@ -2404,10 +2421,33 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 		if (!Seg) return MCPError(FString::Printf(TEXT("Property '%s' not found at '%s'"), *PathParts[i], *PropertyName));
 		if (i < PathParts.Num() - 1)
 		{
-			FStructProperty* SP = CastField<FStructProperty>(Seg);
-			if (!SP) return MCPError(FString::Printf(TEXT("'%s' is not a struct - cannot descend"), *PathParts[i]));
-			CurrentContainer = SP->ContainerPtrToValuePtr<void>(CurrentContainer);
-			CurrentStruct = SP->Struct;
+			if (FStructProperty* SP = CastField<FStructProperty>(Seg))
+			{
+				CurrentContainer = SP->ContainerPtrToValuePtr<void>(CurrentContainer);
+				CurrentStruct = SP->Struct;
+			}
+			// #305: descend through Instanced UObject sub-objects too. The path
+			// "APCGWorldActor.LandscapeCacheObject.SerializationMode" hits an
+			// FObjectProperty (not a struct) - the previous "is not a struct"
+			// rejection forced execute_python on every instanced-subobject write.
+			else if (FObjectProperty* OP = CastField<FObjectProperty>(Seg))
+			{
+				UObject* SubObject = OP->GetObjectPropertyValue(OP->ContainerPtrToValuePtr<void>(CurrentContainer));
+				if (!SubObject)
+				{
+					return MCPError(FString::Printf(
+						TEXT("Cannot descend into '%s' - the sub-object reference is null"),
+						*PathParts[i]));
+				}
+				SubObject->Modify();
+				CurrentContainer = SubObject;
+				CurrentStruct = SubObject->GetClass();
+			}
+			else
+			{
+				return MCPError(FString::Printf(
+					TEXT("'%s' is not a struct or sub-object - cannot descend"), *PathParts[i]));
+			}
 		}
 		else
 		{
