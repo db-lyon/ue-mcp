@@ -67,6 +67,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("delete_actor"), &DeleteActor);
 	Registry.RegisterHandler(TEXT("get_actor_details"), &GetActorDetails);
 	Registry.RegisterHandler(TEXT("get_component_tree"), &GetComponentTree);
+	Registry.RegisterHandler(TEXT("get_relative_transform"), &GetRelativeTransform);
 	Registry.RegisterHandler(TEXT("get_current_level"), &GetCurrentLevel);
 	Registry.RegisterHandler(TEXT("list_levels"), &ListLevels);
 	Registry.RegisterHandler(TEXT("get_selected_actors"), &GetSelectedActors);
@@ -696,6 +697,60 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("actorClass"), Actor->GetClass()->GetName());
 	Result->SetNumberField(TEXT("componentCount"), CompArr.Num());
 	Result->SetArrayField(TEXT("components"), CompArr);
+	return MCPResult(Result);
+}
+
+// #386/#387: compute target's transform expressed in reference's local space.
+// Common dungeon/calibration workflow: figure out the local-space "snap rule"
+// for an actor that was manually aligned to a parent actor. Previously this
+// required execute_python with MathLibrary.inverse_transform_location.
+TSharedPtr<FJsonValue> FLevelHandlers::GetRelativeTransform(const TSharedPtr<FJsonObject>& Params)
+{
+	FString TargetLabel;
+	if (auto Err = RequireStringAlt(Params, TEXT("targetLabel"), TEXT("target"), TargetLabel)) return Err;
+	FString ReferenceLabel;
+	if (auto Err = RequireStringAlt(Params, TEXT("referenceLabel"), TEXT("reference"), ReferenceLabel)) return Err;
+
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(FString::Printf(TEXT("World '%s' not available"), *WorldScope));
+
+	AActor* TargetActor = nullptr;
+	AActor* ReferenceActor = nullptr;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (TargetActor && ReferenceActor) break;
+		if (!TargetActor && (*It)->GetActorLabel() == TargetLabel) TargetActor = *It;
+		if (!ReferenceActor && (*It)->GetActorLabel() == ReferenceLabel) ReferenceActor = *It;
+	}
+	if (!TargetActor) return MCPError(FString::Printf(TEXT("Target actor not found: %s"), *TargetLabel));
+	if (!ReferenceActor) return MCPError(FString::Printf(TEXT("Reference actor not found: %s"), *ReferenceLabel));
+
+	const FTransform Target = TargetActor->GetActorTransform();
+	const FTransform Reference = ReferenceActor->GetActorTransform();
+	const FTransform Relative = Target.GetRelativeTransform(Reference);
+
+	auto MakeVec = [](const FVector& V) {
+		auto O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("x"), V.X);
+		O->SetNumberField(TEXT("y"), V.Y);
+		O->SetNumberField(TEXT("z"), V.Z);
+		return O;
+	};
+	auto MakeRot = [](const FRotator& R) {
+		auto O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("pitch"), R.Pitch);
+		O->SetNumberField(TEXT("yaw"), R.Yaw);
+		O->SetNumberField(TEXT("roll"), R.Roll);
+		return O;
+	};
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("targetLabel"), TargetLabel);
+	Result->SetStringField(TEXT("referenceLabel"), ReferenceLabel);
+	Result->SetObjectField(TEXT("location"), MakeVec(Relative.GetLocation()));
+	Result->SetObjectField(TEXT("rotation"), MakeRot(Relative.GetRotation().Rotator()));
+	Result->SetObjectField(TEXT("scale"), MakeVec(Relative.GetScale3D()));
 	return MCPResult(Result);
 }
 
