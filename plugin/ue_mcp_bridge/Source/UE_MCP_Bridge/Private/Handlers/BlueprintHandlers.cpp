@@ -191,6 +191,24 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraphSummary(const TShar
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("graphName"), GraphName);
+	// #298: identify graph type so callers can tell ubergraph / construction
+	// script / function / macro apart without having to grep node titles.
+	{
+		FString GraphType = TEXT("Other");
+		if (Blueprint->UbergraphPages.Contains(Graph)) GraphType = TEXT("Ubergraph");
+		for (UEdGraph* G : Blueprint->FunctionGraphs)
+		{
+			if (G == Graph) { GraphType = (G->GetFName() == UEdGraphSchema_K2::FN_UserConstructionScript) ? TEXT("ConstructionScript") : TEXT("Function"); break; }
+		}
+		for (UEdGraph* G : Blueprint->MacroGraphs)        { if (G == Graph) { GraphType = TEXT("Macro"); break; } }
+		for (UEdGraph* G : Blueprint->DelegateSignatureGraphs) { if (G == Graph) { GraphType = TEXT("DelegateSignature"); break; } }
+		for (UEdGraph* G : Blueprint->IntermediateGeneratedGraphs) { if (G == Graph) { GraphType = TEXT("Intermediate"); break; } }
+		if (Graph && Graph->Schema)
+		{
+			Result->SetStringField(TEXT("schemaClass"), Graph->Schema->GetName());
+		}
+		Result->SetStringField(TEXT("graphType"), GraphType);
+	}
 	Result->SetArrayField(TEXT("nodes"), Nodes);
 	Result->SetArrayField(TEXT("execEdges"), ExecEdges);
 	Result->SetArrayField(TEXT("dataEdges"), DataEdges);
