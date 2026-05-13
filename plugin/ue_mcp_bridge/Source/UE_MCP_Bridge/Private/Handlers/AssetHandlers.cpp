@@ -13,6 +13,7 @@
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
+#include "EditorFramework/AssetImportData.h"
 #include "UObject/Package.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -161,6 +162,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// v1.0.0-rc.3 — #177, #192, #193
 	Registry.RegisterHandler(TEXT("get_mesh_bounds"), &GetMeshBounds);
+	Registry.RegisterHandler(TEXT("read_import_sources"), &ReadImportSources);
 	Registry.RegisterHandler(TEXT("get_mesh_collision"), &GetMeshCollision);
 	Registry.RegisterHandler(TEXT("set_mesh_nav"), &SetMeshNav);
 	Registry.RegisterHandler(TEXT("move_folder"), &MoveFolder);
@@ -1989,6 +1991,77 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshBounds(const TSharedPtr<FJsonObjec
 	Result->SetObjectField(TEXT("max"), MaxObj);
 	Result->SetObjectField(TEXT("boxExtent"), ExtentObj);
 	Result->SetObjectField(TEXT("boxCenter"), CenterObj);
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// #270: surface AssetImportData->SourceData filenames on imported assets so
+// callers can validate legacy imports without dropping to Python. Works for
+// any UObject that owns an AssetImportData (StaticMesh, SkeletalMesh, Texture,
+// Animation*, etc.) - resolved via reflection on the asset class.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAssetHandlers::ReadImportSources(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	UObject* Asset = LoadAssetByPath<UObject>(AssetPath);
+	if (!Asset)
+	{
+		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
+	}
+
+	UAssetImportData* ImportData = nullptr;
+	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
+	{
+		ImportData = SM->GetAssetImportData();
+	}
+	else if (USkeletalMesh* SKM = Cast<USkeletalMesh>(Asset))
+	{
+		ImportData = SKM->GetAssetImportData();
+	}
+	else
+	{
+		// Most other importable assets expose an `AssetImportData` UPROPERTY.
+		if (FObjectProperty* Prop = CastField<FObjectProperty>(Asset->GetClass()->FindPropertyByName(TEXT("AssetImportData"))))
+		{
+			ImportData = Cast<UAssetImportData>(Prop->GetObjectPropertyValue_InContainer(Asset));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), Asset->GetPathName());
+	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
+
+	if (!ImportData)
+	{
+		Result->SetBoolField(TEXT("hasImportData"), false);
+		TArray<TSharedPtr<FJsonValue>> Empty;
+		Result->SetArrayField(TEXT("sources"), Empty);
+		return MCPResult(Result);
+	}
+
+	Result->SetBoolField(TEXT("hasImportData"), true);
+	TArray<TSharedPtr<FJsonValue>> Sources;
+	for (const FAssetImportInfo::FSourceFile& SF : ImportData->SourceData.SourceFiles)
+	{
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("relativeFilename"), SF.RelativeFilename);
+		Entry->SetStringField(TEXT("timestamp"), SF.Timestamp.ToString());
+		Entry->SetStringField(TEXT("fileHash"), LexToString(SF.FileHash));
+		Entry->SetStringField(TEXT("displayLabelName"), SF.DisplayLabelName);
+		// Resolve absolute path: SourceFilenames returns the resolved paths in
+		// the same order as SourceData.SourceFiles. The internal Resolve method
+		// is protected, so we lift the public ExtractFilenames helper instead.
+		Sources.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+	TArray<FString> AbsoluteFilenames;
+	ImportData->ExtractFilenames(AbsoluteFilenames);
+	for (int32 i = 0; i < Sources.Num() && i < AbsoluteFilenames.Num(); ++i)
+	{
+		Sources[i]->AsObject()->SetStringField(TEXT("absolutePath"), AbsoluteFilenames[i]);
+	}
+	Result->SetArrayField(TEXT("sources"), Sources);
 	return MCPResult(Result);
 }
 
