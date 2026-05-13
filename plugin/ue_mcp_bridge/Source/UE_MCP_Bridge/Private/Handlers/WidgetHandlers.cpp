@@ -680,8 +680,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 				bPropertySet = true;
 			}
 		}
-		// (#159) Brush fields — ImageSize, Tint, DrawAs, Tiling, Margin, ResourceObject
-		else if (PropertyName.StartsWith(TEXT("brush.")))
+		// (#159, #364) Brush fields — ImageSize, Tint, DrawAs, Tiling, Margin, ResourceObject.
+		// Case-insensitive so "Brush.ImageSize" works as well as "brush.imageSize".
+		else if (PropertyName.StartsWith(TEXT("brush."), ESearchCase::IgnoreCase))
 		{
 			FString Field = PropertyName.Mid(6); // strip "brush."
 			FSlateBrush Brush = Image->GetBrush();
@@ -841,7 +842,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 	}
 
 	// ── Slot properties (slot.anchors, slot.alignment, slot.position, slot.autoSize, slot.*) ──
-	if (!bPropertySet && PropertyName.StartsWith(TEXT("slot.")))
+	// Case-insensitive: "Slot.padding" and "slot.padding" both route here (#364).
+	if (!bPropertySet && PropertyName.StartsWith(TEXT("slot."), ESearchCase::IgnoreCase))
 	{
 		UPanelSlot* Slot = FoundWidget->Slot;
 		if (Slot)
@@ -1081,16 +1083,50 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 		}
 	}
 
-	// Fallback: try to set via UObject reflection
+	// Fallback: try to set via UObject reflection. Supports dotted paths
+	// (#364) so "Brush.ImageSize" / "ColorAndOpacity.SpecifiedColor.R" /
+	// "Padding.Left" all drill into FStructProperty fields cleanly. The
+	// previous flat lookup quietly failed because FProperty names never
+	// contain dots, so the parent struct was never written.
 	if (!bPropertySet)
 	{
-		FProperty* Prop = FoundWidget->GetClass()->FindPropertyByName(FName(*PropertyName));
-		if (Prop)
+		TArray<FString> PathParts;
+		PropertyName.ParseIntoArray(PathParts, TEXT("."));
+
+		UStruct* CurrentStruct = FoundWidget->GetClass();
+		void* CurrentContainer = FoundWidget;
+		FProperty* FinalProp = nullptr;
+
+		for (int32 i = 0; i < PathParts.Num(); i++)
 		{
-			void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(FoundWidget);
-			if (Prop->ImportText_Direct(*PropertyValue, ValuePtr, FoundWidget, PPF_None))
+			FProperty* Prop = CurrentStruct->FindPropertyByName(FName(*PathParts[i]));
+			if (!Prop) break;
+			if (i < PathParts.Num() - 1)
 			{
+				FStructProperty* StructProp = CastField<FStructProperty>(Prop);
+				if (!StructProp) break;
+				CurrentContainer = StructProp->ContainerPtrToValuePtr<void>(CurrentContainer);
+				CurrentStruct = StructProp->Struct;
+			}
+			else
+			{
+				FinalProp = Prop;
+			}
+		}
+
+		if (FinalProp)
+		{
+			void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
+			if (FinalProp->ImportText_Direct(*PropertyValue, ValuePtr, FoundWidget, PPF_None))
+			{
+				FoundWidget->PostEditChange();
 				bPropertySet = true;
+			}
+			else
+			{
+				return MCPError(FString::Printf(
+					TEXT("Value '%s' is not valid for property '%s' (type %s). Use UE's text format (e.g. `(X=64,Y=64)` for FVector2D)."),
+					*PropertyValue, *FinalProp->GetName(), *FinalProp->GetCPPType()));
 			}
 		}
 	}
