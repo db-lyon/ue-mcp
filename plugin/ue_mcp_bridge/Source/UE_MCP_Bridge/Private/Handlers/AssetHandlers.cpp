@@ -1935,9 +1935,27 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshBounds(const TSharedPtr<FJsonObjec
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
-	REQUIRE_ASSET(UStaticMesh, Mesh, AssetPath);
-
-	FBox BoundingBox = Mesh->GetBoundingBox();
+	// #351: accept SkeletalMesh too — get_mesh_bounds previously errored
+	// on SkeletalMesh assets and callers had to fall back to Python
+	// (load_asset + get_bounds). Probe StaticMesh first, then SkeletalMesh.
+	FBox BoundingBox(ForceInit);
+	FString MeshKind;
+	if (UStaticMesh* AsStaticMesh = LoadAssetByPath<UStaticMesh>(AssetPath))
+	{
+		BoundingBox = AsStaticMesh->GetBoundingBox();
+		MeshKind = TEXT("StaticMesh");
+	}
+	else if (USkeletalMesh* AsSkeletalMesh = LoadAssetByPath<USkeletalMesh>(AssetPath))
+	{
+		const FBoxSphereBounds Bounds = AsSkeletalMesh->GetBounds();
+		BoundingBox = FBox(Bounds.Origin - Bounds.BoxExtent, Bounds.Origin + Bounds.BoxExtent);
+		MeshKind = TEXT("SkeletalMesh");
+	}
+	else
+	{
+		return MCPError(FString::Printf(
+			TEXT("Mesh not found at '%s' (tried StaticMesh and SkeletalMesh)"), *AssetPath));
+	}
 
 	FVector Min = BoundingBox.Min;
 	FVector Max = BoundingBox.Max;
@@ -1966,6 +1984,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshBounds(const TSharedPtr<FJsonObjec
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("meshKind"), MeshKind);
 	Result->SetObjectField(TEXT("min"), MinObj);
 	Result->SetObjectField(TEXT("max"), MaxObj);
 	Result->SetObjectField(TEXT("boxExtent"), ExtentObj);
