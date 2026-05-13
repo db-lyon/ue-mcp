@@ -14,6 +14,9 @@
 #include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialExpressionTextureCoordinate.h"
 #include "Materials/MaterialExpressionTextureObjectParameter.h"
+#include "Materials/MaterialExpressionParameter.h"
+#include "Materials/MaterialExpressionTextureSampleParameter.h"
+#include "Materials/MaterialExpressionComponentMask.h"
 #include "Materials/MaterialExpressionAdd.h"
 #include "Materials/MaterialExpressionMultiply.h"
 #include "Materials/MaterialExpressionLinearInterpolate.h"
@@ -795,17 +798,20 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 		NewExpression->Desc = ExpressionName;
 	}
 
-	// Set parameter name for parameter expressions
+	// Set parameter name for parameter expressions (#318 sub-item: previously
+	// TextureSampleParameter2D was silently dropped because the cast targeted
+	// TextureObjectParameter; route through the common UMaterialExpressionParameter
+	// base class so every Parameter subclass is covered uniformly).
 	FString ParameterName;
 	if (Params->TryGetStringField(TEXT("parameterName"), ParameterName))
 	{
-		if (UMaterialExpressionScalarParameter* ScalarParam = Cast<UMaterialExpressionScalarParameter>(NewExpression))
+		if (UMaterialExpressionParameter* AsParameter = Cast<UMaterialExpressionParameter>(NewExpression))
 		{
-			ScalarParam->ParameterName = FName(*ParameterName);
+			AsParameter->ParameterName = FName(*ParameterName);
 		}
-		else if (UMaterialExpressionVectorParameter* VectorParam = Cast<UMaterialExpressionVectorParameter>(NewExpression))
+		else if (UMaterialExpressionTextureSampleParameter* AsTextureSampleParam = Cast<UMaterialExpressionTextureSampleParameter>(NewExpression))
 		{
-			VectorParam->ParameterName = FName(*ParameterName);
+			AsTextureSampleParam->ParameterName = FName(*ParameterName);
 		}
 		else if (UMaterialExpressionTextureObjectParameter* TexParam = Cast<UMaterialExpressionTextureObjectParameter>(NewExpression))
 		{
@@ -815,6 +821,104 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 		if (NewExpression->Desc.IsEmpty())
 		{
 			NewExpression->Desc = ParameterName;
+		}
+	}
+
+	// #318: Group/SortPriority on parameter expressions, default value on
+	// scalar/vector parameters, Constant on Constant3Vector, and channel
+	// flags on ComponentMask. Without these the corresponding parameter
+	// authoring workflows had to fall back to MaterialEditingLibrary.
+	FString GroupName;
+	if (Params->TryGetStringField(TEXT("group"), GroupName))
+	{
+		if (UMaterialExpressionParameter* AsParameter = Cast<UMaterialExpressionParameter>(NewExpression))
+		{
+			AsParameter->Group = FName(*GroupName);
+		}
+		else if (UMaterialExpressionTextureSampleParameter* AsTextureSampleParam = Cast<UMaterialExpressionTextureSampleParameter>(NewExpression))
+		{
+			AsTextureSampleParam->Group = FName(*GroupName);
+		}
+	}
+	double SortPriority = 0.0;
+	if (Params->TryGetNumberField(TEXT("sortPriority"), SortPriority))
+	{
+		if (UMaterialExpressionParameter* AsParameter = Cast<UMaterialExpressionParameter>(NewExpression))
+		{
+			AsParameter->SortPriority = static_cast<int32>(SortPriority);
+		}
+	}
+
+	if (UMaterialExpressionScalarParameter* ScalarParam = Cast<UMaterialExpressionScalarParameter>(NewExpression))
+	{
+		double DefaultValue = 0.0;
+		if (Params->TryGetNumberField(TEXT("defaultValue"), DefaultValue))
+		{
+			ScalarParam->DefaultValue = static_cast<float>(DefaultValue);
+		}
+	}
+	else if (UMaterialExpressionVectorParameter* VectorParam = Cast<UMaterialExpressionVectorParameter>(NewExpression))
+	{
+		const TSharedPtr<FJsonObject>* DefaultColorObj = nullptr;
+		if (Params->TryGetObjectField(TEXT("defaultValue"), DefaultColorObj) && DefaultColorObj && (*DefaultColorObj).IsValid())
+		{
+			double R = 0.0, G = 0.0, B = 0.0, A = 1.0;
+			(*DefaultColorObj)->TryGetNumberField(TEXT("r"), R);
+			(*DefaultColorObj)->TryGetNumberField(TEXT("g"), G);
+			(*DefaultColorObj)->TryGetNumberField(TEXT("b"), B);
+			(*DefaultColorObj)->TryGetNumberField(TEXT("a"), A);
+			VectorParam->DefaultValue = FLinearColor((float)R, (float)G, (float)B, (float)A);
+		}
+	}
+
+	// Constant3Vector: bare value assignment (the previous SetMaterialBaseColor
+	// pattern needed a wrapper helper; expose direct authoring here).
+	if (UMaterialExpressionConstant3Vector* Const3 = Cast<UMaterialExpressionConstant3Vector>(NewExpression))
+	{
+		const TSharedPtr<FJsonObject>* ConstColor = nullptr;
+		if (Params->TryGetObjectField(TEXT("value"), ConstColor) && ConstColor && (*ConstColor).IsValid())
+		{
+			double R = 0.0, G = 0.0, B = 0.0, A = 1.0;
+			(*ConstColor)->TryGetNumberField(TEXT("r"), R);
+			(*ConstColor)->TryGetNumberField(TEXT("g"), G);
+			(*ConstColor)->TryGetNumberField(TEXT("b"), B);
+			(*ConstColor)->TryGetNumberField(TEXT("a"), A);
+			Const3->Constant = FLinearColor((float)R, (float)G, (float)B, (float)A);
+		}
+	}
+	if (UMaterialExpressionConstant* Const1 = Cast<UMaterialExpressionConstant>(NewExpression))
+	{
+		double Scalar = 0.0;
+		if (Params->TryGetNumberField(TEXT("value"), Scalar))
+		{
+			Const1->R = static_cast<float>(Scalar);
+		}
+	}
+	if (UMaterialExpressionConstant2Vector* Const2 = Cast<UMaterialExpressionConstant2Vector>(NewExpression))
+	{
+		const TSharedPtr<FJsonObject>* Vec2 = nullptr;
+		if (Params->TryGetObjectField(TEXT("value"), Vec2) && Vec2 && (*Vec2).IsValid())
+		{
+			double X = 0.0, Y = 0.0;
+			(*Vec2)->TryGetNumberField(TEXT("r"), X); (*Vec2)->TryGetNumberField(TEXT("x"), X);
+			(*Vec2)->TryGetNumberField(TEXT("g"), Y); (*Vec2)->TryGetNumberField(TEXT("y"), Y);
+			Const2->R = static_cast<float>(X);
+			Const2->G = static_cast<float>(Y);
+		}
+	}
+
+	// ComponentMask: channels object {r,g,b,a} → bool flags on the node.
+	if (UMaterialExpressionComponentMask* Mask = Cast<UMaterialExpressionComponentMask>(NewExpression))
+	{
+		const TSharedPtr<FJsonObject>* Channels = nullptr;
+		if (Params->TryGetObjectField(TEXT("channels"), Channels) && Channels && (*Channels).IsValid())
+		{
+			bool BR = false, BG = false, BB = false, BA = false;
+			(*Channels)->TryGetBoolField(TEXT("r"), BR);
+			(*Channels)->TryGetBoolField(TEXT("g"), BG);
+			(*Channels)->TryGetBoolField(TEXT("b"), BB);
+			(*Channels)->TryGetBoolField(TEXT("a"), BA);
+			Mask->R = BR; Mask->G = BG; Mask->B = BB; Mask->A = BA;
 		}
 	}
 
@@ -2159,40 +2263,56 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TShar
 		return MCPError(FString::Printf(TEXT("Target expression '%s' not found"), *TargetExpressionName));
 	}
 
-	// Resolve source output index
+	// Resolve source output index. Track whether we matched a named pin so
+	// unknown names fail loudly instead of silently aliasing to index 0
+	// and overwriting whatever connection lives there (#318).
 	int32 SourceOutputIndex = 0;
+	bool bSourceOutputResolved = SourceOutputName.IsEmpty(); // empty == "use default 0"
 	if (!SourceOutputName.IsEmpty())
 	{
 		if (SourceOutputName.IsNumeric())
 		{
 			SourceOutputIndex = FCString::Atoi(*SourceOutputName);
+			bSourceOutputResolved = true;
 		}
 		else
 		{
-			// Try to find named output
 			TArray<FExpressionOutput>& Outputs = SourceExpression->GetOutputs();
 			for (int32 i = 0; i < Outputs.Num(); i++)
 			{
 				if (Outputs[i].OutputName.ToString().Equals(SourceOutputName, ESearchCase::IgnoreCase))
 				{
 					SourceOutputIndex = i;
+					bSourceOutputResolved = true;
 					break;
 				}
+			}
+			if (!bSourceOutputResolved)
+			{
+				TArray<FString> Names;
+				for (const FExpressionOutput& O : Outputs) { Names.Add(O.OutputName.ToString()); }
+				return MCPError(FString::Printf(
+					TEXT("Source output '%s' not found on '%s'. Available: [%s]"),
+					*SourceOutputName, *SourceExpressionName,
+					*FString::Join(Names, TEXT(", "))));
 			}
 		}
 	}
 
-	// Resolve target input index
+	// Resolve target input index. Same loud-fail rule (#318) - this is the
+	// case that previously aliased unknown names to A/RGB and clobbered prior
+	// wiring.
 	int32 TargetInputIndex = 0;
+	bool bTargetInputResolved = TargetInputName.IsEmpty();
 	if (!TargetInputName.IsEmpty())
 	{
 		if (TargetInputName.IsNumeric())
 		{
 			TargetInputIndex = FCString::Atoi(*TargetInputName);
+			bTargetInputResolved = true;
 		}
 		else
 		{
-			// Try to find named input
 			for (int32 i = 0; ; i++)
 			{
 				FExpressionInput* Input = TargetExpression->GetInput(i);
@@ -2201,8 +2321,22 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TShar
 				if (InputName.ToString().Equals(TargetInputName, ESearchCase::IgnoreCase))
 				{
 					TargetInputIndex = i;
+					bTargetInputResolved = true;
 					break;
 				}
+			}
+			if (!bTargetInputResolved)
+			{
+				TArray<FString> Names;
+				for (int32 i = 0; ; i++)
+				{
+					if (!TargetExpression->GetInput(i)) break;
+					Names.Add(TargetExpression->GetInputName(i).ToString());
+				}
+				return MCPError(FString::Printf(
+					TEXT("Target input '%s' not found on '%s'. Available: [%s]"),
+					*TargetInputName, *TargetExpressionName,
+					*FString::Join(Names, TEXT(", "))));
 			}
 		}
 	}
