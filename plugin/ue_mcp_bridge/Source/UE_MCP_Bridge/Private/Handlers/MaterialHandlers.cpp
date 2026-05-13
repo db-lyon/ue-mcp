@@ -42,6 +42,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_material"), &ReadMaterial);
 	Registry.RegisterHandler(TEXT("set_material_shading_model"), &SetMaterialShadingModel);
 	Registry.RegisterHandler(TEXT("set_material_blend_mode"), &SetMaterialBlendMode);
+	Registry.RegisterHandler(TEXT("set_material_domain"), &SetMaterialDomain);
 	Registry.RegisterHandler(TEXT("set_material_base_color"), &SetMaterialBaseColor);
 	Registry.RegisterHandler(TEXT("add_material_expression"), &AddMaterialExpression);
 	Registry.RegisterHandler(TEXT("list_material_expressions"), &ListMaterialExpressions);
@@ -522,6 +523,81 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialShadingModel(const TSharedP
 	Payload->SetStringField(TEXT("path"), Material->GetPathName());
 	Payload->SetStringField(TEXT("shadingModel"), ShadingModelToString(PrevShadingModel));
 	MCPSetRollback(Result, TEXT("set_material_shading_model"), Payload);
+
+	return MCPResult(Result);
+}
+
+// #299/#356: native setter for UMaterial.MaterialDomain. Required to build
+// PostProcess / UI / DeferredDecal / Volume / LightFunction materials without
+// dropping out to execute_python -> MaterialEditingLibrary.
+TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialDomain(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	FString DomainStr;
+	if (auto Err = RequireStringAlt(Params, TEXT("materialDomain"), TEXT("domain"), DomainStr)) return Err;
+
+	UMaterial* Material = LoadMaterialFromPath(AssetPath);
+	if (!Material)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *AssetPath));
+	}
+
+	const FString N = DomainStr;
+	EMaterialDomain NewDomain = MD_Surface;
+	if      (N.Equals(TEXT("Surface"),           ESearchCase::IgnoreCase) || N.Equals(TEXT("MD_Surface"),           ESearchCase::IgnoreCase)) NewDomain = MD_Surface;
+	else if (N.Equals(TEXT("DeferredDecal"),     ESearchCase::IgnoreCase) || N.Equals(TEXT("MD_DeferredDecal"),     ESearchCase::IgnoreCase)) NewDomain = MD_DeferredDecal;
+	else if (N.Equals(TEXT("LightFunction"),     ESearchCase::IgnoreCase) || N.Equals(TEXT("MD_LightFunction"),     ESearchCase::IgnoreCase)) NewDomain = MD_LightFunction;
+	else if (N.Equals(TEXT("Volume"),            ESearchCase::IgnoreCase) || N.Equals(TEXT("MD_Volume"),            ESearchCase::IgnoreCase)) NewDomain = MD_Volume;
+	else if (N.Equals(TEXT("PostProcess"),       ESearchCase::IgnoreCase) || N.Equals(TEXT("MD_PostProcess"),       ESearchCase::IgnoreCase)) NewDomain = MD_PostProcess;
+	else if (N.Equals(TEXT("UI"),                ESearchCase::IgnoreCase) || N.Equals(TEXT("MD_UI"),                ESearchCase::IgnoreCase)) NewDomain = MD_UI;
+	else if (N.Equals(TEXT("RuntimeVirtualTexture"), ESearchCase::IgnoreCase) || N.Equals(TEXT("MD_RuntimeVirtualTexture"), ESearchCase::IgnoreCase)) NewDomain = MD_RuntimeVirtualTexture;
+	else
+	{
+		return MCPError(FString::Printf(
+			TEXT("Unknown material domain: '%s'. Use Surface, DeferredDecal, LightFunction, Volume, PostProcess, UI, or RuntimeVirtualTexture."),
+			*DomainStr));
+	}
+
+	const EMaterialDomain PrevDomain = Material->MaterialDomain;
+
+	auto DomainName = [](EMaterialDomain D) -> FString
+	{
+		switch (D)
+		{
+		case MD_Surface:                return TEXT("Surface");
+		case MD_DeferredDecal:          return TEXT("DeferredDecal");
+		case MD_LightFunction:          return TEXT("LightFunction");
+		case MD_Volume:                 return TEXT("Volume");
+		case MD_PostProcess:            return TEXT("PostProcess");
+		case MD_UI:                     return TEXT("UI");
+		case MD_RuntimeVirtualTexture:  return TEXT("RuntimeVirtualTexture");
+		default:                        return TEXT("Surface");
+		}
+	};
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), Material->GetPathName());
+	Result->SetStringField(TEXT("materialDomain"), DomainName(NewDomain));
+
+	if (PrevDomain == NewDomain)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		return MCPResult(Result);
+	}
+
+	Material->PreEditChange(nullptr);
+	Material->MaterialDomain = NewDomain;
+	Material->PostEditChange();
+	Material->MarkPackageDirty();
+
+	MCPSetUpdated(Result);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), Material->GetPathName());
+	Payload->SetStringField(TEXT("materialDomain"), DomainName(PrevDomain));
+	MCPSetRollback(Result, TEXT("set_material_domain"), Payload);
 
 	return MCPResult(Result);
 }
@@ -1944,6 +2020,19 @@ UMaterialExpression* FMaterialHandlers::FindExpressionByName(UMaterial* Material
 		if (Idx >= 0 && Idx < Expressions.Num())
 		{
 			return Expressions[Idx];
+		}
+	}
+
+	// #307: fall back to the engine-assigned UObject name. The MaterialEditor
+	// surfaces names like "MaterialExpressionConstant_0" and callers often
+	// read those back via read_material_graph then pass them to delete; the
+	// previous code only matched class names or descriptions so the lookup
+	// failed and delete_expression cheerfully reported alreadyDeleted=true.
+	for (UMaterialExpression* Expression : Material->GetExpressions())
+	{
+		if (Expression && Expression->GetName() == ExpressionName)
+		{
+			return Expression;
 		}
 	}
 
