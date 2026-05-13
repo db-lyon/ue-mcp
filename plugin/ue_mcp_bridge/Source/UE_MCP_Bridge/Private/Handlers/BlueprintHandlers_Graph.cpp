@@ -847,6 +847,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 					*DefaultValue, *FinalProp->GetName(), *FinalProp->GetCPPType()));
 			}
 			TargetNode->PostEditChange();
+			// #325: writing pin-defining properties on a K2Node (e.g. VariableReference
+			// on K2Node_VariableGet, FunctionReference on K2Node_CallFunction) leaves
+			// the node's pins frozen at the old class until ReconstructNode is called.
+			// PostEditChange alone does not rebuild pins. Run reconstruct so any
+			// subsequent connect_pins call sees the up-to-date pin types.
+			if (UK2Node* AsK2 = Cast<UK2Node>(TargetNode))
+			{
+				AsK2->ReconstructNode();
+			}
 			bSetViaProperty = true;
 		}
 	}
