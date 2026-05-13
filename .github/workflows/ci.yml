@@ -206,6 +206,52 @@ jobs:
             -f target_url="https://github.com/$REPO/releases/tag/v$VERSION"
           echo "Posted landing/headline: $HEADLINE"
 
+  surface_counts:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      statuses: write   # post the surface/counts commit status
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install
+        # Mirror the build job: lockfile is from Windows, drop it for Linux install.
+        run: |
+          rm -f package-lock.json
+          npm install --include=optional
+
+      - name: Compute surface counts
+        id: counts
+        # Derive the count from the source of truth (TS schema + C++
+        # RegisterHandler) so the status stays accurate across every release
+        # without anyone hand-editing package.json or .uplugin copy.
+        run: |
+          set -euo pipefail
+          DESC=$(npx tsx scripts/surface-counts.mts)
+          echo "desc=$DESC" >> "$GITHUB_OUTPUT"
+          echo "Computed: $DESC"
+
+      - name: Post surface/counts commit status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          DESC: ${{ steps.counts.outputs.desc }}
+        run: |
+          set -euo pipefail
+          gh api -X POST "repos/$REPO/statuses/$SHA" \
+            -f state=success \
+            -f context=surface/counts \
+            -f description="$DESC" \
+            -f target_url="https://github.com/$REPO/blob/$SHA/scripts/surface-counts.mts"
+          echo "Posted surface/counts: $DESC"
+
   docs:
     needs: build
     runs-on: ubuntu-latest
