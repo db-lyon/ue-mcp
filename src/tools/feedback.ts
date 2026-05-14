@@ -1,7 +1,54 @@
 import { z } from "zod";
-import { categoryTool, type ToolDef, type ToolContext } from "../types.js";
+import { categoryTool, directive, type ToolDef, type ToolContext } from "../types.js";
 import { submitFeedback } from "../github-app.js";
 import { getWorkarounds, clearWorkarounds } from "../workaround-tracker.js";
+
+const PLACEHOLDER_TITLE_RE =
+  /^(noop|nop|test|tests?|testing|x|y|z|todo|tbd|tba|ignore|ignored|stop|dummy|temp|tmp|placeholder|accidental|oops|cleanup|n\/?a|none|null|undefined|na|misc|\.+|-+)$/i;
+
+const PLACEHOLDER_PHRASE_RE =
+  /\b(ignore (previous|accidental|placeholder)|accidental (feedback|submission|tool call|placeholder)|placeholder feedback|stop accidental|cleanup needed|test submission)\b/i;
+
+interface RejectionReason {
+  code: string;
+  message: string;
+}
+
+export function validateSubmission(
+  title: string,
+  summary: string,
+  pythonWorkaround: string | undefined,
+  idealTool: string | undefined,
+  sessionWorkaroundCount: number,
+): RejectionReason | null {
+  const t = (title ?? "").trim();
+  const s = (summary ?? "").trim();
+  const py = (pythonWorkaround ?? "").trim();
+  const ideal = (idealTool ?? "").trim();
+
+  if (t.length < 10) {
+    return { code: "title_too_short", message: `Title must be at least 10 characters describing the specific tool gap (got ${t.length}).` };
+  }
+  if (PLACEHOLDER_TITLE_RE.test(t)) {
+    return { code: "placeholder_title", message: `Title "${t}" is a placeholder. Titles must name a specific gap (e.g. "blueprint.set_class_default does not save asset").` };
+  }
+  if (PLACEHOLDER_PHRASE_RE.test(t) || PLACEHOLDER_PHRASE_RE.test(s)) {
+    return { code: "meta_apology", message: `This looks like a meta/apology submission ("ignore previous", "accidental", etc). Do not file follow-ups about earlier accidental feedback.` };
+  }
+  if (s.length < 40) {
+    return { code: "summary_too_short", message: `Summary must be at least 40 characters explaining what was attempted and why the native tool fell short (got ${s.length}).` };
+  }
+  if (s.toLowerCase() === t.toLowerCase()) {
+    return { code: "summary_duplicates_title", message: `Summary must add information beyond the title.` };
+  }
+  if (!py && !ideal) {
+    return { code: "no_concrete_payload", message: `Provide either pythonWorkaround (the code that was used) or idealTool (what native action should have handled it). Without one of these there is no actionable gap to file.` };
+  }
+  if (!py && sessionWorkaroundCount === 0) {
+    return { code: "no_workaround_evidence", message: `No execute_python calls were tracked this session and no pythonWorkaround was provided. There is no workaround to document.` };
+  }
+  return null;
+}
 
 // Map tool category names to GitHub labels
 const CATEGORY_LABELS: Record<string, string[]> = {
@@ -80,6 +127,36 @@ export const feedbackTool: ToolDef = categoryTool(
         const pythonWorkaround = params.pythonWorkaround as string | undefined;
         const idealTool = params.idealTool as string | undefined;
 
+        const sessionWorkarounds = getWorkarounds();
+        const rejection = validateSubmission(title, summary, pythonWorkaround, idealTool, sessionWorkarounds.length);
+        if (rejection) {
+          // Clear the tracked workarounds so a retry doesn't keep dragging the same
+          // session log along. The agent's reporting obligation is satisfied by this
+          // rejection - we explicitly tell it not to retry.
+          clearWorkarounds();
+          return directive(
+            [
+              `[FEEDBACK REJECTED - DO NOT RETRY]`,
+              `Reason (${rejection.code}): ${rejection.message}`,
+              ``,
+              `Your feedback obligation from the execute_python directive is now DISCHARGED.`,
+              `Do NOT call feedback(submit) again with a modified title, a placeholder,`,
+              `or a meta-apology issue. Move on with the user's actual task.`,
+              ``,
+              `Only file feedback when ALL of the following are true:`,
+              `  - The user explicitly asked for feedback to be submitted, AND`,
+              `  - You can name a specific ue-mcp tool/action that should have handled the task, AND`,
+              `  - You have the python workaround (or the concrete ideal tool signature) ready.`,
+            ].join("\n"),
+            { submitted: false, code: rejection.code, message: rejection.message },
+            {
+              kind: "feedback.rejected",
+              requiredActions: ["do_not_retry_feedback_submit", "resume_user_task"],
+              context: { code: rejection.code },
+            },
+          );
+        }
+
         const sections: string[] = ["## Summary", summary];
 
         if (idealTool) {
@@ -96,11 +173,9 @@ export const feedbackTool: ToolDef = categoryTool(
           );
         }
 
-        // Append session workaround log if any calls were tracked
-        const workarounds = getWorkarounds();
-        if (workarounds.length > 0) {
-          sections.push("", "## Session Workaround Log", `${workarounds.length} execute_python call(s) this session:`, "");
-          for (const w of workarounds) {
+        if (sessionWorkarounds.length > 0) {
+          sections.push("", "## Session Workaround Log", `${sessionWorkarounds.length} execute_python call(s) this session:`, "");
+          for (const w of sessionWorkarounds) {
             sections.push(
               `### ${w.timestamp}`,
               "```python",
