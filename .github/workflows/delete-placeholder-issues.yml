@@ -1,0 +1,207 @@
+# Auto-deletes placeholder/noop issues filed by the ue-mcp-feedback bot.
+#
+# The c4786af server-side gate rejects placeholder submissions, but stale
+# clients in the wild keep filing them (titles like "noop", "test", "x",
+# "Dummy", "ignore"). This workflow catches what slips through and what
+# already exists in the backlog.
+#
+# Behavior:
+#   1. Identify placeholders: issue carries the `agent-feedback` label AND
+#      title (or body Summary) matches a strict regex of known placeholder
+#      tokens, or body Summary is <=3 characters.
+#   2. Try true delete via the GraphQL deleteIssue mutation. Requires a
+#      classic PAT with `repo` scope on an account that has admin rights on
+#      this repo, stored as the secret ISSUE_ADMIN_TOKEN. The built-in
+#      GITHUB_TOKEN cannot delete issues.
+#   3. If delete fails or the PAT is not configured, close as not_planned,
+#      add an explanatory comment, and lock the issue with reason=spam.
+#
+# Triggers:
+#   - issues: opened   (auto, every new issue)
+#   - workflow_dispatch with comma-separated issue_numbers (backlog sweep)
+
+name: Delete placeholder issues
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_numbers:
+        description: "Comma-separated issue numbers to sweep (backlog cleanup)"
+        required: false
+        type: string
+
+permissions:
+  issues: write
+
+concurrency:
+  group: delete-placeholder-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Identify placeholder issues
+        id: find
+        uses: actions/github-script@v7
+        env:
+          DISPATCH_NUMBERS: ${{ github.event.inputs.issue_numbers }}
+        with:
+          script: |
+            // Exact-match tokens commonly seen on accidental submissions.
+            // Strict on purpose: real titles like "Stop accidental
+            // placeholder feedback series" must NOT match.
+            const PLACEHOLDER_RE = /^(noop|test|tests|x|y|z|dummy|ignore|accident|accidental|placeholder|todo|asdf|qwerty|foo|bar|baz|junk|spam|delete\s*me|na|n\/a|\.|\?+|!+)$/i;
+            const REQUIRED_LABEL = 'agent-feedback';
+
+            function isPlaceholder(text) {
+              const t = (text || '').trim();
+              if (!t) return true;
+              if (t.length <= 3) return true;
+              return PLACEHOLDER_RE.test(t);
+            }
+
+            function evaluate(issue) {
+              if (issue.state !== 'open') return null;
+              const labels = (issue.labels || []).map(l => l.name || l);
+              if (!labels.includes(REQUIRED_LABEL)) return null;
+
+              const title = (issue.title || '').trim();
+              if (PLACEHOLDER_RE.test(title)) {
+                return { number: issue.number, node_id: issue.node_id, reason: `title=${JSON.stringify(title)}` };
+              }
+              // Bot wraps user input as "## Summary\n<text>\n\n---\n*Submitted...*".
+              // Inspect the summary alone, since the wrapper inflates body length.
+              const body = issue.body || '';
+              const summaryMatch = body.match(/##\s*Summary\s*\n([\s\S]*?)\n\s*---/i);
+              if (summaryMatch) {
+                const summary = summaryMatch[1].trim();
+                if (isPlaceholder(summary)) {
+                  return { number: issue.number, node_id: issue.node_id, reason: `summary=${JSON.stringify(summary)}` };
+                }
+              }
+              return null;
+            }
+
+            const dispatchNumbers = (process.env.DISPATCH_NUMBERS || '')
+              .split(',')
+              .map(s => s.trim())
+              .filter(Boolean)
+              .map(n => parseInt(n, 10))
+              .filter(n => Number.isFinite(n));
+
+            const targets = [];
+            if (dispatchNumbers.length) {
+              for (const num of dispatchNumbers) {
+                try {
+                  const { data: issue } = await github.rest.issues.get({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: num,
+                  });
+                  const verdict = evaluate(issue);
+                  if (verdict) {
+                    targets.push(verdict);
+                  } else {
+                    core.info(`#${num} does not match placeholder criteria, skipping`);
+                  }
+                } catch (e) {
+                  core.warning(`Could not fetch #${num}: ${e.message}`);
+                }
+              }
+            } else if (context.payload.issue) {
+              const verdict = evaluate(context.payload.issue);
+              if (verdict) targets.push(verdict);
+            }
+
+            core.setOutput('placeholders', JSON.stringify(targets));
+            core.info(`Targets: ${JSON.stringify(targets)}`);
+
+      - name: Check PAT availability
+        id: pat
+        env:
+          ADMIN_TOKEN: ${{ secrets.ISSUE_ADMIN_TOKEN }}
+        run: |
+          if [ -n "${ADMIN_TOKEN:-}" ]; then
+            echo "has_pat=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_pat=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ISSUE_ADMIN_TOKEN secret not set; placeholders will be closed+locked instead of deleted."
+          fi
+
+      - name: Delete via GraphQL (requires admin PAT)
+        id: delete
+        if: steps.find.outputs.placeholders != '[]' && steps.pat.outputs.has_pat == 'true'
+        uses: actions/github-script@v7
+        env:
+          PLACEHOLDERS: ${{ steps.find.outputs.placeholders }}
+        with:
+          github-token: ${{ secrets.ISSUE_ADMIN_TOKEN }}
+          script: |
+            const targets = JSON.parse(process.env.PLACEHOLDERS);
+            const deleted = [];
+            const failed = [];
+            const mutation = `mutation($id: ID!) {
+              deleteIssue(input: { issueId: $id }) { repository { id } }
+            }`;
+            for (const t of targets) {
+              try {
+                await github.graphql(mutation, { id: t.node_id });
+                deleted.push(t.number);
+                core.info(`Deleted #${t.number} (${t.reason})`);
+              } catch (e) {
+                failed.push(t);
+                core.warning(`Delete failed for #${t.number}: ${e.message}`);
+              }
+            }
+            core.setOutput('deleted', JSON.stringify(deleted));
+            core.setOutput('failed', JSON.stringify(failed));
+
+      - name: Fallback close + lock
+        if: steps.find.outputs.placeholders != '[]'
+        uses: actions/github-script@v7
+        env:
+          PLACEHOLDERS: ${{ steps.find.outputs.placeholders }}
+          DELETED: ${{ steps.delete.outputs.deleted || '[]' }}
+        with:
+          script: |
+            const targets = JSON.parse(process.env.PLACEHOLDERS);
+            const deleted = new Set(JSON.parse(process.env.DELETED || '[]'));
+            const survivors = targets.filter(t => !deleted.has(t.number));
+            if (!survivors.length) {
+              core.info('All targets deleted; no fallback needed.');
+              return;
+            }
+            const comment = [
+              'Closed automatically: this submission matches the placeholder/noop pattern.',
+              '',
+              'If you intended to file real feedback, please update ue-mcp to the latest version (which rejects accidental submissions at the source) and try again with a concrete title and summary.',
+            ].join('\n');
+            for (const t of survivors) {
+              try {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: t.number,
+                  state: 'closed',
+                  state_reason: 'not_planned',
+                });
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: t.number,
+                  body: comment,
+                });
+                await github.rest.issues.lock({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: t.number,
+                  lock_reason: 'spam',
+                });
+                core.info(`Closed+locked #${t.number} (${t.reason})`);
+              } catch (e) {
+                core.error(`Fallback failed for #${t.number}: ${e.message}`);
+              }
+            }
