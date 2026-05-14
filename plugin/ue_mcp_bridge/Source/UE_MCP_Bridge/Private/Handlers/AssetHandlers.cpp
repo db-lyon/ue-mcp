@@ -91,6 +91,58 @@ namespace
 			TEXT("Refusing to mutate protected mount: %s. Engine, /Script/, /Memory/, /Temp/ are read-only via the bridge."),
 			*Path));
 	}
+
+	// Split "/Game/Foo/Bar.Bar" (or "/Game/Foo/Bar") into mount "/Game/" + rel "Foo/Bar".
+	// Returns false if the path is malformed or has no mount segment.
+	bool SplitMountAndRel(const FString& AssetOrPackagePath, FString& OutMountRoot, FString& OutRelPath, FString& OutPackageName, FString& OutAssetName)
+	{
+		FString Pkg = AssetOrPackagePath;
+		Pkg.TrimStartAndEndInline();
+		if (Pkg.IsEmpty() || !Pkg.StartsWith(TEXT("/"))) return false;
+		if (Pkg.Contains(TEXT(".")))
+		{
+			FString Name;
+			FString PkgOnly;
+			Pkg.Split(TEXT("."), &PkgOnly, &Name, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+			OutAssetName = Name;
+			Pkg = PkgOnly;
+		}
+		else
+		{
+			OutAssetName = FPaths::GetBaseFilename(Pkg);
+		}
+		OutPackageName = Pkg;
+		int32 SecondSlash = INDEX_NONE;
+		if (!Pkg.RightChop(1).FindChar(TEXT('/'), SecondSlash)) return false;
+		OutMountRoot = Pkg.Left(SecondSlash + 2);     // "/Game/"
+		OutRelPath = Pkg.RightChop(SecondSlash + 2);  // "Foo/Bar"
+		return !OutRelPath.IsEmpty();
+	}
+
+	// Look up an asset's class via the AssetRegistry without forcing a load.
+	// Returns the short class name (e.g., "World") or NAME_None when not found.
+	FName GetAssetClassName(const FString& AssetOrPackagePath)
+	{
+		FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		IAssetRegistry& Reg = ARM.Get();
+		FString Mount, Rel, Pkg, Name;
+		if (!SplitMountAndRel(AssetOrPackagePath, Mount, Rel, Pkg, Name)) return NAME_None;
+		const FString ObjectPath = FString::Printf(TEXT("%s.%s"), *Pkg, *Name);
+		FAssetData Data = Reg.GetAssetByObjectPath(FSoftObjectPath(ObjectPath));
+		if (!Data.IsValid())
+		{
+			TArray<FAssetData> Assets;
+			Reg.GetAssetsByPackageName(FName(*Pkg), Assets);
+			if (Assets.Num() > 0) Data = Assets[0];
+		}
+		if (!Data.IsValid()) return NAME_None;
+		return Data.AssetClassPath.GetAssetName();
+	}
+
+	bool IsWorldAsset(const FString& AssetOrPackagePath)
+	{
+		return GetAssetClassName(AssetOrPackagePath) == FName(TEXT("World"));
+	}
 }
 
 void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
@@ -660,6 +712,146 @@ TSharedPtr<FJsonValue> FAssetHandlers::DuplicateAsset(const TSharedPtr<FJsonObje
 	return MCPResult(Result);
 }
 
+// ─── #409: WP-aware world rename ────────────────────────────────────
+// UEditorAssetLibrary::RenameAsset on a World Partition .umap renames only
+// the umap and silently orphans every actor in /Game/__ExternalActors__/<Level>/.
+// Detect Worlds and route through IAssetTools::RenameAssets with the world +
+// all external packages in a single atomic batch. Refuse with a clear error
+// when the destination already has external content or any external fails
+// to load (better to error out before any change than to half-orphan).
+static TSharedPtr<FJsonValue> RenameWorldWithExternals(const FString& SourceAssetPath, const FString& DestAssetPath)
+{
+	FString SrcMount, SrcRel, SrcPkg, SrcName;
+	FString DstMount, DstRel, DstPkg, DstName;
+	if (!SplitMountAndRel(SourceAssetPath, SrcMount, SrcRel, SrcPkg, SrcName))
+		return MCPError(FString::Printf(TEXT("Invalid source package path: %s"), *SourceAssetPath));
+	if (!SplitMountAndRel(DestAssetPath, DstMount, DstRel, DstPkg, DstName))
+		return MCPError(FString::Printf(TEXT("Invalid destination package path: %s"), *DestAssetPath));
+
+	if (SrcMount != DstMount)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Refusing to rename World across content mounts (%s -> %s). Cross-mount external-actor migration is unsafe via the bridge - move externals manually."),
+			*SrcMount, *DstMount));
+	}
+
+	FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	IAssetRegistry& Registry = ARM.Get();
+	FAssetToolsModule& ATM = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	IAssetTools& AssetTools = ATM.Get();
+
+	const FString ExtActorsSrc  = SrcMount + TEXT("__ExternalActors__/")  + SrcRel;
+	const FString ExtObjectsSrc = SrcMount + TEXT("__ExternalObjects__/") + SrcRel;
+	const FString ExtActorsDst  = DstMount + TEXT("__ExternalActors__/")  + DstRel;
+	const FString ExtObjectsDst = DstMount + TEXT("__ExternalObjects__/") + DstRel;
+
+	auto Gather = [&](const FString& Folder, TArray<FAssetData>& Out)
+	{
+		FARFilter F;
+		F.PackagePaths.Add(FName(*Folder));
+		F.bRecursivePaths = true;
+		Registry.GetAssets(F, Out);
+	};
+
+	TArray<FAssetData> DstActorsExisting, DstObjectsExisting;
+	Gather(ExtActorsDst, DstActorsExisting);
+	Gather(ExtObjectsDst, DstObjectsExisting);
+	if (DstActorsExisting.Num() + DstObjectsExisting.Num() > 0)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Refusing to rename World: destination external folders already contain %d asset(s) at %s or %s. Pick a clean destination."),
+			DstActorsExisting.Num() + DstObjectsExisting.Num(), *ExtActorsDst, *ExtObjectsDst));
+	}
+
+	TArray<FAssetData> SrcActors, SrcObjects;
+	Gather(ExtActorsSrc, SrcActors);
+	Gather(ExtObjectsSrc, SrcObjects);
+
+	UObject* World = UEditorAssetLibrary::LoadAsset(SourceAssetPath);
+	if (!World)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load World asset: %s. No changes made."), *SourceAssetPath));
+	}
+
+	TArray<FAssetRenameData> Batch;
+	Batch.Reserve(1 + SrcActors.Num() + SrcObjects.Num());
+
+	const FString NewWorldPkgPath = FPaths::GetPath(DstPkg);
+	Batch.Emplace(TWeakObjectPtr<UObject>(World), NewWorldPkgPath, DstName);
+
+	int32 ActorAdded = 0;
+	int32 ObjectAdded = 0;
+	TArray<FString> FailedLoad;
+
+	auto AddExternals = [&](const TArray<FAssetData>& Assets, const FString& SrcFolder, const FString& DstFolder, int32& AddedCounter)
+	{
+		for (const FAssetData& Data : Assets)
+		{
+			const FString PkgName = Data.PackageName.ToString();
+			if (!PkgName.StartsWith(SrcFolder + TEXT("/")))
+			{
+				FailedLoad.Add(PkgName + TEXT(" (path mismatch)"));
+				continue;
+			}
+			const FString Suffix = PkgName.RightChop(SrcFolder.Len() + 1);
+			const FString SubPath = FPaths::GetPath(Suffix);
+			const FString NewPkgPath = SubPath.IsEmpty() ? DstFolder : (DstFolder + TEXT("/") + SubPath);
+			const FString NewName = FPaths::GetBaseFilename(Suffix);
+
+			UObject* Obj = Data.GetAsset();
+			if (!Obj)
+			{
+				FailedLoad.Add(PkgName);
+				continue;
+			}
+			Batch.Emplace(TWeakObjectPtr<UObject>(Obj), NewPkgPath, NewName);
+			++AddedCounter;
+		}
+	};
+	AddExternals(SrcActors,  ExtActorsSrc,  ExtActorsDst,  ActorAdded);
+	AddExternals(SrcObjects, ExtObjectsSrc, ExtObjectsDst, ObjectAdded);
+
+	if (FailedLoad.Num() > 0)
+	{
+		FString Examples;
+		const int32 Show = FMath::Min(FailedLoad.Num(), 5);
+		for (int32 i = 0; i < Show; ++i)
+		{
+			if (i) Examples += TEXT(", ");
+			Examples += FailedLoad[i];
+		}
+		return MCPError(FString::Printf(
+			TEXT("Failed to load %d external package(s) for World rename. Aborting before any change. Examples: %s"),
+			FailedLoad.Num(), *Examples));
+	}
+
+	const bool bOk = AssetTools.RenameAssets(Batch);
+
+	auto R = MCPSuccess();
+	R->SetStringField(TEXT("sourcePath"), SourceAssetPath);
+	R->SetStringField(TEXT("destinationPath"), DestAssetPath);
+	R->SetStringField(TEXT("kind"), TEXT("world"));
+	R->SetBoolField(TEXT("success"), bOk);
+	R->SetNumberField(TEXT("externalActors"), ActorAdded);
+	R->SetNumberField(TEXT("externalObjects"), ObjectAdded);
+	R->SetNumberField(TEXT("totalRenamed"), Batch.Num());
+
+	if (!bOk)
+	{
+		return MCPError(FString::Printf(
+			TEXT("IAssetTools::RenameAssets failed on World+externals batch (%d items: 1 world, %d actors, %d objects). Editor log has per-item detail. State may be partial - recover by renaming the .umap back and re-running."),
+			Batch.Num(), ActorAdded, ObjectAdded));
+	}
+
+	MCPSetUpdated(R);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("sourcePath"), DestAssetPath);
+	Payload->SetStringField(TEXT("destinationPath"), SourceAssetPath);
+	MCPSetRollback(R, TEXT("rename_asset"), Payload);
+
+	return MCPResult(R);
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SourcePath, DestPath;
@@ -711,6 +903,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>
 			return MCPResult(Noop);
 		}
 		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *SourcePath));
+	}
+
+	// #409: Worlds carry external actor/object packages in /Game/__ExternalActors__/<LevelPath>/.
+	// The plain UEditorAssetLibrary::RenameAsset path silently orphans those - route through
+	// a world-aware batch rename instead.
+	if (IsWorldAsset(SourcePath))
+	{
+		return RenameWorldWithExternals(SourcePath, DestPath);
 	}
 
 	bool bOk = UEditorAssetLibrary::RenameAsset(SourcePath, DestPath);
@@ -1023,6 +1223,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkRename(const TSharedPtr<FJsonObject>&
 		{
 			Record->SetStringField(TEXT("status"), TEXT("protected"));
 			Record->SetStringField(TEXT("reason"), TEXT("Engine/Script/Memory/Temp mounts are read-only via the bridge"));
+			PerItem.Add(MakeShared<FJsonValueObject>(Record));
+			Skipped++;
+			continue;
+		}
+
+		// #409: bulk_rename doesn't migrate World external actor/object packages.
+		// Refuse Worlds here so callers route them through rename_asset, which
+		// handles WP externals atomically.
+		if (IsWorldAsset(SourcePath))
+		{
+			Record->SetStringField(TEXT("status"), TEXT("rejected_world"));
+			Record->SetStringField(TEXT("reason"), TEXT("World assets must use rename_asset, which migrates __ExternalActors__/__ExternalObjects__ atomically. bulk_rename would orphan WP actors."));
 			PerItem.Add(MakeShared<FJsonValueObject>(Record));
 			Skipped++;
 			continue;
