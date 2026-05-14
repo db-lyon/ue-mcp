@@ -192,12 +192,51 @@ export const feedbackTool: ToolDef = categoryTool(
 
         const body = sections.join("\n");
         const labels = inferLabels(title, summary, idealTool);
-        const result = await submitFeedback(title, body, labels);
+        const useBot = params.useBot === true;
+        const result = await submitFeedback(title, body, labels, { useBot });
+
+        if (result.kind === "auth_required") {
+          return directive(
+            [
+              `[FEEDBACK AUTH REQUIRED]`,
+              ``,
+              `Issues should be authored by the actual reporter, not the ue-mcp-feedback bot.`,
+              `Authorize ue-mcp via GitHub device flow (one time only):`,
+              ``,
+              `  1. Open: ${result.verification_uri}`,
+              `  2. Enter code: ${result.user_code}`,
+              `  3. Authorize the ue-mcp-feedback app`,
+              ``,
+              `Then re-call feedback(submit) with the same arguments. The token persists`,
+              `in ~/.ue-mcp/auth.json so this only happens once per machine.`,
+              ``,
+              `Code expires in ~${Math.round(result.expires_in / 60)} min. To submit anonymously`,
+              `as the bot instead, re-call with useBot=true.`,
+            ].join("\n"),
+            {
+              submitted: false,
+              authRequired: true,
+              verification_uri: result.verification_uri,
+              user_code: result.user_code,
+              expires_in: result.expires_in,
+            },
+            {
+              kind: "feedback.auth_required",
+              requiredActions: ["surface_oauth_url_to_user", "retry_feedback_submit_after_auth"],
+              context: {
+                verification_uri: result.verification_uri,
+                user_code: result.user_code,
+              },
+            },
+          );
+        }
 
         return {
-          message: "Feedback submitted successfully!",
+          message: `Feedback submitted as ${result.authoredAs === "user" ? `@${result.authoredBy}` : "bot"}`,
           issue_url: result.url,
           issue_number: result.number,
+          authored_by: result.authoredBy,
+          authored_as: result.authoredAs,
           labels,
         };
       },
@@ -219,5 +258,9 @@ export const feedbackTool: ToolDef = categoryTool(
       .string()
       .optional()
       .describe("What tool/action should have handled this natively (e.g. 'blueprint(action=set_variable_default)')"),
+    useBot: z
+      .boolean()
+      .optional()
+      .describe("Submit as the ue-mcp-feedback bot instead of authoring as the real GitHub user. Default false - issues author as the user via OAuth device flow on first use."),
   },
 );

@@ -7,14 +7,21 @@ UE-MCP includes a built-in feedback system that helps improve tool coverage over
 ```mermaid
 flowchart LR
     Agent[AI Agent] -->|notices tool gap| FT[feedback tool]
-    FT -->|GitHub App auth| GH[GitHub Issues]
+    FT -->|OAuth device flow| GH[GitHub Issues as you]
     GH -->|maintainers triage| Fix[New native tool/action]
 ```
 
 1. During a session, the agent uses `editor(action="execute_python")` as a workaround for something a native tool should handle
 2. When the task is complete, the agent asks: *"I had to use custom Python scripts to get this done. Would you like to submit feedback to improve ue-mcp?"*
 3. If the user agrees, the agent calls `feedback(action="submit")` with details about the gap
-4. A GitHub issue is created automatically on the [ue-mcp repository](https://github.com/db-lyon/ue-mcp)
+4. **First time only**: ue-mcp surfaces a GitHub device flow URL + code. You authorize the `ue-mcp-feedback` app once, the token persists in `~/.ue-mcp/auth.json`, and every subsequent submission authors the issue as you.
+5. A GitHub issue is created on the [ue-mcp repository](https://github.com/db-lyon/ue-mcp), authored by your real GitHub user
+
+## Authorship
+
+By default issues are authored as the actual reporter via OAuth device flow. The first `feedback(submit)` on a fresh machine returns a directive with a verification URL and one-time code; after you authorize the `ue-mcp-feedback` GitHub App, the access token is cached at `~/.ue-mcp/auth.json` (mode 600) and reused.
+
+If you'd rather submit anonymously as the bot, pass `useBot=true`. The bot is the fallback, not the default.
 
 ## Privacy
 
