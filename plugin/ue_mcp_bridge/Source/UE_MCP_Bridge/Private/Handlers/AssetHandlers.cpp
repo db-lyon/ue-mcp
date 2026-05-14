@@ -54,6 +54,9 @@
 // Reimport
 #include "EditorReimportHandler.h"
 
+// World rename redirector cleanup (UEditorLoadingAndSavingUtils ships in FileHelpers.h, already included)
+#include "UObject/ObjectRedirector.h"
+
 // Collision / BodySetup
 #include "PhysicsEngine/BodySetup.h"
 #include "AI/Navigation/NavCollisionBase.h"
@@ -716,10 +719,26 @@ TSharedPtr<FJsonValue> FAssetHandlers::DuplicateAsset(const TSharedPtr<FJsonObje
 // UEditorAssetLibrary::RenameAsset on a World Partition .umap renames only
 // the umap and silently orphans every actor in /Game/__ExternalActors__/<Level>/.
 // Detect Worlds and route through IAssetTools::RenameAssets with the world +
-// all external packages in a single atomic batch. Refuse with a clear error
-// when the destination already has external content or any external fails
-// to load (better to error out before any change than to half-orphan).
-static TSharedPtr<FJsonValue> RenameWorldWithExternals(const FString& SourceAssetPath, const FString& DestAssetPath)
+// all external packages in a single atomic batch.
+//
+// Guards (in order):
+//  1. Cross-mount renames refused (external-package GUIDs are mount-relative).
+//  2. Active editor world: if it matches the source and isn't dirty, auto-swap
+//     to a blank map (RenameAssets on the loaded world otherwise leaves the
+//     editor pointing at a stale UWorld*); if dirty, refuse with a clear ask.
+//  3. Dirty world or external packages: refuse - caller must save first.
+//  4. Destination external folders already populated: refuse unless bForceMerge
+//     (rollback path uses force to step over orphans left by the forward call).
+//  5. Pre-load every external package and abort before any change if any fail
+//     to load (no partial state at the engine level).
+//
+// On success the source-side redirectors are fixed up + deleted so the project
+// doesn't accumulate 200+ stub redirectors per rename.
+//
+// Rollback is emitted unconditionally on a path that reached the mutation - if
+// AssetTools.RenameAssets returns false mid-batch, the rollback descriptor
+// still ships so the caller (or flow runner) can attempt recovery.
+static TSharedPtr<FJsonValue> RenameWorldWithExternals(const FString& SourceAssetPath, const FString& DestAssetPath, bool bForceMerge)
 {
 	FString SrcMount, SrcRel, SrcPkg, SrcName;
 	FString DstMount, DstRel, DstPkg, DstName;
@@ -735,6 +754,25 @@ static TSharedPtr<FJsonValue> RenameWorldWithExternals(const FString& SourceAsse
 			*SrcMount, *DstMount));
 	}
 
+	// Guard 2: active editor world. RenameAssets against the live UWorld leaves
+	// the editor pointing at a stale pointer; the safe pattern is to swap to a
+	// blank map first. We only do that automatically when the world isn't dirty
+	// so we never silently lose unsaved actor edits.
+	if (UWorld* EditorWorld = GetEditorWorld())
+	{
+		UPackage* EditorWorldPkg = EditorWorld->GetOutermost();
+		if (EditorWorldPkg && EditorWorldPkg->GetName() == SrcPkg)
+		{
+			if (EditorWorldPkg->IsDirty())
+			{
+				return MCPError(FString::Printf(
+					TEXT("Refusing to rename World currently open in editor with unsaved changes: %s. Save the level (asset.save) or discard, then re-run."),
+					*SourceAssetPath));
+			}
+			UEditorLoadingAndSavingUtils::NewBlankMap(/*bSaveExistingMap*/ false);
+		}
+	}
+
 	FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 	IAssetRegistry& Registry = ARM.Get();
 	FAssetToolsModule& ATM = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
@@ -745,21 +783,26 @@ static TSharedPtr<FJsonValue> RenameWorldWithExternals(const FString& SourceAsse
 	const FString ExtActorsDst  = DstMount + TEXT("__ExternalActors__/")  + DstRel;
 	const FString ExtObjectsDst = DstMount + TEXT("__ExternalObjects__/") + DstRel;
 
+	// Skip redirector stubs left by prior renames - we don't want to drag them along.
 	auto Gather = [&](const FString& Folder, TArray<FAssetData>& Out)
 	{
 		FARFilter F;
 		F.PackagePaths.Add(FName(*Folder));
 		F.bRecursivePaths = true;
 		Registry.GetAssets(F, Out);
+		Out.RemoveAll([](const FAssetData& D)
+		{
+			return D.AssetClassPath.GetAssetName() == FName(TEXT("ObjectRedirector"));
+		});
 	};
 
 	TArray<FAssetData> DstActorsExisting, DstObjectsExisting;
 	Gather(ExtActorsDst, DstActorsExisting);
 	Gather(ExtObjectsDst, DstObjectsExisting);
-	if (DstActorsExisting.Num() + DstObjectsExisting.Num() > 0)
+	if (!bForceMerge && DstActorsExisting.Num() + DstObjectsExisting.Num() > 0)
 	{
 		return MCPError(FString::Printf(
-			TEXT("Refusing to rename World: destination external folders already contain %d asset(s) at %s or %s. Pick a clean destination."),
+			TEXT("Refusing to rename World: destination external folders already contain %d asset(s) at %s or %s. Pick a clean destination, or pass force=true to merge (used by rollback)."),
 			DstActorsExisting.Num() + DstObjectsExisting.Num(), *ExtActorsDst, *ExtObjectsDst));
 	}
 
@@ -771,6 +814,32 @@ static TSharedPtr<FJsonValue> RenameWorldWithExternals(const FString& SourceAsse
 	if (!World)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load World asset: %s. No changes made."), *SourceAssetPath));
+	}
+
+	// Guard 3: dirty world or externals. Silent loss vector if we let it through.
+	TArray<FString> DirtyPackages;
+	auto CheckDirty = [&](const FString& PkgName)
+	{
+		if (UPackage* P = FindPackage(nullptr, *PkgName))
+		{
+			if (P->IsDirty()) DirtyPackages.Add(PkgName);
+		}
+	};
+	CheckDirty(SrcPkg);
+	for (const FAssetData& D : SrcActors)  CheckDirty(D.PackageName.ToString());
+	for (const FAssetData& D : SrcObjects) CheckDirty(D.PackageName.ToString());
+	if (DirtyPackages.Num() > 0)
+	{
+		FString Examples;
+		const int32 Show = FMath::Min(DirtyPackages.Num(), 5);
+		for (int32 i = 0; i < Show; ++i)
+		{
+			if (i) Examples += TEXT(", ");
+			Examples += DirtyPackages[i];
+		}
+		return MCPError(FString::Printf(
+			TEXT("Refusing to rename World: %d package(s) have unsaved changes. Save with asset.save (or editor.save_dirty) first. Examples: %s"),
+			DirtyPackages.Num(), *Examples));
 	}
 
 	TArray<FAssetRenameData> Batch;
@@ -825,30 +894,200 @@ static TSharedPtr<FJsonValue> RenameWorldWithExternals(const FString& SourceAsse
 			FailedLoad.Num(), *Examples));
 	}
 
+	// Build response + rollback handle BEFORE the mutation. We've cached every
+	// source path that's about to move, so the inverse is deterministic even if
+	// the batch half-completes. Rollback passes force=true to step over orphans
+	// left at the original destination by a partial forward run.
+	auto R = MCPSuccess();
+	R->SetStringField(TEXT("sourcePath"), SourceAssetPath);
+	R->SetStringField(TEXT("destinationPath"), DestAssetPath);
+	R->SetStringField(TEXT("kind"), TEXT("world"));
+	R->SetNumberField(TEXT("externalActors"), ActorAdded);
+	R->SetNumberField(TEXT("externalObjects"), ObjectAdded);
+	R->SetNumberField(TEXT("totalRenamed"), Batch.Num());
+
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	RollbackPayload->SetStringField(TEXT("sourcePath"), DestAssetPath);
+	RollbackPayload->SetStringField(TEXT("destinationPath"), SourceAssetPath);
+	RollbackPayload->SetBoolField(TEXT("force"), true);
+	MCPSetRollback(R, TEXT("rename_asset"), RollbackPayload);
+
+	const bool bOk = AssetTools.RenameAssets(Batch);
+	R->SetBoolField(TEXT("success"), bOk);
+
+	if (!bOk)
+	{
+		// Build the error object by hand so the rollback descriptor survives -
+		// MCPError() would drop it. The caller (flow runner) can invoke the
+		// inverse rename to attempt recovery from a partial batch.
+		TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
+		Err->SetBoolField(TEXT("success"), false);
+		Err->SetBoolField(TEXT("partial"), true);
+		Err->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("IAssetTools::RenameAssets failed on World+externals batch (%d items: 1 world, %d actors, %d objects). Rollback descriptor is attached - invoke the inverse rename to recover."),
+			Batch.Num(), ActorAdded, ObjectAdded));
+		MCPSetRollback(Err, TEXT("rename_asset"), RollbackPayload);
+		return MakeShared<FJsonValueObject>(Err);
+	}
+
+	// Source-side redirector cleanup: AssetTools.RenameAssets leaves a redirector
+	// stub at every old path. With WP that's potentially hundreds of stubs - fix
+	// up referencers and delete them so the project doesn't accumulate cruft.
+	TArray<FAssetData> SourceRedirectors;
+	auto GatherRedirectorsAt = [&](const FString& Folder)
+	{
+		FARFilter F;
+		F.PackagePaths.Add(FName(*Folder));
+		F.bRecursivePaths = true;
+		F.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/CoreUObject"), TEXT("ObjectRedirector")));
+		Registry.GetAssets(F, SourceRedirectors);
+	};
+	GatherRedirectorsAt(FPaths::GetPath(SrcPkg));
+	GatherRedirectorsAt(ExtActorsSrc);
+	GatherRedirectorsAt(ExtObjectsSrc);
+
+	TArray<UObjectRedirector*> RedirectorObjects;
+	RedirectorObjects.Reserve(SourceRedirectors.Num());
+	for (const FAssetData& D : SourceRedirectors)
+	{
+		if (UObjectRedirector* Red = Cast<UObjectRedirector>(D.GetAsset()))
+		{
+			RedirectorObjects.Add(Red);
+		}
+	}
+	int32 RedirectorsCleaned = RedirectorObjects.Num();
+	if (RedirectorsCleaned > 0)
+	{
+		AssetTools.FixupReferencers(RedirectorObjects, /*bCheckoutDialogPrompt*/ false);
+	}
+	R->SetNumberField(TEXT("redirectorsCleaned"), RedirectorsCleaned);
+
+	MCPSetUpdated(R);
+	return MCPResult(R);
+}
+
+// ─── #409: orphan recovery ───────────────────────────────────────────
+// Fast-path called when the source .umap is gone but the destination .umap
+// exists. If externals are still at the source path (a previous rename
+// orphaned them), migrate them into place. If they're already at the
+// destination, return Existed.
+static TSharedPtr<FJsonValue> ReconcileOrphanExternals(const FString& SourceAssetPath, const FString& DestAssetPath)
+{
+	FString SrcMount, SrcRel, SrcPkg, SrcName;
+	FString DstMount, DstRel, DstPkg, DstName;
+	if (!SplitMountAndRel(SourceAssetPath, SrcMount, SrcRel, SrcPkg, SrcName) ||
+	    !SplitMountAndRel(DestAssetPath, DstMount, DstRel, DstPkg, DstName) ||
+	    SrcMount != DstMount)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("sourcePath"), SourceAssetPath);
+		Noop->SetStringField(TEXT("destinationPath"), DestAssetPath);
+		return MCPResult(Noop);
+	}
+
+	FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	IAssetRegistry& Registry = ARM.Get();
+
+	const FString ExtActorsSrc  = SrcMount + TEXT("__ExternalActors__/")  + SrcRel;
+	const FString ExtObjectsSrc = SrcMount + TEXT("__ExternalObjects__/") + SrcRel;
+	const FString ExtActorsDst  = DstMount + TEXT("__ExternalActors__/")  + DstRel;
+	const FString ExtObjectsDst = DstMount + TEXT("__ExternalObjects__/") + DstRel;
+
+	auto Gather = [&](const FString& Folder, TArray<FAssetData>& Out)
+	{
+		FARFilter F;
+		F.PackagePaths.Add(FName(*Folder));
+		F.bRecursivePaths = true;
+		Registry.GetAssets(F, Out);
+		Out.RemoveAll([](const FAssetData& D)
+		{
+			return D.AssetClassPath.GetAssetName() == FName(TEXT("ObjectRedirector"));
+		});
+	};
+
+	TArray<FAssetData> Orphans;
+	Gather(ExtActorsSrc,  Orphans);
+	const int32 OrphanActors = Orphans.Num();
+	TArray<FAssetData> OrphanObjects;
+	Gather(ExtObjectsSrc, OrphanObjects);
+	Orphans.Append(OrphanObjects);
+
+	if (Orphans.Num() == 0)
+	{
+		// True idempotent replay - everything already at destination.
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("sourcePath"), SourceAssetPath);
+		Noop->SetStringField(TEXT("destinationPath"), DestAssetPath);
+		return MCPResult(Noop);
+	}
+
+	FAssetToolsModule& ATM = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	IAssetTools& AssetTools = ATM.Get();
+
+	TArray<FAssetRenameData> Batch;
+	Batch.Reserve(Orphans.Num());
+	TArray<FString> FailedLoad;
+
+	auto Remap = [&](const FString& PkgName, FString& OutPath, FString& OutName) -> bool
+	{
+		auto Try = [&](const FString& Src, const FString& Dst) -> bool
+		{
+			if (!PkgName.StartsWith(Src + TEXT("/"))) return false;
+			const FString Suffix = PkgName.RightChop(Src.Len() + 1);
+			const FString Sub = FPaths::GetPath(Suffix);
+			OutPath = Sub.IsEmpty() ? Dst : (Dst + TEXT("/") + Sub);
+			OutName = FPaths::GetBaseFilename(Suffix);
+			return true;
+		};
+		return Try(ExtActorsSrc, ExtActorsDst) || Try(ExtObjectsSrc, ExtObjectsDst);
+	};
+
+	for (const FAssetData& Data : Orphans)
+	{
+		const FString PkgName = Data.PackageName.ToString();
+		FString NewPkgPath, NewName;
+		if (!Remap(PkgName, NewPkgPath, NewName))
+		{
+			FailedLoad.Add(PkgName + TEXT(" (path mismatch)"));
+			continue;
+		}
+		UObject* Obj = Data.GetAsset();
+		if (!Obj)
+		{
+			FailedLoad.Add(PkgName);
+			continue;
+		}
+		Batch.Emplace(TWeakObjectPtr<UObject>(Obj), NewPkgPath, NewName);
+	}
+
+	if (FailedLoad.Num() > 0)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Found %d orphan external(s) at %s* but failed to load %d. Aborting reconcile."),
+			Orphans.Num(), *(SrcMount + TEXT("__ExternalActors__/") + SrcRel), FailedLoad.Num()));
+	}
+
 	const bool bOk = AssetTools.RenameAssets(Batch);
 
 	auto R = MCPSuccess();
 	R->SetStringField(TEXT("sourcePath"), SourceAssetPath);
 	R->SetStringField(TEXT("destinationPath"), DestAssetPath);
-	R->SetStringField(TEXT("kind"), TEXT("world"));
+	R->SetStringField(TEXT("kind"), TEXT("orphan_reconcile"));
 	R->SetBoolField(TEXT("success"), bOk);
-	R->SetNumberField(TEXT("externalActors"), ActorAdded);
-	R->SetNumberField(TEXT("externalObjects"), ObjectAdded);
+	R->SetNumberField(TEXT("externalActors"), OrphanActors);
+	R->SetNumberField(TEXT("externalObjects"), Orphans.Num() - OrphanActors);
 	R->SetNumberField(TEXT("totalRenamed"), Batch.Num());
 
 	if (!bOk)
 	{
 		return MCPError(FString::Printf(
-			TEXT("IAssetTools::RenameAssets failed on World+externals batch (%d items: 1 world, %d actors, %d objects). Editor log has per-item detail. State may be partial - recover by renaming the .umap back and re-running."),
-			Batch.Num(), ActorAdded, ObjectAdded));
+			TEXT("Orphan reconcile failed: RenameAssets returned false on %d external(s). State may be partial."),
+			Batch.Num()));
 	}
 
 	MCPSetUpdated(R);
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("sourcePath"), DestAssetPath);
-	Payload->SetStringField(TEXT("destinationPath"), SourceAssetPath);
-	MCPSetRollback(R, TEXT("rename_asset"), Payload);
-
 	return MCPResult(R);
 }
 
@@ -892,10 +1131,17 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>
 	}
 
 	// Idempotency: if source is absent but destination exists, prior run succeeded.
+	// For Worlds, also reconcile any externals stranded at the source path - the
+	// .umap moving without its externals is exactly the #409 failure mode, and
+	// re-running rename_asset should fix it instead of silently no-opping.
 	if (!UEditorAssetLibrary::DoesAssetExist(SourcePath))
 	{
 		if (UEditorAssetLibrary::DoesAssetExist(DestPath))
 		{
+			if (IsWorldAsset(DestPath))
+			{
+				return ReconcileOrphanExternals(SourcePath, DestPath);
+			}
 			auto Noop = MCPSuccess();
 			MCPSetExisted(Noop);
 			Noop->SetStringField(TEXT("sourcePath"), SourcePath);
@@ -907,10 +1153,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>
 
 	// #409: Worlds carry external actor/object packages in /Game/__ExternalActors__/<LevelPath>/.
 	// The plain UEditorAssetLibrary::RenameAsset path silently orphans those - route through
-	// a world-aware batch rename instead.
+	// a world-aware batch rename instead. `force` lets a rollback call step over
+	// orphans at the destination left by a partial forward rename.
 	if (IsWorldAsset(SourcePath))
 	{
-		return RenameWorldWithExternals(SourcePath, DestPath);
+		const bool bForce = OptionalBool(Params, TEXT("force"), false);
+		return RenameWorldWithExternals(SourcePath, DestPath, bForce);
 	}
 
 	bool bOk = UEditorAssetLibrary::RenameAsset(SourcePath, DestPath);
