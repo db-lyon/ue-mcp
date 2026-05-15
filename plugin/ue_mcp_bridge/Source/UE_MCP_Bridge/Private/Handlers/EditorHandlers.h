@@ -119,6 +119,7 @@ private:
 	static TSharedPtr<FJsonValue> SetConfig(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadConfig(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetViewportInfo(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> HitTestViewportPixel(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetEditorPerformanceStats(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetOutputLog(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SearchLog(const TSharedPtr<FJsonObject>& Params);

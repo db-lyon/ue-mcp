@@ -39,6 +39,12 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "EditorValidatorSubsystem.h"
+#include "SceneView.h"
+#include "Components/PrimitiveComponent.h"
+#include "PhysicalMaterials/PhysicalMaterial.h"
+#include "Materials/MaterialInterface.h"
+#include "CollisionQueryParams.h"
+#include "Engine/HitResult.h"
 #include "GenericPlatform/GenericPlatformCrashContext.h"
 #if PLATFORM_WINDOWS
 #include "ILiveCodingModule.h"
@@ -65,6 +71,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_config"), &SetConfig);
 	Registry.RegisterHandler(TEXT("read_config"), &ReadConfig);
 	Registry.RegisterHandler(TEXT("get_viewport_info"), &GetViewportInfo);
+	Registry.RegisterHandler(TEXT("hit_test_viewport_pixel"), &HitTestViewportPixel);
 	Registry.RegisterHandler(TEXT("get_editor_performance_stats"), &GetEditorPerformanceStats);
 	Registry.RegisterHandler(TEXT("get_output_log"), &GetOutputLog);
 	Registry.RegisterHandler(TEXT("search_log"), &SearchLog);
@@ -552,6 +559,151 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetViewportInfo(const TSharedPtr<FJsonOb
 	Result->SetObjectField(TEXT("rotation"), RotationObj);
 
 	Result->SetNumberField(TEXT("fov"), FOV);
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// hit_test_viewport_pixel -- Ray-cast from a screen pixel through the active
+// editor viewport and return the first hit (#418). Replaces the bespoke
+// Python "build a ray, line trace, hope" workaround.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FEditorHandlers::HitTestViewportPixel(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor)
+	{
+		return MCPError(TEXT("Editor not available"));
+	}
+
+	double PixelX = 0, PixelY = 0;
+	if (!Params->TryGetNumberField(TEXT("x"), PixelX) || !Params->TryGetNumberField(TEXT("y"), PixelY))
+	{
+		return MCPError(TEXT("Missing required parameters 'x' and 'y' (viewport pixel coordinates)"));
+	}
+
+	FLevelEditorViewportClient* ViewportClient = GCurrentLevelEditingViewportClient;
+	if (!ViewportClient)
+	{
+		const TArray<FLevelEditorViewportClient*>& ViewportClients = GEditor->GetLevelViewportClients();
+		if (ViewportClients.Num() > 0) ViewportClient = ViewportClients[0];
+	}
+	if (!ViewportClient || !ViewportClient->Viewport)
+	{
+		return MCPError(TEXT("No active editor viewport"));
+	}
+
+	// Viewport dimensions. Caller can override (e.g. when targeting a
+	// screenshot pixel coordinate space that differs from the live viewport).
+	FViewport* Viewport = ViewportClient->Viewport;
+	const FIntPoint ViewportSize = Viewport->GetSizeXY();
+	double Width = ViewportSize.X;
+	double Height = ViewportSize.Y;
+	Params->TryGetNumberField(TEXT("width"), Width);
+	Params->TryGetNumberField(TEXT("height"), Height);
+	if (Width <= 0 || Height <= 0)
+	{
+		return MCPError(FString::Printf(TEXT("Viewport size is zero (%dx%d) and no explicit width/height supplied. Focus the viewport, or pass width+height matching the screenshot used to pick the pixel."), ViewportSize.X, ViewportSize.Y));
+	}
+
+	// Build a SceneView matching the live viewport so DeprojectFVector2D uses
+	// the actual projection matrix instead of guessing FOV/aspect.
+	FSceneViewFamilyContext ViewFamily(FSceneViewFamily::ConstructionValues(
+		Viewport, ViewportClient->GetScene(), ViewportClient->EngineShowFlags)
+		.SetRealtimeUpdate(ViewportClient->IsRealtime()));
+	FSceneView* SceneView = ViewportClient->CalcSceneView(&ViewFamily);
+	if (!SceneView)
+	{
+		return MCPError(TEXT("Failed to construct SceneView for viewport"));
+	}
+
+	// If caller supplied width/height that differ from the actual viewport,
+	// rescale the pixel into the viewport's coordinate space so the ray is
+	// correct for the projection we built.
+	const double SX = ViewportSize.X / Width;
+	const double SY = ViewportSize.Y / Height;
+	const FVector2D ScreenPos((float)(PixelX * SX), (float)(PixelY * SY));
+
+	FVector RayOrigin, RayDirection;
+	SceneView->DeprojectFVector2D(ScreenPos, RayOrigin, RayDirection);
+
+	const double MaxDistance = OptionalNumber(Params, TEXT("maxDistance"), 200000.0);
+	const FVector RayEnd = RayOrigin + RayDirection * MaxDistance;
+
+	UWorld* World = ViewportClient->GetWorld();
+	if (!World)
+	{
+		return MCPError(TEXT("No world for active viewport"));
+	}
+
+	FCollisionQueryParams Query(SCENE_QUERY_STAT(MCPHitTestViewportPixel), /*bTraceComplex*/ true);
+	Query.bReturnPhysicalMaterial = true;
+	Query.bReturnFaceIndex = true;
+
+	// Optional ignore list by actor label.
+	const TArray<TSharedPtr<FJsonValue>>* IgnoreArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("ignoreActors"), IgnoreArr) && IgnoreArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *IgnoreArr)
+		{
+			FString Label;
+			if (!V->TryGetString(Label)) continue;
+			for (TActorIterator<AActor> It(World); It; ++It)
+			{
+				if (It->GetActorLabel() == Label) { Query.AddIgnoredActor(*It); break; }
+			}
+		}
+	}
+
+	FHitResult Hit;
+	const bool bHit = World->LineTraceSingleByChannel(Hit, RayOrigin, RayEnd, ECC_Visibility, Query);
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("hit"), bHit);
+	TSharedPtr<FJsonObject> RayObj = MakeShared<FJsonObject>();
+	TSharedPtr<FJsonObject> OriginObj = MakeShared<FJsonObject>();
+	OriginObj->SetNumberField(TEXT("x"), RayOrigin.X);
+	OriginObj->SetNumberField(TEXT("y"), RayOrigin.Y);
+	OriginObj->SetNumberField(TEXT("z"), RayOrigin.Z);
+	RayObj->SetObjectField(TEXT("origin"), OriginObj);
+	TSharedPtr<FJsonObject> DirObj = MakeShared<FJsonObject>();
+	DirObj->SetNumberField(TEXT("x"), RayDirection.X);
+	DirObj->SetNumberField(TEXT("y"), RayDirection.Y);
+	DirObj->SetNumberField(TEXT("z"), RayDirection.Z);
+	RayObj->SetObjectField(TEXT("direction"), DirObj);
+	Result->SetObjectField(TEXT("ray"), RayObj);
+
+	if (!bHit) return MCPResult(Result);
+
+	AActor* HitActor = Hit.GetActor();
+	UPrimitiveComponent* HitComp = Hit.GetComponent();
+	if (HitActor) Result->SetStringField(TEXT("actorLabel"), HitActor->GetActorLabel());
+	if (HitActor) Result->SetStringField(TEXT("actorClass"), HitActor->GetClass()->GetName());
+	if (HitComp)
+	{
+		Result->SetStringField(TEXT("componentName"), HitComp->GetName());
+		Result->SetStringField(TEXT("componentClass"), HitComp->GetClass()->GetName());
+		const int32 MatIndex = Hit.FaceIndex >= 0 && HitComp->GetNumMaterials() > 0 ? 0 : -1;
+		if (UMaterialInterface* Mat = (HitComp->GetNumMaterials() > 0 ? HitComp->GetMaterial(0) : nullptr))
+		{
+			Result->SetStringField(TEXT("materialPath"), Mat->GetPathName());
+		}
+	}
+
+	auto WriteVec = [&](const TCHAR* Field, const FVector& V)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("x"), V.X);
+		Obj->SetNumberField(TEXT("y"), V.Y);
+		Obj->SetNumberField(TEXT("z"), V.Z);
+		Result->SetObjectField(Field, Obj);
+	};
+	WriteVec(TEXT("location"), Hit.Location);
+	WriteVec(TEXT("impactPoint"), Hit.ImpactPoint);
+	WriteVec(TEXT("normal"), Hit.Normal);
+	WriteVec(TEXT("impactNormal"), Hit.ImpactNormal);
+	Result->SetNumberField(TEXT("distance"), Hit.Distance);
+	Result->SetNumberField(TEXT("faceIndex"), Hit.FaceIndex);
+	if (Hit.BoneName != NAME_None) Result->SetStringField(TEXT("boneName"), Hit.BoneName.ToString());
+	if (Hit.PhysMaterial.IsValid()) Result->SetStringField(TEXT("physicalMaterial"), Hit.PhysMaterial->GetPathName());
 	return MCPResult(Result);
 }
 
