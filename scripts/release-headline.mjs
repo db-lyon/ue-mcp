@@ -1,8 +1,12 @@
-#!/usr/bin/env node
 /**
  * Parses YAML frontmatter from a release-notes markdown body, validates the
  * `headline` array, and emits the joined string + a path to the
  * frontmatter-stripped body. Used by CI to gate the publish job: invalid
+ *
+ * No shebang: this file is loaded by `node` from CI and re-imported by
+ * vitest, whose loader chokes on the shebang line as "Invalid or unexpected
+ * token". Invoke as `node scripts/release-headline.mjs` (already the CI
+ * shape).
  * format = publish fails before npm.
  *
  * Frontmatter accepted (block array form):
