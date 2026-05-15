@@ -34,7 +34,7 @@ That's it. The config is **hot-reloaded on every call** — edit the YAML and ru
 
 ### Tasks
 
-A task is a named unit of work. UE-MCP ships with **<!-- count:actions -->450+<!-- /count --> built-in tasks** across <!-- count:tools -->19<!-- /count --> categories - every action available through the MCP tools is also a flow task.
+A task is a named unit of work. UE-MCP ships with **<!-- count:actions -->500+<!-- /count --> built-in tasks** across <!-- count:tools -->19<!-- /count --> categories - every action available through the MCP tools is also a flow task.
 
 Tasks are defined in the `tasks:` section of your config:
 
@@ -57,7 +57,7 @@ The fields:
 | `group` | No | Category for organization |
 | `options` | No | Default options passed to the task (can be overridden per-step) |
 
-You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->450+<!-- /count --> actions. You define tasks when you want to **override** or **add** custom ones.
+You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->500+<!-- /count --> actions. You define tasks when you want to **override** or **add** custom ones.
 
 ### Flows
 
@@ -323,7 +323,19 @@ Returns each step with its task name, type, and skip status.
 
 ## Built-in Flows
 
-UE-MCP ships with a default flow you can run out of the box.
+UE-MCP ships with three built-in flows you can run out of the box.
+
+| Flow | Steps | What it does |
+|------|-------|--------------|
+| `beacon` | 56 | YAML-authored shrine scene built step by step via individual tool calls. Useful as a reference for how a multi-step flow looks. |
+| `neon_shrine` | 19 | The full Neon Shrine demo, driven through the bridge's `demo.step` handler. Leaves the editor on `/Game/Demo/DemoLevel`. |
+| `neon_shrine_cleanup` | 1 | Wipes the Neon Shrine demo content. Switches the editor to `/Game/MCP_Home` first so you don't get stranded on Untitled. |
+
+```
+flow(action="list")          # see every flow available (built-in + your overrides)
+flow(action="plan", flowName="<name>")
+flow(action="run", flowName="<name>")
+```
 
 ### Beacon
 
@@ -358,7 +370,18 @@ Preview the execution plan without running:
 flow(action="plan", flowName="beacon")
 ```
 
-The beacon flow is defined in `dist/ue-mcp.default.yml`. Users can override any of its steps by redefining the `beacon` flow in their project's `ue-mcp.yml`.
+The beacon flow is defined in `src/flow/loader.ts` (compiled into `dist/`). Users can override any of its steps by redefining the `beacon` flow in their project's `ue-mcp.yml`.
+
+### Neon Shrine
+
+A 19-step procedural scene driven through the bridge's `demo.step` handler. Each step invokes `demo(action="step", stepIndex=N)` for `N` in `1..19`. Output lands at `/Game/Demo/DemoLevel`. The matching `neon_shrine_cleanup` flow wipes the demo content and parks the editor on `/Game/MCP_Home` so you're not stranded on Untitled.
+
+```
+flow(action="run", flowName="neon_shrine")
+flow(action="run", flowName="neon_shrine_cleanup")
+```
+
+For a step-by-step walkthrough of what each demo step builds, see the [Neon Shrine Demo](neon-shrine-demo.md) page.
 
 ---
 
@@ -554,7 +577,7 @@ Configuration is loaded with [`@db-lyon/flowkit`'s config loader](https://github
 
 | Layer | File | Purpose |
 |-------|------|---------|
-| 1 (base) | Built-in defaults | All <!-- count:actions -->450+<!-- /count --> tasks, no flows |
+| 1 (base) | Built-in defaults | All <!-- count:actions -->500+<!-- /count --> tasks, no flows |
 | 2 | `ue-mcp.yml` | Your project config |
 | 3 | `ue-mcp.{env}.yml` | Environment overlay (set `UE_MCP_ENV`) |
 | 4 | `ue-mcp.local.yml` | Local-only overrides (gitignore this) |

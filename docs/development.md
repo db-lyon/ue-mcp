@@ -72,7 +72,8 @@ src/
 ├── deployer.ts           # Plugin deployment
 ├── editor-control.ts     # Editor process management
 ├── instructions.ts       # AI-facing server instructions
-├── github-app.ts         # GitHub App auth for feedback submission
+├── github-app.ts         # GitHub App auth for feedback submission (bot fallback)
+├── auth.ts               # GitHub OAuth device flow + ~/.ue-mcp/auth.json token cache
 ├── init.ts / update.ts / resolve.ts / hook-handler.ts  # CLI subcommands
 ├── flow/                 # Flow engine (registry, loader, task factory, HTTP)
 └── tools/                # <!-- count:tools -->19<!-- /count --> tool category implementations
@@ -91,6 +92,7 @@ src/
     ├── editor.ts
     ├── reflection.ts
     ├── gameplay.ts
+    ├── statetree.ts
     ├── gas.ts
     ├── networking.ts
     ├── demo.ts
@@ -103,7 +105,7 @@ plugin/ue_mcp_bridge/     # C++ bridge plugin (deployed to UE projects)
         ├── BridgeServer.cpp/.h
         ├── HandlerRegistry.cpp/.h
         ├── GameThreadExecutor.cpp/.h
-        └── Handlers/          # 22 C++ handler groups
+        └── Handlers/          # 23 C++ handler groups
 
 tests/smoke/               # Smoke tests (require live editor)
 tests/unit/                # Pure-TypeScript unit tests (no editor needed)

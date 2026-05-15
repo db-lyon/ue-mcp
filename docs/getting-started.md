@@ -29,6 +29,7 @@ The wizard then:
 5. Writes `.ue-mcp.json` (project config) and scaffolds an empty `ue-mcp.yml` (for custom flows) if missing.
 6. Detects installed MCP clients (Claude Code, Claude Desktop, Cursor) and writes the config for each you confirm.
 7. **Claude Code only**: optionally installs a PostToolUse hook that prompts agents to file a GitHub issue when they fall back to `execute_python`, and copies bundled workflow skills into `.claude/`.
+8. Optionally runs the **GitHub OAuth device flow** so agent feedback issues author as your real GitHub user instead of the `ue-mcp-feedback` bot. The token is cached at `~/.ue-mcp/auth.json` (mode 600) and reused for every future submission. Skip if you'd rather submit anonymously; the wizard will fall back to bot authorship.
 
 ## 2. Open the Editor
 

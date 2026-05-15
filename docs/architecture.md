@@ -100,7 +100,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 
 ### Handler Categories
 
-22 C++ handler groups are registered in `BridgeServer.cpp`. Together they expose <!-- count:actions -->450+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
+23 C++ handler groups are registered in `BridgeServer.cpp`. Together they expose <!-- count:actions -->500+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
 
 | Handler group | Coverage |
 |---------|----------|
@@ -124,6 +124,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 | SequencerHandlers | Level sequences and tracks |
 | SplineHandlers | Spline actor authoring |
 | DialogHandlers | Modal dialog auto-response policies |
+| StateTreeHandlers | StateTree asset authoring (states, transitions, tasks, root parameters) |
 | ProjectHandlers | Project info, world subsystem queries |
 | DemoHandlers | Neon Shrine demo builder |
 
