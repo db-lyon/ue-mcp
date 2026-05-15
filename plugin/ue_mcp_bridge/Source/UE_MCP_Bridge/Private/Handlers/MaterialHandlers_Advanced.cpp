@@ -217,6 +217,36 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ValidateMaterial(const TSharedPtr<FJso
 				Issue->SetStringField(TEXT("expression"), Expr->GetName());
 				Issues.Add(MakeShared<FJsonValueObject>(Issue));
 			}
+
+			// #318 gap 7: UV type sanity check. TextureSample.Coordinates expects
+			// a 2-channel UV vector. Wiring a 3-channel world-position (or any
+			// non-UV3D-sized source) into it compiles but samples garbage. The
+			// silent failure mode is hours of "why does my texture look wrong"
+			// debugging. Flag the obvious cases - WorldPosition / ObjectPosition
+			// / ActorPosition / CameraPosition wired into Coordinates.
+			if (TS->Coordinates.Expression)
+			{
+				UMaterialExpression* CoordSrc = TS->Coordinates.Expression;
+				const FString SrcClass = CoordSrc->GetClass()->GetName();
+				static const TArray<FString> ThreeDPositionSources = {
+					TEXT("MaterialExpressionWorldPosition"),
+					TEXT("MaterialExpressionObjectPositionWS"),
+					TEXT("MaterialExpressionActorPositionWS"),
+					TEXT("MaterialExpressionCameraPositionWS"),
+				};
+				if (ThreeDPositionSources.Contains(SrcClass))
+				{
+					TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
+					Issue->SetStringField(TEXT("kind"), TEXT("uv_type_mismatch"));
+					Issue->SetStringField(TEXT("expression"), Expr->GetName());
+					Issue->SetStringField(TEXT("input"), TEXT("Coordinates"));
+					Issue->SetStringField(TEXT("sourceClass"), SrcClass);
+					Issue->SetStringField(TEXT("message"), FString::Printf(
+						TEXT("TextureSample '%s' Coordinates wired from %s. The Coordinates pin expects a 2-channel UV. Use a TextureCoordinate node or extract the XY channels via ComponentMask."),
+						*Expr->GetName(), *SrcClass));
+					Issues.Add(MakeShared<FJsonValueObject>(Issue));
+				}
+			}
 		}
 	}
 

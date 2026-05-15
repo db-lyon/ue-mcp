@@ -172,3 +172,12 @@ tests/**/Content/Demo/**/*.umap
 # - Any other project source files
 ISSUE-AUDIT.md
 CODE-SMELLS.md
+
+## Harness lockfiles
+.claude/*.lock
+
+## Test-project bridge cache (written by smoke runs)
+tests/ue_mcp/.ue-mcp/
+
+## Local benchmark scratch
+bench/
