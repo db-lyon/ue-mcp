@@ -14,7 +14,7 @@ export const levelTool: ToolDef = categoryTool(
     select:             bp("Select actors. Params: actorLabels[]", "select_actors"),
     get_selected:       bp("Get selection", "get_selected_actors"),
     add_component:      bp("Add component to actor. Params: actorLabel, componentClass, componentName?", "add_component_to_actor"),
-    set_component_property: bp("Set component prop. Params: actorLabel, componentName, propertyName, value", "set_component_property"),
+    set_component_property: bp("Set component prop. Pass value=null to clear a TObjectPtr/SoftObject/WeakObject/UClass/Interface reference (#420). Params: actorLabel, componentName, propertyName, value", "set_component_property"),
     get_current:        bp("Get current level name and path", "get_current_level"),
     load:               bp("Load level. Params: levelPath", "load_level"),
     save:               bp("Save current level", "save_current_level"),

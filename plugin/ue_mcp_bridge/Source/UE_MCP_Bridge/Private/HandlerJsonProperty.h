@@ -19,6 +19,42 @@ namespace MCPJsonProperty
 	{
 		if (!Prop || !Value.IsValid() || !ValueAddr) { OutError = TEXT("null property/value/addr"); return false; }
 
+		// #420: explicit JSON null clears TObjectPtr<>/FSoftObjectPtr/FWeakObjectPtr/
+		// UClass*/FScriptInterface. The natural shape for clearing an AnimClass,
+		// Override Material, default Pawn class, etc. Previously the call fell through
+		// to ImportText and surfaced "asset not found: None".
+		if (Value->Type == EJson::Null)
+		{
+			if (FObjectProperty* OP = CastField<FObjectProperty>(Prop))
+			{
+				OP->SetObjectPropertyValue(ValueAddr, nullptr);
+				return true;
+			}
+			if (FSoftObjectProperty* SOP = CastField<FSoftObjectProperty>(Prop))
+			{
+				SOP->SetPropertyValue(ValueAddr, FSoftObjectPtr());
+				return true;
+			}
+			if (FWeakObjectProperty* WOP = CastField<FWeakObjectProperty>(Prop))
+			{
+				WOP->SetObjectPropertyValue(ValueAddr, nullptr);
+				return true;
+			}
+			if (FClassProperty* CP = CastField<FClassProperty>(Prop))
+			{
+				CP->SetObjectPropertyValue(ValueAddr, nullptr);
+				return true;
+			}
+			if (FInterfaceProperty* IP = CastField<FInterfaceProperty>(Prop))
+			{
+				FScriptInterface Empty;
+				IP->SetPropertyValue(ValueAddr, Empty);
+				return true;
+			}
+			OutError = FString::Printf(TEXT("property '%s' is not an object/class/interface reference; null value not allowed"), *Prop->GetName());
+			return false;
+		}
+
 		// TArray
 		if (FArrayProperty* ArrProp = CastField<FArrayProperty>(Prop))
 		{

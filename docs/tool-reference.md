@@ -121,9 +121,9 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `connect_pins` | Wire nodes. Params: `sourceNode, sourcePin, targetNode, targetPin, assetPath, graphName?` |
 | `add_component` | Add BP component. Params: `assetPath, componentClass, componentName?, parentComponent? (SCS parent for hierarchy - #115)` |
 | `remove_component` | Remove SCS component. Params: `assetPath, componentName` |
-| `set_component_property` | Set property on SCS or inherited component. Inherited components go through the child BP's InheritableComponentHandler override template so the parent stays untouched. Params: `assetPath, componentName, propertyName, value` |
+| `set_component_property` | Set property on SCS or inherited component. Inherited components go through the child BP's InheritableComponentHandler override template so the parent stays untouched. Pass `value=null` to clear a TObjectPtr/SoftObject/WeakObject/UClass/Interface reference (e.g. clear `AnimClass` on `CharacterMesh0`) (#420). Params: `assetPath, componentName, propertyName, value` |
 | `get_component_property` | Read a single property value from an SCS or inherited component template. Returns the ICH override value for child BPs if one exists. Params: `assetPath, componentName, propertyName` |
-| `set_class_default` | Set UPROPERTY on Blueprint CDO. Params: `assetPath, propertyName, value` |
+| `set_class_default` | Set UPROPERTY on Blueprint CDO. Pass `value=null` to clear an object/class/interface reference (#420). Params: `assetPath, propertyName, value` |
 | `delete_variable` | Delete a member variable. Params: `assetPath, name` |
 | `add_function_parameter` | Add input or output parameter to a function. Params: `assetPath, functionName, parameterName, parameterType?, isOutput?` |
 | `set_variable_default` | Set default value on a BP variable. Params: `assetPath, name, value` |
@@ -172,7 +172,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `select` | Select actors. Params: `actorLabels[]` |
 | `get_selected` | Get selection |
 | `add_component` | Add component to actor. Params: `actorLabel, componentClass, componentName?` |
-| `set_component_property` | Set component prop. Params: `actorLabel, componentName, propertyName, value` |
+| `set_component_property` | Set component prop. Pass `value=null` to clear a TObjectPtr/SoftObject/WeakObject/UClass/Interface reference (#420). Params: `actorLabel, componentName, propertyName, value` |
 | `get_current` | Get current level name and path |
 | `load` | Load level. Params: `levelPath` |
 | `save` | Save current level |
