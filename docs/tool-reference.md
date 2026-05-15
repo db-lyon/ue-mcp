@@ -75,9 +75,10 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `list_textures` | List textures. Params: `directory?, recursive?` |
 | `get_texture_info` | Get texture details. Params: `assetPath` |
 | `set_texture_settings` | Set texture settings. Params: `assetPath, settings (object with compressionSettings?, lodGroup?, sRGB?, neverStream?)` |
-| `add_socket` | Add socket to StaticMesh or SkeletalMesh. Params: `assetPath, socketName, boneName?, relativeLocation?, relativeRotation?, relativeScale?` |
+| `add_socket` | Add socket to StaticMesh or SkeletalMesh. Idempotent on socket name; pass `onConflict='update'` to overwrite an existing socket's transform. Params: `assetPath, socketName, boneName? (SkeletalMesh only), relativeLocation?, relativeRotation?, relativeScale?, onConflict? (skip\\|update\\|error, default skip) (#412)` |
 | `remove_socket` | Remove socket by name. Params: `assetPath, socketName` |
-| `list_sockets` | List sockets on a mesh. Params: `assetPath` |
+| `list_sockets` | List sockets on a mesh (StaticMesh or SkeletalMesh). Params: `assetPath` |
+| `set_socket_transform` | Update an existing socket's relative transform. Pass any subset of relativeLocation/relativeRotation/relativeScale; omitted fields stay at their current values. Errors if the socket does not exist (use `add_socket` to create). Common after FBX import when SOCKET_* empties land with `scale=(100,100,100)`. Params: `assetPath, socketName, relativeLocation?, relativeRotation?, relativeScale? (#412)` |
 | `reload_package` | Force reload an asset package from disk. Params: `assetPath` |
 | `health_check` | Diagnose stuck-unloadable asset. Returns onDisk/inRegistry/isLoaded/canLoad/isStuck flags so an agent can detect the half-shutdown state where load returns null but the file exists (#279). Params: `assetPath` |
 | `force_reload` | Aggressive reload that resets package loaders + GCs + LoadObject. Recovers from the half-shutdown state without an editor restart (#279). Closes any open editors first. Params: `assetPath` |
