@@ -6,7 +6,7 @@ The Neon Shrine is a built-in **19-step procedural demo** that builds a complete
 
 ### Prerequisites
 
-- Editor running and connected. Check with `project(action="get_status")` — `bridgeConnected` must be `true`.
+- Editor running and connected. Check with `project(action="get_status")` — `editorConnected` must be `true`.
 - An empty or expendable level. The demo creates ~30 actors and writes assets under `/Game/Demo/`.
 
 ### Step List
@@ -53,7 +53,7 @@ This wipes `/Game/Demo/` and removes the demo actors from the level.
 | 5 | `hero_sphere` | Emissive gold hero sphere on the pedestal |
 | 6 | `pillars` | Four corner pillar cylinders |
 | 7 | `orbs` | Four glowing orbs at the pillar bases |
-| 8 | `neon_lights` | Four coloured point lights (cyan / magenta / gold / green) |
+| 8 | `neon_lights` | Four coloured point lights (cyan / magenta / amber / violet) |
 | 9 | `hero_light` | Warm point light above the hero sphere |
 | 10 | `moonlight` | Directional moon light |
 | 11 | `sky_light` | SkyLight ambient fill |
@@ -76,4 +76,4 @@ The implementation lives in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/H
 
 ## See Also
 
-For a much larger declarative example, see the **Beacon** flow described in [Flows](flows.md#beacon) — a 56-step shrine scene defined entirely in YAML.
+For a much larger declarative example, see the **Beacon** flow described in [Flows](flows.md#beacon) — a 56-step shrine scene composed entirely from individual MCP tool calls in `src/flow/loader.ts`.

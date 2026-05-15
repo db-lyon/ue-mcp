@@ -12,7 +12,7 @@
 2. **Was the editor restarted after first setup?** The plugin is deployed on first run but needs an editor restart to load.
 3. **Check the Output Log.** In the editor: **Window > Developer Tools > Output Log**, filter on `LogMCPBridge`. You should see:
    ```
-   LogMCPBridge: UE-MCP Bridge server started on ws://localhost:9877
+   LogMCPBridge: [UE-MCP] Bridge listening on ws://localhost:9877
    ```
 4. **Port conflict.** If another process is using port 9877, the bridge can't start. Check with:
 

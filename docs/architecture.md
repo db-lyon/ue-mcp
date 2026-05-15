@@ -14,7 +14,7 @@ flowchart LR
 
 **Entry point:** `src/index.ts`
 
-The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), registers <!-- count:tools -->19<!-- /count --> category tools plus a `flow` tool, and communicates with the AI client over stdio.
+The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), registers <!-- count:tools -->20<!-- /count --> category tools plus a `flow` tool, and communicates with the AI client over stdio.
 
 ### Key Modules
 
@@ -30,7 +30,8 @@ The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), r
 | `deployer.ts` | First-run deployment: copy plugin, mutate `.uproject` |
 | `editor-control.ts` | Start/stop/restart the Unreal Editor process |
 | `instructions.ts` | AI-facing server instructions (embedded documentation) |
-| `github-app.ts` | GitHub App auth for agent feedback issue submission |
+| `auth.ts` | GitHub OAuth device flow + `~/.ue-mcp/auth.json` token cache (default authorship path for feedback issues) |
+| `github-app.ts` | GitHub App auth used as the bot fallback when OAuth isn't authorized |
 | `flow/` | Flow engine (registry, loader, task factory, HTTP server) — see [Flows](flows.md) |
 | `init.ts` / `update.ts` / `resolve.ts` / `hook-handler.ts` | CLI subcommands (`npx ue-mcp init`, `update`, `resolve`, `hook`) |
 
@@ -93,9 +94,9 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 
 | Class | Purpose |
 |-------|---------|
-| `FBridgeServer` | WebSocket server (raw platform sockets, Windows + Linux/Mac) |
-| `FHandlerRegistry` | Maps method names to C++ handler functions |
-| `FGameThreadExecutor` | Queues tasks to the game thread (required for UE API access) |
+| `FMCPBridgeServer` | WebSocket server (raw platform sockets, Windows + Linux/Mac) |
+| `FMCPHandlerRegistry` | Maps method names to C++ handler functions |
+| `FMCPGameThreadExecutor` | Queues tasks to the game thread (required for UE API access) |
 | `HandlerUtils.h` | Shared utilities — `MCPError()`, `MCPSuccess()`, `RequireString()`, `FindClassByShortName()`, `LoadAssetByPath<T>()`, etc. |
 
 ### Handler Categories

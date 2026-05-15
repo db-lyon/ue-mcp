@@ -28,7 +28,7 @@ Each handler accepts a parameter identifying the entity it operates on. Examples
 | Component | parent + `componentName` |
 | Material parameter | `materialPath` + `parameterName` |
 
-Handlers without a natural key (e.g., `execute_console`, `shell`) **cannot** be idempotent or reversible — document them as such, do not emit rollback records.
+Handlers without a natural key (e.g., `execute_command`, `shell`) **cannot** be idempotent or reversible — document them as such, do not emit rollback records.
 
 ### `onConflict` — creates only
 
@@ -186,7 +186,7 @@ return MCPResult(Result);
 These handlers cannot meaningfully participate:
 
 - `shell` — arbitrary command execution
-- `editor.execute_console` — arbitrary console commands
+- `editor.execute_command` — arbitrary console commands
 - `editor.take_screenshot` — side-effect with no natural inverse
 - `editor.start_editor`, `editor.quit_editor`, `level.save`, `level.load` — lifecycle operations
 

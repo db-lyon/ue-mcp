@@ -1,6 +1,6 @@
 # Tool Reference
 
-UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering **<!-- count:actions -->500+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering **<!-- count:actions -->500+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -54,7 +54,7 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `read` | Read asset via reflection. Params: `assetPath` |
 | `read_properties` | Read asset properties with values. Params: `assetPath, propertyName?, includeValues?` |
 | `duplicate` | Duplicate asset. Params: `sourcePath, destinationPath` |
-| `rename` | Rename asset. Params: `assetPath, newName` |
+| `rename` | Rename asset. Detects World Partition levels and migrates their `__ExternalActors__`/`__ExternalObjects__` packages atomically (#409). Params: `assetPath, newName (or sourcePath, destinationPath), force?` |
 | `bulk_rename` | Batched rename using IAssetTools::RenameAssets - single transaction with one redirector-fixup pass (matches Content Browser drag). Use this over looped rename for scene-referenced assets. Params: `renames[] where each entry is {sourcePath, destinationPath} OR {assetPath, newName}` |
 | `move` | Move asset. Params: `sourcePath, destinationPath` |
 | `delete` | Delete asset. On failure returns reason (open_in_editor / has_referencers / unknown) plus referencer list. Pass force=true to auto-close any open asset editors before deleting (#278). Params: `assetPath, force?` |
@@ -101,7 +101,7 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 
 | Action | Description |
 |--------|-------------|
-| `read` | Read BP structure incl. SCS components. Params: `assetPath` |
+| `read` | Read BP structure incl. SCS components AND inherited native components from the CDO (CharacterMesh0, CharMoveComp, etc.). Params: `assetPath, includeComponentProperties? (dump UPROPERTY name/type/value per component)` |
 | `list_variables` | List variables. Params: `assetPath` |
 | `list_functions` | List functions/graphs. Params: `assetPath` |
 | `read_graph` | Read graph nodes. Params: `assetPath, graphName` |
@@ -180,8 +180,8 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `spawn_volume` | Place volume. Params: `volumeType, location?, extent?, label?` |
 | `list_volumes` | List volumes. Params: `volumeType?` |
 | `set_volume_properties` | Edit volume. Params: `actorLabel, properties` |
-| `spawn_light` | Place light. Params: `lightType (point\\|spot\\|directional\\|rect\\|sky), location?, rotation?, intensity?, color?, label?` |
-| `set_light_properties` | Edit light. Params: `actorLabel, intensity?, color?, rotation? (DirectionalLight sun angle), recaptureSky?, temperature?, castShadows?, attenuationRadius?` |
+| `spawn_light` | Place light. Params: `lightType (point\\|spot\\|directional\\|rect\\|sky), location?, rotation?, intensity?, color? ({r,g,b} 0-255), mobility? (static\\|stationary\\|movable; default movable), label?` |
+| `set_light_properties` | Edit light. Params: `actorLabel, intensity?, color?, rotation? (DirectionalLight sun angle), mobility? (static\\|stationary\\|movable), recaptureSky?, temperature?, castShadows?, attenuationRadius?` |
 | `set_fog_properties` | Edit ExponentialHeightFog. Params: `actorLabel?, fogDensity?, fogHeightFalloff?, startDistance?, fogInscatteringColor?` |
 | `get_actors_by_class` | List actors by class name. Params: `className, world? (editor\\|pie)` |
 | `count_actors_by_class` | Histogram of actor classes in the level (sorted desc). Params: `world? (editor\\|pie), topN? (#146)` |
@@ -236,7 +236,7 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | `set_domain` | Set material domain (Surface\\|DeferredDecal\\|LightFunction\\|Volume\\|PostProcess\\|UI\\|RuntimeVirtualTexture). Required for post-process / decal / UI authoring. Params: `assetPath, materialDomain (#299/#356)` |
 | `set_base_color` | Set base color. Params: `assetPath, color` |
 | `connect_texture` | Connect texture to property. Params: `materialPath, texturePath, property` |
-| `add_expression` | Add expression node. Params: `materialPath, expressionType, name?, parameterName?` |
+| `add_expression` | Add expression node. Params: `materialPath, expressionType, name?, parameterName?, group?, sortPriority?, defaultValue? (scalar number or {r,g,b,a} for vector params), value? (Constant value or {r,g,b,a} for Constant3Vector/Constant4Vector), channels? (for ComponentMask), positionX?, positionY?` |
 | `connect_expressions` | Wire two expressions. Params: `materialPath, sourceExpression, sourceOutput?, targetExpression, targetInput?` |
 | `connect_to_property` | Wire expression to material output. Params: `materialPath, expressionName, outputName?, property` |
 | `list_expressions` | List expression nodes. Params: `materialPath` |
@@ -692,3 +692,15 @@ UE-MCP exposes **<!-- count:tools -->19<!-- /count --> category tools** covering
 | Action | Description |
 |--------|-------------|
 | `submit` | Submit feedback about a tool gap. Params: `title, summary, pythonWorkaround?, idealTool?` |
+
+---
+
+## flow
+
+*Run pre-built named sequences (YAML flows). Config reloads on every call - no restart needed. See [Flows](flows.md) for the full guide.*
+
+| Action | Description |
+|--------|-------------|
+| `list` | List available flows (name, description, step count) |
+| `plan` | Show execution plan without running. Params: `flowName` |
+| `run` | Execute a flow. Params: `flowName, skip? (step names or numbers to skip), params? (runtime options merged into every step), rollback_on_failure? (invoke inverse tasks in reverse order on failure)` |

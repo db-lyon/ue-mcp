@@ -76,7 +76,7 @@ src/
 ├── auth.ts               # GitHub OAuth device flow + ~/.ue-mcp/auth.json token cache
 ├── init.ts / update.ts / resolve.ts / hook-handler.ts  # CLI subcommands
 ├── flow/                 # Flow engine (registry, loader, task factory, HTTP)
-└── tools/                # <!-- count:tools -->19<!-- /count --> tool category implementations
+└── tools/                # <!-- count:tools -->20<!-- /count --> tool category implementations
     ├── project.ts
     ├── asset.ts
     ├── blueprint.ts
@@ -148,7 +148,7 @@ npm run test:smoke
 
 !!! note "Prerequisites"
     - Editor running with the test project
-    - Bridge connected (`project(action="get_status")` returns `bridgeConnected: true`)
+    - Bridge connected (`project(action="get_status")` returns `editorConnected: true`)
 
 ### Test Suites
 

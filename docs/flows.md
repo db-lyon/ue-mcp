@@ -34,7 +34,7 @@ That's it. The config is **hot-reloaded on every call** — edit the YAML and ru
 
 ### Tasks
 
-A task is a named unit of work. UE-MCP ships with **<!-- count:actions -->500+<!-- /count --> built-in tasks** across <!-- count:tools -->19<!-- /count --> categories - every action available through the MCP tools is also a flow task.
+A task is a named unit of work. UE-MCP ships with **<!-- count:actions -->500+<!-- /count --> built-in tasks** across <!-- count:tools -->20<!-- /count --> categories - every action available through the MCP tools is also a flow task.
 
 Tasks are defined in the `tasks:` section of your config:
 
@@ -146,11 +146,11 @@ Every MCP action is registered as a task using its `category.action` name. Some 
 | `blueprint.compile` | Compile a blueprint |
 | `level.place_actor` | Spawn an actor in the level |
 | `material.create` | Create a material asset |
-| `editor.execute_console` | Run a console command |
+| `editor.execute_command` | Run a console command |
 | `editor.start_editor` | Launch the Unreal Editor |
 | `shell` | Run a shell command |
 
-See the full list in `dist/ue-mcp.default.yml` or run `flow(action="list")`.
+See the full list by running `flow(action="list")` (the bundled defaults live in `src/flow/loader.ts`, compiled into `dist/`).
 
 ### Task Types
 
@@ -210,7 +210,7 @@ flows:
         options:
           directory: ${steps.1.outputDir}       # whole-value → raw type preserved
       3:
-        task: editor.execute_console
+        task: editor.execute_command
         options:
           command: "echo built ${steps.project.build.version}"  # embedded → stringified
 ```
@@ -237,9 +237,9 @@ A flow can attach steps that run around the main sequence, keyed by outcome:
 flows:
   deploy:
     description: Build and push the plugin
-    on_start:   [ { task: editor.execute_console, options: { command: "echo starting" } } ]
-    on_success: [ { task: editor.execute_console, options: { command: "echo done ${steps.build.version}" } } ]
-    on_failure: [ { task: editor.execute_console, options: { command: "echo failed: ${error.message}" } } ]
+    on_start:   [ { task: editor.execute_command, options: { command: "echo starting" } } ]
+    on_success: [ { task: editor.execute_command, options: { command: "echo done ${steps.build.version}" } } ]
+    on_failure: [ { task: editor.execute_command, options: { command: "echo failed: ${error.message}" } } ]
     finally:    [ { task: project.get_status } ]
     steps:
       1: { task: project.build }
@@ -283,7 +283,7 @@ flows:
       3: { task: some_fragile_step }
 ```
 
-If step 3 fails: the `delete_actor` inverses for B and A run, leaving the level as it was. Handlers without an inverse (`execute_console`, `shell`, some deletes) simply don't contribute records; their steps are left as-is when rollback runs.
+If step 3 fails: the `delete_actor` inverses for B and A run, leaving the level as it was. Handlers without an inverse (`execute_command`, `shell`, some deletes) simply don't contribute records; their steps are left as-is when rollback runs.
 
 Conventions for handlers — natural keys, the `onConflict: skip|update|error` option, and rollback record shape — live in [docs/handler-conventions.md](handler-conventions.md).
 
