@@ -44,6 +44,7 @@
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
+    "audit:docs": "node scripts/audit-docs.mjs && node scripts/audit-params.mjs",
     "test:watch": "vitest",
     "test:level": "vitest run tests/smoke/level.test.ts",
     "test:asset": "vitest run tests/smoke/asset.test.ts",
