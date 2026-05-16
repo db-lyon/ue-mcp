@@ -83,6 +83,9 @@ private:
 	static TSharedPtr<FJsonValue> ConnectPinsBatch(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetNodePosition(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AutoLayoutGraph(const TSharedPtr<FJsonObject>& Params);
+	// #419: SetCapsuleSize on CapsuleComponent BP templates (UFUNCTION setter
+	// path; raw property writes leave the visualizer stale)
+	static TSharedPtr<FJsonValue> SetCapsuleSize(const TSharedPtr<FJsonObject>& Params);
 
 	// Helper functions
 	static class UBlueprint* LoadBlueprint(const FString& AssetPath);

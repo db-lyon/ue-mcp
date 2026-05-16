@@ -79,6 +79,9 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `remove_socket` | Remove socket by name. Params: `assetPath, socketName` |
 | `list_sockets` | List sockets on a mesh (StaticMesh or SkeletalMesh). Params: `assetPath` |
 | `set_socket_transform` | Update an existing socket's relative transform. Pass any subset of relativeLocation/relativeRotation/relativeScale; omitted fields stay at their current values. Errors if the socket does not exist (use `add_socket` to create). Common after FBX import when SOCKET_* empties land with `scale=(100,100,100)`. Params: `assetPath, socketName, relativeLocation?, relativeRotation?, relativeScale? (#412)` |
+| `set_property` | Set a UPROPERTY on any loaded asset (Material, DataAsset, DataTable, SubsurfaceProfile, etc.) using a dotted path. Walks nested structs and sub-objects internally - no more read-modify-write copies (e.g. `settings.mean_free_path_distance` on a UMaterial). Value goes through `MCPJsonProperty::SetJsonOnProperty` so JSON null clears object refs, structs accept `{x,y,z}`, arrays/maps round-trip. Params: `assetPath, propertyName (dotted path), value (#420)` |
+| `set_texture_settings_by_type` | Apply the canonical (compressionSettings, sRGB, LOD group) combo to every texture in each group: `normal` -> Normalmap, `grayscale` -> Grayscale, `baseColor` -> Default sRGB, `hdr` -> HDR. Params: `groups (object: {normal?:[paths], grayscale?:[paths], baseColor?:[paths], hdr?:[paths]}) (#421)` |
+| `create_interchange_pipeline` | One-call factory for a `UInterchangeGenericAssetsPipeline` asset with the 15-property mesh-import boilerplate already applied. Params: `assetPath OR (name + packagePath?), meshType? (skeletal default \\| static), options? (dotted-path overrides), onConflict? (#421)` |
 | `reload_package` | Force reload an asset package from disk. Params: `assetPath` |
 | `health_check` | Diagnose stuck-unloadable asset. Returns onDisk/inRegistry/isLoaded/canLoad/isStuck flags so an agent can detect the half-shutdown state where load returns null but the file exists (#279). Params: `assetPath` |
 | `force_reload` | Aggressive reload that resets package loaders + GCs + LoadObject. Recovers from the half-shutdown state without an editor restart (#279). Closes any open editors first. Params: `assetPath` |
@@ -122,6 +125,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `add_component` | Add BP component. Params: `assetPath, componentClass, componentName?, parentComponent? (SCS parent for hierarchy - #115)` |
 | `remove_component` | Remove SCS component. Params: `assetPath, componentName` |
 | `set_component_property` | Set property on SCS or inherited component. Inherited components go through the child BP's InheritableComponentHandler override template so the parent stays untouched. Pass `value=null` to clear a TObjectPtr/SoftObject/WeakObject/UClass/Interface reference (e.g. clear `AnimClass` on `CharacterMesh0`) (#420). Params: `assetPath, componentName, propertyName, value` |
+| `set_capsule_size` | Call `UCapsuleComponent::SetCapsuleSize` on a CapsuleComponent template (CharacterMovement-friendly path; raw property writes leave the visualizer stale). Params: `assetPath, componentName, halfHeight?, radius? (#419)` |
 | `get_component_property` | Read a single property value from an SCS or inherited component template. Returns the ICH override value for child BPs if one exists. Params: `assetPath, componentName, propertyName` |
 | `set_class_default` | Set UPROPERTY on Blueprint CDO. Pass `value=null` to clear an object/class/interface reference (#420). Params: `assetPath, propertyName, value` |
 | `delete_variable` | Delete a member variable. Params: `assetPath, name` |
@@ -214,6 +218,12 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `spawn_grid` | Batch-spawn StaticMeshActors on a grid. Params: `staticMesh, min, max (Vec3 bounds), countX?, countY?, countZ?, jitter?, labelPrefix? (#203)` |
 | `batch_translate` | Translate a set of actors by an offset. Params: `offset (Vec3), actorLabels[] OR tag (#203)` |
 | `place_actors_batch` | Bulk-spawn StaticMeshActors with per-instance mesh + transform. Params: `actors[]: [{staticMesh, location?, rotation?, scale?, label?}]` |
+| `line_trace` | Line trace in the editor world. Returns hit + actorLabel/actorClass/componentName/componentClass/location/impactPoint/normal/distance/faceIndex/boneName/physicalMaterial. Params: `start (Vec3), end? (Vec3) OR direction? (Vec3) + distance? (default 200000), ignoreActors? (#420)` |
+| `get_bone_transform` | Read a bone or socket transform on a live actor's SkeletalMeshComponent. Wraps `GetBoneTransform` / `GetSocketTransform`. Params: `actorLabel, boneName (or socket name), componentName? (default: CharacterMesh0 / Mesh / first SK component), space? (world\\|component\\|local, default world)` (#420) |
+| `list_bones` | List bones in the ref skeleton (name, index, parent). Params: `actorLabel, componentName? (#420)` |
+| `rebind_leader_pose` | Re-bind every secondary SkeletalMeshComponent on an actor to a body component (default `CharacterMesh0` / `Mesh`). One-call fix for the "character explodes after rotating the actor" failure mode. Params: `actorLabel, bodyComponent? (#419)` |
+| `snap_actor_to_floor` | Snap an actor's bounds-bottom to the first downward line-trace hit. Equivalent of the End-key shortcut; works on arbitrary geometry. Params: `actorLabel, floorOffset?, maxDistance? (default 100000) (#419)` |
+| `preview_animation` | Toggle `bUpdateAnimationInEditor` + `VisibilityBasedAnimTickOption=AlwaysTickPoseAndRefreshBones` on every SkeletalMeshComponent of an actor. Bypasses the "cannot be edited on templates" guard for level instances. Params: `actorLabel, enabled (#419/#420)` |
 
 ---
 
@@ -243,7 +253,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `list_expressions` | List expression nodes. Params: `materialPath` |
 | `delete_expression` | Remove expression. Params: `materialPath, expressionName` |
 | `list_expression_types` | List available expression types |
-| `recompile` | Recompile material. Params: `materialPath` |
+| `recompile` | Recompile material. Pass `recompileChildren=true` to cascade to every MaterialInstanceConstant whose parent chain reaches this material. Params: `materialPath, recompileChildren? (#421)` |
 | `duplicate` | Duplicate material asset. Params: `sourcePath, destinationPath` |
 | `validate` | Validate material graph - find orphans, broken refs. Params: `assetPath` |
 | `get_shader_stats` | Shader compile stats, sampler+param counts. Params: `assetPath` |
@@ -489,6 +499,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `capture_scene_png` | Headless PNG screenshot via SceneCapture2D (works unfocused, guaranteed RGBA8 LDR). Params: `outputPath, location?, rotation?, width? (default 1280), height? (default 720), fov? (default 90) (#148)` |
 | `get_viewport` | Get viewport camera |
 | `hit_test_viewport_pixel` | Ray-cast from a screen pixel through the active editor viewport and return the first hit. Builds the ray from the live viewport's projection matrix (no FOV/aspect guessing). Returns `hit` + `actorLabel/actorClass/componentName/componentClass/materialPath/location/impactPoint/normal/distance/faceIndex/boneName/physicalMaterial`. Params: `x, y (pixel coords), width? height? (override viewport size when picking from a different-resolution screenshot), maxDistance? (default 200000), ignoreActors? (#418)` |
+| `get_runtime_values` | Bulk runtime read across the active world. For each actor/component matching `classFilter`, resolves every path against the (actor\\|component) root. Paths support property hops, sub-object hops, and zero-arg BlueprintCallable getter calls at any segment (e.g. `PowerConnector.GetRequired` reaches a UFUNCTION on a UObject sub-object). `classFilter` matches actor class OR component class. Params: `classFilter?, paths[], world? (editor\\|pie, default pie if running) (#414)` |
 | `set_viewport` | Set viewport camera. Params: `location?, rotation?` |
 | `focus_on_actor` | Focus on actor. Params: `actorLabel` |
 | `create_sequence` | Create Level Sequence. Params: `name, packagePath?` |
@@ -574,6 +585,11 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `add_state_tree_component` | Add StateTreeComponent. Params: `blueprintPath` |
 | `create_smart_object_def` | Create SmartObjectDefinition. Params: `name, packagePath?` |
 | `add_smart_object_component` | Add SmartObjectComponent. Params: `blueprintPath` |
+| `add_smart_object_slot` | Append a `FSmartObjectSlotDefinition` to a SmartObjectDefinition's Slots array. Params: `assetPath, name?, offset? ({x,y,z}), rotation? ({pitch,yaw,roll}), tags?` (#416) |
+| `set_smart_object_slot` | Mutate an existing slot's offset/rotation/tags. Params: `assetPath, slotIndex, offset?, rotation?, tags?` (#416) |
+| `remove_smart_object_slot` | Remove a slot by index. Idempotent: out-of-range returns `alreadyDeleted=true`. Params: `assetPath, slotIndex` (#416) |
+| `list_smart_object_slots` | List slots with `index, offset, rotation, raw`. Params: `assetPath` (#416) |
+| `add_smart_object_slot_behavior` | Attach a behavior definition (asset or class path) to a slot. Pass `instanceProperties` to seed UPROPERTYs on a freshly-spawned class-instance. Params: `assetPath, slotIndex, behaviorClass, instanceProperties?` (#416) |
 | `inspect_pie` | Inspect PIE runtime. Params: `actorLabel?` |
 | `get_pie_anim_state` | Get PIE anim instance state. Params: `actorLabel` |
 | `get_pie_anim_properties` | Read arbitrary UPROPERTY values on a PIE actor's AnimInstance (#139). Params: `actorLabel, propertyNames? (omit = dump all)` |

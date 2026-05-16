@@ -92,6 +92,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_node_property"), &SetNodeProperty);
 	Registry.RegisterHandler(TEXT("list_blueprint_graphs"), &ListGraphs);
 	Registry.RegisterHandler(TEXT("set_blueprint_component_property"), &SetComponentProperty);
+	Registry.RegisterHandler(TEXT("set_capsule_size"), &SetCapsuleSize);
 	Registry.RegisterHandler(TEXT("set_class_default"), &SetClassDefault);
 	Registry.RegisterHandler(TEXT("remove_component"), &RemoveComponent);
 	Registry.RegisterHandler(TEXT("delete_variable"), &DeleteVariable);

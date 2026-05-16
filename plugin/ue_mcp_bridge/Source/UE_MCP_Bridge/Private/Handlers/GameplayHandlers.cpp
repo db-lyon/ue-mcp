@@ -1,6 +1,7 @@
 #include "GameplayHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerJsonProperty.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -123,6 +124,11 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("configure_ai_perception_sense"), &ConfigureAiPerceptionSense);
 	Registry.RegisterHandler(TEXT("add_state_tree_component"), &AddStateTreeComponent);
 	Registry.RegisterHandler(TEXT("add_smart_object_component"), &AddSmartObjectComponent);
+	Registry.RegisterHandler(TEXT("add_smart_object_slot"), &AddSmartObjectSlot);
+	Registry.RegisterHandler(TEXT("set_smart_object_slot"), &SetSmartObjectSlot);
+	Registry.RegisterHandler(TEXT("remove_smart_object_slot"), &RemoveSmartObjectSlot);
+	Registry.RegisterHandler(TEXT("list_smart_object_slots"), &ListSmartObjectSlots);
+	Registry.RegisterHandler(TEXT("add_smart_object_slot_behavior"), &AddSmartObjectSlotBehavior);
 	Registry.RegisterHandler(TEXT("read_imc"), &ReadImc);
 	Registry.RegisterHandler(TEXT("list_imc_mappings"), &ReadImc);
 	Registry.RegisterHandler(TEXT("add_imc_mapping"), &AddImcMapping);
@@ -174,6 +180,303 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 	Result->SetStringField(TEXT("name"), Name);
 	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 
+	return MCPResult(Result);
+}
+
+// ── #416: SmartObject slot authoring (reflection-only) ────────────────
+
+namespace
+{
+	// Load a USmartObjectDefinition by asset path and locate its Slots TArray
+	// property. Returns: the asset, the array property, and a writable script
+	// array helper. Uses pure reflection so we don't have to depend on the
+	// SmartObjectsModule at build time.
+	struct FSlotsAccess
+	{
+		UObject* Asset = nullptr;
+		FArrayProperty* SlotsProp = nullptr;
+		FStructProperty* SlotStruct = nullptr;
+		void* ArrayAddr = nullptr;
+	};
+
+	static TSharedPtr<FJsonValue> ResolveSlots(const TSharedPtr<FJsonObject>& Params, FSlotsAccess& Out)
+	{
+		FString AssetPath;
+		if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+		UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+		if (!Asset) return MCPError(FString::Printf(TEXT("SmartObjectDefinition not found: %s"), *AssetPath));
+		UClass* Cls = Asset->GetClass();
+		if (Cls->GetName() != TEXT("SmartObjectDefinition"))
+		{
+			return MCPError(FString::Printf(TEXT("Asset '%s' is %s, not a SmartObjectDefinition"), *AssetPath, *Cls->GetName()));
+		}
+		FProperty* Prop = Cls->FindPropertyByName(FName(TEXT("Slots")));
+		FArrayProperty* ArrProp = CastField<FArrayProperty>(Prop);
+		if (!ArrProp)
+		{
+			return MCPError(TEXT("SmartObjectDefinition has no 'Slots' TArray property (engine layout changed?)"));
+		}
+		FStructProperty* SlotStruct = CastField<FStructProperty>(ArrProp->Inner);
+		if (!SlotStruct)
+		{
+			return MCPError(TEXT("Slots inner is not a struct"));
+		}
+		Out.Asset = Asset;
+		Out.SlotsProp = ArrProp;
+		Out.SlotStruct = SlotStruct;
+		Out.ArrayAddr = ArrProp->ContainerPtrToValuePtr<void>(Asset);
+		return nullptr;
+	}
+
+	// Apply optional offset/rotation/tags JSON fields onto a slot struct in place.
+	static FString ApplySlotFieldsFromJson(FStructProperty* SlotStruct, void* SlotAddr, const TSharedPtr<FJsonObject>& Src)
+	{
+		auto SetField = [&](const TCHAR* PropName, const TSharedPtr<FJsonValue>& Val) -> FString
+		{
+			FProperty* P = SlotStruct->Struct->FindPropertyByName(FName(PropName));
+			if (!P) return FString::Printf(TEXT("Slot has no '%s'"), PropName);
+			void* PV = P->ContainerPtrToValuePtr<void>(SlotAddr);
+			FString E;
+			if (!MCPJsonProperty::SetJsonOnProperty(P, PV, Val, E))
+			{
+				return FString::Printf(TEXT("Failed to set '%s': %s"), PropName, *E);
+			}
+			return FString();
+		};
+		const TSharedPtr<FJsonObject>* SubObj = nullptr;
+		FString Err;
+		if (Src->TryGetObjectField(TEXT("offset"), SubObj))
+		{
+			Err = SetField(TEXT("Offset"), MakeShared<FJsonValueObject>(*SubObj));
+			if (!Err.IsEmpty()) return Err;
+		}
+		if (Src->TryGetObjectField(TEXT("rotation"), SubObj))
+		{
+			Err = SetField(TEXT("Rotation"), MakeShared<FJsonValueObject>(*SubObj));
+			if (!Err.IsEmpty()) return Err;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* TagArr = nullptr;
+		if (Src->TryGetArrayField(TEXT("tags"), TagArr) && TagArr)
+		{
+			Err = SetField(TEXT("RuntimeTags"), MakeShared<FJsonValueArray>(*TagArr));
+			if (!Err.IsEmpty()) return Err;
+		}
+		FString NameStr;
+		if (Src->TryGetStringField(TEXT("name"), NameStr))
+		{
+			FProperty* P = SlotStruct->Struct->FindPropertyByName(FName(TEXT("Name")));
+			if (P)
+			{
+				FNameProperty* NP = CastField<FNameProperty>(P);
+				if (NP) NP->SetPropertyValue(NP->ContainerPtrToValuePtr<void>(SlotAddr), FName(*NameStr));
+			}
+		}
+		return FString();
+	}
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlot(const TSharedPtr<FJsonObject>& Params)
+{
+	FSlotsAccess SA;
+	if (auto Err = ResolveSlots(Params, SA)) return Err;
+	SA.Asset->Modify();
+	FScriptArrayHelper Helper(SA.SlotsProp, SA.ArrayAddr);
+	const int32 NewIdx = Helper.AddValue();
+	void* SlotAddr = Helper.GetRawPtr(NewIdx);
+	const FString ApplyErr = ApplySlotFieldsFromJson(SA.SlotStruct, SlotAddr, Params);
+	if (!ApplyErr.IsEmpty())
+	{
+		Helper.RemoveValues(NewIdx, 1);
+		return MCPError(ApplyErr);
+	}
+	SA.Asset->PostEditChange();
+	SA.Asset->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
+	Result->SetNumberField(TEXT("slotIndex"), NewIdx);
+	Result->SetNumberField(TEXT("slotCount"), Helper.Num());
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
+	Payload->SetNumberField(TEXT("slotIndex"), NewIdx);
+	MCPSetRollback(Result, TEXT("remove_smart_object_slot"), Payload);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::SetSmartObjectSlot(const TSharedPtr<FJsonObject>& Params)
+{
+	FSlotsAccess SA;
+	if (auto Err = ResolveSlots(Params, SA)) return Err;
+	int32 SlotIdx = -1;
+	if (!Params->TryGetNumberField(TEXT("slotIndex"), SlotIdx) || SlotIdx < 0)
+	{
+		return MCPError(TEXT("Missing 'slotIndex' (non-negative integer)"));
+	}
+	FScriptArrayHelper Helper(SA.SlotsProp, SA.ArrayAddr);
+	if (SlotIdx >= Helper.Num())
+	{
+		return MCPError(FString::Printf(TEXT("slotIndex %d out of range (0-%d)"), SlotIdx, Helper.Num() - 1));
+	}
+	SA.Asset->Modify();
+	void* SlotAddr = Helper.GetRawPtr(SlotIdx);
+	const FString ApplyErr = ApplySlotFieldsFromJson(SA.SlotStruct, SlotAddr, Params);
+	if (!ApplyErr.IsEmpty()) return MCPError(ApplyErr);
+	SA.Asset->PostEditChange();
+	SA.Asset->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
+	Result->SetNumberField(TEXT("slotIndex"), SlotIdx);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSmartObjectSlot(const TSharedPtr<FJsonObject>& Params)
+{
+	FSlotsAccess SA;
+	if (auto Err = ResolveSlots(Params, SA)) return Err;
+	int32 SlotIdx = -1;
+	if (!Params->TryGetNumberField(TEXT("slotIndex"), SlotIdx) || SlotIdx < 0)
+	{
+		return MCPError(TEXT("Missing 'slotIndex' (non-negative integer)"));
+	}
+	FScriptArrayHelper Helper(SA.SlotsProp, SA.ArrayAddr);
+	if (SlotIdx >= Helper.Num())
+	{
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
+		Noop->SetNumberField(TEXT("slotIndex"), SlotIdx);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
+	}
+	SA.Asset->Modify();
+	Helper.RemoveValues(SlotIdx, 1);
+	SA.Asset->PostEditChange();
+	SA.Asset->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
+	Result->SetNumberField(TEXT("slotIndex"), SlotIdx);
+	Result->SetBoolField(TEXT("deleted"), true);
+	Result->SetNumberField(TEXT("slotCount"), Helper.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::ListSmartObjectSlots(const TSharedPtr<FJsonObject>& Params)
+{
+	FSlotsAccess SA;
+	if (auto Err = ResolveSlots(Params, SA)) return Err;
+	FScriptArrayHelper Helper(SA.SlotsProp, SA.ArrayAddr);
+	TArray<TSharedPtr<FJsonValue>> Slots;
+	for (int32 i = 0; i < Helper.Num(); ++i)
+	{
+		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+		S->SetNumberField(TEXT("index"), i);
+		void* SlotAddr = Helper.GetRawPtr(i);
+		// Export the whole struct as text - generic but always readable. Callers
+		// who want structured offset/rotation can call set_smart_object_slot to
+		// mutate or asset.set_property for typed reads.
+		FString Exported;
+		SA.SlotStruct->ExportTextItem_Direct(Exported, SlotAddr, nullptr, nullptr, PPF_None);
+		S->SetStringField(TEXT("raw"), Exported);
+		// Pull out common fields explicitly for ergonomics.
+		if (FProperty* Off = SA.SlotStruct->Struct->FindPropertyByName(FName(TEXT("Offset"))))
+		{
+			if (CastField<FStructProperty>(Off))
+			{
+				const FVector* V = reinterpret_cast<const FVector*>(Off->ContainerPtrToValuePtr<void>(SlotAddr));
+				TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+				O->SetNumberField(TEXT("x"), V->X); O->SetNumberField(TEXT("y"), V->Y); O->SetNumberField(TEXT("z"), V->Z);
+				S->SetObjectField(TEXT("offset"), O);
+			}
+		}
+		if (FProperty* Rot = SA.SlotStruct->Struct->FindPropertyByName(FName(TEXT("Rotation"))))
+		{
+			if (CastField<FStructProperty>(Rot))
+			{
+				const FRotator* R = reinterpret_cast<const FRotator*>(Rot->ContainerPtrToValuePtr<void>(SlotAddr));
+				TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+				O->SetNumberField(TEXT("pitch"), R->Pitch); O->SetNumberField(TEXT("yaw"), R->Yaw); O->SetNumberField(TEXT("roll"), R->Roll);
+				S->SetObjectField(TEXT("rotation"), O);
+			}
+		}
+		Slots.Add(MakeShared<FJsonValueObject>(S));
+	}
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
+	Result->SetNumberField(TEXT("slotCount"), Helper.Num());
+	Result->SetArrayField(TEXT("slots"), Slots);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlotBehavior(const TSharedPtr<FJsonObject>& Params)
+{
+	FSlotsAccess SA;
+	if (auto Err = ResolveSlots(Params, SA)) return Err;
+	int32 SlotIdx = -1;
+	if (!Params->TryGetNumberField(TEXT("slotIndex"), SlotIdx) || SlotIdx < 0)
+	{
+		return MCPError(TEXT("Missing 'slotIndex' (non-negative integer)"));
+	}
+	FString BehaviorClassPath;
+	if (auto Err2 = RequireString(Params, TEXT("behaviorClass"), BehaviorClassPath)) return Err2;
+
+	FScriptArrayHelper Helper(SA.SlotsProp, SA.ArrayAddr);
+	if (SlotIdx >= Helper.Num()) return MCPError(FString::Printf(TEXT("slotIndex %d out of range"), SlotIdx));
+	void* SlotAddr = Helper.GetRawPtr(SlotIdx);
+
+	FProperty* BDProp = SA.SlotStruct->Struct->FindPropertyByName(FName(TEXT("BehaviorDefinitions")));
+	if (!BDProp) return MCPError(TEXT("Slot struct has no 'BehaviorDefinitions' property"));
+	FArrayProperty* BDArr = CastField<FArrayProperty>(BDProp);
+	if (!BDArr) return MCPError(TEXT("'BehaviorDefinitions' is not a TArray"));
+	FObjectProperty* BDObj = CastField<FObjectProperty>(BDArr->Inner);
+	if (!BDObj) return MCPError(TEXT("'BehaviorDefinitions' inner is not a UObject*"));
+
+	// Resolve the behavior class. Caller may pass either a class path or an
+	// existing UBehaviorDefinition asset; the array holds object pointers.
+	UObject* BehaviorAsset = LoadObject<UObject>(nullptr, *BehaviorClassPath);
+	if (!BehaviorAsset)
+	{
+		// Try as a class path
+		UClass* BehaviorClass = LoadClass<UObject>(nullptr, *BehaviorClassPath);
+		if (!BehaviorClass) return MCPError(FString::Printf(TEXT("Could not load behavior asset/class '%s'"), *BehaviorClassPath));
+		BehaviorAsset = NewObject<UObject>(SA.Asset, BehaviorClass);
+	}
+
+	SA.Asset->Modify();
+	FScriptArrayHelper BDHelper(BDArr, BDProp->ContainerPtrToValuePtr<void>(SlotAddr));
+	const int32 NewBDIdx = BDHelper.AddValue();
+	BDObj->SetObjectPropertyValue(BDHelper.GetRawPtr(NewBDIdx), BehaviorAsset);
+
+	// Optional instance properties: dictionary of name -> JSON value applied
+	// to the new behavior asset.
+	const TSharedPtr<FJsonObject>* InstObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("instanceProperties"), InstObj) && InstObj && (*InstObj).IsValid())
+	{
+		for (const auto& Pair : (*InstObj)->Values)
+		{
+			FProperty* P = BehaviorAsset->GetClass()->FindPropertyByName(FName(*Pair.Key));
+			if (!P) continue;
+			FString E;
+			MCPJsonProperty::SetJsonOnProperty(P, P->ContainerPtrToValuePtr<void>(BehaviorAsset), Pair.Value, E);
+		}
+	}
+
+	SA.Asset->PostEditChange();
+	SA.Asset->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
+	Result->SetNumberField(TEXT("slotIndex"), SlotIdx);
+	Result->SetNumberField(TEXT("behaviorIndex"), NewBDIdx);
+	Result->SetStringField(TEXT("behavior"), BehaviorAsset->GetClass()->GetPathName());
 	return MCPResult(Result);
 }
 

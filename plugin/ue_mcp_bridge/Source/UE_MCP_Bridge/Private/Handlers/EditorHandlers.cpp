@@ -72,6 +72,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_config"), &ReadConfig);
 	Registry.RegisterHandler(TEXT("get_viewport_info"), &GetViewportInfo);
 	Registry.RegisterHandler(TEXT("hit_test_viewport_pixel"), &HitTestViewportPixel);
+	Registry.RegisterHandler(TEXT("get_runtime_values"), &GetRuntimeValues);
 	Registry.RegisterHandler(TEXT("get_editor_performance_stats"), &GetEditorPerformanceStats);
 	Registry.RegisterHandler(TEXT("get_output_log"), &GetOutputLog);
 	Registry.RegisterHandler(TEXT("search_log"), &SearchLog);
@@ -1564,6 +1565,256 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieGetRuntimeValue(const TSharedPtr<FJso
 
 	Result->SetStringField(TEXT("actorPath"), ActorPath);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// get_runtime_values -- bulk read across the active world. classFilter +
+// paths array, with each path supporting UObject-pointer hops AND zero-arg
+// BlueprintCallable getter dispatch (#414).
+//
+// Closes the recurring "walk every actor with class X, dump GetRequired() /
+// GetSupplied() / IsPowered() off a sub-object" Python escape hatch.
+// ---------------------------------------------------------------------------
+namespace
+{
+	// Serialize a property value into a JSON value field. Returns false if the
+	// property type is unsupported.
+	static bool WritePropertyValue(TSharedPtr<FJsonObject> Out, const TCHAR* Field, FProperty* Prop, const void* ValuePtr)
+	{
+		if (!Prop || !ValuePtr) { Out->SetField(Field, MakeShared<FJsonValueNull>()); return true; }
+		if (FStrProperty* SP = CastField<FStrProperty>(Prop))     { Out->SetStringField(Field, SP->GetPropertyValue(ValuePtr)); return true; }
+		if (FBoolProperty* BP = CastField<FBoolProperty>(Prop))   { Out->SetBoolField(Field, BP->GetPropertyValue(ValuePtr)); return true; }
+		if (FIntProperty* IP = CastField<FIntProperty>(Prop))     { Out->SetNumberField(Field, IP->GetPropertyValue(ValuePtr)); return true; }
+		if (FFloatProperty* FP = CastField<FFloatProperty>(Prop)) { Out->SetNumberField(Field, FP->GetPropertyValue(ValuePtr)); return true; }
+		if (FDoubleProperty* DP = CastField<FDoubleProperty>(Prop)) { Out->SetNumberField(Field, DP->GetPropertyValue(ValuePtr)); return true; }
+		if (FNameProperty* NP = CastField<FNameProperty>(Prop))   { Out->SetStringField(Field, NP->GetPropertyValue(ValuePtr).ToString()); return true; }
+		if (FTextProperty* TP = CastField<FTextProperty>(Prop))   { Out->SetStringField(Field, TP->GetPropertyValue(ValuePtr).ToString()); return true; }
+		if (FObjectPropertyBase* OP = CastField<FObjectPropertyBase>(Prop))
+		{
+			UObject* Obj = OP->GetObjectPropertyValue(ValuePtr);
+			if (!Obj) { Out->SetField(Field, MakeShared<FJsonValueNull>()); return true; }
+			Out->SetStringField(Field, Obj->GetPathName());
+			return true;
+		}
+		if (FStructProperty* StP = CastField<FStructProperty>(Prop))
+		{
+			if (StP->Struct == TBaseStructure<FVector>::Get())
+			{
+				const FVector* V = reinterpret_cast<const FVector*>(ValuePtr);
+				TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+				O->SetNumberField(TEXT("x"), V->X); O->SetNumberField(TEXT("y"), V->Y); O->SetNumberField(TEXT("z"), V->Z);
+				Out->SetObjectField(Field, O); return true;
+			}
+		}
+		FString Exported;
+		Prop->ExportTextItem_Direct(Exported, ValuePtr, nullptr, nullptr, PPF_None);
+		Out->SetStringField(Field, Exported);
+		return true;
+	}
+
+	// Walk one dotted path starting at Root. Per segment: property hop, sub-object
+	// hop, or - at the leaf - a zero-arg UFUNCTION call. Writes the result onto Out.
+	static void ResolvePath(UObject* Root, const FString& Path, TSharedPtr<FJsonObject> Out, const TCHAR* FieldKey, FString& OutErr)
+	{
+		if (!Root) { OutErr = TEXT("null root"); return; }
+		TArray<FString> Parts;
+		Path.ParseIntoArray(Parts, TEXT("."));
+		if (Parts.Num() == 0) { OutErr = TEXT("empty path"); return; }
+
+		UStruct* CurStruct = Root->GetClass();
+		void* CurContainer = Root;
+		UObject* CurObject = Root;
+
+		for (int32 i = 0; i < Parts.Num(); ++i)
+		{
+			const FString& Seg = Parts[i];
+			const bool bLast = (i == Parts.Num() - 1);
+			FProperty* Prop = CurStruct->FindPropertyByName(FName(*Seg));
+
+			if (bLast && Prop)
+			{
+				void* Val = Prop->ContainerPtrToValuePtr<void>(CurContainer);
+				WritePropertyValue(Out, FieldKey, Prop, Val);
+				return;
+			}
+
+			if (Prop)
+			{
+				if (FStructProperty* SP = CastField<FStructProperty>(Prop))
+				{
+					CurContainer = SP->ContainerPtrToValuePtr<void>(CurContainer);
+					CurStruct = SP->Struct;
+					continue;
+				}
+				if (FObjectProperty* OP = CastField<FObjectProperty>(Prop))
+				{
+					UObject* Sub = OP->GetObjectPropertyValue(OP->ContainerPtrToValuePtr<void>(CurContainer));
+					if (!Sub) { OutErr = FString::Printf(TEXT("'%s' is null"), *Seg); return; }
+					CurContainer = Sub;
+					CurStruct = Sub->GetClass();
+					CurObject = Sub;
+					continue;
+				}
+				OutErr = FString::Printf(TEXT("'%s' is not a struct/sub-object - cannot descend"), *Seg);
+				return;
+			}
+
+			// No property by that name. At the head of the path, try matching an
+			// actor component by name (mirrors get_runtime_value behavior). At
+			// any later segment OR the leaf, try a zero-arg UFUNCTION call - that
+			// covers GetRequired() / IsPowered() etc.
+			if (i == 0)
+			{
+				if (AActor* AsActor = Cast<AActor>(CurObject))
+				{
+					for (UActorComponent* Comp : AsActor->GetComponents())
+					{
+						if (Comp && Comp->GetName() == Seg)
+						{
+							CurContainer = Comp;
+							CurStruct = Comp->GetClass();
+							CurObject = Comp;
+							goto NextSegment;
+						}
+					}
+				}
+			}
+
+			// UFUNCTION zero-arg getter at this segment.
+			if (UFunction* Fn = CurObject ? CurObject->FindFunction(FName(*Seg)) : nullptr)
+			{
+				if (Fn->NumParms == 1 && Fn->ReturnValueOffset != MAX_uint16)
+				{
+					uint8* Frame = (uint8*)FMemory_Alloca(Fn->ParmsSize);
+					FMemory::Memzero(Frame, Fn->ParmsSize);
+					for (TFieldIterator<FProperty> It(Fn); It; ++It)
+					{
+						It->InitializeValue_InContainer(Frame);
+					}
+					CurObject->ProcessEvent(Fn, Frame);
+					FProperty* RetProp = Fn->GetReturnProperty();
+					if (RetProp)
+					{
+						if (bLast)
+						{
+							void* RetVal = RetProp->ContainerPtrToValuePtr<void>(Frame);
+							WritePropertyValue(Out, FieldKey, RetProp, RetVal);
+						}
+						else
+						{
+							OutErr = FString::Printf(TEXT("UFUNCTION '%s' must be the leaf segment - cannot descend into its return"), *Seg);
+						}
+					}
+					else
+					{
+						OutErr = FString::Printf(TEXT("UFUNCTION '%s' has no return value"), *Seg);
+					}
+					for (TFieldIterator<FProperty> It(Fn); It; ++It)
+					{
+						It->DestroyValue_InContainer(Frame);
+					}
+					return;
+				}
+				OutErr = FString::Printf(TEXT("UFUNCTION '%s' must be zero-arg with a return"), *Seg);
+				return;
+			}
+
+			OutErr = FString::Printf(TEXT("Segment '%s' is neither a property, component, nor a zero-arg UFUNCTION on %s"),
+				*Seg, *CurStruct->GetName());
+			return;
+
+		NextSegment:;
+		}
+	}
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor) return MCPError(TEXT("Editor not available"));
+
+	const FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
+	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("paths"), PathsArr) || !PathsArr || PathsArr->Num() == 0)
+	{
+		return MCPError(TEXT("Missing 'paths' (array of dotted property/function paths)"));
+	}
+
+	TArray<FString> Paths;
+	for (const TSharedPtr<FJsonValue>& V : *PathsArr)
+	{
+		FString P;
+		if (V->TryGetString(P) && !P.IsEmpty()) Paths.Add(P);
+	}
+	if (Paths.Num() == 0) return MCPError(TEXT("'paths' must contain at least one non-empty string"));
+
+	const FString WorldHint = OptionalString(Params, TEXT("world"));
+	UWorld* World = nullptr;
+	if (WorldHint == TEXT("editor") || !GEditor->PlayWorld)
+	{
+		World = (UWorld*)GEditor->GetEditorWorldContext().World();
+	}
+	else
+	{
+		World = (UWorld*)GEditor->PlayWorld;
+	}
+	if (!World) return MCPError(TEXT("No world available"));
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	int32 Matched = 0;
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!Actor) continue;
+
+		// classFilter empty => every actor. Match against actor class OR any
+		// component class so callers can target component types directly.
+		bool bActorMatch = ClassFilter.IsEmpty() || Actor->GetClass()->GetName() == ClassFilter;
+		UActorComponent* ComponentMatch = nullptr;
+		if (!bActorMatch)
+		{
+			for (UActorComponent* Comp : Actor->GetComponents())
+			{
+				if (Comp && Comp->GetClass()->GetName() == ClassFilter)
+				{
+					ComponentMatch = Comp;
+					bActorMatch = true;
+					break;
+				}
+			}
+		}
+		if (!bActorMatch) continue;
+
+		++Matched;
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+		Row->SetStringField(TEXT("actorClass"), Actor->GetClass()->GetName());
+		if (ComponentMatch)
+		{
+			Row->SetStringField(TEXT("componentName"), ComponentMatch->GetName());
+			Row->SetStringField(TEXT("componentClass"), ComponentMatch->GetClass()->GetName());
+		}
+
+		TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
+		TSharedPtr<FJsonObject> Errors = MakeShared<FJsonObject>();
+		UObject* ResolveRoot = ComponentMatch ? (UObject*)ComponentMatch : (UObject*)Actor;
+		for (const FString& Path : Paths)
+		{
+			FString Err;
+			ResolvePath(ResolveRoot, Path, Values, *Path, Err);
+			if (!Err.IsEmpty()) Errors->SetStringField(Path, Err);
+		}
+		Row->SetObjectField(TEXT("values"), Values);
+		if (Errors->Values.Num() > 0) Row->SetObjectField(TEXT("errors"), Errors);
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("world"), World == (UWorld*)GEditor->PlayWorld ? TEXT("pie") : TEXT("editor"));
+	Result->SetStringField(TEXT("classFilter"), ClassFilter);
+	Result->SetNumberField(TEXT("matched"), Matched);
+	Result->SetArrayField(TEXT("rows"), Rows);
 	return MCPResult(Result);
 }
 

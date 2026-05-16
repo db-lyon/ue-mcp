@@ -5,6 +5,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceConstant.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "Materials/MaterialExpressionConstant.h"
 #include "Materials/MaterialExpressionConstant2Vector.h"
 #include "Materials/MaterialExpressionConstant3Vector.h"
@@ -1102,6 +1103,45 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RecompileMaterial(const TSharedPtr<FJs
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), Material->GetPathName());
+
+	// #421 gap 8: cascade to MaterialInstances so existing instance instances
+	// pick up shader changes without the caller re-saving each one manually.
+	bool bRecompileChildren = false;
+	Params->TryGetBoolField(TEXT("recompileChildren"), bRecompileChildren);
+	if (bRecompileChildren)
+	{
+		FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		IAssetRegistry& Reg = ARM.Get();
+		TArray<FAssetData> AllInstances;
+		FARFilter Filter;
+		Filter.ClassPaths.Add(FTopLevelAssetPath(TEXT("/Script/Engine"), TEXT("MaterialInstanceConstant")));
+		Filter.bRecursivePaths = true;
+		Filter.PackagePaths.Add(FName(TEXT("/Game")));
+		Reg.GetAssets(Filter, AllInstances);
+
+		TArray<TSharedPtr<FJsonValue>> RecompiledPaths;
+		const FString ParentPath = Material->GetPathName();
+		for (const FAssetData& Data : AllInstances)
+		{
+			UMaterialInstanceConstant* MIC = Cast<UMaterialInstanceConstant>(Data.GetAsset());
+			if (!MIC) continue;
+			UMaterialInterface* Walk = MIC->Parent;
+			bool bDescends = false;
+			while (Walk)
+			{
+				if (Walk->GetPathName() == ParentPath) { bDescends = true; break; }
+				UMaterialInstance* ParentMI = Cast<UMaterialInstance>(Walk);
+				Walk = ParentMI ? ParentMI->Parent : nullptr;
+			}
+			if (!bDescends) continue;
+			MIC->PreEditChange(nullptr);
+			MIC->PostEditChange();
+			MIC->MarkPackageDirty();
+			RecompiledPaths.Add(MakeShared<FJsonValueString>(MIC->GetPathName()));
+		}
+		Result->SetArrayField(TEXT("recompiledChildren"), RecompiledPaths);
+		Result->SetNumberField(TEXT("childCount"), RecompiledPaths.Num());
+	}
 
 	return MCPResult(Result);
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
-import { Vec3 } from "../schemas.js";
+import { Vec3, Rotator } from "../schemas.js";
 
 export const gameplayTool: ToolDef = categoryTool(
   "gameplay",
@@ -40,6 +40,11 @@ export const gameplayTool: ToolDef = categoryTool(
     add_state_tree_component: bp("Add StateTreeComponent. Params: blueprintPath", "add_state_tree_component"),
     create_smart_object_def: bp("Create SmartObjectDefinition. Params: name, packagePath?", "create_smart_object_definition"),
     add_smart_object_component: bp("Add SmartObjectComponent. Params: blueprintPath", "add_smart_object_component"),
+    add_smart_object_slot: bp("Append a FSmartObjectSlotDefinition to a SmartObjectDefinition's Slots array. Params: assetPath, name?, offset? ({x,y,z}), rotation? ({pitch,yaw,roll}), tags? (array). Returns the new slotIndex. Rollback removes the slot (#416)", "add_smart_object_slot", (p) => ({ assetPath: p.assetPath, name: p.name, offset: p.offset, rotation: p.rotation, tags: p.tags })),
+    set_smart_object_slot: bp("Mutate an existing slot's offset/rotation/tags. Params: assetPath, slotIndex, offset? ({x,y,z}), rotation? ({pitch,yaw,roll}), tags? (array). Omitted fields keep their current values (#416)", "set_smart_object_slot", (p) => ({ assetPath: p.assetPath, slotIndex: p.slotIndex, name: p.name, offset: p.offset, rotation: p.rotation, tags: p.tags })),
+    remove_smart_object_slot: bp("Remove a slot by index. Idempotent: out-of-range returns alreadyDeleted=true. Params: assetPath, slotIndex (#416)", "remove_smart_object_slot", (p) => ({ assetPath: p.assetPath, slotIndex: p.slotIndex })),
+    list_smart_object_slots: bp("List slots on a SmartObjectDefinition with index, offset, rotation, and raw text. Params: assetPath (#416)", "list_smart_object_slots", (p) => ({ assetPath: p.assetPath })),
+    add_smart_object_slot_behavior: bp("Attach a behavior definition (UBehaviorDefinition asset or class) to a slot's BehaviorDefinitions array. Pass instanceProperties to seed UPROPERTYs on a freshly-spawned class-instance. Params: assetPath, slotIndex, behaviorClass (asset path or class path), instanceProperties? (#416)", "add_smart_object_slot_behavior", (p) => ({ assetPath: p.assetPath, slotIndex: p.slotIndex, behaviorClass: p.behaviorClass, instanceProperties: p.instanceProperties })),
     inspect_pie:            bp("Inspect PIE runtime. Params: actorLabel?", "inspect_pie"),
     get_pie_anim_state:     bp("Get PIE anim instance state. Params: actorLabel", "get_pie_anim_state"),
     get_pie_anim_properties: bp("Read arbitrary UPROPERTY values on a PIE actor's AnimInstance (#139). Params: actorLabel, propertyNames? (omit = dump all)", "get_pie_anim_properties", (p) => ({ actorLabel: p.actorLabel, propertyNames: p.propertyNames })),
@@ -79,6 +84,12 @@ export const gameplayTool: ToolDef = categoryTool(
     keyType: z.string().optional().describe("Blackboard key type: Bool, Int, Float, String, Name, Vector, Rotator, Object, Class, Enum"),
     baseClass: z.string().optional().describe("Base class path for Object/Class blackboard keys (e.g. /Script/Engine.Actor)"),
     blueprintPath: z.string().optional(),
+    slotIndex: z.number().optional().describe("SmartObject slot index"),
+    offset: Vec3.optional().describe("SmartObject slot offset"),
+    rotation: Rotator.optional().describe("SmartObject slot rotation"),
+    tags: z.array(z.unknown()).optional().describe("SmartObject slot tags (gameplay tag strings or struct shapes)"),
+    behaviorClass: z.string().optional().describe("SmartObject behavior class or asset path for add_smart_object_slot_behavior"),
+    instanceProperties: z.record(z.unknown()).optional().describe("Property writes to apply to a freshly-spawned behavior instance"),
     senses: z.array(z.string()).optional(),
     senseType: z.string().optional(),
     settings: z.record(z.unknown()).optional(),

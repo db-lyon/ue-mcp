@@ -29,6 +29,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/Actor.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
@@ -1128,6 +1129,87 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::GetCdoProperties(const TSharedPtr<FJs
 	Result->SetObjectField(TEXT("properties"), PropsObj);
 	Result->SetNumberField(TEXT("count"), PropsObj->Values.Num());
 
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_capsule_size -- Call UCapsuleComponent::SetCapsuleSize on a BP capsule
+// component template. Property writes alone leave the visualizer stale; the
+// UFUNCTION setter propagates scaled/unscaled state correctly (#419).
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::SetCapsuleSize(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	FString ComponentName;
+	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
+
+	const bool bHasHalfHeight = Params->HasField(TEXT("halfHeight"));
+	const bool bHasRadius = Params->HasField(TEXT("radius"));
+	if (!bHasHalfHeight && !bHasRadius)
+	{
+		return MCPError(TEXT("Pass at least one of 'halfHeight' or 'radius'"));
+	}
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	bool bIsInherited = false;
+	TArray<FString> Available;
+	UActorComponent* Template = ResolveComponentTemplate(
+		Blueprint, ComponentName, /*bForWrite*/ true, bIsInherited, Available);
+	if (!Template)
+	{
+		return MCPError(FString::Printf(TEXT("Component '%s' not found. Available: [%s]"),
+			*ComponentName, *FString::Join(Available, TEXT(", "))));
+	}
+
+	UCapsuleComponent* Capsule = Cast<UCapsuleComponent>(Template);
+	if (!Capsule)
+	{
+		return MCPError(FString::Printf(TEXT("Component '%s' is %s, not a CapsuleComponent"),
+			*ComponentName, *Template->GetClass()->GetName()));
+	}
+
+	const float PrevHalfHeight = Capsule->GetUnscaledCapsuleHalfHeight();
+	const float PrevRadius = Capsule->GetUnscaledCapsuleRadius();
+
+	float NewHalfHeight = PrevHalfHeight;
+	float NewRadius = PrevRadius;
+	if (bHasHalfHeight)
+	{
+		double H = PrevHalfHeight;
+		Params->TryGetNumberField(TEXT("halfHeight"), H);
+		NewHalfHeight = (float)H;
+	}
+	if (bHasRadius)
+	{
+		double R = PrevRadius;
+		Params->TryGetNumberField(TEXT("radius"), R);
+		NewRadius = (float)R;
+	}
+
+	Capsule->Modify();
+	Capsule->SetCapsuleSize(NewRadius, NewHalfHeight, /*bUpdateOverlaps*/ true);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	SaveAssetPackage(Blueprint);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("componentName"), ComponentName);
+	Result->SetNumberField(TEXT("halfHeight"), NewHalfHeight);
+	Result->SetNumberField(TEXT("radius"), NewRadius);
+	Result->SetNumberField(TEXT("previousHalfHeight"), PrevHalfHeight);
+	Result->SetNumberField(TEXT("previousRadius"), PrevRadius);
+	Result->SetBoolField(TEXT("inherited"), bIsInherited);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), AssetPath);
+	Payload->SetStringField(TEXT("componentName"), ComponentName);
+	Payload->SetNumberField(TEXT("halfHeight"), PrevHalfHeight);
+	Payload->SetNumberField(TEXT("radius"), PrevRadius);
+	MCPSetRollback(Result, TEXT("set_capsule_size"), Payload);
 	return MCPResult(Result);
 }
 

@@ -189,6 +189,9 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// Socket handlers
 	Registry.RegisterHandler(TEXT("add_socket"), &AddSocket);
 	Registry.RegisterHandler(TEXT("set_socket_transform"), &SetSocketTransform);
+	Registry.RegisterHandler(TEXT("set_asset_property"), &SetAssetProperty);
+	Registry.RegisterHandler(TEXT("set_texture_settings_by_type"), &SetTextureSettingsByType);
+	Registry.RegisterHandler(TEXT("create_interchange_pipeline"), &CreateInterchangePipeline);
 	Registry.RegisterHandler(TEXT("remove_socket"), &RemoveSocket);
 	Registry.RegisterHandler(TEXT("list_sockets"), &ListSockets);
 	Registry.RegisterHandler(TEXT("reload_package"), &ReloadPackage);
@@ -3107,5 +3110,330 @@ TSharedPtr<FJsonValue> FAssetHandlers::ForceReload(const TSharedPtr<FJsonObject>
 	{
 		Result->SetStringField(TEXT("error"), TEXT("LoadObject returned null after reset; the package file may be corrupt or contain a class the editor cannot resolve."));
 	}
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_asset_property -- Set a UPROPERTY on any loaded asset, walking dotted
+// paths through nested structs and sub-objects (#420).
+//
+// Removes the read-modify-write Python pattern for things like
+// `subsurface_profile.settings.mean_free_path_distance` - the handler does
+// the struct-copy dance internally and writes back through SetJsonOnProperty.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	FString PropertyName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
+	const TSharedPtr<FJsonValue>* ValueField = Params->Values.Find(TEXT("value"));
+	if (!ValueField || !(*ValueField).IsValid())
+	{
+		return MCPError(TEXT("Missing 'value' parameter"));
+	}
+
+	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	if (!Asset)
+	{
+		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
+	}
+
+	TArray<FString> PathParts;
+	PropertyName.ParseIntoArray(PathParts, TEXT("."));
+	if (PathParts.Num() == 0) return MCPError(TEXT("Empty propertyName"));
+
+	UStruct* CurrentStruct = Asset->GetClass();
+	void* CurrentContainer = Asset;
+	FProperty* FinalProp = nullptr;
+	for (int32 i = 0; i < PathParts.Num(); ++i)
+	{
+		FProperty* SegmentProp = CurrentStruct->FindPropertyByName(FName(*PathParts[i]));
+		if (!SegmentProp)
+		{
+			return MCPError(FString::Printf(TEXT("Property '%s' not found at '%s'"), *PathParts[i], *PropertyName));
+		}
+		if (i < PathParts.Num() - 1)
+		{
+			if (FStructProperty* SP = CastField<FStructProperty>(SegmentProp))
+			{
+				CurrentContainer = SP->ContainerPtrToValuePtr<void>(CurrentContainer);
+				CurrentStruct = SP->Struct;
+			}
+			else if (FObjectProperty* OP = CastField<FObjectProperty>(SegmentProp))
+			{
+				UObject* Sub = OP->GetObjectPropertyValue(OP->ContainerPtrToValuePtr<void>(CurrentContainer));
+				if (!Sub) return MCPError(FString::Printf(TEXT("Sub-object '%s' is null - cannot descend"), *PathParts[i]));
+				Sub->Modify();
+				CurrentContainer = Sub;
+				CurrentStruct = Sub->GetClass();
+			}
+			else
+			{
+				return MCPError(FString::Printf(TEXT("'%s' is not a struct or sub-object - cannot descend"), *PathParts[i]));
+			}
+		}
+		else
+		{
+			FinalProp = SegmentProp;
+		}
+	}
+
+	void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
+	FString PrevValue;
+	FinalProp->ExportText_Direct(PrevValue, ValuePtr, ValuePtr, nullptr, PPF_None);
+
+	Asset->Modify();
+	FString SetErr;
+	if (!MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, *ValueField, SetErr))
+	{
+		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
+	}
+
+	Asset->PostEditChange();
+	Asset->MarkPackageDirty();
+
+	FString NewValue;
+	FinalProp->ExportText_Direct(NewValue, ValuePtr, ValuePtr, nullptr, PPF_None);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("previousValue"), PrevValue);
+	Result->SetStringField(TEXT("value"), NewValue);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("propertyName"), PropertyName);
+	Payload->SetStringField(TEXT("value"), PrevValue);
+	MCPSetRollback(Result, TEXT("set_asset_property"), Payload);
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// set_texture_settings_by_type (#421)
+//
+// Apply the canonical compression / sRGB / LOD combo per type group:
+//   normal      -> TC_Normalmap,    sRGB=false, TextureGroup::Character_NormalMap fallback
+//   grayscale   -> TC_Grayscale,    sRGB=false, TextureGroup::World
+//   baseColor   -> TC_Default,      sRGB=true,  TextureGroup::Character
+//   hdr         -> TC_HDR,          sRGB=false, TextureGroup::HDR
+//
+// Params: groups: { normal?: [paths], grayscale?: [paths], baseColor?: [paths], hdr?: [paths] }
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAssetHandlers::SetTextureSettingsByType(const TSharedPtr<FJsonObject>& Params)
+{
+	const TSharedPtr<FJsonObject>* GroupsObj = nullptr;
+	if (!Params->TryGetObjectField(TEXT("groups"), GroupsObj) || !GroupsObj || !(*GroupsObj).IsValid())
+	{
+		return MCPError(TEXT("Missing 'groups' object: { normal?: [paths], grayscale?: [paths], baseColor?: [paths], hdr?: [paths] }"));
+	}
+
+	struct FProfile
+	{
+		TextureCompressionSettings Compression;
+		bool bSRGB;
+		TextureGroup LodGroup;
+	};
+	static const TMap<FString, FProfile> Profiles = {
+		{ TEXT("normal"),    { TC_Normalmap,  false, TEXTUREGROUP_CharacterNormalMap } },
+		{ TEXT("grayscale"), { TC_Grayscale,  false, TEXTUREGROUP_World } },
+		{ TEXT("baseColor"), { TC_Default,    true,  TEXTUREGROUP_Character } },
+		{ TEXT("hdr"),       { TC_HDR,        false, TEXTUREGROUP_Skybox } },
+	};
+
+	TArray<TSharedPtr<FJsonValue>> Updated;
+	TArray<TSharedPtr<FJsonValue>> Failed;
+
+	for (const auto& Pair : (*GroupsObj)->Values)
+	{
+		const FString& Group = Pair.Key;
+		const FProfile* Profile = Profiles.Find(Group);
+		if (!Profile)
+		{
+			TSharedPtr<FJsonObject> F = MakeShared<FJsonObject>();
+			F->SetStringField(TEXT("group"), Group);
+			F->SetStringField(TEXT("error"), TEXT("Unknown group; expected normal, grayscale, baseColor, hdr"));
+			Failed.Add(MakeShared<FJsonValueObject>(F));
+			continue;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Paths = nullptr;
+		if (!Pair.Value->TryGetArray(Paths) || !Paths) continue;
+
+		for (const TSharedPtr<FJsonValue>& V : *Paths)
+		{
+			FString TexPath;
+			if (!V->TryGetString(TexPath)) continue;
+			UTexture2D* Tex = LoadObject<UTexture2D>(nullptr, *TexPath);
+			if (!Tex)
+			{
+				TSharedPtr<FJsonObject> F = MakeShared<FJsonObject>();
+				F->SetStringField(TEXT("path"), TexPath);
+				F->SetStringField(TEXT("error"), TEXT("Texture not found or not a Texture2D"));
+				Failed.Add(MakeShared<FJsonValueObject>(F));
+				continue;
+			}
+			Tex->Modify();
+			Tex->PreEditChange(nullptr);
+			Tex->CompressionSettings = Profile->Compression;
+			Tex->SRGB = Profile->bSRGB;
+			Tex->LODGroup = Profile->LodGroup;
+			Tex->PostEditChange();
+			Tex->MarkPackageDirty();
+			TSharedPtr<FJsonObject> U = MakeShared<FJsonObject>();
+			U->SetStringField(TEXT("path"), Tex->GetPathName());
+			U->SetStringField(TEXT("group"), Group);
+			Updated.Add(MakeShared<FJsonValueObject>(U));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("updated"), Updated);
+	Result->SetNumberField(TEXT("updatedCount"), Updated.Num());
+	if (Failed.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("failed"), Failed);
+		Result->SetNumberField(TEXT("failedCount"), Failed.Num());
+	}
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// create_interchange_pipeline (#421)
+//
+// Spawn a UInterchangeGenericAssetsPipeline asset with the most common
+// mesh-import boilerplate already applied, replacing 15+ set_editor_property
+// calls per project.
+//
+// Params: assetPath OR (name + packagePath), meshType ('skeletal' default,
+// 'static'), options? (object of overrides on the resulting pipeline).
+//
+// Uses pure reflection so we don't depend on the InterchangeEditor module.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("assetPath"), AssetPath);
+	FString Name, PackagePath;
+	if (AssetPath.IsEmpty())
+	{
+		if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+		PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Import"));
+	}
+	else
+	{
+		FString Package, AssetName;
+		AssetPath.Split(TEXT("."), &Package, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+		Name = AssetName;
+		PackagePath = FPaths::GetPath(Package);
+	}
+	const FString MeshType = OptionalString(Params, TEXT("meshType"), TEXT("skeletal")).ToLower();
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("InterchangePipeline")))
+	{
+		return Existing;
+	}
+
+	UClass* PipelineClass = FindObject<UClass>(nullptr, TEXT("/Script/InterchangePipelines.InterchangeGenericAssetsPipeline"));
+	if (!PipelineClass)
+	{
+		return MCPError(TEXT("InterchangeGenericAssetsPipeline class not found. Enable the Interchange Editor plugin."));
+	}
+
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	UObject* NewAsset = AssetToolsModule.Get().CreateAsset(Name, PackagePath, PipelineClass, nullptr);
+	if (!NewAsset)
+	{
+		return MCPError(TEXT("Failed to create InterchangePipeline asset"));
+	}
+
+	// Default mesh-pipeline settings. We write through SetJsonOnProperty so
+	// every field stays in sync with the asset's UPROPERTY layout.
+	auto SetSubProp = [&](const FString& SubPath, const TCHAR* Field, const TSharedPtr<FJsonValue>& Val) -> bool
+	{
+		TArray<FString> Parts;
+		SubPath.ParseIntoArray(Parts, TEXT("."));
+		UStruct* Cur = NewAsset->GetClass();
+		void* Container = NewAsset;
+		for (const FString& Part : Parts)
+		{
+			FProperty* P = Cur->FindPropertyByName(FName(*Part));
+			if (!P) return false;
+			if (FObjectProperty* OP = CastField<FObjectProperty>(P))
+			{
+				UObject* Sub = OP->GetObjectPropertyValue(OP->ContainerPtrToValuePtr<void>(Container));
+				if (!Sub) return false;
+				Sub->Modify();
+				Container = Sub;
+				Cur = Sub->GetClass();
+			}
+			else if (FStructProperty* SP = CastField<FStructProperty>(P))
+			{
+				Container = SP->ContainerPtrToValuePtr<void>(Container);
+				Cur = SP->Struct;
+			}
+			else { return false; }
+		}
+		FProperty* Leaf = Cur->FindPropertyByName(FName(Field));
+		if (!Leaf) return false;
+		FString E;
+		return MCPJsonProperty::SetJsonOnProperty(Leaf, Leaf->ContainerPtrToValuePtr<void>(Container), Val, E);
+	};
+
+	auto JBool = [](bool B) { return MakeShared<FJsonValueBoolean>(B); };
+	auto JStr  = [](const TCHAR* S) { return MakeShared<FJsonValueString>(S); };
+
+	// Common mesh pipeline defaults (matches the user's Python boilerplate).
+	const bool bSkeletal = (MeshType == TEXT("skeletal"));
+	SetSubProp(TEXT("CommonMeshesProperties"), TEXT("bRecomputeNormals"), JBool(false));
+	SetSubProp(TEXT("CommonMeshesProperties"), TEXT("bRecomputeTangents"), JBool(false));
+	SetSubProp(TEXT("CommonMeshesProperties"), TEXT("bUseMikkTSpace"), JBool(true));
+	SetSubProp(TEXT("CommonMeshesProperties"), TEXT("bUseHighPrecisionTangentBasis"), JBool(true));
+	SetSubProp(TEXT("CommonMeshesProperties"), TEXT("bRemoveDegenerates"), JBool(true));
+	SetSubProp(TEXT("CommonMeshesProperties"), TEXT("ForceAllMeshAsType"),
+		JStr(bSkeletal ? TEXT("SkeletalMesh") : TEXT("StaticMesh")));
+	SetSubProp(TEXT("MeshPipeline"), TEXT("bBuildNanite"), JBool(false));
+	SetSubProp(TEXT("MeshPipeline"), TEXT("bImportSkeletalMeshes"), JBool(bSkeletal));
+	SetSubProp(TEXT("MeshPipeline"), TEXT("bImportStaticMeshes"), JBool(!bSkeletal));
+	SetSubProp(TEXT("MeshPipeline"), TEXT("bCreatePhysicsAsset"), JBool(false));
+
+	// Caller-supplied overrides.
+	const TSharedPtr<FJsonObject>* OptionsObj = nullptr;
+	int32 OverridesApplied = 0;
+	TArray<TSharedPtr<FJsonValue>> OverrideFailures;
+	if (Params->TryGetObjectField(TEXT("options"), OptionsObj) && OptionsObj && (*OptionsObj).IsValid())
+	{
+		for (const auto& Pair : (*OptionsObj)->Values)
+		{
+			// Caller key is a dotted path: "MeshPipeline.bImportSkeletalMeshes" etc.
+			const FString& Key = Pair.Key;
+			int32 Dot = INDEX_NONE;
+			Key.FindLastChar('.', Dot);
+			if (Dot == INDEX_NONE)
+			{
+				if (SetSubProp(TEXT(""), *Key, Pair.Value)) ++OverridesApplied;
+				else OverrideFailures.Add(MakeShared<FJsonValueString>(Key));
+				continue;
+			}
+			const FString SubPath = Key.Left(Dot);
+			const FString Field = Key.RightChop(Dot + 1);
+			if (SetSubProp(SubPath, *Field, Pair.Value)) ++OverridesApplied;
+			else OverrideFailures.Add(MakeShared<FJsonValueString>(Key));
+		}
+	}
+
+	NewAsset->PostEditChange();
+	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("name"), Name);
+	Result->SetStringField(TEXT("meshType"), MeshType);
+	Result->SetNumberField(TEXT("overridesApplied"), OverridesApplied);
+	if (OverrideFailures.Num() > 0) Result->SetArrayField(TEXT("overrideFailures"), OverrideFailures);
+	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
 	return MCPResult(Result);
 }

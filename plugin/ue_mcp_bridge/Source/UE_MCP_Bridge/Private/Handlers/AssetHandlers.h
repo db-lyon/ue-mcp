@@ -60,6 +60,15 @@ private:
 	static TSharedPtr<FJsonValue> RemoveSocket(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListSockets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetSocketTransform(const TSharedPtr<FJsonObject>& Params);
+
+	// #420: nested-path UPROPERTY setter for any asset (materials, datatables,
+	// data assets, etc.) so callers don't read-modify-write struct copies.
+	static TSharedPtr<FJsonValue> SetAssetProperty(const TSharedPtr<FJsonObject>& Params);
+	// #421: batch texture settings by canonical type (Normal/Grayscale/BaseColor/HDR).
+	static TSharedPtr<FJsonValue> SetTextureSettingsByType(const TSharedPtr<FJsonObject>& Params);
+	// #421: one-call factory for an Interchange pipeline asset with the
+	// 15-property mesh-import boilerplate already configured.
+	static TSharedPtr<FJsonValue> CreateInterchangePipeline(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReloadPackage(const TSharedPtr<FJsonObject>& Params);
 
 	// v0.7.8 — FTS5-backed asset search (stubs)
