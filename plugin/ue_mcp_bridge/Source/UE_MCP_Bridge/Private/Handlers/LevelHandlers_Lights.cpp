@@ -63,14 +63,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 		}
 	}
 
-	FVector Location = FVector::ZeroVector;
-	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocationObj))
-	{
-		(*LocationObj)->TryGetNumberField(TEXT("x"), Location.X);
-		(*LocationObj)->TryGetNumberField(TEXT("y"), Location.Y);
-		(*LocationObj)->TryGetNumberField(TEXT("z"), Location.Z);
-	}
+	const FVector Location = OptionalVec3(Params, TEXT("location"));
 
 	double Intensity = OptionalNumber(Params, TEXT("intensity"), 5000.0);
 
@@ -100,16 +93,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 		return MCPError(FString::Printf(TEXT("Unknown light type: %s. Use point, spot, directional, rect, or sky."), *LightType));
 	}
 
-	FRotator Rotation = FRotator::ZeroRotator;
-	const TSharedPtr<FJsonObject>* RotObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && (*RotObj).IsValid())
-	{
-		double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
-		(*RotObj)->TryGetNumberField(TEXT("pitch"), Pitch);
-		(*RotObj)->TryGetNumberField(TEXT("yaw"), Yaw);
-		(*RotObj)->TryGetNumberField(TEXT("roll"), Roll);
-		Rotation = FRotator((float)Pitch, (float)Yaw, (float)Roll);
-	}
+	const FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
 
 	FTransform LightTransform(Rotation, Location);
 	AActor* NewLight = World->SpawnActor<AActor>(LightClass, LightTransform);

@@ -262,27 +262,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 		return MCPError(FString::Printf(TEXT("Actor class not found: %s"), *ActorClass));
 	}
 
-	// Location
-	FVector Location = FVector::ZeroVector;
-	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocationObj))
-	{
-		(*LocationObj)->TryGetNumberField(TEXT("x"), Location.X);
-		(*LocationObj)->TryGetNumberField(TEXT("y"), Location.Y);
-		(*LocationObj)->TryGetNumberField(TEXT("z"), Location.Z);
-	}
+	const FVector Location = OptionalVec3(Params, TEXT("location"));
+	const FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
 
-	// Rotation
-	FRotator Rotation = FRotator::ZeroRotator;
-	const TSharedPtr<FJsonObject>* RotObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("rotation"), RotObj))
-	{
-		(*RotObj)->TryGetNumberField(TEXT("pitch"), Rotation.Pitch);
-		(*RotObj)->TryGetNumberField(TEXT("yaw"), Rotation.Yaw);
-		(*RotObj)->TryGetNumberField(TEXT("roll"), Rotation.Roll);
-	}
-
-	// Spawn
 	FTransform SpawnTransform(Rotation, Location);
 	AActor* NewActor = World->SpawnActor<AActor>(Class, SpawnTransform);
 	if (!NewActor)
@@ -295,15 +277,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 		NewActor->SetActorLabel(Label);
 	}
 
-	// Scale
-	const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("scale"), ScaleObj))
+	if (Params->HasField(TEXT("scale")))
 	{
-		FVector Scale = FVector::OneVector;
-		(*ScaleObj)->TryGetNumberField(TEXT("x"), Scale.X);
-		(*ScaleObj)->TryGetNumberField(TEXT("y"), Scale.Y);
-		(*ScaleObj)->TryGetNumberField(TEXT("z"), Scale.Z);
-		NewActor->SetActorScale3D(Scale);
+		NewActor->SetActorScale3D(OptionalVec3(Params, TEXT("scale"), FVector::OneVector));
 	}
 
 	// Static mesh shorthand
@@ -889,79 +865,32 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 	const FRotator PreviousRotation = Actor->GetActorRotation();
 	const FVector PreviousScale = Actor->GetActorScale3D();
 
-	const TSharedPtr<FJsonObject>* LocObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocObj))
+	if (Params->HasField(TEXT("location")))
 	{
-		FVector Location = Actor->GetActorLocation();
-		(*LocObj)->TryGetNumberField(TEXT("x"), Location.X);
-		(*LocObj)->TryGetNumberField(TEXT("y"), Location.Y);
-		(*LocObj)->TryGetNumberField(TEXT("z"), Location.Z);
-		Actor->SetActorLocation(Location);
+		Actor->SetActorLocation(OptionalVec3(Params, TEXT("location"), Actor->GetActorLocation()));
 	}
-
-	const TSharedPtr<FJsonObject>* RotObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("rotation"), RotObj))
+	if (Params->HasField(TEXT("rotation")))
 	{
-		FRotator Rotation = Actor->GetActorRotation();
-		(*RotObj)->TryGetNumberField(TEXT("pitch"), Rotation.Pitch);
-		(*RotObj)->TryGetNumberField(TEXT("yaw"), Rotation.Yaw);
-		(*RotObj)->TryGetNumberField(TEXT("roll"), Rotation.Roll);
-		Actor->SetActorRotation(Rotation);
+		Actor->SetActorRotation(OptionalRotator(Params, TEXT("rotation"), Actor->GetActorRotation()));
 	}
-
-	const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("scale"), ScaleObj))
+	if (Params->HasField(TEXT("scale")))
 	{
-		FVector Scale = Actor->GetActorScale3D();
-		(*ScaleObj)->TryGetNumberField(TEXT("x"), Scale.X);
-		(*ScaleObj)->TryGetNumberField(TEXT("y"), Scale.Y);
-		(*ScaleObj)->TryGetNumberField(TEXT("z"), Scale.Z);
-		Actor->SetActorScale3D(Scale);
+		Actor->SetActorScale3D(OptionalVec3(Params, TEXT("scale"), Actor->GetActorScale3D()));
 	}
-
-	FVector NewLocation = Actor->GetActorLocation();
-	TSharedPtr<FJsonObject> NewLocationObj = MakeShared<FJsonObject>();
-	NewLocationObj->SetNumberField(TEXT("x"), NewLocation.X);
-	NewLocationObj->SetNumberField(TEXT("y"), NewLocation.Y);
-	NewLocationObj->SetNumberField(TEXT("z"), NewLocation.Z);
-
-	FRotator NewRotation = Actor->GetActorRotation();
-	TSharedPtr<FJsonObject> NewRotationObj = MakeShared<FJsonObject>();
-	NewRotationObj->SetNumberField(TEXT("pitch"), NewRotation.Pitch);
-	NewRotationObj->SetNumberField(TEXT("yaw"), NewRotation.Yaw);
-	NewRotationObj->SetNumberField(TEXT("roll"), NewRotation.Roll);
-
-	FVector NewScale = Actor->GetActorScale3D();
-	TSharedPtr<FJsonObject> NewScaleObj = MakeShared<FJsonObject>();
-	NewScaleObj->SetNumberField(TEXT("x"), NewScale.X);
-	NewScaleObj->SetNumberField(TEXT("y"), NewScale.Y);
-	NewScaleObj->SetNumberField(TEXT("z"), NewScale.Z);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
-	Result->SetObjectField(TEXT("location"), NewLocationObj);
-	Result->SetObjectField(TEXT("rotation"), NewRotationObj);
-	Result->SetObjectField(TEXT("scale"), NewScaleObj);
+	Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Actor->GetActorLocation()));
+	Result->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Actor->GetActorRotation()));
+	Result->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Actor->GetActorScale3D()));
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 
 	// Self-inverse: call move_actor with previous transform.
-	TSharedPtr<FJsonObject> PrevLoc = MakeShared<FJsonObject>();
-	PrevLoc->SetNumberField(TEXT("x"), PreviousLocation.X);
-	PrevLoc->SetNumberField(TEXT("y"), PreviousLocation.Y);
-	PrevLoc->SetNumberField(TEXT("z"), PreviousLocation.Z);
-	TSharedPtr<FJsonObject> PrevRot = MakeShared<FJsonObject>();
-	PrevRot->SetNumberField(TEXT("pitch"), PreviousRotation.Pitch);
-	PrevRot->SetNumberField(TEXT("yaw"), PreviousRotation.Yaw);
-	PrevRot->SetNumberField(TEXT("roll"), PreviousRotation.Roll);
-	TSharedPtr<FJsonObject> PrevScale = MakeShared<FJsonObject>();
-	PrevScale->SetNumberField(TEXT("x"), PreviousScale.X);
-	PrevScale->SetNumberField(TEXT("y"), PreviousScale.Y);
-	PrevScale->SetNumberField(TEXT("z"), PreviousScale.Z);
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
-	Payload->SetObjectField(TEXT("location"), PrevLoc);
-	Payload->SetObjectField(TEXT("rotation"), PrevRot);
-	Payload->SetObjectField(TEXT("scale"), PrevScale);
+	Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(PreviousLocation));
+	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(PreviousRotation));
+	Payload->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(PreviousScale));
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 
 	return MCPResult(Result);
@@ -2433,15 +2362,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddStreamingSublevel(const TSharedPtr<FJs
 	if (Params->HasField(TEXT("initiallyLoaded"))) SL->SetShouldBeLoaded(OptionalBool(Params, TEXT("initiallyLoaded"), true));
 	if (Params->HasField(TEXT("initiallyVisible"))) SL->SetShouldBeVisible(OptionalBool(Params, TEXT("initiallyVisible"), true));
 
-	const TSharedPtr<FJsonObject>* LocObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocObj) && LocObj && (*LocObj).IsValid())
+	if (Params->HasField(TEXT("location")))
 	{
-		double X = 0, Y = 0, Z = 0;
-		(*LocObj)->TryGetNumberField(TEXT("x"), X);
-		(*LocObj)->TryGetNumberField(TEXT("y"), Y);
-		(*LocObj)->TryGetNumberField(TEXT("z"), Z);
 		FTransform T = SL->LevelTransform;
-		T.SetLocation(FVector(X, Y, Z));
+		T.SetLocation(OptionalVec3(Params, TEXT("location")));
 		SL->LevelTransform = T;
 	}
 
@@ -2534,22 +2458,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnGrid(const TSharedPtr<FJsonObject>& 
 	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
 	if (!Mesh) return MCPError(FString::Printf(TEXT("StaticMesh not found: %s"), *MeshPath));
 
-	const TSharedPtr<FJsonObject>* MinObj = nullptr;
-	const TSharedPtr<FJsonObject>* MaxObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("min"), MinObj) || !Params->TryGetObjectField(TEXT("max"), MaxObj))
-	{
-		return MCPError(TEXT("Missing 'min' / 'max' Vec3 fields for grid bounds"));
-	}
-	auto ReadVec = [](const TSharedPtr<FJsonObject>* O) -> FVector
-	{
-		FVector V = FVector::ZeroVector;
-		double X = 0; if ((*O)->TryGetNumberField(TEXT("x"), X)) V.X = X;
-		double Y = 0; if ((*O)->TryGetNumberField(TEXT("y"), Y)) V.Y = Y;
-		double Z = 0; if ((*O)->TryGetNumberField(TEXT("z"), Z)) V.Z = Z;
-		return V;
-	};
-	const FVector Min = ReadVec(MinObj);
-	const FVector Max = ReadVec(MaxObj);
+	FVector Min, Max;
+	if (auto Err = RequireVec3(Params, TEXT("min"), Min)) return Err;
+	if (auto Err = RequireVec3(Params, TEXT("max"), Max)) return Err;
 
 	const int32 CountX = FMath::Max(1, OptionalInt(Params, TEXT("countX"), 4));
 	const int32 CountY = FMath::Max(1, OptionalInt(Params, TEXT("countY"), 4));
@@ -2600,16 +2511,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchTranslate(const TSharedPtr<FJsonObje
 {
 	REQUIRE_EDITOR_WORLD(World);
 
-	const TSharedPtr<FJsonObject>* OffObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("offset"), OffObj))
-	{
-		return MCPError(TEXT("Missing 'offset' Vec3"));
-	}
-	double X = 0, Y = 0, Z = 0;
-	(*OffObj)->TryGetNumberField(TEXT("x"), X);
-	(*OffObj)->TryGetNumberField(TEXT("y"), Y);
-	(*OffObj)->TryGetNumberField(TEXT("z"), Z);
-	const FVector Offset(X, Y, Z);
+	FVector Offset;
+	if (auto Err = RequireVec3(Params, TEXT("offset"), Offset)) return Err;
 
 	TSet<AActor*> Targets;
 	const TArray<TSharedPtr<FJsonValue>>* LabelArr = nullptr;

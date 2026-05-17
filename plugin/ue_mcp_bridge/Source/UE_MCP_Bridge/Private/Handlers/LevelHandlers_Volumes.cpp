@@ -104,25 +104,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>
 		}
 	}
 
-	// Get location
-	FVector Location = FVector::ZeroVector;
-	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocationObj))
-	{
-		(*LocationObj)->TryGetNumberField(TEXT("x"), Location.X);
-		(*LocationObj)->TryGetNumberField(TEXT("y"), Location.Y);
-		(*LocationObj)->TryGetNumberField(TEXT("z"), Location.Z);
-	}
-
-	// Get extent
-	FVector Extent = FVector(100.0, 100.0, 100.0);
-	const TSharedPtr<FJsonObject>* ExtentObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("extent"), ExtentObj))
-	{
-		(*ExtentObj)->TryGetNumberField(TEXT("x"), Extent.X);
-		(*ExtentObj)->TryGetNumberField(TEXT("y"), Extent.Y);
-		(*ExtentObj)->TryGetNumberField(TEXT("z"), Extent.Z);
-	}
+	const FVector Location = OptionalVec3(Params, TEXT("location"));
+	const FVector Extent = OptionalVec3(Params, TEXT("extent"), FVector(100.0, 100.0, 100.0));
 
 	// Determine volume class
 	UClass* VolumeClass = nullptr;
