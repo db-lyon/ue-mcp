@@ -45,6 +45,8 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "audit:docs": "node scripts/audit-docs.mjs && node scripts/audit-params.mjs",
+    "audit:handlers": "node scripts/audit-handlers.mjs",
+    "audit": "npm run audit:docs && npm run audit:handlers",
     "test:watch": "vitest",
     "test:level": "vitest run tests/smoke/level.test.ts",
     "test:asset": "vitest run tests/smoke/asset.test.ts",
