@@ -1,0 +1,42 @@
+{
+  "class": "FMaterialHandlers",
+  "src": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/MaterialHandlers.cpp",
+  "dst": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/MaterialHandlers_Graph.cpp",
+  "move": [
+    "ConnectExpression",
+    "ConnectMaterialProperty",
+    "DeleteExpression",
+    "ConnectTextureToMaterial",
+    "ConnectMaterialExpressions",
+    "ConnectToMaterialProperty",
+    "DeleteMaterialExpression",
+    "DisconnectMaterialProperty"
+  ],
+  "includes": [
+    "#include \"MaterialHandlers.h\"",
+    "#include \"HandlerRegistry.h\"",
+    "#include \"HandlerUtils.h\"",
+    "#include \"HandlerJsonProperty.h\"",
+    "#include \"JsonSerializer.h\"",
+    "#include \"Materials/Material.h\"",
+    "#include \"Materials/MaterialInstanceConstant.h\"",
+    "#include \"Materials/MaterialExpressionTextureSample.h\"",
+    "#include \"Materials/MaterialExpressionConstant.h\"",
+    "#include \"Materials/MaterialExpressionConstant3Vector.h\"",
+    "#include \"Materials/MaterialExpressionConstant4Vector.h\"",
+    "#include \"Materials/MaterialExpressionScalarParameter.h\"",
+    "#include \"Materials/MaterialExpressionVectorParameter.h\"",
+    "#include \"Materials/MaterialExpressionTextureSampleParameter2D.h\"",
+    "#include \"Materials/MaterialExpressionMultiply.h\"",
+    "#include \"Materials/MaterialExpressionAdd.h\"",
+    "#include \"Materials/MaterialExpressionLinearInterpolate.h\"",
+    "#include \"MaterialEditingLibrary.h\"",
+    "#include \"Engine/Texture.h\"",
+    "#include \"Engine/Texture2D.h\"",
+    "#include \"UObject/Package.h\"",
+    "#include \"Misc/PackageName.h\"",
+    "#include \"UObject/SavePackage.h\"",
+    "#include \"Dom/JsonObject.h\"",
+    "#include \"Dom/JsonValue.h\""
+  ]
+}
