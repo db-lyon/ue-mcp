@@ -11,7 +11,6 @@ import fs from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const TS_TOOLS = path.join(ROOT, "src/tools");
 const CPP_HANDLERS = path.join(ROOT, "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers");
 
 // ── TS side ───────────────────────────────────────────────────────────────────
@@ -20,24 +19,41 @@ const CPP_HANDLERS = path.join(ROOT, "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/
 
 function tsBridgeMethods() {
   const methods = new Map(); // method -> [{file, action}]
-  for (const f of fs.readdirSync(TS_TOOLS)) {
-    if (!f.endsWith(".ts")) continue;
-    const file = path.join(TS_TOOLS, f);
-    const src = fs.readFileSync(file, "utf8");
 
-    // bp("...", "method_name", ...)
-    for (const m of src.matchAll(/^\s*([a-z_][a-z0-9_]*)\s*:\s*bp\(\s*"[^"]*"\s*,\s*"([a-z_][a-z0-9_]*)"/gm)) {
-      const action = m[1], method = m[2];
-      if (!methods.has(method)) methods.set(method, []);
-      methods.get(method).push({ file: f, action });
-    }
-    // { ..., bridge: "method_name", ... }
-    for (const m of src.matchAll(/^\s*([a-z_][a-z0-9_]*)\s*:\s*\{[\s\S]*?bridge:\s*"([a-z_][a-z0-9_]*)"/gm)) {
-      const action = m[1], method = m[2];
-      if (!methods.has(method)) methods.set(method, []);
-      methods.get(method).push({ file: f, action });
+  // Walk both src/tools/ (typed action surface) and the rest of src/ which
+  // also makes direct bridge calls (flow runtime, custom tool handlers).
+  function walkTs(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { walkTs(full); continue; }
+      if (!entry.name.endsWith(".ts")) continue;
+      if (entry.name.endsWith(".d.ts")) continue;
+      const src = fs.readFileSync(full, "utf8");
+      const rel = path.relative(path.join(ROOT, "src"), full).replace(/\\/g, "/");
+
+      // bp("desc", "method_name", ...) — the dominant pattern in tools/*.ts.
+      // The 2nd string arg is the C++ bridge method.
+      for (const m of src.matchAll(/\bbp\(\s*"[^"]*"\s*,\s*"([a-z_][a-z0-9_]*)"/g)) {
+        const method = m[1];
+        if (!methods.has(method)) methods.set(method, []);
+        methods.get(method).push({ file: rel });
+      }
+      // { ..., bridge: "method_name", ... } — custom action specs.
+      for (const m of src.matchAll(/\bbridge\s*:\s*"([a-z_][a-z0-9_]*)"/g)) {
+        const method = m[1];
+        if (!methods.has(method)) methods.set(method, []);
+        methods.get(method).push({ file: rel });
+      }
+      // ctx.bridge.call("method_name", ...) and bridge.call("...", ...) —
+      // direct calls in custom handlers (asset.list, asset.search, etc.).
+      for (const m of src.matchAll(/\bbridge\.call\(\s*"([a-z_][a-z0-9_]*)"/g)) {
+        const method = m[1];
+        if (!methods.has(method)) methods.set(method, []);
+        methods.get(method).push({ file: rel });
+      }
     }
   }
+  walkTs(path.join(ROOT, "src"));
   return methods;
 }
 
