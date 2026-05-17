@@ -506,65 +506,6 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 	return MCPResult(Result);
 }
 
-TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromEmitter(const TSharedPtr<FJsonObject>& Params)
-{
-	FString SystemName;
-	if (auto Err = RequireString(Params, TEXT("systemName"), SystemName)) return Err;
-
-	FString EmitterPath;
-	if (auto Err = RequireString(Params, TEXT("emitterPath"), EmitterPath)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/VFX"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	if (auto Existing = MCPCheckAssetExists(PackagePath, SystemName, OnConflict, TEXT("NiagaraSystem")))
-	{
-		return Existing;
-	}
-
-	UNiagaraEmitter* Emitter = LoadObject<UNiagaraEmitter>(nullptr, *EmitterPath);
-	if (!Emitter)
-	{
-		return MCPError(FString::Printf(TEXT("NiagaraEmitter not found: %s"), *EmitterPath));
-	}
-
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	UObject* NewAsset = AssetTools.CreateAsset(SystemName, PackagePath, UNiagaraSystem::StaticClass(), nullptr);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create NiagaraSystem"));
-	}
-
-	UNiagaraSystem* NewSystem = Cast<UNiagaraSystem>(NewAsset);
-	if (!NewSystem)
-	{
-		return MCPError(TEXT("Created asset is not a NiagaraSystem"));
-	}
-
-	NewSystem->MarkPackageDirty();
-	// #275: same crash-on-zero-emitters pattern as add_emitter_to_system.
-	// Route through the editor helper instead of raw AddEmitterHandle.
-	const FGuid HandleId = FNiagaraEditorUtilities::AddEmitterToSystem(*NewSystem, *Emitter, Emitter->GetExposedVersion().VersionGuid);
-	FName HandleName = NAME_None;
-	for (const FNiagaraEmitterHandle& H : NewSystem->GetEmitterHandles())
-	{
-		if (H.GetId() == HandleId) { HandleName = H.GetName(); break; }
-	}
-
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("systemPath"), NewAsset->GetPathName());
-	Result->SetStringField(TEXT("systemName"), SystemName);
-	Result->SetStringField(TEXT("emitterPath"), EmitterPath);
-	Result->SetStringField(TEXT("emitterHandleName"), HandleName.ToString());
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
-	return MCPResult(Result);
-}
-
 TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath;

@@ -28,8 +28,6 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_gameplay_ability"), &CreateGameplayAbility);
 	Registry.RegisterHandler(TEXT("create_attribute_set"), &CreateAttributeSet);
 	Registry.RegisterHandler(TEXT("create_gameplay_cue"), &CreateGameplayCue);
-	Registry.RegisterHandler(TEXT("add_ability_tag"), &AddAbilityTag);
-	Registry.RegisterHandler(TEXT("create_gameplay_cue_notify"), &CreateGameplayCueNotify);
 	Registry.RegisterHandler(TEXT("add_ability_system_component"), &AddAbilitySystemComponent);
 	Registry.RegisterHandler(TEXT("add_attribute"), &AddAttribute);
 	Registry.RegisterHandler(TEXT("set_ability_tags"), &SetAbilityTags);
@@ -202,115 +200,6 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCue(const TSharedPtr<FJsonObj
 		[&CueType](TSharedPtr<FJsonObject>& R)
 		{
 			R->SetStringField(TEXT("cueType"), CueType);
-		});
-}
-
-TSharedPtr<FJsonValue> FGasHandlers::AddAbilityTag(const TSharedPtr<FJsonObject>& Params)
-{
-	FString BlueprintPath;
-	if (auto Err = RequireString(Params, TEXT("blueprintPath"), BlueprintPath)) return Err;
-
-	FString TagString;
-	if (auto Err = RequireString(Params, TEXT("tag"), TagString)) return Err;
-
-	// Load the ability blueprint
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	if (!Blueprint || !Blueprint->GeneratedClass)
-	{
-		return MCPError(FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
-	}
-
-	// Verify it is a GameplayAbility subclass
-	UClass* GAClass = FindObject<UClass>(nullptr, TEXT("/Script/GameplayAbilities.GameplayAbility"));
-	if (!GAClass || !Blueprint->GeneratedClass->IsChildOf(GAClass))
-	{
-		return MCPError(TEXT("Blueprint is not a GameplayAbility subclass"));
-	}
-
-	// Get CDO
-	UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
-	if (!CDO)
-	{
-		return MCPError(TEXT("Could not get CDO for ability blueprint"));
-	}
-
-	// Request the gameplay tag (this will create it if it does not exist)
-	FGameplayTag Tag = UGameplayTagsManager::Get().RequestGameplayTag(FName(*TagString), false);
-	if (!Tag.IsValid())
-	{
-		// If the tag doesn't exist yet, add it
-		Tag = UGameplayTagsManager::Get().AddNativeGameplayTag(FName(*TagString));
-	}
-
-	if (!Tag.IsValid())
-	{
-		return MCPError(FString::Printf(TEXT("Could not resolve gameplay tag: %s"), *TagString));
-	}
-
-	// Find the AbilityTags property on the CDO and add the tag
-	FProperty* AbilityTagsProp = GAClass->FindPropertyByName(TEXT("AbilityTags"));
-	if (!AbilityTagsProp)
-	{
-		return MCPError(TEXT("Could not find AbilityTags property on GameplayAbility"));
-	}
-
-	FGameplayTagContainer* TagContainer = AbilityTagsProp->ContainerPtrToValuePtr<FGameplayTagContainer>(CDO);
-	if (!TagContainer)
-	{
-		return MCPError(TEXT("Could not access AbilityTags container on CDO"));
-	}
-
-	// Idempotency: tag already present?
-	if (TagContainer->HasTagExact(Tag))
-	{
-		auto Existed = MCPSuccess();
-		MCPSetExisted(Existed);
-		Existed->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-		Existed->SetStringField(TEXT("tag"), TagString);
-		Existed->SetNumberField(TEXT("totalTags"), TagContainer->Num());
-		return MCPResult(Existed);
-	}
-
-	TagContainer->AddTag(Tag);
-
-	// Compile and save
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
-
-	SaveAssetPackage(Blueprint);
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
-	Result->SetStringField(TEXT("tag"), TagString);
-	Result->SetNumberField(TEXT("totalTags"), TagContainer->Num());
-	// No rollback: no paired remove_ability_tag handler.
-	return MCPResult(Result);
-}
-
-TSharedPtr<FJsonValue> FGasHandlers::CreateGameplayCueNotify(const TSharedPtr<FJsonObject>& Params)
-{
-	const FString NotifyType = OptionalString(Params, TEXT("notifyType"), TEXT("Actor"));
-	const TCHAR* ParentPath;
-	const TCHAR* FriendlyName;
-	if (NotifyType == TEXT("Static"))
-	{
-		ParentPath = TEXT("/Script/GameplayAbilities.GameplayCueNotify_Static");
-		FriendlyName = TEXT("GameplayCueNotify_Static");
-	}
-	else
-	{
-		ParentPath = TEXT("/Script/GameplayAbilities.GameplayCueNotify_Actor");
-		FriendlyName = TEXT("GameplayCueNotify_Actor");
-	}
-	UClass* Cls = FindObject<UClass>(nullptr, ParentPath);
-
-	FString FriendlyCopy(FriendlyName);
-	return CreateGasBlueprint(
-		Params, TEXT("/Game/GAS/CueNotifies"), Cls, TEXT("GameplayCueNotify"),
-		[&NotifyType, &FriendlyCopy](TSharedPtr<FJsonObject>& R)
-		{
-			R->SetStringField(TEXT("notifyType"), NotifyType);
-			R->SetStringField(TEXT("parentClass"), FriendlyCopy);
 		});
 }
 

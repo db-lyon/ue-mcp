@@ -18,7 +18,6 @@ private:
 	static TSharedPtr<FJsonValue> SetNetPriority(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetReplicateMovement(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetVariableReplication(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> GetReplicationInfo(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetOwnerOnlyRelevant(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetNetLoadOnClient(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ConfigureNetCullDistance(const TSharedPtr<FJsonObject>& Params);

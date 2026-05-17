@@ -19,7 +19,6 @@ private:
 	static TSharedPtr<FJsonValue> PaintLandscapeLayer(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ImportHeightmap(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetLandscapeMaterial(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> GetLandscapeBounds(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddLandscapeLayerInfo(const TSharedPtr<FJsonObject>& Params);
 	// #303: spawn an ALandscape with a default flat heightmap. Required for
 	// PCG/heightmap workflows that need a sampleable landscape without a

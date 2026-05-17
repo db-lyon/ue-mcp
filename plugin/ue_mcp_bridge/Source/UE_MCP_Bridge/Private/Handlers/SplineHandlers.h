@@ -12,7 +12,6 @@ public:
 
 private:
 	// Handler implementations
-	static TSharedPtr<FJsonValue> CreateSplineActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadSpline(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetSplinePoints(const TSharedPtr<FJsonObject>& Params);
 };

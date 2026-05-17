@@ -33,8 +33,6 @@ private:
 	static TSharedPtr<FJsonValue> SpawnVolume(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddComponentToActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LoadLevel(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> SaveLevel(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> ListSublevels(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetComponentProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetVolumeProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetWorldSettings(const TSharedPtr<FJsonObject>& Params);
