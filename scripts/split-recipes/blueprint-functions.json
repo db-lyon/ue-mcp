@@ -1,0 +1,41 @@
+{
+  "class": "FBlueprintHandlers",
+  "src": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/BlueprintHandlers.cpp",
+  "dst": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/BlueprintHandlers_Functions.cpp",
+  "move": [
+    "CreateFunction",
+    "ListBlueprintFunctions",
+    "AddEventDispatcher",
+    "RenameFunction",
+    "DeleteFunction",
+    "AddBlueprintInterface",
+    "CreateBlueprintInterface"
+  ],
+  "includes": [
+    "#include \"BlueprintHandlers.h\"",
+    "#include \"HandlerRegistry.h\"",
+    "#include \"HandlerUtils.h\"",
+    "#include \"Kismet2/BlueprintEditorUtils.h\"",
+    "#include \"Kismet2/KismetEditorUtilities.h\"",
+    "#include \"BlueprintEditorLibrary.h\"",
+    "#include \"Engine/Blueprint.h\"",
+    "#include \"EdGraph/EdGraph.h\"",
+    "#include \"EdGraph/EdGraphPin.h\"",
+    "#include \"EdGraphSchema_K2.h\"",
+    "#include \"K2Node_FunctionEntry.h\"",
+    "#include \"K2Node_EditablePinBase.h\"",
+    "#include \"K2Node_CustomEvent.h\"",
+    "#include \"K2Node_CallDelegate.h\"",
+    "#include \"AssetToolsModule.h\"",
+    "#include \"IAssetTools.h\"",
+    "#include \"Factories/BlueprintFactory.h\"",
+    "#include \"UObject/UObjectGlobals.h\"",
+    "#include \"UObject/Package.h\"",
+    "#include \"UObject/TopLevelAssetPath.h\"",
+    "#include \"Misc/PackageName.h\"",
+    "#include \"Internationalization/Text.h\"",
+    "#include \"Editor.h\"",
+    "#include \"Dom/JsonObject.h\"",
+    "#include \"Dom/JsonValue.h\""
+  ]
+}

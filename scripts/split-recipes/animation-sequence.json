@@ -1,0 +1,39 @@
+{
+  "class": "FAnimationHandlers",
+  "src": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers.cpp",
+  "dst": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_Sequence.cpp",
+  "move": [
+    "ReadAnimSequence",
+    "CreateSequence",
+    "SetBoneKeyframes",
+    "GetBoneTransforms",
+    "ReadBoneTrack",
+    "SetSequenceProperties",
+    "BakeRootMotionFromBone",
+    "AddCurve",
+    "CreateAnimComposite",
+    "ListAnimModifiers"
+  ],
+  "includes": [
+    "#include \"AnimationHandlers.h\"",
+    "#include \"HandlerRegistry.h\"",
+    "#include \"HandlerUtils.h\"",
+    "#include \"Animation/AnimSequence.h\"",
+    "#include \"Animation/AnimSequenceBase.h\"",
+    "#include \"Animation/AnimComposite.h\"",
+    "#include \"Animation/Skeleton.h\"",
+    "#include \"AnimationBlueprintLibrary.h\"",
+    "#include \"Engine/SkeletalMesh.h\"",
+    "#include \"ReferenceSkeleton.h\"",
+    "#include \"AssetToolsModule.h\"",
+    "#include \"IAssetTools.h\"",
+    "#include \"UObject/Package.h\"",
+    "#include \"UObject/UObjectGlobals.h\"",
+    "#include \"UObject/SavePackage.h\"",
+    "#include \"Misc/PackageName.h\"",
+    "#include \"EditorAssetLibrary.h\"",
+    "#include \"Editor.h\"",
+    "#include \"Dom/JsonObject.h\"",
+    "#include \"Dom/JsonValue.h\""
+  ]
+}

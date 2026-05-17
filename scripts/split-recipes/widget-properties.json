@@ -1,0 +1,32 @@
+{
+  "class": "FWidgetHandlers",
+  "src": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/WidgetHandlers.cpp",
+  "dst": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/WidgetHandlers_Properties.cpp",
+  "move": [
+    "GetWidgetProperties",
+    "SetWidgetProperty",
+    "ReadWidgetAnimations"
+  ],
+  "includes": [
+    "#include \"WidgetHandlers.h\"",
+    "#include \"HandlerRegistry.h\"",
+    "#include \"HandlerUtils.h\"",
+    "#include \"HandlerJsonProperty.h\"",
+    "#include \"WidgetBlueprint.h\"",
+    "#include \"Blueprint/UserWidget.h\"",
+    "#include \"Blueprint/WidgetTree.h\"",
+    "#include \"Components/Widget.h\"",
+    "#include \"Components/PanelWidget.h\"",
+    "#include \"Components/CanvasPanelSlot.h\"",
+    "#include \"Components/HorizontalBoxSlot.h\"",
+    "#include \"Components/VerticalBoxSlot.h\"",
+    "#include \"UObject/UnrealType.h\"",
+    "#include \"UObject/UObjectGlobals.h\"",
+    "#include \"UObject/Package.h\"",
+    "#include \"EditorAssetLibrary.h\"",
+    "#include \"Kismet2/BlueprintEditorUtils.h\"",
+    "#include \"Kismet2/KismetEditorUtilities.h\"",
+    "#include \"Dom/JsonObject.h\"",
+    "#include \"Dom/JsonValue.h\""
+  ]
+}

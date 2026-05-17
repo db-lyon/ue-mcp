@@ -1,0 +1,37 @@
+{
+  "class": "FAssetHandlers",
+  "src": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AssetHandlers.cpp",
+  "dst": "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AssetHandlers_Mesh.cpp",
+  "move": [
+    "SetMeshMaterial",
+    "RecenterPivot",
+    "SetSkeletalMeshMaterialSlots",
+    "GetMeshBounds",
+    "ReadImportSources",
+    "GetMeshCollision",
+    "SetMeshNav"
+  ],
+  "includes": [
+    "#include \"AssetHandlers.h\"",
+    "#include \"HandlerRegistry.h\"",
+    "#include \"HandlerUtils.h\"",
+    "#include \"HandlerJsonProperty.h\"",
+    "#include \"AssetRegistry/AssetRegistryModule.h\"",
+    "#include \"AssetRegistry/IAssetRegistry.h\"",
+    "#include \"Editor.h\"",
+    "#include \"FileHelpers.h\"",
+    "#include \"UObject/UObjectGlobals.h\"",
+    "#include \"UObject/Package.h\"",
+    "#include \"Misc/PackageName.h\"",
+    "#include \"Misc/Paths.h\"",
+    "#include \"EditorScriptingUtilities/Public/EditorAssetLibrary.h\"",
+    "#include \"EditorFramework/AssetImportData.h\"",
+    "#include \"Engine/StaticMesh.h\"",
+    "#include \"Engine/SkeletalMesh.h\"",
+    "#include \"Materials/MaterialInterface.h\"",
+    "#include \"PhysicsEngine/BodySetup.h\"",
+    "#include \"AI/Navigation/NavCollisionBase.h\"",
+    "#include \"Dom/JsonObject.h\"",
+    "#include \"Dom/JsonValue.h\""
+  ]
+}
