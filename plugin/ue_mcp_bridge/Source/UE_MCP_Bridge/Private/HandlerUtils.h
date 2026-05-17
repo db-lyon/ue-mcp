@@ -173,6 +173,169 @@ inline bool OptionalBool(
 	return Params->TryGetBoolField(Key, Value) ? Value : DefaultValue;
 }
 
+// ── Vector/Rotator/Color/Transform extraction ────────────────────────────────
+//
+// Wire shape contract (matches src/schemas.ts):
+//   Vec3:    { x: number, y: number, z: number }
+//   Rotator: { pitch: number, yaw: number, roll: number }
+//   Color:   { r, g, b, a? }                          (a defaults to 1)
+//   Transform: { location: Vec3, rotation: Rotator, scale: Vec3 }
+//
+// Per-axis numeric fields are individually optional. Missing axes inherit
+// from the default value passed in. Use the *Strict variants when every
+// axis must be present.
+
+/** Read x/y/z fields out of a JSON object into Out. Returns true if any field
+ *  was present. */
+inline bool ReadVec3Fields(const TSharedPtr<FJsonObject>& Obj, FVector& Out)
+{
+	if (!Obj.IsValid()) return false;
+	double Tmp;
+	bool Any = false;
+	if (Obj->TryGetNumberField(TEXT("x"), Tmp)) { Out.X = Tmp; Any = true; }
+	if (Obj->TryGetNumberField(TEXT("y"), Tmp)) { Out.Y = Tmp; Any = true; }
+	if (Obj->TryGetNumberField(TEXT("z"), Tmp)) { Out.Z = Tmp; Any = true; }
+	return Any;
+}
+
+inline bool ReadRotatorFields(const TSharedPtr<FJsonObject>& Obj, FRotator& Out)
+{
+	if (!Obj.IsValid()) return false;
+	double Tmp;
+	bool Any = false;
+	if (Obj->TryGetNumberField(TEXT("pitch"), Tmp)) { Out.Pitch = Tmp; Any = true; }
+	if (Obj->TryGetNumberField(TEXT("yaw"),   Tmp)) { Out.Yaw   = Tmp; Any = true; }
+	if (Obj->TryGetNumberField(TEXT("roll"),  Tmp)) { Out.Roll  = Tmp; Any = true; }
+	return Any;
+}
+
+inline bool ReadLinearColorFields(const TSharedPtr<FJsonObject>& Obj, FLinearColor& Out)
+{
+	if (!Obj.IsValid()) return false;
+	double Tmp;
+	bool Any = false;
+	if (Obj->TryGetNumberField(TEXT("r"), Tmp)) { Out.R = Tmp; Any = true; }
+	if (Obj->TryGetNumberField(TEXT("g"), Tmp)) { Out.G = Tmp; Any = true; }
+	if (Obj->TryGetNumberField(TEXT("b"), Tmp)) { Out.B = Tmp; Any = true; }
+	if (Obj->TryGetNumberField(TEXT("a"), Tmp)) { Out.A = Tmp; Any = true; }
+	return Any;
+}
+
+/** Extract an optional FVector from Params[Key]. Missing or non-object: returns DefaultValue.
+ *  Individual missing axes inherit from DefaultValue. */
+inline FVector OptionalVec3(
+	const TSharedPtr<FJsonObject>& Params,
+	const TCHAR* Key,
+	const FVector& DefaultValue = FVector::ZeroVector)
+{
+	const TSharedPtr<FJsonObject>* Obj = nullptr;
+	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
+	FVector Out = DefaultValue;
+	ReadVec3Fields(*Obj, Out);
+	return Out;
+}
+
+/** Extract a required FVector. Returns error JSON on miss/malformed, nullptr on success. */
+inline TSharedPtr<FJsonValue> RequireVec3(
+	const TSharedPtr<FJsonObject>& Params,
+	const TCHAR* Key,
+	FVector& Out)
+{
+	const TSharedPtr<FJsonObject>* Obj = nullptr;
+	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid())
+		return MCPError(FString::Printf(TEXT("Missing required vector parameter '%s' ({x,y,z})"), Key));
+	Out = FVector::ZeroVector;
+	if (!ReadVec3Fields(*Obj, Out))
+		return MCPError(FString::Printf(TEXT("Vector '%s' has no x/y/z fields"), Key));
+	return nullptr;
+}
+
+inline FRotator OptionalRotator(
+	const TSharedPtr<FJsonObject>& Params,
+	const TCHAR* Key,
+	const FRotator& DefaultValue = FRotator::ZeroRotator)
+{
+	const TSharedPtr<FJsonObject>* Obj = nullptr;
+	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
+	FRotator Out = DefaultValue;
+	ReadRotatorFields(*Obj, Out);
+	return Out;
+}
+
+inline TSharedPtr<FJsonValue> RequireRotator(
+	const TSharedPtr<FJsonObject>& Params,
+	const TCHAR* Key,
+	FRotator& Out)
+{
+	const TSharedPtr<FJsonObject>* Obj = nullptr;
+	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid())
+		return MCPError(FString::Printf(TEXT("Missing required rotator parameter '%s' ({pitch,yaw,roll})"), Key));
+	Out = FRotator::ZeroRotator;
+	if (!ReadRotatorFields(*Obj, Out))
+		return MCPError(FString::Printf(TEXT("Rotator '%s' has no pitch/yaw/roll fields"), Key));
+	return nullptr;
+}
+
+inline FLinearColor OptionalLinearColor(
+	const TSharedPtr<FJsonObject>& Params,
+	const TCHAR* Key,
+	const FLinearColor& DefaultValue = FLinearColor::White)
+{
+	const TSharedPtr<FJsonObject>* Obj = nullptr;
+	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
+	FLinearColor Out = DefaultValue;
+	ReadLinearColorFields(*Obj, Out);
+	return Out;
+}
+
+/** Inline FVector→JSON. Mirrors FMCPJsonSerializer::SerializeVector. Use this
+ *  in handlers building result objects so the wire shape stays consistent. */
+inline TSharedPtr<FJsonObject> MCPVec3ToJsonObject(const FVector& V)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetNumberField(TEXT("x"), V.X);
+	Obj->SetNumberField(TEXT("y"), V.Y);
+	Obj->SetNumberField(TEXT("z"), V.Z);
+	return Obj;
+}
+
+inline TSharedPtr<FJsonObject> MCPRotatorToJsonObject(const FRotator& R)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetNumberField(TEXT("pitch"), R.Pitch);
+	Obj->SetNumberField(TEXT("yaw"),   R.Yaw);
+	Obj->SetNumberField(TEXT("roll"),  R.Roll);
+	return Obj;
+}
+
+inline TSharedPtr<FJsonObject> MCPLinearColorToJsonObject(const FLinearColor& C)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetNumberField(TEXT("r"), C.R);
+	Obj->SetNumberField(TEXT("g"), C.G);
+	Obj->SetNumberField(TEXT("b"), C.B);
+	Obj->SetNumberField(TEXT("a"), C.A);
+	return Obj;
+}
+
+/** Extract an optional FTransform from Params[Key]. Reads location/rotation/scale sub-objects.
+ *  Missing entirely or non-object: returns FTransform::Identity. */
+inline FTransform OptionalTransform(
+	const TSharedPtr<FJsonObject>& Params,
+	const TCHAR* Key)
+{
+	const TSharedPtr<FJsonObject>* Obj = nullptr;
+	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return FTransform::Identity;
+	FVector  Loc   = FVector::ZeroVector;
+	FRotator Rot   = FRotator::ZeroRotator;
+	FVector  Scale = FVector::OneVector;
+	const TSharedPtr<FJsonObject>* Sub = nullptr;
+	if ((*Obj)->TryGetObjectField(TEXT("location"), Sub) && Sub) ReadVec3Fields(*Sub, Loc);
+	if ((*Obj)->TryGetObjectField(TEXT("rotation"), Sub) && Sub) ReadRotatorFields(*Sub, Rot);
+	if ((*Obj)->TryGetObjectField(TEXT("scale"),    Sub) && Sub) ReadVec3Fields(*Sub, Scale);
+	return FTransform(Rot, Loc, Scale);
+}
+
 // ── Common helpers ───────────────────────────────────────────────────────────
 
 /** Find a UClass by short name, handling A/U prefix resolution.
