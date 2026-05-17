@@ -85,25 +85,12 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 UMaterial* FMaterialHandlers::LoadMaterialFromPath(const FString& AssetPath)
 {
-	UObject* LoadedObject = StaticLoadObject(UMaterial::StaticClass(), nullptr, *AssetPath);
-	if (!LoadedObject)
-	{
-		// Try with explicit class prefix
-		LoadedObject = StaticLoadObject(UMaterial::StaticClass(), nullptr, *(TEXT("Material'") + AssetPath + TEXT("'")));
-	}
-	return Cast<UMaterial>(LoadedObject);
+	return LoadAssetByPath<UMaterial>(AssetPath);
 }
 
 UMaterialInstanceConstant* FMaterialHandlers::LoadMaterialInstanceFromPath(const FString& AssetPath)
 {
-	UObject* LoadedObject = StaticLoadObject(UMaterialInstanceConstant::StaticClass(), nullptr, *AssetPath);
-	if (!LoadedObject)
-	{
-		// Try with explicit class prefix
-		LoadedObject = StaticLoadObject(UMaterialInstanceConstant::StaticClass(), nullptr,
-			*(TEXT("MaterialInstanceConstant'") + AssetPath + TEXT("'")));
-	}
-	return Cast<UMaterialInstanceConstant>(LoadedObject);
+	return LoadAssetByPath<UMaterialInstanceConstant>(AssetPath);
 }
 
 EMaterialShadingModel FMaterialHandlers::ParseShadingModel(const FString& ShadingModelStr)

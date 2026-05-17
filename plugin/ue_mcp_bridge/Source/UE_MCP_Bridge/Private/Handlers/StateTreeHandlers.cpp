@@ -66,17 +66,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 UStateTree* FStateTreeHandlers::LoadStateTree(const FString& AssetPath)
 {
-	UStateTree* ST = LoadObject<UStateTree>(nullptr, *AssetPath);
-	if (ST) return ST;
-
-	if (!AssetPath.Contains(TEXT(".")))
-	{
-		FString AssetName;
-		AssetPath.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-		FString ObjectPath = AssetPath + TEXT(".") + AssetName;
-		ST = LoadObject<UStateTree>(nullptr, *ObjectPath);
-	}
-	return ST;
+	return LoadAssetByPath<UStateTree>(AssetPath);
 }
 
 UStateTreeEditorData* FStateTreeHandlers::GetEditorData(UStateTree* StateTree)

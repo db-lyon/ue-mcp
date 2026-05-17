@@ -406,20 +406,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::GetBlueprintDependencies(const TShare
 
 UBlueprint* FBlueprintHandlers::LoadBlueprint(const FString& AssetPath)
 {
-	// Try exact path first (handles both package path and full object path)
-	UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *AssetPath);
-	if (BP) return BP;
-
-	// If the path looks like a package path (no '.' after last '/'), try object path format
-	// e.g. "/Game/Foo/BP_Bar" -> "/Game/Foo/BP_Bar.BP_Bar"
-	if (!AssetPath.Contains(TEXT(".")))
-	{
-		FString AssetName;
-		AssetPath.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
-		FString ObjectPath = AssetPath + TEXT(".") + AssetName;
-		BP = LoadObject<UBlueprint>(nullptr, *ObjectPath);
-	}
-	return BP;
+	return LoadAssetByPath<UBlueprint>(AssetPath);
 }
 
 // ---------------------------------------------------------------------------
