@@ -111,11 +111,6 @@ export class EditorBridge implements IBridge {
     });
   }
 
-  async callOrThrow(method: string, params?: Record<string, unknown>): Promise<unknown> {
-    const result = await this.call(method, params);
-    return result;
-  }
-
   disconnect(): void {
     this.stopReconnecting();
     for (const [, pending] of this.pending) {
