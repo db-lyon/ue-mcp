@@ -644,16 +644,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListStateTrees(const TSharedPtr<FJsonO
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ProjectPointToNavigation(const TSharedPtr<FJsonObject>& Params)
 {
-	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("location"), LocationObj))
-	{
-		return MCPError(TEXT("Missing 'location' parameter"));
-	}
-
 	FVector Point;
-	Point.X = (*LocationObj)->GetNumberField(TEXT("x"));
-	Point.Y = (*LocationObj)->GetNumberField(TEXT("y"));
-	Point.Z = (*LocationObj)->GetNumberField(TEXT("z"));
+	if (auto Err = RequireVec3(Params, TEXT("location"), Point)) return Err;
 
 	REQUIRE_EDITOR_WORLD(World);
 
@@ -962,24 +954,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPt
 		}
 	}
 
-	FVector Location = FVector::ZeroVector;
-	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocationObj))
-	{
-		Location.X = (*LocationObj)->GetNumberField(TEXT("x"));
-		Location.Y = (*LocationObj)->GetNumberField(TEXT("y"));
-		Location.Z = (*LocationObj)->GetNumberField(TEXT("z"));
-	}
-
-	// Get scale
-	FVector Scale = FVector::OneVector;
-	const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("scale"), ScaleObj))
-	{
-		Scale.X = (*ScaleObj)->GetNumberField(TEXT("x"));
-		Scale.Y = (*ScaleObj)->GetNumberField(TEXT("y"));
-		Scale.Z = (*ScaleObj)->GetNumberField(TEXT("z"));
-	}
+	const FVector Location = OptionalVec3(Params, TEXT("location"));
+	const FVector Scale = OptionalVec3(Params, TEXT("scale"), FVector::OneVector);
 
 	FTransform SpawnTransform;
 	SpawnTransform.SetLocation(Location);

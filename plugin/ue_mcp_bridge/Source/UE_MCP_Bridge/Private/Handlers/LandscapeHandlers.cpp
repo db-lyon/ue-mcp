@@ -744,23 +744,8 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::CreateLandscape(const TSharedPtr<FJso
 		return MCPError(TEXT("heightOffset must be in [0, 65535] (uint16 elevation)"));
 	}
 
-	FVector Location(0.0, 0.0, 0.0);
-	const TSharedPtr<FJsonObject>* LocObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocObj) && LocObj && (*LocObj).IsValid())
-	{
-		(*LocObj)->TryGetNumberField(TEXT("x"), Location.X);
-		(*LocObj)->TryGetNumberField(TEXT("y"), Location.Y);
-		(*LocObj)->TryGetNumberField(TEXT("z"), Location.Z);
-	}
-
-	FVector Scale(100.0, 100.0, 100.0);
-	const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("scale"), ScaleObj) && ScaleObj && (*ScaleObj).IsValid())
-	{
-		(*ScaleObj)->TryGetNumberField(TEXT("x"), Scale.X);
-		(*ScaleObj)->TryGetNumberField(TEXT("y"), Scale.Y);
-		(*ScaleObj)->TryGetNumberField(TEXT("z"), Scale.Z);
-	}
+	const FVector Location = OptionalVec3(Params, TEXT("location"));
+	const FVector Scale = OptionalVec3(Params, TEXT("scale"), FVector(100.0, 100.0, 100.0));
 
 	const FString Label = OptionalString(Params, TEXT("label"));
 

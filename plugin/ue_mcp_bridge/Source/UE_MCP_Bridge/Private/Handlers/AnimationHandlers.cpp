@@ -1244,14 +1244,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 		FQuat Rotation = RefPose.GetRotation();
 		FVector Scale = RefPose.GetScale3D();
 
-		// Override with provided values
-		const TSharedPtr<FJsonObject>* LocObj;
-		if (KF->TryGetObjectField(TEXT("location"), LocObj))
-		{
-			(*LocObj)->TryGetNumberField(TEXT("x"), Location.X);
-			(*LocObj)->TryGetNumberField(TEXT("y"), Location.Y);
-			(*LocObj)->TryGetNumberField(TEXT("z"), Location.Z);
-		}
+		// Override with provided values. Rotation is a quaternion {x,y,z,w}
+		// here (not pitch/yaw/roll), so leave it as inline TryGet calls.
+		Location = OptionalVec3(KF, TEXT("location"), Location);
+		Scale = OptionalVec3(KF, TEXT("scale"), Scale);
 
 		const TSharedPtr<FJsonObject>* RotObj;
 		if (KF->TryGetObjectField(TEXT("rotation"), RotObj))
@@ -1260,14 +1256,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 			(*RotObj)->TryGetNumberField(TEXT("y"), Rotation.Y);
 			(*RotObj)->TryGetNumberField(TEXT("z"), Rotation.Z);
 			(*RotObj)->TryGetNumberField(TEXT("w"), Rotation.W);
-		}
-
-		const TSharedPtr<FJsonObject>* ScaleObj;
-		if (KF->TryGetObjectField(TEXT("scale"), ScaleObj))
-		{
-			(*ScaleObj)->TryGetNumberField(TEXT("x"), Scale.X);
-			(*ScaleObj)->TryGetNumberField(TEXT("y"), Scale.Y);
-			(*ScaleObj)->TryGetNumberField(TEXT("z"), Scale.Z);
 		}
 
 		Locations.Add(Location);

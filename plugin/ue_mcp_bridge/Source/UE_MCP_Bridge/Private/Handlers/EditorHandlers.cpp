@@ -877,26 +877,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetViewportCamera(const TSharedPtr<FJson
 		return MCPError(TEXT("No viewport client available"));
 	}
 
-	// Set location if provided
-	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocationObj) && LocationObj)
+	if (Params->HasField(TEXT("location")))
 	{
-		FVector Location;
-		Location.X = (*LocationObj)->GetNumberField(TEXT("x"));
-		Location.Y = (*LocationObj)->GetNumberField(TEXT("y"));
-		Location.Z = (*LocationObj)->GetNumberField(TEXT("z"));
-		ViewportClient->SetViewLocation(Location);
+		ViewportClient->SetViewLocation(OptionalVec3(Params, TEXT("location")));
 	}
-
-	// Set rotation if provided
-	const TSharedPtr<FJsonObject>* RotationObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("rotation"), RotationObj) && RotationObj)
+	if (Params->HasField(TEXT("rotation")))
 	{
-		FRotator Rotation;
-		Rotation.Pitch = (*RotationObj)->GetNumberField(TEXT("pitch"));
-		Rotation.Yaw = (*RotationObj)->GetNumberField(TEXT("yaw"));
-		Rotation.Roll = (*RotationObj)->GetNumberField(TEXT("roll"));
-		ViewportClient->SetViewRotation(Rotation);
+		ViewportClient->SetViewRotation(OptionalRotator(Params, TEXT("rotation")));
 	}
 
 	auto Result = MCPSuccess();
@@ -1474,21 +1461,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 
 	const double Fov = OptionalNumber(Params, TEXT("fov"), 90.0);
 
-	// Location / rotation
-	FVector Location = FVector::ZeroVector;
-	if (const TSharedPtr<FJsonObject>* LocObj = nullptr; Params->TryGetObjectField(TEXT("location"), LocObj) && LocObj && LocObj->IsValid())
-	{
-		(*LocObj)->TryGetNumberField(TEXT("x"), Location.X);
-		(*LocObj)->TryGetNumberField(TEXT("y"), Location.Y);
-		(*LocObj)->TryGetNumberField(TEXT("z"), Location.Z);
-	}
-	FRotator Rotation = FRotator::ZeroRotator;
-	if (const TSharedPtr<FJsonObject>* RotObj = nullptr; Params->TryGetObjectField(TEXT("rotation"), RotObj) && RotObj && RotObj->IsValid())
-	{
-		(*RotObj)->TryGetNumberField(TEXT("pitch"), Rotation.Pitch);
-		(*RotObj)->TryGetNumberField(TEXT("yaw"), Rotation.Yaw);
-		(*RotObj)->TryGetNumberField(TEXT("roll"), Rotation.Roll);
-	}
+	const FVector Location = OptionalVec3(Params, TEXT("location"));
+	const FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
 
 	// Find or spawn the reusable capture actor.
 	static const FString CaptureLabel = TEXT("__ClaudeSceneCapture");
