@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { Vec3 } from "../schemas.js";
 
 export const landscapeTool: ToolDef = categoryTool(
   "landscape",
@@ -33,8 +34,8 @@ export const landscapeTool: ToolDef = categoryTool(
     physMaterial: z.string().optional(),
     hardness: z.number().optional(),
     onConflict: z.string().optional(),
-    location: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
-    scale: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(),
+    location: Vec3.optional(),
+    scale: Vec3.optional(),
     componentCountX: z.number().optional(),
     componentCountY: z.number().optional(),
     subsectionSizeQuads: z.number().optional(),
