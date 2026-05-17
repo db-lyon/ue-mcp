@@ -13,7 +13,6 @@
 void FSplineHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("create_spline_actor"), &CreateSplineActor);
-	Registry.RegisterHandler(TEXT("read_spline"), &ReadSpline);
 	Registry.RegisterHandler(TEXT("get_spline_info"), &ReadSpline);
 	Registry.RegisterHandler(TEXT("set_spline_points"), &SetSplinePoints);
 }

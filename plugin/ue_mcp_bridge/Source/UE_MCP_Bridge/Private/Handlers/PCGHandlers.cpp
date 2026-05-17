@@ -280,7 +280,6 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_pcg_node"), &RemovePCGNode);
 	Registry.RegisterHandler(TEXT("set_pcg_node_settings"), &SetPCGNodeSettings);
 	Registry.RegisterHandler(TEXT("execute_pcg_graph"), &ExecutePCGGraph);
-	Registry.RegisterHandler(TEXT("spawn_pcg_volume"), &SpawnPCGVolume);
 	Registry.RegisterHandler(TEXT("add_pcg_volume"), &SpawnPCGVolume);
 	Registry.RegisterHandler(TEXT("read_pcg_node_settings"), &ReadPCGNodeSettings);
 	Registry.RegisterHandler(TEXT("get_pcg_component_details"), &GetPCGComponentDetails);

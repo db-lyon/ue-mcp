@@ -35,9 +35,7 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_landscape_component"), &GetLandscapeComponent);
 	Registry.RegisterHandler(TEXT("sculpt_landscape"), &SculptLandscape);
 	Registry.RegisterHandler(TEXT("paint_landscape_layer"), &PaintLandscapeLayer);
-	Registry.RegisterHandler(TEXT("import_heightmap"), &ImportHeightmap);
 	Registry.RegisterHandler(TEXT("set_landscape_material"), &SetLandscapeMaterial);
-	Registry.RegisterHandler(TEXT("get_landscape_bounds"), &GetLandscapeBounds);
 	Registry.RegisterHandler(TEXT("add_landscape_layer_info"), &AddLandscapeLayerInfo);
 	Registry.RegisterHandler(TEXT("create_landscape"), &CreateLandscape);
 	Registry.RegisterHandler(TEXT("create_landscape_layer_info"), &CreateLandscapeLayerInfo);

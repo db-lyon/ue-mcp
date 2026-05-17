@@ -54,14 +54,9 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("recompile_material"), &RecompileMaterial);
 	Registry.RegisterHandler(TEXT("create_material_instance"), &CreateMaterialInstance);
 	Registry.RegisterHandler(TEXT("set_material_parameter"), &SetMaterialParameter);
-	Registry.RegisterHandler(TEXT("connect_expression"), &ConnectExpression);
-	Registry.RegisterHandler(TEXT("connect_material_property"), &ConnectMaterialProperty);
-	Registry.RegisterHandler(TEXT("delete_expression"), &DeleteExpression);
 	Registry.RegisterHandler(TEXT("set_expression_value"), &SetExpressionValue);
-	Registry.RegisterHandler(TEXT("create_material_from_texture"), &CreateMaterialFromTexture);
-	Registry.RegisterHandler(TEXT("read_material_instance"), &ReadMaterialInstance);
 
-	// TS-expected name aliases
+	// Expression graph operations
 	Registry.RegisterHandler(TEXT("connect_texture_to_material"), &ConnectTextureToMaterial);
 	Registry.RegisterHandler(TEXT("connect_material_expressions"), &ConnectMaterialExpressions);
 	Registry.RegisterHandler(TEXT("connect_to_material_property"), &ConnectToMaterialProperty);
@@ -1764,85 +1759,6 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 
 	return MCPResult(Result);
 }
-TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterialInstance(const TSharedPtr<FJsonObject>& Params)
-{
-	FString AssetPath;
-	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
-
-	UMaterialInstanceConstant* MaterialInstance = LoadMaterialInstanceFromPath(AssetPath);
-	if (!MaterialInstance)
-	{
-		return MCPError(FString::Printf(TEXT("Failed to load material instance at '%s'"), *AssetPath));
-	}
-
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("name"), MaterialInstance->GetName());
-	Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
-	Result->SetBoolField(TEXT("isMaterialInstance"), true);
-
-	// Parent material
-	UMaterialInterface* Parent = MaterialInstance->Parent;
-	if (Parent)
-	{
-		Result->SetStringField(TEXT("parent"), Parent->GetPathName());
-	}
-	else
-	{
-		Result->SetStringField(TEXT("parent"), TEXT(""));
-	}
-
-	// Scalar parameter overrides
-	TArray<TSharedPtr<FJsonValue>> ScalarOverrides;
-	for (const FScalarParameterValue& ScalarParam : MaterialInstance->ScalarParameterValues)
-	{
-		TSharedPtr<FJsonObject> ParamObj = MakeShared<FJsonObject>();
-		ParamObj->SetStringField(TEXT("name"), ScalarParam.ParameterInfo.Name.ToString());
-		ParamObj->SetNumberField(TEXT("value"), ScalarParam.ParameterValue);
-		ScalarOverrides.Add(MakeShared<FJsonValueObject>(ParamObj));
-	}
-
-	// Vector parameter overrides
-	TArray<TSharedPtr<FJsonValue>> VectorOverrides;
-	for (const FVectorParameterValue& VectorParam : MaterialInstance->VectorParameterValues)
-	{
-		TSharedPtr<FJsonObject> ParamObj = MakeShared<FJsonObject>();
-		ParamObj->SetStringField(TEXT("name"), VectorParam.ParameterInfo.Name.ToString());
-
-		TSharedPtr<FJsonObject> ValueObj = MakeShared<FJsonObject>();
-		ValueObj->SetNumberField(TEXT("r"), VectorParam.ParameterValue.R);
-		ValueObj->SetNumberField(TEXT("g"), VectorParam.ParameterValue.G);
-		ValueObj->SetNumberField(TEXT("b"), VectorParam.ParameterValue.B);
-		ValueObj->SetNumberField(TEXT("a"), VectorParam.ParameterValue.A);
-		ParamObj->SetObjectField(TEXT("value"), ValueObj);
-
-		VectorOverrides.Add(MakeShared<FJsonValueObject>(ParamObj));
-	}
-
-	// Texture parameter overrides
-	TArray<TSharedPtr<FJsonValue>> TextureOverrides;
-	for (const FTextureParameterValue& TextureParam : MaterialInstance->TextureParameterValues)
-	{
-		TSharedPtr<FJsonObject> ParamObj = MakeShared<FJsonObject>();
-		ParamObj->SetStringField(TEXT("name"), TextureParam.ParameterInfo.Name.ToString());
-		if (TextureParam.ParameterValue)
-		{
-			ParamObj->SetStringField(TEXT("value"), TextureParam.ParameterValue->GetPathName());
-		}
-		else
-		{
-			ParamObj->SetStringField(TEXT("value"), TEXT(""));
-		}
-		TextureOverrides.Add(MakeShared<FJsonValueObject>(ParamObj));
-	}
-
-	Result->SetArrayField(TEXT("scalarOverrides"), ScalarOverrides);
-	Result->SetArrayField(TEXT("vectorOverrides"), VectorOverrides);
-	Result->SetArrayField(TEXT("textureOverrides"), TextureOverrides);
-	Result->SetNumberField(TEXT("totalOverrides"), ScalarOverrides.Num() + VectorOverrides.Num() + TextureOverrides.Num());
-
-	return MCPResult(Result);
-}
-
 UMaterialExpression* FMaterialHandlers::FindExpressionByName(UMaterial* Material, const FString& ExpressionName)
 {
 	if (!Material || ExpressionName.IsEmpty()) return nullptr;

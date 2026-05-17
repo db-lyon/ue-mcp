@@ -88,8 +88,6 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("spawn_volume"), &SpawnVolume);
 	Registry.RegisterHandler(TEXT("add_component_to_actor"), &AddComponentToActor);
 	Registry.RegisterHandler(TEXT("load_level"), &LoadLevel);
-	Registry.RegisterHandler(TEXT("save_level"), &SaveLevel);
-	Registry.RegisterHandler(TEXT("list_sublevels"), &ListSublevels);
 	Registry.RegisterHandler(TEXT("set_component_property"), &SetComponentProperty);
 	Registry.RegisterHandler(TEXT("set_actor_material"), &SetActorMaterial);
 	Registry.RegisterHandler(TEXT("set_volume_properties"), &SetVolumeProperties);

@@ -23,11 +23,6 @@ void FNetworkingHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_always_relevant"), &SetAlwaysRelevant);
 	Registry.RegisterHandler(TEXT("set_net_priority"), &SetNetPriority);
 	Registry.RegisterHandler(TEXT("set_replicate_movement"), &SetReplicateMovement);
-	Registry.RegisterHandler(TEXT("set_variable_replication"), &SetVariableReplication);
-	Registry.RegisterHandler(TEXT("get_replication_info"), &GetReplicationInfo);
-	Registry.RegisterHandler(TEXT("set_owner_only_relevant"), &SetOwnerOnlyRelevant);
-
-	// Aliases
 	Registry.RegisterHandler(TEXT("set_property_replicated"), &SetVariableReplication);
 	Registry.RegisterHandler(TEXT("set_only_relevant_to_owner"), &SetOwnerOnlyRelevant);
 	// New handlers

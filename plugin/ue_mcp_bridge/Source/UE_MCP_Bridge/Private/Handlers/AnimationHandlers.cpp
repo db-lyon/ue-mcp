@@ -68,15 +68,13 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_anim_montage"), &ReadAnimMontage);
 	Registry.RegisterHandler(TEXT("read_anim_sequence"), &ReadAnimSequence);
 	Registry.RegisterHandler(TEXT("create_anim_blueprint"), &CreateAnimBlueprint);
-	Registry.RegisterHandler(TEXT("create_montage"), &CreateMontage);
-	Registry.RegisterHandler(TEXT("create_anim_montage"), &CreateMontage);  // alias used by TS tools
+	Registry.RegisterHandler(TEXT("create_anim_montage"), &CreateMontage);
 	Registry.RegisterHandler(TEXT("create_blendspace"), &CreateBlendspace);
 	Registry.RegisterHandler(TEXT("add_blend_sample"), &AddBlendSample);
 	Registry.RegisterHandler(TEXT("set_blend_sample"), &SetBlendSample);
 	Registry.RegisterHandler(TEXT("read_blendspace"), &ReadBlendspace);
 	Registry.RegisterHandler(TEXT("add_anim_notify"), &AddAnimNotify);
 	Registry.RegisterHandler(TEXT("create_sequence"), &CreateSequence);
-	Registry.RegisterHandler(TEXT("create_anim_sequence"), &CreateSequence);  // alias
 	Registry.RegisterHandler(TEXT("set_bone_keyframes"), &SetBoneKeyframes);
 	Registry.RegisterHandler(TEXT("get_bone_transforms"), &GetBoneTransforms);
 	Registry.RegisterHandler(TEXT("set_montage_sequence"), &SetMontageSequence);

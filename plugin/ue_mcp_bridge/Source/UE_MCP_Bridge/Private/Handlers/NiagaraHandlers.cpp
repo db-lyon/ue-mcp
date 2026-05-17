@@ -45,7 +45,6 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_niagara_emitter"), &CreateNiagaraEmitter);
 	Registry.RegisterHandler(TEXT("spawn_niagara_at_location"), &SpawnNiagaraAtLocation);
 	Registry.RegisterHandler(TEXT("set_niagara_parameter"), &SetNiagaraParameter);
-	Registry.RegisterHandler(TEXT("create_niagara_system_from_emitter"), &CreateNiagaraSystemFromEmitter);
 	Registry.RegisterHandler(TEXT("add_emitter_to_system"), &AddEmitterToSystem);
 	Registry.RegisterHandler(TEXT("set_emitter_property"), &SetEmitterProperty);
 	Registry.RegisterHandler(TEXT("get_emitter_info"), &GetEmitterInfo);

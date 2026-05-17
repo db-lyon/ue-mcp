@@ -23,11 +23,8 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("list_foliage_types"), &ListFoliageTypes);
 	Registry.RegisterHandler(TEXT("sample_foliage"), &SampleFoliage);
-	Registry.RegisterHandler(TEXT("get_foliage_settings"), &GetFoliageSettings);
 	Registry.RegisterHandler(TEXT("paint_foliage"), &PaintFoliage);
 	Registry.RegisterHandler(TEXT("erase_foliage"), &EraseFoliage);
-	Registry.RegisterHandler(TEXT("sample_foliage_instances"), &SampleFoliageInstances);
-	Registry.RegisterHandler(TEXT("create_foliage_layer"), &CreateFoliageLayer);
 	Registry.RegisterHandler(TEXT("get_foliage_type_settings"), &GetFoliageSettings);
 	Registry.RegisterHandler(TEXT("set_foliage_type_settings"), &SetFoliageTypeSettings);
 	Registry.RegisterHandler(TEXT("create_foliage_type"), &CreateFoliageType);

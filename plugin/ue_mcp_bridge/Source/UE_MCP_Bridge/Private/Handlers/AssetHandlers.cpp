@@ -150,7 +150,6 @@ namespace
 
 void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
-	Registry.RegisterHandler(TEXT("list_assets"), &ListAssets);
 	Registry.RegisterHandler(TEXT("search_assets"), &SearchAssets);
 	Registry.RegisterHandler(TEXT("read_asset"), &ReadAsset);
 	Registry.RegisterHandler(TEXT("read_asset_properties"), &ReadAssetProperties);
@@ -164,21 +163,13 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("save_asset"), &SaveAsset);
 	Registry.RegisterHandler(TEXT("list_textures"), &ListTextures);
 
-	// DataTable handlers
-	Registry.RegisterHandler(TEXT("import_datatable_json"), &ImportDataTableJson);
-	Registry.RegisterHandler(TEXT("export_datatable_json"), &ExportDataTableJson);
-
 	// FBX import handlers
 	Registry.RegisterHandler(TEXT("import_static_mesh"), &ImportStaticMesh);
 	Registry.RegisterHandler(TEXT("import_skeletal_mesh"), &ImportSkeletalMesh);
 	Registry.RegisterHandler(TEXT("import_animation"), &ImportAnimation);
 
 	// Texture handlers
-	Registry.RegisterHandler(TEXT("list_texture_properties"), &ListTextureProperties);
-	Registry.RegisterHandler(TEXT("set_texture_properties"), &SetTextureProperties);
 	Registry.RegisterHandler(TEXT("import_texture"), &ImportTexture);
-
-	// Aliases for TS tool compatibility
 	Registry.RegisterHandler(TEXT("get_texture_info"), &ListTextureProperties);
 	Registry.RegisterHandler(TEXT("set_texture_settings"), &SetTextureProperties);
 
@@ -359,54 +350,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReindexAssetsFTS(const TSharedPtr<FJsonOb
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	Result->SetStringField(TEXT("directory"), Directory);
 	Result->SetNumberField(TEXT("indexedCount"), Found.Num());
-	return MCPResult(Result);
-}
-
-TSharedPtr<FJsonValue> FAssetHandlers::ListAssets(const TSharedPtr<FJsonObject>& Params)
-{
-	FString Query = OptionalString(Params, TEXT("query"), TEXT("*"));
-	// Default scope: /Game/ only. Explicit empty string or "*" passed as
-	// directory means "all mounted roots" — agents must opt in deliberately.
-	FString Directory = OptionalString(Params, TEXT("directory"), TEXT("/Game"));
-	const bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
-
-	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-
-	TArray<FAssetData> AssetDataList;
-	if (Directory.IsEmpty() || Directory == TEXT("*") || Directory == TEXT("/"))
-	{
-		// Explicit all-mounts request — mirror prior behavior.
-		AssetRegistry.GetAllAssets(AssetDataList);
-	}
-	else
-	{
-		// Strip a trailing slash so "/Game/Foo/" and "/Game/Foo" are equivalent.
-		while (Directory.Len() > 1 && Directory.EndsWith(TEXT("/"))) Directory = Directory.LeftChop(1);
-		FARFilter Filter;
-		Filter.bRecursivePaths = bRecursive;
-		Filter.PackagePaths.Add(FName(*Directory));
-		AssetRegistry.GetAssets(Filter, AssetDataList);
-	}
-
-	TArray<TSharedPtr<FJsonValue>> AssetsArray;
-	for (const FAssetData& AssetData : AssetDataList)
-	{
-		FString AssetPath = AssetData.GetObjectPathString();
-		if (Query == TEXT("*") || AssetPath.Contains(Query))
-		{
-			TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
-			AssetObj->SetStringField(TEXT("path"), AssetPath);
-			AssetObj->SetStringField(TEXT("className"), AssetData.AssetClassPath.GetAssetName().ToString());
-			AssetObj->SetStringField(TEXT("name"), AssetData.AssetName.ToString());
-			AssetsArray.Add(MakeShared<FJsonValueObject>(AssetObj));
-		}
-	}
-
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("directory"), Directory);
-	Result->SetArrayField(TEXT("assets"), AssetsArray);
-	Result->SetNumberField(TEXT("count"), AssetsArray.Num());
-
 	return MCPResult(Result);
 }
 

@@ -69,7 +69,6 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("run_python_file"), &RunPythonFile);
 	Registry.RegisterHandler(TEXT("set_property"), &SetProperty);
 	Registry.RegisterHandler(TEXT("set_config"), &SetConfig);
-	Registry.RegisterHandler(TEXT("read_config"), &ReadConfig);
 	Registry.RegisterHandler(TEXT("get_viewport_info"), &GetViewportInfo);
 	Registry.RegisterHandler(TEXT("hit_test_viewport_pixel"), &HitTestViewportPixel);
 	Registry.RegisterHandler(TEXT("get_runtime_values"), &GetRuntimeValues);
@@ -85,11 +84,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("redo"), &Redo);
 	Registry.RegisterHandler(TEXT("reload_handlers"), &ReloadHandlers);
 	Registry.RegisterHandler(TEXT("save_asset"), &SaveAsset);
-	Registry.RegisterHandler(TEXT("save_all"), &SaveAll);
 	Registry.RegisterHandler(TEXT("save_dirty"), &SaveDirty);
 	Registry.RegisterHandler(TEXT("list_dirty_packages"), &ListDirtyPackages);
-	Registry.RegisterHandler(TEXT("get_crash_reports"), &GetCrashReports);
-	Registry.RegisterHandler(TEXT("read_editor_log"), &ReadEditorLog);
 	Registry.RegisterHandler(TEXT("pie_get_runtime_value"), &PieGetRuntimeValue);
 	Registry.RegisterHandler(TEXT("build_lighting"), &BuildLighting);
 	Registry.RegisterHandler(TEXT("build_all"), &BuildAll);
@@ -476,45 +472,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetConfig(const TSharedPtr<FJsonObject>&
 		MCPSetRollback(Result, TEXT("set_config"), Payload);
 	}
 
-	return MCPResult(Result);
-}
-
-TSharedPtr<FJsonValue> FEditorHandlers::ReadConfig(const TSharedPtr<FJsonObject>& Params)
-{
-	FString ConfigName;
-	if (!Params->TryGetStringField(TEXT("configFile"), ConfigName))
-	{
-		Params->TryGetStringField(TEXT("configName"), ConfigName);
-	}
-	FString Section;
-	if (auto Err = RequireString(Params, TEXT("section"), Section)) return Err;
-	FString Key;
-	if (auto Err = RequireString(Params, TEXT("key"), Key)) return Err;
-
-	if (ConfigName.IsEmpty())
-	{
-		ConfigName = TEXT("DefaultEngine.ini");
-	}
-	else if (!ConfigName.EndsWith(TEXT(".ini")))
-	{
-		ConfigName = FString::Printf(TEXT("Default%s.ini"), *ConfigName);
-	}
-
-	FString ConfigDir = FPaths::ProjectConfigDir();
-	FString IniPath = FPaths::Combine(ConfigDir, ConfigName);
-
-	FString Value;
-	bool bFound = GConfig->GetString(*Section, *Key, Value, IniPath);
-
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("configFile"), ConfigName);
-	Result->SetStringField(TEXT("section"), Section);
-	Result->SetStringField(TEXT("key"), Key);
-	Result->SetBoolField(TEXT("found"), bFound);
-	if (bFound)
-	{
-		Result->SetStringField(TEXT("value"), Value);
-	}
 	return MCPResult(Result);
 }
 
@@ -999,20 +956,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveAsset(const TSharedPtr<FJsonObject>&
 	return MCPResult(Result);
 }
 
-TSharedPtr<FJsonValue> FEditorHandlers::SaveAll(const TSharedPtr<FJsonObject>& Params)
-{
-	// Save all dirty packages using FEditorFileUtils
-	bool bPromptUserToSave = false;
-	bool bSaveMapPackages = true;
-	bool bSaveContentPackages = true;
-	bool bSuccess = FEditorFileUtils::SaveDirtyPackages(bPromptUserToSave, bSaveMapPackages, bSaveContentPackages);
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetBoolField(TEXT("success"), bSuccess);
-	Result->SetStringField(TEXT("message"), bSuccess ? TEXT("All dirty packages saved") : TEXT("Some packages may have failed to save"));
-	return MCPResult(Result);
-}
-
 // #378: drive UPackage::SavePackage directly on every dirty content package
 // so callers get a per-package result map. set_class_default and friends
 // occasionally leave packages dirty without persisting; this is the escape
@@ -1127,128 +1070,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::ListDirtyPackages(const TSharedPtr<FJson
 	return MCPResult(Result);
 }
 
-TSharedPtr<FJsonValue> FEditorHandlers::GetCrashReports(const TSharedPtr<FJsonObject>& Params)
-{
-	FString CrashesDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Crashes"));
-	IFileManager& FileManager = IFileManager::Get();
-
-	TArray<TSharedPtr<FJsonValue>> CrashesArray;
-
-	if (FileManager.DirectoryExists(*CrashesDir))
-	{
-		// Find all subdirectories in Crashes folder
-		TArray<FString> CrashFolders;
-		FileManager.FindFiles(CrashFolders, *FPaths::Combine(CrashesDir, TEXT("*")), false, true);
-
-		for (const FString& FolderName : CrashFolders)
-		{
-			FString FolderPath = FPaths::Combine(CrashesDir, FolderName);
-
-			TSharedPtr<FJsonObject> CrashObj = MakeShared<FJsonObject>();
-			CrashObj->SetStringField(TEXT("folder"), FolderName);
-			CrashObj->SetStringField(TEXT("path"), FolderPath);
-
-			// Get folder timestamp
-			FDateTime TimeStamp = FileManager.GetTimeStamp(*FolderPath);
-			if (TimeStamp != FDateTime::MinValue())
-			{
-				CrashObj->SetStringField(TEXT("timestamp"), TimeStamp.ToString());
-			}
-
-			// List files inside the crash folder
-			TArray<FString> CrashFiles;
-			FileManager.FindFiles(CrashFiles, *FPaths::Combine(FolderPath, TEXT("*")), true, false);
-
-			TArray<TSharedPtr<FJsonValue>> FilesArray;
-			for (const FString& FileName : CrashFiles)
-			{
-				FilesArray.Add(MakeShared<FJsonValueString>(FileName));
-			}
-			CrashObj->SetArrayField(TEXT("files"), FilesArray);
-
-			CrashesArray.Add(MakeShared<FJsonValueObject>(CrashObj));
-		}
-	}
-
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("crashesDir"), CrashesDir);
-	Result->SetNumberField(TEXT("crashCount"), CrashesArray.Num());
-	Result->SetArrayField(TEXT("crashes"), CrashesArray);
-	return MCPResult(Result);
-}
-
-TSharedPtr<FJsonValue> FEditorHandlers::ReadEditorLog(const TSharedPtr<FJsonObject>& Params)
-{
-	// Parameters
-	int32 LastN = OptionalInt(Params, TEXT("lastN"), 100);
-	FString Filter = OptionalString(Params, TEXT("filter"));
-
-	// Locate the editor log file
-	FString LogDir = FPaths::ProjectLogDir();
-	FString LogFilePath = FPaths::Combine(LogDir, TEXT("Editor.log"));
-
-	// If Editor.log doesn't exist, try the current log file
-	if (!FPaths::FileExists(LogFilePath))
-	{
-		LogFilePath = FPaths::Combine(LogDir, FString(FApp::GetProjectName()) + TEXT(".log"));
-	}
-
-	if (!FPaths::FileExists(LogFilePath))
-	{
-		return MCPError(FString::Printf(TEXT("Editor log file not found in %s"), *LogDir));
-	}
-
-	// Read the log file into lines
-	TArray<FString> AllLines;
-	if (!FFileHelper::LoadFileToStringArray(AllLines, *LogFilePath))
-	{
-		return MCPError(TEXT("Failed to read editor log file"));
-	}
-
-	// Apply filter and take last N lines
-	TArray<FString> ResultLines;
-	if (Filter.IsEmpty())
-	{
-		// No filter - take the last N lines directly
-		int32 StartIndex = FMath::Max(0, AllLines.Num() - LastN);
-		for (int32 i = StartIndex; i < AllLines.Num(); ++i)
-		{
-			ResultLines.Add(AllLines[i]);
-		}
-	}
-	else
-	{
-		// Filter lines (case-insensitive) then take last N
-		FString FilterLower = Filter.ToLower();
-		TArray<FString> FilteredLines;
-		for (const FString& Line : AllLines)
-		{
-			if (Line.ToLower().Contains(FilterLower))
-			{
-				FilteredLines.Add(Line);
-			}
-		}
-		int32 StartIndex = FMath::Max(0, FilteredLines.Num() - LastN);
-		for (int32 i = StartIndex; i < FilteredLines.Num(); ++i)
-		{
-			ResultLines.Add(FilteredLines[i]);
-		}
-	}
-
-	// Convert to JSON array
-	TArray<TSharedPtr<FJsonValue>> LinesArray;
-	for (const FString& Line : ResultLines)
-	{
-		LinesArray.Add(MakeShared<FJsonValueString>(Line));
-	}
-
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("logFile"), LogFilePath);
-	Result->SetNumberField(TEXT("lineCount"), ResultLines.Num());
-	Result->SetNumberField(TEXT("totalLines"), AllLines.Num());
-	Result->SetArrayField(TEXT("lines"), LinesArray);
-	return MCPResult(Result);
-}
 TSharedPtr<FJsonValue> FEditorHandlers::FocusViewportOnActor(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ActorLabel;
