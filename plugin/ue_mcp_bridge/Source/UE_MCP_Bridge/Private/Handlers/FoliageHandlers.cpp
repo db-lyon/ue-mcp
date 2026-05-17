@@ -78,18 +78,8 @@ TSharedPtr<FJsonValue> FFoliageHandlers::ListFoliageTypes(const TSharedPtr<FJson
 
 TSharedPtr<FJsonValue> FFoliageHandlers::SampleFoliage(const TSharedPtr<FJsonObject>& Params)
 {
-	// Parse center point
-	const TSharedPtr<FJsonObject>* CenterObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("center"), CenterObj) || !CenterObj || !(*CenterObj).IsValid())
-	{
-		return MCPError(TEXT("Missing 'center' parameter (object with x, y, z)"));
-	}
-
-	double CenterX = 0, CenterY = 0, CenterZ = 0;
-	(*CenterObj)->TryGetNumberField(TEXT("x"), CenterX);
-	(*CenterObj)->TryGetNumberField(TEXT("y"), CenterY);
-	(*CenterObj)->TryGetNumberField(TEXT("z"), CenterZ);
-	FVector Center(CenterX, CenterY, CenterZ);
+	FVector Center;
+	if (auto Err = RequireVec3(Params, TEXT("center"), Center)) return Err;
 
 	double Radius = OptionalNumber(Params, TEXT("radius"), 1000.0);
 	double RadiusSq = Radius * Radius;
@@ -151,13 +141,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SampleFoliage(const TSharedPtr<FJsonObj
 	}
 
 	auto Result = MCPSuccess();
-
-	TSharedPtr<FJsonObject> CenterResult = MakeShared<FJsonObject>();
-	CenterResult->SetNumberField(TEXT("x"), CenterX);
-	CenterResult->SetNumberField(TEXT("y"), CenterY);
-	CenterResult->SetNumberField(TEXT("z"), CenterZ);
-
-	Result->SetObjectField(TEXT("center"), CenterResult);
+	Result->SetObjectField(TEXT("center"), MCPVec3ToJsonObject(Center));
 	Result->SetNumberField(TEXT("radius"), Radius);
 	Result->SetNumberField(TEXT("totalCount"), TotalCount);
 	Result->SetArrayField(TEXT("types"), TypesArray);
@@ -240,16 +224,8 @@ TSharedPtr<FJsonValue> FFoliageHandlers::PaintFoliage(const TSharedPtr<FJsonObje
 	FString FoliageTypePath;
 	if (auto Err = RequireString(Params, TEXT("foliageType"), FoliageTypePath)) return Err;
 
-	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("location"), LocationObj) || !LocationObj || !(*LocationObj).IsValid())
-	{
-		return MCPError(TEXT("Missing 'location' parameter (object with x, y, z)"));
-	}
-
-	double LocX = 0, LocY = 0, LocZ = 0;
-	(*LocationObj)->TryGetNumberField(TEXT("x"), LocX);
-	(*LocationObj)->TryGetNumberField(TEXT("y"), LocY);
-	(*LocationObj)->TryGetNumberField(TEXT("z"), LocZ);
+	FVector Location;
+	if (auto Err = RequireVec3(Params, TEXT("location"), Location)) return Err;
 
 	double PaintRadius = OptionalNumber(Params, TEXT("radius"), 500.0);
 	double PaintDensity = OptionalNumber(Params, TEXT("density"), 100.0);
@@ -260,12 +236,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::PaintFoliage(const TSharedPtr<FJsonObje
 	// Use execute_python as a fallback to invoke the Python FoliageEditorLibrary if available.
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("foliageType"), FoliageTypePath);
-
-	TSharedPtr<FJsonObject> LocationResult = MakeShared<FJsonObject>();
-	LocationResult->SetNumberField(TEXT("x"), LocX);
-	LocationResult->SetNumberField(TEXT("y"), LocY);
-	LocationResult->SetNumberField(TEXT("z"), LocZ);
-	Result->SetObjectField(TEXT("location"), LocationResult);
+	Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Location));
 	Result->SetNumberField(TEXT("radius"), PaintRadius);
 	Result->SetNumberField(TEXT("density"), PaintDensity);
 
@@ -280,16 +251,8 @@ TSharedPtr<FJsonValue> FFoliageHandlers::PaintFoliage(const TSharedPtr<FJsonObje
 
 TSharedPtr<FJsonValue> FFoliageHandlers::EraseFoliage(const TSharedPtr<FJsonObject>& Params)
 {
-	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("location"), LocationObj) || !LocationObj || !(*LocationObj).IsValid())
-	{
-		return MCPError(TEXT("Missing 'location' parameter (object with x, y, z)"));
-	}
-
-	double LocX = 0, LocY = 0, LocZ = 0;
-	(*LocationObj)->TryGetNumberField(TEXT("x"), LocX);
-	(*LocationObj)->TryGetNumberField(TEXT("y"), LocY);
-	(*LocationObj)->TryGetNumberField(TEXT("z"), LocZ);
+	FVector Location;
+	if (auto Err = RequireVec3(Params, TEXT("location"), Location)) return Err;
 
 	double EraseRadius = OptionalNumber(Params, TEXT("radius"), 500.0);
 
@@ -298,12 +261,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::EraseFoliage(const TSharedPtr<FJsonObje
 	// Foliage erasure, like painting, is internal to FoliageEdMode.
 	// Provide the same execute_python fallback note.
 	auto Result = MakeShared<FJsonObject>();
-
-	TSharedPtr<FJsonObject> LocationResult = MakeShared<FJsonObject>();
-	LocationResult->SetNumberField(TEXT("x"), LocX);
-	LocationResult->SetNumberField(TEXT("y"), LocY);
-	LocationResult->SetNumberField(TEXT("z"), LocZ);
-	Result->SetObjectField(TEXT("location"), LocationResult);
+	Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Location));
 	Result->SetNumberField(TEXT("radius"), EraseRadius);
 
 	if (!FoliageTypeFilter.IsEmpty())

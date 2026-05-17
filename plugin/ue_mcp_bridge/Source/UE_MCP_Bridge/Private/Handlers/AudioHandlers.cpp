@@ -177,15 +177,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJso
 	// Get the editor world
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Parse location from JSON object (defaults to origin)
-	FVector Location = FVector::ZeroVector;
-	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocationObj))
-	{
-		(*LocationObj)->TryGetNumberField(TEXT("x"), Location.X);
-		(*LocationObj)->TryGetNumberField(TEXT("y"), Location.Y);
-		(*LocationObj)->TryGetNumberField(TEXT("z"), Location.Z);
-	}
+	const FVector Location = OptionalVec3(Params, TEXT("location"));
 
 	// Parse optional volume and pitch multipliers (accept both short and long names)
 	double Volume = 1.0;
@@ -240,15 +232,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SpawnAmbientSound(const TSharedPtr<FJsonO
 		}
 	}
 
-	FVector Location = FVector::ZeroVector;
-	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocationObj))
-	{
-		(*LocationObj)->TryGetNumberField(TEXT("x"), Location.X);
-		(*LocationObj)->TryGetNumberField(TEXT("y"), Location.Y);
-		(*LocationObj)->TryGetNumberField(TEXT("z"), Location.Z);
-	}
-
+	const FVector Location = OptionalVec3(Params, TEXT("location"));
 	FTransform SpawnTransform(FRotator::ZeroRotator, Location);
 	AAmbientSound* AmbientSoundActor = World->SpawnActor<AAmbientSound>(AAmbientSound::StaticClass(), SpawnTransform);
 	if (!AmbientSoundActor)

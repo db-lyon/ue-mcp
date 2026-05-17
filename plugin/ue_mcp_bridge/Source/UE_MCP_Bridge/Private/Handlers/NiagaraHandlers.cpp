@@ -295,44 +295,16 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraAtLocation(const TSharedPtr
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Parse location — accept nested object {x,y,z} or flat x/y/z (#70)
-	FVector Location = FVector::ZeroVector;
+	// Location accepts nested {x,y,z} or flat x/y/z params (#70).
+	FVector Location = OptionalVec3(Params, TEXT("location"));
+	if (Location == FVector::ZeroVector)
 	{
-		double X = 0, Y = 0, Z = 0;
-		const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("location"), LocationObj))
-		{
-			(*LocationObj)->TryGetNumberField(TEXT("x"), X);
-			(*LocationObj)->TryGetNumberField(TEXT("y"), Y);
-			(*LocationObj)->TryGetNumberField(TEXT("z"), Z);
-		}
-		else
-		{
-			Params->TryGetNumberField(TEXT("x"), X);
-			Params->TryGetNumberField(TEXT("y"), Y);
-			Params->TryGetNumberField(TEXT("z"), Z);
-		}
-		Location = FVector(X, Y, Z);
+		ReadVec3Fields(Params, Location);
 	}
-
-	// Parse rotation — accept nested object or flat
-	FRotator Rotation = FRotator::ZeroRotator;
+	FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
+	if (Rotation == FRotator::ZeroRotator)
 	{
-		double Pitch = 0, Yaw = 0, Roll = 0;
-		const TSharedPtr<FJsonObject>* RotationObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("rotation"), RotationObj))
-		{
-			(*RotationObj)->TryGetNumberField(TEXT("pitch"), Pitch);
-			(*RotationObj)->TryGetNumberField(TEXT("yaw"), Yaw);
-			(*RotationObj)->TryGetNumberField(TEXT("roll"), Roll);
-		}
-		else
-		{
-			Params->TryGetNumberField(TEXT("pitch"), Pitch);
-			Params->TryGetNumberField(TEXT("yaw"), Yaw);
-			Params->TryGetNumberField(TEXT("roll"), Roll);
-		}
-		Rotation = FRotator(Pitch, Yaw, Roll);
+		ReadRotatorFields(Params, Rotation);
 	}
 
 	// Parse scale
