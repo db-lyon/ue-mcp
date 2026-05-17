@@ -10,6 +10,7 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -27,6 +28,19 @@
 
 namespace
 {
+	// Local copy of FindActorByLabel - the canonical version lives in
+	// LevelHandlers.cpp's anonymous namespace. Both translation units need
+	// it; keep them in lockstep when changing either.
+	static AActor* FindActorByLabel(UWorld* World, const FString& Label)
+	{
+		if (!World) return nullptr;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if (It->GetActorLabel() == Label) return *It;
+		}
+		return nullptr;
+	}
+
 	// Resolve a SkeletalMeshComponent on an actor by name. If componentName is
 	// empty, prefer "CharacterMesh0" / "Mesh" first (the canonical Character
 	// body), then any SkeletalMeshComponent.

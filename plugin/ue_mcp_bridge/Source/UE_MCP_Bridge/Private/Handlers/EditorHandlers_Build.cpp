@@ -18,6 +18,10 @@
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformFile.h"
+#include "Modules/ModuleManager.h"
+#include "ILiveCodingModule.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "EditorValidatorSubsystem.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
