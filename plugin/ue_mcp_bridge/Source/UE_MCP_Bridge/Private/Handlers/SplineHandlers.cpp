@@ -23,17 +23,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::ReadSpline(const TSharedPtr<FJsonObject>
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Find actor by label
-	AActor* Actor = nullptr;
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-	{
-		if ((*ActorIt)->GetActorLabel() == ActorLabel)
-		{
-			Actor = *ActorIt;
-			break;
-		}
-	}
-
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
 	if (!Actor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
@@ -122,17 +112,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Find actor by label
-	AActor* Actor = nullptr;
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-	{
-		if ((*ActorIt)->GetActorLabel() == ActorLabel)
-		{
-			Actor = *ActorIt;
-			break;
-		}
-	}
-
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
 	if (!Actor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));

@@ -289,19 +289,9 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraAtLocation(const TSharedPtr
 
 	// Idempotency: if a label is provided and an actor with that label already exists, short-circuit
 	FString Label = OptionalString(Params, TEXT("label"));
-	if (!Label.IsEmpty())
+	if (auto ExistingActor = MCPCheckActorLabelExists(World, Label, TEXT("skip"), TEXT("Niagara actor")))
 	{
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			if (It->GetActorLabel() == Label)
-			{
-				auto Existed = MCPSuccess();
-				MCPSetExisted(Existed);
-				Existed->SetStringField(TEXT("systemPath"), SystemPath);
-				Existed->SetStringField(TEXT("actorLabel"), Label);
-				return MCPResult(Existed);
-			}
-		}
+		return ExistingActor;
 	}
 
 	UNiagaraComponent* SpawnedComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
@@ -367,18 +357,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Find actor by label
-	AActor* FoundActor = nullptr;
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-	{
-		AActor* Actor = *ActorIt;
-		if (Actor && Actor->GetActorLabel() == ActorLabel)
-		{
-			FoundActor = Actor;
-			break;
-		}
-	}
-
+	AActor* FoundActor = FindActorByLabel(World, ActorLabel);
 	if (!FoundActor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));

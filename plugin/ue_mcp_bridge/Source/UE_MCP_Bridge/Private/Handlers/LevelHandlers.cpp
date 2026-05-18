@@ -314,15 +314,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActor(const TSharedPtr<FJsonObject>
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	AActor* ActorToDelete = nullptr;
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-	{
-		if ((*ActorIt)->GetActorLabel() == ActorLabel)
-		{
-			ActorToDelete = *ActorIt;
-			break;
-		}
-	}
+	AActor* ActorToDelete = FindActorByLabel(World, ActorLabel);
 
 	// Idempotent: deleting a non-existent actor is a no-op, not an error.
 	if (!ActorToDelete)
@@ -825,17 +817,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Find actor by label
-	AActor* Actor = nullptr;
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-	{
-		if ((*ActorIt)->GetActorLabel() == ActorLabel)
-		{
-			Actor = *ActorIt;
-			break;
-		}
-	}
-
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
 	if (!Actor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
@@ -937,16 +919,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	AActor* Actor = nullptr;
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-	{
-		if ((*ActorIt)->GetActorLabel() == ActorLabel)
-		{
-			Actor = *ActorIt;
-			break;
-		}
-	}
-
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
 	if (!Actor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
@@ -1066,16 +1039,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	AActor* TargetActor = nullptr;
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		if (It->GetActorLabel() == ActorLabel)
-		{
-			TargetActor = *It;
-			break;
-		}
-	}
-
+	AActor* TargetActor = FindActorByLabel(World, ActorLabel);
 	if (!TargetActor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
@@ -1421,16 +1385,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorMaterial(const TSharedPtr<FJsonOb
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	AActor* Actor = nullptr;
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		if (It->GetActorLabel() == ActorLabel)
-		{
-			Actor = *It;
-			break;
-		}
-	}
-
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
 	if (!Actor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
@@ -1709,16 +1664,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorBounds(const TSharedPtr<FJsonObje
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	AActor* Actor = nullptr;
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		if ((*It)->GetActorLabel() == ActorLabel)
-		{
-			Actor = *It;
-			break;
-		}
-	}
-
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
 	if (!Actor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
@@ -1821,14 +1767,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 	}
 	else
 	{
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			if (It->GetActorLabel() == ActorLabel)
-			{
-				TargetActor = *It;
-				break;
-			}
-		}
+		TargetActor = FindActorByLabel(World, ActorLabel);
 	}
 
 	if (!TargetActor)
