@@ -2,6 +2,7 @@
 #include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerAssetCreate.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Engine/Blueprint.h"
 #include "AssetToolsModule.h"
@@ -47,27 +48,17 @@ TSharedPtr<FJsonValue> FGasHandlers::CreateGasBlueprint(
 	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), DefaultPackagePath);
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, FriendlyType))
-	{
-		return Existing;
-	}
-
 	if (!ParentClass)
 	{
 		return MCPError(FString::Printf(TEXT("%s parent class not found. Enable GameplayAbilities plugin."), *FriendlyType));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
 	BlueprintFactory->ParentClass = ParentClass;
 
-	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
-	if (!NewBlueprint)
-	{
-		return MCPError(FString::Printf(TEXT("Failed to create %s Blueprint"), *FriendlyType));
-	}
+	auto Created = MCPCreateAssetIdempotent<UBlueprint>(Name, PackagePath, OnConflict, FriendlyType, BlueprintFactory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UBlueprint* NewBlueprint = Created.Asset;
 
 	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);
