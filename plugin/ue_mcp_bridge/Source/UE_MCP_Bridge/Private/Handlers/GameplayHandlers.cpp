@@ -19,6 +19,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Editor.h"
 #include "NavigationSystem.h"
+#include "NavigationPath.h"
 #include "NavMesh/NavMeshBoundsVolume.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/GameStateBase.h"
@@ -106,6 +107,8 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_blackboard_key"), &AddBlackboardKey);
 	Registry.RegisterHandler(TEXT("set_behavior_tree_blackboard"), &SetBehaviorTreeBlackboard);
 	Registry.RegisterHandler(TEXT("rebuild_navigation"), &RebuildNavmesh);
+	Registry.RegisterHandler(TEXT("find_nav_path"), &FindNavPath);
+	Registry.RegisterHandler(TEXT("list_nav_invokers"), &ListNavInvokers);
 	// New handlers
 	Registry.RegisterHandler(TEXT("get_behavior_tree_info"), &GetBehaviorTreeInfo);
 	Registry.RegisterHandler(TEXT("read_behavior_tree_graph"), &ReadBehaviorTreeGraph);
@@ -919,6 +922,97 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RebuildNavmesh(const TSharedPtr<FJsonO
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("status"), TEXT("rebuild_triggered"));
 
+	return MCPResult(Result);
+}
+
+// #424: synchronous path query between two world points. Returns the polyline
+// (if any), partial flag, and total length. The standard "why doesn't my AI
+// move?" diagnostic.
+TSharedPtr<FJsonValue> FGameplayHandlers::FindNavPath(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	const FVector Start = OptionalVec3(Params, TEXT("start"));
+	const FVector End = OptionalVec3(Params, TEXT("end"));
+
+	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+	if (!NavSys) return MCPError(TEXT("Navigation system unavailable"));
+
+	// Optional pathfindingContext (actor label) so the path query uses the
+	// matching navigation filter / agent.
+	AActor* Context = nullptr;
+	FString ContextLabel = OptionalString(Params, TEXT("pathfindingContext"));
+	if (!ContextLabel.IsEmpty()) Context = FindActorByLabel(World, ContextLabel);
+
+	UNavigationPath* Path = NavSys->FindPathToLocationSynchronously(World, Start, End, Context);
+	auto Result = MCPSuccess();
+	Result->SetObjectField(TEXT("start"), MCPVec3ToJsonObject(Start));
+	Result->SetObjectField(TEXT("end"), MCPVec3ToJsonObject(End));
+	if (!Path)
+	{
+		Result->SetBoolField(TEXT("valid"), false);
+		Result->SetBoolField(TEXT("partial"), false);
+		Result->SetNumberField(TEXT("length"), 0.0);
+		Result->SetArrayField(TEXT("points"), {});
+		return MCPResult(Result);
+	}
+	Result->SetBoolField(TEXT("valid"), Path->IsValid());
+	Result->SetBoolField(TEXT("partial"), Path->IsPartial());
+	Result->SetNumberField(TEXT("length"), Path->GetPathLength());
+	TArray<TSharedPtr<FJsonValue>> Points;
+	for (const FVector& P : Path->PathPoints)
+	{
+		Points.Add(MakeShared<FJsonValueObject>(MCPVec3ToJsonObject(P)));
+	}
+	Result->SetArrayField(TEXT("points"), Points);
+	return MCPResult(Result);
+}
+
+// #424: enumerate every actor in the world carrying a NavigationInvokerComponent
+// plus its tile-generation radius. Useful for diagnosing "AI doesn't move
+// because there's no nav data tiled here".
+TSharedPtr<FJsonValue> FGameplayHandlers::ListNavInvokers(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	UClass* InvokerClass = FindObject<UClass>(nullptr, TEXT("/Script/NavigationSystem.NavigationInvokerComponent"));
+	if (!InvokerClass) InvokerClass = LoadObject<UClass>(nullptr, TEXT("/Script/NavigationSystem.NavigationInvokerComponent"));
+	if (!InvokerClass) return MCPError(TEXT("NavigationInvokerComponent class not found"));
+
+	TArray<TSharedPtr<FJsonValue>> Out;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* A = *It;
+		if (!A) continue;
+		TArray<UActorComponent*> Comps;
+		A->GetComponents(InvokerClass, Comps);
+		for (UActorComponent* Comp : Comps)
+		{
+			if (!Comp) continue;
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("actorLabel"), A->GetActorLabel());
+			Entry->SetStringField(TEXT("componentName"), Comp->GetName());
+			Entry->SetStringField(TEXT("componentClass"), Comp->GetClass()->GetName());
+			// Read TileGenerationRadius + TileRemovalRadius via reflection so we
+			// don't link against the NavigationSystem editor module just for
+			// these two properties.
+			auto ReadFloat = [&](const TCHAR* PropName) -> double
+			{
+				if (FFloatProperty* FP = CastField<FFloatProperty>(Comp->GetClass()->FindPropertyByName(PropName)))
+					return FP->GetPropertyValue_InContainer(Comp);
+				if (FDoubleProperty* DP = CastField<FDoubleProperty>(Comp->GetClass()->FindPropertyByName(PropName)))
+					return DP->GetPropertyValue_InContainer(Comp);
+				return 0.0;
+			};
+			Entry->SetNumberField(TEXT("tileGenerationRadius"), ReadFloat(TEXT("TileGenerationRadius")));
+			Entry->SetNumberField(TEXT("tileRemovalRadius"), ReadFloat(TEXT("TileRemovalRadius")));
+			Out.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetNumberField(TEXT("count"), Out.Num());
+	Result->SetArrayField(TEXT("invokers"), Out);
 	return MCPResult(Result);
 }
 
