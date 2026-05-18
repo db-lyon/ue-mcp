@@ -1089,7 +1089,16 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>
 		{
 			SourcePath = AssetPath;
 			FString PackageName, AssetName;
-			AssetPath.Split(TEXT("."), &PackageName, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+			// AssetPath may be either bare ("/Game/Foo/Bar") or object-path form
+			// ("/Game/Foo/Bar.Bar"). When the dot is absent, Split returns false
+			// and leaves both outputs empty - then GetPath of "" yields "" and
+			// DestPath collapses to "/NewName.NewName", dropping the source
+			// folder entirely (#425). Treat the whole input as the package name
+			// in that case.
+			if (!AssetPath.Split(TEXT("."), &PackageName, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd))
+			{
+				PackageName = AssetPath;
+			}
 			FString ParentDir = FPaths::GetPath(PackageName);
 			if (ParentDir.IsEmpty()) ParentDir = PackageName;
 			DestPath = FString::Printf(TEXT("%s/%s.%s"), *ParentDir, *NewName, *NewName);
