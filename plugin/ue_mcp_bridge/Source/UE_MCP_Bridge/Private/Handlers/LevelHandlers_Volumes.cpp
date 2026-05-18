@@ -84,24 +84,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	const FString Label = OptionalString(Params, TEXT("label"));
 
-	// Idempotency by label.
-	if (!Label.IsEmpty())
+	if (auto Existing = MCPCheckActorLabelExists(World, Label, OnConflict, TEXT("Volume")))
 	{
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			if (It->GetActorLabel() == Label)
-			{
-				if (OnConflict == TEXT("error"))
-				{
-					return MCPError(FString::Printf(TEXT("Volume '%s' already exists"), *Label));
-				}
-				auto Existing = MCPSuccess();
-				MCPSetExisted(Existing);
-				Existing->SetStringField(TEXT("actorLabel"), Label);
-				Existing->SetStringField(TEXT("volumeType"), VolumeType);
-				return MCPResult(Existing);
-			}
-		}
+		return Existing;
 	}
 
 	const FVector Location = OptionalVec3(Params, TEXT("location"));

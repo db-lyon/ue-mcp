@@ -232,24 +232,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	const FString Label = OptionalString(Params, TEXT("label"));
 
-	// Idempotency: reuse an actor that already has this label.
-	if (!Label.IsEmpty())
+	if (auto Existing = MCPCheckActorLabelExists(World, Label, OnConflict, TEXT("Actor")))
 	{
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			if (It->GetActorLabel() == Label)
-			{
-				if (OnConflict == TEXT("error"))
-				{
-					return MCPError(FString::Printf(TEXT("Actor '%s' already exists"), *Label));
-				}
-				auto Existing = MCPSuccess();
-				MCPSetExisted(Existing);
-				Existing->SetStringField(TEXT("actorLabel"), Label);
-				Existing->SetStringField(TEXT("actorClass"), It->GetClass()->GetName());
-				return MCPResult(Existing);
-			}
-		}
+		return Existing;
 	}
 
 	UClass* Class = FindClassByShortName(ActorClass);
@@ -1973,15 +1958,6 @@ WriteDone:
 
 namespace
 {
-	static AActor* FindActorByLabel(UWorld* World, const FString& Label)
-	{
-		if (!World) return nullptr;
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			if (It->GetActorLabel() == Label) return *It;
-		}
-		return nullptr;
-	}
 }
 
 // #220: bulk delete actors matching label prefix / class / tag.

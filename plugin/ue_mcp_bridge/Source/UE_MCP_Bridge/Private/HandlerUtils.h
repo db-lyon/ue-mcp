@@ -7,6 +7,10 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Misc/PackageName.h"
+#include "Engine/World.h"
+#include "Engine/Blueprint.h"
+#include "EngineUtils.h"
+#include "GameFramework/Actor.h"
 
 // ── Quick result builders ────────────────────────────────────────────────────
 
@@ -104,6 +108,82 @@ inline void MCPSetDeleteAssetRollback(TSharedPtr<FJsonObject> Result, const FStr
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);
 	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
+}
+
+/** Find an actor by GetActorLabel(). Returns nullptr on miss. Centralises
+ *  the iterator-based lookup that previously lived as a private static in
+ *  several handler translation units. */
+inline AActor* FindActorByLabel(UWorld* World, const FString& Label)
+{
+	if (!World) return nullptr;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (It->GetActorLabel() == Label) return *It;
+	}
+	return nullptr;
+}
+
+/** Spawn-by-label idempotency check. If World already has an actor with the
+ *  given Label, returns a fully-formed "already existed" result the caller
+ *  can return directly (or an MCPError when OnConflict == "error"). When
+ *  Label is empty or no match exists, returns an unset shared pointer so the
+ *  caller proceeds to spawn. Mirrors MCPCheckAssetExists's contract for
+ *  in-world actors. */
+inline TSharedPtr<FJsonValue> MCPCheckActorLabelExists(
+	UWorld* World,
+	const FString& Label,
+	const FString& OnConflict,
+	const FString& FriendlyType = TEXT("Actor"))
+{
+	if (!World || Label.IsEmpty()) return TSharedPtr<FJsonValue>();
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (It->GetActorLabel() == Label)
+		{
+			if (OnConflict == TEXT("error"))
+			{
+				return MCPError(FString::Printf(TEXT("%s '%s' already exists"), *FriendlyType, *Label));
+			}
+			auto Existing = MCPSuccess();
+			MCPSetExisted(Existing);
+			Existing->SetStringField(TEXT("actorLabel"), Label);
+			Existing->SetStringField(TEXT("actorPath"), It->GetPathName());
+			return MCPResult(Existing);
+		}
+	}
+	return TSharedPtr<FJsonValue>();
+}
+
+/** Load a Blueprint by path and return its CDO cast to T. Returns nullptr
+ *  on miss; writes a structured error to OutError. Centralises the
+ *  pattern that previously lived in NetworkingHandlers::LoadBlueprintCDO,
+ *  GasHandlers, and GameplayHandlers. */
+template <typename T = AActor>
+inline T* LoadBlueprintCDO(const FString& BlueprintPath, TSharedPtr<FJsonValue>& OutError)
+{
+	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
+	if (!Blueprint && !BlueprintPath.Contains(TEXT(".")))
+	{
+		// Retry in ObjectPath form ("/Game/Foo/Bar" → "/Game/Foo/Bar.Bar").
+		FString AssetName;
+		BlueprintPath.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+		Blueprint = LoadObject<UBlueprint>(nullptr, *(BlueprintPath + TEXT(".") + AssetName));
+	}
+	if (!Blueprint || !Blueprint->GeneratedClass)
+	{
+		OutError = MCPError(FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
+		return nullptr;
+	}
+	T* CDO = Cast<T>(Blueprint->GeneratedClass->GetDefaultObject());
+	if (!CDO)
+	{
+		OutError = MCPError(FString::Printf(
+			TEXT("Blueprint CDO at '%s' is not a %s"),
+			*BlueprintPath,
+			*T::StaticClass()->GetName()));
+		return nullptr;
+	}
+	return CDO;
 }
 
 // ── Parameter extraction ─────────────────────────────────────────────────────
