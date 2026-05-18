@@ -49,7 +49,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 
 | Action | Description |
 |--------|-------------|
-| `list` | List assets in directory. Params: `directory?, typeFilter?, recursive?` |
+| `list` | List assets via the AssetRegistry (sees /Game and every mounted plugin root). Params: `directory? (default /Game), classFilter?, recursive? (default true), maxResults? (default 2000)` |
 | `search` | Search by name/class/path. Params: `query, directory?, maxResults?, searchAll?` |
 | `read` | Read asset via reflection. Params: `assetPath` |
 | `read_properties` | Read asset properties with values. Params: `assetPath, propertyName?, includeValues?` |
@@ -219,11 +219,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `batch_translate` | Translate a set of actors by an offset. Params: `offset (Vec3), actorLabels[] OR tag (#203)` |
 | `place_actors_batch` | Bulk-spawn StaticMeshActors with per-instance mesh + transform. Params: `actors[]: [{staticMesh, location?, rotation?, scale?, label?}]` |
 | `line_trace` | Line trace in the editor world. Returns hit + actorLabel/actorClass/componentName/componentClass/location/impactPoint/normal/distance/faceIndex/boneName/physicalMaterial. Params: `start (Vec3), end? (Vec3) OR direction? (Vec3) + distance? (default 200000), ignoreActors? (#420)` |
-| `get_bone_transform` | Read a bone or socket transform on a live actor's SkeletalMeshComponent. Wraps `GetBoneTransform` / `GetSocketTransform`. Params: `actorLabel, boneName (or socket name), componentName? (default: CharacterMesh0 / Mesh / first SK component), space? (world\\|component\\|local, default world)` (#420) |
-| `list_bones` | List bones in the ref skeleton (name, index, parent). Params: `actorLabel, componentName? (#420)` |
-| `rebind_leader_pose` | Re-bind every secondary SkeletalMeshComponent on an actor to a body component (default `CharacterMesh0` / `Mesh`). One-call fix for the "character explodes after rotating the actor" failure mode. Params: `actorLabel, bodyComponent? (#419)` |
 | `snap_actor_to_floor` | Snap an actor's bounds-bottom to the first downward line-trace hit. Equivalent of the End-key shortcut; works on arbitrary geometry. Params: `actorLabel, floorOffset?, maxDistance? (default 100000) (#419)` |
-| `preview_animation` | Toggle `bUpdateAnimationInEditor` + `VisibilityBasedAnimTickOption=AlwaysTickPoseAndRefreshBones` on every SkeletalMeshComponent of an actor. Bypasses the "cannot be edited on templates" guard for level instances. Params: `actorLabel, enabled (#419/#420)` |
 
 ---
 
@@ -321,12 +317,16 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `read_pose_search_database` | Inspect a PoseSearchDatabase: schema, animation entries, cost biases, tags. Params: `assetPath` |
 | `set_sequence_properties` | Batch-set properties on AnimSequence assets. If a path is a Montage and resolveFromMontages is true (default), resolves to its first AnimSequence. Params: `assetPaths[], properties{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?}, resolveFromMontages?` |
 | `bake_root_motion_from_bone` | Bake delta translation from a source bone (e.g. pelvis) onto the root bone across the whole sequence; compensates the source bone so world-space position is unchanged. Params: `assetPath, sourceBone, rootBone? (default 'root'), axes? (default ['x','y']), interpolation? ('linear'\\|'per_frame', default 'linear')` |
+| `get_bone_transform` | Read a bone or socket transform on a live actor's SkeletalMeshComponent. Wraps `GetBoneTransform` / `GetSocketTransform`. Params: `actorLabel, boneName (or socket name), componentName? (default: CharacterMesh0 / Mesh / first SK component), space? (world\\|component\\|local, default world)` (#420) |
+| `list_bones` | List bones in a live actor's SkeletalMeshComponent ref skeleton (name, index, parent). Params: `actorLabel, componentName? (#420)` |
+| `rebind_leader_pose` | Re-bind every secondary SkeletalMeshComponent on an actor to a body component (default `CharacterMesh0` / `Mesh`). One-call fix for the "character explodes after rotating the actor" failure mode. Params: `actorLabel, bodyComponent? (#419)` |
+| `preview_animation` | Toggle `bUpdateAnimationInEditor` + `VisibilityBasedAnimTickOption=AlwaysTickPoseAndRefreshBones` on every SkeletalMeshComponent of an actor. Bypasses the "cannot be edited on templates" guard for level instances. Params: `actorLabel, enabled (#419/#420)` |
 
 ---
 
 ## landscape
 
-*Landscape terrain: info, layers, sculpting, painting, materials, heightmap import.*
+*Landscape terrain: info, layers, materials, layer-info creation, proxy spawning.*
 
 | Action | Description |
 |--------|-------------|
@@ -335,13 +335,10 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `sample` | Sample height/layers. Params: `x, y` |
 | `list_splines` | Read landscape splines |
 | `get_component` | Inspect component. Params: `componentIndex` |
-| `sculpt` | Sculpt heightmap. Params: `x, y, radius, strength, falloff?` |
-| `paint_layer` | Paint weight layer. Params: `layerName, x, y, radius, strength?` |
 | `set_material` | Set landscape material. Params: `materialPath` |
 | `add_layer_info` | Register paint layer (creates LayerInfo asset + binds to active landscape). Params: `layerName, packagePath?, weightBlended?` |
 | `create_layer_info` | Standalone LayerInfo asset creation - no landscape required. Params: `layerName, name? (default LI_<layerName>), packagePath? (default /Game/Landscape/LayerInfos), physMaterial?, hardness? (#251)` |
 | `create` | Spawn a new ALandscape with a flat heightmap. Defaults match Landscape Mode "create new" (8x8 components, 63 quads/subsection, 2 subsections/component = 1016x1016 quads). Params: `location?, scale? (default 100,100,100), componentCountX? (default 8), componentCountY? (default 8), subsectionSizeQuads? (7\\|15\\|31\\|63\\|127\\|255, default 63), numSubsections? (1\\|2, default 2), heightOffset? (uint16, default 32768 = mid-elevation), label? (#303)` |
-| `import_heightmap` | Import heightmap file. Params: `filePath` |
 | `get_material_usage_summary` | Per-proxy summary: landscape/hole material paths + component/grass/nanite counts (#150) |
 
 ---
@@ -376,15 +373,13 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 
 ## foliage
 
-*Foliage painting, types, sampling, and settings.*
+*Foliage types, sampling, and settings.*
 
 | Action | Description |
 |--------|-------------|
 | `list_types` | List foliage types in level |
 | `get_settings` | Read foliage type settings. Params: `foliageTypeName` |
 | `sample` | Query instances in region. Params: `center, radius, foliageType?` |
-| `paint` | Add foliage. Params: `foliageType, center, radius, count?, density?` |
-| `erase` | Remove foliage. Params: `center, radius, foliageType?` |
 | `create_type` | Create foliage type from mesh. Params: `meshPath, name?, packagePath?` |
 | `set_settings` | Modify type settings. Params: `foliageTypeName, settings` |
 

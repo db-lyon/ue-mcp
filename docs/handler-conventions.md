@@ -89,11 +89,39 @@ MCPSetCreated(Result)                         // { created: true,  existed: fals
 MCPSetExisted(Result)                         // { created: false, existed: true  }
 MCPSetUpdated(Result)                         // { updated: true }
 MCPSetRollback(Result, InverseMethod, Payload)
+MCPSetDeleteAssetRollback(Result, AssetPath)  // shorthand for delete_asset rollback
+
+// Existence probes - return a ready-to-return Existed/Error JSON value
+// on hit, an unset shared pointer on miss.
+MCPCheckAssetExists(PackagePath, Name, OnConflict, FriendlyType?)
+MCPCheckActorLabelExists(World, Label, OnConflict, FriendlyType?)
+
+// Actor lookup
+FindActorByLabel(World, Label)                // canonical label lookup
+FindActorByLabelOrName(World, Token)          // PIE: label OR internal name
+
+// Blueprint CDO load + cast with structured error
+LoadBlueprintCDO<TActor>(Path, OutError)
+
+// Parameter extraction (Vec3 / Rotator / Color / Transform helpers)
+RequireString, OptionalString, OptionalNumber, OptionalInt, OptionalBool
+OptionalVec3, RequireVec3, OptionalRotator, RequireRotator, OptionalTransform
+MCPVec3ToJsonObject, MCPRotatorToJsonObject, MCPLinearColorToJsonObject
+```
+
+`HandlerAssetCreate.h` adds:
+
+```cpp
+// Probe-then-create using AssetTools. Returns FMCPAssetCreate<T> with either
+// an EarlyReturn JSON value (caller just returns it) or an Asset pointer.
+// Two overloads: static class (TAsset::StaticClass()) or runtime UClass*.
+MCPCreateAssetIdempotent<TAsset>(Name, PackagePath, OnConflict, Label, Factory)
+MCPCreateAssetIdempotent<TAsset>(Name, PackagePath, OnConflict, Label, UClass*, Factory)
 ```
 
 ## Patterns
 
-### Create with natural key
+### Spawn an actor with natural-key idempotency
 
 ```cpp
 TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>& Params)
@@ -103,26 +131,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 
     REQUIRE_EDITOR_WORLD(World);
 
-    // Idempotency: if an actor with this label exists, reuse it.
-    if (!Label.IsEmpty())
+    // Idempotency: if an actor with this label exists, return Existed JSON.
+    if (auto Existing = MCPCheckActorLabelExists(World, Label, OnConflict, TEXT("Actor")))
     {
-        for (TActorIterator<AActor> It(World); It; ++It)
-        {
-            if (It->GetActorLabel() == Label)
-            {
-                if (OnConflict == TEXT("error"))
-                    return MCPError(FString::Printf(TEXT("Actor '%s' already exists"), *Label));
-
-                auto Result = MCPSuccess();
-                MCPSetExisted(Result);
-                Result->SetStringField(TEXT("actorLabel"), Label);
-                // No rollback record — nothing was created.
-                return MCPResult(Result);
-            }
-        }
+        return Existing;
     }
 
-    // Create path
     AActor* NewActor = /* spawn */;
     if (Label.IsEmpty()) Label = NewActor->GetActorLabel();
 
@@ -134,6 +148,33 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
     Payload->SetStringField(TEXT("actorLabel"), Label);
     MCPSetRollback(Result, TEXT("delete_actor"), Payload);
 
+    return MCPResult(Result);
+}
+```
+
+### Create an asset with natural-key idempotency
+
+```cpp
+TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+    FString Name;
+    if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+    const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Materials"));
+    const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+    UMaterialFactoryNew* Factory = NewObject<UMaterialFactoryNew>();
+    auto Created = MCPCreateAssetIdempotent<UMaterial>(Name, PackagePath, OnConflict, TEXT("Material"), Factory);
+    if (Created.EarlyReturn) return Created.EarlyReturn;  // Existed or Error
+
+    SaveAssetPackage(Created.Asset);
+    const FString AssetPath = Created.Asset->GetPathName();
+
+    auto Result = MCPSuccess();
+    MCPSetCreated(Result);
+    Result->SetStringField(TEXT("path"), AssetPath);
+    Result->SetStringField(TEXT("name"), Name);
+    Result->SetStringField(TEXT("packagePath"), PackagePath);
+    MCPSetDeleteAssetRollback(Result, AssetPath);
     return MCPResult(Result);
 }
 ```
@@ -200,7 +241,7 @@ These handlers cannot meaningfully participate:
 | Material | create_material, create_material_instance, create_material_from_texture | add_material_expression, set_*, connect_expression, delete_expression |
 | Animation | create_anim_blueprint, create_montage, create_blendspace, create_sequence | add_anim_notify, create_state_machine, add_state, add_transition, set_*, set_bone_keyframes |
 | Audio | create_sound_cue, create_metasound_source, spawn_ambient_sound | — |
-| Foliage | create_foliage_type | create_foliage_layer, paint_foliage, set_foliage_type_settings |
+| Foliage | create_foliage_type | set_foliage_type_settings |
 | Gameplay | create_smart_object_definition, create_input_action, create_input_mapping_context, create_blackboard, create_behavior_tree, create_eqs_query, create_state_tree, create_game_mode/state/player_controller/player_state/hud (via CreateBlueprintWithParent), spawn_nav_modifier_volume | set_collision_profile, set_physics_enabled, set_body_properties, create_ai_perception_config |
 | GAS | create_gameplay_effect, create_gameplay_ability, create_attribute_set, create_gameplay_cue, create_gameplay_cue_notify | add_ability_tag, add_attribute, set_ability_tags, set_effect_modifier, add_ability_system_component |
 | Niagara | create_niagara_system, create_niagara_emitter, create_niagara_system_from_emitter | spawn_niagara_at_location, set_niagara_parameter, add_emitter_to_system, set_emitter_property |
@@ -208,6 +249,6 @@ These handlers cannot meaningfully participate:
 | Sequencer | create_level_sequence | add_track, sequence_control |
 | Spline | create_spline_actor | set_spline_points |
 | Widget | create_widget_blueprint, create_editor_utility_widget, create_editor_utility_blueprint | set_widget_property, add_widget, remove_widget, move_widget |
-| Landscape/Networking/Physics/Reflection | — | set_landscape_material, import_heightmap, sculpt_*, paint_*, networking setters, physics setters, create_gameplay_tag |
+| Landscape/Networking/Physics/Reflection | create_landscape, create_landscape_layer_info, set_landscape_material, create_enum (#251/#303), set_replicates, set_collision_profile, set_simulate_physics, set_mass_override, set_linear_damping | — |
 
 Every handler in the "Done" column is idempotent (checks for existing entity by natural key, returns `{ existed: true }` on replay) and emits a rollback record where a paired inverse exists. Handlers in "Remaining" are either pure modifies that need before-state capture, or pure deletes that need snapshot-before-delete to be reversible. They still work; they just don't yet participate in rollback.

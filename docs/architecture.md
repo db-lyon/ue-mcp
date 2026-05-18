@@ -97,7 +97,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 | `FMCPBridgeServer` | WebSocket server (raw platform sockets, Windows + Linux/Mac) |
 | `FMCPHandlerRegistry` | Maps method names to C++ handler functions |
 | `FMCPGameThreadExecutor` | Queues tasks to the game thread (required for UE API access) |
-| `HandlerUtils.h` | Shared utilities — `MCPError()`, `MCPSuccess()`, `RequireString()`, `FindClassByShortName()`, `LoadAssetByPath<T>()`, etc. |
+| `HandlerUtils.h` + `HandlerAssetCreate.h` | Shared utilities - `MCPError`/`MCPSuccess`/`MCPResult`, `RequireString`/`OptionalVec3`/`OptionalRotator`/etc., `FindActorByLabel`/`FindActorByLabelOrName`, `MCPCheckAssetExists`/`MCPCheckActorLabelExists`, `LoadAssetByPath<T>`, `LoadBlueprintCDO<T>`, `MCPCreateAssetIdempotent<T>`, `SaveAssetPackage`. |
 
 ### Handler Categories
 
@@ -111,11 +111,11 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 | LevelHandlers | Actors, components, volumes, lights, world settings, splines |
 | ReflectionHandlers | Class/struct/enum reflection, gameplay tags |
 | MaterialHandlers | Materials, instances, expression graph authoring, declarative builder, render preview |
-| AnimationHandlers | Anim BPs, montages, blendspaces, skeletons, IK Rig, ControlRig, virtual bones |
+| AnimationHandlers | Anim BPs, montages, blendspaces, skeletons, IK Rig, ControlRig, virtual bones, live-actor bone reads + leader-pose rebind + preview-animation toggle |
 | AudioHandlers | Playback, ambient sounds, SoundCues, MetaSounds |
 | WidgetHandlers | UMG widget trees, editor utility widgets and blueprints |
-| FoliageHandlers | Foliage painting, types, instance queries |
-| LandscapeHandlers | Terrain sculpting, layer painting, heightmap import |
+| FoliageHandlers | Foliage types, instance queries |
+| LandscapeHandlers | Landscape proxies, layer-info assets, materials |
 | NetworkingHandlers | Replication, dormancy, relevancy, net priority |
 | NiagaraHandlers | VFX systems, emitters, renderers, data interfaces, GPU HLSL inspection |
 | PCGHandlers | Procedural generation graphs, mesh spawner authoring |
