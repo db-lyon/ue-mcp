@@ -71,8 +71,13 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::GetNetworkingInfo(const TSharedPtr<F
 
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Result->SetBoolField(TEXT("replicates"), CDO->GetIsReplicated());
+#if UE_MCP_HAS_5_5_API
 	Result->SetNumberField(TEXT("netUpdateFrequency"), CDO->GetNetUpdateFrequency());
 	Result->SetNumberField(TEXT("minNetUpdateFrequency"), CDO->GetMinNetUpdateFrequency());
+#else
+	Result->SetNumberField(TEXT("netUpdateFrequency"), CDO->NetUpdateFrequency);
+	Result->SetNumberField(TEXT("minNetUpdateFrequency"), CDO->MinNetUpdateFrequency);
+#endif
 	Result->SetNumberField(TEXT("netPriority"), CDO->NetPriority);
 	Result->SetBoolField(TEXT("alwaysRelevant"), CDO->bAlwaysRelevant);
 	Result->SetBoolField(TEXT("replicateMovement"), CDO->IsReplicatingMovement());
@@ -129,20 +134,33 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetUpdateFrequency(const TS
 	double NetUpdateFrequency = 0;
 	if (Params->TryGetNumberField(TEXT("netUpdateFrequency"), NetUpdateFrequency))
 	{
+#if UE_MCP_HAS_5_5_API
 		CDO->SetNetUpdateFrequency((float)NetUpdateFrequency);
+#else
+		CDO->NetUpdateFrequency = (float)NetUpdateFrequency;
+#endif
 	}
 	double MinNetUpdateFrequency = 0;
 	if (Params->TryGetNumberField(TEXT("minNetUpdateFrequency"), MinNetUpdateFrequency))
 	{
+#if UE_MCP_HAS_5_5_API
 		CDO->SetMinNetUpdateFrequency((float)MinNetUpdateFrequency);
+#else
+		CDO->MinNetUpdateFrequency = (float)MinNetUpdateFrequency;
+#endif
 	}
 
 	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
 	SaveBlueprint(Blueprint);
 
 	Result->SetStringField(TEXT("blueprintPath"), BlueprintPath);
+#if UE_MCP_HAS_5_5_API
 	Result->SetNumberField(TEXT("netUpdateFrequency"), CDO->GetNetUpdateFrequency());
 	Result->SetNumberField(TEXT("minNetUpdateFrequency"), CDO->GetMinNetUpdateFrequency());
+#else
+	Result->SetNumberField(TEXT("netUpdateFrequency"), CDO->NetUpdateFrequency);
+	Result->SetNumberField(TEXT("minNetUpdateFrequency"), CDO->MinNetUpdateFrequency);
+#endif
 	Result->SetBoolField(TEXT("success"), true);
 	return MCPResult(Result);
 }
