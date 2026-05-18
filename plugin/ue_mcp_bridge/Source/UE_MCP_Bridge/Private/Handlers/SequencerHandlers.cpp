@@ -319,17 +319,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 		// Find the binding for this actor
 		REQUIRE_EDITOR_WORLD(World);
 
-		// Find actor by label
-		AActor* TargetActor = nullptr;
-		for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-		{
-			if ((*ActorIt)->GetActorLabel() == ActorLabel)
-			{
-				TargetActor = *ActorIt;
-				break;
-			}
-		}
-
+		AActor* TargetActor = FindActorByLabel(World, ActorLabel);
 		if (!TargetActor)
 		{
 			return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));

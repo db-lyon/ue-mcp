@@ -1046,18 +1046,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExecutePCGGraph(const TSharedPtr<FJsonObjec
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Find actor by label
-	AActor* FoundActor = nullptr;
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-	{
-		AActor* Actor = *ActorIt;
-		if (Actor && Actor->GetActorLabel() == ActorLabel)
-		{
-			FoundActor = Actor;
-			break;
-		}
-	}
-
+	AActor* FoundActor = FindActorByLabel(World, ActorLabel);
 	if (!FoundActor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));
@@ -1355,18 +1344,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::GetPCGComponentDetails(const TSharedPtr<FJs
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Find actor by label
-	AActor* FoundActor = nullptr;
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-	{
-		AActor* Actor = *ActorIt;
-		if (Actor && Actor->GetActorLabel() == ActorLabel)
-		{
-			FoundActor = Actor;
-			break;
-		}
-	}
-
+	AActor* FoundActor = FindActorByLabel(World, ActorLabel);
 	if (!FoundActor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));
@@ -1550,17 +1528,9 @@ namespace
 		}
 		if (!World) return MCPError(TEXT("Editor world not available"));
 
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			AActor* A = *It;
-			if (A && A->GetActorLabel() == ActorLabel)
-			{
-				OutActor = A;
-				OutComp = A->FindComponentByClass<UPCGComponent>();
-				break;
-			}
-		}
+		OutActor = FindActorByLabel(World, ActorLabel);
 		if (!OutActor) return MCPError(FString::Printf(TEXT("Actor not found with label: %s"), *ActorLabel));
+		OutComp = OutActor->FindComponentByClass<UPCGComponent>();
 		if (!OutComp) return MCPError(FString::Printf(TEXT("No PCGComponent on actor: %s"), *ActorLabel));
 		return nullptr;
 	}

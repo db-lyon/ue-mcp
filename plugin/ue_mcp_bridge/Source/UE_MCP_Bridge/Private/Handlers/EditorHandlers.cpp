@@ -602,10 +602,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::HitTestViewportPixel(const TSharedPtr<FJ
 		{
 			FString Label;
 			if (!V->TryGetString(Label)) continue;
-			for (TActorIterator<AActor> It(World); It; ++It)
-			{
-				if (It->GetActorLabel() == Label) { Query.AddIgnoredActor(*It); break; }
-			}
+			if (AActor* A = FindActorByLabel(World, Label)) Query.AddIgnoredActor(A);
 		}
 	}
 
@@ -1062,17 +1059,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::FocusViewportOnActor(const TSharedPtr<FJ
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	// Find the actor by label
-	AActor* TargetActor = nullptr;
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		if ((*It)->GetActorLabel() == ActorLabel)
-		{
-			TargetActor = *It;
-			break;
-		}
-	}
-
+	AActor* TargetActor = FindActorByLabel(World, ActorLabel);
 	if (!TargetActor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor '%s' not found"), *ActorLabel));

@@ -878,20 +878,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 	for (const TSharedPtr<FJsonValue>& LabelValue : *ActorLabelsArray)
 	{
 		FString Label = LabelValue->AsString();
-		bool bFound = false;
-
-		for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+		if (AActor* Match = FindActorByLabel(World, Label))
 		{
-			if ((*ActorIt)->GetActorLabel() == Label)
-			{
-				GEditor->SelectActor(*ActorIt, true, true, true);
-				SelectedArray.Add(MakeShared<FJsonValueString>(Label));
-				bFound = true;
-				break;
-			}
+			GEditor->SelectActor(Match, true, true, true);
+			SelectedArray.Add(MakeShared<FJsonValueString>(Label));
 		}
-
-		if (!bFound)
+		else
 		{
 			NotFoundArray.Add(MakeShared<FJsonValueString>(Label));
 		}
@@ -1609,11 +1601,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJs
 
 	REQUIRE_EDITOR_WORLD(World);
 
-	AActor* Actor = nullptr;
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		if (*It && (*It)->GetActorLabel() == ActorLabel) { Actor = *It; break; }
-	}
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
 	if (!Actor) return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
 
 	UClass* WBClass = LoadClass<UActorComponent>(nullptr, TEXT("/Script/Water.WaterBodyComponent"));

@@ -533,19 +533,9 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::CreateLandscape(const TSharedPtr<FJso
 	const FString Label = OptionalString(Params, TEXT("label"));
 
 	// Idempotency by label.
-	if (!Label.IsEmpty())
+	if (auto Existing = MCPCheckActorLabelExists(World, Label, TEXT("skip"), TEXT("Landscape")))
 	{
-		for (TActorIterator<ALandscape> It(World); It; ++It)
-		{
-			if (*It && (*It)->GetActorLabel() == Label)
-			{
-				auto Existing = MCPSuccess();
-				MCPSetExisted(Existing);
-				Existing->SetStringField(TEXT("actorLabel"), Label);
-				Existing->SetStringField(TEXT("actorPath"), (*It)->GetPathName());
-				return MCPResult(Existing);
-			}
-		}
+		return Existing;
 	}
 
 	FActorSpawnParameters SpawnParams;
