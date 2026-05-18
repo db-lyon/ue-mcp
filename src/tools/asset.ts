@@ -59,6 +59,7 @@ export const assetTool: ToolDef = categoryTool(
     import_skeletal_mesh: bp("Import skeletal mesh from FBX. Params: filePath, name?, packagePath?, skeletonPath?, importMaterials?, importTextures?", "import_skeletal_mesh", (p) => ({ filename: p.filePath, destinationPath: p.packagePath, assetName: p.name, skeletonPath: p.skeletonPath, importMaterials: p.importMaterials, importTextures: p.importTextures })),
     import_animation:     bp("Import anim from FBX. Params: filePath, name?, packagePath?, skeletonPath", "import_animation", (p) => ({ filename: p.filePath, destinationPath: p.packagePath, assetName: p.name, skeletonPath: p.skeletonPath })),
     import_texture:       bp("Import image. Params: filePath, name?, packagePath?", "import_texture", (p) => ({ filename: p.filePath, destinationPath: p.packagePath, assetName: p.name })),
+    import_texture_batch: bp("Import many textures in one call - the loop stays inside the editor (no per-file bridge round-trip), so this finishes far faster than N import_texture calls. Per-item result records mirror import_texture. Params: items[]: [{filePath, packagePath?, name?, replaceExisting?}], packagePath? (default for items that don't set it), save? (default true), automated? (default true). Returns requested/imported/failed counts + items[] (#430)", "import_texture_batch", (p) => ({ items: p.items, packagePath: p.packagePath, save: p.save, automated: p.automated })),
     reimport:             bp("Reimport asset from source file. Params: assetPath, filePath?", "reimport_asset", (p) => ({ assetPath: p.assetPath, filePath: p.filePath })),
     read_datatable:       bp("Read DataTable rows. Params: assetPath, rowFilter?", "read_datatable", (p) => ({ path: p.assetPath, rowFilter: p.rowFilter })),
     create_datatable:     bp("Create DataTable. Params: name, packagePath?, rowStruct", "create_datatable"),
@@ -101,6 +102,14 @@ export const assetTool: ToolDef = categoryTool(
   {
     saveMapPackages: z.boolean().optional().describe("save_all_dirty: include map packages (default true)"),
     saveContentPackages: z.boolean().optional().describe("save_all_dirty: include content packages (default true)"),
+    items: z.array(z.object({
+      filePath: z.string(),
+      packagePath: z.string().optional(),
+      name: z.string().optional(),
+      replaceExisting: z.boolean().optional(),
+    })).optional().describe("import_texture_batch entries"),
+    save: z.boolean().optional().describe("import_texture_batch: save imported packages immediately (default true)"),
+    automated: z.boolean().optional().describe("import_texture_batch: bypass interactive dialogs (default true)"),
     assetPath: z.string().optional().describe("Asset path"),
     directory: z.string().optional(), query: z.string().optional(),
     maxResults: z.number().optional(), typeFilter: z.string().optional(),

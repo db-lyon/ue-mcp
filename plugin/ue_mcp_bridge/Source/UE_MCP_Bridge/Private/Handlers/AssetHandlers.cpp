@@ -173,6 +173,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Texture handlers
 	Registry.RegisterHandler(TEXT("import_texture"), &ImportTexture);
+	Registry.RegisterHandler(TEXT("import_texture_batch"), &ImportTextureBatch);
 	Registry.RegisterHandler(TEXT("get_texture_info"), &ListTextureProperties);
 	Registry.RegisterHandler(TEXT("set_texture_settings"), &SetTextureProperties);
 

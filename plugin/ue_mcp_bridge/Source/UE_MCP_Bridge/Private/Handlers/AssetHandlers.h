@@ -48,6 +48,8 @@ private:
 	static TSharedPtr<FJsonValue> ListTextureProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetTextureProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ImportTexture(const TSharedPtr<FJsonObject>& Params);
+	// #430: one-call batch of texture imports - loops AssetImportTasks inside the editor.
+	static TSharedPtr<FJsonValue> ImportTextureBatch(const TSharedPtr<FJsonObject>& Params);
 
 	// Export
 	static TSharedPtr<FJsonValue> ExportAsset(const TSharedPtr<FJsonObject>& Params);
