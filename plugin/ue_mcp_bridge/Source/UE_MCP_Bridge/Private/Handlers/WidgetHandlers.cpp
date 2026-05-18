@@ -1,6 +1,7 @@
 #include "WidgetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerAssetCreate.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -142,12 +143,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetBlueprint(const TSharedPtr<F
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	FString ParentClassName = OptionalString(Params, TEXT("parentClass"), TEXT("UserWidget"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("WidgetBlueprint")))
-	{
-		return Existing;
-	}
-
-	// (#134) Resolve parentClass string — accept short names ("UserWidget"),
+	// (#134) Resolve parentClass string - accept short names ("UserWidget"),
 	// short names with U prefix, and full class paths. Default to UUserWidget
 	// only when the caller didn't pass a parentClass.
 	UClass* ParentClass = nullptr;
@@ -165,26 +161,20 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetBlueprint(const TSharedPtr<F
 		return MCPError(FString::Printf(TEXT("parentClass '%s' is not a UUserWidget subclass"), *ParentClassName));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
 	UWidgetBlueprintFactory* WidgetFactory = NewObject<UWidgetBlueprintFactory>();
 	WidgetFactory->ParentClass = ParentClass;
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UWidgetBlueprint::StaticClass(), WidgetFactory);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create WidgetBlueprint"));
-	}
+	auto Created = MCPCreateAssetIdempotent<UWidgetBlueprint>(Name, PackagePath, OnConflict, TEXT("WidgetBlueprint"), WidgetFactory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("parentClass"), ParentClass->GetPathName());
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -262,10 +252,6 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 	}
 
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	if (auto Existing = MCPCheckAssetExists(PackagePath, AssetName, OnConflict, TEXT("EditorUtilityWidgetBlueprint")))
-	{
-		return Existing;
-	}
 
 	UClass* EUWBClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityWidgetBlueprint"));
 	if (!EUWBClass)
@@ -273,26 +259,20 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityWidget(const TSharedP
 		return MCPError(TEXT("EditorUtilityWidgetBlueprint class not found. Enable Blutility plugin."));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
 	UWidgetBlueprintFactory* WidgetFactory = NewObject<UWidgetBlueprintFactory>();
 	WidgetFactory->ParentClass = UUserWidget::StaticClass();
 	WidgetFactory->BlueprintType = BPTYPE_Normal;
 
-	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, EUWBClass, WidgetFactory);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create EditorUtilityWidgetBlueprint"));
-	}
+	auto Created = MCPCreateAssetIdempotent<UObject>(AssetName, PackagePath, OnConflict, TEXT("EditorUtilityWidgetBlueprint"), EUWBClass, WidgetFactory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), AssetName);
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -311,10 +291,6 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 	}
 
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	if (auto Existing = MCPCheckAssetExists(PackagePath, AssetName, OnConflict, TEXT("EditorUtilityBlueprint")))
-	{
-		return Existing;
-	}
 
 	UClass* EUBClass = FindObject<UClass>(nullptr, TEXT("/Script/Blutility.EditorUtilityBlueprint"));
 	if (!EUBClass)
@@ -322,22 +298,16 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateEditorUtilityBlueprint(const TShar
 		return MCPError(TEXT("EditorUtilityBlueprint class not found. Enable Blutility plugin."));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
+	auto Created = MCPCreateAssetIdempotent<UObject>(AssetName, PackagePath, OnConflict, TEXT("EditorUtilityBlueprint"), EUBClass, nullptr);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UObject* NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, EUBClass, nullptr);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create EditorUtilityBlueprint"));
-	}
-
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), AssetName);
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
