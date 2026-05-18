@@ -587,7 +587,8 @@ bool FStateTreeHandlers::CompileAndSave(UStateTree* StateTree, TSharedPtr<FJsonO
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::ReadStateTree(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -671,7 +672,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadStateTree(const TSharedPtr<FJsonO
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::ListStates(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -710,7 +712,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStates(const TSharedPtr<FJsonObje
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -786,7 +789,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveState(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -817,7 +821,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveState(const TSharedPtr<FJsonObj
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -952,7 +957,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::ClearStateNodes(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -979,7 +985,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ClearStateNodes(const TSharedPtr<FJso
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::AddTask(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1016,7 +1023,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTask(const TSharedPtr<FJsonObject>
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::AddEnterCondition(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1059,7 +1067,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEnterCondition(const TSharedPtr<FJ
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEnterCondition(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1087,7 +1096,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEnterCondition(const TSharedPtr
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTask(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1114,7 +1124,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTask(const TSharedPtr<FJsonObje
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskInstanceProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1159,7 +1170,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskInstanceProperty(const TShared
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1221,7 +1233,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskProperty(const TSharedPtr<FJso
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::AddEvaluator(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1266,7 +1279,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEvaluator(const TSharedPtr<FJsonOb
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEvaluator(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1299,7 +1313,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEvaluator(const TSharedPtr<FJso
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorInstanceProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1346,7 +1361,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorInstanceProperty(const TS
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1403,7 +1419,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorProperty(const TSharedPtr
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::AddGlobalTask(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1448,7 +1465,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddGlobalTask(const TSharedPtr<FJsonO
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveGlobalTask(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1481,7 +1499,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveGlobalTask(const TSharedPtr<FJs
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskInstanceProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1528,7 +1547,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskInstanceProperty(const T
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskProperty(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1585,7 +1605,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskProperty(const TSharedPt
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1663,7 +1684,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonO
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransitionCondition(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1712,7 +1734,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransitionCondition(const TSharedP
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTransition(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1741,7 +1764,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTransition(const TSharedPtr<FJs
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1777,7 +1801,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObje
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1810,7 +1835,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonO
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::ListBindings(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1855,7 +1881,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListBindings(const TSharedPtr<FJsonOb
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::ListColors(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1879,7 +1906,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListColors(const TSharedPtr<FJsonObje
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::AddColor(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1920,7 +1948,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddColor(const TSharedPtr<FJsonObject
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::ListStateParameters(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -1983,7 +2012,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStateParameters(const TSharedPtr<
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -2034,7 +2064,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJ
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveStateParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -2064,7 +2095,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveStateParameter(const TSharedPtr
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateParameter(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -2115,7 +2147,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateParameter(const TSharedPtr<FJ
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetRootParameters(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -2163,7 +2196,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetRootParameters(const TSharedPtr<FJ
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::CompileStateTree(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
@@ -2174,7 +2208,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::CompileStateTree(const TSharedPtr<FJs
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::ValidateStateTree(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("assetPath"));
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
