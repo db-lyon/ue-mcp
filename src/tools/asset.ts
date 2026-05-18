@@ -48,6 +48,7 @@ export const assetTool: ToolDef = categoryTool(
     delete_batch:   bp("Batch-delete assets. Per-path status (deleted/absent/failed) plus reason+referencers on failed entries (#278). Params: assetPaths[], force?", "delete_asset_batch"),
     create_data_asset: bp("Create UDataAsset instance of custom class. Params: name, className (/Script/Module.ClassName or loaded name), packagePath?, properties? (key/value map)", "create_data_asset"),
     save:           bp("Save asset(s). Params: assetPath?", "save_asset"),
+    save_all_dirty: bp("Flush every dirty package to disk in one call. End-of-workflow shortcut after bulk import/edit. Params: saveMapPackages? (default true), saveContentPackages? (default true). Returns savedAll boolean (#429)", "save_all_dirty", (p) => ({ saveMapPackages: p.saveMapPackages, saveContentPackages: p.saveContentPackages })),
     set_mesh_material:    bp("Assign material to static mesh slot. Params: assetPath, materialPath, slotIndex?", "set_mesh_material"),
     recenter_pivot:       { description: "Move static mesh pivot to geometry center. Params: assetPath OR assetPaths", bridge: "recenter_pivot", mapParams: (p) => {
       const paths = p.assetPaths as string[] | undefined;
@@ -98,6 +99,8 @@ export const assetTool: ToolDef = categoryTool(
   },
   undefined,
   {
+    saveMapPackages: z.boolean().optional().describe("save_all_dirty: include map packages (default true)"),
+    saveContentPackages: z.boolean().optional().describe("save_all_dirty: include content packages (default true)"),
     assetPath: z.string().optional().describe("Asset path"),
     directory: z.string().optional(), query: z.string().optional(),
     maxResults: z.number().optional(), typeFilter: z.string().optional(),

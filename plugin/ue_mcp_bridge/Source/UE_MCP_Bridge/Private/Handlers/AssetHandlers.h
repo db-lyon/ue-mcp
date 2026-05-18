@@ -24,6 +24,8 @@ private:
 	static TSharedPtr<FJsonValue> BulkRename(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateDataAsset(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SaveAsset(const TSharedPtr<FJsonObject>& Params);
+	// #429: bulk save of every dirty package - one-shot end-of-workflow flush.
+	static TSharedPtr<FJsonValue> SaveAllDirty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListTextures(const TSharedPtr<FJsonObject>& Params);
 
 	// DataTable handlers

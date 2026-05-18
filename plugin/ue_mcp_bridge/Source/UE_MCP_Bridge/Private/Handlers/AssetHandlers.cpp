@@ -163,6 +163,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("bulk_rename_assets"), &BulkRename);
 	Registry.RegisterHandler(TEXT("create_data_asset"), &CreateDataAsset);
 	Registry.RegisterHandler(TEXT("save_asset"), &SaveAsset);
+	Registry.RegisterHandler(TEXT("save_all_dirty"), &SaveAllDirty);
 	Registry.RegisterHandler(TEXT("list_textures"), &ListTextures);
 
 	// FBX import handlers
@@ -1664,6 +1665,20 @@ TSharedPtr<FJsonValue> FAssetHandlers::SaveAsset(const TSharedPtr<FJsonObject>& 
 		Result->SetStringField(TEXT("message"), TEXT("All modified assets saved"));
 		return MCPResult(Result);
 	}
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::SaveAllDirty(const TSharedPtr<FJsonObject>& Params)
+{
+	const bool bSaveMapPackages = OptionalBool(Params, TEXT("saveMapPackages"), true);
+	const bool bSaveContentPackages = OptionalBool(Params, TEXT("saveContentPackages"), true);
+
+	const bool bOk = UEditorLoadingAndSavingUtils::SaveDirtyPackages(bSaveMapPackages, bSaveContentPackages);
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("saveMapPackages"), bSaveMapPackages);
+	Result->SetBoolField(TEXT("saveContentPackages"), bSaveContentPackages);
+	Result->SetBoolField(TEXT("savedAll"), bOk);
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ListTextures(const TSharedPtr<FJsonObject>& Params)
