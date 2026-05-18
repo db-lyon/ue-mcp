@@ -537,11 +537,15 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 		}
 	}
 
-	// Register widget GUID so the compiler doesn't assert
+	// Register widget GUID so the compiler doesn't assert.
+	// WidgetVariableNameToGuidMap was added in UE 5.5; the assert it dodges
+	// only exists in 5.5+, so the registration is unnecessary on 5.4.
+#if UE_MCP_HAS_5_5_API
 	if (!WidgetBP->WidgetVariableNameToGuidMap.Contains(NewWidget->GetFName()))
 	{
 		WidgetBP->WidgetVariableNameToGuidMap.Add(NewWidget->GetFName(), FGuid::NewGuid());
 	}
+#endif
 
 	// ── Save ──
 	WidgetBP->MarkPackageDirty();
