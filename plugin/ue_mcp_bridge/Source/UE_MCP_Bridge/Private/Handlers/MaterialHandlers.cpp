@@ -2,6 +2,7 @@
 #include "UE_MCP_BridgeModule.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerAssetCreate.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -247,53 +248,19 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterial(const TSharedPtr<FJsonO
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] CreateMaterial: name=%s packagePath=%s"), *Name, *PackagePath);
 
-	// Idempotency: check if the material already exists at the target path.
-	const FString ProbePath = PackagePath + TEXT("/") + Name + TEXT(".") + Name;
-	if (UMaterial* Existing = LoadObject<UMaterial>(nullptr, *ProbePath))
-	{
-		if (OnConflict == TEXT("error"))
-		{
-			return MCPError(FString::Printf(TEXT("Material '%s' already exists"), *ProbePath));
-		}
-		auto ExistingResult = MCPSuccess();
-		MCPSetExisted(ExistingResult);
-		ExistingResult->SetStringField(TEXT("path"), Existing->GetPathName());
-		ExistingResult->SetStringField(TEXT("name"), Name);
-		ExistingResult->SetStringField(TEXT("packagePath"), PackagePath);
-		return MCPResult(ExistingResult);
-	}
-
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
 	UMaterialFactoryNew* MaterialFactory = NewObject<UMaterialFactoryNew>();
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UMaterial::StaticClass(), MaterialFactory);
+	auto Created = MCPCreateAssetIdempotent<UMaterial>(Name, PackagePath, OnConflict, TEXT("Material"), MaterialFactory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create material asset"));
-	}
-
-	UMaterial* NewMaterial = Cast<UMaterial>(NewAsset);
-	if (!NewMaterial)
-	{
-		return MCPError(TEXT("Created asset is not a material"));
-	}
-
-	SaveAssetPackage(NewMaterial);
-
-	const FString AssetPath = NewMaterial->GetPathName();
+	SaveAssetPackage(Created.Asset);
+	const FString AssetPath = Created.Asset->GetPathName();
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
-
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("assetPath"), AssetPath);
-	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-
+	MCPSetDeleteAssetRollback(Result, AssetPath);
 	return MCPResult(Result);
 }
 
@@ -1137,12 +1104,6 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPt
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Materials"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("MaterialInstance")))
-	{
-		return Existing;
-	}
 
 	UMaterialInterface* ParentMaterial = Cast<UMaterialInterface>(
 		StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, *ParentPath));
@@ -1159,35 +1120,22 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialInstance(const TSharedPt
 
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] CreateMaterialInstance: name=%s parent=%s packagePath=%s"), *Name, *ParentPath, *PackagePath);
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
 	UMaterialInstanceConstantFactoryNew* Factory = NewObject<UMaterialInstanceConstantFactoryNew>();
 	Factory->InitialParent = ParentMaterial;
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UMaterialInstanceConstant::StaticClass(), Factory);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create material instance asset"));
-	}
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	auto Created = MCPCreateAssetIdempotent<UMaterialInstanceConstant>(Name, PackagePath, OnConflict, TEXT("Material instance"), Factory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UMaterialInstanceConstant* MaterialInstance = Cast<UMaterialInstanceConstant>(NewAsset);
-	if (!MaterialInstance)
-	{
-		return MCPError(TEXT("Created asset is not a material instance"));
-	}
-
-	// Save the package
-	SaveAssetPackage(MaterialInstance);
+	SaveAssetPackage(Created.Asset);
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), MaterialInstance->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
 	Result->SetStringField(TEXT("parentPath"), ParentMaterial->GetPathName());
 	Result->SetStringField(TEXT("packagePath"), PackagePath);
-	MCPSetDeleteAssetRollback(Result, MaterialInstance->GetPathName());
-
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 	return MCPResult(Result);
 }
 
@@ -1931,26 +1879,12 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialSimple(const TSharedPtr<
 	FString Name;
 	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
 	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Materials"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	const FString FullPath = PackagePath + TEXT("/") + Name;
-	if (UEditorAssetLibrary::DoesAssetExist(FullPath))
-	{
-		const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-		if (OnConflict == TEXT("error"))
-		{
-			return MCPError(FString::Printf(TEXT("Material already exists: %s"), *FullPath));
-		}
-		auto Existed = MCPSuccess();
-		MCPSetExisted(Existed);
-		Existed->SetStringField(TEXT("assetPath"), FullPath);
-		return MCPResult(Existed);
-	}
-
-	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 	UMaterialFactoryNew* Factory = NewObject<UMaterialFactoryNew>();
-	UObject* Created = AssetTools.CreateAsset(Name, PackagePath, UMaterial::StaticClass(), Factory);
-	UMaterial* Material = Cast<UMaterial>(Created);
-	if (!Material) return MCPError(TEXT("Failed to create material asset"));
+	auto CreatedRes = MCPCreateAssetIdempotent<UMaterial>(Name, PackagePath, OnConflict, TEXT("Material"), Factory);
+	if (CreatedRes.EarlyReturn) return CreatedRes.EarlyReturn;
+	UMaterial* Material = CreatedRes.Asset;
 
 	auto AddConstant3 = [Material](double R, double G, double B) -> UMaterialExpressionConstant3Vector*
 	{
