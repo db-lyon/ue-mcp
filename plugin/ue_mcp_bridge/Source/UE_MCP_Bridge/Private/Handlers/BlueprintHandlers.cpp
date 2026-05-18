@@ -575,6 +575,27 @@ FEdGraphPinType FBlueprintHandlers::MakePinType(const FString& TypeStr)
 	{
 		PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
 	}
+	// (#428) Explicit enum reference: "enum:/Game/Path/E_Foo[.E_Foo]" or
+	// "enum:/Script/Module.EEnumName". Used for user-defined enums where the
+	// short-name resolver can't reach them.
+	else if (TypeStr.StartsWith(TEXT("enum:")))
+	{
+		FString EnumPath = TypeStr.Mid(5);
+		EnumPath.TrimStartAndEndInline();
+		UEnum* Enum = LoadObject<UEnum>(nullptr, *EnumPath);
+		if (!Enum && !EnumPath.Contains(TEXT(".")))
+		{
+			// Try object-path form ("/Game/Foo/Bar" -> "/Game/Foo/Bar.Bar")
+			FString AssetName;
+			EnumPath.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+			Enum = LoadObject<UEnum>(nullptr, *(EnumPath + TEXT(".") + AssetName));
+		}
+		if (Enum)
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+			PinType.PinSubCategoryObject = Enum;
+		}
+	}
 	// (#286) Resolve named enums by full path (/Script/Module.EEnumName) or
 	// short name (EMyEnum / E_MyEnum). UE pin types for enums use PC_Byte with
 	// PinSubCategoryObject = UEnum*.
@@ -591,6 +612,23 @@ FEdGraphPinType FBlueprintHandlers::MakePinType(const FString& TypeStr)
 		else if (TryResolveObjectPin(TypeStr))
 		{
 			// resolved as object/class
+		}
+	}
+	// (#428) Bare /Game/... path - assume user-defined enum.
+	else if (TypeStr.StartsWith(TEXT("/Game/")))
+	{
+		FString EnumPath = TypeStr;
+		UEnum* Enum = LoadObject<UEnum>(nullptr, *EnumPath);
+		if (!Enum && !EnumPath.Contains(TEXT(".")))
+		{
+			FString AssetName;
+			EnumPath.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+			Enum = LoadObject<UEnum>(nullptr, *(EnumPath + TEXT(".") + AssetName));
+		}
+		if (Enum)
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_Byte;
+			PinType.PinSubCategoryObject = Enum;
 		}
 	}
 	else
