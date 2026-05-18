@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
 #include "UObject/UObjectIterator.h"
@@ -11,6 +12,12 @@
 #include "Engine/Blueprint.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+
+// True on UE 5.5+ (and any future 6.x). Used to gate APIs introduced in 5.5
+// that don't exist in 5.4: StateTreeEditingSubsystem, FExpressionInputIterator,
+// AActor::Get/SetNetUpdateFrequency, UWidgetBlueprint::WidgetVariableNameToGuidMap,
+// UPCGEditorGraphNodeBase, UIKRetargeterController::AssignIKRigToAllOps, etc.
+#define UE_MCP_HAS_5_5_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5))
 
 // ── Quick result builders ────────────────────────────────────────────────────
 
