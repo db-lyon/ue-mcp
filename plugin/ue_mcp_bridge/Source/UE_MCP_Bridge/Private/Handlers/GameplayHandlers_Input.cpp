@@ -731,17 +731,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::InspectPie(const TSharedPtr<FJsonObjec
 		return MCPResult(Result);
 	}
 
-	// Find specific actor by label
-	AActor* FoundActor = nullptr;
-	for (TActorIterator<AActor> It(PIEWorld); It; ++It)
-	{
-		if ((*It)->GetActorLabel() == ActorLabel || (*It)->GetName() == ActorLabel)
-		{
-			FoundActor = *It;
-			break;
-		}
-	}
-
+	AActor* FoundActor = FindActorByLabelOrName(PIEWorld, ActorLabel);
 	if (!FoundActor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found in PIE: %s"), *ActorLabel));
@@ -823,17 +813,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetPieAnimState(const TSharedPtr<FJson
 
 	UWorld* PIEWorld = PIEContext->World();
 
-	// Find actor
-	AActor* FoundActor = nullptr;
-	for (TActorIterator<AActor> It(PIEWorld); It; ++It)
-	{
-		if ((*It)->GetActorLabel() == ActorLabel || (*It)->GetName() == ActorLabel)
-		{
-			FoundActor = *It;
-			break;
-		}
-	}
-
+	AActor* FoundActor = FindActorByLabelOrName(PIEWorld, ActorLabel);
 	if (!FoundActor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found in PIE: %s"), *ActorLabel));
@@ -927,15 +907,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetPieAnimProperties(const TSharedPtr<
 		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
 	}
 
-	AActor* FoundActor = nullptr;
-	for (TActorIterator<AActor> It(PIEWorld); It; ++It)
-	{
-		if ((*It)->GetActorLabel() == ActorLabel || (*It)->GetName() == ActorLabel)
-		{
-			FoundActor = *It;
-			break;
-		}
-	}
+	AActor* FoundActor = FindActorByLabelOrName(PIEWorld, ActorLabel);
 	if (!FoundActor) return MCPError(FString::Printf(TEXT("Actor not found in PIE: %s"), *ActorLabel));
 
 	USkeletalMeshComponent* SkelMesh = FoundActor->FindComponentByClass<USkeletalMeshComponent>();
@@ -1138,17 +1110,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ApplyDamageInPie(const TSharedPtr<FJso
 	}
 	UWorld* PIEWorld = PIEContext->World();
 
-	// Find actor by label or name
-	AActor* TargetActor = nullptr;
-	for (TActorIterator<AActor> It(PIEWorld); It; ++It)
-	{
-		if ((*It)->GetActorLabel() == ActorLabel || (*It)->GetName() == ActorLabel)
-		{
-			TargetActor = *It;
-			break;
-		}
-	}
-
+	AActor* TargetActor = FindActorByLabelOrName(PIEWorld, ActorLabel);
 	if (!TargetActor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found in PIE: %s"), *ActorLabel));

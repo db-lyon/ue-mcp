@@ -123,6 +123,18 @@ inline AActor* FindActorByLabel(UWorld* World, const FString& Label)
 	return nullptr;
 }
 
+/** Find an actor by either editor label or internal UObject name. Used by
+ *  PIE / runtime handlers where callers may pass either form. */
+inline AActor* FindActorByLabelOrName(UWorld* World, const FString& LabelOrName)
+{
+	if (!World) return nullptr;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (It->GetActorLabel() == LabelOrName || It->GetName() == LabelOrName) return *It;
+	}
+	return nullptr;
+}
+
 /** Spawn-by-label idempotency check. If World already has an actor with the
  *  given Label, returns a fully-formed "already existed" result the caller
  *  can return directly (or an MCPError when OnConflict == "error"). When

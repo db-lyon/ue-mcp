@@ -799,11 +799,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObj
 		if (!World) return MCPError(TEXT("No editor world available"));
 	}
 
-	AActor* Target = nullptr;
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		if (It->GetActorLabel() == ActorLabel) { Target = *It; break; }
-	}
+	AActor* Target = FindActorByLabel(World, ActorLabel);
 	if (!Target)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found in %s world: %s"), WorldScope == TEXT("pie") ? TEXT("PIE") : TEXT("editor"), *ActorLabel));
@@ -900,11 +896,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObj
 				continue;
 			}
 
-			AActor* RefActor = nullptr;
-			for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-			{
-				if (ActorIt->GetActorLabel() == ActorArgLabel) { RefActor = *ActorIt; break; }
-			}
+			AActor* RefActor = FindActorByLabel(World, ActorArgLabel);
 			if (!RefActor)
 			{
 				for (TFieldIterator<FProperty> CleanupIt(Func); CleanupIt && (CleanupIt->PropertyFlags & CPF_Parm); ++CleanupIt)
