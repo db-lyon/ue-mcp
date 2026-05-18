@@ -19,6 +19,9 @@
 #include "EditorFramework/AssetImportData.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
+#include "Rendering/SkeletalMeshRenderData.h"
+#include "Animation/Skeleton.h"
+#include "StaticMeshResources.h"
 #include "Materials/MaterialInterface.h"
 #include "PhysicsEngine/BodySetup.h"
 #include "AI/Navigation/NavCollisionBase.h"
@@ -302,6 +305,89 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSkeletalMeshMaterialSlots(const TShare
 // ---------------------------------------------------------------------------
 // v1.0.0-rc.3 — #193 get_mesh_bounds
 // ---------------------------------------------------------------------------
+// #431: one-call asset QA - bounds + material slots + skeleton + LOD/vertex
+// counts in one shot. Works for both UStaticMesh and USkeletalMesh.
+TSharedPtr<FJsonValue> FAssetHandlers::GetMeshInfo(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+
+	UStaticMesh* AsStaticMesh = LoadAssetByPath<UStaticMesh>(AssetPath);
+	USkeletalMesh* AsSkeletalMesh = AsStaticMesh ? nullptr : LoadAssetByPath<USkeletalMesh>(AssetPath);
+	if (!AsStaticMesh && !AsSkeletalMesh)
+	{
+		return MCPError(FString::Printf(TEXT("Mesh not found at '%s' (tried StaticMesh and SkeletalMesh)"), *AssetPath));
+	}
+
+	FBox BoundingBox(ForceInit);
+	FString MeshKind;
+	int32 LodCount = 0;
+	int32 VertexCount = 0;
+	FString SkeletonPath;
+	TArray<TSharedPtr<FJsonValue>> SlotsJson;
+
+	if (AsStaticMesh)
+	{
+		MeshKind = TEXT("StaticMesh");
+		BoundingBox = AsStaticMesh->GetBoundingBox();
+		LodCount = AsStaticMesh->GetNumLODs();
+		if (LodCount > 0 && AsStaticMesh->GetRenderData() && AsStaticMesh->GetRenderData()->LODResources.Num() > 0)
+		{
+			VertexCount = AsStaticMesh->GetRenderData()->LODResources[0].GetNumVertices();
+		}
+		const TArray<FStaticMaterial>& Mats = AsStaticMesh->GetStaticMaterials();
+		for (int32 i = 0; i < Mats.Num(); ++i)
+		{
+			const FStaticMaterial& M = Mats[i];
+			TSharedPtr<FJsonObject> SlotObj = MakeShared<FJsonObject>();
+			SlotObj->SetNumberField(TEXT("index"), i);
+			SlotObj->SetStringField(TEXT("slotName"), M.MaterialSlotName.ToString());
+			SlotObj->SetStringField(TEXT("materialPath"), M.MaterialInterface ? M.MaterialInterface->GetPathName() : FString());
+			SlotObj->SetBoolField(TEXT("isDefaultFallback"), M.MaterialInterface == nullptr);
+			SlotsJson.Add(MakeShared<FJsonValueObject>(SlotObj));
+		}
+	}
+	else
+	{
+		MeshKind = TEXT("SkeletalMesh");
+		const FBoxSphereBounds Bounds = AsSkeletalMesh->GetBounds();
+		BoundingBox = FBox(Bounds.Origin - Bounds.BoxExtent, Bounds.Origin + Bounds.BoxExtent);
+		if (USkeleton* Skel = AsSkeletalMesh->GetSkeleton()) SkeletonPath = Skel->GetPathName();
+		if (const FSkeletalMeshRenderData* RD = AsSkeletalMesh->GetResourceForRendering())
+		{
+			LodCount = RD->LODRenderData.Num();
+			if (LodCount > 0) VertexCount = RD->LODRenderData[0].GetNumVertices();
+		}
+		const TArray<FSkeletalMaterial>& Mats = AsSkeletalMesh->GetMaterials();
+		for (int32 i = 0; i < Mats.Num(); ++i)
+		{
+			const FSkeletalMaterial& M = Mats[i];
+			TSharedPtr<FJsonObject> SlotObj = MakeShared<FJsonObject>();
+			SlotObj->SetNumberField(TEXT("index"), i);
+			SlotObj->SetStringField(TEXT("slotName"), M.MaterialSlotName.ToString());
+			SlotObj->SetStringField(TEXT("materialPath"), M.MaterialInterface ? M.MaterialInterface->GetPathName() : FString());
+			SlotObj->SetBoolField(TEXT("isDefaultFallback"), M.MaterialInterface == nullptr);
+			SlotsJson.Add(MakeShared<FJsonValueObject>(SlotObj));
+		}
+	}
+
+	const FVector Extent = BoundingBox.GetExtent();
+	const FVector Origin = BoundingBox.GetCenter();
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("meshKind"), MeshKind);
+	Result->SetObjectField(TEXT("boundsOrigin"), MCPVec3ToJsonObject(Origin));
+	Result->SetObjectField(TEXT("boundsExtent"), MCPVec3ToJsonObject(Extent));
+	Result->SetNumberField(TEXT("heightM"), (Extent.Z * 2.0) / 100.0);
+	Result->SetNumberField(TEXT("lodCount"), LodCount);
+	Result->SetNumberField(TEXT("vertexCount"), VertexCount);
+	if (!SkeletonPath.IsEmpty()) Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
+	Result->SetArrayField(TEXT("materialSlots"), SlotsJson);
+	Result->SetNumberField(TEXT("materialCount"), SlotsJson.Num());
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::GetMeshBounds(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
