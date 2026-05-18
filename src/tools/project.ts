@@ -446,6 +446,95 @@ export const projectTool: ToolDef = categoryTool(
         };
       },
     },
+
+    add_cpp_member: {
+      // #423: append a UPROPERTY / UFUNCTION declaration to an existing UCLASS
+      // header in the right access-specifier block. The recurring trap is that
+      // raw appending lands the declaration in whatever access section the
+      // class happened to end in (often private:), which makes UHT reject
+      // BlueprintReadWrite ("should not be used on private members"). This
+      // handler inserts the requested access specifier before the declaration
+      // and restores the previous one after, so the caller doesn't need to
+      // know what section was active at the end of the class body.
+      description:
+        "Append a UPROPERTY/UFUNCTION declaration to an existing UCLASS header inside the access specifier you choose. Idempotent: if a declaration containing the same memberName is already present, returns existed:true. Params: headerPath (relative to Source/ or absolute), declaration (full multi-line UPROPERTY(...) / UFUNCTION(...) block plus its single-line member or function signature), memberName (the identifier the declaration introduces - used for idempotency), access? ('public'|'protected'|'private', default 'public').",
+      handler: async (ctx, p) => {
+        ctx.project.ensureLoaded();
+        const headerPath = p.headerPath as string;
+        const declaration = p.declaration as string;
+        const memberName = p.memberName as string;
+        const access = (((p.access as string) || "public").toLowerCase()) as "public" | "protected" | "private";
+        if (!headerPath) throw new Error("Missing 'headerPath'");
+        if (!declaration) throw new Error("Missing 'declaration'");
+        if (!memberName) throw new Error("Missing 'memberName'");
+        if (access !== "public" && access !== "protected" && access !== "private") {
+          throw new Error("'access' must be 'public' | 'protected' | 'private'");
+        }
+        const sourceDir = path.join(ctx.project.projectDir!, "Source");
+        const resolved = path.isAbsolute(headerPath) ? path.resolve(headerPath) : path.resolve(sourceDir, headerPath);
+        const sourceAbs = path.resolve(sourceDir);
+        if (!resolved.startsWith(sourceAbs + path.sep) && resolved !== sourceAbs) {
+          throw new Error(`Refusing to write outside project Source/: ${resolved}`);
+        }
+        if (!/\.h$/i.test(resolved)) {
+          throw new Error(`add_cpp_member only accepts .h files (got '${path.extname(resolved)}')`);
+        }
+        if (!fs.existsSync(resolved)) throw new Error(`Header not found: ${resolved}`);
+
+        const original = fs.readFileSync(resolved, "utf-8");
+
+        // Idempotency: does a declaration with this memberName already exist?
+        // Match identifier as a whole word - tolerant of pointer/ref/const sigils.
+        const wordRe = new RegExp(`\\b${memberName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+        if (wordRe.test(original)) {
+          return { status: "existed", path: resolved, memberName };
+        }
+
+        // Find the class's terminating "};" - last occurrence in the file is
+        // the conservative choice; UCLASS headers rarely have nested types.
+        const closeIdx = original.lastIndexOf("};");
+        if (closeIdx < 0) {
+          throw new Error(`Could not find class closing '};' in ${resolved}`);
+        }
+
+        // Walk backward from closeIdx to find the most recent access specifier.
+        // Default to "private" if none found (C++ class default).
+        const before = original.slice(0, closeIdx);
+        const accessRe = /(^|\n)\s*(public|protected|private)\s*:\s*(\/\/[^\n]*)?\s*(?=\n)/g;
+        let lastAccess: "public" | "protected" | "private" = "private";
+        let m: RegExpExecArray | null;
+        while ((m = accessRe.exec(before)) !== null) {
+          lastAccess = m[2] as "public" | "protected" | "private";
+        }
+
+        // Indent the declaration to match the class body (one tab is the
+        // convention used by UE templates).
+        const indented = declaration
+          .replace(/\r\n/g, "\n")
+          .split("\n")
+          .map(line => (line.length === 0 ? line : (line.startsWith("\t") ? line : `\t${line}`)))
+          .join("\n");
+
+        // If the requested access section already exists and is the most recent
+        // one before the closing brace, we can append the declaration directly
+        // without restoring a different prior access.
+        const sameAsPrior = access === lastAccess;
+        const insertion = sameAsPrior
+          ? `\n${indented}\n`
+          : `\n${access}:\n${indented}\n${lastAccess}:\n`;
+
+        const updated = `${original.slice(0, closeIdx)}${insertion}${original.slice(closeIdx)}`;
+        fs.writeFileSync(resolved, updated, "utf-8");
+        return {
+          status: "added",
+          path: resolved,
+          memberName,
+          access,
+          restoredPrior: sameAsPrior ? null : lastAccess,
+          hint: "Call live_coding_compile to hot-reload, or build_project for a full rebuild.",
+        };
+      },
+    },
   },
   undefined,
   {
@@ -476,6 +565,8 @@ export const projectTool: ToolDef = categoryTool(
     content: z.string().optional().describe("For write_cpp_file: full file contents."),
     sourcePath: z.string().optional().describe("For read_cpp_source: path to .cpp (relative to Source/ or absolute)."),
     dependency: z.string().optional().describe("For add_module_dependency: module name to add (e.g. 'UMG')."),
+    declaration: z.string().optional().describe("For add_cpp_member: full UPROPERTY(...) / UFUNCTION(...) block plus the member or function signature."),
+    memberName: z.string().optional().describe("For add_cpp_member: the identifier the declaration introduces (used for idempotency)."),
     access: z.enum(["public", "private"]).optional().describe("For add_module_dependency: 'public' (PublicDependencyModuleNames) or 'private' (default)."),
   },
 );
