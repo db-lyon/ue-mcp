@@ -2,6 +2,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
+#include "HandlerAssetCreate.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -140,33 +141,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/SmartObjects"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("SmartObjectDefinition")))
-	{
-		return Existing;
-	}
-
 	UClass* SmartObjectDefClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectDefinition"));
 	if (!SmartObjectDefClass)
 	{
 		return MCPError(TEXT("SmartObjectDefinition class not found. Enable SmartObjects plugin."));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
+	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("SmartObjectDefinition"), SmartObjectDefClass, nullptr);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, SmartObjectDefClass, nullptr);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create SmartObjectDefinition"));
-	}
-
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -679,33 +669,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlackboard(const TSharedPtr<FJso
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("BlackboardData")))
-	{
-		return Existing;
-	}
-
 	UClass* BlackboardClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.BlackboardData"));
 	if (!BlackboardClass)
 	{
 		return MCPError(TEXT("BlackboardData class not found."));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
+	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("BlackboardData"), BlackboardClass, nullptr);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, BlackboardClass, nullptr);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create BlackboardData"));
-	}
-
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -718,33 +697,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJ
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("BehaviorTree")))
-	{
-		return Existing;
-	}
-
 	UClass* BTClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.BehaviorTree"));
 	if (!BTClass)
 	{
 		return MCPError(TEXT("BehaviorTree class not found."));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
+	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("BehaviorTree"), BTClass, nullptr);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, BTClass, nullptr);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create BehaviorTree"));
-	}
-
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -757,33 +725,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateEqsQuery(const TSharedPtr<FJsonO
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/EQS"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("EnvironmentQuery")))
-	{
-		return Existing;
-	}
-
 	UClass* EQSClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.EnvironmentQuery"));
 	if (!EQSClass)
 	{
 		return MCPError(TEXT("EnvironmentQuery class not found."));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
+	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("EnvironmentQuery"), EQSClass, nullptr);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, EQSClass, nullptr);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create EnvironmentQuery"));
-	}
-
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -796,33 +753,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("StateTree")))
-	{
-		return Existing;
-	}
-
 	UClass* STClass = FindObject<UClass>(nullptr, TEXT("/Script/StateTreeModule.StateTree"));
 	if (!STClass)
 	{
 		return MCPError(TEXT("StateTree class not found. Enable StateTree plugin."));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
+	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("StateTree"), STClass, nullptr);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, STClass, nullptr);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create StateTree"));
-	}
-
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -835,29 +781,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBlueprintWithParent(const FStrin
 		return MCPError(FString::Printf(TEXT("%s class not found: %s"), *FriendlyTypeName, *ParentClassPath));
 	}
 
-	// Idempotency: check if the blueprint already exists.
-	const FString ProbePath = PackagePath + TEXT("/") + Name + TEXT(".") + Name;
-	if (UBlueprint* Existing = LoadObject<UBlueprint>(nullptr, *ProbePath))
-	{
-		auto Res = MCPSuccess();
-		MCPSetExisted(Res);
-		Res->SetStringField(TEXT("path"), Existing->GetPathName());
-		Res->SetStringField(TEXT("name"), Name);
-		Res->SetStringField(TEXT("type"), FriendlyTypeName);
-		return MCPResult(Res);
-	}
-
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
 	UBlueprintFactory* BlueprintFactory = NewObject<UBlueprintFactory>();
 	BlueprintFactory->ParentClass = ParentClass;
 
-	UBlueprint* NewBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(Name, PackagePath, UBlueprint::StaticClass(), BlueprintFactory));
-	if (!NewBlueprint)
-	{
-		return MCPError(FString::Printf(TEXT("Failed to create %s Blueprint"), *FriendlyTypeName));
-	}
+	auto Created = MCPCreateAssetIdempotent<UBlueprint>(Name, PackagePath, TEXT("skip"), FriendlyTypeName, BlueprintFactory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UBlueprint* NewBlueprint = Created.Asset;
 
 	NewBlueprint->ParentClass = ParentClass;
 	FKismetEditorUtilities::CompileBlueprint(NewBlueprint);

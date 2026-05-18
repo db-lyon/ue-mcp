@@ -6,6 +6,7 @@
 #include "GameplayHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerAssetCreate.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
 #include "UObject/UObjectGlobals.h"
@@ -49,25 +50,15 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputAction(const TSharedPtr<FJs
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Input"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("InputAction")))
-	{
-		return Existing;
-	}
-
 	UClass* InputActionClass = FindObject<UClass>(nullptr, TEXT("/Script/EnhancedInput.InputAction"));
 	if (!InputActionClass)
 	{
 		return MCPError(TEXT("InputAction class not found. Enable EnhancedInput plugin."));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, InputActionClass, nullptr);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create InputAction"));
-	}
+	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("InputAction"), InputActionClass, nullptr);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UObject* NewAsset = Created.Asset;
 
 	// Apply valueType if provided
 	FString ValueTypeStr = OptionalString(Params, TEXT("valueType"));
@@ -127,33 +118,22 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputMappingContext(const TShare
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Input"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("InputMappingContext")))
-	{
-		return Existing;
-	}
-
 	UClass* IMCClass = FindObject<UClass>(nullptr, TEXT("/Script/EnhancedInput.InputMappingContext"));
 	if (!IMCClass)
 	{
 		return MCPError(TEXT("InputMappingContext class not found. Enable EnhancedInput plugin."));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
+	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("InputMappingContext"), IMCClass, nullptr);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, IMCClass, nullptr);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create InputMappingContext"));
-	}
-
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
