@@ -88,6 +88,21 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	else if (NodeClass == TEXT("SetVar"))   ResolvedClass = TEXT("K2Node_VariableSet");
 	else if (NodeClass == TEXT("Branch"))   ResolvedClass = TEXT("K2Node_IfThenElse");
 	else if (NodeClass == TEXT("CustomEvent")) ResolvedClass = TEXT("K2Node_CustomEvent");
+	// #427: extra well-known node aliases. The literal K2Node_* names still
+	// work, but these short forms match what the agent reaches for first.
+	else if (NodeClass == TEXT("Cast") || NodeClass == TEXT("DynamicCast")) ResolvedClass = TEXT("K2Node_DynamicCast");
+	else if (NodeClass == TEXT("Sequence"))     ResolvedClass = TEXT("K2Node_ExecutionSequence");
+	else if (NodeClass == TEXT("ForEachLoop") || NodeClass == TEXT("ForEach")) ResolvedClass = TEXT("K2Node_CallFunction"); // resolved later via Array_ForEach
+	else if (NodeClass == TEXT("Select"))       ResolvedClass = TEXT("K2Node_Select");
+	else if (NodeClass == TEXT("Switch") || NodeClass == TEXT("SwitchInt")) ResolvedClass = TEXT("K2Node_SwitchInteger");
+	else if (NodeClass == TEXT("SwitchEnum"))   ResolvedClass = TEXT("K2Node_SwitchEnum");
+	else if (NodeClass == TEXT("SwitchString")) ResolvedClass = TEXT("K2Node_SwitchString");
+	else if (NodeClass == TEXT("MakeStruct"))   ResolvedClass = TEXT("K2Node_MakeStruct");
+	else if (NodeClass == TEXT("BreakStruct"))  ResolvedClass = TEXT("K2Node_BreakStruct");
+	else if (NodeClass == TEXT("MakeArray"))    ResolvedClass = TEXT("K2Node_MakeArray");
+	else if (NodeClass == TEXT("Return") || NodeClass == TEXT("FunctionResult")) ResolvedClass = TEXT("K2Node_FunctionResult");
+	else if (NodeClass == TEXT("ComponentBoundEvent")) ResolvedClass = TEXT("K2Node_ComponentBoundEvent");
+	else if (NodeClass == TEXT("InputAction") || NodeClass == TEXT("EnhancedInputAction")) ResolvedClass = TEXT("K2Node_EnhancedInputAction");
 
 	// Find the UEdGraphNode subclass by name (works for K2, AnimGraph, and any other graph node types)
 	UClass* NodeUClass = nullptr;
