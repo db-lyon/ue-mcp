@@ -15,9 +15,6 @@ private:
 	static TSharedPtr<FJsonValue> SampleLandscape(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListLandscapeSplines(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetLandscapeComponent(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> SculptLandscape(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PaintLandscapeLayer(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> ImportHeightmap(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetLandscapeMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddLandscapeLayerInfo(const TSharedPtr<FJsonObject>& Params);
 	// #303: spawn an ALandscape with a default flat heightmap. Required for

@@ -13,8 +13,6 @@ private:
 	static TSharedPtr<FJsonValue> ListFoliageTypes(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SampleFoliage(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetFoliageSettings(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PaintFoliage(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> EraseFoliage(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetFoliageTypeSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateFoliageType(const TSharedPtr<FJsonObject>& Params);
 };

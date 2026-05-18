@@ -23,8 +23,6 @@ void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("list_foliage_types"), &ListFoliageTypes);
 	Registry.RegisterHandler(TEXT("sample_foliage"), &SampleFoliage);
-	Registry.RegisterHandler(TEXT("paint_foliage"), &PaintFoliage);
-	Registry.RegisterHandler(TEXT("erase_foliage"), &EraseFoliage);
 	Registry.RegisterHandler(TEXT("get_foliage_type_settings"), &GetFoliageSettings);
 	Registry.RegisterHandler(TEXT("set_foliage_type_settings"), &SetFoliageTypeSettings);
 	Registry.RegisterHandler(TEXT("create_foliage_type"), &CreateFoliageType);
@@ -215,65 +213,6 @@ TSharedPtr<FJsonValue> FFoliageHandlers::GetFoliageSettings(const TSharedPtr<FJs
 		Result->SetStringField(TEXT("meshPath"), ISMType->Mesh->GetPathName());
 		Result->SetStringField(TEXT("meshName"), ISMType->Mesh->GetName());
 	}
-
-	return MCPResult(Result);
-}
-
-TSharedPtr<FJsonValue> FFoliageHandlers::PaintFoliage(const TSharedPtr<FJsonObject>& Params)
-{
-	FString FoliageTypePath;
-	if (auto Err = RequireString(Params, TEXT("foliageType"), FoliageTypePath)) return Err;
-
-	FVector Location;
-	if (auto Err = RequireVec3(Params, TEXT("location"), Location)) return Err;
-
-	double PaintRadius = OptionalNumber(Params, TEXT("radius"), 500.0);
-	double PaintDensity = OptionalNumber(Params, TEXT("density"), 100.0);
-
-	// Foliage painting is not directly exposed as a C++ editor API.
-	// The FoliageEdMode / FoliageEditorLibrary is internal to the foliage editor mode
-	// and cannot be easily called programmatically from a plugin.
-	// Use execute_python as a fallback to invoke the Python FoliageEditorLibrary if available.
-	auto Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("foliageType"), FoliageTypePath);
-	Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Location));
-	Result->SetNumberField(TEXT("radius"), PaintRadius);
-	Result->SetNumberField(TEXT("density"), PaintDensity);
-
-	Result->SetBoolField(TEXT("success"), false);
-	Result->SetStringField(TEXT("note"),
-		TEXT("Foliage painting requires FoliageEdMode which is not accessible from C++ plugins. ")
-		TEXT("Use the execute_python handler with unreal.FoliageEditorLibrary.paint_foliage() if available, ")
-		TEXT("or manually paint in the editor foliage tool."));
-
-	return MCPResult(Result);
-}
-
-TSharedPtr<FJsonValue> FFoliageHandlers::EraseFoliage(const TSharedPtr<FJsonObject>& Params)
-{
-	FVector Location;
-	if (auto Err = RequireVec3(Params, TEXT("location"), Location)) return Err;
-
-	double EraseRadius = OptionalNumber(Params, TEXT("radius"), 500.0);
-
-	FString FoliageTypeFilter = OptionalString(Params, TEXT("foliageType"));
-
-	// Foliage erasure, like painting, is internal to FoliageEdMode.
-	// Provide the same execute_python fallback note.
-	auto Result = MakeShared<FJsonObject>();
-	Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Location));
-	Result->SetNumberField(TEXT("radius"), EraseRadius);
-
-	if (!FoliageTypeFilter.IsEmpty())
-	{
-		Result->SetStringField(TEXT("foliageTypeFilter"), FoliageTypeFilter);
-	}
-
-	Result->SetBoolField(TEXT("success"), false);
-	Result->SetStringField(TEXT("note"),
-		TEXT("Foliage erasure requires FoliageEdMode which is not accessible from C++ plugins. ")
-		TEXT("Use the execute_python handler with unreal.FoliageEditorLibrary.erase_foliage() if available, ")
-		TEXT("or manually erase in the editor foliage tool."));
 
 	return MCPResult(Result);
 }

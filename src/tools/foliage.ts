@@ -9,8 +9,6 @@ export const foliageTool: ToolDef = categoryTool(
     list_types:    bp("List foliage types in level", "list_foliage_types"),
     get_settings:  bp("Read foliage type settings. Params: foliageTypeName", "get_foliage_type_settings"),
     sample:        bp("Query instances in region. Params: center, radius, foliageType?", "sample_foliage"),
-    paint:         bp("Add foliage. Params: foliageType, center, radius, count?, density?", "paint_foliage"),
-    erase:         bp("Remove foliage. Params: center, radius, foliageType?", "erase_foliage"),
     create_type:   bp("Create foliage type from mesh. Params: meshPath, name?, packagePath?", "create_foliage_type"),
     set_settings:  bp("Modify type settings. Params: foliageTypeName, settings", "set_foliage_type_settings"),
   },
