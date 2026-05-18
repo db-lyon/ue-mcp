@@ -47,6 +47,19 @@
 #include "Dom/JsonValue.h"
 
 
+// UPoseSearchDatabase's "asset count" accessor was renamed between 5.4 and 5.5:
+//   5.4: GetAnimationAssets().Num()
+//   5.5+: GetNumAnimationAssets()
+// Use one helper so the call sites stay readable.
+static int32 GetPoseSearchAssetCount(const UPoseSearchDatabase* Database)
+{
+#if UE_MCP_HAS_5_5_API
+	return Database->GetNumAnimationAssets();
+#else
+	return GetPoseSearchAssetCount(Database);
+#endif
+}
+
 // ─── State Machine Helpers ────────────────────────────────────────
 
 static UAnimBlueprint* LoadAnimBP(const FString& Path)
@@ -966,6 +979,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 			UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter);
 			if (Controller)
 			{
+#if UE_MCP_HAS_5_5_API
 				if (!SourceRigPath.IsEmpty())
 				{
 					if (UIKRigDefinition* SrcRig = Cast<UIKRigDefinition>(LoadObject<UObject>(nullptr, *SourceRigPath)))
@@ -989,10 +1003,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 						if (!Controller->GetSourceChain(C.ChainName).IsNone()) ChainsMapped++;
 					}
 				}
+#else
+				// 5.4 has no ops-stack: per-op rig assignment + AutoMapChains(EAutoMapChainType,bool)
+				// don't exist. The retargeter still works from SourceIKRigAsset/TargetIKRigAsset
+				// properties; chain auto-mapping must be triggered manually in the IK Retargeter editor.
+				OpsWarning = TEXT("autoMapChains requires UE 5.5+; open the IK Retargeter and auto-map chains manually.");
+#endif
 			}
 			else
 			{
-				OpsWarning = TEXT("IKRetargeterController unavailable — chains not mapped (call autoMapChains=false to suppress)");
+				OpsWarning = TEXT("IKRetargeterController unavailable - chains not mapped (call autoMapChains=false to suppress)");
 			}
 		}
 	}
@@ -1150,7 +1170,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSequence(const TSharedPt
 		return MCPError(FString::Printf(TEXT("Animation asset type not supported by PoseSearch: %s"), *AnimAsset->GetClass()->GetName()));
 	}
 
-	const int32 PrevCount = Database->GetNumAnimationAssets();
+	const int32 PrevCount = GetPoseSearchAssetCount(Database);
 	FPoseSearchDatabaseAnimationAsset NewEntry;
 	NewEntry.AnimAsset = AnimAsset;
 	Database->Modify();
@@ -1158,7 +1178,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSequence(const TSharedPt
 	Database->PostEditChange();
 	UEditorAssetLibrary::SaveLoadedAsset(Database);
 
-	const int32 NewCount = Database->GetNumAnimationAssets();
+	const int32 NewCount = GetPoseSearchAssetCount(Database);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -1180,7 +1200,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BuildPoseSearchIndex(const TSharedPtr
 	UPoseSearchDatabase* Database = Cast<UPoseSearchDatabase>(UEditorAssetLibrary::LoadAsset(AssetPath));
 	if (!Database) return MCPError(FString::Printf(TEXT("PoseSearchDatabase not found: %s"), *AssetPath));
 	if (!Database->Schema) return MCPError(TEXT("Database has no Schema set — call set_pose_search_schema first"));
-	if (Database->GetNumAnimationAssets() == 0) return MCPError(TEXT("Database has no animation assets — call add_pose_search_sequence first"));
+	if (GetPoseSearchAssetCount(Database) == 0) return MCPError(TEXT("Database has no animation assets — call add_pose_search_sequence first"));
 
 	using namespace UE::PoseSearch;
 	const ERequestAsyncBuildFlag Flag = bWait
@@ -1205,7 +1225,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BuildPoseSearchIndex(const TSharedPtr
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetStringField(TEXT("result"), ResultStr);
 	Res->SetBoolField(TEXT("waitedForCompletion"), bWait);
-	Res->SetNumberField(TEXT("animationAssetCount"), Database->GetNumAnimationAssets());
+	Res->SetNumberField(TEXT("animationAssetCount"), GetPoseSearchAssetCount(Database));
 	return MCPResult(Res);
 }
 
@@ -1227,7 +1247,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadPoseSearchDatabase(const TSharedP
 	Res->SetNumberField(TEXT("loopingCostBias"), Database->LoopingCostBias);
 	Res->SetNumberField(TEXT("kdTreeQueryNumNeighbors"), Database->KDTreeQueryNumNeighbors);
 
-	const int32 AssetCount = Database->GetNumAnimationAssets();
+	const int32 AssetCount = GetPoseSearchAssetCount(Database);
 	Res->SetNumberField(TEXT("animationAssetCount"), AssetCount);
 
 	TArray<TSharedPtr<FJsonValue>> Animations;

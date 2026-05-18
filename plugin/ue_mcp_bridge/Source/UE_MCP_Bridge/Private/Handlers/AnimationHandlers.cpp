@@ -19,7 +19,11 @@
 #include "Animation/AnimNotifies/AnimNotify.h"
 #include "PhysicsEngine/PhysicsAsset.h"
 #include "Engine/SkeletalMeshSocket.h"
+// PhysicsEngine/SkeletalBodySetup.h is unavailable as a public include on
+// UE 5.4. USkeletalBodySetup is still defined transitively via PhysicsAsset.h.
+#if __has_include("PhysicsEngine/SkeletalBodySetup.h")
 #include "PhysicsEngine/SkeletalBodySetup.h"
+#endif
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "Factories/AnimBlueprintFactory.h"
 #include "Factories/AnimMontageFactory.h"
