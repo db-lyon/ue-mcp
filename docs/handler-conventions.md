@@ -99,6 +99,8 @@ MCPCheckActorLabelExists(World, Label, OnConflict, FriendlyType?)
 // Actor lookup
 FindActorByLabel(World, Label)                // canonical label lookup
 FindActorByLabelOrName(World, Token)          // PIE: label OR internal name
+FindActorByLabelOrPath(World, Label, Path)    // get_actor_details: one of two
+FindActorByLabelNameOrPath(World, Token)      // PIE invoke: any of three
 
 // Blueprint CDO load + cast with structured error
 LoadBlueprintCDO<TActor>(Path, OutError)
@@ -117,6 +119,12 @@ MCPVec3ToJsonObject, MCPRotatorToJsonObject, MCPLinearColorToJsonObject
 // Two overloads: static class (TAsset::StaticClass()) or runtime UClass*.
 MCPCreateAssetIdempotent<TAsset>(Name, PackagePath, OnConflict, Label, Factory)
 MCPCreateAssetIdempotent<TAsset>(Name, PackagePath, OnConflict, Label, UClass*, Factory)
+
+// Probe-then-create via raw NewObject<> on a fresh UPackage + AssetCreated.
+// Used by AnimSequence / AnimComposite / LevelSequence / PoseSearchDatabase /
+// NiagaraSystem-from-spec where AssetTools.CreateAsset isn't the right entry
+// point (factory configuration must happen on the constructed object first).
+MCPCreateAssetIdempotentNewObject<TAsset>(Name, PackagePath, OnConflict, Label)
 ```
 
 ## Patterns
