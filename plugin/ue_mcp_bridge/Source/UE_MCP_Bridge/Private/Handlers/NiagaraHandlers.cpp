@@ -932,18 +932,9 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromSpec(const TShar
 	const TArray<TSharedPtr<FJsonValue>>* EmittersArr = nullptr;
 	Params->TryGetArrayField(TEXT("emitters"), EmittersArr);
 
-	if (auto Hit = MCPCheckAssetExists(PackagePath, Name, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("NiagaraSystem")))
-	{
-		return Hit;
-	}
-
-	const FString PkgName = PackagePath + TEXT("/") + Name;
-	UPackage* Package = CreatePackage(*PkgName);
-	UNiagaraSystem* System = NewObject<UNiagaraSystem>(Package, UNiagaraSystem::StaticClass(), *Name, RF_Public | RF_Standalone);
-	if (!System) return MCPError(TEXT("Failed to create NiagaraSystem"));
-	FAssetRegistryModule::AssetCreated(System);
-	System->MarkPackageDirty();
-	Package->SetDirtyFlag(true);
+	auto Created = MCPCreateAssetIdempotentNewObject<UNiagaraSystem>(Name, PackagePath, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("NiagaraSystem"));
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UNiagaraSystem* System = Created.Asset;
 
 	int32 AddedEmitters = 0;
 	if (EmittersArr)

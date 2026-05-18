@@ -1074,15 +1074,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchDatabase(const TShare
 	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/MotionMatching"));
 	const FString SchemaPath = OptionalString(Params, TEXT("schemaPath"), TEXT(""));
 
-	if (auto Hit = MCPCheckAssetExists(PackagePath, Name, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("PoseSearchDatabase")))
-	{
-		return Hit;
-	}
-
-	const FString PkgName = PackagePath + TEXT("/") + Name;
-	UPackage* Package = CreatePackage(*PkgName);
-	UPoseSearchDatabase* Database = NewObject<UPoseSearchDatabase>(Package, UPoseSearchDatabase::StaticClass(), *Name, RF_Public | RF_Standalone);
-	if (!Database) return MCPError(TEXT("Failed to create PoseSearchDatabase"));
+	auto Created = MCPCreateAssetIdempotentNewObject<UPoseSearchDatabase>(Name, PackagePath, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("PoseSearchDatabase"));
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UPoseSearchDatabase* Database = Created.Asset;
 
 	if (!SchemaPath.IsEmpty())
 	{
@@ -1091,9 +1085,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchDatabase(const TShare
 		Database->Schema = Schema;
 	}
 
-	FAssetRegistryModule::AssetCreated(Database);
-	Database->MarkPackageDirty();
-	Package->SetDirtyFlag(true);
 	UEditorAssetLibrary::SaveLoadedAsset(Database);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();

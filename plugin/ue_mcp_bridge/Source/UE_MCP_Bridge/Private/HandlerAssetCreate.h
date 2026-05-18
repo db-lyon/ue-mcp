@@ -8,8 +8,11 @@
 #include "HandlerUtils.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "Factories/Factory.h"
 #include "UObject/UObjectGlobals.h"
+#include "UObject/Package.h"
+#include "Misc/PackageName.h"
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
 
@@ -78,6 +81,51 @@ inline FMCPAssetCreate<TAsset> MCPCreateAssetIdempotent(
 	UFactory* Factory)
 {
 	return MCPCreateAssetIdempotent<TAsset>(Name, PackagePath, OnConflict, AssetTypeLabel, TAsset::StaticClass(), Factory);
+}
+
+/** Probe-then-create using direct NewObject<> on a fresh UPackage. Used by
+ *  asset types whose proper factory either doesn't exist or whose Initialize
+ *  / configuration must happen on the constructed object before
+ *  AssetTools-style finalization (LevelSequence, AnimSequence, AnimComposite,
+ *  PoseSearchDatabase, NiagaraSystem-from-spec).
+ *
+ *  Calls FAssetRegistryModule::AssetCreated and marks the package dirty.
+ *  Caller is responsible for any post-create configuration plus
+ *  UEditorAssetLibrary::SaveLoadedAsset / SaveAssetPackage and the success
+ *  JSON. */
+template <typename TAsset>
+inline FMCPAssetCreate<TAsset> MCPCreateAssetIdempotentNewObject(
+	const FString& Name,
+	const FString& PackagePath,
+	const FString& OnConflict,
+	const FString& AssetTypeLabel)
+{
+	FMCPAssetCreate<TAsset> Out;
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, AssetTypeLabel))
+	{
+		Out.EarlyReturn = Existing;
+		return Out;
+	}
+
+	const FString PkgName = PackagePath + TEXT("/") + Name;
+	UPackage* Package = CreatePackage(*PkgName);
+	if (!Package)
+	{
+		Out.EarlyReturn = MCPError(FString::Printf(TEXT("Failed to create package for %s '%s'"), *AssetTypeLabel, *PkgName));
+		return Out;
+	}
+	TAsset* NewAsset = NewObject<TAsset>(Package, TAsset::StaticClass(), *Name, RF_Public | RF_Standalone);
+	if (!NewAsset)
+	{
+		Out.EarlyReturn = MCPError(FString::Printf(TEXT("Failed to construct %s '%s'"), *AssetTypeLabel, *Name));
+		return Out;
+	}
+	FAssetRegistryModule::AssetCreated(NewAsset);
+	NewAsset->MarkPackageDirty();
+	Package->SetDirtyFlag(true);
+	Out.Asset = NewAsset;
+	return Out;
 }
 
 // (Rollback emission lives in HandlerUtils.h as MCPSetDeleteAssetRollback;

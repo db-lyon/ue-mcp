@@ -6,6 +6,7 @@
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerAssetCreate.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/AnimComposite.h"
@@ -121,11 +122,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 	double NumFrames = OptionalNumber(Params, TEXT("numFrames"), 30.0);
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("AnimSequence")))
-	{
-		return Existing;
-	}
-
 	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
 	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
 	if (!Skeleton)
@@ -141,22 +137,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
 
-	FString FullAssetPath = PackagePath / Name;
-
-	// Create the package
-	FString PackageName = PackagePath / Name;
-	UPackage* Package = CreatePackage(*PackageName);
-	if (!Package)
-	{
-		return MCPError(TEXT("Failed to create package"));
-	}
-
-	// Create the AnimSequence
-	UAnimSequence* NewSeq = NewObject<UAnimSequence>(Package, *Name, RF_Public | RF_Standalone);
-	if (!NewSeq)
-	{
-		return MCPError(TEXT("Failed to create AnimSequence"));
-	}
+	auto Created = MCPCreateAssetIdempotentNewObject<UAnimSequence>(Name, PackagePath, OnConflict, TEXT("AnimSequence"));
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UAnimSequence* NewSeq = Created.Asset;
+	const FString FullAssetPath = NewSeq->GetPathName();
 
 	NewSeq->SetSkeleton(Skeleton);
 
@@ -502,22 +486,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimComposite(const TSharedPtr<
 	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
 
-	if (auto Hit = MCPCheckAssetExists(PackagePath, Name, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("AnimComposite")))
-	{
-		return Hit;
-	}
-
 	USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 
-	// Manually construct the package so we don't depend on a specialized factory.
-	FString PkgName = PackagePath + TEXT("/") + Name;
-	UPackage* Package = CreatePackage(*PkgName);
-	UAnimComposite* Composite = NewObject<UAnimComposite>(Package, UAnimComposite::StaticClass(), *Name, RF_Public | RF_Standalone);
+	auto Created = MCPCreateAssetIdempotentNewObject<UAnimComposite>(Name, PackagePath, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("AnimComposite"));
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UAnimComposite* Composite = Created.Asset;
 	Composite->SetSkeleton(Skeleton);
-	FAssetRegistryModule::AssetCreated(Composite);
-	Composite->MarkPackageDirty();
-	Package->SetDirtyFlag(true);
 	UEditorAssetLibrary::SaveLoadedAsset(Composite);
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
