@@ -324,17 +324,9 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAbilityTags(const TSharedPtr<FJsonObject
 	FString AbilityPath;
 	if (auto Err = RequireString(Params, TEXT("abilityPath"), AbilityPath)) return Err;
 
-	UBlueprint* BP = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(AbilityPath));
-	if (!BP)
-	{
-		return MCPError(FString::Printf(TEXT("Ability Blueprint not found: %s"), *AbilityPath));
-	}
-
-	UObject* CDO = BP->GeneratedClass ? BP->GeneratedClass->GetDefaultObject() : nullptr;
-	if (!CDO)
-	{
-		return MCPError(TEXT("Could not get CDO. Compile the blueprint first."));
-	}
+	TSharedPtr<FJsonValue> CdoErr;
+	UObject* CDO = LoadBlueprintCDO<UObject>(AbilityPath, CdoErr);
+	if (!CDO) return CdoErr;
 
 	TSharedPtr<FJsonObject> TagsSet = MakeShared<FJsonObject>();
 

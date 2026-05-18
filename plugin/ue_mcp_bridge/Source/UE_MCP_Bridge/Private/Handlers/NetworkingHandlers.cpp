@@ -32,22 +32,24 @@ void FNetworkingHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 AActor* FNetworkingHandlers::LoadBlueprintCDO(const FString& BlueprintPath, TSharedPtr<FJsonObject>& OutResult)
 {
-	UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *BlueprintPath);
-	if (!Blueprint || !Blueprint->GeneratedClass)
-	{
-		OutResult->SetStringField(TEXT("error"), FString::Printf(TEXT("Blueprint not found or has no generated class: %s"), *BlueprintPath));
-		OutResult->SetBoolField(TEXT("success"), false);
-		return nullptr;
-	}
-
-	AActor* CDO = Cast<AActor>(Blueprint->GeneratedClass->GetDefaultObject());
+	// Thin adapter over the shared ::LoadBlueprintCDO<T> helper in HandlerUtils.h.
+	// Translates the helper's TSharedPtr<FJsonValue> error into the OutResult-style
+	// {success:false, error:...} object the networking call sites accumulate into.
+	TSharedPtr<FJsonValue> Err;
+	AActor* CDO = ::LoadBlueprintCDO<AActor>(BlueprintPath, Err);
 	if (!CDO)
 	{
-		OutResult->SetStringField(TEXT("error"), TEXT("CDO is not an Actor"));
+		FString ErrMsg = TEXT("Failed to load blueprint CDO");
+		if (Err.IsValid())
+		{
+			if (TSharedPtr<FJsonObject> ErrObj = Err->AsObject())
+			{
+				ErrObj->TryGetStringField(TEXT("error"), ErrMsg);
+			}
+		}
+		OutResult->SetStringField(TEXT("error"), ErrMsg);
 		OutResult->SetBoolField(TEXT("success"), false);
-		return nullptr;
 	}
-
 	return CDO;
 }
 
