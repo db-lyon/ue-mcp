@@ -32,6 +32,8 @@ private:
 	static TSharedPtr<FJsonValue> SetLightProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SpawnVolume(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddComponentToActor(const TSharedPtr<FJsonObject>& Params);
+	// #426: symmetric inverse of add_component_to_actor.
+	static TSharedPtr<FJsonValue> RemoveComponentFromActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LoadLevel(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetComponentProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetVolumeProperties(const TSharedPtr<FJsonObject>& Params);

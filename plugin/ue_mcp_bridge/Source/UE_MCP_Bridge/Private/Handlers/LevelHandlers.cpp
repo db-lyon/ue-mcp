@@ -87,6 +87,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_light_properties"), &SetLightProperties);
 	Registry.RegisterHandler(TEXT("spawn_volume"), &SpawnVolume);
 	Registry.RegisterHandler(TEXT("add_component_to_actor"), &AddComponentToActor);
+	Registry.RegisterHandler(TEXT("remove_component_from_actor"), &RemoveComponentFromActor);
 	Registry.RegisterHandler(TEXT("load_level"), &LoadLevel);
 	Registry.RegisterHandler(TEXT("set_component_property"), &SetComponentProperty);
 	Registry.RegisterHandler(TEXT("set_actor_material"), &SetActorMaterial);
@@ -965,8 +966,57 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddComponentToActor(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetStringField(TEXT("componentClass"), NewComponent->GetClass()->GetName());
-	// No generic remove-instance-component handler exists yet; not emitting a
-	// rollback record. Adding one later will make this reversible.
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Payload->SetStringField(TEXT("componentName"), ComponentName);
+	MCPSetRollback(Result, TEXT("remove_component_from_actor"), Payload);
+	return MCPResult(Result);
+}
+
+// #426: symmetric remove of an instance component. Idempotent (returns
+// alreadyDeleted=true when the actor has no component with that name).
+TSharedPtr<FJsonValue> FLevelHandlers::RemoveComponentFromActor(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+	FString ComponentName;
+	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
+
+	REQUIRE_EDITOR_WORLD(World);
+
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
+	if (!Actor) return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+
+	const FName CompName(*ComponentName);
+	UActorComponent* Target = nullptr;
+	for (UActorComponent* Comp : Actor->GetComponents())
+	{
+		if (Comp && Comp->GetFName() == CompName) { Target = Comp; break; }
+	}
+
+	if (!Target)
+	{
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Noop->SetStringField(TEXT("componentName"), ComponentName);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
+	}
+
+	const FString ComponentClass = Target->GetClass()->GetName();
+	Actor->Modify();
+	Target->Modify();
+	Actor->RemoveInstanceComponent(Target);
+	Target->DestroyComponent();
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("componentName"), ComponentName);
+	Result->SetStringField(TEXT("componentClass"), ComponentClass);
+	Result->SetBoolField(TEXT("deleted"), true);
+	// Removing an instance component is not symmetrically reversible without a
+	// snapshot of its property state. No rollback record emitted by default.
 	return MCPResult(Result);
 }
 
