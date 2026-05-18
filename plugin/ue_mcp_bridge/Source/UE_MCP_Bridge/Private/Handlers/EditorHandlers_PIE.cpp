@@ -217,21 +217,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieGetRuntimeValue(const TSharedPtr<FJso
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
-	// Search for the actor in the PIE world
+	// Search for the actor in the PIE world (accept label, name, or full path)
 	UWorld* PIEWorld = GEditor->PlayWorld;
-	AActor* TargetActor = nullptr;
-
-	for (TActorIterator<AActor> It(PIEWorld); It; ++It)
-	{
-		AActor* Actor = *It;
-		if (Actor->GetName() == ActorPath ||
-			Actor->GetActorLabel() == ActorPath ||
-			Actor->GetPathName() == ActorPath)
-		{
-			TargetActor = Actor;
-			break;
-		}
-	}
+	AActor* TargetActor = FindActorByLabelNameOrPath(PIEWorld, ActorPath);
 
 	if (!TargetActor)
 	{

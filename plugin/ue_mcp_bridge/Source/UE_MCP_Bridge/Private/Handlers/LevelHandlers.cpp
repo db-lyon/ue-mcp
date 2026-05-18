@@ -367,13 +367,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObj
 		if (!World) return MCPError(TEXT("No editor world available"));
 	}
 
-	AActor* Actor = nullptr;
-	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
-	{
-		if (bHasPath && (*ActorIt)->GetPathName() == ActorPath) { Actor = *ActorIt; break; }
-		if (bHasLabel && (*ActorIt)->GetActorLabel() == ActorLabel) { Actor = *ActorIt; break; }
-	}
-
+	AActor* Actor = FindActorByLabelOrPath(World, bHasLabel ? ActorLabel : FString(), bHasPath ? ActorPath : FString());
 	if (!Actor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), bHasPath ? *ActorPath : *ActorLabel));
@@ -485,12 +479,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("World '%s' not available"), *WorldScope));
 	}
 
-	AActor* Actor = nullptr;
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		if (bHasPath && (*It)->GetPathName() == ActorPath) { Actor = *It; break; }
-		if (bHasLabel && (*It)->GetActorLabel() == ActorLabel) { Actor = *It; break; }
-	}
+	AActor* Actor = FindActorByLabelOrPath(World, bHasLabel ? ActorLabel : FString(), bHasPath ? ActorPath : FString());
 	if (!Actor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), bHasPath ? *ActorPath : *ActorLabel));
@@ -677,14 +666,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetRelativeTransform(const TSharedPtr<FJs
 	UWorld* World = ResolveWorldScope(WorldScope);
 	if (!World) return MCPError(FString::Printf(TEXT("World '%s' not available"), *WorldScope));
 
-	AActor* TargetActor = nullptr;
-	AActor* ReferenceActor = nullptr;
-	for (TActorIterator<AActor> It(World); It; ++It)
-	{
-		if (TargetActor && ReferenceActor) break;
-		if (!TargetActor && (*It)->GetActorLabel() == TargetLabel) TargetActor = *It;
-		if (!ReferenceActor && (*It)->GetActorLabel() == ReferenceLabel) ReferenceActor = *It;
-	}
+	AActor* TargetActor = FindActorByLabel(World, TargetLabel);
+	AActor* ReferenceActor = FindActorByLabel(World, ReferenceLabel);
 	if (!TargetActor) return MCPError(FString::Printf(TEXT("Target actor not found: %s"), *TargetLabel));
 	if (!ReferenceActor) return MCPError(FString::Printf(TEXT("Reference actor not found: %s"), *ReferenceLabel));
 
@@ -1171,15 +1154,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 						// Skip obvious non-identifiers
 						if (Token != TEXT("True") && Token != TEXT("False") && Token != TEXT("None") && !Token.IsNumeric())
 						{
-							// Try to resolve as actor label
-							for (TActorIterator<AActor> It(World); It; ++It)
+							if (AActor* Resolved = FindActorByLabel(World, Token))
 							{
-								if (It->GetActorLabel() == Token)
-								{
-									Result.Append(It->GetPathName());
-									i = End;
-									goto AppendDone;
-								}
+								Result.Append(Resolved->GetPathName());
+								i = End;
+								goto AppendDone;
 							}
 						}
 					}
@@ -1834,11 +1813,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 		FString S = Value->AsString();
 		if (FObjectProperty* OP = CastField<FObjectProperty>(Prop))
 		{
-			AActor* RefActor = nullptr;
-			for (TActorIterator<AActor> It(World); It; ++It)
-			{
-				if (It->GetActorLabel() == S) { RefActor = *It; break; }
-			}
+			AActor* RefActor = FindActorByLabel(World, S);
 			if (RefActor && RefActor->IsA(OP->PropertyClass))
 			{
 				OP->SetObjectPropertyValue(ValuePtr, RefActor);

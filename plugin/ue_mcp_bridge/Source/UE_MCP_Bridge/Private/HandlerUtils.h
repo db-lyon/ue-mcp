@@ -135,6 +135,35 @@ inline AActor* FindActorByLabelOrName(UWorld* World, const FString& LabelOrName)
 	return nullptr;
 }
 
+/** Find an actor by either editor label or full object path. Used by
+ *  get_actor_details / get_component_tree which accept either form. */
+inline AActor* FindActorByLabelOrPath(UWorld* World, const FString& Label, const FString& Path)
+{
+	if (!World) return nullptr;
+	const bool bHasLabel = !Label.IsEmpty();
+	const bool bHasPath = !Path.IsEmpty();
+	if (!bHasLabel && !bHasPath) return nullptr;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (bHasPath && It->GetPathName() == Path) return *It;
+		if (bHasLabel && It->GetActorLabel() == Label) return *It;
+	}
+	return nullptr;
+}
+
+/** Three-way actor lookup: label, internal name, or full path. Used by
+ *  EditorHandlers_PIE invoke_function which accepts any of the three. */
+inline AActor* FindActorByLabelNameOrPath(UWorld* World, const FString& Token)
+{
+	if (!World || Token.IsEmpty()) return nullptr;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* A = *It;
+		if (A->GetName() == Token || A->GetActorLabel() == Token || A->GetPathName() == Token) return A;
+	}
+	return nullptr;
+}
+
 /** Spawn-by-label idempotency check. If World already has an actor with the
  *  given Label, returns a fully-formed "already existed" result the caller
  *  can return directly (or an MCPError when OnConflict == "error"). When

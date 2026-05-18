@@ -1186,16 +1186,7 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepLevelSequence()
 	UMovieScene* MovieScene = Seq->GetMovieScene();
 	if (MovieScene)
 	{
-		AActor* HeroSphere = nullptr;
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			if ((*It)->GetActorLabel() == TEXT("Demo_HeroSphere"))
-			{
-				HeroSphere = *It;
-				break;
-			}
-		}
-
+		AActor* HeroSphere = FindActorByLabel(World, TEXT("Demo_HeroSphere"));
 		if (HeroSphere)
 		{
 			FGuid BindingGuid = MovieScene->AddPossessable(
