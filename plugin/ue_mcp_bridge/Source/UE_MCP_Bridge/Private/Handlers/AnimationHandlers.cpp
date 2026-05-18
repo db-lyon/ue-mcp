@@ -1,6 +1,7 @@
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerAssetCreate.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -518,20 +519,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<
 	FString ParentClassName = OptionalString(Params, TEXT("parentClass"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("AnimBlueprint")))
-	{
-		return Existing;
-	}
-
 	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
 	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
 	if (!Skeleton)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
-
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
 
 	UAnimBlueprintFactory* Factory = NewObject<UAnimBlueprintFactory>();
 	Factory->TargetSkeleton = Skeleton;
@@ -545,20 +538,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<
 		}
 	}
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UAnimBlueprint::StaticClass(), Factory);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create AnimBlueprint"));
-	}
+	auto Created = MCPCreateAssetIdempotent<UAnimBlueprint>(Name, PackagePath, OnConflict, TEXT("AnimBlueprint"), Factory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
-	Result->SetStringField(TEXT("name"), NewAsset->GetName());
-	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
+	Result->SetStringField(TEXT("name"), Created.Asset->GetName());
+	Result->SetStringField(TEXT("class"), Created.Asset->GetClass()->GetName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -577,11 +567,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("AnimMontage")))
-	{
-		return Existing;
-	}
-
 	UObject* SourceAsset = UEditorAssetLibrary::LoadAsset(AnimSequencePath);
 	UAnimSequence* SourceSequence = Cast<UAnimSequence>(SourceAsset);
 	if (!SourceSequence)
@@ -589,27 +574,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 		return MCPError(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimSequencePath));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
 	UAnimMontageFactory* Factory = NewObject<UAnimMontageFactory>();
 	Factory->TargetSkeleton = SourceSequence->GetSkeleton();
 	Factory->SourceAnimation = SourceSequence;
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UAnimMontage::StaticClass(), Factory);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create AnimMontage"));
-	}
+	auto Created = MCPCreateAssetIdempotent<UAnimMontage>(Name, PackagePath, OnConflict, TEXT("AnimMontage"), Factory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
-	Result->SetStringField(TEXT("name"), NewAsset->GetName());
-	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
+	Result->SetStringField(TEXT("name"), Created.Asset->GetName());
+	Result->SetStringField(TEXT("class"), Created.Asset->GetClass()->GetName());
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);
 }
@@ -799,11 +778,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 	FString AxisVertical = OptionalString(Params, TEXT("axisVertical"), TEXT("Direction"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("BlendSpace")))
-	{
-		return Existing;
-	}
-
 	double HorizontalMin = OptionalNumber(Params, TEXT("horizontalMin"), 0.0);
 	double HorizontalMax = OptionalNumber(Params, TEXT("horizontalMax"), 500.0);
 	double VerticalMin = OptionalNumber(Params, TEXT("verticalMin"), -180.0);
@@ -816,42 +790,33 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 	}
 
-	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	IAssetTools& AssetTools = AssetToolsModule.Get();
-
 	UBlendSpaceFactoryNew* Factory = NewObject<UBlendSpaceFactoryNew>();
 	Factory->TargetSkeleton = Skeleton;
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UBlendSpace::StaticClass(), Factory);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create BlendSpace"));
-	}
+	auto Created = MCPCreateAssetIdempotent<UBlendSpace>(Name, PackagePath, OnConflict, TEXT("BlendSpace"), Factory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
 
-	UBlendSpace* BlendSpace = Cast<UBlendSpace>(NewAsset);
-	if (BlendSpace)
-	{
-		FBlendParameter& BlendParam0 = const_cast<FBlendParameter&>(BlendSpace->GetBlendParameter(0));
-		BlendParam0.DisplayName = AxisHorizontal;
-		BlendParam0.Min = HorizontalMin;
-		BlendParam0.Max = HorizontalMax;
+	UBlendSpace* BlendSpace = Created.Asset;
+	FBlendParameter& BlendParam0 = const_cast<FBlendParameter&>(BlendSpace->GetBlendParameter(0));
+	BlendParam0.DisplayName = AxisHorizontal;
+	BlendParam0.Min = HorizontalMin;
+	BlendParam0.Max = HorizontalMax;
 
-		FBlendParameter& BlendParam1 = const_cast<FBlendParameter&>(BlendSpace->GetBlendParameter(1));
-		BlendParam1.DisplayName = AxisVertical;
-		BlendParam1.Min = VerticalMin;
-		BlendParam1.Max = VerticalMax;
-	}
+	FBlendParameter& BlendParam1 = const_cast<FBlendParameter&>(BlendSpace->GetBlendParameter(1));
+	BlendParam1.DisplayName = AxisVertical;
+	BlendParam1.Min = VerticalMin;
+	BlendParam1.Max = VerticalMax;
 
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	UEditorAssetLibrary::SaveAsset(BlendSpace->GetPathName());
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), NewAsset->GetPathName());
-	Result->SetStringField(TEXT("name"), NewAsset->GetName());
-	Result->SetStringField(TEXT("class"), NewAsset->GetClass()->GetName());
+	Result->SetStringField(TEXT("path"), BlendSpace->GetPathName());
+	Result->SetStringField(TEXT("name"), BlendSpace->GetName());
+	Result->SetStringField(TEXT("class"), BlendSpace->GetClass()->GetName());
 	Result->SetStringField(TEXT("axisHorizontal"), AxisHorizontal);
 	Result->SetStringField(TEXT("axisVertical"), AxisVertical);
-	MCPSetDeleteAssetRollback(Result, NewAsset->GetPathName());
+	MCPSetDeleteAssetRollback(Result, BlendSpace->GetPathName());
 
 	return MCPResult(Result);
 }
