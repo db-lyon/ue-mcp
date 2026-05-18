@@ -574,7 +574,13 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::CreateLandscape(const TSharedPtr<FJso
 		nullptr,
 		ImportLayerInfo,
 		ELandscapeImportAlphamapType::Additive,
-		MakeArrayView(EmptyLayers));
+#if UE_MCP_HAS_5_5_API
+		MakeArrayView(EmptyLayers)
+#else
+		// 5.4: last arg is const TArray<FLandscapeLayer>* (TArrayView signature added in 5.5).
+		&EmptyLayers
+#endif
+	);
 
 	if (!Label.IsEmpty())
 	{

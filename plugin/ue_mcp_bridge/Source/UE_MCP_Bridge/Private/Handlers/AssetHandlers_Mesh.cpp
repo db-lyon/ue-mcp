@@ -6,6 +6,11 @@
 #include "AssetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+// FSkeletalMaterial moved out of Engine/SkeletalMesh.h in later UE versions.
+// Pull it explicitly via SkinnedAssetCommon when available.
+#if __has_include("Engine/SkinnedAssetCommon.h")
+#include "Engine/SkinnedAssetCommon.h"
+#endif
 #include "HandlerJsonProperty.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
