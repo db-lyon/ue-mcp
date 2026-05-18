@@ -102,11 +102,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("resolve_actor"), &ResolveActor);
 	Registry.RegisterHandler(TEXT("set_actor_property"), &SetActorProperty);
 	Registry.RegisterHandler(TEXT("line_trace"), &LineTrace);
-	Registry.RegisterHandler(TEXT("get_bone_transform"), &GetBoneTransform);
-	Registry.RegisterHandler(TEXT("list_bones"), &ListBones);
-	Registry.RegisterHandler(TEXT("rebind_leader_pose"), &RebindLeaderPose);
 	Registry.RegisterHandler(TEXT("snap_actor_to_floor"), &SnapActorToFloor);
-	Registry.RegisterHandler(TEXT("preview_animation"), &PreviewAnimation);
 	Registry.RegisterHandler(TEXT("delete_actors"), &DeleteActors);
 	Registry.RegisterHandler(TEXT("add_actor_tag"), &AddActorTag);
 	Registry.RegisterHandler(TEXT("remove_actor_tag"), &RemoveActorTag);

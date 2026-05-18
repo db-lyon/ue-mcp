@@ -128,6 +128,12 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_pose_search_sequence"), &AddPoseSearchSequence);
 	Registry.RegisterHandler(TEXT("build_pose_search_index"), &BuildPoseSearchIndex);
 	Registry.RegisterHandler(TEXT("read_pose_search_database"), &ReadPoseSearchDatabase);
+
+	// #419/#420 — live-actor skeletal reads + rebind + preview (moved from Level)
+	Registry.RegisterHandler(TEXT("get_bone_transform"), &GetBoneTransform);
+	Registry.RegisterHandler(TEXT("list_bones"), &ListBones);
+	Registry.RegisterHandler(TEXT("rebind_leader_pose"), &RebindLeaderPose);
+	Registry.RegisterHandler(TEXT("preview_animation"), &PreviewAnimation);
 }
 
 TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimAssets(const TSharedPtr<FJsonObject>& Params)

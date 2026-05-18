@@ -77,11 +77,7 @@ private:
 	static TSharedPtr<FJsonValue> BatchTranslate(const TSharedPtr<FJsonObject>& Params);
 	// #264: explicit per-instance batch spawn (mesh+transform per actor)
 	static TSharedPtr<FJsonValue> PlaceActorsBatch(const TSharedPtr<FJsonObject>& Params);
-	// #420 / #419: raycast + bone reads + leader-pose rebind + snap-to-floor + preview-animation
+	// #420: raycast + #419 snap-to-floor (spatial level operations)
 	static TSharedPtr<FJsonValue> LineTrace(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> GetBoneTransform(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> ListBones(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> RebindLeaderPose(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SnapActorToFloor(const TSharedPtr<FJsonObject>& Params);
-	static TSharedPtr<FJsonValue> PreviewAnimation(const TSharedPtr<FJsonObject>& Params);
 };

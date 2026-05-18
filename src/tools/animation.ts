@@ -56,6 +56,11 @@ export const animationTool: ToolDef = categoryTool(
     // v1.0.0-rc.2 — #153, #154 (animation authoring gaps)
     set_sequence_properties: bp("Batch-set properties on AnimSequence assets. If a path is a Montage and resolveFromMontages is true (default), resolves to its first AnimSequence. Params: assetPaths[], properties{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?}, resolveFromMontages?", "set_sequence_properties"),
     bake_root_motion_from_bone: bp("Bake delta translation from a source bone (e.g. pelvis) onto the root bone across the whole sequence; compensates the source bone so world-space position is unchanged. Params: assetPath, sourceBone, rootBone? (default 'root'), axes? (default ['x','y']), interpolation? ('linear'|'per_frame', default 'linear')", "bake_root_motion_from_bone"),
+    // #419/#420 — live-actor skeletal operations (moved from level for proper domain alignment)
+    get_bone_transform: bp("Read a bone or socket transform on a live actor's SkeletalMeshComponent. Wraps GetBoneTransform / GetSocketTransform. Params: actorLabel, boneName (or socket name), componentName? (default: CharacterMesh0 / Mesh / first SK component), space? (world|component|local, default world). Returns location, rotation, scale (#420)", "get_bone_transform", (p) => ({ actorLabel: p.actorLabel, boneName: p.boneName, componentName: p.componentName, space: p.space })),
+    list_bones: bp("List bones in a live actor's SkeletalMeshComponent ref skeleton (name, index, parent). Params: actorLabel, componentName? (#420)", "list_bones", (p) => ({ actorLabel: p.actorLabel, componentName: p.componentName })),
+    rebind_leader_pose: bp("Re-bind every secondary SkeletalMeshComponent on an actor to a body component (default CharacterMesh0 / Mesh). One-call fix for the 'character explodes after rotating the actor' failure mode. Params: actorLabel, bodyComponent? (#419)", "rebind_leader_pose", (p) => ({ actorLabel: p.actorLabel, bodyComponent: p.bodyComponent })),
+    preview_animation: bp("Toggle bUpdateAnimationInEditor + VisibilityBasedAnimTickOption=AlwaysTickPoseAndRefreshBones on every SkeletalMeshComponent of an actor. Bypasses the 'cannot be edited on templates' guard for level instances. Params: actorLabel, enabled (#419/#420)", "preview_animation", (p) => ({ actorLabel: p.actorLabel, enabled: p.enabled })),
   },
   undefined,
   {
@@ -137,11 +142,16 @@ export const animationTool: ToolDef = categoryTool(
     rootBone: z.string().optional().describe("Root bone name for bake_root_motion_from_bone (default 'root')"),
     axes: z.array(z.string()).optional().describe("Axes to bake ('x','y','z') for bake_root_motion_from_bone"),
     interpolation: z.string().optional().describe("bake_root_motion_from_bone: 'linear' (default) or 'per_frame'"),
-    space: z.string().optional().describe("get_bone_transforms: 'local' (default) or 'component' (composed parent-chain transforms) (#245)"),
+    space: z.string().optional().describe("Bone-space frame. get_bone_transforms (ref skeleton): 'local' (default) | 'component'. get_bone_transform (live actor): 'world' (default) | 'component' | 'local'"),
     animation: z.string().optional().describe("AnimSequence path for add_blend_sample / set_blend_sample"),
     sampleIndex: z.number().optional().describe("BlendSpace sample index for set_blend_sample"),
     position: z.object({ x: z.number().optional(), y: z.number().optional() }).optional().describe("BlendSpace sample position {x,y}"),
     x: z.number().optional(),
     y: z.number().optional(),
+    // Live-actor skeletal operations (moved from level)
+    actorLabel: z.string().optional().describe("Actor label for live skeletal queries"),
+    componentName: z.string().optional().describe("SkeletalMeshComponent name (default: CharacterMesh0 / Mesh)"),
+    bodyComponent: z.string().optional().describe("rebind_leader_pose: explicit body component name"),
+    enabled: z.boolean().optional().describe("preview_animation: toggle on/off"),
   },
 );
