@@ -73,6 +73,33 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimSequence(const TSharedPtr<FJs
 	// Additive animation type
 	Result->SetBoolField(TEXT("isAdditive"), AnimSeq->AdditiveAnimType != EAdditiveAnimationType::AAT_None);
 
+	// #432: explicit per-sequence QA fields. Mirror the property names the
+	// agent-feedback issue requested so callers don't have to derive them.
+	auto AdditiveTypeName = [&]() -> const TCHAR* {
+		switch (AnimSeq->AdditiveAnimType)
+		{
+		case EAdditiveAnimationType::AAT_None:                 return TEXT("None");
+		case EAdditiveAnimationType::AAT_LocalSpaceBase:       return TEXT("LocalSpaceBase");
+		case EAdditiveAnimationType::AAT_RotationOffsetMeshSpace: return TEXT("RotationOffsetMeshSpace");
+		default: return TEXT("Unknown");
+		}
+	};
+	Result->SetStringField(TEXT("additiveType"), AdditiveTypeName());
+	Result->SetNumberField(TEXT("lengthSeconds"), AnimSeq->GetPlayLength());
+	Result->SetNumberField(TEXT("numFrames"), AnimSeq->GetNumberOfSampledKeys());
+	Result->SetNumberField(TEXT("frameRate"), SamplingRate);
+	Result->SetBoolField(TEXT("rootMotionEnabled"), AnimSeq->bEnableRootMotion);
+	Result->SetStringField(TEXT("rootMotionRootLock"),
+		AnimSeq->RootMotionRootLock == ERootMotionRootLock::RefPose ? TEXT("RefPose")
+		: AnimSeq->RootMotionRootLock == ERootMotionRootLock::AnimFirstFrame ? TEXT("AnimFirstFrame")
+		: TEXT("Zero"));
+	Result->SetBoolField(TEXT("forceRootLock"), AnimSeq->bForceRootLock);
+	Result->SetBoolField(TEXT("useNormalizedRootMotionScale"), AnimSeq->bUseNormalizedRootMotionScale);
+	Result->SetStringField(TEXT("targetSkeletonPath"), Skeleton ? Skeleton->GetPathName() : FString());
+	Result->SetNumberField(TEXT("boneCount"), Skeleton ? Skeleton->GetReferenceSkeleton().GetNum() : 0);
+	Result->SetBoolField(TEXT("hasNotifies"), AnimSeq->Notifies.Num() > 0);
+	Result->SetBoolField(TEXT("hasCurves"), AnimSeq->GetCurveData().FloatCurves.Num() > 0);
+
 	// Notifies
 	TArray<TSharedPtr<FJsonValue>> NotifiesArray;
 	for (const FAnimNotifyEvent& NotifyEvent : AnimSeq->Notifies)
