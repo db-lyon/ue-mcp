@@ -19,7 +19,9 @@
 #include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformFile.h"
 #include "Modules/ModuleManager.h"
+#if PLATFORM_WINDOWS
 #include "ILiveCodingModule.h"
+#endif
 #include "Kismet/KismetSystemLibrary.h"
 #include "EditorValidatorSubsystem.h"
 #include "Dom/JsonObject.h"
