@@ -6,6 +6,7 @@
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerAssetCreate.h"
 #include "Engine/Blueprint.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimMontage.h"
@@ -735,11 +736,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Hit = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("IKRigDefinition")))
-	{
-		return Hit;
-	}
-
 	// Load the skeletal mesh to get the skeleton
 	USkeletalMesh* SkelMesh = LoadObject<USkeletalMesh>(nullptr, *SkeletalMeshPath);
 	if (!SkelMesh)
@@ -747,20 +743,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRig(const TSharedPtr<FJsonObj
 		return MCPError(FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *SkeletalMeshPath));
 	}
 
-	// Create the IKRigDefinition asset via AssetTools
-	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FindObject<UClass>(nullptr, TEXT("/Script/IKRigEditor.IKRigDefinitionFactory")));
 	if (!Factory)
 	{
-		return MCPError(TEXT("IKRigDefinitionFactory not found — is the IKRig plugin enabled?"));
+		return MCPError(TEXT("IKRigDefinitionFactory not found - is the IKRig plugin enabled?"));
 	}
 
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, UIKRigDefinition::StaticClass(), Factory);
-	UIKRigDefinition* IKRig = Cast<UIKRigDefinition>(NewAsset);
-	if (!IKRig)
-	{
-		return MCPError(TEXT("Failed to create IKRigDefinition asset"));
-	}
+	auto Created = MCPCreateAssetIdempotent<UIKRigDefinition>(Name, PackagePath, OnConflict, TEXT("IKRigDefinition"), Factory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UIKRigDefinition* IKRig = Created.Asset;
 
 	// Prefer IKRigController to atomically configure the rig (#97, #103)
 	int32 ChainsAdded = 0;
@@ -928,16 +919,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 	FString TargetRigPath = OptionalString(Params, TEXT("targetRig"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (auto Hit = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("IKRetargeter")))
-	{
-		return Hit;
-	}
-
-	IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 	UClass* FactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/IKRigEditor.IKRetargetFactory"));
 	if (!FactoryClass)
 	{
-		return MCPError(TEXT("IKRetargetFactory not found — is the IKRig plugin enabled?"));
+		return MCPError(TEXT("IKRetargetFactory not found - is the IKRig plugin enabled?"));
 	}
 	UClass* RetargeterClass = FindObject<UClass>(nullptr, TEXT("/Script/IKRig.IKRetargeter"));
 	if (!RetargeterClass)
@@ -945,11 +930,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 		return MCPError(TEXT("IKRetargeter class not found"));
 	}
 	UFactory* Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
-	UObject* NewAsset = AssetTools.CreateAsset(Name, PackagePath, RetargeterClass, Factory);
-	if (!NewAsset)
-	{
-		return MCPError(TEXT("Failed to create IKRetargeter asset"));
-	}
+
+	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("IKRetargeter"), RetargeterClass, Factory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UObject* NewAsset = Created.Asset;
 
 	// Optionally set source / target IK Rigs via reflection
 	auto SetRigProperty = [&](const FString& PropName, const FString& Path) -> FString
