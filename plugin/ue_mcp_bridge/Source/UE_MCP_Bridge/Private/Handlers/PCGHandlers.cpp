@@ -24,7 +24,13 @@
 #include "PCGVolume.h"
 #include "Elements/PCGStaticMeshSpawner.h"
 #include "MeshSelectors/PCGMeshSelectorWeighted.h"
+// UPCGEditorGraphNodeBase ships in the PCGEditor module starting in UE 5.5.
+// On 5.4 the editor-node-position round-trip is unavailable; we fall back to
+// the runtime UPCGNode::PositionX/Y instead (only populated when this bridge
+// authored the node).
+#if UE_MCP_HAS_5_5_API
 #include "Nodes/PCGEditorGraphNodeBase.h"
+#endif
 #include "UObject/UObjectIterator.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Brush.h"
@@ -1909,6 +1915,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 	// only populated when the node was authored through this bridge - the PCG
 	// editor never writes back to it. Build a lookup so editor-authored
 	// graphs round-trip their hand-laid-out positions.
+	// (5.4 lacks UPCGEditorGraphNodeBase; falls back to runtime PositionX/Y below.)
+#if UE_MCP_HAS_5_5_API
 	TMap<const UPCGNode*, const UPCGEditorGraphNodeBase*> EditorNodeByPCGNode;
 	for (TObjectIterator<UPCGEditorGraphNodeBase> It; It; ++It)
 	{
@@ -1921,6 +1929,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 			EditorNodeByPCGNode.Add(PCGN, EdNode);
 		}
 	}
+#endif
 
 	TArray<TSharedPtr<FJsonValue>> NodesArr;
 	for (const UPCGNode* Node : Graph->GetNodes())
@@ -1932,11 +1941,13 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 
 		double PosX = Node->PositionX;
 		double PosY = Node->PositionY;
+#if UE_MCP_HAS_5_5_API
 		if (const UPCGEditorGraphNodeBase* const* EdNodePtr = EditorNodeByPCGNode.Find(Node); EdNodePtr && *EdNodePtr)
 		{
 			PosX = (*EdNodePtr)->NodePosX;
 			PosY = (*EdNodePtr)->NodePosY;
 		}
+#endif
 		NodeObj->SetNumberField(TEXT("posX"), PosX);
 		NodeObj->SetNumberField(TEXT("posY"), PosY);
 
