@@ -1,6 +1,6 @@
 # Tool Reference
 
-UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering **<!-- count:actions -->500+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering **<!-- count:actions -->524+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -40,6 +40,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `write_cpp_file` | Write a .h / .cpp / .inl file under the project's Source/ tree. Used to append UPROPERTYs/UFUNCTIONs or method bodies after create_cpp_class. Writes are scoped to Source/ for safety. Params: `path (relative to Source/ or absolute within Source/), content (full file contents)` |
 | `read_cpp_source` | Read a .cpp file from the project Source/ tree. Companion to read_cpp_header for round-trip edits. Params: `sourcePath (relative to Source/ or absolute)` |
 | `add_module_dependency` | Add a module to a target module's Build.cs dependency array. Params: `moduleName (the Build.cs to edit - must exist in the project), dependency (module name to add, e.g. 'UMG'), access? ('public'\\|'private', default 'private')` |
+| `add_cpp_member` | Append a UPROPERTY/UFUNCTION declaration to an existing UCLASS header inside the access specifier you choose. Idempotent: if a declaration containing the same memberName is already present, returns existed:true. Params: `headerPath (relative to Source/ or absolute), declaration (full multi-line UPROPERTY(...) / UFUNCTION(...) block plus its single-line member or function signature), memberName (the identifier the declaration introduces - used for idempotency), access? ('public'\\|'protected'\\|'private', default 'public')` |
 
 ---
 
@@ -54,34 +55,35 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `read` | Read asset via reflection. Params: `assetPath` |
 | `read_properties` | Read asset properties with values. Params: `assetPath, propertyName?, includeValues?` |
 | `duplicate` | Duplicate asset. Params: `sourcePath, destinationPath` |
-| `rename` | Rename asset. Detects World Partition levels and migrates their `__ExternalActors__`/`__ExternalObjects__` packages atomically (#409). Params: `assetPath, newName (or sourcePath, destinationPath), force?` |
-| `bulk_rename` | Batched rename using IAssetTools::RenameAssets - single transaction with one redirector-fixup pass (matches Content Browser drag). Use this over looped rename for scene-referenced assets. Params: `renames[] where each entry is {sourcePath, destinationPath} OR {assetPath, newName}` |
+| `rename` | Rename asset. Params: `assetPath, newName (or sourcePath, destinationPath), force?` |
+| `bulk_rename` | Batched rename using IAssetTools::RenameAssets - single transaction with one redirector-fixup pass (matches Content Browser drag). Use this over looped rename for scene-referenced assets. World assets are rejected (status=rejected_world); use rename_asset which handles WP externals atomically (#409). Params: `renames[] where each entry is {sourcePath, destinationPath} OR {assetPath, newName}` |
 | `move` | Move asset. Params: `sourcePath, destinationPath` |
 | `delete` | Delete asset. On failure returns reason (open_in_editor / has_referencers / unknown) plus referencer list. Pass force=true to auto-close any open asset editors before deleting (#278). Params: `assetPath, force?` |
 | `delete_batch` | Batch-delete assets. Per-path status (deleted/absent/failed) plus reason+referencers on failed entries (#278). Params: `assetPaths[], force?` |
 | `create_data_asset` | Create UDataAsset instance of custom class. Params: `name, className (/Script/Module.ClassName or loaded name), packagePath?, properties? (key/value map)` |
 | `save` | Save asset(s). Params: `assetPath?` |
+| `save_all_dirty` | Flush every dirty package to disk in one call. End-of-workflow shortcut after bulk import/edit. Params: `saveMapPackages? (default true), saveContentPackages? (default true)` |
 | `set_mesh_material` | Assign material to static mesh slot. Params: `assetPath, materialPath, slotIndex?` |
 | `recenter_pivot` | Move static mesh pivot to geometry center. Params: `assetPath OR assetPaths` |
 | `import_static_mesh` | Import from FBX/OBJ. Params: `filePath, name?, packagePath?, combineMeshes?, importMaterials?, importTextures?, generateLightmapUVs?` |
 | `import_skeletal_mesh` | Import skeletal mesh from FBX. Params: `filePath, name?, packagePath?, skeletonPath?, importMaterials?, importTextures?` |
 | `import_animation` | Import anim from FBX. Params: `filePath, name?, packagePath?, skeletonPath` |
 | `import_texture` | Import image. Params: `filePath, name?, packagePath?` |
+| `import_texture_batch` | Import many textures in one call - the loop stays inside the editor (no per-file bridge round-trip), so this finishes far faster than N import_texture calls. Per-item result records mirror import_texture. Params: `items[]: [{filePath, packagePath?, name?, replaceExisting?}], packagePath? (default for items that don't set it), save? (default true), automated? (default true)` |
 | `reimport` | Reimport asset from source file. Params: `assetPath, filePath?` |
-| `read_import_sources` | Read AssetImportData source filenames on an imported asset (StaticMesh, SkeletalMesh, Texture, Animation, etc.). Returns sources[] of `{relativeFilename, absolutePath, timestamp, fileHash, displayLabelName}`. Params: `assetPath (#270)` |
 | `read_datatable` | Read DataTable rows. Params: `assetPath, rowFilter?` |
 | `create_datatable` | Create DataTable. Params: `name, packagePath?, rowStruct` |
 | `reimport_datatable` | Reimport DataTable from JSON. Params: `assetPath, jsonPath?, jsonString?` |
 | `list_textures` | List textures. Params: `directory?, recursive?` |
 | `get_texture_info` | Get texture details. Params: `assetPath` |
 | `set_texture_settings` | Set texture settings. Params: `assetPath, settings (object with compressionSettings?, lodGroup?, sRGB?, neverStream?)` |
-| `add_socket` | Add socket to StaticMesh or SkeletalMesh. Idempotent on socket name; pass `onConflict='update'` to overwrite an existing socket's transform. Params: `assetPath, socketName, boneName? (SkeletalMesh only), relativeLocation?, relativeRotation?, relativeScale?, onConflict? (skip\\|update\\|error, default skip) (#412)` |
+| `add_socket` | Add socket to StaticMesh or SkeletalMesh. Idempotent on socket name; pass onConflict='update' to overwrite an existing socket's transform with the supplied relativeLocation/relativeRotation/relativeScale (#412). Params: `assetPath, socketName, boneName? (SkeletalMesh only, default 'root'), relativeLocation?, relativeRotation?, relativeScale?, onConflict? (skip\\\|update\\\|error, default skip)` |
 | `remove_socket` | Remove socket by name. Params: `assetPath, socketName` |
 | `list_sockets` | List sockets on a mesh (StaticMesh or SkeletalMesh). Params: `assetPath` |
-| `set_socket_transform` | Update an existing socket's relative transform. Pass any subset of relativeLocation/relativeRotation/relativeScale; omitted fields stay at their current values. Errors if the socket does not exist (use `add_socket` to create). Common after FBX import when SOCKET_* empties land with `scale=(100,100,100)`. Params: `assetPath, socketName, relativeLocation?, relativeRotation?, relativeScale? (#412)` |
-| `set_property` | Set a UPROPERTY on any loaded asset (Material, DataAsset, DataTable, SubsurfaceProfile, etc.) using a dotted path. Walks nested structs and sub-objects internally - no more read-modify-write copies (e.g. `settings.mean_free_path_distance` on a UMaterial). Value goes through `MCPJsonProperty::SetJsonOnProperty` so JSON null clears object refs, structs accept `{x,y,z}`, arrays/maps round-trip. Params: `assetPath, propertyName (dotted path), value (#420)` |
-| `set_texture_settings_by_type` | Apply the canonical (compressionSettings, sRGB, LOD group) combo to every texture in each group: `normal` -> Normalmap, `grayscale` -> Grayscale, `baseColor` -> Default sRGB, `hdr` -> HDR. Params: `groups (object: {normal?:[paths], grayscale?:[paths], baseColor?:[paths], hdr?:[paths]}) (#421)` |
-| `create_interchange_pipeline` | One-call factory for a `UInterchangeGenericAssetsPipeline` asset with the 15-property mesh-import boilerplate already applied. Params: `assetPath OR (name + packagePath?), meshType? (skeletal default \\| static), options? (dotted-path overrides), onConflict? (#421)` |
+| `set_socket_transform` | Update an existing socket's relative transform on StaticMesh or SkeletalMesh. Pass any subset of relativeLocation/relativeRotation/relativeScale; omitted fields stay at their current values. Errors if the socket does not exist (use add_socket to create). Common after FBX import when SOCKET_* empties land with scale=(100,100,100) (#412). Params: `assetPath, socketName, relativeLocation?, relativeRotation?, relativeScale?` |
+| `set_property` | Set a UPROPERTY on any loaded asset (Material, DataAsset, DataTable, SubsurfaceProfile, etc.) using a dotted path. Walks nested structs and sub-objects internally - no more read-modify-write copies (e.g. `settings.mean_free_path_distance` on a UMaterial). Value goes through MCPJsonProperty::SetJsonOnProperty so JSON null clears object refs, structs accept {x,y,z}, arrays/maps round-trip. Params: `assetPath, propertyName (dotted path), value (#420)` |
+| `set_texture_settings_by_type` | Apply the canonical (compressionSettings, sRGB, LOD group) combo to every texture in each group: normal -> Normalmap, grayscale -> Grayscale, baseColor -> Default sRGB, hdr -> HDR. Params: `groups (object: {normal?:[paths], grayscale?:[paths], baseColor?:[paths], hdr?:[paths]}) (#421)` |
+| `create_interchange_pipeline` | One-call factory for a UInterchangeGenericAssetsPipeline asset with the 15-property mesh-import boilerplate already applied (RecomputeNormals=false, MikkTSpace=true, HighPrecisionTangents=true, BuildNanite=false, CreatePhysicsAsset=false, etc.). Params: `assetPath OR (name + packagePath?), meshType? (skeletal default \\| static), options? (dotted-path overrides on the resulting pipeline e.g. {'MeshPipeline.bBuildNanite': true}), onConflict? (#421)` |
 | `reload_package` | Force reload an asset package from disk. Params: `assetPath` |
 | `health_check` | Diagnose stuck-unloadable asset. Returns onDisk/inRegistry/isLoaded/canLoad/isStuck flags so an agent can detect the half-shutdown state where load returns null but the file exists (#279). Params: `assetPath` |
 | `force_reload` | Aggressive reload that resets package loaders + GCs + LoadObject. Recovers from the half-shutdown state without an editor restart (#279). Closes any open editors first. Params: `assetPath` |
@@ -91,7 +93,9 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `get_referencers` | Reverse dependency lookup. Params: `packages[] OR packagePath (#150)` |
 | `set_sk_material_slots` | Set materials on a USkeletalMesh by slot name or slotIndex (bypasses the blueprint override-materials path that UE's ICH silently reverts). Params: `assetPath, slots[{slotName?\\|slotIndex?, materialPath}]` |
 | `diagnose_registry` | Scan a content path and compare disk vs AssetRegistry (including in-memory pending-kill entries). Returns onDiskCount, inMemoryIncludedCount, ghostCount and paths. Params: `path, recursive? (default true), reconcile? (forceRescan=true)` |
-| `get_mesh_bounds` | Get StaticMesh bounding box. Params: `assetPath` |
+| `get_mesh_bounds` | Get StaticMesh OR SkeletalMesh bounding box. Params: `assetPath` |
+| `get_mesh_info` | One-call mesh QA: bounds + material slots + skeleton + LOD/vertex counts. Works for both UStaticMesh and USkeletalMesh. Params: `assetPath` |
+| `read_import_sources` | Read AssetImportData source filenames on an imported asset (StaticMesh, SkeletalMesh, Texture, Animation, etc.). Returns sources[] of {relativeFilename, absolutePath, timestamp, fileHash, displayLabelName}. Params: `assetPath (#270)` |
 | `get_mesh_collision` | Inspect StaticMesh collision setup. Params: `assetPath` |
 | `move_folder` | Move/rename entire content folder with redirector fixup in one transaction. Params: `sourcePath, destinationPath (#192)` |
 | `create_folder` | Create empty content browser folder(s). Params: `path OR paths[] (e.g. /Game/Foo, /Game/Bar/Baz)` |
@@ -105,7 +109,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 
 | Action | Description |
 |--------|-------------|
-| `read` | Read BP structure incl. SCS components AND inherited native components from the CDO (CharacterMesh0, CharMoveComp, etc.). Params: `assetPath, includeComponentProperties? (dump UPROPERTY name/type/value per component)` |
+| `read` | Read BP structure incl. SCS components AND inherited native components from the CDO (CharacterMesh0, CharMoveComp, etc.). Params: `assetPath, includeComponentProperties? (dump UPROPERTY name/type/value per component template; off by default) (#353/#370)` |
 | `list_variables` | List variables. Params: `assetPath` |
 | `list_functions` | List functions/graphs. Params: `assetPath` |
 | `read_graph` | Read graph nodes. Params: `assetPath, graphName` |
@@ -124,10 +128,10 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `connect_pins` | Wire nodes. Params: `sourceNode, sourcePin, targetNode, targetPin, assetPath, graphName?` |
 | `add_component` | Add BP component. Params: `assetPath, componentClass, componentName?, parentComponent? (SCS parent for hierarchy - #115)` |
 | `remove_component` | Remove SCS component. Params: `assetPath, componentName` |
-| `set_component_property` | Set property on SCS or inherited component. Inherited components go through the child BP's InheritableComponentHandler override template so the parent stays untouched. Pass `value=null` to clear a TObjectPtr/SoftObject/WeakObject/UClass/Interface reference (e.g. clear `AnimClass` on `CharacterMesh0`) (#420). Params: `assetPath, componentName, propertyName, value` |
-| `set_capsule_size` | Call `UCapsuleComponent::SetCapsuleSize` on a CapsuleComponent template (CharacterMovement-friendly path; raw property writes leave the visualizer stale). Params: `assetPath, componentName, halfHeight?, radius? (#419)` |
+| `set_component_property` | Set property on SCS or inherited component. Inherited components go through the child BP's InheritableComponentHandler override template so the parent stays untouched. Pass value=null to clear a TObjectPtr/SoftObject/WeakObject/UClass/Interface reference (e.g. clear AnimClass on CharacterMesh0) (#420). Params: `assetPath, componentName, propertyName, value` |
+| `set_capsule_size` | Call UCapsuleComponent::SetCapsuleSize on a CapsuleComponent template (CharacterMovement-friendly path; raw property writes leave the visualizer stale). Pass either or both of halfHeight/radius. Returns the new + previous values. Params: `assetPath, componentName, halfHeight?, radius? (#419)` |
 | `get_component_property` | Read a single property value from an SCS or inherited component template. Returns the ICH override value for child BPs if one exists. Params: `assetPath, componentName, propertyName` |
-| `set_class_default` | Set UPROPERTY on Blueprint CDO. Pass `value=null` to clear an object/class/interface reference (#420). Params: `assetPath, propertyName, value` |
+| `set_class_default` | Set UPROPERTY on Blueprint CDO. Pass value=null to clear an object/class/interface reference (#420). Params: `assetPath, propertyName, value` |
 | `delete_variable` | Delete a member variable. Params: `assetPath, name` |
 | `add_function_parameter` | Add input or output parameter to a function. Params: `assetPath, functionName, parameterName, parameterType?, isOutput?` |
 | `set_variable_default` | Set default value on a BP variable. Params: `assetPath, name, value` |
@@ -170,13 +174,12 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `place_actor` | Spawn actor. Params: `actorClass, label?, location?, rotation?, scale?, staticMesh?, material?` |
 | `delete_actor` | Remove actor. Params: `actorLabel` |
 | `get_actor_details` | Inspect actor. Params: `actorLabel OR actorPath, includeProperties?, propertyName?, world? (editor\\|pie)` |
-| `get_component_tree` | Deep component-tree dump for an actor. Per-component: name, class, attachParent, attachSocket, mobility, visibility, relative+world transforms, tags. Primitives add collisionProfile/collisionEnabled/bounds/castShadow. StaticMesh adds staticMesh + materials[]. SkeletalMesh adds skeletalMesh + skeleton + materials[]. Params: `actorLabel \\| actorPath, world? (editor\\|pie), componentClass? (substring filter), includeProperties? (dump UPROPERTY name/type/value per component) (#240/#241/#302/#320/#370/#353)` |
-| `get_relative_transform` | Compute target's transform in reference's local space (location/rotation/scale). Common dungeon/calibration workflow. Params: `target (actor label), reference (actor label), world? (#386/#387)` |
 | `move_actor` | Transform actor. Params: `actorLabel, location?, rotation?, scale?` |
 | `select` | Select actors. Params: `actorLabels[]` |
 | `get_selected` | Get selection |
 | `add_component` | Add component to actor. Params: `actorLabel, componentClass, componentName?` |
-| `set_component_property` | Set component prop. Pass `value=null` to clear a TObjectPtr/SoftObject/WeakObject/UClass/Interface reference (#420). Params: `actorLabel, componentName, propertyName, value` |
+| `remove_component` | Remove instance component from a level actor by name. Idempotent: returns alreadyDeleted=true if no matching component exists. Params: `actorLabel, componentName (#426)` |
+| `set_component_property` | Set component prop. Pass value=null to clear a TObjectPtr/SoftObject/WeakObject/UClass/Interface reference (#420). Params: `actorLabel, componentName, propertyName, value` |
 | `get_current` | Get current level name and path |
 | `load` | Load level. Params: `levelPath` |
 | `save` | Save current level |
@@ -185,7 +188,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `spawn_volume` | Place volume. Params: `volumeType, location?, extent?, label?` |
 | `list_volumes` | List volumes. Params: `volumeType?` |
 | `set_volume_properties` | Edit volume. Params: `actorLabel, properties` |
-| `spawn_light` | Place light. Params: `lightType (point\\|spot\\|directional\\|rect\\|sky), location?, rotation?, intensity?, color? ({r,g,b} 0-255), mobility? (static\\|stationary\\|movable; default movable), label?` |
+| `spawn_light` | Place light. Params: `lightType (point\\|spot\\|directional\\|rect\\|sky), location?, rotation?, intensity?, color? ({r,g,b} 0-255), mobility? (static\\|stationary\\|movable; default movable so the light renders without a build), label? (#331/#310)` |
 | `set_light_properties` | Edit light. Params: `actorLabel, intensity?, color?, rotation? (DirectionalLight sun angle), mobility? (static\\|stationary\\|movable), recaptureSky?, temperature?, castShadows?, attenuationRadius?` |
 | `set_fog_properties` | Edit ExponentialHeightFog. Params: `actorLabel?, fogDensity?, fogHeightFalloff?, startDistance?, fogInscatteringColor?` |
 | `get_actors_by_class` | List actors by class name. Params: `className, world? (editor\\|pie)` |
@@ -199,6 +202,8 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `get_world_settings` | Read world settings (GameMode, KillZ, gravity, etc.) |
 | `set_world_settings` | Set world settings. Params: `defaultGameMode?, killZ?, globalGravityZ?, enableWorldBoundsChecks?` |
 | `get_actor_bounds` | Get actor AABB. Params: `actorLabel` |
+| `get_component_tree` | Deep component-tree dump for an actor. Returns per-component: name, class, attachParent, attachSocket, mobility, visibility, relative+world transforms, tags. For PrimitiveComponents adds collisionProfile/collisionEnabled/bounds/castShadow. For StaticMeshComponent adds staticMesh + materials[]. For SkeletalMeshComponent adds skeletalMesh + skeleton + materials[]. Params: `actorLabel \\| actorPath, world? (editor\\|pie), componentClass? (substring filter), includeProperties? (dump UPROPERTY name/type/value per component) (#240/#241/#302/#320/#370/#353)` |
+| `get_relative_transform` | Compute target's transform in reference's local space (location/rotation/scale). Common dungeon/calibration workflow. Params: `target (actor label), reference (actor label), world? (#386/#387)` |
 | `resolve_actor` | Resolve internal/runtime actor name to editor label. Params: `internalName (e.g. StaticMeshActor_141)` |
 | `set_actor_property` | Set per-instance UPROPERTY on a level actor. Params: `actorLabel ('WorldSettings' targets the world settings actor), propertyName (dotted paths like 'Foo.Bar' supported), value (string/number/bool/object/array; an actor label resolves to AActor* refs), force? (bypass EditDefaultsOnly), world? (editor\\|pie) (#202/#230)` |
 | `delete_actors` | Bulk-delete actors. Params: `at least one of labelPrefix, className, tag; dryRun? to preview` |
@@ -218,8 +223,8 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `spawn_grid` | Batch-spawn StaticMeshActors on a grid. Params: `staticMesh, min, max (Vec3 bounds), countX?, countY?, countZ?, jitter?, labelPrefix? (#203)` |
 | `batch_translate` | Translate a set of actors by an offset. Params: `offset (Vec3), actorLabels[] OR tag (#203)` |
 | `place_actors_batch` | Bulk-spawn StaticMeshActors with per-instance mesh + transform. Params: `actors[]: [{staticMesh, location?, rotation?, scale?, label?}]` |
-| `line_trace` | Line trace in the editor world. Returns hit + actorLabel/actorClass/componentName/componentClass/location/impactPoint/normal/distance/faceIndex/boneName/physicalMaterial. Params: `start (Vec3), end? (Vec3) OR direction? (Vec3) + distance? (default 200000), ignoreActors? (#420)` |
-| `snap_actor_to_floor` | Snap an actor's bounds-bottom to the first downward line-trace hit. Equivalent of the End-key shortcut; works on arbitrary geometry. Params: `actorLabel, floorOffset?, maxDistance? (default 100000) (#419)` |
+| `line_trace` | Line trace in the editor world. Returns hit + actorLabel/actorClass/componentName/componentClass/location/impactPoint/normal/distance/faceIndex/boneName/physicalMaterial. Params: `start (Vec3), end? (Vec3) OR direction? (Vec3) + distance? (default 200000), ignoreActors? (array of labels) (#420)` |
+| `snap_actor_to_floor` | Snap an actor's bounds-bottom to the first downward line-trace hit. Equivalent of the End-key shortcut, works on arbitrary geometry (not just Landscape). Params: `actorLabel, floorOffset? (added to impact Z, default 0), maxDistance? (default 100000) (#419)` |
 
 ---
 
@@ -240,16 +245,16 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `set_usage` | Set EMaterialUsage flag(s) on a material. Params: `assetPath, usage OR usages[], enabled? (default true)` |
 | `set_shading_model` | Set shading model. Params: `assetPath, shadingModel` |
 | `set_blend_mode` | Set blend mode. Params: `assetPath, blendMode` |
-| `set_domain` | Set material domain (Surface\\|DeferredDecal\\|LightFunction\\|Volume\\|PostProcess\\|UI\\|RuntimeVirtualTexture). Required for post-process / decal / UI authoring. Params: `assetPath, materialDomain (#299/#356)` |
+| `set_domain` | Set material domain. Params: `assetPath, materialDomain (Surface \\| DeferredDecal \\| LightFunction \\| Volume \\| PostProcess \\| UI \\| RuntimeVirtualTexture)` |
 | `set_base_color` | Set base color. Params: `assetPath, color` |
 | `connect_texture` | Connect texture to property. Params: `materialPath, texturePath, property` |
-| `add_expression` | Add expression node. Params: `materialPath, expressionType, name?, parameterName?, group?, sortPriority?, defaultValue? (scalar number or {r,g,b,a} for vector params), value? (Constant value or {r,g,b,a} for Constant3Vector/Constant4Vector), channels? (for ComponentMask), positionX?, positionY?` |
+| `add_expression` | Add expression node. Params: `materialPath, expressionType, name?, parameterName?, group?, sortPriority?, defaultValue? (scalar number or {r,g,b,a} for vector params), value? (number for Constant, {r,g,b} for Constant3Vector, {x,y} for Constant2Vector), channels? ({r,g,b,a} bools for ComponentMask), positionX?, positionY? (#318)` |
 | `connect_expressions` | Wire two expressions. Params: `materialPath, sourceExpression, sourceOutput?, targetExpression, targetInput?` |
 | `connect_to_property` | Wire expression to material output. Params: `materialPath, expressionName, outputName?, property` |
 | `list_expressions` | List expression nodes. Params: `materialPath` |
 | `delete_expression` | Remove expression. Params: `materialPath, expressionName` |
 | `list_expression_types` | List available expression types |
-| `recompile` | Recompile material. Pass `recompileChildren=true` to cascade to every MaterialInstanceConstant whose parent chain reaches this material. Params: `materialPath, recompileChildren? (#421)` |
+| `recompile` | Recompile material. Pass recompileChildren=true to cascade to every MaterialInstanceConstant whose parent chain reaches this material (#421). Params: `materialPath, recompileChildren?` |
 | `duplicate` | Duplicate material asset. Params: `sourcePath, destinationPath` |
 | `validate` | Validate material graph - find orphans, broken refs. Params: `assetPath` |
 | `get_shader_stats` | Shader compile stats, sampler+param counts. Params: `assetPath` |
@@ -272,6 +277,8 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `read_montage` | Read montage. Params: `assetPath` |
 | `read_sequence` | Read anim sequence. Params: `assetPath` |
 | `read_blendspace` | Read blendspace. Params: `assetPath` |
+| `add_blend_sample` | Append a sample to a BlendSpace. Params: `assetPath, animation (AnimSequence path), position {x,y} (or flat x,y) (#248)` |
+| `set_blend_sample` | Move an existing BlendSpace sample or swap its animation. Params: `assetPath, sampleIndex, position? {x,y} (or flat x,y), animation? (#272)` |
 | `list` | List anim assets. Params: `directory?, recursive?` |
 | `create_montage` | Create montage. Params: `animSequencePath, name?, packagePath?` |
 | `create_anim_blueprint` | Create AnimBP. Params: `skeletonPath, name?, packagePath?, parentClass?` |
@@ -283,9 +290,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `get_physics_asset` | Read physics asset. Params: `assetPath` |
 | `create_sequence` | Create blank AnimSequence. Params: `name, skeletonPath, packagePath?, numFrames?, frameRate?` |
 | `set_bone_keyframes` | Set bone transform keyframes. Params: `assetPath, boneName, keyframes` |
-| `get_bone_transforms` | Read reference pose transforms. Params: `skeletonPath, boneNames?, space? (local default \\| component for parent-chain composed transforms) (#245)` |
-| `add_blend_sample` | Append a sample to a BlendSpace. Params: `assetPath, animation (AnimSequence path), position {x,y} (or flat x, y) (#248)` |
-| `set_blend_sample` | Move an existing BlendSpace sample or swap its animation. Params: `assetPath, sampleIndex, position? {x,y} (or flat x, y), animation? (#272)` |
+| `get_bone_transforms` | Read reference pose transforms. Params: `skeletonPath, boneNames?, space? ('local' default, or 'component' for composed parent-chain transforms - retarget-chain / anatomical-scale work) (#245)` |
 | `set_montage_sequence` | Replace animation sequence in a montage. Params: `assetPath, animSequencePath, slotIndex?` |
 | `set_montage_properties` | Set montage properties. Params: `assetPath, sequenceLength?, rateScale?, blendIn?, blendOut?` |
 | `create_state_machine` | Create state machine in AnimBP. Params: `assetPath, name?, graphName?` |
@@ -317,16 +322,16 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `read_pose_search_database` | Inspect a PoseSearchDatabase: schema, animation entries, cost biases, tags. Params: `assetPath` |
 | `set_sequence_properties` | Batch-set properties on AnimSequence assets. If a path is a Montage and resolveFromMontages is true (default), resolves to its first AnimSequence. Params: `assetPaths[], properties{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?}, resolveFromMontages?` |
 | `bake_root_motion_from_bone` | Bake delta translation from a source bone (e.g. pelvis) onto the root bone across the whole sequence; compensates the source bone so world-space position is unchanged. Params: `assetPath, sourceBone, rootBone? (default 'root'), axes? (default ['x','y']), interpolation? ('linear'\\|'per_frame', default 'linear')` |
-| `get_bone_transform` | Read a bone or socket transform on a live actor's SkeletalMeshComponent. Wraps `GetBoneTransform` / `GetSocketTransform`. Params: `actorLabel, boneName (or socket name), componentName? (default: CharacterMesh0 / Mesh / first SK component), space? (world\\|component\\|local, default world)` (#420) |
+| `get_bone_transform` | Read a bone or socket transform on a live actor's SkeletalMeshComponent. Wraps GetBoneTransform / GetSocketTransform. Params: `actorLabel, boneName (or socket name), componentName? (default: CharacterMesh0 / Mesh / first SK component), space? (world\\|component\\|local, default world)` |
 | `list_bones` | List bones in a live actor's SkeletalMeshComponent ref skeleton (name, index, parent). Params: `actorLabel, componentName? (#420)` |
-| `rebind_leader_pose` | Re-bind every secondary SkeletalMeshComponent on an actor to a body component (default `CharacterMesh0` / `Mesh`). One-call fix for the "character explodes after rotating the actor" failure mode. Params: `actorLabel, bodyComponent? (#419)` |
-| `preview_animation` | Toggle `bUpdateAnimationInEditor` + `VisibilityBasedAnimTickOption=AlwaysTickPoseAndRefreshBones` on every SkeletalMeshComponent of an actor. Bypasses the "cannot be edited on templates" guard for level instances. Params: `actorLabel, enabled (#419/#420)` |
+| `rebind_leader_pose` | Re-bind every secondary SkeletalMeshComponent on an actor to a body component (default CharacterMesh0 / Mesh). One-call fix for the 'character explodes after rotating the actor' failure mode. Params: `actorLabel, bodyComponent? (#419)` |
+| `preview_animation` | Toggle bUpdateAnimationInEditor + VisibilityBasedAnimTickOption=AlwaysTickPoseAndRefreshBones on every SkeletalMeshComponent of an actor. Bypasses the 'cannot be edited on templates' guard for level instances. Params: `actorLabel, enabled (#419/#420)` |
 
 ---
 
 ## landscape
 
-*Landscape terrain: info, layers, materials, layer-info creation, proxy spawning.*
+*Landscape terrain: info, layers, sculpting, painting, materials, heightmap import.*
 
 | Action | Description |
 |--------|-------------|
@@ -337,8 +342,8 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `get_component` | Inspect component. Params: `componentIndex` |
 | `set_material` | Set landscape material. Params: `materialPath` |
 | `add_layer_info` | Register paint layer (creates LayerInfo asset + binds to active landscape). Params: `layerName, packagePath?, weightBlended?` |
-| `create_layer_info` | Standalone LayerInfo asset creation - no landscape required. Params: `layerName, name? (default LI_<layerName>), packagePath? (default /Game/Landscape/LayerInfos), physMaterial?, hardness? (#251)` |
-| `create` | Spawn a new ALandscape with a flat heightmap. Defaults match Landscape Mode "create new" (8x8 components, 63 quads/subsection, 2 subsections/component = 1016x1016 quads). Params: `location?, scale? (default 100,100,100), componentCountX? (default 8), componentCountY? (default 8), subsectionSizeQuads? (7\\|15\\|31\\|63\\|127\\|255, default 63), numSubsections? (1\\|2, default 2), heightOffset? (uint16, default 32768 = mid-elevation), label? (#303)` |
+| `create_layer_info` | Standalone LayerInfo asset creation - no landscape required. Params: `layerName, name? (default LI_<layerName>), packagePath? (default /Game/Landscape/LayerInfos), physMaterial? (asset path), hardness? (#251)` |
+| `create` | Spawn a new ALandscape with a flat heightmap. Defaults match the Editor's Landscape Mode 'create new' (8x8 components, 63 quads/subsection, 2 subsections/component = 1016x1016 quads). Params: `location? (Vec3), scale? (Vec3, default 100,100,100), componentCountX? (default 8), componentCountY? (default 8), subsectionSizeQuads? (one of 7\\|15\\|31\\|63\\|127\\|255, default 63), numSubsections? (1\\|2, default 2), heightOffset? (uint16, default 32768 = mid-elevation), label? (#303)` |
 | `get_material_usage_summary` | Per-proxy summary: landscape/hole material paths + component/grass/nanite counts (#150) |
 
 ---
@@ -357,7 +362,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `create_graph` | Create graph. Params: `name, packagePath?` |
 | `add_node` | Add node. Params: `assetPath, nodeType, nodeName?` |
 | `connect_nodes` | Wire nodes. Params: `assetPath, sourceNode, sourcePin, targetNode, targetPin` |
-| `disconnect_nodes` | Remove a wired edge between two PCG nodes. Returns removedEdges count. Params: `assetPath, sourceNode, targetNode, sourcePin? (default: any), targetPin? (default: any) (#346)` |
+| `disconnect_nodes` | Remove a wired edge between two PCG nodes. Params: `assetPath, sourceNode, targetNode, sourcePin? (default: any), targetPin? (default: any)` |
 | `set_node_settings` | Set node params. Params: `assetPath, nodeName, settings` |
 | `set_static_mesh_spawner_meshes` | Populate weighted MeshEntries on a PCGStaticMeshSpawner node (#145). Params: `assetPath, nodeName, entries=[{mesh, weight?}], replace? (default true)` |
 | `remove_node` | Remove node. Params: `assetPath, nodeName` |
@@ -373,7 +378,7 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 
 ## foliage
 
-*Foliage types, sampling, and settings.*
+*Foliage painting, types, sampling, and settings.*
 
 | Action | Description |
 |--------|-------------|
@@ -453,8 +458,8 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `add_widget` | Add widget to widget tree. Params: `assetPath, widgetClass, widgetName?, parentWidgetName?` |
 | `remove_widget` | Remove widget from tree. Params: `assetPath, widgetName` |
 | `move_widget` | Reparent widget. Params: `assetPath, widgetName, newParentWidgetName` |
-| `set_root` | Replace WBP root with an existing widget by name. Params: `assetPath, widgetName (#365)` |
-| `wrap_root` | Wrap the current root in a new panel widget (UMG "Wrap With"). Params: `assetPath, wrapperClass (UPanelWidget subclass: CanvasPanel, VerticalBox, Overlay, ...), wrapperName? (#365)` |
+| `set_root` | Replace WBP root with an existing widget by name (#365). Params: `assetPath, widgetName` |
+| `wrap_root` | Wrap the current root in a new panel widget (UMG 'Wrap With'). Params: `assetPath, wrapperClass (must be a UPanelWidget subclass), wrapperName? (#365)` |
 | `list_classes` | List available widget classes |
 | `list_runtime` | (#160) List live UUserWidget instances in the PIE world. Params: `classFilter?, namePrefix?, viewportOnly?` |
 | `get_runtime` | (#160) Inspect a live PIE widget tree with text/visibility/brush/percent values. Params: `widgetName? \\| className?, childName?, maxDepth?` |
@@ -476,14 +481,10 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `run_python_file` | Run a Python file from disk with __file__/__name__ populated (#142). Params: `filePath, args?` |
 | `set_property` | Set UObject property. Params: `objectPath, propertyName, value` |
 | `play_in_editor` | PIE control. Params: `pieAction (start\\|stop\\|status), waitForAssetRegistry? (start only; default true - block until the AssetRegistry initial scan completes before requesting PIE, otherwise PIE silently no-ops on cold editor starts), assetRegistryTimeoutSeconds? (default 180) (#406)` |
-| `get_runtime_value` | Read PIE actor value. Params: `actorLabel, propertyName` |
+| `get_runtime_value` | Read PIE actor property. Params: `actorLabel, propertyName (supports dotted paths: component.field or component.struct.field for nested reads on component subobjects, #344/#381)` |
 | `get_pie_pawn` | Resolve the controlled pawn in the active PIE world. Params: `playerIndex? (default 0)` |
-| `invoke_function` | Call a BlueprintCallable / Exec UFUNCTION on an actor or one of its components. Params: `actorLabel, functionName, component? (component subobject name, #382), args? (object), actorArgs? (object mapping UObject* parameter name to actor label, resolved against live actors, #383), world? (editor\\|pie)` |
+| `invoke_function` | Call a BlueprintCallable / Exec UFUNCTION on a target actor or one of its components. Params: `actorLabel, functionName, component? (component subobject name; redirects target from the actor to that component, #382), args? (object), actorArgs? (object mapping UObject* parameter name to actor label, resolved against live actors in the active world; #383), world? (editor\\|pie)` |
 | `set_pie_time_scale` | Fast-forward PIE game time. Params: `factor (>0)` |
-| `configure_pie` | Set ULevelEditorPlaySettings - multi-client PIE, net mode, single-process. Params: `numClients?, netMode? (standalone\\|listen\\|client), runUnderOneProcess?, launchSeparateServer? (#384)` |
-| `get_pie_config` | Read current ULevelEditorPlaySettings (numClients, netMode, single-process, separate-server) (#384) |
-| `save_dirty` | Flush every dirty package and return per-package saved/failed map. Use after multi-step CDO/component edits when set_class_default leaves the asset dirty without persisting. Params: `includeMaps? (default true), includeContent? (default true) (#378)` |
-| `list_dirty_packages` | Enumerate currently-dirty content + map packages (#340) |
 | `hot_reload` | Hot reload C++ |
 | `undo` | Undo last transaction |
 | `redo` | Redo last transaction |
@@ -493,8 +494,8 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `capture_screenshot` | Screenshot. Params: `filename?, resolution?, target? (auto\\|pie\\|editor; auto routes to PIE viewport when PIE is running) (#226)` |
 | `capture_scene_png` | Headless PNG screenshot via SceneCapture2D (works unfocused, guaranteed RGBA8 LDR). Params: `outputPath, location?, rotation?, width? (default 1280), height? (default 720), fov? (default 90) (#148)` |
 | `get_viewport` | Get viewport camera |
-| `hit_test_viewport_pixel` | Ray-cast from a screen pixel through the active editor viewport and return the first hit. Builds the ray from the live viewport's projection matrix (no FOV/aspect guessing). Returns `hit` + `actorLabel/actorClass/componentName/componentClass/materialPath/location/impactPoint/normal/distance/faceIndex/boneName/physicalMaterial`. Params: `x, y (pixel coords), width? height? (override viewport size when picking from a different-resolution screenshot), maxDistance? (default 200000), ignoreActors? (#418)` |
-| `get_runtime_values` | Bulk runtime read across the active world. For each actor/component matching `classFilter`, resolves every path against the (actor\\|component) root. Paths support property hops, sub-object hops, and zero-arg BlueprintCallable getter calls at any segment (e.g. `PowerConnector.GetRequired` reaches a UFUNCTION on a UObject sub-object). `classFilter` matches actor class OR component class. Params: `classFilter?, paths[], world? (editor\\|pie, default pie if running) (#414)` |
+| `hit_test_viewport_pixel` | Ray-cast from a screen pixel through the active editor viewport and return the first hit. Builds the ray from the live viewport's projection matrix (no FOV/aspect guessing). Returns hit + actorLabel/actorClass/componentName/componentClass/materialPath/location/impactPoint/normal/distance/faceIndex/boneName/physicalMaterial. Params: `x, y (pixel coords), width? height? (override viewport size when picking from a different-resolution screenshot), maxDistance? (default 200000), ignoreActors? (array of actor labels) (#418)` |
+| `get_runtime_values` | Bulk runtime read across the active world. For each actor/component matching classFilter, resolves every path against the (actor\|component) root and returns rows of {actorLabel, actorClass, componentName?, componentClass?, values, errors?}. Paths support property hops, sub-object hops, and zero-arg BlueprintCallable getter calls at any segment (e.g. 'PowerConnector.GetRequired' reaches a UFUNCTION on a UObject sub-object). classFilter matches actor class OR component class - omit to match everything. World defaults to PIE if running, else editor. Params: `classFilter?, paths[], world? (editor\\|pie) (#414)` |
 | `set_viewport` | Set viewport camera. Params: `location?, rotation?` |
 | `focus_on_actor` | Focus on actor. Params: `actorLabel` |
 | `create_sequence` | Create Level Sequence. Params: `name, packagePath?` |
@@ -520,6 +521,10 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `respond_to_dialog` | Click a button on the active modal dialog. Params: `buttonIndex?, buttonLabel?` |
 | `open_asset` | Open asset in its editor. Params: `assetPath` |
 | `reload_bridge` | Hot-reload Python bridge handlers from disk |
+| `save_dirty` | Flush every dirty package and return a per-package saved/failed map. Use after multi-step CDO/component edits when set_class_default leaves the asset dirty without persisting (#378). Params: `includeMaps? (default true), includeContent? (default true)` |
+| `configure_pie` | Set ULevelEditorPlaySettings - multi-client PIE, net mode, single-process flag. Params: `numClients?, netMode? (standalone\\|listen\\|client), runUnderOneProcess?, launchSeparateServer? (#384)` |
+| `get_pie_config` | Read current ULevelEditorPlaySettings (numClients, netMode, single-process, separate-server) (#384) |
+| `list_dirty_packages` | Enumerate currently-dirty content + map packages (#340) |
 
 ---
 
@@ -551,6 +556,8 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `set_collision_enabled` | Set collision mode. Params: `actorLabel, collisionEnabled` |
 | `set_physics_properties` | Set mass/damping/gravity. Params: `actorLabel, mass?, linearDamping?, angularDamping?, enableGravity?` |
 | `rebuild_navigation` | Rebuild navmesh |
+| `find_nav_path` | Synchronous nav-path query between two world points. Returns valid/partial/length plus the polyline. The standard 'why doesn't my AI move?' diagnostic. Params: `start (Vec3), end (Vec3), pathfindingContext? (actorLabel - uses its agent + filter) (#424)` |
+| `list_nav_invokers` | Enumerate actors carrying a NavigationInvokerComponent + their tile generation/removal radii. Diagnoses 'no navmesh in this region' caused by missing or mis-sized invokers (#424) |
 | `get_navmesh_info` | Query nav system |
 | `project_to_nav` | Project point to navmesh. Params: `location, extent?` |
 | `spawn_nav_modifier` | Place nav modifier. Params: `location, extent?, areaClass?` |
@@ -568,9 +575,9 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `get_behavior_tree_info` | Inspect behavior tree (top-level + blackboard). Params: `assetPath` |
 | `read_behavior_tree_graph` | Walk BT tree: composites, tasks, decorators, services with blackboard keys. Params: `assetPath` |
 | `create_blackboard` | Create Blackboard. Params: `name, packagePath?` |
-| `add_blackboard_key` | Add a typed key to a Blackboard asset. Params: `blackboardPath, keyName, keyType (Bool\\|Int\\|Float\\|String\\|Name\\|Vector\\|Rotator\\|Object\\|Class\\|Enum), baseClass? (for Object/Class, e.g. /Script/Engine.Actor) (#250)` |
+| `add_blackboard_key` | Add a typed key to a Blackboard asset. Params: `blackboardPath, keyName, keyType (Bool\\|Int\\|Float\\|String\\|Name\\|Vector\\|Rotator\\|Object\\|Class\\|Enum), baseClass? (for Object/Class types; e.g. /Script/Engine.Actor) (#250)` |
+| `set_behavior_tree_blackboard` | Rebind a BehaviorTree asset's BlackboardAsset reference. Params: `behaviorTreePath, blackboardPath` |
 | `create_behavior_tree` | Create behavior tree. Params: `name, packagePath?, blackboardPath?` |
-| `set_behavior_tree_blackboard` | Rebind a BehaviorTree asset's BlackboardAsset reference (the C++ field is protected so reflection is the only writable path). Params: `behaviorTreePath, blackboardPath (#250)` |
 | `create_eqs_query` | Create EQS query. Params: `name, packagePath?` |
 | `list_eqs_queries` | List EQS queries. Params: `directory?` |
 | `add_perception` | Add AIPerceptionComponent. Params: `blueprintPath, senses?` |
@@ -580,11 +587,11 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `add_state_tree_component` | Add StateTreeComponent. Params: `blueprintPath` |
 | `create_smart_object_def` | Create SmartObjectDefinition. Params: `name, packagePath?` |
 | `add_smart_object_component` | Add SmartObjectComponent. Params: `blueprintPath` |
-| `add_smart_object_slot` | Append a `FSmartObjectSlotDefinition` to a SmartObjectDefinition's Slots array. Params: `assetPath, name?, offset? ({x,y,z}), rotation? ({pitch,yaw,roll}), tags?` (#416) |
-| `set_smart_object_slot` | Mutate an existing slot's offset/rotation/tags. Params: `assetPath, slotIndex, offset?, rotation?, tags?` (#416) |
-| `remove_smart_object_slot` | Remove a slot by index. Idempotent: out-of-range returns `alreadyDeleted=true`. Params: `assetPath, slotIndex` (#416) |
-| `list_smart_object_slots` | List slots with `index, offset, rotation, raw`. Params: `assetPath` (#416) |
-| `add_smart_object_slot_behavior` | Attach a behavior definition (asset or class path) to a slot. Pass `instanceProperties` to seed UPROPERTYs on a freshly-spawned class-instance. Params: `assetPath, slotIndex, behaviorClass, instanceProperties?` (#416) |
+| `add_smart_object_slot` | Append a FSmartObjectSlotDefinition to a SmartObjectDefinition's Slots array. Params: `assetPath, name?, offset? ({x,y,z}), rotation? ({pitch,yaw,roll}), tags? (array)` |
+| `set_smart_object_slot` | Mutate an existing slot's offset/rotation/tags. Params: `assetPath, slotIndex, offset? ({x,y,z}), rotation? ({pitch,yaw,roll}), tags? (array)` |
+| `remove_smart_object_slot` | Remove a slot by index. Idempotent: out-of-range returns alreadyDeleted=true. Params: `assetPath, slotIndex (#416)` |
+| `list_smart_object_slots` | List slots on a SmartObjectDefinition with index, offset, rotation, and raw text. Params: `assetPath (#416)` |
+| `add_smart_object_slot_behavior` | Attach a behavior definition (UBehaviorDefinition asset or class) to a slot's BehaviorDefinitions array. Pass instanceProperties to seed UPROPERTYs on a freshly-spawned class-instance. Params: `assetPath, slotIndex, behaviorClass (asset path or class path), instanceProperties? (#416)` |
 | `inspect_pie` | Inspect PIE runtime. Params: `actorLabel?` |
 | `get_pie_anim_state` | Get PIE anim instance state. Params: `actorLabel` |
 | `get_pie_anim_properties` | Read arbitrary UPROPERTY values on a PIE actor's AnimInstance (#139). Params: `actorLabel, propertyNames? (omit = dump all)` |
@@ -598,53 +605,6 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 | `get_framework_info` | Get level framework classes |
 | `get_navmesh_details` | Read RecastNavMesh generation params (cellSize, agentHeight, maxStepHeight, etc.) (#163) |
 | `apply_damage_in_pie` | Apply damage to PIE actor. Params: `actorLabel, baseDamage?, damageTypeClass? (#186)` |
-
----
-
-## statetree
-
-*StateTree asset editing: states, tasks, conditions, transitions, bindings, evaluators, global tasks, color palette, state parameters, root parameters, compile and validate (#322).*
-
-!!! note "Creation vs. authoring"
-    Use `gameplay(action="create_state_tree", ...)` to create a new StateTree asset and `gameplay(action="add_state_tree_component", ...)` to attach a runtime component. Everything below edits the *contents* of an existing StateTree.
-
-| Action | Description |
-|--------|-------------|
-| `read` | Full dump: state hierarchy (description, tag, customTickRate, color), tasks, conditions, transitions, evaluators, global tasks, root params, bindings. Params: `assetPath` |
-| `list_states` | List all states with IDs and dot-paths. Params: `assetPath` |
-| `add_state` | Add child state. Params: `assetPath, stateId? (parent GUID, omit for root), name, stateType? (State\\|Group\\|LinkedAsset\\|Subtree), selectionBehavior?, insertIndex?` |
-| `remove_state` | Remove a state by ID. Params: `assetPath, stateId` |
-| `set_state_property` | Set a property on a state (`name\\|type\\|selectionBehavior\\|bEnabled\\|weight\\|linkedAsset\\|description\\|tag\\|customTickRate\\|color`). Params: `assetPath, stateId, propertyName, value` |
-| `clear_state_nodes` | Remove all tasks/conditions/transitions from a state. Params: `assetPath, stateId` |
-| `add_task` | Add a task to a state. Params: `assetPath, stateId, structType (C++ struct e.g. FStateTreeRunParallelStateTreesTask), instanceProperties?` |
-| `remove_task` | Remove a task by index. Params: `assetPath, stateId, taskIndex` |
-| `set_task_instance_property` | Set a property on a task's instance data. Params: `assetPath, stateId, taskIndex, propertyName, value` |
-| `set_task_property` | Set a property on the task's node struct (FStateTreeTaskBase-level: bConsideredForCompletion, bTaskEnabled, bShouldStateChangeOnReselect). Params: `assetPath, stateId, taskIndex, propertyName, value` |
-| `add_enter_condition` | Add an enter condition to a state. Params: `assetPath, stateId, structType, instanceProperties?, operand? (And\\|Or)` |
-| `remove_enter_condition` | Remove an enter condition by index. Params: `assetPath, stateId, conditionIndex` |
-| `add_transition` | Add a transition. Params: `assetPath, stateId, trigger (OnStateCompleted\\|OnStateSucceeded\\|OnStateFailed\\|OnTick\\|OnEvent; combine with \\|), transitionType (GotoState\\|NextState\\|Succeeded\\|Failed), eventTag?, targetStateId?, targetStatePath?, priority?, delayDuration?, bDelayTransition?` |
-| `add_transition_condition` | Add a condition to an existing transition. Params: `assetPath, stateId, transitionIndex, structType, instanceProperties?, operand?` |
-| `remove_transition` | Remove a transition by index. Params: `assetPath, stateId, transitionIndex` |
-| `add_binding` | Add a property binding. Params: `assetPath, sourceStructId, sourcePath, targetStructId, targetPath` |
-| `remove_binding` | Remove a property binding. Params: `assetPath, targetStructId, targetPath` |
-| `list_bindings` | List all property bindings. Params: `assetPath, structId? (filter)` |
-| `add_evaluator` | Add a tree-level evaluator. Params: `assetPath, structType (FStateTreeEvaluatorBase subclass), instanceProperties?` |
-| `remove_evaluator` | Remove an evaluator by node ID. Params: `assetPath, nodeId` |
-| `set_evaluator_instance_property` | Set a property on an evaluator's instance data. Params: `assetPath, nodeId, propertyName, value` |
-| `set_evaluator_property` | Set a property on the evaluator's node struct. Params: `assetPath, nodeId, propertyName, value` |
-| `add_global_task` | Add a tree-level global task. Params: `assetPath, structType (FStateTreeTaskBase subclass), instanceProperties?` |
-| `remove_global_task` | Remove a global task by node ID. Params: `assetPath, nodeId` |
-| `set_global_task_instance_property` | Set a property on a global task's instance data. Params: `assetPath, nodeId, propertyName, value` |
-| `set_global_task_property` | Set a property on a global task's node struct. Params: `assetPath, nodeId, propertyName, value` |
-| `list_colors` | List color palette entries. Params: `assetPath` |
-| `add_color` | Add a palette color. Params: `assetPath, displayName, color? (FLinearColor string e.g. '(R=1.0,G=0.0,B=0.0,A=1.0)')` |
-| `list_state_parameters` | List parameters defined on a state. Params: `assetPath, stateId` |
-| `add_state_parameter` | Add a parameter to a state's property bag. Rejects fixed-layout (linked) states. Params: `assetPath, stateId, paramName, paramType (Bool\\|Int32\\|Int64\\|Float\\|Double\\|Name\\|String\\|Text)` |
-| `remove_state_parameter` | Remove a parameter by name. Rejects fixed-layout states. Params: `assetPath, stateId, paramName` |
-| `set_state_parameter` | Set the value of an existing state parameter. On fixed-layout states, marks the parameter as overridden. Params: `assetPath, stateId, paramName, value` |
-| `set_root_parameters` | Define root parameters (property bag). Params: `assetPath, parameters[] ({name, type}) where type is float\\|int32\\|bool\\|string\\|name\\|double` |
-| `compile` | Compile a StateTree. Returns success, errors[], warnings[]. Params: `assetPath` |
-| `validate` | Validate without compiling. Params: `assetPath` |
 
 ---
 
@@ -708,12 +668,55 @@ UE-MCP exposes **<!-- count:tools -->20<!-- /count --> category tools** covering
 
 ---
 
-## flow
+## statetree
 
-*Run pre-built named sequences (YAML flows). Config reloads on every call - no restart needed. See [Flows](flows.md) for the full guide.*
+*StateTree asset editing: read, modify states/tasks/conditions/transitions/bindings/evaluators/global tasks/colors/state parameters/root parameters, compile and validate.*
 
 | Action | Description |
 |--------|-------------|
-| `list` | List available flows (name, description, step count) |
-| `plan` | Show execution plan without running. Params: `flowName` |
-| `run` | Execute a flow. Params: `flowName, skip? (step names or numbers to skip), params? (runtime options merged into every step), rollback_on_failure? (invoke inverse tasks in reverse order on failure)` |
+| `read` | Full dump of a StateTree asset: state hierarchy (with description, tag, customTickRate, color), tasks, conditions, transitions, evaluators, global tasks, root params, bindings. Params: `assetPath` |
+| `list_states` | List all states with IDs and paths. Params: `assetPath` |
+| `add_state` | Add child state. Params: `assetPath, stateId? (parent GUID, omit for root), name, stateType? (State\\|Group\\|LinkedAsset\\|Subtree), selectionBehavior?, insertIndex?` |
+| `remove_state` | Remove a state by ID. Params: `assetPath, stateId` |
+| `set_state_property` | Set a property on a state. Params: `assetPath, stateId, propertyName (name\\|type\\|selectionBehavior\\|bEnabled\\|weight\\|linkedAsset\\|description\\|tag\\|customTickRate\\|color), value` |
+| `clear_state_nodes` | Remove all tasks/conditions/transitions from a state. Params: `assetPath, stateId` |
+| `add_task` | Add a task to a state. Params: `assetPath, stateId, structType (C++ struct name e.g. FMyStateTreeTask or an engine-shipped task like FStateTreeRunParallelStateTreesTask), instanceProperties?` |
+| `add_enter_condition` | Add an enter condition to a state. Params: `assetPath, stateId, structType (C++ struct name), instanceProperties?, operand? (And\\|Or)` |
+| `remove_enter_condition` | Remove an enter condition by index. Params: `assetPath, stateId, conditionIndex` |
+| `remove_task` | Remove a task by index. Params: `assetPath, stateId, taskIndex` |
+| `set_task_instance_property` | Set a property on a task's instance data. Params: `assetPath, stateId, taskIndex, propertyName, value` |
+| `set_task_property` | Set a property on the task's node struct (FStateTreeTaskBase-level: bConsideredForCompletion, bTaskEnabled, bShouldStateChangeOnReselect). Distinct from set_task_instance_property which targets instance data. Params: `assetPath, stateId, taskIndex, propertyName, value (string-encoded e.g. 'true'/'false')` |
+| `add_transition` | Add a transition to a state. Params: `assetPath, stateId, trigger (OnStateCompleted\\|OnStateSucceeded\\|OnStateFailed\\|OnTick\\|OnEvent; combine with \\| e.g. OnStateSucceeded\\|OnStateFailed), transitionType (GotoState\\|NextState\\|Succeeded\\|Failed), eventTag?, targetStateId?, targetStatePath?, priority? (Low\\|Normal\\|Medium\\|High\\|Critical), delayDuration?, bDelayTransition?` |
+| `add_transition_condition` | Add a condition to an existing transition. Params: `assetPath, stateId, transitionIndex, structType, instanceProperties?, operand?` |
+| `remove_transition` | Remove a transition by index. Params: `assetPath, stateId, transitionIndex` |
+| `add_binding` | Add a property binding. Params: `assetPath, sourceStructId, sourcePath, targetStructId, targetPath` |
+| `remove_binding` | Remove a property binding. Params: `assetPath, targetStructId, targetPath` |
+| `list_bindings` | List all property bindings. Params: `assetPath, structId? (filter)` |
+| `add_evaluator` | Add an evaluator to the StateTree (tree-level). Params: `assetPath, structType (must derive from FStateTreeEvaluatorBase), instanceProperties?` |
+| `remove_evaluator` | Remove an evaluator by node ID. Params: `assetPath, nodeId` |
+| `set_evaluator_instance_property` | Set a property on an evaluator's instance data. Params: `assetPath, nodeId, propertyName, value` |
+| `set_evaluator_property` | Set a property on the evaluator's node struct (FStateTreeEvaluatorBase-level). Params: `assetPath, nodeId, propertyName, value` |
+| `add_global_task` | Add a global task to the StateTree (tree-level). Params: `assetPath, structType (must derive from FStateTreeTaskBase), instanceProperties?` |
+| `remove_global_task` | Remove a global task by node ID. Params: `assetPath, nodeId` |
+| `set_global_task_instance_property` | Set a property on a global task's instance data. Params: `assetPath, nodeId, propertyName, value` |
+| `set_global_task_property` | Set a property on a global task's node struct (FStateTreeTaskBase-level). Params: `assetPath, nodeId, propertyName, value` |
+| `list_colors` | List all color palette entries for a StateTree. Params: `assetPath` |
+| `add_color` | Add a new color to the StateTree palette. Params: `assetPath, displayName, color? (FLinearColor string e.g. '(R=1.0,G=0.0,B=0.0,A=1.0)')` |
+| `list_state_parameters` | List parameters defined on a state. Params: `assetPath, stateId` |
+| `add_state_parameter` | Add a parameter to a state's property bag. Rejects fixed-layout (linked) states. Params: `assetPath, stateId, paramName, paramType (Bool\\|Int32\\|Int64\\|Float\\|Double\\|Name\\|String\\|Text)` |
+| `remove_state_parameter` | Remove a parameter from a state's property bag by name. Rejects fixed-layout (linked) states. Params: `assetPath, stateId, paramName` |
+| `set_state_parameter` | Set the value of an existing state parameter. On fixed-layout states, also marks the parameter as overridden. Params: `assetPath, stateId, paramName, value` |
+| `set_root_parameters` | Define root parameters (property bag). Params: `assetPath, parameters[] ({name, type}) where type is float\\|int32\\|bool\\|string\\|name\\|double` |
+| `compile` | Compile a StateTree asset. Returns success, errors[], warnings[]. Params: `assetPath` |
+| `validate` | Validate a StateTree asset without compiling. Params: `assetPath` |
+
+---
+
+## plugins
+
+*Introspect npm-distributed plugins that contribute actions into other categories. Read-only.*
+
+| Action | Description |
+|--------|-------------|
+| `list` | Every plugin loaded from ue-mcp.yml: name, version, prefix, status, and injected actions |
+| `describe` | Full detail for one plugin including knowledge files and flows. Params: `name` |

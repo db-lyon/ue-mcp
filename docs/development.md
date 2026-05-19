@@ -76,7 +76,7 @@ src/
 ├── auth.ts               # GitHub OAuth device flow + ~/.ue-mcp/auth.json token cache
 ├── init.ts / update.ts / resolve.ts / hook-handler.ts  # CLI subcommands
 ├── flow/                 # Flow engine (registry, loader, task factory, HTTP)
-└── tools/                # <!-- count:tools -->20<!-- /count --> tool category implementations
+└── tools/                # <!-- count:tools -->21<!-- /count --> tool category implementations
     ├── project.ts
     ├── asset.ts
     ├── blueprint.ts
