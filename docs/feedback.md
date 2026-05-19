@@ -27,6 +27,14 @@ If you'd rather submit anonymously as the bot, pass `useBot=true`. The bot is th
 
 The agent is instructed to **strip project-specific details** from feedback submissions. Issues should describe the general capability gap, not your project's internals. You can review the issue content before the agent submits it.
 
+## Security model
+
+`feedback(submit)` posts to a public issue tracker. Treat anything you let the agent submit as already-disclosed. Specific notes:
+
+- **Secret scrubbing is best-effort.** Before submit, the assembled body and title are scanned for common credential shapes (GitHub PATs, AWS access keys, Slack/Stripe/OpenAI/Anthropic tokens, JWTs, PEM blocks, `SECRET=`/`TOKEN=`/`API_KEY=`/`PASSWORD=` style assignments) and replaced with `[REDACTED]`. Novel token shapes still pass through. Read the body before you let the agent post it.
+- **The PostToolUse hook is opt-in.** `npx ue-mcp init` no longer pre-checks the "prompt agents to file a GitHub issue" box. If you opt in, the hook fires after every `execute_python` call and pushes the agent toward calling `feedback(submit)`; the workaround log it would submit includes the Python you ran. Leave it off if your session touches anything sensitive.
+- **`useBot=true` ships an embedded GitHub App key.** The published npm package contains the `ue-mcp-feedback` App's PEM. The App's permissions are scoped to `issues: write` on `db-lyon/ue-mcp` and nowhere else, so the realistic blast radius from key disclosure is bot impersonation (spam-create, edit, or close issues on this one repo as `ue-mcp-feedback[bot]`); not RCE, not exfil of private code, not a foothold on your machine. The proper fix is server-side signing, tracked in [#461](https://github.com/db-lyon/ue-mcp/issues/461). In the meantime: the bot path is opt-in (default flow uses your device-auth token), the App's permissions stay locked, and revocation is one click on the App installation page.
+
 ## Submitting Feedback
 
 The `feedback` tool has one action:

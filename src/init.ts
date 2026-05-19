@@ -531,8 +531,8 @@ async function init() {
       },
       {
         label: "Prompt agents to file a GitHub issue when they resort to Python workarounds",
-        checked: true,
-        suffix: "Recommended",
+        checked: false,
+        suffix: "Opt-in; posts session execute_python bodies to a public issue tracker",
       },
     ];
 

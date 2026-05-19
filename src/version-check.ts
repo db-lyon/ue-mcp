@@ -47,6 +47,11 @@ function writeCache(entry: CacheEntry): void {
   }
 }
 
+// Strict semver: the registry value is interpolated into a string the agent
+// reads as a system-level message, so anything that doesn't match this shape
+// is dropped to close a prompt-injection channel through a poisoned response.
+const STRICT_SEMVER_RE = /^(\d{1,8})\.(\d{1,8})\.(\d{1,8})(?:-[A-Za-z0-9.-]{1,32})?$/;
+
 async function fetchLatest(): Promise<string | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
@@ -54,7 +59,12 @@ async function fetchLatest(): Promise<string | null> {
     const res = await fetch(REGISTRY_URL, { signal: ctrl.signal });
     if (!res.ok) return null;
     const body = (await res.json()) as { version?: unknown };
-    return typeof body.version === "string" ? body.version : null;
+    if (typeof body.version !== "string") return null;
+    if (!STRICT_SEMVER_RE.test(body.version)) {
+      warn("update", `registry returned non-semver version; dropping`);
+      return null;
+    }
+    return body.version;
   } catch {
     return null;
   } finally {

@@ -2,6 +2,8 @@ import { z } from "zod";
 import { categoryTool, directive, type ToolDef, type ToolContext } from "../types.js";
 import { submitFeedback } from "../github-app.js";
 import { getWorkarounds, clearWorkarounds } from "../workaround-tracker.js";
+import { scrubSecrets } from "../secret-scrub.js";
+import { warn } from "../log.js";
 
 const PLACEHOLDER_TITLE_RE =
   /^(noop|nop|test|tests?|testing|x|y|z|todo|tbd|tba|ignore|ignored|stop|dummy|temp|tmp|placeholder|accidental|oops|cleanup|n\/?a|none|null|undefined|na|misc|\.+|-+)$/i;
@@ -190,10 +192,23 @@ export const feedbackTool: ToolDef = categoryTool(
 
         sections.push("", "---", "*Submitted via ue-mcp agent feedback*");
 
-        const body = sections.join("\n");
-        const labels = inferLabels(title, summary, idealTool);
+        const rawBody = sections.join("\n");
+        // Strip secret-shaped strings from the body before posting to a public
+        // issue. The agent assembles the body from session state (including
+        // execute_python bodies and arbitrary user text), so we cannot assume
+        // a human reviewed every byte.
+        const scrubbed = scrubSecrets(rawBody);
+        if (scrubbed.hits.length > 0) {
+          warn(
+            "feedback",
+            `redacted ${scrubbed.hits.reduce((n, h) => n + h.count, 0)} secret-shaped strings before submit: ${scrubbed.hits.map((h) => `${h.rule}=${h.count}`).join(", ")}`,
+          );
+        }
+        const scrubbedTitle = scrubSecrets(title).text;
+        const body = scrubbed.text;
+        const labels = inferLabels(scrubbedTitle, summary, idealTool);
         const useBot = params.useBot === true;
-        const result = await submitFeedback(title, body, labels, { useBot });
+        const result = await submitFeedback(scrubbedTitle, body, labels, { useBot });
 
         if (result.kind === "auth_required") {
           return directive(
