@@ -133,6 +133,9 @@ demo — Neon Shrine demo scene
 feedback — Agent feedback submission
   submit
 
+plugins — Introspect npm-distributed plugins that inject actions into other categories (read-only)
+  list, describe
+
 ═══ TIPS ═══
 • Start with level(action="get_outliner") or asset(action="list") to discover what's in the project.
 • Use reflection(action="reflect_class") to understand any UE class's properties.

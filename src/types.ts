@@ -10,6 +10,27 @@ export interface ToolContext {
    *  built-in + ue-mcp.yml flows. Used by project(get_status) so agents
    *  see which canonical sequences are pre-encoded for this project. */
   getFlows?: () => Array<{ name: string; description?: string }>;
+  /** Lazy accessor for the loaded plugin set. Returns one PluginInfo per
+   *  entry in the user's `plugins:` array, active or skipped. Used by the
+   *  `plugins` introspection category. */
+  getPlugins?: () => PluginInfo[];
+}
+
+export interface PluginInfo {
+  name: string;
+  version: string;
+  actionPrefix: string;
+  status: "active" | "skipped";
+  statusReason?: string;
+  minServerVersion?: string;
+  uePluginDependency?: string;
+  uePluginPresent?: boolean;
+  injected: Record<string, string[]>;
+  knowledge: Record<string, string>;
+  flows: string[];
+  tasks: string[];
+  pkgDir: string;
+  manifestPath: string;
 }
 
 export interface ToolDef {
