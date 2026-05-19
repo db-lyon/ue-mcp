@@ -1,6 +1,6 @@
 import { TaskRegistry, ShellTask } from "@db-lyon/flowkit";
 import type { TaskConstructor } from "@db-lyon/flowkit";
-import type { ToolDef, ActionSpec, ToolContext } from "../types.js";
+import type { ToolDef } from "../types.js";
 import type { FlowContext } from "./context.js";
 import { BridgeTask } from "./bridge-task.js";
 import { bridgeTaskClass, handlerTaskClass } from "./task-factory.js";
@@ -25,13 +25,15 @@ export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
       const taskName = `${tool.name}.${actionName}`;
 
       if (spec.handler) {
-        // Wrap the existing handler function — adapt ToolContext to FlowContext
+        // FlowContext is a structural superset of ToolContext (see
+        // context.ts), so we pass ctx straight through. Rebuilding it
+        // field-by-field used to silently drop new accessors at this
+        // boundary — never reintroduce that pattern.
         const originalHandler = spec.handler;
         registry.register(
           taskName,
           handlerTaskClass(taskName, (ctx: FlowContext, params: Record<string, unknown>) => {
-            const toolCtx: ToolContext = { bridge: ctx.bridge, project: ctx.project, getFlows: ctx.getFlows };
-            return originalHandler(toolCtx, params);
+            return originalHandler(ctx, params);
           }),
         );
       } else if (spec.bridge) {

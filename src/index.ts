@@ -133,7 +133,7 @@ async function main() {
       const action = params.action as string;
       const taskName = `${tool.name}.${action}`;
       const { action: _, ...taskParams } = params;
-      const flowCtx: FlowContext = { bridge, project, getFlows };
+      const flowCtx: FlowContext = { bridge, project, getFlows, getPlugins };
 
       try {
         const task = await registry.create(taskName, flowCtx, taskParams);
