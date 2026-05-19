@@ -64,13 +64,21 @@ function findProjectDir(startDir: string): ProjectInfo {
 }
 
 function runNpm(args: string[], cwd: string): void {
-  const r = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", args, {
+  // On Windows, npm is `npm.cmd`. Node's child_process with `shell: false`
+  // cannot launch a `.cmd` file directly (it expects a real executable), so
+  // spawnSync returns status=null and an ENOENT-style error. Setting
+  // `shell: true` routes through cmd.exe which resolves the .cmd correctly.
+  // On POSIX `shell: true` is also safe; `npm` is a plain binary.
+  const r = spawnSync("npm", args, {
     cwd,
     stdio: "inherit",
-    shell: false,
+    shell: true,
   });
+  if (r.error) {
+    fail(`npm ${args.join(" ")} failed to start: ${r.error.message}`);
+  }
   if (r.status !== 0) {
-    fail(`npm ${args.join(" ")} exited ${r.status}`);
+    fail(`npm ${args.join(" ")} exited ${r.status ?? "(killed by signal)"}`);
   }
 }
 
