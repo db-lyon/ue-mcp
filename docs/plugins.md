@@ -2,11 +2,13 @@
 
 A ue-mcp plugin is a normal npm package that injects new actions into existing built-in categories (`pcg`, `landscape`, etc.). The agent discovers them at the point of need: nothing else changes about how the agent picks tools.
 
-This page is the author contract. The user-facing side (installing, removing, listing) is just `ue-mcp plugin install <name>`.
+This page is the author contract. The user-facing side (installing, removing, listing) is just `ue-mcp plugin install <name>`, plus a `plugins:` array in the project's `ue-mcp.yml` — see [Configuration → Plugins](configuration.md#plugins) for the consumer view.
+
+**Live reference:** [`ue-mcp-plugin-voxel-plugin`](https://github.com/db-lyon/ue-mcp-plugin-voxel-plugin) ([npm](https://www.npmjs.com/package/ue-mcp-plugin-voxel-plugin)) ships three actions (`pcg.voxel_scatter_meshes`, `pcg.voxel_spawn_stamps`, `landscape.voxel_bake_heightmap`) and two flows. Every example in this page mirrors that package — clone it for a working starting point.
 
 ## Why injection, not a standalone tool
 
-A standalone tool is opaque to the agent — it has no reason to open a `vpp` category during terrain work. If the action lands inside `pcg` as `pcg(action="vpp_scatter_on_terrain")`, the agent already working in PCG discovers it exactly when relevant. Capability appears at the point of need, not behind a door the agent has to know to open.
+A standalone tool is opaque to the agent — it has no reason to open a `voxel` category during terrain work. If the action lands inside `pcg` as `pcg(action="voxel_scatter_meshes")`, the agent already working in PCG discovers it exactly when relevant. Capability appears at the point of need, not behind a door the agent has to know to open.
 
 ## Package layout
 
@@ -39,9 +41,9 @@ Conventions:
 
 ```json
 {
-  "name": "ue-mcp-plugin-voxel-plugin-pro",
+  "name": "ue-mcp-plugin-voxel-plugin",
   "version": "0.1.0",
-  "description": "Voxel Plugin Pro 2 actions for ue-mcp",
+  "description": "Voxel Plugin actions for ue-mcp",
   "type": "module",
   "main": "dist/index.js",
   "files": ["dist", "ue-mcp.plugin.yml", "knowledge", "README.md"],
@@ -66,23 +68,23 @@ The `ue-mcp-plugin` keyword is the registry signal. The peer-dep on `@db-lyon/fl
 This is the only file ue-mcp reads from your package. Authored once; never edited by users.
 
 ```yaml
-actionPrefix: vpp                # mandatory, lowercase, must match /^[a-z][a-z0-9_]*$/
-minServerVersion: 1.0.0          # optional - the server enforces this at install and load
-uePluginDependency: VoxelPro     # optional - the installer warns if missing from .uproject
+actionPrefix: voxel              # mandatory, lowercase, must match /^[a-z][a-z0-9_]*$/
+minServerVersion: 1.0.15         # optional - the server enforces this at install and load
+uePluginDependency: Voxel        # optional - the installer warns if missing from .uproject
 
 inject:
   pcg:
-    scatter_on_terrain:          # → pcg(action="vpp_scatter_on_terrain")
-      task: vpp.scatter_on_terrain
-      description: "Scatter meshes on a voxel terrain. Params: graphPath, mesh, cellSize?"
+    scatter_meshes:              # → pcg(action="voxel_scatter_meshes")
+      task: voxel.scatter_meshes
+      description: "Scatter meshes on a voxel terrain. Params: graphPath, mesh, density?"
       schema:
         graphPath: { type: string, required: true }
         mesh:      { type: string, required: true }
-        cellSize:  { type: number }
+        density:   { type: number }
 
   landscape:
-    voxel_to_heightmap:          # → landscape(action="vpp_voxel_to_heightmap")
-      task: vpp.voxel_to_heightmap
+    bake_heightmap:              # → landscape(action="voxel_bake_heightmap")
+      task: voxel.bake_heightmap
       description: "Bake a voxel terrain region to a landscape heightmap. Params: bounds, resolution?"
       schema:
         bounds:     { type: object, required: true }
@@ -93,36 +95,36 @@ knowledge:
   landscape: knowledge/landscape.md
 
 tasks:
-  vpp.scatter_on_terrain:  { class_path: tasks/ScatterOnTerrain }
-  vpp.voxel_to_heightmap:  { class_path: tasks/VoxelToHeightmap }
+  voxel.scatter_meshes:  { class_path: tasks/ScatterMeshes }
+  voxel.bake_heightmap:  { class_path: tasks/BakeHeightmap }
 
 flows:
-  vpp_full_setup:
-    description: "Full VPP scatter setup"
+  voxel_full_setup:
+    description: "Full voxel scatter setup"
     rollback_on_failure: true
     steps:
-      1: { task: vpp.scatter_on_terrain }
-      2: { task: vpp.voxel_to_heightmap }
+      1: { task: voxel.scatter_meshes }
+      2: { task: voxel.bake_heightmap }
 ```
 
-The key under each category is the *bare* action name. The loader prepends your `actionPrefix` to compute the injected name: `vpp` + `scatter_on_terrain` → `vpp_scatter_on_terrain`. The user always sees the prefixed form.
+The key under each category is the *bare* action name. The loader prepends your `actionPrefix` to compute the injected name: `voxel` + `scatter_meshes` → `voxel_scatter_meshes`. The user always sees the prefixed form.
 
 Param schemas under `schema:` accept these types: `string`, `number`, `boolean`, `object`, `array`. Non-required params become optional at the top level of the host category tool's schema.
 
 ## Writing tasks
 
 ```ts
-// src/tasks/ScatterOnTerrain.ts
+// src/tasks/ScatterMeshes.ts
 import { BaseTask, type TaskResult } from "@db-lyon/flowkit";
 
-interface ScatterOnTerrainOpts {
+interface ScatterMeshesOpts {
   graphPath: string;
   mesh: string;
-  cellSize?: number;
+  density?: number;
 }
 
-export default class ScatterOnTerrain extends BaseTask<ScatterOnTerrainOpts> {
-  get taskName() { return "vpp.scatter_on_terrain"; }
+export default class ScatterMeshes extends BaseTask<ScatterMeshesOpts> {
+  get taskName() { return "voxel.scatter_meshes"; }
 
   async execute(): Promise<TaskResult> {
     // Compose existing MCP actions via `this.call('<category>.<action>', ...)`.
@@ -153,15 +155,15 @@ For each category your plugin injects into, ship a short markdown file under `kn
 Keep it terse. One screenful per category. Concrete examples beat prose - the agent does not need a tutorial.
 
 ```markdown
-# Voxel Plugin Pro - PCG actions
+# Voxel Plugin - PCG actions
 
-`vpp_scatter_on_terrain` builds a PCG graph wired to a Voxel Sampler.
+`voxel_scatter_meshes` builds a PCG graph wired to a Voxel Sampler.
 Use it when the user wants meshes scattered on a voxel terrain rather
 than the standard landscape.
 
 Typical sequence:
 1. `pcg(action="create_graph", ...)` if no graph exists
-2. `pcg(action="vpp_scatter_on_terrain", graphPath=..., mesh=...)`
+2. `pcg(action="voxel_scatter_meshes", graphPath=..., mesh=...)`
 3. `pcg(action="execute", ...)` to materialise the result
 ```
 

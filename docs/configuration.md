@@ -48,6 +48,34 @@ Place a `.ue-mcp.json` file in your UE project root (next to the `.uproject`) to
 | `disable` | `string[]` | `[]` | Tool categories to disable. Disabled categories are not registered with the MCP server, reducing context noise for the AI. |
 | `http` | `object` | `undefined` (HTTP server off) | Optional REST surface for the flow engine. Object with `enabled` (bool), `port` (default `7723`), `host` (default `127.0.0.1`). When `enabled: true`, the MCP server also serves `GET /flows`, `GET /flows/<name>/plan`, `POST /flows/<name>/run` over HTTP so external tools can drive flows without an MCP client. |
 
+## Plugins
+
+The `plugins:` array in **`ue-mcp.yml`** declares npm packages that inject new actions into existing built-in categories. The full author contract lives in [Plugins](plugins.md); this is the consumer view.
+
+```yaml
+plugins:
+  - name: ue-mcp-plugin-voxel-plugin
+  - name: ue-mcp-plugin-my-other-thing
+    version: "0.2.x"        # optional - npm semver range
+```
+
+At server start, ue-mcp resolves each entry against the project's `node_modules/`, validates the plugin manifest, and merges its injected actions into the host category tools. Stay-on-disk facts:
+
+- The package must already be installed under `<project>/node_modules/`. Use `ue-mcp plugin install <name>` to add an entry **and** run `npm install --save` in one step.
+- Plugins are loaded only when the server boots — edit the array and restart your MCP client (`/mcp` in Claude Code).
+- A plugin that fails validation is skipped with a loud warning. Other plugins keep loading; the host tools are never partially mutated.
+- Use the `plugins` tool to introspect the loaded set:
+  - `plugins(action="list")` — name, version, prefix, status, injected count, host UE plugin presence.
+  - `plugins(action="describe", name="<package>")` — full detail including injected actions, knowledge files, and flows.
+
+Order matters: earlier entries win on inter-plugin action-name collisions. A plugin action can never overwrite a built-in.
+
+### Host UE plugin dependencies
+
+A plugin can declare `uePluginDependency: <PluginName>` in its `ue-mcp.plugin.yml`. The MCP server checks the project's `.uproject` for `Plugins[].Name == "<PluginName>"` and exposes the result as `uePluginPresent` in `plugins(action="list")`. The npm side loads regardless — the flag is a signal that the host UE plugin needs to be enabled before the injected actions will actually run.
+
+For example, `ue-mcp-plugin-voxel-plugin` declares `uePluginDependency: Voxel`. Until `Voxel` is added to `<Project>.uproject`'s `Plugins` array (and the C++ modules are built), `voxel_scatter_meshes` and friends are loaded but will fail at execute time.
+
 ## Bridge Connection
 
 The C++ plugin listens on **`ws://localhost:9877`** (currently hardcoded). The MCP server auto-connects on startup and reconnects every 15 seconds if the connection drops.
