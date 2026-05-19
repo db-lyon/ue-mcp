@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../../src/types.js";
 import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/plugin/injection.js";
+import { looksLikeBaseTask } from "../../src/plugin/loader.js";
 
 function fakePcg(): ToolDef {
   return categoryTool(
@@ -63,13 +64,10 @@ describe("mergeInjectionsIntoTool", () => {
   });
 
   it("skips built-in collisions and never overrides", () => {
-    const orig = fakePcg();
     const plan: InjectionPlan = {
       category: "pcg",
       prefix: "vpp",
       pluginName: "x",
-      // attempt to inject `add_node` after prefixing - simulate by setting
-      // the prefix and bare name such that prefixed equals a built-in
       actions: { node: { task: "vpp.node", description: "" } },
     };
     // Hand-craft a built-in named exactly `vpp_node` to provoke a collision.
@@ -99,5 +97,52 @@ describe("mergeInjectionsIntoTool", () => {
     const { added, skipped } = mergeInjectionsIntoTool(orig, [planA, planB]);
     expect(added).toEqual(["vpp_foo"]);
     expect(skipped).toHaveLength(1);
+  });
+});
+
+describe("looksLikeBaseTask", () => {
+  // Regression: npm 7+ installs peerDependencies into the consumer's
+  // node_modules, giving the plugin its own copy of @db-lyon/flowkit with a
+  // distinct BaseTask class identity. `instanceof BaseTask` then fails even
+  // when the plugin is behaviourally correct. We rely on duck-typing.
+  it("accepts a class with run() and execute() on its own prototype", () => {
+    class GoodTask {
+      get taskName() { return "fake"; }
+      async execute() { return { success: true }; }
+      async run() { return this.execute(); }
+    }
+    expect(looksLikeBaseTask(GoodTask)).toBe(true);
+  });
+
+  it("accepts a class that inherits run() / execute() from a parent", () => {
+    class FakeBase {
+      async run() { return { success: true }; }
+      async execute() { return { success: true }; }
+    }
+    class Sub extends FakeBase {
+      get taskName() { return "fake"; }
+    }
+    expect(looksLikeBaseTask(Sub)).toBe(true);
+  });
+
+  it("rejects a class missing execute()", () => {
+    class NoExecute {
+      async run() { return { success: true }; }
+    }
+    expect(looksLikeBaseTask(NoExecute)).toBe(false);
+  });
+
+  it("rejects a class missing run()", () => {
+    class NoRun {
+      async execute() { return { success: true }; }
+    }
+    expect(looksLikeBaseTask(NoRun)).toBe(false);
+  });
+
+  it("rejects non-functions", () => {
+    expect(looksLikeBaseTask({})).toBe(false);
+    expect(looksLikeBaseTask(null)).toBe(false);
+    expect(looksLikeBaseTask(undefined)).toBe(false);
+    expect(looksLikeBaseTask("class")).toBe(false);
   });
 });

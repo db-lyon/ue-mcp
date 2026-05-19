@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
-import { BaseTask, type TaskConstructor, type TaskDefinition, type FlowDefinition } from "@db-lyon/flowkit";
+import type { TaskConstructor, TaskDefinition, FlowDefinition } from "@db-lyon/flowkit";
 import type { ToolDef } from "../types.js";
 import type { FlowConfig, PluginEntry } from "../flow/schema.js";
 import { warn, info } from "../log.js";
@@ -349,8 +349,40 @@ async function importTaskClass(pkgDir: string, classPath: string): Promise<TaskC
       `module '${resolved}' has no default export and no named export matching '${baseName}'`,
     );
   }
-  if (!(TaskClass.prototype instanceof BaseTask)) {
-    throw new Error(`class from '${resolved}' does not extend BaseTask`);
+  if (!looksLikeBaseTask(TaskClass)) {
+    throw new Error(
+      `class from '${resolved}' does not look like a BaseTask subclass ` +
+      `(missing run() / execute() on the prototype chain)`,
+    );
   }
   return TaskClass as TaskConstructor;
+}
+
+/**
+ * Duck-type check that a class behaves like a BaseTask subclass. We can't use
+ * `instanceof BaseTask` here because npm 7+ installs peerDependencies into
+ * the consumer's node_modules, giving the plugin its own copy of
+ * `@db-lyon/flowkit` with a distinct BaseTask identity. `instanceof` then
+ * fails across module instances even though the classes are behaviourally
+ * identical. The prototype-chain check is sufficient because the registry
+ * only invokes `.run()` on instances.
+ */
+export function looksLikeBaseTask(TaskClass: unknown): boolean {
+  if (typeof TaskClass !== "function") return false;
+  const proto = (TaskClass as { prototype?: unknown }).prototype;
+  if (!proto || typeof proto !== "object") return false;
+  // `run` is implemented on BaseTask itself; `execute` is abstract on
+  // BaseTask and overridden by every subclass. Both must be reachable on
+  // the prototype chain.
+  return hasFn(proto, "run") && hasFn(proto, "execute");
+}
+
+function hasFn(obj: object, name: string): boolean {
+  let cur: object | null = obj;
+  while (cur && cur !== Object.prototype) {
+    const desc = Object.getOwnPropertyDescriptor(cur, name);
+    if (desc && typeof desc.value === "function") return true;
+    cur = Object.getPrototypeOf(cur) as object | null;
+  }
+  return false;
 }
