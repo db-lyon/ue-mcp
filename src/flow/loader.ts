@@ -270,16 +270,41 @@ function defaultFlows(): Record<string, unknown> {
 }
 
 /**
+ * Plugin-contributed tasks and flows to merge into the defaults layer. The
+ * user's own ue-mcp.yml continues to win — plugins sit between built-ins and
+ * user config in the layered order, so a user can always override.
+ */
+export interface PluginContribution {
+  tasks?: Record<string, unknown>;
+  flows?: Record<string, unknown>;
+}
+
+/**
  * Load ue-mcp.yml from the given directory, layered on top of built-in defaults.
  * Returns the merged config even if no project ue-mcp.yml exists.
+ *
+ * Layer order (lowest precedence first):
+ *   built-in defaults
+ *   plugin contributions
+ *   ue-mcp.yml
+ *   ue-mcp.{env}.yml
+ *   ue-mcp.local.yml
  */
 export function loadFlowConfig(
   tools: ToolDef[],
   configDir?: string,
+  pluginContribution?: PluginContribution,
 ): LoadedConfig<FlowConfig> {
   const dir = configDir ?? process.cwd();
   const configPath = path.join(dir, "ue-mcp.yml");
   const defaults = buildDefaults(tools);
+
+  if (pluginContribution) {
+    const baseTasks = (defaults.tasks ?? {}) as Record<string, unknown>;
+    const baseFlows = (defaults.flows ?? {}) as Record<string, unknown>;
+    defaults.tasks = { ...baseTasks, ...(pluginContribution.tasks ?? {}) };
+    defaults.flows = { ...baseFlows, ...(pluginContribution.flows ?? {}) };
+  }
 
   if (!fs.existsSync(configPath)) {
     return { config: FlowConfigSchema.parse(defaults), configDir: dir };
