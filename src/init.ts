@@ -9,6 +9,7 @@ import { readUserAuth, startDeviceFlow, tryExchangeDeviceCode } from "./auth.js"
 import { warn as logWarn } from "./log.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW, fail, info, ok, warn } from "./ui/ansi.js";
 import { checkboxSelect, multiSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
+import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */
@@ -113,59 +114,6 @@ function writeMcpConfig(configPath: string, uprojectPath: string): void {
   const dir = path.dirname(configPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(configPath, JSON.stringify(existing, null, 2));
-}
-
-/* ------------------------------------------------------------------ */
-/*  Claude Code hooks                                                  */
-/* ------------------------------------------------------------------ */
-
-interface ClaudeHookEntry {
-  type: string;
-  command: string;
-}
-
-interface ClaudeHookMatcher {
-  matcher: string;
-  hooks: ClaudeHookEntry[];
-}
-
-interface ClaudeSettings {
-  hooks?: Record<string, ClaudeHookMatcher[]>;
-  [key: string]: unknown;
-}
-
-function installClaudeHooks(settingsPath: string): void {
-  let existing: ClaudeSettings = {};
-  if (fs.existsSync(settingsPath)) {
-    try {
-      existing = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-    } catch (e) {
-      logWarn("init", `Claude settings at ${settingsPath} was not valid JSON - rewriting hooks section only`, e);
-    }
-  }
-
-  if (!existing.hooks) existing.hooks = {};
-  if (!existing.hooks.PostToolUse) existing.hooks.PostToolUse = [];
-
-  // Avoid duplicate: check if we already have a ue-mcp hook
-  const already = existing.hooks.PostToolUse.some(
-    (h) => h.matcher === "mcp__ue-mcp__editor",
-  );
-  if (!already) {
-    existing.hooks.PostToolUse.push({
-      matcher: "mcp__ue-mcp__editor",
-      hooks: [
-        {
-          type: "command",
-          command: "npx ue-mcp hook post-tool-use",
-        },
-      ],
-    });
-  }
-
-  const dir = path.dirname(settingsPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2));
 }
 
 /* ------------------------------------------------------------------ */
@@ -523,6 +471,7 @@ async function init() {
 
   if (configuredClaudeCode) {
     console.log("");
+    const feedbackDisabled = disabled.includes("feedback");
     const hookItems: CheckboxItem[] = [
       {
         label: "Allow agents to fall back to execute_python when native tools can't do the job",
@@ -530,9 +479,13 @@ async function init() {
         suffix: "Recommended",
       },
       {
-        label: "Prompt agents to file a GitHub issue when they resort to Python workarounds",
+        label: "Prompt agents to ask whether to file a GitHub issue when they resort to Python workarounds",
+        // The hook is meaningless when the feedback tool is disabled, so do
+        // not even offer it pre-checked in that case.
         checked: false,
-        suffix: "Opt-in; posts session execute_python bodies to a public issue tracker",
+        suffix: feedbackDisabled
+          ? "Disabled because the feedback category is in disable[] — uncheck has no effect"
+          : "Opt-in; assembles a preview the user must approve before anything is posted",
       },
     ];
 
@@ -541,16 +494,28 @@ async function init() {
       hookItems,
     );
 
-    if (hookStates[1]) {
-      // Write hooks to the project-level Claude Code settings
-      const claudeSettingsPath = path.join(
-        project.projectDir!,
-        ".claude",
-        "settings.json",
-      );
-      installClaudeHooks(claudeSettingsPath);
-      ok("Claude Code hooks installed");
+    const claudeSettingsPath = path.join(
+      project.projectDir!,
+      ".claude",
+      "settings.json",
+    );
+
+    if (hookStates[1] && !feedbackDisabled) {
+      installClaudeHooks(claudeSettingsPath, project.projectDir!);
+      ok("Claude Code feedback prompt hook installed");
       info(claudeSettingsPath);
+    } else {
+      // Symmetric uninstall: if the user unchecks the prompt (or feedback is
+      // disabled outright), purge any matcher we may have installed on a
+      // prior init run. Token waste and stale-consent both fixed here.
+      const removed = uninstallClaudeHooks(
+        claudeSettingsPath,
+        project.projectDir!,
+      );
+      if (removed) {
+        ok("Claude Code feedback prompt hook removed");
+        info(claudeSettingsPath);
+      }
     }
 
     // 9b. Claude Code skills — bundled workflow guides

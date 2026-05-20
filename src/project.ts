@@ -24,6 +24,10 @@ export interface UeMcpConfig {
     /** Override bind host. Defaults to 127.0.0.1 — do not expose externally. */
     host?: string;
   };
+  /** Absolute paths to Claude Code settings.json files where the ue-mcp
+   *  PostToolUse hook was installed. Maintained by the installer in
+   *  src/hook-installer.ts so uninstall can reach every site. */
+  installedHooks?: string[];
 }
 
 export class ProjectContext {

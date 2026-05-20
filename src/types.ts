@@ -3,6 +3,34 @@ import type { IBridge } from "./bridge.js";
 import type { ProjectContext } from "./project.js";
 import { McpError, ErrorCode } from "./errors.js";
 
+/**
+ * Elicit a deterministic, user-mediated form response via the MCP client.
+ * The server blocks until the client returns one of accept / decline / cancel.
+ * Returns null when the connected client did not advertise the `elicitation`
+ * capability — handlers that rely on this gate must refuse to proceed in
+ * that case rather than fall back to an agent-mediated approval.
+ */
+export type ElicitFn = (params: ElicitParams) => Promise<ElicitResult>;
+
+export interface ElicitParams {
+  message: string;
+  requestedSchema: {
+    type: "object";
+    properties: Record<string, ElicitPrimitiveSchema>;
+    required?: string[];
+  };
+}
+
+export type ElicitPrimitiveSchema =
+  | { type: "string"; title?: string; description?: string; enum?: string[]; enumNames?: string[]; default?: string }
+  | { type: "number" | "integer"; title?: string; description?: string; default?: number }
+  | { type: "boolean"; title?: string; description?: string; default?: boolean };
+
+export interface ElicitResult {
+  action: "accept" | "decline" | "cancel";
+  content?: Record<string, string | number | boolean | string[]>;
+}
+
 export interface ToolContext {
   bridge: IBridge;
   project: ProjectContext;
@@ -14,6 +42,13 @@ export interface ToolContext {
    *  entry in the user's `plugins:` array, active or skipped. Used by the
    *  `plugins` introspection category. */
   getPlugins?: () => PluginInfo[];
+  /** MCP elicitation gate. When defined, calling this blocks the active
+   *  tool invocation until the user responds in their MCP client UI. When
+   *  undefined, the connected client does not declare the elicitation
+   *  capability — handlers that need a deterministic user signal MUST
+   *  refuse instead of degrading to an agent-mediated channel. Used by
+   *  feedback(submit) to gate every GitHub post on real user approval. */
+  elicit?: ElicitFn;
 }
 
 export interface PluginInfo {

@@ -6,8 +6,8 @@ import { EditorBridge } from "./bridge.js";
 import { ProjectContext } from "./project.js";
 import { attach, attachSummary } from "./deployer.js";
 import { SERVER_INSTRUCTIONS } from "./instructions.js";
-import { isDirectiveResponse, type ToolDef, type ToolContext, type PluginInfo } from "./types.js";
-import { McpError } from "./errors.js";
+import { isDirectiveResponse, type ToolDef, type ToolContext, type PluginInfo, type ElicitFn } from "./types.js";
+import { McpError, ErrorCode } from "./errors.js";
 import { info, warn } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
@@ -91,6 +91,25 @@ async function main() {
 
   const getPlugins = (): PluginInfo[] => pluginRecords.map((r) => toPluginInfo(r, project));
 
+  // Elicitation is only meaningful once the client has advertised support
+  // during initialize. We lazily probe at call time so the function is bound
+  // to whatever the live capabilities are, not a stale snapshot.
+  const buildElicit = (mcp: McpServer): ElicitFn | undefined => {
+    return async (params) => {
+      const caps = mcp.server.getClientCapabilities();
+      if (!caps?.elicitation) {
+        // Surface a JSON-RPC-style error shape so callers can distinguish
+        // "user declined" from "client has no UI for this".
+        throw new McpError(
+          ErrorCode.UNKNOWN_ACTION,
+          "Connected MCP client did not advertise the `elicitation` capability — cannot obtain a deterministic user approval. Upgrade your client (Claude Code >= 2.1.76) or run the action from a client that supports MCP elicitation.",
+        );
+      }
+      const result = await mcp.server.elicitInput(params);
+      return result as Awaited<ReturnType<ElicitFn>>;
+    };
+  };
+
   const ctx: ToolContext = { bridge, project, getFlows, getPlugins };
 
   // ── Flow engine: task registry ──────────────────────────────────
@@ -119,6 +138,8 @@ async function main() {
     instructions: serverInstructions,
   });
 
+  ctx.elicit = buildElicit(server);
+
   const disabled = new Set(project.config.disable ?? []);
   const tools = activeTools.filter((t) => !disabled.has(t.name));
 
@@ -133,7 +154,7 @@ async function main() {
       const action = params.action as string;
       const taskName = `${tool.name}.${action}`;
       const { action: _, ...taskParams } = params;
-      const flowCtx: FlowContext = { bridge, project, getFlows, getPlugins };
+      const flowCtx: FlowContext = { bridge, project, getFlows, getPlugins, elicit: ctx.elicit };
 
       try {
         const task = await registry.create(taskName, flowCtx, taskParams);
@@ -336,6 +357,9 @@ if (subcmd === "init") {
   import("./update.js");
 } else if (subcmd === "hook") {
   import("./hook-handler.js");
+} else if (subcmd === "uninstall-hooks") {
+  process.argv.splice(2, 1);
+  import("./uninstall-hooks.js");
 } else if (subcmd === "resolve") {
   import("./resolve.js");
 } else if (subcmd === "plugin") {
