@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { categoryTool, directive, type ToolDef, type ToolContext } from "../types.js";
 import { submitFeedback } from "../github-app.js";
+import { readUserAuth } from "../auth.js";
 import { getWorkarounds, clearWorkarounds } from "../workaround-tracker.js";
 import { scrubSecrets } from "../secret-scrub.js";
 import { warn } from "../log.js";
@@ -186,7 +187,13 @@ function assemblePayload(
   };
 }
 
-function buildApprovalMessage(p: AssembledPayload, useBot: boolean): string {
+/** What the CALLER wants. Pure intent, two values. */
+export type AuthorIntent = "user" | "bot";
+
+function buildApprovalMessage(
+  p: AssembledPayload,
+  authorPromptLine: string,
+): string {
   const lines: string[] = [
     "REVIEW BEFORE SUBMITTING — nothing has been posted yet.",
     "",
@@ -195,7 +202,7 @@ function buildApprovalMessage(p: AssembledPayload, useBot: boolean): string {
     "",
     `Title : ${p.title}`,
     `Labels: ${p.labels.join(", ")}`,
-    `Author: ${useBot ? "ue-mcp-feedback bot (anonymous)" : "your GitHub user via OAuth"}`,
+    `Author: ${authorPromptLine}`,
   ];
   if (p.scrubHits > 0) {
     lines.push(
@@ -219,7 +226,8 @@ export const feedbackTool: ToolDef = categoryTool(
         const summary = (params.summary as string | undefined) ?? "";
         const pythonWorkaround = params.pythonWorkaround as string | undefined;
         const idealTool = params.idealTool as string | undefined;
-        const useBot = params.useBot === true;
+        // Enum, default "user" per the schema. Missing == "user".
+        const author: AuthorIntent = params.author === "bot" ? "bot" : "user";
 
         const sessionWorkarounds = getWorkarounds();
         const rejection = validateSubmission(
@@ -280,10 +288,49 @@ export const feedbackTool: ToolDef = categoryTool(
 
         const payload = assemblePayload(title, summary, pythonWorkaround, idealTool);
 
+        // Two independent checks: (1) capture intent above, (2) validate
+        // auth here. Auth validation only matters when intent is "user".
+        // If validation fails, return a normal error directive — there is
+        // no third "plan" state to model.
+        let authorPromptLine: string;
+        let useBotForSubmit: boolean;
+        if (author === "bot") {
+          authorPromptLine = "ue-mcp-feedback bot (anonymous)";
+          useBotForSubmit = true;
+        } else {
+          const cached = await readUserAuth();
+          if (!cached) {
+            return directive(
+              [
+                `[FEEDBACK BLOCKED - GITHUB AUTH REQUIRED]`,
+                `author="user" requires a cached GitHub OAuth token, and none is cached on this machine.`,
+                ``,
+                `Either:`,
+                `  - Run \`npx ue-mcp auth\` to authorize as your GitHub user, then re-call`,
+                `  - Re-call feedback(submit) with author="bot" to post anonymously instead`,
+                ``,
+                `Nothing was posted.`,
+              ].join("\n"),
+              {
+                submitted: false,
+                code: "auth_required",
+                message: "GitHub OAuth token required for author=\"user\".",
+              },
+              {
+                kind: "feedback.blocked",
+                requiredActions: ["run_npx_ue_mcp_auth_or_call_with_author_bot"],
+                context: { code: "auth_required" },
+              },
+            );
+          }
+          authorPromptLine = `your GitHub user @${cached.login}`;
+          useBotForSubmit = false;
+        }
+
         let elicitResult;
         try {
           elicitResult = await ctx.elicit({
-            message: buildApprovalMessage(payload, useBot),
+            message: buildApprovalMessage(payload, authorPromptLine),
             requestedSchema: {
               type: "object",
               properties: {
@@ -350,27 +397,33 @@ export const feedbackTool: ToolDef = categoryTool(
 
         // ── Submit ──────────────────────────────────────────────────
         // The exact bytes the user saw in the elicitation prompt are the
-        // exact bytes we POST. No mutation between approval and submit.
-        const result = await submitFeedback(payload.title, payload.body, payload.labels, { useBot });
+        // exact bytes we POST, and the authorship we promised at the prompt
+        // is the authorship we use here.
+        const result = await submitFeedback(
+          payload.title,
+          payload.body,
+          payload.labels,
+          { useBot: useBotForSubmit },
+        );
 
         if (result.kind === "auth_required") {
-          // The user already approved the body — they just have no token
-          // cached. Surface the device flow URL and tell the agent the
-          // tool call is done; the user runs `npx ue-mcp auth` and the
-          // user (not the agent) can re-invoke if they still want to file.
+          // Should not happen: resolveAuthorship() falls back to bot when
+          // no OAuth is cached, so the only path here is a token cached at
+          // resolve time but rejected by GitHub at post time (e.g. revoked
+          // mid-session). Surface the device flow so the user can re-auth.
           return directive(
             [
-              `[FEEDBACK APPROVED BUT NOT POSTED - GITHUB AUTH MISSING]`,
+              `[FEEDBACK APPROVED BUT NOT POSTED - CACHED GITHUB TOKEN REJECTED]`,
               ``,
-              `You approved the body but no GitHub user token was cached on this`,
-              `machine. To author future issues as your real GitHub user, run:`,
+              `You approved the body and the cached OAuth token was used, but`,
+              `GitHub rejected it (revoked or expired). Re-authorize:`,
               ``,
               `  1. Open: ${result.verification_uri}`,
               `  2. Enter code: ${result.user_code}`,
               `  3. Authorize the ue-mcp-feedback app`,
               ``,
               `Code expires in ~${Math.round(result.expires_in / 60)} min.`,
-              `To submit anonymously without auth, re-run feedback(submit) with useBot=true.`,
+              `Or re-run feedback(submit) with author="bot" to post anonymously instead.`,
             ].join("\n"),
             {
               submitted: false,
@@ -421,9 +474,11 @@ export const feedbackTool: ToolDef = categoryTool(
       .string()
       .optional()
       .describe("What tool/action should have handled this natively (e.g. 'blueprint(action=set_variable_default)')."),
-    useBot: z
-      .boolean()
+    author: z
+      .enum(["user", "bot"])
       .optional()
-      .describe("Submit as the ue-mcp-feedback bot instead of authoring as the real GitHub user. Default false."),
+      .describe(
+        'Who the issue is authored by. "user" (default): credit me — requires a cached GitHub OAuth token. "bot": anonymous as the ue-mcp-feedback bot.',
+      ),
   },
 );
