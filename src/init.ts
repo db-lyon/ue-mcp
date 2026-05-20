@@ -4,11 +4,11 @@ import * as path from "node:path";
 import * as readline from "node:readline";
 import { ProjectContext } from "./project.js";
 import { deploy } from "./deployer.js";
-import { installSkills } from "./skills.js";
+import { installSkills, uninstallSkills } from "./skills.js";
 import { readUserAuth, startDeviceFlow, tryExchangeDeviceCode } from "./auth.js";
 import { warn as logWarn } from "./log.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW, fail, info, ok, warn } from "./ui/ansi.js";
-import { checkboxSelect, multiSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
+import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
 import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
 
 /* ------------------------------------------------------------------ */
@@ -18,30 +18,35 @@ import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
 interface ToolCategory {
   name: string;
   label: string;
+  description?: string;
   requiredPlugins?: string[];
   alwaysOn?: boolean;
 }
 
 const CATEGORIES: ToolCategory[] = [
-  { name: "project", label: "project", alwaysOn: true },
-  { name: "editor", label: "editor", alwaysOn: true },
-  { name: "reflection", label: "reflection", alwaysOn: true },
-  { name: "level", label: "levels" },
-  { name: "blueprint", label: "blueprints" },
-  { name: "material", label: "materials" },
-  { name: "asset", label: "assets" },
-  { name: "animation", label: "animation" },
-  { name: "niagara", label: "vfx (niagara)", requiredPlugins: ["Niagara"] },
-  { name: "landscape", label: "landscape" },
-  { name: "pcg", label: "pcg", requiredPlugins: ["PCG"] },
-  { name: "foliage", label: "foliage" },
-  { name: "audio", label: "audio" },
-  { name: "widget", label: "ui (widgets)" },
-  { name: "gameplay", label: "gameplay / ai", requiredPlugins: ["EnhancedInput"] },
-  { name: "gas", label: "gas", requiredPlugins: ["GameplayAbilities"] },
-  { name: "networking", label: "networking" },
-  { name: "demo", label: "demo" },
-  { name: "feedback", label: "feedback", alwaysOn: true },
+  { name: "project",    label: "project",       alwaysOn: true },
+  { name: "editor",     label: "editor",        alwaysOn: true },
+  { name: "reflection", label: "reflection",    alwaysOn: true },
+  { name: "level",      label: "levels",        description: "spawn/move/select actors, sublevels, world settings" },
+  { name: "blueprint",  label: "blueprints",    description: "Blueprint classes: variables, functions, components, nodes" },
+  { name: "material",   label: "materials",     description: "Materials, Material Functions, parameters" },
+  { name: "asset",      label: "assets",        description: "import/move/rename/delete content browser assets" },
+  { name: "animation",  label: "animation",     description: "anim sequences, montages, AnimBPs, skeletons" },
+  { name: "niagara",    label: "vfx (niagara)", description: "VFX systems, emitters, modules", requiredPlugins: ["Niagara"] },
+  { name: "landscape",  label: "landscape",     description: "terrain edit, layers, paint, sculpt" },
+  { name: "pcg",        label: "pcg",           description: "procedural content graphs", requiredPlugins: ["PCG"] },
+  { name: "foliage",    label: "foliage",       description: "instanced foliage placement and types" },
+  { name: "audio",      label: "audio",         description: "MetaSounds, sound cues, sound classes" },
+  { name: "widget",     label: "ui (widgets)",  description: "UMG widgets, editor utility widgets" },
+  { name: "gameplay",   label: "gameplay / ai", description: "input mappings, collision, navmesh, PIE", requiredPlugins: ["EnhancedInput"] },
+  { name: "gas",        label: "gas",           description: "Gameplay Ability System abilities, effects, attributes", requiredPlugins: ["GameplayAbilities"] },
+  { name: "networking", label: "networking",    description: "replication, dormancy, RPCs" },
+  { name: "demo",       label: "demo",          description: "tutorial / demo project scaffolding" },
+  // feedback is intentionally NOT in the main category list — it has its
+  // own toggle in the "Agent behavior" section below since enabling it
+  // means giving the agent a tool that can post to a public issue tracker
+  // (gated by user approval, but worth surfacing explicitly).
+  { name: "feedback",   label: "feedback",      alwaysOn: true },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -54,21 +59,39 @@ interface McpClient {
   detected: boolean;
 }
 
+/**
+ * Project-scoped clients write their MCP config alongside the .uproject,
+ * so enabling them only affects this project. Global/Desktop configs touch
+ * every project the user opens — they should not be opted in by default.
+ */
+function isProjectScopedClient(clientName: string): boolean {
+  return clientName.includes("(project)") || clientName === "Cursor";
+}
+
 function detectMcpClients(projectDir: string): McpClient[] {
   const home = process.env.HOME || process.env.USERPROFILE || "";
   const clients: McpClient[] = [];
 
   const claudeProjectMcp = path.join(projectDir, ".mcp.json");
   const claudeGlobalMcp = path.join(home, ".claude", ".mcp.json");
+  // "Detected" for both Claude Code scopes means "Claude Code is installed
+  // anywhere on this machine." If we gated project-scope detection on the
+  // project's .mcp.json already existing, first-time users in a fresh
+  // project would never see the project-scope checkbox and would be
+  // funneled into global scope by elimination. Show both scopes whenever
+  // Claude Code has been opened at least once; let the user pick.
+  const claudeInstalled =
+    fs.existsSync(claudeProjectMcp) ||
+    fs.existsSync(path.dirname(claudeGlobalMcp));
   clients.push({
     name: "Claude Code (project)",
     configPath: claudeProjectMcp,
-    detected: fs.existsSync(claudeProjectMcp),
+    detected: claudeInstalled,
   });
   clients.push({
     name: "Claude Code (global)",
     configPath: claudeGlobalMcp,
-    detected: fs.existsSync(path.dirname(claudeGlobalMcp)),
+    detected: claudeInstalled,
   });
 
   const appData =
@@ -219,22 +242,25 @@ async function runFeedbackAuthStep(): Promise<void> {
   }
 
   console.log(
-    `  ${DIM}Without auth, agent feedback issues author as the ue-mcp-feedback bot,${RESET}`,
+    `  ${DIM}feedback(submit) defaults to authoring issues as your GitHub user.${RESET}`,
   );
   console.log(
-    `  ${DIM}hiding who actually reported the gap. One-time browser authorization${RESET}`,
+    `  ${DIM}Without a cached OAuth token, every submission will refuse until${RESET}`,
   );
   console.log(
-    `  ${DIM}makes every submission author as your real GitHub user.${RESET}`,
+    `  ${DIM}you either authorize here, or call feedback(submit) with author="bot"${RESET}`,
+  );
+  console.log(
+    `  ${DIM}to post anonymously as the ue-mcp-feedback bot.${RESET}`,
   );
   console.log("");
 
   const choice = await singleSelect("Authorize now?", [
     "Yes - run device flow now (recommended)",
-    "Skip - bot will author feedback issues until I run auth later",
+    `Skip - feedback submissions will refuse until I run \`npx ue-mcp auth\` or call with author="bot"`,
   ]);
   if (choice !== 0) {
-    info("Skipped. Run npx ue-mcp auth to set this up later.");
+    info(`Skipped. Run npx ue-mcp auth to set this up later, or pass author="bot" at submit time.`);
     return;
   }
 
@@ -243,7 +269,7 @@ async function runFeedbackAuthStep(): Promise<void> {
     pending = await startDeviceFlow();
   } catch (e) {
     warn(`Device flow start failed: ${e instanceof Error ? e.message : e}`);
-    info("Bot will author feedback issues. Re-run npx ue-mcp init or npx ue-mcp auth to retry.");
+    info(`Submissions will refuse until you run \`npx ue-mcp auth\` or call with author="bot".`);
     return;
   }
 
@@ -264,7 +290,7 @@ async function runFeedbackAuthStep(): Promise<void> {
     } catch (e) {
       console.log("");
       warn(`Auth failed: ${e instanceof Error ? e.message : e}`);
-      info("Bot will author feedback issues until you re-run auth.");
+      info(`Submissions will refuse until you re-run \`npx ue-mcp auth\` or call with author="bot".`);
       return;
     }
     if (result.kind === "auth") {
@@ -280,13 +306,13 @@ async function runFeedbackAuthStep(): Promise<void> {
     }
     if (result.kind === "denied") {
       console.log("");
-      warn("Authorization denied. Bot will author feedback issues.");
+      warn(`Authorization denied. Submissions will refuse until you re-run auth or call with author="bot".`);
       return;
     }
     process.stdout.write(".");
   }
   console.log("");
-  warn("Timed out waiting for authorization. Bot will author feedback issues.");
+  warn(`Timed out waiting for authorization. Submissions will refuse until you re-run auth or call with author="bot".`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -297,6 +323,11 @@ async function init() {
   console.log("");
   console.log(`  ${BOLD}${CYAN}UE-MCP Setup${RESET}`);
   console.log("");
+
+  // Track every file/directory init mutates so the completion screen can
+  // tell the user exactly where things landed. Push paths only after the
+  // write actually succeeded.
+  const wrote: Array<{ what: string; where: string }> = [];
 
   // 1. Get project path — check CLI arg, then cwd, then ask
   let uprojectPath = process.argv[2] || "";
@@ -326,15 +357,23 @@ async function init() {
   );
   console.log("");
 
-  // 2. Tool category selection — interactive checkboxes
+  // On re-init, respect prior opt-outs in .ue-mcp.json so the user doesn't
+  // have to re-uncheck categories they already disabled. project.config is
+  // populated by ProjectContext.setProject above.
+  const existingDisabled = new Set(project.config.disable ?? []);
+
+  // 2. Tool category selection — interactive checkboxes with descriptions
   const optional = CATEGORIES.filter((c) => !c.alwaysOn);
-  const checkboxItems: CheckboxItem[] = optional.map((c) => ({
-    label: c.label,
-    checked: true,
-    suffix: c.requiredPlugins
-      ? `requires ${c.requiredPlugins.join(", ")}`
-      : undefined,
-  }));
+  const checkboxItems: CheckboxItem[] = optional.map((c) => {
+    const parts: string[] = [];
+    if (c.description) parts.push(c.description);
+    if (c.requiredPlugins) parts.push(`requires ${c.requiredPlugins.join(", ")}`);
+    return {
+      label: c.label,
+      checked: !existingDisabled.has(c.name),
+      suffix: parts.length > 0 ? parts.join(" — ") : undefined,
+    };
+  });
 
   const states = await checkboxSelect("Tool categories", checkboxItems);
 
@@ -357,11 +396,19 @@ async function init() {
   // 4. Deploy C++ plugin
   const deployResult = deploy(project);
   if (deployResult.error) {
+    // Hard failure: without the bridge plugin deployed, every subsequent step
+    // is misleading at best — we would land on "Setup complete!" with nothing
+    // actually wired up. `fail` only prints; abort explicitly.
     fail(`Plugin deployment failed: ${deployResult.error}`);
+    process.exit(1);
   } else if (deployResult.cppPluginDeployed) {
     ok(
       `Plugin deployed to ${project.projectName}/Plugins/UE_MCP_Bridge/`,
     );
+    wrote.push({
+      what: "C++ bridge plugin",
+      where: path.join(project.projectDir!, "Plugins", "UE_MCP_Bridge"),
+    });
   } else {
     ok("Plugin already deployed");
   }
@@ -372,13 +419,13 @@ async function init() {
   ]);
   if (enabled.length > 0) {
     ok(`Enabled: ${enabled.join(", ")}`);
+    wrote.push({ what: "enabled plugins", where: project.projectPath! });
   } else {
     ok("Required plugins already enabled");
   }
 
-  // 6. Write .ue-mcp.json
-  writeProjectConfig(project.projectDir!, disabled);
-  ok(".ue-mcp.json written");
+  // .ue-mcp.json is written at the end of init() once all decisions
+  // (categories, MCP clients, agent behavior) are settled — see step 10.
 
   // 7. Scaffold ue-mcp.yml if it doesn't exist
   const flowConfigPath = path.join(project.projectDir!, "ue-mcp.yml");
@@ -388,7 +435,7 @@ async function init() {
       "  version: 1",
       "",
       "# Custom tasks — pre-fill options for built-in actions",
-      "# All 425+ built-in actions are available without listing them here.",
+      "# All built-in actions are available without listing them here.",
       "#",
       "# tasks:",
       "#   import_hero:",
@@ -419,6 +466,7 @@ async function init() {
       "",
     ].join("\n"));
     ok("ue-mcp.yml created (custom tasks & flows)");
+    wrote.push({ what: "custom tasks & flows", where: flowConfigPath });
   } else {
     ok("ue-mcp.yml already exists");
   }
@@ -433,7 +481,11 @@ async function init() {
   if (detected.length > 0) {
     const clientItems: CheckboxItem[] = detected.map((c) => ({
       label: c.name,
-      checked: true,
+      // Global / Desktop configs affect every project on this machine, so
+      // they default to UNCHECKED — opting them in should be an explicit
+      // choice. Project-scoped configs default to checked since the user
+      // running init for this project clearly wants ue-mcp here.
+      checked: isProjectScopedClient(c.name),
       suffix: c.configPath,
     }));
 
@@ -446,6 +498,10 @@ async function init() {
       if (clientStates[i]) {
         writeMcpConfig(detected[i].configPath, project.projectPath!);
         ok(`${detected[i].name} configured`);
+        wrote.push({
+          what: `${detected[i].name} MCP server entry`,
+          where: detected[i].configPath,
+        });
       }
     }
   } else {
@@ -464,52 +520,88 @@ async function init() {
     console.log("");
   }
 
-  // 9. Claude Code hooks
+  // 9. Agent behavior — feedback toggle (always shown) plus the
+  // Claude-Code-only rows (prompt hook + skills + OAuth). The hook and OAuth
+  // are nested under feedback: if the user opts out of feedback, the hook
+  // and the GitHub device flow are not even offered.
   const configuredClaudeCode = detected.some(
     (c, i) => c.name.startsWith("Claude Code") && clientStates[i],
   );
 
-  if (configuredClaudeCode) {
-    console.log("");
-    const feedbackDisabled = disabled.includes("feedback");
-    const hookItems: CheckboxItem[] = [
-      {
-        label: "Allow agents to fall back to execute_python when native tools can't do the job",
-        checked: true,
-        suffix: "Recommended",
-      },
-      {
-        label: "Prompt agents to ask whether to file a GitHub issue when they resort to Python workarounds",
-        // The hook is meaningless when the feedback tool is disabled, so do
-        // not even offer it pre-checked in that case.
-        checked: false,
-        suffix: feedbackDisabled
-          ? "Disabled because the feedback category is in disable[] — uncheck has no effect"
-          : "Opt-in; assembles a preview the user must approve before anything is posted",
-      },
-    ];
+  console.log("");
 
-    const hookStates = await checkboxSelect(
-      "Agent behavior",
-      hookItems,
+  const behaviorItems: CheckboxItem[] = [
+    {
+      label: "Enable feedback(submit) tool for filing tool-gap issues",
+      checked: !existingDisabled.has("feedback"),
+      suffix:
+        "calls block on a user-approval prompt before anything is posted to a public tracker",
+    },
+  ];
+  if (configuredClaudeCode) {
+    // Seed the prompt-hook and skills checkboxes from current install state
+    // so re-init doesn't silently invert the user's prior choice — checking
+    // installs, unchecking uninstalls (symmetric paths below), so a stale
+    // default would silently un-do whatever the last init produced.
+    const claudeSettingsPathForSeed = path.join(
+      project.projectDir!,
+      ".claude",
+      "settings.json",
+    );
+    const installedHookSites = new Set(
+      (project.config.installedHooks ?? []).map((p) => path.resolve(p)),
+    );
+    const hookCurrentlyInstalled = installedHookSites.has(
+      path.resolve(claudeSettingsPathForSeed),
     );
 
+    const skillsDir = path.join(project.projectDir!, ".claude", "skills");
+    const skillsCurrentlyInstalled =
+      fs.existsSync(skillsDir) && fs.readdirSync(skillsDir).length > 0;
+
+    behaviorItems.push({
+      label: "Auto-nudge agent to offer feedback after execute_python",
+      // Default off on fresh install (opt-in). On re-init: respect prior
+      // choice by reading the install registry.
+      checked: hookCurrentlyInstalled,
+      suffix:
+        "installs a PostToolUse hook in .claude/settings.json; ignored if feedback is off",
+    });
+    behaviorItems.push({
+      label: "Install bundled Claude Code skills (workflow guides)",
+      // Default on for fresh installs; respect prior uninstall on re-init.
+      checked: !fs.existsSync(skillsDir) || skillsCurrentlyInstalled,
+      suffix: "copies skill markdown into .claude/skills/",
+    });
+  }
+
+  const behaviorStates = await checkboxSelect("Agent behavior", behaviorItems);
+
+  const feedbackEnabled = behaviorStates[0];
+  const promptHookEnabled =
+    configuredClaudeCode && (behaviorStates[1] ?? false) && feedbackEnabled;
+  const installSkillsEnabled =
+    configuredClaudeCode && (behaviorStates[2] ?? false);
+
+  if (!feedbackEnabled) {
+    disabled.push("feedback");
+  }
+
+  if (configuredClaudeCode) {
     const claudeSettingsPath = path.join(
       project.projectDir!,
       ".claude",
       "settings.json",
     );
 
-    const feedbackHookEnabled = hookStates[1] && !feedbackDisabled;
-
-    if (feedbackHookEnabled) {
+    if (promptHookEnabled) {
       installClaudeHooks(claudeSettingsPath, project.projectDir!);
       ok("Claude Code feedback prompt hook installed");
       info(claudeSettingsPath);
+      wrote.push({ what: "feedback prompt hook", where: claudeSettingsPath });
     } else {
-      // Symmetric uninstall: if the user unchecks the prompt (or feedback is
-      // disabled outright), purge any matcher we may have installed on a
-      // prior init run. Token waste and stale-consent both fixed here.
+      // Symmetric uninstall: purge any matcher we may have installed on a
+      // prior init run when the user has now opted out.
       const removed = uninstallClaudeHooks(
         claudeSettingsPath,
         project.projectDir!,
@@ -520,31 +612,58 @@ async function init() {
       }
     }
 
-    // 9b. Claude Code skills — bundled workflow guides
-    const skillsResult = installSkills(project.projectDir!);
-    if (skillsResult.error) {
-      warn(`Skills install skipped: ${skillsResult.error}`);
-    } else if (skillsResult.installed.length > 0) {
-      ok(`Claude Code skills installed: ${skillsResult.installed.join(", ")}`);
-      info(skillsResult.skillsDir);
+    if (installSkillsEnabled) {
+      const skillsResult = installSkills(project.projectDir!);
+      if (skillsResult.error) {
+        warn(`Skills install skipped: ${skillsResult.error}`);
+      } else if (skillsResult.installed.length > 0) {
+        ok(`Claude Code skills installed: ${skillsResult.installed.join(", ")}`);
+        info(skillsResult.skillsDir);
+        wrote.push({ what: "workflow skills", where: skillsResult.skillsDir });
+      }
+    } else {
+      // Symmetric uninstall: opting out on re-init removes any skills we
+      // copied in on a previous run. Leaves user-added skill files alone.
+      const removed = uninstallSkills(project.projectDir!);
+      if (removed.removed.length > 0) {
+        ok(`Claude Code skills removed: ${removed.removed.join(", ")}`);
+        info(removed.skillsDir);
+      }
     }
 
-    // 9c. GitHub OAuth for feedback authorship.
-    // Only offered when the user explicitly opted into the feedback prompt
-    // hook AND feedback is not disabled. Asking for GitHub auth from a user
-    // who declined the feedback prompt (or disabled the category) is noise
-    // and a privacy footgun — they can always run `npx ue-mcp auth` later.
-    if (feedbackHookEnabled) {
+    // OAuth only when the prompt hook is on — the user has explicitly opted
+    // into a flow where the agent will routinely ask to file feedback. For
+    // anyone else (feedback enabled but no hook, or feedback off), they can
+    // run `npx ue-mcp auth` later if they ever want to author as their own
+    // GitHub user instead of the bot.
+    if (promptHookEnabled) {
       await runFeedbackAuthStep();
     }
   }
 
-  // 10. Done
+  // 10. Write .ue-mcp.json with the final disable[] — done last so the
+  // feedback toggle from step 9 is captured. contentRoots seeding lives
+  // inside writeProjectConfig.
+  const ueMcpJsonPath = path.join(project.projectDir!, ".ue-mcp.json");
+  writeProjectConfig(project.projectDir!, disabled);
+  ok(".ue-mcp.json written");
+  wrote.push({ what: "tool surface + content roots", where: ueMcpJsonPath });
+
+  // 11. Done — recap what landed where so the user can find / undo anything.
   console.log("");
   console.log(`  ${BOLD}${GREEN}Setup complete!${RESET}`);
   console.log("");
+  if (wrote.length > 0) {
+    console.log(`  ${BOLD}Wrote:${RESET}`);
+    const widest = Math.max(...wrote.map((w) => w.what.length));
+    for (const w of wrote) {
+      const padded = w.what.padEnd(widest);
+      console.log(`    ${padded}  ${DIM}${w.where}${RESET}`);
+    }
+    console.log("");
+  }
   console.log(
-    `  ${DIM}Restart the editor to load the bridge plugin.`,
+    `  ${DIM}Open (or restart) your editor to load the bridge plugin.`,
   );
   console.log(
     `  Then ask your AI: project(action="get_status")${RESET}`,

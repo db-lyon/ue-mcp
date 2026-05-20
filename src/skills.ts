@@ -52,3 +52,42 @@ export function installSkills(projectDir: string): SkillsInstallResult {
 
   return result;
 }
+
+export interface SkillsUninstallResult {
+  skillsDir: string;
+  removed: string[];
+}
+
+/**
+ * Inverse of installSkills: remove every `<projectDir>/.claude/skills/<name>/SKILL.md`
+ * whose `<name>` matches a directory in the packaged skills folder. Removes the
+ * containing `<name>` directory only if it ends up empty (preserves any user
+ * additions). Removes the parent `.claude/skills/` directory only if it ends
+ * up empty too. Idempotent: a missing destination is a no-op.
+ */
+export function uninstallSkills(projectDir: string): SkillsUninstallResult {
+  const source = packagedSkillsDir();
+  const dest = path.join(projectDir, ".claude", "skills");
+  const result: SkillsUninstallResult = { skillsDir: dest, removed: [] };
+
+  if (!fs.existsSync(dest) || !fs.existsSync(source)) return result;
+
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const destSkill = path.join(dest, entry.name);
+    const destFile = path.join(destSkill, "SKILL.md");
+    if (fs.existsSync(destFile)) {
+      fs.unlinkSync(destFile);
+      result.removed.push(entry.name);
+    }
+    if (fs.existsSync(destSkill) && fs.readdirSync(destSkill).length === 0) {
+      fs.rmdirSync(destSkill);
+    }
+  }
+
+  if (fs.existsSync(dest) && fs.readdirSync(dest).length === 0) {
+    fs.rmdirSync(dest);
+  }
+
+  return result;
+}
