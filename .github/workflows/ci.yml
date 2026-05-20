@@ -66,12 +66,17 @@ jobs:
           node-version: "22"
           cache: "npm"
 
-      - name: Upgrade npm for trusted publishing
+      - name: Activate npm >= 11.5.1 via corepack
         # npm trusted publishing (OIDC) requires npm CLI >= 11.5.1. Node 22
-        # LTS ships with npm 10.x, so upgrade in-place before any publish.
-        # Without this, `npm publish --provenance` falls back to legacy token
-        # auth and 404s because there is no NPM_TOKEN secret anymore.
-        run: npm install -g npm@latest
+        # LTS ships with npm 10.x. An in-place `npm install -g npm@latest`
+        # corrupts itself mid-install when crossing the 10 -> 11 major
+        # boundary on hosted runners (promise-retry MODULE_NOT_FOUND).
+        # Corepack is the supported path for swapping the active package
+        # manager version without the self-replacement race.
+        run: |
+          corepack enable
+          corepack prepare npm@latest --activate
+          npm --version
 
       - name: Configure git identity
         run: |
