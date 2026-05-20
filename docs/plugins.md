@@ -5,7 +5,7 @@ ue-mcp's plugin system lets npm packages add new actions to ue-mcp's built-in ca
 This page covers both sides: installing and managing plugins (consumer), and writing and publishing one (author). The author section starts at [Authoring a plugin](#authoring-a-plugin) — if you're just trying to use a plugin somebody else wrote, you can stop after [Using plugins](#using-plugins).
 
 !!! info "Live reference"
-    [`ue-mcp-plugin-voxel-plugin`](https://github.com/db-lyon/ue-mcp-plugin-voxel-plugin) ([npm](https://www.npmjs.com/package/ue-mcp-plugin-voxel-plugin)) is the canonical reference. It ships three injected actions and two flows over the [Voxel Plugin](https://voxelplugin.com), and every example below mirrors its real source.
+    [`ue-mcp-plugin-voxel-plugin`](https://github.com/db-lyon/ue-mcp-plugin-voxel-plugin) ([npm](https://www.npmjs.com/package/ue-mcp-plugin-voxel-plugin)) is the canonical reference. It ships one injected `pcg` action over the [Voxel Plugin](https://voxelplugin.com) — `voxel_build_scatter_graph` — with more tracked in its `TODO.md`. The examples below mirror its real source.
 
 ## Quick start
 
@@ -30,12 +30,12 @@ plugins(action="list")
   "plugins": [
     {
       "name": "ue-mcp-plugin-voxel-plugin",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "actionPrefix": "voxel",
       "status": "active",
-      "categories": ["pcg", "landscape"],
-      "injectedActions": 3,
-      "flows": 2,
+      "categories": ["pcg"],
+      "injectedActions": 1,
+      "flows": 0,
       "uePluginDependency": "Voxel",
       "uePluginPresent": true
     }
@@ -43,7 +43,7 @@ plugins(action="list")
 }
 ```
 
-Once `status: "active"` and `uePluginPresent: true`, the injected actions (e.g. `pcg(action="voxel_scatter_meshes", ...)`) are callable end-to-end.
+Once `status: "active"` and `uePluginPresent: true`, the injected action (e.g. `pcg(action="voxel_build_scatter_graph", ...)`) is callable end-to-end.
 
 ## How plugins work
 
@@ -67,7 +67,7 @@ The injection happens before any tool is registered with the MCP client, so by t
 
 ### Why injection, not a standalone tool
 
-A standalone "voxel" tool would be opaque to the agent — it has no reason to open a category called `voxel` while working on terrain. If the action lives inside `pcg` as `pcg(action="voxel_scatter_meshes")`, the agent already working in PCG discovers it exactly when relevant. Capability appears at the point of need, not behind a door the agent has to know to open.
+A standalone "voxel" tool would be opaque to the agent — it has no reason to open a category called `voxel` while working on terrain. If the action lives inside `pcg` as `pcg(action="voxel_build_scatter_graph")`, the agent already working in PCG discovers it exactly when relevant. Capability appears at the point of need, not behind a door the agent has to know to open.
 
 ## Using plugins
 
@@ -224,72 +224,71 @@ uePluginDependency: Voxel        # optional - .uplugin filename to check in .upr
 
 inject:
   pcg:
-    scatter_meshes:              # → pcg(action="voxel_scatter_meshes")
-      task: voxel.scatter_meshes
-      description: "Scatter meshes on a voxel terrain. Params: graphPath, mesh, density?"
+    build_scatter_graph:         # → pcg(action="voxel_build_scatter_graph")
+      task: voxel.build_scatter_graph
+      description: "Build a PCG graph that scatters weighted static meshes on a voxel terrain. Wraps UPCGVoxelSamplerSettings + the stock PCGStaticMeshSpawner."
       schema:
-        graphPath: { type: string, required: true }
-        mesh:      { type: string, required: true }
-        density:   { type: number }
-
-  landscape:
-    bake_heightmap:              # → landscape(action="voxel_bake_heightmap")
-      task: voxel.bake_heightmap
-      description: "Bake a voxel-terrain region to a Landscape heightmap. Params: bounds, resolution?"
-      schema:
-        bounds:     { type: object, required: true }
-        resolution: { type: number }
-
-knowledge:
-  pcg: knowledge/pcg.md
-  landscape: knowledge/landscape.md
+        assetPath:             { type: string, required: true }
+        meshes:                { type: array,  required: true }
+        pointsPerSquaredMeter: { type: number }
+        seed:                  { type: number }
 
 tasks:
-  voxel.scatter_meshes:  { class_path: tasks/ScatterMeshes }
-  voxel.bake_heightmap:  { class_path: tasks/BakeHeightmap }
-
-flows:
-  voxel_full_setup:
-    description: "Scatter, then bake — a full voxel→landscape pass"
-    rollback_on_failure: true
-    steps:
-      1: { task: voxel.scatter_meshes }
-      2: { task: voxel.bake_heightmap }
+  voxel.build_scatter_graph:
+    class_path: tasks/BuildScatterGraph
+    description: "Build a Voxel-Sampler-driven PCG mesh scatter graph"
 ```
 
-The key under each category is the **bare** action name. The loader prepends your `actionPrefix` to compute the injected name: `voxel` + `scatter_meshes` → `voxel_scatter_meshes`. The user always sees the prefixed form.
+The key under each category is the **bare** action name. The loader prepends your `actionPrefix` to compute the injected name: `voxel` + `build_scatter_graph` → `voxel_build_scatter_graph`. The user always sees the prefixed form.
+
+`knowledge:` and `flows:` are optional — omit them when you have nothing to attach. A plugin can ship a single action and nothing else.
 
 Param schemas under `schema:` accept these types: `string`, `number`, `boolean`, `object`, `array`. Non-required params become optional at the top level of the host category tool's schema.
 
 ### Writing tasks
 
 ```ts
-// src/tasks/ScatterMeshes.ts
+// src/tasks/BuildScatterGraph.ts
 import { BaseTask, type TaskResult } from "@db-lyon/flowkit";
 
-interface ScatterMeshesOpts {
-  graphPath: string;
-  mesh: string;
-  density?: number;
+interface MeshEntry { mesh: string; weight?: number; }
+
+interface Options {
+  assetPath: string;
+  meshes: MeshEntry[];
+  pointsPerSquaredMeter?: number;
+  seed?: number;
 }
 
-export default class ScatterMeshes extends BaseTask<ScatterMeshesOpts> {
-  get taskName() { return "voxel.scatter_meshes"; }
+export default class BuildScatterGraph extends BaseTask<Options> {
+  get taskName() { return "voxel.build_scatter_graph"; }
 
   async execute(): Promise<TaskResult> {
-    // Compose existing MCP actions via `this.call('<category>.<action>', ...)`.
-    // The bridge, project, and logger are available on `this.ctx` exactly the
-    // same way as for built-in tasks.
-    const created = await this.call("pcg.create_graph", { path: this.options.graphPath });
-    if (!created.success) return created;
+    const { assetPath, meshes, pointsPerSquaredMeter = 0.1, seed = 1 } = this.options;
+    const slash = assetPath.lastIndexOf("/");
+    const packagePath = assetPath.slice(0, slash);
+    const name = assetPath.slice(slash + 1);
 
-    const node = await this.call("pcg.add_node", {
-      graphPath: this.options.graphPath,
-      nodeType: "VoxelSampler",
+    // Compose existing MCP actions via this.call('<category>.<action>', ...).
+    const created = await this.call("pcg.create_graph", { name, packagePath });
+    if (!created.success && !/exist|already/i.test(created.error?.message ?? "")) return created;
+
+    // The bridge's nodeType resolver falls back to /Script/PCG.* only — for
+    // VoxelPCG nodes, pass the absolute object path so the first FindObject hits.
+    const sampler = await this.call("pcg.add_node", {
+      assetPath,
+      nodeType: "/Script/VoxelPCG.PCGVoxelSamplerSettings",
     });
-    if (!node.success) return node;
+    if (!sampler.success) return sampler;
 
-    return { success: true, data: { graphPath: this.options.graphPath } };
+    const spawner = await this.call("pcg.add_node", {
+      assetPath,
+      nodeType: "/Script/PCG.PCGStaticMeshSpawnerSettings",
+    });
+    if (!spawner.success) return spawner;
+
+    // ... set_node_settings, connect_nodes, set_static_mesh_spawner_meshes ...
+    return { success: true, data: { assetPath, meshCount: meshes.length } };
   }
 }
 ```
@@ -297,6 +296,7 @@ export default class ScatterMeshes extends BaseTask<ScatterMeshesOpts> {
 Notes:
 
 - Compose existing actions through `this.call('<category>.<action>', params)`. Don't reach into the bridge directly unless you have to — composition gives you free observability and rollback hooks.
+- Use the **real** parameter names of the host task you're calling. `pcg.add_node` takes `assetPath` (not `graphPath`) and `nodeType` (which the bridge resolves via `FindObject<UClass>` — bare class names only resolve when the bridge's fallback paths cover the module, so for plugin modules pass the absolute `/Script/<Module>.<UCLASS>` path).
 - If your task makes multi-step mutations, return a `rollback` record so users can opt into `rollback_on_failure: true` on the wrapping flow.
 - Throw, don't return success-with-error-data. The runtime catches throws and turns them into structured failures.
 
@@ -309,14 +309,15 @@ Keep it terse — one screenful per category. Concrete examples beat prose. The 
 ```markdown
 # Voxel Plugin - PCG actions
 
-`voxel_scatter_meshes` builds a PCG graph wired to a Voxel Sampler.
-Use it when the user wants meshes scattered on a voxel terrain rather
-than the standard landscape.
+`voxel_build_scatter_graph` creates a UPCGGraph asset that wires a
+Voxel Sampler into a Static Mesh Spawner. Use it when the user wants
+weighted meshes scattered on a voxel terrain rather than the standard
+landscape.
 
 Typical sequence:
-1. `pcg(action="create_graph", ...)` if no graph exists
-2. `pcg(action="voxel_scatter_meshes", graphPath=..., mesh=...)`
-3. `pcg(action="execute", ...)` to materialise the result
+1. `pcg(action="voxel_build_scatter_graph", assetPath="/Game/PCG/MyScatter", meshes=[{mesh:".../Rock.Rock"}])`
+2. Attach the resulting graph to a PCG component near your `AVoxelWorld`.
+3. `pcg(action="execute", actorLabel="MyPCGActor")` to materialise the result.
 ```
 
 ### Publishing
