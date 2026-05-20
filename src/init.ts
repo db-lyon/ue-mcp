@@ -500,7 +500,9 @@ async function init() {
       "settings.json",
     );
 
-    if (hookStates[1] && !feedbackDisabled) {
+    const feedbackHookEnabled = hookStates[1] && !feedbackDisabled;
+
+    if (feedbackHookEnabled) {
       installClaudeHooks(claudeSettingsPath, project.projectDir!);
       ok("Claude Code feedback prompt hook installed");
       info(claudeSettingsPath);
@@ -526,10 +528,16 @@ async function init() {
       ok(`Claude Code skills installed: ${skillsResult.installed.join(", ")}`);
       info(skillsResult.skillsDir);
     }
-  }
 
-  // 9c. GitHub OAuth for feedback authorship
-  await runFeedbackAuthStep();
+    // 9c. GitHub OAuth for feedback authorship.
+    // Only offered when the user explicitly opted into the feedback prompt
+    // hook AND feedback is not disabled. Asking for GitHub auth from a user
+    // who declined the feedback prompt (or disabled the category) is noise
+    // and a privacy footgun — they can always run `npx ue-mcp auth` later.
+    if (feedbackHookEnabled) {
+      await runFeedbackAuthStep();
+    }
+  }
 
   // 10. Done
   console.log("");
