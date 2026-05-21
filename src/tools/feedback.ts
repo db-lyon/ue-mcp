@@ -366,30 +366,28 @@ export const feedbackTool: ToolDef = categoryTool(
         try {
           elicitResult = await ctx.elicit({
             message: buildApprovalMessage(payload, authorPromptLine),
+            // Single text field, no enum dropdown. The three outcomes are
+            // derived from (form action) x (revisions empty?):
+            //
+            //   Decline button     → declined (no post)
+            //   Accept + empty     → submit the body as shown
+            //   Accept + text      → return text to the agent for a body
+            //                        revision; nothing posts until the user
+            //                        re-approves the revised body
+            //
+            // Using an enum here makes Claude Code render the field as a
+            // collapsed dropdown, which buries the choices behind a click.
+            // A plain string field renders inline.
             requestedSchema: {
               type: "object",
               properties: {
-                decision: {
-                  type: "string",
-                  title: "What should happen?",
-                  description:
-                    "Choose how to handle this submission. \"Revise first\" returns your notes to the agent for a body rewrite, and nothing posts until you re-approve the revision.",
-                  enum: ["submit", "revise", "decline"],
-                  enumNames: [
-                    "Submit as shown",
-                    "Revise first",
-                    "Decline (do not post)",
-                  ],
-                  default: "decline",
-                },
                 revisions: {
                   type: "string",
-                  title: "Revision notes (optional)",
+                  title: "Revisions before submit (optional)",
                   description:
-                    "If you chose \"Revise first\", describe what the agent should change before resubmitting. Examples: redact a project path, soften a claim, drop a section.",
+                    "Leave EMPTY and click Accept to submit the body above as shown. Fill in to ask the agent to change the body first — nothing posts until you re-approve the revised version. Click Decline to discard the submission entirely.",
                 },
               },
-              required: ["decision"],
             },
           });
         } catch (e) {
@@ -410,38 +408,56 @@ export const feedbackTool: ToolDef = categoryTool(
           );
         }
 
-        const decision =
-          typeof elicitResult.content?.decision === "string"
-            ? elicitResult.content.decision
-            : "";
         const revisions =
           typeof elicitResult.content?.revisions === "string"
             ? elicitResult.content.revisions.trim()
             : "";
 
-        // Anything other than action="accept" + decision="submit" stops here.
-        // Outcomes:
-        //   accept + submit   → fall through to the GitHub POST below
-        //   accept + revise   → bounce revisions back to the agent for a rewrite
-        //   accept + decline  → declined (explicit in-form choice)
-        //   decline / cancel  → declined (form-level button)
-        if (elicitResult.action === "accept" && decision === "revise") {
-          // The user approved in principle but wants the body rewritten
-          // before anything posts. Hand the notes (or a request for them)
-          // back to the agent; agent revises the params and calls
-          // feedback(submit) again to surface a fresh approval prompt.
-          const guidanceBlock = revisions
-            ? `User's revision notes:\n${revisions}`
-            : `The user did not provide specific revision notes. Ask the user in your next message what they want changed, then revise accordingly.`;
+        // Three outcomes from (action, revisions):
+        //   action !== "accept"   → declined (user hit the form's Decline)
+        //   accept + revisions    → bounce revisions back to the agent
+        //   accept + no revisions → submit the body as shown
+        if (elicitResult.action !== "accept") {
+          const reasonCode =
+            elicitResult.action === "decline"
+              ? "user_declined_form"
+              : elicitResult.action === "cancel"
+                ? "user_cancelled"
+                : "user_did_not_approve";
+          return directive(
+            [
+              `[FEEDBACK NOT SUBMITTED - USER DECLINED]`,
+              `Reason: ${reasonCode} (action="${elicitResult.action}")`,
+              ``,
+              `The user reviewed the prompt and clicked Decline. Do not retry.`,
+              `Resume the user's task.`,
+            ].join("\n"),
+            { submitted: false, code: reasonCode, action: elicitResult.action },
+            {
+              kind: "feedback.declined",
+              requiredActions: ["do_not_retry_feedback_submit", "resume_user_task"],
+              context: { code: reasonCode, action: elicitResult.action },
+            },
+          );
+        }
+
+        if (revisions) {
+          // The user accepted the principle but wants the body rewritten
+          // before anything posts. Hand the notes back to the agent; agent
+          // revises the params and calls feedback(submit) again to surface
+          // a fresh approval prompt for the revised body.
           return directive(
             [
               `[FEEDBACK NEEDS REVISION BEFORE SUBMIT]`,
               ``,
-              `The user reviewed the body and chose "Revise first". Nothing has`,
-              `been posted. ${guidanceBlock}`,
+              `The user approved in principle but filled in the revisions field.`,
+              `Nothing has been posted. Revision notes from the user:`,
               ``,
-              `When you re-call feedback(submit), the user will see a fresh`,
-              `approval prompt for the revised body.`,
+              revisions,
+              ``,
+              `Revise the title/summary/pythonWorkaround/idealTool to address`,
+              `these notes and call feedback(submit) again. The user will see`,
+              `a fresh approval prompt for the revised body.`,
             ].join("\n"),
             {
               submitted: false,
@@ -455,33 +471,6 @@ export const feedbackTool: ToolDef = categoryTool(
                 "call_feedback_submit_again_with_revised_payload",
               ],
               context: { revisions },
-            },
-          );
-        }
-
-        const submitted = elicitResult.action === "accept" && decision === "submit";
-        if (!submitted) {
-          const reasonCode =
-            elicitResult.action === "decline"
-              ? "user_declined_form"
-              : elicitResult.action === "cancel"
-                ? "user_cancelled"
-                : decision === "decline"
-                  ? "user_declined_in_form"
-                  : "user_did_not_approve";
-          return directive(
-            [
-              `[FEEDBACK NOT SUBMITTED - USER DID NOT APPROVE]`,
-              `Reason: ${reasonCode} (action="${elicitResult.action}", decision="${decision}")`,
-              ``,
-              `The user reviewed the prompt and chose not to submit. Do not retry.`,
-              `Resume the user's task.`,
-            ].join("\n"),
-            { submitted: false, code: reasonCode, action: elicitResult.action, decision },
-            {
-              kind: "feedback.declined",
-              requiredActions: ["do_not_retry_feedback_submit", "resume_user_task"],
-              context: { code: reasonCode, action: elicitResult.action },
             },
           );
         }
