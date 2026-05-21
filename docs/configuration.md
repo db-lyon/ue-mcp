@@ -45,8 +45,9 @@ Place a `.ue-mcp.json` file in your UE project root (next to the `.uproject`) to
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `contentRoots` | `string[]` | `["/Game/"]` | Content paths to search when using `asset(action="search")`. Add plugin content roots here if your project uses plugins with their own assets. |
-| `disable` | `string[]` | `[]` | Tool categories to disable. Disabled categories are not registered with the MCP server, reducing context noise for the AI. |
+| `disable` | `string[]` | `[]` | Tool categories to disable. Disabled categories are not registered with the MCP server, reducing context noise for the AI. Use `"feedback"` here to opt out of the feedback tool entirely. |
 | `http` | `object` | `undefined` (HTTP server off) | Optional REST surface for the flow engine. Object with `enabled` (bool), `port` (default `7723`), `host` (default `127.0.0.1`). When `enabled: true`, the MCP server also serves `GET /flows`, `GET /flows/<name>/plan`, `POST /flows/<name>/run` over HTTP so external tools can drive flows without an MCP client. |
+| `installedHooks` | `string[]` | `[]` | Maintained by `npx ue-mcp init` / `npx ue-mcp uninstall-hooks`. Lists the absolute paths of every Claude Code `settings.json` where ue-mcp installed its feedback PostToolUse hook, so uninstall can find and remove them cleanly. Don't hand-edit. |
 
 ## Plugins
 
@@ -109,6 +110,21 @@ The C++ bridge plugin enables these UE plugins (adding them to `.uproject` if mi
 - `GameplayAbilities` — for GAS tools
 - `Niagara` — for VFX tools
 - `PCG` — for procedural generation tools
+
+## CLI Subcommands
+
+`npx ue-mcp` exposes a few utility subcommands beyond the default MCP server entry:
+
+| Command | Description |
+|---------|-------------|
+| `npx ue-mcp init` | Interactive setup wizard. Deploys the C++ bridge plugin, writes MCP client configs, scaffolds `.ue-mcp.json` / `ue-mcp.yml`, optionally installs Claude Code skills + feedback prompt hook, optionally runs the GitHub OAuth device flow. |
+| `npx ue-mcp update` | Re-deploy the C++ bridge plugin to the project. Use after a ue-mcp version bump. |
+| `npx ue-mcp auth` | Run the GitHub device flow standalone so `feedback(submit)` can author issues as your real GitHub user. Same step that lives inside `init`; use this if you skipped it at init time. |
+| `npx ue-mcp uninstall-hooks` | Remove the feedback PostToolUse hook from every Claude Code settings file recorded in `.ue-mcp.json installedHooks[]`. |
+| `npx ue-mcp resolve <issue>` | Fetch a feedback issue, branch, hand it to Claude Code to implement, open a PR. See [Feedback](feedback.md#resolving-feedback-issues). |
+| `npx ue-mcp plugin install <name>` | Install a ue-mcp plugin from npm and register it in `ue-mcp.yml`. See [Configuration → Plugins](#plugins). |
+| `npx ue-mcp plugin uninstall <name>` | Inverse of install. |
+| `npx ue-mcp plugin create <name>` | Scaffold a new plugin package. See [Plugins](plugins.md). |
 
 ## Editor Lifecycle
 

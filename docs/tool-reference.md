@@ -660,11 +660,11 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 
 ## feedback
 
-*Submit feedback to improve ue-mcp when native tools fall short and execute_python was used as a workaround.*
+*Submit feedback to improve ue-mcp when native tools fall short and execute_python was used as a workaround. Gated on an MCP elicitation approval prompt the user sees before anything posts. See [Feedback](feedback.md) for the full flow.*
 
 | Action | Description |
 |--------|-------------|
-| `submit` | Submit feedback about a tool gap. Params: `title, summary, pythonWorkaround?, idealTool?` |
+| `submit` | Submit feedback about a tool gap. Params: `title, summary, pythonWorkaround?, idealTool?, author? ("user" default, or "bot")`. Server-side scrubs credentials and personal/project identifiers, then opens an approval prompt in your MCP client. Requires the client to advertise the `elicitation` capability. |
 
 ---
 

@@ -23,13 +23,14 @@ UE-MCP lets you tell an AI assistant what you want done in Unreal. It can place 
 The wizard then:
 
 1. Auto-detects your `.uproject`.
-2. Asks which **tool categories** to enable (`level`, `blueprint`, `material`, `niagara`, etc.). All enabled by default.
+2. Asks which **tool categories** to enable (`level`, `blueprint`, `material`, `niagara`, etc.), with one-line descriptions. Pre-checked on a fresh install; on re-init, prior opt-outs in `.ue-mcp.json disable[]` are remembered.
 3. Copies the C++ bridge plugin into `<YourProject>/Plugins/UE_MCP_Bridge/`.
 4. Enables the plugins it needs in your `.uproject`: `UE_MCP_Bridge`, `PythonScriptPlugin`, plus any of `Niagara`, `PCG`, `GameplayAbilities`, `EnhancedInput` required by the categories you kept.
-5. Writes `.ue-mcp.json` (project config) and scaffolds an empty `ue-mcp.yml` (for custom flows) if missing.
-6. Detects installed MCP clients (Claude Code, Claude Desktop, Cursor) and writes the config for each you confirm.
-7. **Claude Code only**: optionally installs a PostToolUse hook that prompts agents to file a GitHub issue when they fall back to `execute_python`, and copies bundled workflow skills into `.claude/`.
-8. Optionally runs the **GitHub OAuth device flow** so agent feedback issues author as your real GitHub user instead of the `ue-mcp-feedback` bot. The token is cached at `~/.ue-mcp/auth.json` (mode 600) and reused for every future submission. Skip if you'd rather submit anonymously; the wizard will fall back to bot authorship.
+5. Scaffolds an empty `ue-mcp.yml` (for custom flows) if missing.
+6. Detects installed MCP clients (Claude Code project + global, Claude Desktop, Cursor) and writes the config for each you confirm. Global/Desktop configs default unchecked since opting them in affects every project on the machine.
+7. Asks about **agent behavior** (all default off on fresh installs — blasting through with Enter adds no surprises): enable the `feedback(submit)` tool, install the Claude-Code-only PostToolUse hook that nudges the agent to offer feedback after `execute_python`, install bundled Claude Code workflow skills.
+8. If you opted into the feedback prompt hook, optionally runs the **GitHub OAuth device flow** so `feedback(submit)` can author issues as your real GitHub user (default `author="user"`). The token is cached at `~/.ue-mcp/auth.json` (mode 600) and reused. Skip if you don't want it now — you can run `npx ue-mcp auth` later, or call `feedback(submit)` with `author="bot"` to post anonymously instead.
+9. Writes the final `.ue-mcp.json` and prints a recap of every file or directory init touched.
 
 ## 2. Open the Editor
 

@@ -1,56 +1,114 @@
 # Feedback
 
-UE-MCP includes a built-in feedback system that helps improve tool coverage over time. When an AI agent has to fall back to `editor(action="execute_python")` because a native tool couldn't handle the task, it can submit structured feedback directly as a GitHub issue.
+`feedback(submit)` files a GitHub issue against the ue-mcp tracker describing a tool gap, so maintainers can close it with a native handler. The flow is gated on explicit user approval (no agent-mediated consent), and the body is server-side scrubbed for credentials and personal/project identifiers before anything leaves your machine.
 
-## How It Works
+## How it works
 
 ```mermaid
 flowchart LR
-    Agent[AI Agent] -->|notices tool gap| FT[feedback tool]
-    FT -->|OAuth device flow| GH[GitHub Issues as you]
-    GH -->|maintainers triage| Fix[New native tool/action]
+    Agent[AI Agent] -->|notices gap| Submit[feedback action=submit]
+    Submit -->|validate + scrub| Prompt[Approval prompt<br/>in your MCP client]
+    Prompt -->|Accept| Post[POST to GitHub Issues]
+    Prompt -->|Decline| Discard[Nothing posted]
+    Prompt -->|Revise| Loop[Agent rewrites, re-prompts]
+    Loop --> Prompt
 ```
 
-1. During a session, the agent uses `editor(action="execute_python")` as a workaround for something a native tool should handle
-2. When the task is complete, the agent asks: *"I had to use custom Python scripts to get this done. Would you like to submit feedback to improve ue-mcp?"*
-3. If the user agrees, the agent calls `feedback(action="submit")` with details about the gap
-4. **First time only**: ue-mcp surfaces a GitHub device flow URL + code. You authorize the `ue-mcp-feedback` app once, the token persists in `~/.ue-mcp/auth.json`, and every subsequent submission authors the issue as you.
-5. A GitHub issue is created on the [ue-mcp repository](https://github.com/db-lyon/ue-mcp), authored by your real GitHub user
+1. Agent calls `feedback(action="submit")` with `title`, `summary`, and either `pythonWorkaround` or `idealTool`.
+2. Server validates the submission (rejects placeholder titles, meta-apology phrases, too-short summaries, etc.).
+3. Server assembles the body, applies a credential scrub pass and a privacy redaction pass (see below).
+4. Server requests an **MCP elicitation** — your client surfaces an approval prompt with the full body, an optional revisions text field, and an Accept / Decline action.
+5. Based on your choice the server submits the POST, returns a revision directive to the agent, or discards.
+
+## The approval prompt
+
+The prompt the elicitation request opens has:
+
+- The exact body that would post to GitHub (already redacted)
+- A line declaring who the issue will author as (`@your-github-user` or `ue-mcp-feedback bot`)
+- A `Submit with revisions (optional)` text field
+- Your MCP client's built-in **Accept** / **Decline** action buttons
+
+Outcomes:
+
+| Click | Revisions field | Result |
+|---|---|---|
+| Accept | empty | The body is POSTed to the public tracker |
+| Accept | filled in | Server returns your notes to the agent; the agent rewrites and triggers a fresh approval prompt for the revised body. Nothing posts until you re-approve. |
+| Decline | (any) | Discarded. The agent receives a declined directive and stops. |
+
+The agent has no way to bypass this prompt or forge a response — the consent signal comes from your client's UI, not from a tool result.
+
+!!! info "Requires elicitation support"
+    `feedback(submit)` requires the connected MCP client to advertise the `elicitation` capability. Claude Code 2.1.76+ supports it. If your client does not, the call returns a `feedback.blocked` directive with `code: "elicitation_unsupported"` instead of posting.
 
 ## Authorship
 
-By default issues are authored as the actual reporter via OAuth device flow. The first `feedback(submit)` on a fresh machine returns a directive with a verification URL and one-time code; after you authorize the `ue-mcp-feedback` GitHub App, the access token is cached at `~/.ue-mcp/auth.json` (mode 600) and reused.
+The `author` parameter is an enum with two values:
 
-If you'd rather submit anonymously as the bot, pass `useBot=true`. The bot is the fallback, not the default.
+- `author: "user"` (default) — issue is authored by your real GitHub account via a cached OAuth token
+- `author: "bot"` — issue is authored anonymously by the `ue-mcp-feedback[bot]`
 
-## Privacy
+If `author="user"` and no OAuth token is cached, the call returns an `auth_required` directive. Run `npx ue-mcp auth` to authorize, or call with `author="bot"` to post anonymously.
 
-The agent is instructed to **strip project-specific details** from feedback submissions. Issues should describe the general capability gap, not your project's internals. You can review the issue content before the agent submits it.
+### Authorizing as your GitHub user
 
-## Security model
+```bash
+npx ue-mcp auth
+```
 
-`feedback(submit)` posts to a public issue tracker. Treat anything you let the agent submit as already-disclosed. Specific notes:
+Runs the GitHub device flow: prompts you to open a URL, enter a code, and authorize the `ue-mcp-feedback` GitHub App. On success the token is cached at `~/.ue-mcp/auth.json` (mode 600) and every subsequent `feedback(submit)` defaults to authoring as your user.
 
-- **Secret scrubbing is best-effort.** Before submit, the assembled body and title are scanned for common credential shapes (GitHub PATs, AWS access keys, Slack/Stripe/OpenAI/Anthropic tokens, JWTs, PEM blocks, `SECRET=`/`TOKEN=`/`API_KEY=`/`PASSWORD=` style assignments) and replaced with `[REDACTED]`. Novel token shapes still pass through. Read the body before you let the agent post it.
-- **The PostToolUse hook is opt-in.** `npx ue-mcp init` no longer pre-checks the "prompt agents to file a GitHub issue" box. If you opt in, the hook fires after every `execute_python` call and pushes the agent toward calling `feedback(submit)`; the workaround log it would submit includes the Python you ran. Leave it off if your session touches anything sensitive.
-- **`useBot=true` ships an embedded GitHub App key.** The published npm package contains the `ue-mcp-feedback` App's PEM. The App's permissions are scoped to `issues: write` on `db-lyon/ue-mcp` and nowhere else, so the realistic blast radius from key disclosure is bot impersonation (spam-create, edit, or close issues on this one repo as `ue-mcp-feedback[bot]`); not RCE, not exfil of private code, not a foothold on your machine. The proper fix is server-side signing, tracked in [#461](https://github.com/db-lyon/ue-mcp/issues/461). In the meantime: the bot path is opt-in (default flow uses your device-auth token), the App's permissions stay locked, and revocation is one click on the App installation page.
+This same step is offered inside `npx ue-mcp init` when you opt into the feedback prompt hook. Run `auth` standalone if you skipped that and want to authorize later.
 
-## Submitting Feedback
+## What gets scrubbed
 
-The `feedback` tool has one action:
+Two passes run server-side on the assembled title and body, before either reaches the approval prompt or the GitHub POST. The agent cannot bypass them or see the pre-scrubbed bytes.
 
-### `submit`
+### Credential scrub
+
+Common credential shapes are replaced with `[REDACTED]`:
+
+- GitHub PATs and App tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_…`)
+- AWS access key IDs (`AKIA…`, `ASIA…`)
+- Slack tokens (`xoxb-`, `xoxp-`, etc.)
+- Stripe live/test secret keys (`sk_live_`, `sk_test_`)
+- Anthropic API keys (`sk-ant-…`)
+- OpenAI keys (`sk-…`)
+- JSON Web Tokens (`eyJ…eyJ…`)
+- PEM blocks (`-----BEGIN … PRIVATE KEY-----`)
+- Env-style assignments where the key name names a secret (`PASSWORD=`, `TOKEN=`, `API_KEY=`, etc.)
+
+Novel shapes can pass through. Read the body on the approval prompt before clicking Accept.
+
+### Privacy scrub
+
+Personal and project identifiers are replaced with stable placeholders:
+
+| What | Replacement |
+|---|---|
+| Absolute project root path | `REDACTED_PROJECT_ROOT` |
+| OS home directory path | `REDACTED_HOME` |
+| Project name (whole word, case-insensitive) | `REDACTED_PROJECT` |
+| OS username (whole word, case-insensitive) | `REDACTED_USER` |
+
+Path matching covers both slash and backslash separator conventions so the same path is caught whether it came from `execute_python` output, a JSON config, or a console trace. Word-boundary matching avoids substring false positives (`Davidson` keeps the `d`, `Valedictory` keeps the `V`).
+
+Class, component, and actor names are **not** redacted automatically — the agent often needs to reference them to describe the gap. Use the **Submit with revisions** field on the approval prompt to request additional case-by-case redactions; the agent will rewrite and bring you a fresh prompt.
+
+## Submit parameters
 
 | Parameter | Required | Description |
-|-----------|----------|-------------|
-| `title` | Yes | Short title describing the tool gap (generic, no project details) |
-| `summary` | Yes | What was attempted and why the native tool fell short |
-| `pythonWorkaround` | No | The `execute_python` code used as a workaround |
-| `idealTool` | No | What tool/action should handle this natively |
+|---|---|---|
+| `title` | Yes | Short title describing the tool gap. At least 10 characters, no placeholder phrases. |
+| `summary` | Yes | What was attempted and why the native tool fell short. At least 40 characters. |
+| `pythonWorkaround` | Conditional | The `execute_python` code used as a workaround. Either this or `idealTool` is required; if omitted, the server checks for tracked session workarounds. |
+| `idealTool` | Conditional | What tool/action should handle this natively (e.g. `blueprint(action='set_variable_default')`). Either this or `pythonWorkaround` is required. |
+| `author` | No | `"user"` (default) or `"bot"`. See [Authorship](#authorship). |
 
-### Example
+## Example
 
-```
+```text
 feedback(action="submit",
   title="Cannot set default values for Blueprint variables",
   summary="Tried to set a default value on a Blueprint variable. add_variable creates the variable but there's no action to set its default. Had to use execute_python to access the variable's DefaultValue property directly.",
@@ -59,28 +117,42 @@ feedback(action="submit",
 )
 ```
 
-## For Maintainers
+The agent makes the call; you see the approval prompt; you click Accept (with or without revisions) or Decline.
 
-Feedback issues are created with the `agent-feedback` label and include:
+## Claude Code prompt hook
 
-- **Summary** — what the user was trying to do
-- **Ideal Tool/Action** — suggested native tool signature
-- **Python Workaround** — the code that solved it, useful for implementing the native handler
+`npx ue-mcp init` offers (opt-in, default off) to install a Claude Code PostToolUse hook that fires after every `execute_python` call. The hook injects a system message asking the agent to surface the workaround to you and offer `feedback(submit)`. Without the hook, the agent will only file feedback if you ask for it directly.
 
-These issues form a prioritized backlog of tool gaps to close.
+The hook lives in `<project>/.claude/settings.json`. Its path is also recorded in `<project>/.ue-mcp.json` under `installedHooks[]` so re-running init can find and remove it cleanly. Remove all installed hooks manually with:
 
-## Claude Code Hooks
+```bash
+npx ue-mcp uninstall-hooks
+```
 
-If you ran `npx ue-mcp init` and selected "Agent behavior" hooks, Claude Code will automatically prompt agents to submit feedback whenever they fall back to `execute_python`. This is a Claude Code [PostToolUse hook](https://docs.anthropic.com/en/docs/claude-code/hooks) — it fires deterministically after the tool call, not as a suggestion the agent can ignore.
+The hook handler self-gates: if `feedback` is in `.ue-mcp.json` `disable[]` (or no `.ue-mcp.json` is reachable from the cwd), the hook silently no-ops even if the matcher is still in `settings.json`.
 
-The hook is configured in your project's `.claude/settings.json` and calls `npx ue-mcp hook post-tool-use` under the hood.
+## Security model
 
-## Resolving Feedback Issues
+- **The agent is the adversary for the consent step.** The MCP elicitation prompt is rendered by your client, and the response comes back to the server over the protocol — the agent has no IPC to forge an approval.
+- **The redaction passes are non-bypassable.** They run before the body reaches the elicitation prompt or `submitFeedback`, and the agent never sees the pre-scrubbed bytes.
+- **`author="bot"` uses an embedded GitHub App key.** The published npm package contains the `ue-mcp-feedback` App's installation credential as an XOR-encoded asset (not a literal source string), so a casual `grep` over the source tree finds nothing of interest. This is not a security boundary — the cycle constant lives next to the blob — but it removes the affordance that lets an agent stumble on the key during routine source inspection. The App's permissions are scoped to `issues: write` on `db-lyon/ue-mcp`; the realistic blast radius of a leak is bot impersonation on this one repo (`ue-mcp-feedback[bot]` posting noise), not RCE or exfil. Server-side bot signing is the long-term fix, tracked in [#461](https://github.com/db-lyon/ue-mcp/issues/461).
+- **Disable the category if you don't want it available.** Add `"feedback"` to `.ue-mcp.json`'s `disable[]` and the tool is not registered with the MCP server. The category checkbox lives in the **Agent behavior** section of `npx ue-mcp init` (default unchecked on fresh installs).
 
-Once feedback issues are triaged, anyone can resolve them:
+## For maintainers
+
+Submitted issues carry the `agent-feedback` label and include:
+
+- **Summary** — what the user was trying to do (post-scrub)
+- **Ideal Tool/Action** — suggested native tool signature, if supplied
+- **Python Workaround Used** — the workaround code (post-scrub), if supplied
+- **Session Workaround Log** — every `execute_python` call recorded during the session (post-scrub)
+
+These form a prioritized backlog of tool gaps to close.
+
+## Resolving feedback issues
 
 ```bash
 npx ue-mcp resolve <issue-number>
 ```
 
-This fetches the issue, creates a branch, launches Claude Code to implement the fix, and opens a PR. See [Getting Started](getting-started.md#resolving-issues) for details.
+Fetches the issue, creates a branch, launches Claude Code to implement the fix, and opens a PR. See [Getting Started](getting-started.md#resolving-issues) for details.
