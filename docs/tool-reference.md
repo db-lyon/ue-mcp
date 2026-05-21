@@ -1,6 +1,6 @@
 # Tool Reference
 
-UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering **<!-- count:actions -->524+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering **<!-- count:actions -->525+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -99,6 +99,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `get_mesh_collision` | Inspect StaticMesh collision setup. Params: `assetPath` |
 | `move_folder` | Move/rename entire content folder with redirector fixup in one transaction. Params: `sourcePath, destinationPath (#192)` |
 | `create_folder` | Create empty content browser folder(s). Params: `path OR paths[] (e.g. /Game/Foo, /Game/Bar/Baz)` |
+| `delete_folder` | Delete content browser folder(s) - counterpart to delete_asset, which leaves the parent directory entry behind as an orphan. Empty folders only by default; pass force=true to also delete any assets still inside (Content Browser 'Delete folder' equivalent). Per-path status (deleted/absent/failed) with reason (invalid_path/protected_path/not_empty/delete_failed) and a sample of contained assets on not_empty entries. Params: `path OR paths[], force?` |
 | `set_mesh_nav` | Set StaticMesh nav contribution. Params: `assetPath, bHasNavigationData?, clearNavCollision? (#167)` |
 
 ---
@@ -660,11 +661,11 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 
 ## feedback
 
-*Submit feedback to improve ue-mcp when native tools fall short and execute_python was used as a workaround. Gated on an MCP elicitation approval prompt the user sees before anything posts. See [Feedback](feedback.md) for the full flow.*
+*Submit feedback to improve ue-mcp when native tools fall short and execute_python was used as a workaround.*
 
 | Action | Description |
 |--------|-------------|
-| `submit` | Submit feedback about a tool gap. Params: `title, summary, pythonWorkaround?, idealTool?, author? ("user" default, or "bot")`. Server-side scrubs credentials and personal/project identifiers, then (in default `interactive` mode) opens an approval prompt in your MCP client. Requires the client to advertise the `elicitation` capability. Run `npx ue-mcp feedback mode auto-approve` (or `defer`) to skip the prompt for unattended sessions — see [Feedback → modes](feedback.md#feedback-modes). |
+| `submit` | Submit feedback about a tool gap. Blocks on an MCP elicitation prompt that asks the USER (not the agent) to approve or decline the exact payload before anything is posted to GitHub |
 
 ---
 
