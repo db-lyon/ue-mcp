@@ -22,8 +22,12 @@ const realSummary =
   "blueprint.set_class_default marks the asset dirty but never saves it, forcing python flushes via execute_python on a separate call.";
 const realPy = "import unreal\nfoo = unreal.do_thing()";
 
-function makeCtx(elicit?: ElicitFn): ToolContext {
-  return { bridge: {} as never, project: {} as never, elicit };
+function makeCtx(elicit?: ElicitFn, projectName?: string, projectDir?: string): ToolContext {
+  const project = {
+    projectName: projectName ?? null,
+    projectDir: projectDir ?? null,
+  } as never;
+  return { bridge: {} as never, project, elicit };
 }
 
 async function call(ctx: ToolContext, params: Record<string, unknown>): Promise<unknown> {
@@ -308,6 +312,44 @@ describe("feedback(submit) elicitation gate", () => {
     expect(r.machine?.kind).toBe("feedback.revisions_requested");
     expect(r.directive).toContain("Ask the user");
     expect(mockSubmitFeedback).not.toHaveBeenCalled();
+  });
+
+  it("privacy redactions land in both the elicitation prompt and the GitHub POST", async () => {
+    const projectName = "Vale";
+    const projectDir = "C:/Users/david/Projects/UE/Vale";
+    let promptShown = "";
+    const elicit = vi.fn<ElicitFn>().mockImplementation(async (p) => {
+      promptShown = p.message;
+      return { action: "accept", content: { decision: "submit" } } as ElicitResult;
+    });
+    mockSubmitFeedback.mockResolvedValue({
+      kind: "submitted",
+      url: "https://github.com/x/y/issues/42",
+      number: 42,
+      authoredBy: "tester",
+      authoredAs: "user",
+    });
+    const ctx = makeCtx(elicit, projectName, projectDir);
+
+    await call(ctx, {
+      title: "Vale: editor.foo missing for /Game/Vale/Items",
+      summary:
+        "While working in the Vale project I tried to call editor.foo on C:/Users/david/Projects/UE/Vale/Content/Items/Foo.uasset and had to use execute_python instead.",
+      pythonWorkaround:
+        "import unreal\nasset = unreal.EditorAssetLibrary.load_asset('/Game/Vale/Items/Foo')",
+    });
+
+    // What the user reads at consent time must already be redacted.
+    expect(promptShown).not.toMatch(/\bVale\b/);
+    expect(promptShown).not.toContain("C:/Users/david/Projects/UE/Vale");
+    expect(promptShown).toContain("REDACTED_PROJECT");
+
+    // What posts to GitHub must be the same redacted bytes.
+    const [postedTitle, postedBody] = mockSubmitFeedback.mock.calls[0];
+    expect(postedTitle).not.toMatch(/\bVale\b/);
+    expect(postedBody).not.toMatch(/\bVale\b/);
+    expect(postedBody).not.toContain("C:/Users/david/Projects/UE/Vale");
+    expect(postedBody).toContain("REDACTED_PROJECT");
   });
 
   it("if the elicitation request itself fails, treat as not-approved and do not submit", async () => {

@@ -4,6 +4,7 @@ import { submitFeedback } from "../github-app.js";
 import { readUserAuth } from "../auth.js";
 import { getWorkarounds, clearWorkarounds } from "../workaround-tracker.js";
 import { scrubSecrets } from "../secret-scrub.js";
+import { privacyScrub } from "../privacy-scrub.js";
 import { warn } from "../log.js";
 
 const PLACEHOLDER_TITLE_RE =
@@ -125,11 +126,17 @@ interface AssembledPayload {
   scrubHits: number;
 }
 
+interface PrivacyInputs {
+  projectRoot?: string;
+  projectName?: string;
+}
+
 function assemblePayload(
   title: string,
   summary: string,
   pythonWorkaround: string | undefined,
   idealTool: string | undefined,
+  privacy: PrivacyInputs,
 ): AssembledPayload {
   const sections: string[] = ["## Summary", summary];
 
@@ -165,24 +172,49 @@ function assemblePayload(
   sections.push("", "---", "*Submitted via ue-mcp agent feedback*");
 
   const rawBody = sections.join("\n");
-  const scrubbedBody = scrubSecrets(rawBody);
-  const scrubbedTitle = scrubSecrets(title);
-  const scrubHits =
-    scrubbedBody.hits.reduce((n, h) => n + h.count, 0) +
-    scrubbedTitle.hits.reduce((n, h) => n + h.count, 0);
+
+  // Two-pass scrub. Order matters:
+  //   1. Secret-shaped strings (PEMs, API tokens, JWTs, env-style secrets).
+  //   2. Personal/project identifiers (project root path, home dir, project
+  //      name, OS username). Applied second so a path that contained a
+  //      secret-shaped substring has the secret redacted before we drop the
+  //      surrounding path bytes.
+  // The agent has no surface to bypass either pass — both are applied here
+  // server-side before the body ever appears on the elicitation prompt or
+  // crosses the GitHub API boundary.
+  const secretsBody = scrubSecrets(rawBody);
+  const privacyBody = privacyScrub(secretsBody.text, {
+    projectRoot: privacy.projectRoot,
+    projectName: privacy.projectName,
+  });
+  const secretsTitle = scrubSecrets(title);
+  const privacyTitle = privacyScrub(secretsTitle.text, {
+    projectRoot: privacy.projectRoot,
+    projectName: privacy.projectName,
+  });
+
+  const allHits = [
+    ...secretsBody.hits,
+    ...privacyBody.hits,
+    ...secretsTitle.hits,
+    ...privacyTitle.hits,
+  ];
+  const scrubHits = allHits.reduce((n, h) => n + h.count, 0);
 
   if (scrubHits > 0) {
-    const allHits = [...scrubbedBody.hits, ...scrubbedTitle.hits];
     warn(
       "feedback",
-      `redacted ${scrubHits} secret-shaped strings before approval prompt: ${allHits.map((h) => `${h.rule}=${h.count}`).join(", ")}`,
+      `redacted ${scrubHits} string(s) before approval prompt: ${allHits.map((h) => `${h.rule}=${h.count}`).join(", ")}`,
     );
   }
 
   return {
-    title: scrubbedTitle.text,
-    body: scrubbedBody.text,
-    labels: inferLabels(scrubbedTitle.text, summary, idealTool),
+    title: privacyTitle.text,
+    body: privacyBody.text,
+    // Inferred labels look at the (already-scrubbed) title + the
+    // user-supplied summary. summary feeds keyword detection (blueprint,
+    // niagara, etc.) which is structural classification, not user identity.
+    labels: inferLabels(privacyTitle.text, summary, idealTool),
     scrubHits,
   };
 }
@@ -286,7 +318,10 @@ export const feedbackTool: ToolDef = categoryTool(
           );
         }
 
-        const payload = assemblePayload(title, summary, pythonWorkaround, idealTool);
+        const payload = assemblePayload(title, summary, pythonWorkaround, idealTool, {
+          projectRoot: ctx.project?.projectDir ?? undefined,
+          projectName: ctx.project?.projectName ?? undefined,
+        });
 
         // Two independent checks: (1) capture intent above, (2) validate
         // auth here. Auth validation only matters when intent is "user".
