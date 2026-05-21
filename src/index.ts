@@ -360,6 +360,9 @@ if (subcmd === "init") {
 } else if (subcmd === "uninstall-hooks") {
   process.argv.splice(2, 1);
   import("./uninstall-hooks.js");
+} else if (subcmd === "auth") {
+  process.argv.splice(2, 1);
+  import("./auth-cli.js");
 } else if (subcmd === "resolve") {
   import("./resolve.js");
 } else if (subcmd === "plugin") {

@@ -5,11 +5,11 @@ import * as readline from "node:readline";
 import { ProjectContext } from "./project.js";
 import { deploy } from "./deployer.js";
 import { installSkills, uninstallSkills } from "./skills.js";
-import { readUserAuth, startDeviceFlow, tryExchangeDeviceCode } from "./auth.js";
 import { warn as logWarn } from "./log.js";
-import { BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW, fail, info, ok, warn } from "./ui/ansi.js";
+import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
 import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
+import { runFeedbackAuthStep } from "./auth-cli.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */
@@ -223,96 +223,6 @@ function askPath(): Promise<string> {
       },
     );
   });
-}
-
-/* ------------------------------------------------------------------ */
-/*  GitHub feedback authorship (OAuth device flow)                     */
-/* ------------------------------------------------------------------ */
-
-async function runFeedbackAuthStep(): Promise<void> {
-  console.log("");
-  console.log(
-    `  ${BOLD}${CYAN}Feedback authorship${RESET}  ${DIM}(GitHub OAuth, optional)${RESET}`,
-  );
-
-  const cached = await readUserAuth();
-  if (cached) {
-    ok(`Feedback issues will author as @${cached.login} (cached token reused)`);
-    return;
-  }
-
-  console.log(
-    `  ${DIM}feedback(submit) defaults to authoring issues as your GitHub user.${RESET}`,
-  );
-  console.log(
-    `  ${DIM}Without a cached OAuth token, every submission will refuse until${RESET}`,
-  );
-  console.log(
-    `  ${DIM}you either authorize here, or call feedback(submit) with author="bot"${RESET}`,
-  );
-  console.log(
-    `  ${DIM}to post anonymously as the ue-mcp-feedback bot.${RESET}`,
-  );
-  console.log("");
-
-  const choice = await singleSelect("Authorize now?", [
-    "Yes - run device flow now (recommended)",
-    `Skip - feedback submissions will refuse until I run \`npx ue-mcp auth\` or call with author="bot"`,
-  ]);
-  if (choice !== 0) {
-    info(`Skipped. Run npx ue-mcp auth to set this up later, or pass author="bot" at submit time.`);
-    return;
-  }
-
-  let pending;
-  try {
-    pending = await startDeviceFlow();
-  } catch (e) {
-    warn(`Device flow start failed: ${e instanceof Error ? e.message : e}`);
-    info(`Submissions will refuse until you run \`npx ue-mcp auth\` or call with author="bot".`);
-    return;
-  }
-
-  console.log("");
-  console.log(`  ${BOLD}1.${RESET} Open: ${CYAN}${pending.verification_uri}${RESET}`);
-  console.log(`  ${BOLD}2.${RESET} Enter code: ${BOLD}${YELLOW}${pending.user_code}${RESET}`);
-  console.log(`  ${BOLD}3.${RESET} Authorize the ue-mcp-feedback app`);
-  console.log("");
-  console.log(`  ${DIM}Polling every ${pending.interval}s. Code expires in ~15 min. Ctrl-C to skip.${RESET}`);
-
-  const deadline = pending.expires_at * 1000;
-  process.stdout.write("  ");
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, pending.interval * 1000));
-    let result;
-    try {
-      result = await tryExchangeDeviceCode(pending);
-    } catch (e) {
-      console.log("");
-      warn(`Auth failed: ${e instanceof Error ? e.message : e}`);
-      info(`Submissions will refuse until you re-run \`npx ue-mcp auth\` or call with author="bot".`);
-      return;
-    }
-    if (result.kind === "auth") {
-      console.log("");
-      ok(`Authorized as @${result.auth.login}`);
-      info(`Token cached at ~/.ue-mcp/auth.json (mode 600)`);
-      return;
-    }
-    if (result.kind === "expired") {
-      console.log("");
-      warn("Device code expired. Re-run npx ue-mcp init to retry.");
-      return;
-    }
-    if (result.kind === "denied") {
-      console.log("");
-      warn(`Authorization denied. Submissions will refuse until you re-run auth or call with author="bot".`);
-      return;
-    }
-    process.stdout.write(".");
-  }
-  console.log("");
-  warn(`Timed out waiting for authorization. Submissions will refuse until you re-run auth or call with author="bot".`);
 }
 
 /* ------------------------------------------------------------------ */
