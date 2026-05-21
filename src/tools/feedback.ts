@@ -336,11 +336,22 @@ export const feedbackTool: ToolDef = categoryTool(
               properties: {
                 decision: {
                   type: "string",
-                  title: "Approve submission?",
+                  title: "What should happen?",
                   description:
-                    "Approve to post this exact issue to the public ue-mcp GitHub tracker. Decline to discard.",
-                  enum: ["approve", "decline"],
+                    "Choose how to handle this submission. \"Revise first\" returns your notes to the agent for a body rewrite, and nothing posts until you re-approve the revision.",
+                  enum: ["submit", "revise", "decline"],
+                  enumNames: [
+                    "Submit as shown",
+                    "Revise first",
+                    "Decline (do not post)",
+                  ],
                   default: "decline",
+                },
+                revisions: {
+                  type: "string",
+                  title: "Revision notes (optional)",
+                  description:
+                    "If you chose \"Revise first\", describe what the agent should change before resubmitting. Examples: redact a project path, soften a claim, drop a section.",
                 },
               },
               required: ["decision"],
@@ -368,16 +379,61 @@ export const feedbackTool: ToolDef = categoryTool(
           typeof elicitResult.content?.decision === "string"
             ? elicitResult.content.decision
             : "";
-        const approved =
-          elicitResult.action === "accept" && decision === "approve";
+        const revisions =
+          typeof elicitResult.content?.revisions === "string"
+            ? elicitResult.content.revisions.trim()
+            : "";
 
-        if (!approved) {
+        // Anything other than action="accept" + decision="submit" stops here.
+        // Outcomes:
+        //   accept + submit   → fall through to the GitHub POST below
+        //   accept + revise   → bounce revisions back to the agent for a rewrite
+        //   accept + decline  → declined (explicit in-form choice)
+        //   decline / cancel  → declined (form-level button)
+        if (elicitResult.action === "accept" && decision === "revise") {
+          // The user approved in principle but wants the body rewritten
+          // before anything posts. Hand the notes (or a request for them)
+          // back to the agent; agent revises the params and calls
+          // feedback(submit) again to surface a fresh approval prompt.
+          const guidanceBlock = revisions
+            ? `User's revision notes:\n${revisions}`
+            : `The user did not provide specific revision notes. Ask the user in your next message what they want changed, then revise accordingly.`;
+          return directive(
+            [
+              `[FEEDBACK NEEDS REVISION BEFORE SUBMIT]`,
+              ``,
+              `The user reviewed the body and chose "Revise first". Nothing has`,
+              `been posted. ${guidanceBlock}`,
+              ``,
+              `When you re-call feedback(submit), the user will see a fresh`,
+              `approval prompt for the revised body.`,
+            ].join("\n"),
+            {
+              submitted: false,
+              code: "revisions_requested",
+              revisions,
+            },
+            {
+              kind: "feedback.revisions_requested",
+              requiredActions: [
+                "revise_submission_per_user_notes",
+                "call_feedback_submit_again_with_revised_payload",
+              ],
+              context: { revisions },
+            },
+          );
+        }
+
+        const submitted = elicitResult.action === "accept" && decision === "submit";
+        if (!submitted) {
           const reasonCode =
-            elicitResult.action === "decline" || decision === "decline"
-              ? "user_declined"
+            elicitResult.action === "decline"
+              ? "user_declined_form"
               : elicitResult.action === "cancel"
                 ? "user_cancelled"
-                : "user_did_not_approve";
+                : decision === "decline"
+                  ? "user_declined_in_form"
+                  : "user_did_not_approve";
           return directive(
             [
               `[FEEDBACK NOT SUBMITTED - USER DID NOT APPROVE]`,

@@ -81,7 +81,7 @@ describe("feedback(submit) elicitation gate", () => {
   it("submits ONLY when the user clicks accept + decision=approve", async () => {
     const elicit = vi.fn<ElicitFn>().mockResolvedValue({
       action: "accept",
-      content: { decision: "approve" },
+      content: { decision: "submit" },
     } as ElicitResult);
     const ctx = makeCtx(elicit);
     mockSubmitFeedback.mockResolvedValue({
@@ -118,7 +118,7 @@ describe("feedback(submit) elicitation gate", () => {
     expect(isDirectiveResponse(r)).toBe(true);
     if (!isDirectiveResponse(r)) return;
     expect(r.machine?.kind).toBe("feedback.declined");
-    expect((r.result as { code?: string }).code).toBe("user_declined");
+    expect((r.result as { code?: string }).code).toBe("user_declined_form");
     expect(mockSubmitFeedback).not.toHaveBeenCalled();
   });
 
@@ -136,7 +136,7 @@ describe("feedback(submit) elicitation gate", () => {
     expect(mockSubmitFeedback).not.toHaveBeenCalled();
   });
 
-  it("does NOT submit when user accepts but picks decision=decline", async () => {
+  it("does NOT submit when user accepts but picks decision=\"decline\"", async () => {
     const elicit = vi.fn<ElicitFn>().mockResolvedValue({
       action: "accept",
       content: { decision: "decline" },
@@ -221,7 +221,7 @@ describe("feedback(submit) elicitation gate", () => {
     let promptShown = "";
     const elicit = vi.fn<ElicitFn>().mockImplementation(async (p) => {
       promptShown = p.message;
-      return { action: "accept", content: { decision: "approve" } } as ElicitResult;
+      return { action: "accept", content: { decision: "submit" } } as ElicitResult;
     });
     const ctx = makeCtx(elicit);
 
@@ -252,7 +252,7 @@ describe("feedback(submit) elicitation gate", () => {
     let promptShown = "";
     const elicit = vi.fn<ElicitFn>().mockImplementation(async (p) => {
       promptShown = p.message;
-      return { action: "accept", content: { decision: "approve" } } as ElicitResult;
+      return { action: "accept", content: { decision: "submit" } } as ElicitResult;
     });
     const ctx = makeCtx(elicit);
 
@@ -266,6 +266,48 @@ describe("feedback(submit) elicitation gate", () => {
     expect(promptShown).toContain("ue-mcp-feedback bot");
     const [, , , opts] = mockSubmitFeedback.mock.calls[0];
     expect(opts).toEqual({ useBot: true });
+  });
+
+  it("\"revise\" decision does NOT submit and returns a revisions_requested directive to the agent", async () => {
+    const elicit = vi.fn<ElicitFn>().mockResolvedValue({
+      action: "accept",
+      content: {
+        decision: "revise",
+        revisions: "Redact the project path on line 3.",
+      },
+    } as ElicitResult);
+    const ctx = makeCtx(elicit);
+    const r = await call(ctx, {
+      title: realTitle,
+      summary: realSummary,
+      pythonWorkaround: realPy,
+    });
+    expect(isDirectiveResponse(r)).toBe(true);
+    if (!isDirectiveResponse(r)) return;
+    expect(r.machine?.kind).toBe("feedback.revisions_requested");
+    expect(r.directive).toContain("Redact the project path on line 3.");
+    expect((r.result as { code?: string; revisions?: string }).revisions).toBe(
+      "Redact the project path on line 3.",
+    );
+    expect(mockSubmitFeedback).not.toHaveBeenCalled();
+  });
+
+  it("\"revise\" with empty revision notes asks the agent to query the user", async () => {
+    const elicit = vi.fn<ElicitFn>().mockResolvedValue({
+      action: "accept",
+      content: { decision: "revise", revisions: "" },
+    } as ElicitResult);
+    const ctx = makeCtx(elicit);
+    const r = await call(ctx, {
+      title: realTitle,
+      summary: realSummary,
+      pythonWorkaround: realPy,
+    });
+    expect(isDirectiveResponse(r)).toBe(true);
+    if (!isDirectiveResponse(r)) return;
+    expect(r.machine?.kind).toBe("feedback.revisions_requested");
+    expect(r.directive).toContain("Ask the user");
+    expect(mockSubmitFeedback).not.toHaveBeenCalled();
   });
 
   it("if the elicitation request itself fails, treat as not-approved and do not submit", async () => {
@@ -292,7 +334,7 @@ describe("feedback(submit) elicitation gate", () => {
       .fn<ElicitFn>()
       .mockImplementation(async (p) => {
         promptBody = p.message;
-        return { action: "accept", content: { decision: "approve" } } as ElicitResult;
+        return { action: "accept", content: { decision: "submit" } } as ElicitResult;
       });
     const ctx = makeCtx(elicit);
     mockSubmitFeedback.mockResolvedValue({
