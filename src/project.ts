@@ -28,6 +28,10 @@ export interface UeMcpConfig {
    *  PostToolUse hook was installed. Maintained by the installer in
    *  src/hook-installer.ts so uninstall can reach every site. */
   installedHooks?: string[];
+  /** Feedback flow behavior. */
+  feedback?: {
+    mode?: "interactive" | "auto-approve" | "defer";
+  };
 }
 
 export class ProjectContext {

@@ -363,6 +363,9 @@ if (subcmd === "init") {
 } else if (subcmd === "auth") {
   process.argv.splice(2, 1);
   import("./auth-cli.js");
+} else if (subcmd === "feedback") {
+  process.argv.splice(2, 1);
+  import("./feedback-cli.js");
 } else if (subcmd === "resolve") {
   import("./resolve.js");
 } else if (subcmd === "plugin") {

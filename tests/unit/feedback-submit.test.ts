@@ -1,4 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { isDirectiveResponse, type ToolContext, type ElicitFn, type ElicitResult } from "../../src/types.js";
 import { clearWorkarounds, pushWorkaround } from "../../src/workaround-tracker.js";
 
@@ -22,10 +25,16 @@ const realSummary =
   "blueprint.set_class_default marks the asset dirty but never saves it, forcing python flushes via execute_python on a separate call.";
 const realPy = "import unreal\nfoo = unreal.do_thing()";
 
-function makeCtx(elicit?: ElicitFn, projectName?: string, projectDir?: string): ToolContext {
+function makeCtx(
+  elicit?: ElicitFn,
+  projectName?: string,
+  projectDir?: string,
+  feedbackMode?: "interactive" | "auto-approve" | "defer",
+): ToolContext {
   const project = {
     projectName: projectName ?? null,
     projectDir: projectDir ?? null,
+    config: { feedback: feedbackMode ? { mode: feedbackMode } : undefined },
   } as never;
   return { bridge: {} as never, project, elicit };
 }
@@ -316,6 +325,137 @@ describe("feedback(submit) elicitation gate", () => {
     expect(postedBody).not.toMatch(/\bVale\b/);
     expect(postedBody).not.toContain("C:/Users/david/Projects/UE/Vale");
     expect(postedBody).toContain("REDACTED_PROJECT");
+  });
+
+  describe("non-interactive modes", () => {
+    let tmpPendingRoot: string;
+
+    beforeEach(() => {
+      tmpPendingRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-mode-test-"));
+      process.env.UE_MCP_PENDING_DIR = tmpPendingRoot;
+    });
+
+    afterEach(() => {
+      delete process.env.UE_MCP_PENDING_DIR;
+      delete process.env.UE_MCP_FEEDBACK_MODE;
+      fs.rmSync(tmpPendingRoot, { recursive: true, force: true });
+    });
+
+    it("auto-approve mode skips elicitation and posts directly", async () => {
+      mockSubmitFeedback.mockResolvedValue({
+        kind: "submitted",
+        url: "https://github.com/x/y/issues/42",
+        number: 42,
+        authoredBy: "tester",
+        authoredAs: "user",
+      });
+      const elicit = vi.fn<ElicitFn>();
+      const ctx = makeCtx(elicit, "Vale", undefined, "auto-approve");
+
+      const r = await call(ctx, {
+        title: realTitle,
+        summary: realSummary,
+        pythonWorkaround: realPy,
+      });
+
+      expect(elicit).not.toHaveBeenCalled();
+      expect(mockSubmitFeedback).toHaveBeenCalledTimes(1);
+      expect(isDirectiveResponse(r)).toBe(false);
+      expect((r as { mode?: string }).mode).toBe("auto-approve");
+    });
+
+    it("auto-approve preserves the privacy scrub", async () => {
+      mockSubmitFeedback.mockResolvedValue({
+        kind: "submitted",
+        url: "https://github.com/x/y/issues/42",
+        number: 42,
+        authoredBy: "tester",
+        authoredAs: "user",
+      });
+      const ctx = makeCtx(undefined, "Vale", "C:/Users/david/Projects/UE/Vale", "auto-approve");
+
+      await call(ctx, {
+        title: "Vale: editor.foo missing",
+        summary:
+          "While working in the Vale project I called editor.foo on C:/Users/david/Projects/UE/Vale/Content/X.uasset and had to use execute_python.",
+        pythonWorkaround: "x",
+      });
+
+      const [postedTitle, postedBody] = mockSubmitFeedback.mock.calls[0];
+      expect(postedTitle).not.toMatch(/\bVale\b/);
+      expect(postedBody).not.toContain("C:/Users/david/Projects/UE/Vale");
+      expect(postedBody).toContain("REDACTED_PROJECT");
+    });
+
+    it("defer mode skips elicitation, writes to disk, does not post", async () => {
+      const elicit = vi.fn<ElicitFn>();
+      const ctx = makeCtx(elicit, "Vale", undefined, "defer");
+
+      const r = await call(ctx, {
+        title: realTitle,
+        summary: realSummary,
+        pythonWorkaround: realPy,
+      });
+
+      expect(elicit).not.toHaveBeenCalled();
+      expect(mockSubmitFeedback).not.toHaveBeenCalled();
+      expect(isDirectiveResponse(r)).toBe(false);
+      const res = r as { deferred?: boolean; id?: string; mode?: string };
+      expect(res.deferred).toBe(true);
+      expect(res.mode).toBe("defer");
+      expect(res.id).toMatch(/^\d{8}T\d{9}-[0-9a-f]{6}$/);
+
+      // The on-disk entry should have the scrubbed payload.
+      const files = fs.readdirSync(tmpPendingRoot);
+      expect(files).toHaveLength(1);
+      const entry = JSON.parse(
+        fs.readFileSync(path.join(tmpPendingRoot, files[0]), "utf-8"),
+      ) as { title: string; project: string; author: string };
+      expect(entry.project).toBe("Vale");
+      expect(entry.title).toBe(realTitle);
+      expect(entry.author).toBe("user");
+    });
+
+    it("env var UE_MCP_FEEDBACK_MODE overrides config", async () => {
+      mockSubmitFeedback.mockResolvedValue({
+        kind: "submitted",
+        url: "https://github.com/x/y/issues/42",
+        number: 42,
+        authoredBy: "tester",
+        authoredAs: "user",
+      });
+      process.env.UE_MCP_FEEDBACK_MODE = "auto-approve";
+      const elicit = vi.fn<ElicitFn>();
+      // config says "defer" but env overrides to "auto-approve"
+      const ctx = makeCtx(elicit, "Vale", undefined, "defer");
+
+      await call(ctx, {
+        title: realTitle,
+        summary: realSummary,
+        pythonWorkaround: realPy,
+      });
+
+      expect(elicit).not.toHaveBeenCalled();
+      expect(mockSubmitFeedback).toHaveBeenCalledTimes(1);
+    });
+
+    it("auto-approve still hits the auth check (author=user, no cached token)", async () => {
+      mockReadUserAuth.mockResolvedValue(null);
+      const elicit = vi.fn<ElicitFn>();
+      const ctx = makeCtx(elicit, "Vale", undefined, "auto-approve");
+
+      const r = await call(ctx, {
+        title: realTitle,
+        summary: realSummary,
+        pythonWorkaround: realPy,
+      });
+
+      expect(elicit).not.toHaveBeenCalled();
+      expect(mockSubmitFeedback).not.toHaveBeenCalled();
+      expect(isDirectiveResponse(r)).toBe(true);
+      if (!isDirectiveResponse(r)) return;
+      expect((r.result as { code?: string }).code).toBe("auth_required");
+    });
   });
 
   it("if the elicitation request itself fails, treat as not-approved and do not submit", async () => {

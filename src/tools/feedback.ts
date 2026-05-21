@@ -5,7 +5,24 @@ import { readUserAuth } from "../auth.js";
 import { getWorkarounds, clearWorkarounds } from "../workaround-tracker.js";
 import { scrubSecrets } from "../secret-scrub.js";
 import { privacyScrub } from "../privacy-scrub.js";
+import { deferSubmission } from "../feedback-deferred.js";
 import { warn } from "../log.js";
+
+type FeedbackMode = "interactive" | "auto-approve" | "defer";
+
+/**
+ * Resolve the active feedback mode. Env var UE_MCP_FEEDBACK_MODE wins over
+ * .ue-mcp.json `feedback.mode`; default is "interactive" so the consent gate
+ * stays on unless the user explicitly opts out. The agent has no surface to
+ * change this — it is set by the human running the server.
+ */
+function resolveFeedbackMode(ctx: ToolContext): FeedbackMode {
+  const env = (process.env.UE_MCP_FEEDBACK_MODE ?? "").trim().toLowerCase();
+  if (env === "auto-approve" || env === "defer" || env === "interactive") return env;
+  const cfg = ctx.project?.config?.feedback?.mode;
+  if (cfg === "auto-approve" || cfg === "defer" || cfg === "interactive") return cfg;
+  return "interactive";
+}
 
 const PLACEHOLDER_TITLE_RE =
   /^(noop|nop|test|tests?|testing|x|y|z|todo|tbd|tba|ignore|ignored|stop|dummy|temp|tmp|placeholder|accidental|oops|cleanup|n\/?a|none|null|undefined|na|misc|\.+|-+)$/i;
@@ -289,12 +306,13 @@ export const feedbackTool: ToolDef = categoryTool(
           );
         }
 
-        // ── Deterministic approval gate ─────────────────────────────
-        // Without an elicitation channel there is no way to obtain a
-        // user-mediated signal that the agent cannot forge. We refuse
-        // rather than fall back to an agent-mediated channel — the whole
-        // point of this code path is that the agent is the adversary.
-        if (!ctx.elicit) {
+        // Resolve mode BEFORE checking for elicit. In interactive mode the
+        // missing elicit capability is a hard block. In auto-approve or
+        // defer modes the user has explicitly opted out of the elicitation
+        // gate, so elicit support is irrelevant.
+        const mode = resolveFeedbackMode(ctx);
+
+        if (mode === "interactive" && !ctx.elicit) {
           return directive(
             [
               `[FEEDBACK BLOCKED - NO APPROVAL CHANNEL]`,
@@ -302,8 +320,9 @@ export const feedbackTool: ToolDef = categoryTool(
               `so the server has no deterministic way to obtain the user's approval`,
               `for posting an issue to a public tracker.`,
               ``,
-              `Upgrade your client (Claude Code >= 2.1.76) or use a different client.`,
-              `feedback(submit) will refuse until elicitation is available.`,
+              `Upgrade your client (Claude Code >= 2.1.76) or set feedback.mode in`,
+              `.ue-mcp.json (or UE_MCP_FEEDBACK_MODE env) to "auto-approve" or "defer"`,
+              `to skip the prompt.`,
             ].join("\n"),
             {
               submitted: false,
@@ -362,9 +381,83 @@ export const feedbackTool: ToolDef = categoryTool(
           useBotForSubmit = false;
         }
 
+        // ── Defer mode ─────────────────────────────────────────────
+        // User has explicitly opted out of the elicitation gate via
+        // `.ue-mcp.json feedback.mode = "defer"` (or the env override).
+        // Write the scrubbed payload to ~/.ue-mcp/pending-feedback/ for
+        // later review via `npx ue-mcp feedback list/approve/discard`.
+        if (mode === "defer") {
+          const entry = deferSubmission(
+            { title: payload.title, body: payload.body, labels: payload.labels },
+            ctx.project?.projectName ?? null,
+            useBotForSubmit ? "bot" : "user",
+          );
+          clearWorkarounds();
+          return {
+            message: `Feedback deferred locally for later review (id ${entry.id}).`,
+            deferred: true,
+            id: entry.id,
+            createdAt: entry.createdAt,
+            mode: "defer",
+            review_with: "npx ue-mcp feedback list",
+          };
+        }
+
+        // ── Auto-approve mode ──────────────────────────────────────
+        // Skip the elicitation prompt entirely and post the scrubbed
+        // body. Opt-in via config/env only; the agent has no surface
+        // to set this.
+        if (mode === "auto-approve") {
+          const result = await submitFeedback(
+            payload.title,
+            payload.body,
+            payload.labels,
+            { useBot: useBotForSubmit },
+          );
+          if (result.kind === "auth_required") {
+            return directive(
+              [
+                `[FEEDBACK BLOCKED - CACHED GITHUB TOKEN REJECTED]`,
+                ``,
+                `Auto-approve mode tried to post as your user but GitHub`,
+                `rejected the cached token (revoked or expired). Re-authorize`,
+                `with \`npx ue-mcp auth\` or switch to author="bot".`,
+              ].join("\n"),
+              {
+                submitted: false,
+                authRequired: true,
+                verification_uri: result.verification_uri,
+                user_code: result.user_code,
+                expires_in: result.expires_in,
+              },
+              {
+                kind: "feedback.auth_required",
+                requiredActions: ["surface_oauth_url_to_user"],
+                context: {
+                  verification_uri: result.verification_uri,
+                  user_code: result.user_code,
+                },
+              },
+            );
+          }
+          clearWorkarounds();
+          return {
+            message: `Feedback auto-approved and submitted as ${result.authoredAs === "user" ? `@${result.authoredBy}` : "bot"} (auto-approve mode).`,
+            issue_url: result.url,
+            issue_number: result.number,
+            authored_by: result.authoredBy,
+            authored_as: result.authoredAs,
+            labels: payload.labels,
+            mode: "auto-approve",
+          };
+        }
+
+        // ── Interactive mode (default): elicitation gate ───────────
+        // NOTE: ctx.elicit is guaranteed defined here because the
+        // mode === "interactive" + !ctx.elicit case returned above.
         let elicitResult;
         try {
-          elicitResult = await ctx.elicit({
+          elicitResult = await ctx.elicit!({
             message: buildApprovalMessage(payload, authorPromptLine),
             // Radio semantics on `decision` (two-value enum, mutually
             // exclusive by schema). Filling the `revisions` text field is

@@ -20,6 +20,45 @@ flowchart LR
 4. Server requests an **MCP elicitation** — your client surfaces an approval prompt with the full body, an optional revisions text field, and an Accept / Decline action.
 5. Based on your choice the server submits the POST, returns a revision directive to the agent, or discards.
 
+## Feedback modes
+
+The default is **interactive** — every `feedback(submit)` blocks on the MCP elicitation approval prompt. Two other modes exist for autonomous / long-running agent sessions where waiting for human input on every submission isn't acceptable. Set the mode in `.ue-mcp.json` or via the `UE_MCP_FEEDBACK_MODE` env var (env wins). The agent has no surface to change the mode — it's set by the human running the server.
+
+| Mode | What happens on `feedback(submit)` | When to use it |
+|---|---|---|
+| `interactive` (default) | Server scrubs + opens the elicitation prompt; you Accept / Decline / request revisions. Nothing posts without explicit human approval. | Default. Use whenever a human is at the keyboard. |
+| `auto-approve` | Server scrubs + posts directly to GitHub. No prompt. | Long-running unattended agent sessions where you trust the agent's title/summary judgment. **Still applies the credential and privacy scrubs.** |
+| `defer` | Server scrubs + writes the payload to `~/.ue-mcp/pending-feedback/<id>.json` instead of posting. No prompt, no network call. | Long-running unattended agent sessions where you want to review what would have been filed before any of it leaves the machine. Use `npx ue-mcp feedback list/show/approve/discard` to act on the queue afterward. |
+
+Example `.ue-mcp.json`:
+
+```json
+{
+  "feedback": { "mode": "defer" }
+}
+```
+
+Or for a one-off agent run:
+
+```bash
+UE_MCP_FEEDBACK_MODE=defer npx ue-mcp ./MyGame.uproject
+```
+
+### Reviewing deferred submissions
+
+```bash
+npx ue-mcp feedback list             # show pending entries
+npx ue-mcp feedback show <id>        # full title + body + labels
+npx ue-mcp feedback approve <id>     # POST to GitHub, then remove
+npx ue-mcp feedback discard <id>     # delete without posting
+```
+
+Deferred entries are stored at `~/.ue-mcp/pending-feedback/<id>.json` (override with `UE_MCP_PENDING_DIR`). The recorded `author` choice from the original `feedback(submit)` is honored on approve.
+
+### Threat-model note
+
+Both `auto-approve` and `defer` bypass the elicitation consent gate. The scrubs (credential + privacy) still run server-side regardless of mode — auto-approve doesn't downgrade the redaction story, it just removes the human-in-the-loop confirmation that the scrub caught everything you care about. Use defer instead if you want unattended operation **with** human review before anything ships.
+
 ## The approval prompt
 
 The prompt the elicitation request opens has:
