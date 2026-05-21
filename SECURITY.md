@@ -8,7 +8,16 @@ Use GitHub's private vulnerability reporting:
 
 That opens a private thread between you and the maintainer. Please do **not** file security issues on the public issue tracker.
 
-If you've never used the flow before: it's the same as filing a normal issue, except the thread is private and can be promoted to a published Security Advisory (with a CVE if applicable) once a fix ships.
+### Filling in the form
+
+GitHub's form is the same one used to draft the eventual public Security Advisory, so the section prompts read awkwardly for first-time reporters. Treat it like this:
+
+- **Impact** — this is the only one you need to fill in. Describe what you found, the steps to reproduce, the version it affects (`ue-mcp@1.0.x`), and what you think the impact is (consent-gate bypass, credential leak, path escape, etc.). Include any proof-of-concept that helps.
+- **Patches** — leave blank. This gets filled in by the maintainer once a fix is decided; it's for the eventual advisory's "upgrade to X.Y.Z" message.
+- **Workarounds** — leave blank unless you've found one. Maintainer-fillable during triage.
+- **References** — optional. Link related CVEs, prior reports, or relevant documentation if you have any. Skip if you don't.
+
+A short, clear **Impact** with reliable reproduction steps is the most valuable thing you can give us. Everything else can be sorted out on the advisory thread.
 
 ## What's in scope
 
