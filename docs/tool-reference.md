@@ -664,7 +664,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 
 | Action | Description |
 |--------|-------------|
-| `submit` | Submit feedback about a tool gap. Params: `title, summary, pythonWorkaround?, idealTool?, author? ("user" default, or "bot")`. Server-side scrubs credentials and personal/project identifiers, then opens an approval prompt in your MCP client. Requires the client to advertise the `elicitation` capability. |
+| `submit` | Submit feedback about a tool gap. Params: `title, summary, pythonWorkaround?, idealTool?, author? ("user" default, or "bot")`. Server-side scrubs credentials and personal/project identifiers, then (in default `interactive` mode) opens an approval prompt in your MCP client. Requires the client to advertise the `elicitation` capability. Set `.ue-mcp.json feedback.mode` to `"auto-approve"` or `"defer"` to skip the prompt for unattended sessions — see [Feedback → modes](feedback.md#feedback-modes). |
 
 ---
 

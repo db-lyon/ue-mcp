@@ -105,6 +105,18 @@ Run from your project directory whenever a new UE-MCP version ships:
 npx ue-mcp update
 ```
 
+## Unattended agent sessions
+
+If you set up the feedback prompt hook and then leave a long-running agent working, the elicitation approval prompt on `feedback(submit)` will stall the session waiting for you. For unattended runs, set a non-interactive feedback mode in `.ue-mcp.json`:
+
+```json
+{
+  "feedback": { "mode": "defer" }
+}
+```
+
+`defer` writes submissions to `~/.ue-mcp/pending-feedback/` for later review with `npx ue-mcp feedback list/show/approve/discard`. `auto-approve` posts directly without prompting. Both still run the credential and privacy scrubs. See [Feedback → modes](feedback.md#feedback-modes).
+
 ## Switching projects
 
 To point ue-mcp at a different `.uproject` without restarting your AI client, ask:
