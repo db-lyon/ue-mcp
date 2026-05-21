@@ -524,18 +524,32 @@ async function init() {
   // Claude-Code-only rows (prompt hook + skills + OAuth). The hook and OAuth
   // are nested under feedback: if the user opts out of feedback, the hook
   // and the GitHub device flow are not even offered.
+  //
+  // Every checkbox in this section defaults OFF on a fresh install. A user
+  // who blasts through with Enter gets nothing added — no tool registered,
+  // no hook installed, no skill files copied. Re-init preserves prior
+  // choices by reading state from .ue-mcp.json (categories, installed
+  // hooks) and the filesystem (skills directory).
   const configuredClaudeCode = detected.some(
     (c, i) => c.name.startsWith("Claude Code") && clientStates[i],
   );
 
   console.log("");
 
+  // .ue-mcp.json existing means init has been run before in this project.
+  // We use that as the "this is a re-init" signal: prior choices should be
+  // honored. On a fresh install (no config file yet), default all Agent
+  // behavior off regardless of what the eventual disable[] would look like.
+  const ueMcpJsonPathForSeed = path.join(project.projectDir!, ".ue-mcp.json");
+  const isReInit = fs.existsSync(ueMcpJsonPathForSeed);
+
   const behaviorItems: CheckboxItem[] = [
     {
       label: "Enable feedback(submit) tool for filing tool-gap issues",
-      checked: !existingDisabled.has("feedback"),
+      // Fresh install: off. Re-init: on unless they previously disabled it.
+      checked: isReInit && !existingDisabled.has("feedback"),
       suffix:
-        "calls block on a user-approval prompt before anything is posted to a public tracker",
+        "Recommended. Calls block on a user-approval prompt before anything is posted to a public tracker.",
     },
   ];
   if (configuredClaudeCode) {
@@ -561,17 +575,18 @@ async function init() {
 
     behaviorItems.push({
       label: "Auto-nudge agent to offer feedback after execute_python",
-      // Default off on fresh install (opt-in). On re-init: respect prior
-      // choice by reading the install registry.
+      // Fresh install: off (opt-in only). Re-init: respect prior install.
       checked: hookCurrentlyInstalled,
       suffix:
-        "installs a PostToolUse hook in .claude/settings.json; ignored if feedback is off",
+        "Opt-in. Installs a PostToolUse hook in .claude/settings.json; ignored if feedback is off.",
     });
     behaviorItems.push({
       label: "Install bundled Claude Code skills (workflow guides)",
-      // Default on for fresh installs; respect prior uninstall on re-init.
-      checked: !fs.existsSync(skillsDir) || skillsCurrentlyInstalled,
-      suffix: "copies skill markdown into .claude/skills/",
+      // Fresh install: off. Re-init: on if any skill file is currently
+      // present (a non-empty skills dir means they were installed before).
+      checked: skillsCurrentlyInstalled,
+      suffix:
+        "Recommended for Claude Code. Copies skill markdown into .claude/skills/.",
     });
   }
 
