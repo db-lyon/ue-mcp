@@ -366,38 +366,35 @@ export const feedbackTool: ToolDef = categoryTool(
         try {
           elicitResult = await ctx.elicit({
             message: buildApprovalMessage(payload, authorPromptLine),
-            // Three boolean fields render as one row per field in MCP clients,
-            // avoiding the collapsed-enum-dropdown problem. Exactly one of
-            // accept / decline / acceptWithRevisions must be checked; the
-            // schema cannot enforce that, so the handler validates server-side
-            // and treats any 0-or-many case as a decline (safer default).
+            // Radio semantics on `decision` (two-value enum, mutually
+            // exclusive by schema). Filling the `revisions` text field is
+            // its own choice and takes precedence over `decision` — no
+            // extra checkbox to tick. Three outcomes the user can express:
             //
-            // Form-level Accept/Decline buttons still exist (MCP spec). The
-            // form Decline button is the same outcome as ticking the
-            // `decline` field — both surfaces are honored.
+            //   decision = submit, revisions empty   → post the body as shown
+            //   decision = reject, revisions empty   → discard
+            //   revisions non-empty (any decision)   → return notes to the
+            //                                          agent for a body
+            //                                          rewrite; nothing posts
+            //                                          until re-approval
+            //
+            // Form-level Decline/cancel always declines, regardless of
+            // field values.
             requestedSchema: {
               type: "object",
               properties: {
-                accept: {
-                  type: "boolean",
-                  title: "Accept (submit the body as shown)",
-                  default: false,
-                },
-                decline: {
-                  type: "boolean",
-                  title: "Decline (discard, do not post)",
-                  default: false,
-                },
-                acceptWithRevisions: {
-                  type: "boolean",
-                  title:
-                    "Accept with revisions (fill notes below; agent rewrites and re-prompts)",
-                  default: false,
+                decision: {
+                  type: "string",
+                  enum: ["submit", "reject"],
+                  title: "Decision",
+                  description:
+                    "Pick Submit to post the body as shown, or Reject to discard. Leave empty and fill Revisions below to request a rewrite instead.",
                 },
                 revisions: {
                   type: "string",
-                  title:
-                    "Revision notes (used when \"Accept with revisions\" is checked)",
+                  title: "Submit with revisions (optional)",
+                  description:
+                    "Fill in to ask the agent to rewrite the body per these notes. If non-empty, this overrides the Decision field — nothing posts until you re-approve the revised body.",
                 },
               },
             },
@@ -420,45 +417,41 @@ export const feedbackTool: ToolDef = categoryTool(
           );
         }
 
-        const accept = elicitResult.content?.accept === true;
-        const declineField = elicitResult.content?.decline === true;
-        const acceptWithRevisions =
-          elicitResult.content?.acceptWithRevisions === true;
+        const decisionRaw = elicitResult.content?.decision;
+        const decision =
+          decisionRaw === "submit" || decisionRaw === "reject"
+            ? decisionRaw
+            : undefined;
         const revisions =
           typeof elicitResult.content?.revisions === "string"
             ? elicitResult.content.revisions.trim()
             : "";
 
-        // Form-level Decline (or cancel) is treated the same as ticking the
-        // in-form Decline checkbox — both are honored.
         const formDeclined =
           elicitResult.action === "decline" ||
           elicitResult.action === "cancel";
 
-        // Exactly one of the three options must be picked. If multiple are
-        // checked, or none are checked (form Accept with no boxes), we treat
-        // it as a Decline to avoid silently choosing for the user.
-        const ticks = [accept, declineField, acceptWithRevisions].filter(Boolean).length;
-        const explicitDecline = formDeclined || declineField;
-        const ambiguous = !explicitDecline && elicitResult.action === "accept" && ticks !== 1;
-
-        if (explicitDecline || ambiguous) {
+        // Outcome precedence (any one of these short-circuits the rest):
+        //   1. form-level Decline / cancel  → declined
+        //   2. revisions non-empty          → revise (notes back to agent)
+        //   3. decision = "reject"          → declined
+        //   4. decision = "submit"          → submit
+        //   5. nothing chosen               → declined (no_choice_made)
+        if (formDeclined || (!revisions && decision !== "submit")) {
           const reasonCode = formDeclined
             ? elicitResult.action === "cancel"
               ? "user_cancelled"
               : "user_declined_form"
-            : declineField
-              ? "user_declined_in_form"
-              : ticks === 0
-                ? "no_choice_made"
-                : "multiple_choices_checked";
+            : decision === "reject"
+              ? "user_rejected_in_form"
+              : "no_choice_made";
           return directive(
             [
               `[FEEDBACK NOT SUBMITTED - USER DECLINED]`,
-              `Reason: ${reasonCode} (form action="${elicitResult.action}", accept=${accept}, decline=${declineField}, acceptWithRevisions=${acceptWithRevisions})`,
+              `Reason: ${reasonCode} (form action="${elicitResult.action}", decision="${decisionRaw ?? ""}")`,
               ``,
-              ambiguous
-                ? `The form was submitted without a single clear choice. Treating as decline; do not retry.`
+              reasonCode === "no_choice_made"
+                ? `The form was submitted without picking a Decision and with no revisions. Treating as decline; do not retry.`
                 : `The user reviewed the prompt and declined. Do not retry.`,
               `Resume the user's task.`,
             ].join("\n"),
@@ -466,9 +459,7 @@ export const feedbackTool: ToolDef = categoryTool(
               submitted: false,
               code: reasonCode,
               action: elicitResult.action,
-              accept,
-              decline: declineField,
-              acceptWithRevisions,
+              decision: decisionRaw,
             },
             {
               kind: "feedback.declined",
@@ -478,7 +469,7 @@ export const feedbackTool: ToolDef = categoryTool(
           );
         }
 
-        if (acceptWithRevisions) {
+        if (revisions) {
           // The user accepted the principle but wants the body rewritten
           // before anything posts. Hand the notes back to the agent; agent
           // revises the params and calls feedback(submit) again to surface

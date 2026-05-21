@@ -78,17 +78,16 @@ describe("feedback(submit) elicitation gate", () => {
     expect(params.message).toContain(realSummary);
     expect(params.message).toContain(realPy);
     expect(params.message).toContain(realTitle);
-    expect(params.requestedSchema.properties.accept).toBeDefined();
-    expect(params.requestedSchema.properties.decline).toBeDefined();
-    expect(params.requestedSchema.properties.acceptWithRevisions).toBeDefined();
+    expect(params.requestedSchema.properties.decision).toBeDefined();
+    expect(params.requestedSchema.properties.decision.enum).toEqual(["submit", "reject"]);
     expect(params.requestedSchema.properties.revisions).toBeDefined();
     expect(mockSubmitFeedback).not.toHaveBeenCalled();
   });
 
-  it("submits ONLY when the user checks accept and clicks Accept", async () => {
+  it("submits when decision=\"submit\" and revisions empty", async () => {
     const elicit = vi.fn<ElicitFn>().mockResolvedValue({
       action: "accept",
-      content: { accept: true },
+      content: { decision: "submit" },
     } as ElicitResult);
     const ctx = makeCtx(elicit);
     mockSubmitFeedback.mockResolvedValue({
@@ -211,7 +210,7 @@ describe("feedback(submit) elicitation gate", () => {
     let promptShown = "";
     const elicit = vi.fn<ElicitFn>().mockImplementation(async (p) => {
       promptShown = p.message;
-      return { action: "accept", content: { accept: true } } as ElicitResult;
+      return { action: "accept", content: { decision: "submit" } } as ElicitResult;
     });
     const ctx = makeCtx(elicit);
 
@@ -242,7 +241,7 @@ describe("feedback(submit) elicitation gate", () => {
     let promptShown = "";
     const elicit = vi.fn<ElicitFn>().mockImplementation(async (p) => {
       promptShown = p.message;
-      return { action: "accept", content: { accept: true } } as ElicitResult;
+      return { action: "accept", content: { decision: "submit" } } as ElicitResult;
     });
     const ctx = makeCtx(elicit);
 
@@ -258,11 +257,11 @@ describe("feedback(submit) elicitation gate", () => {
     expect(opts).toEqual({ useBot: true });
   });
 
-  it("acceptWithRevisions=true + revisions text returns revisions_requested directive (no submit)", async () => {
+  it("non-empty revisions returns revisions_requested directive (no submit), overriding decision", async () => {
     const elicit = vi.fn<ElicitFn>().mockResolvedValue({
       action: "accept",
       content: {
-        acceptWithRevisions: true,
+        decision: "submit",  // overridden by revisions
         revisions: "Redact the project path on line 3.",
       },
     } as ElicitResult);
@@ -282,10 +281,10 @@ describe("feedback(submit) elicitation gate", () => {
     expect(mockSubmitFeedback).not.toHaveBeenCalled();
   });
 
-  it("in-form decline=true is treated the same as form-level Decline", async () => {
+  it("decision=\"reject\" is treated as decline (user_rejected_in_form)", async () => {
     const elicit = vi.fn<ElicitFn>().mockResolvedValue({
       action: "accept",
-      content: { decline: true },
+      content: { decision: "reject" },
     } as ElicitResult);
     const ctx = makeCtx(elicit);
     const r = await call(ctx, {
@@ -296,11 +295,11 @@ describe("feedback(submit) elicitation gate", () => {
     expect(isDirectiveResponse(r)).toBe(true);
     if (!isDirectiveResponse(r)) return;
     expect(r.machine?.kind).toBe("feedback.declined");
-    expect((r.result as { code?: string }).code).toBe("user_declined_in_form");
+    expect((r.result as { code?: string }).code).toBe("user_rejected_in_form");
     expect(mockSubmitFeedback).not.toHaveBeenCalled();
   });
 
-  it("Accept with NO boxes checked is treated as decline (no_choice_made)", async () => {
+  it("Accept with NO decision and empty revisions is treated as decline (no_choice_made)", async () => {
     const elicit = vi.fn<ElicitFn>().mockResolvedValue({
       action: "accept",
     } as ElicitResult);
@@ -317,31 +316,13 @@ describe("feedback(submit) elicitation gate", () => {
     expect(mockSubmitFeedback).not.toHaveBeenCalled();
   });
 
-  it("Accept with MULTIPLE boxes checked is treated as decline (multiple_choices_checked)", async () => {
-    const elicit = vi.fn<ElicitFn>().mockResolvedValue({
-      action: "accept",
-      content: { accept: true, acceptWithRevisions: true },
-    } as ElicitResult);
-    const ctx = makeCtx(elicit);
-    const r = await call(ctx, {
-      title: realTitle,
-      summary: realSummary,
-      pythonWorkaround: realPy,
-    });
-    expect(isDirectiveResponse(r)).toBe(true);
-    if (!isDirectiveResponse(r)) return;
-    expect(r.machine?.kind).toBe("feedback.declined");
-    expect((r.result as { code?: string }).code).toBe("multiple_choices_checked");
-    expect(mockSubmitFeedback).not.toHaveBeenCalled();
-  });
-
   it("privacy redactions land in both the elicitation prompt and the GitHub POST", async () => {
     const projectName = "Vale";
     const projectDir = "C:/Users/david/Projects/UE/Vale";
     let promptShown = "";
     const elicit = vi.fn<ElicitFn>().mockImplementation(async (p) => {
       promptShown = p.message;
-      return { action: "accept", content: { accept: true } } as ElicitResult;
+      return { action: "accept", content: { decision: "submit" } } as ElicitResult;
     });
     mockSubmitFeedback.mockResolvedValue({
       kind: "submitted",
@@ -397,7 +378,7 @@ describe("feedback(submit) elicitation gate", () => {
       .fn<ElicitFn>()
       .mockImplementation(async (p) => {
         promptBody = p.message;
-        return { action: "accept", content: { accept: true } } as ElicitResult;
+        return { action: "accept", content: { decision: "submit" } } as ElicitResult;
       });
     const ctx = makeCtx(elicit);
     mockSubmitFeedback.mockResolvedValue({
