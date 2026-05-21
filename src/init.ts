@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import yaml from "js-yaml";
+import { dumpYaml } from "./yaml-dump.js";
 import { ProjectContext } from "./project.js";
 import { deploy } from "./deployer.js";
 import { installSkills, uninstallSkills } from "./skills.js";
@@ -182,7 +183,7 @@ function writeProjectConfig(projectDir: string, disabled: string[]): void {
   if (!("tasks" in existing)) existing.tasks = {};
   if (!("flows" in existing)) existing.flows = {};
 
-  fs.writeFileSync(configPath, yaml.dump(existing, { indent: 2 }), "utf-8");
+  fs.writeFileSync(configPath, dumpYaml(existing), "utf-8");
 }
 
 

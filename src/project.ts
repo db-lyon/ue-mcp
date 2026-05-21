@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
+import { dumpYaml } from "./yaml-dump.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { info, warn } from "./log.js";
 import { UProjectSchema, UeMcpConfigSchema } from "./schemas.js";
@@ -299,7 +300,7 @@ function migrateLegacyJsonConfig(projectDir: string): void {
     }
     const existingBlock = (existing["ue-mcp"] as Record<string, unknown>) ?? {};
     existing["ue-mcp"] = { version: 1, ...existingBlock, ...tracked };
-    fs.writeFileSync(ymlPath, yaml.dump(existing, { indent: 2 }), "utf-8");
+    fs.writeFileSync(ymlPath, dumpYaml(existing), "utf-8");
   }
 
   // installedHooks → ~/.ue-mcp/state.json under this project's key.
