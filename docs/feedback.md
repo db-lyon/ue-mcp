@@ -16,7 +16,7 @@ flowchart LR
 
 1. Agent calls `feedback(action="submit")` with `title`, `summary`, and either `pythonWorkaround` or `idealTool`.
 2. Server validates the submission (rejects placeholder titles, meta-apology phrases, too-short summaries, etc.).
-3. Server assembles the body, applies a credential scrub pass and a privacy redaction pass (see below).
+3. Server assembles the body, applies a credential scrub pass and a privacy redaction pass ([jump to section](#what-gets-scrubbed)).
 4. Server requests an **MCP elicitation** — your client surfaces an approval prompt with the full body, an optional revisions text field, and an Accept / Decline action.
 5. Based on your choice the server submits the POST, returns a revision directive to the agent, or discards.
 
