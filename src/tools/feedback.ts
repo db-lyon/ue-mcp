@@ -380,36 +380,26 @@ export const feedbackTool: ToolDef = categoryTool(
             //
             // Form-level Decline/cancel always declines, regardless of
             // field values.
-            // Uses the modern TitledSingleSelectEnumSchema shape (oneOf with
-            // const/title) plus an explicit default. Both nudge clients
-            // toward showing the field with a value rather than a collapsed
-            // "Pick one" placeholder. MCP has no formal expand/collapse hint
-            // — the actual layout is the client's call.
+            // The form-level Accept / Decline buttons are Claude Code's
+            // built-in form actions — they carry the submit/discard
+            // decision. We only need ONE field in the schema, for the
+            // optional revisions text. The three outcomes:
             //
-            // Conservative default of "reject" so a user who blasts through
-            // without reading does not accidentally post.
+            //   form Decline / cancel    → discard
+            //   form Accept, empty text  → submit the body as shown
+            //   form Accept, text filled → return notes to the agent;
+            //                              nothing posts until re-approval
             requestedSchema: {
               type: "object",
               properties: {
-                decision: {
-                  type: "string",
-                  title: "Decision",
-                  description:
-                    "Submit posts the body. Reject discards. Or fill Revisions below to request a rewrite instead.",
-                  oneOf: [
-                    { const: "submit", title: "Submit (post the body as shown)" },
-                    { const: "reject", title: "Reject (discard, do not post)" },
-                  ],
-                  default: "reject",
-                },
                 revisions: {
                   type: "string",
                   title: "Submit with revisions (optional)",
                   description:
-                    "Fill in to ask the agent to rewrite the body per these notes. If non-empty, this overrides the Decision field — nothing posts until you re-approve the revised body.",
+                    "Leave EMPTY and click Accept to submit the body as shown. Fill in to ask the agent to rewrite the body per these notes — nothing posts until you re-approve the revised body. Click Decline to discard.",
                 },
               },
-            } as unknown as Parameters<typeof ctx.elicit>[0]["requestedSchema"],
+            },
           });
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -429,50 +419,29 @@ export const feedbackTool: ToolDef = categoryTool(
           );
         }
 
-        const decisionRaw = elicitResult.content?.decision;
-        const decision =
-          decisionRaw === "submit" || decisionRaw === "reject"
-            ? decisionRaw
-            : undefined;
         const revisions =
           typeof elicitResult.content?.revisions === "string"
             ? elicitResult.content.revisions.trim()
             : "";
 
-        const formDeclined =
-          elicitResult.action === "decline" ||
-          elicitResult.action === "cancel";
-
-        // Outcome precedence (any one of these short-circuits the rest):
-        //   1. form-level Decline / cancel  → declined
-        //   2. revisions non-empty          → revise (notes back to agent)
-        //   3. decision = "reject"          → declined
-        //   4. decision = "submit"          → submit
-        //   5. nothing chosen               → declined (no_choice_made)
-        if (formDeclined || (!revisions && decision !== "submit")) {
-          const reasonCode = formDeclined
-            ? elicitResult.action === "cancel"
-              ? "user_cancelled"
-              : "user_declined_form"
-            : decision === "reject"
-              ? "user_rejected_in_form"
-              : "no_choice_made";
+        // form-level Accept = submit. form-level Decline/cancel = discard.
+        // Revisions text presence routes to the rewrite path on Accept.
+        if (elicitResult.action !== "accept") {
+          const reasonCode =
+            elicitResult.action === "decline"
+              ? "user_declined_form"
+              : elicitResult.action === "cancel"
+                ? "user_cancelled"
+                : "user_did_not_approve";
           return directive(
             [
               `[FEEDBACK NOT SUBMITTED - USER DECLINED]`,
-              `Reason: ${reasonCode} (form action="${elicitResult.action}", decision="${decisionRaw ?? ""}")`,
+              `Reason: ${reasonCode} (action="${elicitResult.action}")`,
               ``,
-              reasonCode === "no_choice_made"
-                ? `The form was submitted without picking a Decision and with no revisions. Treating as decline; do not retry.`
-                : `The user reviewed the prompt and declined. Do not retry.`,
+              `The user reviewed the prompt and clicked Decline. Do not retry.`,
               `Resume the user's task.`,
             ].join("\n"),
-            {
-              submitted: false,
-              code: reasonCode,
-              action: elicitResult.action,
-              decision: decisionRaw,
-            },
+            { submitted: false, code: reasonCode, action: elicitResult.action },
             {
               kind: "feedback.declined",
               requiredActions: ["do_not_retry_feedback_submit", "resume_user_task"],
