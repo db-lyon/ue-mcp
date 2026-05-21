@@ -380,15 +380,27 @@ export const feedbackTool: ToolDef = categoryTool(
             //
             // Form-level Decline/cancel always declines, regardless of
             // field values.
+            // Uses the modern TitledSingleSelectEnumSchema shape (oneOf with
+            // const/title) plus an explicit default. Both nudge clients
+            // toward showing the field with a value rather than a collapsed
+            // "Pick one" placeholder. MCP has no formal expand/collapse hint
+            // — the actual layout is the client's call.
+            //
+            // Conservative default of "reject" so a user who blasts through
+            // without reading does not accidentally post.
             requestedSchema: {
               type: "object",
               properties: {
                 decision: {
                   type: "string",
-                  enum: ["submit", "reject"],
                   title: "Decision",
                   description:
-                    "Pick Submit to post the body as shown, or Reject to discard. Leave empty and fill Revisions below to request a rewrite instead.",
+                    "Submit posts the body. Reject discards. Or fill Revisions below to request a rewrite instead.",
+                  oneOf: [
+                    { const: "submit", title: "Submit (post the body as shown)" },
+                    { const: "reject", title: "Reject (discard, do not post)" },
+                  ],
+                  default: "reject",
                 },
                 revisions: {
                   type: "string",
@@ -397,7 +409,7 @@ export const feedbackTool: ToolDef = categoryTool(
                     "Fill in to ask the agent to rewrite the body per these notes. If non-empty, this overrides the Decision field — nothing posts until you re-approve the revised body.",
                 },
               },
-            },
+            } as unknown as Parameters<typeof ctx.elicit>[0]["requestedSchema"],
           });
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);

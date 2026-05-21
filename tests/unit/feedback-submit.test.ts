@@ -79,7 +79,15 @@ describe("feedback(submit) elicitation gate", () => {
     expect(params.message).toContain(realPy);
     expect(params.message).toContain(realTitle);
     expect(params.requestedSchema.properties.decision).toBeDefined();
-    expect(params.requestedSchema.properties.decision.enum).toEqual(["submit", "reject"]);
+    // Modern TitledSingleSelectEnumSchema shape: oneOf with const/title
+    // plus an explicit default for clients that show field-with-value
+    // inline instead of a collapsed "Pick one" placeholder.
+    const dec = params.requestedSchema.properties.decision as {
+      oneOf?: Array<{ const: string }>;
+      default?: string;
+    };
+    expect(dec.oneOf?.map((o) => o.const)).toEqual(["submit", "reject"]);
+    expect(dec.default).toBe("reject");
     expect(params.requestedSchema.properties.revisions).toBeDefined();
     expect(mockSubmitFeedback).not.toHaveBeenCalled();
   });
