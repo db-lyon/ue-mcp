@@ -163,13 +163,13 @@ The agent makes the call; you see the approval prompt; you click Accept (with or
 
 `npx ue-mcp init` offers (opt-in, default off) to install a Claude Code PostToolUse hook that fires after every `execute_python` call. The hook injects a system message asking the agent to surface the workaround to you and offer `feedback(submit)`. Without the hook, the agent will only file feedback if you ask for it directly.
 
-The hook lives in `<project>/.claude/settings.json`. Its path is also recorded in `<project>/ue-mcp.local.yml` under `ue-mcp.installedHooks[]` (the local file is gitignored — those absolute paths are user-machine-specific) so re-running init can find and remove it cleanly. Remove all installed hooks manually with:
+The hook lives in `<project>/.claude/settings.json`. Its path is also recorded in `~/.ue-mcp/state.json` under this project's entry so re-running init can find and remove it cleanly. (User-machine state lives outside the project tree because the paths are absolute and machine-specific.) Remove all installed hooks manually with:
 
 ```bash
 npx ue-mcp uninstall-hooks
 ```
 
-The hook handler self-gates: if `feedback` is in the merged `ue-mcp.disable[]` (across `ue-mcp.yml` + `ue-mcp.local.yml`), or no ue-mcp YAML is reachable from the cwd, the hook silently no-ops even if the matcher is still in `settings.json`.
+The hook handler self-gates: if `feedback` is in `ue-mcp.yml`'s `ue-mcp.disable[]`, or no `ue-mcp.yml` is reachable from the cwd, the hook silently no-ops even if the matcher is still in `settings.json`.
 
 ## Security model
 

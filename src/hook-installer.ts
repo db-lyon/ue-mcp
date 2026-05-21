@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import yaml from "js-yaml";
 import { warn as logWarn } from "./log.js";
+import { getInstalledHooks, setInstalledHooks } from "./user-state.js";
 
 /**
  * Symmetric install/uninstall for the Claude Code PostToolUse hook that
@@ -9,10 +9,12 @@ import { warn as logWarn } from "./log.js";
  * workaround.
  *
  * Two invariants:
- *   1. Every install records the settings path in ue-mcp.local.yml's
- *      `ue-mcp.installedHooks[]`, so uninstall can reach every site even
- *      after the user moves their MCP client config. The local file is
- *      gitignored — these paths are user-machine-specific.
+ *   1. Every install records the settings path in `~/.ue-mcp/state.json`
+ *      keyed by absolute project root, so uninstall can reach every site
+ *      even after the user moves their MCP client config. Lives in the
+ *      user-state file (not the project tree) because those absolute
+ *      paths are user-machine-specific and have no business in tracked
+ *      config.
  *   2. Uninstall is idempotent — calling it against a settings file that
  *      doesn't have our matcher is a no-op, not an error.
  */
@@ -55,71 +57,6 @@ function writeSettings(settingsPath: string, settings: ClaudeSettings): void {
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 }
 
-/**
- * Read/write the `ue-mcp:` block of ue-mcp.local.yml. The local file is
- * gitignored and holds user-machine-specific state — installed hook paths
- * are absolute paths in the user's filesystem and have no business in
- * tracked config.
- */
-
-interface LocalYaml {
-  "ue-mcp"?: {
-    installedHooks?: string[];
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
-
-function localPath(projectDir: string): string {
-  return path.join(projectDir, "ue-mcp.local.yml");
-}
-
-function readLocal(projectDir: string): LocalYaml {
-  const file = localPath(projectDir);
-  if (!fs.existsSync(file)) return {};
-  try {
-    return (yaml.load(fs.readFileSync(file, "utf-8")) as LocalYaml | null) ?? {};
-  } catch (e) {
-    logWarn(
-      "hook-installer",
-      `ue-mcp.local.yml at ${file} did not parse — installedHooks registry will be rewritten`,
-      e,
-    );
-    return {};
-  }
-}
-
-function writeLocal(projectDir: string, doc: LocalYaml): void {
-  const file = localPath(projectDir);
-  // Empty doc → remove the file rather than leaving a stub behind.
-  const block = doc["ue-mcp"];
-  if (
-    !block ||
-    Object.keys(block).filter((k) => block[k] !== undefined).length === 0
-  ) {
-    if (fs.existsSync(file)) fs.unlinkSync(file);
-    return;
-  }
-  fs.writeFileSync(file, yaml.dump(doc, { indent: 2 }), "utf-8");
-}
-
-function getInstalledHooks(projectDir: string): string[] {
-  const local = readLocal(projectDir);
-  const hooks = local["ue-mcp"]?.installedHooks;
-  return Array.isArray(hooks) ? hooks : [];
-}
-
-function setInstalledHooks(projectDir: string, hooks: string[]): void {
-  const local = readLocal(projectDir);
-  const block = (local["ue-mcp"] ??= {});
-  if (hooks.length > 0) {
-    block.installedHooks = hooks;
-  } else {
-    delete block.installedHooks;
-  }
-  writeLocal(projectDir, local);
-}
-
 function registerInstalledHook(projectDir: string, settingsPath: string): void {
   const abs = path.resolve(settingsPath);
   const installed = new Set(getInstalledHooks(projectDir));
@@ -142,8 +79,9 @@ function unregisterInstalledHook(
 
 /**
  * Install the ue-mcp PostToolUse hook into a Claude Code settings.json. If
- * `projectDir` is supplied, the settings path is also recorded in the
- * project's ue-mcp.local.yml installedHooks registry.
+ * `projectDir` is supplied, the settings path is also recorded in
+ * `~/.ue-mcp/state.json` under this project's entry so uninstall can find
+ * every site later.
  */
 export function installClaudeHooks(
   settingsPath: string,
@@ -202,9 +140,10 @@ export function uninstallClaudeHooks(
 }
 
 /**
- * Uninstall the hook from every path recorded in ue-mcp.local.yml's
- * `ue-mcp.installedHooks[]`. Used by `npx ue-mcp uninstall-hooks` and by
- * init when the user disables feedback or opts out of the prompt checkbox.
+ * Uninstall the hook from every path recorded in `~/.ue-mcp/state.json`'s
+ * `projects[<root>].installedHooks[]`. Used by `npx ue-mcp uninstall-hooks`
+ * and by init when the user disables feedback or opts out of the prompt
+ * checkbox.
  */
 export function uninstallAllRegisteredHooks(projectDir: string): {
   removed: string[];

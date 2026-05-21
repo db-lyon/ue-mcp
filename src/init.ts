@@ -11,6 +11,7 @@ import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/a
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
 import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
+import { getInstalledHooks } from "./user-state.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */
@@ -184,43 +185,6 @@ function writeProjectConfig(projectDir: string, disabled: string[]): void {
   fs.writeFileSync(configPath, yaml.dump(existing, { indent: 2 }), "utf-8");
 }
 
-/**
- * Make sure ue-mcp.local.yml is gitignored on a best-effort basis. Only
- * touches .gitignore if the project is inside a git repo (we check for
- * a .git directory walking up). Idempotent: if the entry is already
- * present, no-op.
- */
-function ensureLocalYmlGitignored(projectDir: string): void {
-  // Find the enclosing git repo by walking up; ignore if none found.
-  let gitRoot: string | null = null;
-  let dir = projectDir;
-  for (let i = 0; i < 32; i++) {
-    if (fs.existsSync(path.join(dir, ".git"))) { gitRoot = dir; break; }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  if (!gitRoot) return;
-
-  // Choose the closest .gitignore: prefer one at the project root, fall back
-  // to the git root.
-  const candidates = [path.join(projectDir, ".gitignore"), path.join(gitRoot, ".gitignore")];
-  const target = candidates.find((c) => fs.existsSync(c)) ?? candidates[0];
-
-  let content = "";
-  if (fs.existsSync(target)) content = fs.readFileSync(target, "utf-8");
-
-  // Match either bare "ue-mcp.local.yml" or with a leading "/" path anchor.
-  const present = /^\s*\/?ue-mcp\.local\.ya?ml\s*$/m.test(content);
-  if (present) return;
-
-  const needsLeadingNewline = content.length > 0 && !content.endsWith("\n");
-  fs.writeFileSync(
-    target,
-    `${content}${needsLeadingNewline ? "\n" : ""}ue-mcp.local.yml\n`,
-    "utf-8",
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /*  Plugin enablement                                                  */
@@ -490,7 +454,7 @@ async function init() {
   // who blasts through with Enter gets nothing added — no tool registered,
   // no hook installed, no skill files copied. Re-init preserves prior
   // choices by reading state from ue-mcp.yml (categories) +
-  // ue-mcp.local.yml (installedHooks) and the filesystem (skills directory).
+  // ~/.ue-mcp/state.json (installedHooks) and the filesystem (skills directory).
   const configuredClaudeCode = detected.some(
     (c, i) => c.name.startsWith("Claude Code") && clientStates[i],
   );
@@ -524,8 +488,10 @@ async function init() {
       ".claude",
       "settings.json",
     );
+    // Hook install registry lives in ~/.ue-mcp/state.json keyed by
+    // project root, not in project.config.
     const installedHookSites = new Set(
-      (project.config.installedHooks ?? []).map((p) => path.resolve(p)),
+      getInstalledHooks(project.projectDir!).map((p) => path.resolve(p)),
     );
     const hookCurrentlyInstalled = installedHookSites.has(
       path.resolve(claudeSettingsPathForSeed),
@@ -625,11 +591,6 @@ async function init() {
   writeProjectConfig(project.projectDir!, disabled);
   ok("ue-mcp.yml written");
   wrote.push({ what: "tool surface + content roots", where: ueMcpYmlPath });
-
-  // Best-effort: add ue-mcp.local.yml to .gitignore if this project lives
-  // in a git repo. The local file holds user-machine-specific state
-  // (installed hook paths) and shouldn't be tracked.
-  ensureLocalYmlGitignored(project.projectDir!);
 
   // 11. Done — recap what landed where so the user can find / undo anything.
   console.log("");

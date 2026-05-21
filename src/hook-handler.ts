@@ -28,15 +28,12 @@ function readStdin(): Promise<string> {
 }
 
 /**
- * Walk up from cwd looking for a ue-mcp.yml. Returns true if the merged
- * `ue-mcp.disable[]` block (from ue-mcp.yml + ue-mcp.local.yml) contains
- * "feedback" (hook should silently no-op) or if cwd is not inside a ue-mcp
- * project at all (don't nudge an unrelated repo). Defense in depth against
- * stale install — even if `npx ue-mcp uninstall-hooks` was never run, the
- * hook self-disables once the user opts out via config.
- *
- * Reads YAML lazily via require so the hook handler doesn't pull in
- * js-yaml's full module graph until it actually needs to.
+ * Walk up from cwd looking for a ue-mcp.yml. Returns true if the
+ * `ue-mcp.disable[]` block contains "feedback" (hook should silently
+ * no-op) or if cwd is not inside a ue-mcp project at all (don't nudge an
+ * unrelated repo). Defense in depth against stale install — even if
+ * `npx ue-mcp uninstall-hooks` was never run, the hook self-disables once
+ * the user opts out via config.
  */
 async function feedbackDisabledForCwd(): Promise<boolean> {
   try {
@@ -46,28 +43,18 @@ async function feedbackDisabledForCwd(): Promise<boolean> {
     let dir = process.cwd();
     for (let i = 0; i < 32; i++) {
       const ymlPath = path.join(dir, "ue-mcp.yml");
-      const localPath = path.join(dir, "ue-mcp.local.yml");
-      const ymlExists = fs.existsSync(ymlPath);
-      const localExists = fs.existsSync(localPath);
-      if (ymlExists || localExists) {
-        const disable = new Set<string>();
-        for (const file of [ymlPath, localPath]) {
-          if (!fs.existsSync(file)) continue;
-          try {
-            const doc = yaml.load(fs.readFileSync(file, "utf-8")) as
-              | { "ue-mcp"?: { disable?: unknown } }
-              | null;
-            const block = doc && typeof doc === "object" ? doc["ue-mcp"] : undefined;
-            const list = block && Array.isArray(block.disable) ? block.disable : [];
-            for (const item of list) {
-              if (typeof item === "string") disable.add(item);
-            }
-          } catch {
-            // Malformed config: don't nudge, safer to no-op.
-            return true;
-          }
+      if (fs.existsSync(ymlPath)) {
+        try {
+          const doc = yaml.load(fs.readFileSync(ymlPath, "utf-8")) as
+            | { "ue-mcp"?: { disable?: unknown } }
+            | null;
+          const block = doc && typeof doc === "object" ? doc["ue-mcp"] : undefined;
+          const list = block && Array.isArray(block.disable) ? block.disable : [];
+          return list.includes("feedback");
+        } catch {
+          // Malformed config: don't nudge, safer to no-op.
+          return true;
         }
-        return disable.has("feedback");
       }
       const parent = path.dirname(dir);
       if (parent === dir) break;

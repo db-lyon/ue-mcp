@@ -30,7 +30,7 @@ The wizard then:
 6. Detects installed MCP clients (Claude Code project + global, Claude Desktop, Cursor) and writes the config for each you confirm. Global/Desktop configs default unchecked since opting them in affects every project on the machine.
 7. Asks about **agent behavior** (all default off on fresh installs — blasting through with Enter adds no surprises): enable the `feedback(submit)` tool, install the Claude-Code-only PostToolUse hook that nudges the agent to offer feedback after `execute_python`, install bundled Claude Code workflow skills.
 8. If you opted into the feedback prompt hook, optionally runs the **GitHub OAuth device flow** so `feedback(submit)` can author issues as your real GitHub user (default `author="user"`). The token is cached at `~/.ue-mcp/auth.json` (mode 600) and reused. Skip if you don't want it now — you can run `npx ue-mcp auth` later, or call `feedback(submit)` with `author="bot"` to post anonymously instead.
-9. Writes the final `ue-mcp.yml` (and `ue-mcp.local.yml` if any user-local state needs tracking) and prints a recap of every file or directory init touched. If your project is inside a git repo, init also adds `ue-mcp.local.yml` to `.gitignore`.
+9. Writes the final `ue-mcp.yml` and prints a recap of every file or directory init touched. Per-machine state (e.g. the list of Claude Code settings files where the feedback hook was installed) is kept under `~/.ue-mcp/`, not in the project tree.
 
 ## 2. Open the Editor
 

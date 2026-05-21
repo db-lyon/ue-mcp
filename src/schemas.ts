@@ -39,10 +39,6 @@ export const UeMcpConfigSchema = z
         host: z.string().optional(),
       })
       .optional(),
-    /** Absolute paths to Claude Code settings.json files where the ue-mcp
-     *  PostToolUse hook was installed. Used to symmetrically uninstall when
-     *  feedback is disabled or the user opts out of agent prompts. */
-    installedHooks: z.array(z.string()).optional(),
     /** Feedback flow behavior. Default "interactive" runs the MCP
      *  elicitation approval prompt. "auto-approve" posts immediately
      *  without prompting (still scrubbed). "defer" writes the scrubbed

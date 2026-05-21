@@ -2,9 +2,10 @@
 /**
  * `npx ue-mcp uninstall-hooks` — manual escape hatch.
  *
- * Reads `installedHooks[]` from ue-mcp.local.yml in cwd (or a path passed
- * as argv[2]), removes the ue-mcp PostToolUse matcher from each, and clears
- * the registry.
+ * Walks up from cwd (or a path passed as argv[2]) to find the project
+ * root via `ue-mcp.yml`, reads `installedHooks` for that project from
+ * `~/.ue-mcp/state.json`, removes the ue-mcp PostToolUse matcher from
+ * each settings file, and clears the registry entry.
  */
 
 import * as fs from "node:fs";
@@ -23,16 +24,10 @@ function resolveProjectDir(): string | null {
     }
     return path.resolve(arg);
   }
-  // Walk up from cwd looking for a ue-mcp project (either YAML file is a
-  // signal that we're in a configured project root).
+  // Walk up from cwd looking for a ue-mcp.yml (the project root signal).
   let dir = process.cwd();
   for (let i = 0; i < 32; i++) {
-    if (
-      fs.existsSync(path.join(dir, "ue-mcp.yml")) ||
-      fs.existsSync(path.join(dir, "ue-mcp.local.yml"))
-    ) {
-      return dir;
-    }
+    if (fs.existsSync(path.join(dir, "ue-mcp.yml"))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -55,7 +50,7 @@ function main(): void {
   const result = uninstallAllRegisteredHooks(projectDir);
 
   if (result.removed.length === 0 && result.skipped.length === 0) {
-    info("No installed hooks found in ue-mcp.local.yml. Nothing to remove.");
+    info("No installed hooks recorded in ~/.ue-mcp/state.json. Nothing to remove.");
   }
   for (const p of result.removed) {
     ok(`Removed hook from ${p}`);

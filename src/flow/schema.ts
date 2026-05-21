@@ -3,9 +3,11 @@ import { EngineConfigSchema } from "@db-lyon/flowkit";
 
 /**
  * The `ue-mcp:` block at the top of ue-mcp.yml. Historically just had
- * `version: 1`. As of 1.0.29, also hosts the project-level config that
- * used to live in the separate `.ue-mcp.json` file (killed for one-config-
- * format consistency).
+ * `version: 1`. As of 1.0.30 also hosts the project-level config that
+ * used to live in `.ue-mcp.json` (killed for one-config-format
+ * consistency). Everything in this block is tracked — user-machine-only
+ * state (e.g. installedHooks for the feedback prompt hook) lives in
+ * `~/.ue-mcp/state.json`, not here.
  *
  *   ue-mcp:
  *     version: 1
@@ -13,13 +15,6 @@ import { EngineConfigSchema } from "@db-lyon/flowkit";
  *     disable: ["gas"]
  *     http: { enabled: false, port: 7723 }
  *     feedback: { mode: "interactive" }
- *     installedHooks: [...]            # user-local; lives in ue-mcp.local.yml
- *
- * Tracked vs untracked split is by convention:
- *   ue-mcp.yml         - tracked. version, contentRoots, disable, http, feedback.
- *   ue-mcp.local.yml   - gitignored. installedHooks and anything else user-local.
- * flowkit's loader deep-merges local on top of yml so both surface as one
- * resolved config to the server.
  */
 export const FlowVersionSchema = z.object({
   version: z.literal(1),
@@ -37,7 +32,6 @@ export const FlowVersionSchema = z.object({
       mode: z.enum(["interactive", "auto-approve", "defer"]).optional(),
     })
     .optional(),
-  installedHooks: z.array(z.string()).optional(),
 }).passthrough();
 
 export const FlowProjectSchema = z.object({
