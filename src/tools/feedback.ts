@@ -366,26 +366,38 @@ export const feedbackTool: ToolDef = categoryTool(
         try {
           elicitResult = await ctx.elicit({
             message: buildApprovalMessage(payload, authorPromptLine),
-            // Single text field, no enum dropdown. The three outcomes are
-            // derived from (form action) x (revisions empty?):
+            // Three boolean fields render as one row per field in MCP clients,
+            // avoiding the collapsed-enum-dropdown problem. Exactly one of
+            // accept / decline / acceptWithRevisions must be checked; the
+            // schema cannot enforce that, so the handler validates server-side
+            // and treats any 0-or-many case as a decline (safer default).
             //
-            //   Decline button     → declined (no post)
-            //   Accept + empty     → submit the body as shown
-            //   Accept + text      → return text to the agent for a body
-            //                        revision; nothing posts until the user
-            //                        re-approves the revised body
-            //
-            // Using an enum here makes Claude Code render the field as a
-            // collapsed dropdown, which buries the choices behind a click.
-            // A plain string field renders inline.
+            // Form-level Accept/Decline buttons still exist (MCP spec). The
+            // form Decline button is the same outcome as ticking the
+            // `decline` field — both surfaces are honored.
             requestedSchema: {
               type: "object",
               properties: {
+                accept: {
+                  type: "boolean",
+                  title: "Accept (submit the body as shown)",
+                  default: false,
+                },
+                decline: {
+                  type: "boolean",
+                  title: "Decline (discard, do not post)",
+                  default: false,
+                },
+                acceptWithRevisions: {
+                  type: "boolean",
+                  title:
+                    "Accept with revisions (fill notes below; agent rewrites and re-prompts)",
+                  default: false,
+                },
                 revisions: {
                   type: "string",
-                  title: "Revisions before submit (optional)",
-                  description:
-                    "Leave EMPTY and click Accept to submit the body above as shown. Fill in to ask the agent to change the body first — nothing posts until you re-approve the revised version. Click Decline to discard the submission entirely.",
+                  title:
+                    "Revision notes (used when \"Accept with revisions\" is checked)",
                 },
               },
             },
@@ -408,31 +420,56 @@ export const feedbackTool: ToolDef = categoryTool(
           );
         }
 
+        const accept = elicitResult.content?.accept === true;
+        const declineField = elicitResult.content?.decline === true;
+        const acceptWithRevisions =
+          elicitResult.content?.acceptWithRevisions === true;
         const revisions =
           typeof elicitResult.content?.revisions === "string"
             ? elicitResult.content.revisions.trim()
             : "";
 
-        // Three outcomes from (action, revisions):
-        //   action !== "accept"   → declined (user hit the form's Decline)
-        //   accept + revisions    → bounce revisions back to the agent
-        //   accept + no revisions → submit the body as shown
-        if (elicitResult.action !== "accept") {
-          const reasonCode =
-            elicitResult.action === "decline"
-              ? "user_declined_form"
-              : elicitResult.action === "cancel"
-                ? "user_cancelled"
-                : "user_did_not_approve";
+        // Form-level Decline (or cancel) is treated the same as ticking the
+        // in-form Decline checkbox — both are honored.
+        const formDeclined =
+          elicitResult.action === "decline" ||
+          elicitResult.action === "cancel";
+
+        // Exactly one of the three options must be picked. If multiple are
+        // checked, or none are checked (form Accept with no boxes), we treat
+        // it as a Decline to avoid silently choosing for the user.
+        const ticks = [accept, declineField, acceptWithRevisions].filter(Boolean).length;
+        const explicitDecline = formDeclined || declineField;
+        const ambiguous = !explicitDecline && elicitResult.action === "accept" && ticks !== 1;
+
+        if (explicitDecline || ambiguous) {
+          const reasonCode = formDeclined
+            ? elicitResult.action === "cancel"
+              ? "user_cancelled"
+              : "user_declined_form"
+            : declineField
+              ? "user_declined_in_form"
+              : ticks === 0
+                ? "no_choice_made"
+                : "multiple_choices_checked";
           return directive(
             [
               `[FEEDBACK NOT SUBMITTED - USER DECLINED]`,
-              `Reason: ${reasonCode} (action="${elicitResult.action}")`,
+              `Reason: ${reasonCode} (form action="${elicitResult.action}", accept=${accept}, decline=${declineField}, acceptWithRevisions=${acceptWithRevisions})`,
               ``,
-              `The user reviewed the prompt and clicked Decline. Do not retry.`,
+              ambiguous
+                ? `The form was submitted without a single clear choice. Treating as decline; do not retry.`
+                : `The user reviewed the prompt and declined. Do not retry.`,
               `Resume the user's task.`,
             ].join("\n"),
-            { submitted: false, code: reasonCode, action: elicitResult.action },
+            {
+              submitted: false,
+              code: reasonCode,
+              action: elicitResult.action,
+              accept,
+              decline: declineField,
+              acceptWithRevisions,
+            },
             {
               kind: "feedback.declined",
               requiredActions: ["do_not_retry_feedback_submit", "resume_user_task"],
@@ -441,7 +478,7 @@ export const feedbackTool: ToolDef = categoryTool(
           );
         }
 
-        if (revisions) {
+        if (acceptWithRevisions) {
           // The user accepted the principle but wants the body rewritten
           // before anything posts. Hand the notes back to the agent; agent
           // revises the params and calls feedback(submit) again to surface
