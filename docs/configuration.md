@@ -155,7 +155,7 @@ The C++ bridge plugin enables these UE plugins (adding them to `.uproject` if mi
 | `npx ue-mcp auth` | Run the GitHub device flow standalone so `feedback(submit)` can author issues as your real GitHub user. Same step that lives inside `init`; use this if you skipped it at init time. |
 | `npx ue-mcp uninstall-hooks` | Remove the feedback PostToolUse hook from every Claude Code settings file recorded for this project in `~/.ue-mcp/state.json`. |
 | `npx ue-mcp feedback mode [<mode>]` | Read or set your personal feedback approval mode (`interactive`, `auto-approve`, or `defer`). Stored in `~/.ue-mcp/state.json`. See [Feedback → modes](feedback.md#feedback-modes). |
-| `npx ue-mcp feedback list \| show \| approve \| discard` | Manage submissions queued while feedback mode is `defer`. See [Feedback → Reviewing deferred submissions](feedback.md#reviewing-deferred-submissions). |
+| `npx ue-mcp feedback list \| show \| approve \| discard \| review` | Manage submissions queued while feedback mode is `defer`. `review` (experimental) walks the queue interactively (approve/discard/skip per item). See [Feedback → Reviewing deferred submissions](feedback.md#reviewing-deferred-submissions). |
 | `npx ue-mcp resolve <issue>` | Fetch a feedback issue, branch, hand it to Claude Code to implement, open a PR. See [Feedback](feedback.md#resolving-feedback-issues). |
 | `npx ue-mcp plugin install <name>` | Install a ue-mcp plugin from npm and register it in `ue-mcp.yml`. See [Configuration → Plugins](#plugins). |
 | `npx ue-mcp plugin uninstall <name>` | Inverse of install. |

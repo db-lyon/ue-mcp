@@ -53,11 +53,14 @@ Precedence: `UE_MCP_FEEDBACK_MODE` env > `~/.ue-mcp/state.json` preference > def
 ### Reviewing deferred submissions
 
 ```bash
+npx ue-mcp feedback review           # walk every pending entry, one at a time
 npx ue-mcp feedback list             # show pending entries
 npx ue-mcp feedback show <id>        # full title + body + labels
 npx ue-mcp feedback approve <id>     # POST to GitHub, then remove
 npx ue-mcp feedback discard <id>     # delete without posting
 ```
+
+`review` is **experimental** in this release. It is the path of least friction once you have more than one entry queued: it prints each item in turn and asks `[a]pprove  [d]iscard  [s]kip  [q]uit`. Approved items POST to GitHub and are removed from disk; discarded items are deleted without posting; skipped items stay on disk for the next pass; quit stops the loop and leaves the rest untouched. If a POST hits an auth prompt or a network failure, the loop stops with the entry left on disk so you can resume after fixing the cause. The per-id `approve`/`discard` commands are still there for scripting and one-offs.
 
 Deferred entries are stored at `~/.ue-mcp/pending-feedback/<id>.json` (override with `UE_MCP_PENDING_DIR`). The recorded `author` choice from the original `feedback(submit)` is honored on approve.
 
