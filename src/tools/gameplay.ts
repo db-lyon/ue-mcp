@@ -166,6 +166,7 @@ export const gameplayTool: ToolDef = categoryTool(
     record_drift: z.boolean().optional().describe("pie_replay_arm: sample replay state and emit drift.json (default true when recording_id is set)"),
     auto_stop_pie: z.boolean().optional().describe("pie_replay_arm: stop PIE on sequence completion (default false)"),
     mode: z.string().optional().describe("pie_replay_arm: 'replay' (default) injects inputs and drives the sequence; 'monitor' skips step execution but keeps drift sampling running so a human can play manually against a reference recording."),
+    capture_frame_every: z.number().optional().describe("pie_replay_arm: when > 0, write a viewport screenshot every Nth sampled frame to <recording_dir>/frames/. pie_replay_stop returns ffmpeg hints for assembling the PNG sequence into a GIF or MP4."),
     drift_thresholds: z.record(z.unknown()).optional().describe("pie_replay_arm: { position_cm?, rotation_deg?, velocity_cms?, tracked_default?, tracked? } cutoffs for over-threshold frame list. tracked is a per-path map (path -> threshold); tracked_default applies to paths without an explicit entry. 0 disables tracked-value triggering."),
     a_id: z.string().optional().describe("pie_record_diff: id of recording A"),
     b_id: z.string().optional().describe("pie_record_diff: id of recording B"),

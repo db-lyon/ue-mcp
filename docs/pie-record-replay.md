@@ -149,6 +149,19 @@ Used internally by the replayer; exposed because they are useful on their own.
 
 `capture` writes a viewport screenshot via `FScreenshotRequest::RequestScreenshot`. When replaying a known `recording_id` the file lands in `<recording_dir>/captures/<name>_frame<N>.png`; inline-steps replays write to `Saved/Screenshots/MCPReplay/`. The drift entry records the full path under the `capture:<name>:<path>` marker.
 
+### Per-frame video capture
+
+Pass `capture_frame_every: N` to `pie_replay_arm` to also write a viewport screenshot every Nth sampled frame to `<recording_dir>/frames/frame_<NNNNN>.png`. `pie_replay_stop` returns `capture_dir` plus ffmpeg hints for assembling the PNG sequence into a GIF or MP4:
+
+```bash
+# GIF
+ffmpeg -framerate 30 -i <capture_dir>/frame_%05d.png -vf 'fps=30,scale=720:-1:flags=lanczos' replay.gif
+# MP4
+ffmpeg -framerate 60 -i <capture_dir>/frame_%05d.png -c:v libx264 -pix_fmt yuv420p replay.mp4
+```
+
+Override `-framerate` to match the replay's `pin_fps` when you used a non-default rate.
+
 `delay_ms` is **cumulative from sequence start**. The replayer schedules each step against the elapsed time since pawn attach (after `settle_ms`).
 
 `input_tape` values per element:
@@ -201,5 +214,4 @@ For a full example see `plans/pie-record-replay.md` in the repo (gitignored desi
 These are tracked as follow-ups, not present in the first ship:
 
 - **Take Recorder integration** (`take_record: true` on arm) - planned, not wired
-- **GIF / video export** of replay - planned, not wired
 - **Multi-client PIE** - one local player only

@@ -220,6 +220,8 @@ namespace UEMCPPIE
 		SourceActorIds.Reset();
 		ReplayActorCache.Reset();
 		ActorDriftAccum.Reset();
+		FramesCaptured = 0;
+		CaptureDir.Reset();
 		NextStepIndex = 0;
 		ExecutedSteps = 0;
 		ActiveHolds.Reset();
@@ -485,6 +487,32 @@ namespace UEMCPPIE
 				ExecutePendingSteps(ElapsedMs - Settle);
 			}
 
+			// Per-frame viewport capture (off by default). Counted off the
+			// drift sampler's frame index so frame_<NNNNN>.png aligns with
+			// recording.csv rows.
+			if (Pending.CaptureFrameEvery > 0)
+			{
+				if (CaptureDir.IsEmpty())
+				{
+					if (!CurrentDriftPath.IsEmpty())
+					{
+						CaptureDir = FPaths::GetPath(CurrentDriftPath) / TEXT("frames");
+					}
+					else
+					{
+						CaptureDir = FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("MCPReplay");
+					}
+					IFileManager::Get().MakeDirectory(*CaptureDir, true);
+				}
+				const uint64 FrameIdx = static_cast<uint64>(FramesCompared);
+				if ((FrameIdx % static_cast<uint64>(Pending.CaptureFrameEvery)) == 0)
+				{
+					const FString FullPath = CaptureDir / FString::Printf(TEXT("frame_%05llu.png"), FrameIdx);
+					FScreenshotRequest::RequestScreenshot(FullPath, /*bShowUI*/false, /*bAddFilenameSuffix*/false);
+					FramesCaptured++;
+				}
+			}
+
 			// Drift sampling: sample current pawn state + compare to source by
 			// frame index since attach.
 			if (SourceFrames.Num() > 0)
@@ -617,6 +645,8 @@ namespace UEMCPPIE
 
 		R.bSuccess = true;
 		R.ExecutedSteps = ExecutedSteps;
+		R.FramesCaptured = FramesCaptured;
+		R.CaptureDir = CaptureDir;
 
 		// Write drift.json when we had source frames to compare against.
 		if (SourceFrames.Num() > 0 && !CurrentDriftPath.IsEmpty())
@@ -675,6 +705,7 @@ namespace UEMCPPIE
 		}
 		S.MaxPositionDriftCm = MaxPosDriftCm;
 		S.MaxVelocityDriftCms = MaxVelDriftCms;
+		S.FramesCaptured = FramesCaptured;
 		return S;
 	}
 }

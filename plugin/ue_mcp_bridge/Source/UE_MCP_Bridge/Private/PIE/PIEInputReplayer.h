@@ -41,6 +41,12 @@ namespace UEMCPPIE
 		// sampling running. Lets a human play manually against a reference
 		// recording and watch divergence live via pie_replay_status.
 		bool bMonitor = false;
+		// Per-frame viewport capture. 0 = off, N>0 = grab a screenshot every
+		// Nth sampled frame. Files land in <recording_dir>/frames/, or a
+		// fallback under Saved/Screenshots/MCPReplay/ for inline replays.
+		// Document the ffmpeg incantation to assemble a GIF/MP4 from the
+		// resulting PNG sequence.
+		int32 CaptureFrameEvery = 0;
 		float ThrPosCm = 5.0f;
 		float ThrRotDeg = 2.0f;
 		float ThrVelCms = 25.0f;
@@ -60,6 +66,7 @@ namespace UEMCPPIE
 		double ElapsedSeconds = 0.0;
 		float MaxPositionDriftCm = 0.f;
 		float MaxVelocityDriftCms = 0.f;
+		int32 FramesCaptured = 0;
 	};
 
 	struct FReplayerFinishResult
@@ -69,6 +76,8 @@ namespace UEMCPPIE
 		FString DriftReportPath;
 		FDriftReport Drift;
 		int32 ExecutedSteps = 0;
+		int32 FramesCaptured = 0;
+		FString CaptureDir;
 	};
 
 	class FPIEInputReplayer
@@ -144,6 +153,8 @@ namespace UEMCPPIE
 		TArray<FString> SourceActorIds;
 		TMap<FString, TWeakObjectPtr<AActor>> ReplayActorCache;
 		TMap<FString, FActorDrift> ActorDriftAccum;
+		int32 FramesCaptured = 0;
+		FString CaptureDir;
 
 		FDelegateHandle BeginPIEHandle;
 		FDelegateHandle EndPIEHandle;
