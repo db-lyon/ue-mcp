@@ -1,8 +1,12 @@
 # Plugins
 
-ue-mcp's plugin system lets npm packages add new actions to ue-mcp's built-in categories. A plugin that contributes voxel-terrain helpers injects them into `pcg` and `landscape`, so the agent already working in those categories discovers the new actions exactly where they're relevant — there is no separate tool to open.
+ue-mcp's plugin system lets npm packages extend the server in three ways:
 
-This page covers both sides: installing and managing plugins (consumer), and writing and publishing one (author). The author section starts at [Authoring a plugin](#authoring-a-plugin) — if you're just trying to use a plugin somebody else wrote, you can stop after [Using plugins](#using-plugins).
+- **Inject** new actions into ue-mcp's built-in categories so agents discover them where they're already working.
+- **Provide** entirely new top-level categories that the plugin owns end-to-end.
+- **Ship native C++** that registers handlers directly with the editor bridge, opening up engine APIs that have no built-in coverage.
+
+Most plugins use only the first shape; the other two are available when injection is the wrong fit. This page covers both sides: installing and managing plugins (consumer), and writing and publishing one (author). The author section starts at [Authoring a plugin](#authoring-a-plugin) — if you're just trying to use a plugin somebody else wrote, you can stop after [Using plugins](#using-plugins).
 
 !!! info "Live reference"
     [`ue-mcp-plugin-voxel-plugin`](https://github.com/db-lyon/ue-mcp-plugin-voxel-plugin) ([npm](https://www.npmjs.com/package/ue-mcp-plugin-voxel-plugin)) is the canonical reference. It ships one injected `pcg` action over the [Voxel Plugin](https://voxelplugin.com) — `voxel_build_scatter_graph` — with more tracked in its `TODO.md`. The examples below mirror its real source.
@@ -65,9 +69,19 @@ At server start, ue-mcp:
 
 The injection happens before any tool is registered with the MCP client, so by the time the agent sees the `pcg` tool's action list, the plugin's actions are already there alongside the built-ins.
 
-### Why injection, not a standalone tool
+### Three shapes a plugin can take
 
-A standalone "voxel" tool would be opaque to the agent — it has no reason to open a category called `voxel` while working on terrain. If the action lives inside `pcg` as `pcg(action="voxel_build_scatter_graph")`, the agent already working in PCG discovers it exactly when relevant. Capability appears at the point of need, not behind a door the agent has to know to open.
+| Shape | Manifest blocks | When to reach for it |
+|-------|-----------------|----------------------|
+| **A. Inject only** | `inject:` | The action belongs inside an existing category. Default choice. |
+| **B. Provide a new category** | `provides:` (with or without `inject:`) | The plugin opens a whole new domain - audio middleware, build pipelines, networking layers - that doesn't fit inside any built-in category. |
+| **C. Ship native C++** | `nativeModule:` (plus `inject:` or `provides:`) | The plugin needs engine APIs ue-mcp's built-in handlers don't expose. The plugin ships a UE C++ module that registers handlers on the editor bridge. |
+
+Shape A is overwhelmingly the right answer. A standalone "voxel" tool would be opaque to an agent that has no reason to open a category called `voxel` while working on terrain; injecting into `pcg` puts the action at the point of need.
+
+Shape B is for genuinely new domains. If your plugin's actions don't fit anywhere in the built-in category list, owning a new top-level category is cleaner than forcing a misfit injection.
+
+Shape C is for capability that can't be expressed through orchestration of existing actions. The plugin ships C++ source that compiles into the user's project alongside the bridge, and registers handlers via `UEMCP::RegisterExternalHandler` from its `StartupModule`. Native handlers participate in the same dispatch path as built-in ones.
 
 ## Using plugins
 
@@ -245,6 +259,145 @@ The key under each category is the **bare** action name. The loader prepends you
 
 Param schemas under `schema:` accept these types: `string`, `number`, `boolean`, `object`, `array`. Non-required params become optional at the top level of the host category tool's schema.
 
+### Providing new categories (`provides:`)
+
+When the plugin's actions don't belong inside any built-in category, declare a `provides:` block. Each entry registers a brand-new top-level MCP category that the plugin owns. Action names are NOT prefixed inside provided categories - the category itself is the namespace.
+
+```yaml
+actionPrefix: voxel              # still required (used for any inject: entries)
+
+provides:
+  voxel_terrain:                 # → voxel_terrain(action="sample_density", ...)
+    description: "Voxel terrain authoring operations"
+    actions:
+      sample_density:
+        task: voxel_terrain.sample_density
+        description: "Sample density values along a curve through the voxel world"
+        schema:
+          start: { type: array, required: true }
+          end:   { type: array, required: true }
+          steps: { type: number }
+
+tasks:
+  voxel_terrain.sample_density:
+    class_path: tasks/SampleDensity
+```
+
+Rules:
+
+- Provided category names must match `/^[a-z][a-z0-9_]*$/`.
+- A provided name may not collide with a built-in category. The CLI fails install with the offending name; the runtime loader skips the plugin with a clear status reason.
+- Inter-plugin collisions resolve first-writer-wins. If two installed plugins both `provides: voxel_terrain`, the one earlier in your `plugins:` array claims the name; the other is skipped with a warning visible in `plugins(list)`.
+- Knowledge files keyed by a provided category name (`knowledge/voxel_terrain.md`) attach to that category's AI-facing docs the same way they do for injected categories.
+
+A plugin can mix `inject:` and `provides:` freely - whatever fits each action best.
+
+### Shipping native C++ (`nativeModule:`)
+
+When the plugin needs engine APIs ue-mcp's bridge doesn't already expose, ship a UE C++ module alongside the npm package. The module compiles into the user's project at install time and registers handlers on the bridge via `UEMCP::RegisterExternalHandler`.
+
+```yaml
+nativeModule:
+  uePluginName: VoxelPCGBridge          # name of the .uplugin that gets deployed
+  minBridgeApi: 1                       # gate against UEMCP_BRIDGE_API_VERSION
+  source: ue/Plugins/VoxelPCGBridge     # path inside your npm tarball
+  supportedEngineVersions: ["5.5", "5.6"]
+  handlers:
+    voxel.sample_density:
+      description: "Sample voxel density via the native handler"
+```
+
+#### Layout inside the npm tarball
+
+```
+ue-mcp-plugin-<name>/
+  ue-mcp.plugin.yml
+  dist/                              # tsc output (TypeScript tasks)
+  ue/                                # NEW: native source ships here
+    Plugins/
+      VoxelPCGBridge/
+        VoxelPCGBridge.uplugin
+        Source/
+          VoxelPCGBridge/
+            VoxelPCGBridge.Build.cs
+            Public/
+              VoxelPCGBridgeModule.h
+            Private/
+              VoxelPCGBridgeModule.cpp     # calls UEMCP::RegisterExternalHandler
+              SampleDensity.cpp
+```
+
+Update `package.json` `files:` so the `ue/` directory ships with the published tarball:
+
+```json
+"files": ["dist", "ue", "ue-mcp.plugin.yml", "knowledge", "README.md"]
+```
+
+#### The native module
+
+Add `UE_MCP_Bridge` to `PrivateDependencyModuleNames` in your `.Build.cs`:
+
+```csharp
+public class VoxelPCGBridge : ModuleRules
+{
+    public VoxelPCGBridge(ReadOnlyTargetRules Target) : base(Target)
+    {
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "Json" });
+        PrivateDependencyModuleNames.AddRange(new string[] { "UE_MCP_Bridge" });
+    }
+}
+```
+
+Register handlers from `StartupModule`:
+
+```cpp
+#include "VoxelPCGBridgeModule.h"
+#include "MCPHandlerRegistration.h"
+
+void FVoxelPCGBridgeModule::StartupModule()
+{
+    UEMCP::RegisterExternalHandler(
+        TEXT("voxel.sample_density"),
+        [](const TSharedPtr<FJsonObject>& Params) -> TSharedPtr<FJsonValue>
+        {
+            // ... do the work, return a JSON value
+            TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+            Result->SetBoolField(TEXT("success"), true);
+            return MakeShared<FJsonValueObject>(Result);
+        });
+}
+
+void FVoxelPCGBridgeModule::ShutdownModule()
+{
+    UEMCP::UnregisterExternalHandler(TEXT("voxel.sample_density"));
+}
+```
+
+The handler's method name (`voxel.sample_density`) is what the plugin's TypeScript task addresses through `this.call("voxel.sample_density", ...)` or what the bridge looks up when an MCP action dispatches.
+
+#### Install flow
+
+```bash
+ue-mcp plugin install ue-mcp-plugin-voxel-pro
+```
+
+The CLI now also:
+
+1. Reads `MCPHandlerRegistration.h` from the deployed bridge and checks that `UEMCP_BRIDGE_API_VERSION >= manifest.nativeModule.minBridgeApi`. Install fails fast if the bridge is too old, with a pointer to `ue-mcp update`.
+2. Copies `<pkgDir>/<source>` to `<projectDir>/Plugins/<uePluginName>/`.
+3. Records every copied file in `<projectDir>/.ue-mcp/native-modules.json` so `ue-mcp plugin uninstall` can clean up without nuking user edits.
+4. Prints `REBUILD REQUIRED` - the user must build the UE project before launching the editor so the new module compiles in.
+
+#### Bridge ABI versioning
+
+`UEMCP_BRIDGE_API_VERSION` is the C++ ABI contract every native plugin compiles against. Bumps are reserved for breaking changes to the `FExternalHandlerFn` signature or the registration contract. A plugin declaring `minBridgeApi: N` refuses to load against a bridge whose version is below N. Inspect the deployed bridge's version with:
+
+```text
+project(action="get_status")
+```
+
+The response includes `bridgeApiVersion` when a bridge is deployed.
+
 ### Writing tasks
 
 ```ts
@@ -340,9 +493,11 @@ These are enforced both at install (`ue-mcp plugin install`) and at server load:
 - `actionPrefix` is mandatory and must match `/^[a-z][a-z0-9_]*$/`.
 - Every `inject:` target must be a real registered category. A nonexistent target fails install with the list of valid categories.
 - A plugin action may never overwrite a built-in. Collisions are hard-skipped with a warning.
-- Inter-plugin collisions resolve by `plugins:` order — first wins.
-- Every `inject:` entry must point to a task declared under `tasks:`, and every task's `class_path` must resolve under `dist/`.
+- Every `provides:` category name must match `/^[a-z][a-z0-9_]*$/` and must not collide with a built-in category.
+- Inter-plugin collisions resolve by `plugins:` order - first wins. Applies to both injected actions and provided category names.
+- Every `inject:` and `provides:` entry must point to a task declared under `tasks:`, and every task's `class_path` must resolve under `dist/`.
 - `minServerVersion` is checked at install and re-checked at load.
+- `nativeModule.minBridgeApi` is checked at install (against the deployed bridge's `UEMCP_BRIDGE_API_VERSION`) and re-checked at load.
 - A plugin that fails any of these is skipped entirely (never partially injected) with a loud warning. Other plugins keep loading.
 
 ## Troubleshooting
@@ -376,3 +531,20 @@ Then restart your MCP client.
 ### Injected action appears in `plugins.describe` but not in the host category tool's action list
 
 You restarted the editor but not the MCP server. They're separate processes — the editor restart doesn't respawn the npx-launched ue-mcp server. Reconnect MCP in your client (in Claude Code, `/mcp`).
+
+### `nativeModule requires bridge ABI >= N`
+
+The plugin needs a newer bridge than the one deployed in this project. Run `ue-mcp update` to refresh the bridge source, then `npm run build` (or rebuild from the editor) before retrying. The deployed ABI is also visible in `project(action="get_status")` as `bridgeApiVersion`.
+
+### Provided category does not show up as its own MCP tool
+
+The plugin loaded but a name collision skipped its `provides:` entry. Run `plugins(action="describe", name="<package>")` and check the `provided` field. If it's empty, look at the server boot log for a `provides target '<category>' already claimed by '<other plugin>'` warning - earlier-listed plugins win, so reorder your `plugins:` array or drop one of the conflicting packages.
+
+### Native module deployed but handlers come back `Unknown method`
+
+The C++ side didn't compile in. Two common causes:
+
+1. The user never rebuilt after install. Run `npm run build` from the project (or rebuild from the editor IDE) and confirm the new `.dll` lands under `Binaries/Win64/`.
+2. The build failed silently because the deployed bridge is older than the plugin expects. Run `ue-mcp update` to refresh `MCPHandlerRegistration.h`, then `npm run build`.
+
+If the rebuild succeeds but `Unknown method` persists, you've hit a stale Live Coding patch: delete `<projectDir>/Binaries/Win64/*.patch_*` and rebuild clean. UBT's incremental build can otherwise shadow a freshly built DLL with a leftover patch.
