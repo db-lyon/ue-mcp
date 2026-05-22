@@ -33,6 +33,7 @@ namespace
 		R->SetNumberField(TEXT("elapsed_seconds"), S.ElapsedSeconds);
 		R->SetNumberField(TEXT("max_position_drift_cm"), S.MaxPositionDriftCm);
 		R->SetNumberField(TEXT("max_velocity_drift_cms"), S.MaxVelocityDriftCms);
+		R->SetNumberField(TEXT("frames_captured"), S.FramesCaptured);
 	}
 }
 
@@ -79,6 +80,13 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieReplayArm(const TSharedPtr<FJsonObj
 	Cfg.bAutoStopPIE  = OptionalBool(Params, TEXT("auto_stop_pie"), false);
 	const FString Mode = OptionalString(Params, TEXT("mode"), TEXT("replay")).ToLower();
 	Cfg.bMonitor = (Mode == TEXT("monitor"));
+
+	if (Params->HasField(TEXT("capture_frame_every")))
+	{
+		int32 N = 0;
+		Params->TryGetNumberField(TEXT("capture_frame_every"), N);
+		Cfg.CaptureFrameEvery = FMath::Max(0, N);
+	}
 
 	const TSharedPtr<FJsonObject>* Thr = nullptr;
 	if (Params->TryGetObjectField(TEXT("drift_thresholds"), Thr) && Thr)
@@ -138,6 +146,18 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieReplayStop(const TSharedPtr<FJsonOb
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("stopped"), true);
 	Result->SetNumberField(TEXT("executed_steps"), F.ExecutedSteps);
+	Result->SetNumberField(TEXT("frames_captured"), F.FramesCaptured);
+	if (!F.CaptureDir.IsEmpty())
+	{
+		Result->SetStringField(TEXT("capture_dir"), F.CaptureDir);
+		// Document the assembly recipe inline so consumers don't have to look
+		// it up. Two common targets: GIF and MP4. Override -framerate to match
+		// pin_fps if you used a non-default rate.
+		Result->SetStringField(TEXT("ffmpeg_gif_hint"),
+			FString::Printf(TEXT("ffmpeg -framerate 30 -i %s/frame_%%05d.png -vf 'fps=30,scale=720:-1:flags=lanczos' replay.gif"), *F.CaptureDir));
+		Result->SetStringField(TEXT("ffmpeg_mp4_hint"),
+			FString::Printf(TEXT("ffmpeg -framerate 60 -i %s/frame_%%05d.png -c:v libx264 -pix_fmt yuv420p replay.mp4"), *F.CaptureDir));
+	}
 	if (!F.DriftReportPath.IsEmpty())
 	{
 		Result->SetStringField(TEXT("drift_report_path"), F.DriftReportPath);
