@@ -85,6 +85,19 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieReplayArm(const TSharedPtr<FJsonObj
 		if ((*Thr)->TryGetNumberField(TEXT("position_cm"), D)) Cfg.ThrPosCm = static_cast<float>(D);
 		if ((*Thr)->TryGetNumberField(TEXT("rotation_deg"), D)) Cfg.ThrRotDeg = static_cast<float>(D);
 		if ((*Thr)->TryGetNumberField(TEXT("velocity_cms"), D)) Cfg.ThrVelCms = static_cast<float>(D);
+		if ((*Thr)->TryGetNumberField(TEXT("tracked_default"), D)) Cfg.ThrTrackedDefault = static_cast<float>(D);
+		const TSharedPtr<FJsonObject>* Tracked = nullptr;
+		if ((*Thr)->TryGetObjectField(TEXT("tracked"), Tracked) && Tracked)
+		{
+			for (const auto& KV : (*Tracked)->Values)
+			{
+				double TD = 0;
+				if (KV.Value.IsValid() && KV.Value->TryGetNumber(TD))
+				{
+					Cfg.TrackedThresholds.Add(KV.Key, static_cast<float>(TD));
+				}
+			}
+		}
 	}
 
 	FString Err, Msg;

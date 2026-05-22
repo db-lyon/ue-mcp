@@ -22,9 +22,10 @@ namespace
 		FVector Vel = FVector::ZeroVector;
 		float Speed2D = 0.f;
 		FString Montage;
+		TMap<FString, double> Tracked;
 	};
 
-	bool LoadPawnFrames(const FString& CSVPath, TArray<FCSVPawn>& Out, FString& OutError)
+	bool LoadPawnFrames(const FString& CSVPath, TArray<FCSVPawn>& Out, TArray<FString>& OutTrackedPaths, FString& OutError)
 	{
 		FString Raw;
 		if (!FFileHelper::LoadFileToString(Raw, *CSVPath))
@@ -58,6 +59,18 @@ namespace
 		const int32 CS2 = Col(TEXT("speed2d"));
 		const int32 CMo = Col(TEXT("montage"));
 
+		// Discover tracked-value columns by their "t:" prefix.
+		TArray<TPair<int32, FString>> TrackedCols;
+		for (int32 i = 0; i < H.Num(); ++i)
+		{
+			if (H[i].StartsWith(TEXT("t:")))
+			{
+				const FString Path = H[i].Mid(2);
+				TrackedCols.Add(TPair<int32, FString>(i, Path));
+				OutTrackedPaths.AddUnique(Path);
+			}
+		}
+
 		auto Read = [](const TArray<FString>& Cs, int32 Idx)
 		{
 			if (Idx < 0 || Idx >= Cs.Num()) return 0.0;
@@ -77,6 +90,10 @@ namespace
 			P.Vel = FVector(Read(Cols, CVx), Read(Cols, CVy), Read(Cols, CVz));
 			P.Speed2D = static_cast<float>(Read(Cols, CS2));
 			if (CMo >= 0 && CMo < Cols.Num()) P.Montage = Cols[CMo];
+			for (const TPair<int32, FString>& TC : TrackedCols)
+			{
+				P.Tracked.Add(TC.Value, Read(Cols, TC.Key));
+			}
 			Out.Add(P);
 		}
 		return true;
@@ -93,6 +110,24 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieRecordDiff(const TSharedPtr<FJsonOb
 	const double ThrPos = OptionalNumber(Params, TEXT("position_cm"), 5.0);
 	const double ThrRot = OptionalNumber(Params, TEXT("rotation_deg"), 2.0);
 	const double ThrVel = OptionalNumber(Params, TEXT("velocity_cms"), 25.0);
+	const double ThrTrackedDefault = OptionalNumber(Params, TEXT("tracked_default"), 0.0);
+
+	// Per-tracked-path thresholds. Falls back to ThrTrackedDefault when a path
+	// is sampled in both CSVs but missing from this map. <= 0 means tracked
+	// deltas don't trip frames_over_threshold.
+	TMap<FString, double> TrackedThresholds;
+	const TSharedPtr<FJsonObject>* TT = nullptr;
+	if (Params->TryGetObjectField(TEXT("tracked_thresholds"), TT) && TT)
+	{
+		for (const auto& KV : (*TT)->Values)
+		{
+			double D = 0;
+			if (KV.Value.IsValid() && KV.Value->TryGetNumber(D))
+			{
+				TrackedThresholds.Add(KV.Key, D);
+			}
+		}
+	}
 
 	const FString CsvA = Root / A / TEXT("recording.csv");
 	const FString CsvB = Root / B / TEXT("recording.csv");
@@ -100,15 +135,25 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieRecordDiff(const TSharedPtr<FJsonOb
 	if (!FPaths::FileExists(CsvB)) return MCPError(FString::Printf(TEXT("not found: %s"), *CsvB));
 
 	TArray<FCSVPawn> RowsA, RowsB;
+	TArray<FString> TrackedA, TrackedB;
 	FString Err;
-	if (!LoadPawnFrames(CsvA, RowsA, Err)) return MCPError(Err);
-	if (!LoadPawnFrames(CsvB, RowsB, Err)) return MCPError(Err);
+	if (!LoadPawnFrames(CsvA, RowsA, TrackedA, Err)) return MCPError(Err);
+	if (!LoadPawnFrames(CsvB, RowsB, TrackedB, Err)) return MCPError(Err);
+
+	// Tracked-value paths shared by both recordings.
+	TArray<FString> SharedTracked;
+	for (const FString& P : TrackedA)
+	{
+		if (TrackedB.Contains(P)) SharedTracked.Add(P);
+	}
 
 	const int32 N = FMath::Min(RowsA.Num(), RowsB.Num());
 	float MaxPos = 0.f, MaxVel = 0.f, MaxRot = 0.f;
 	uint64 MaxPosFrame = 0;
 	int32 MontageMismatches = 0;
 	TArray<TSharedPtr<FJsonValue>> Over;
+	TMap<FString, double> MaxTrackedDeltas;
+	for (const FString& P : SharedTracked) MaxTrackedDeltas.Add(P, 0.0);
 
 	for (int32 i = 0; i < N; ++i)
 	{
@@ -119,7 +164,21 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieRecordDiff(const TSharedPtr<FJsonOb
 		if (V > MaxVel) MaxVel = V;
 		if (R > MaxRot) MaxRot = R;
 		if (RowsA[i].Montage != RowsB[i].Montage) MontageMismatches++;
-		if (P > ThrPos || V > ThrVel || R > ThrRot)
+
+		bool bTrackedOver = false;
+		for (const FString& Path : SharedTracked)
+		{
+			const double* VA = RowsA[i].Tracked.Find(Path);
+			const double* VB = RowsB[i].Tracked.Find(Path);
+			const double D = FMath::Abs((VA ? *VA : 0.0) - (VB ? *VB : 0.0));
+			double& Max = MaxTrackedDeltas.FindOrAdd(Path, 0.0);
+			if (D > Max) Max = D;
+			const double* PerPath = TrackedThresholds.Find(Path);
+			const double Thr = PerPath ? *PerPath : ThrTrackedDefault;
+			if (Thr > 0.0 && D > Thr) bTrackedOver = true;
+		}
+
+		if (P > ThrPos || V > ThrVel || R > ThrRot || bTrackedOver)
 		{
 			TSharedRef<FJsonObject> E = MakeShared<FJsonObject>();
 			E->SetNumberField(TEXT("frame"), static_cast<double>(RowsA[i].Frame));
@@ -141,6 +200,14 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieRecordDiff(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("max_velocity_drift_cms"), MaxVel);
 	Result->SetNumberField(TEXT("max_rotation_drift_deg"), MaxRot);
 	Result->SetNumberField(TEXT("montage_section_mismatches"), MontageMismatches);
+
+	TSharedRef<FJsonObject> TVD = MakeShared<FJsonObject>();
+	for (const TPair<FString, double>& KV : MaxTrackedDeltas)
+	{
+		TVD->SetNumberField(KV.Key, KV.Value);
+	}
+	Result->SetObjectField(TEXT("tracked_value_max_deltas"), TVD);
+
 	Result->SetArrayField(TEXT("frames_over_threshold"), Over);
 	return MCPResult(Result);
 }
