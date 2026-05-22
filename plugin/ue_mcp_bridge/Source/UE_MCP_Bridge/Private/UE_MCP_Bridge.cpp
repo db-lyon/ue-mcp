@@ -6,6 +6,7 @@
 #include "PIE/PIEInputRecorder.h"
 #include "PIE/PIEInputReplayer.h"
 #include "Editor.h"
+#include "Editor/EditorEngine.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/CoreDelegates.h"
 #include "Containers/Ticker.h"
@@ -86,6 +87,23 @@ void FUE_MCP_BridgeModule::StartupModule()
 				G_BridgeServer->GetGameThreadExecutor().SetEditorReady();
 				UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Editor ready — accepting requests"));
 			}
+
+			// Opt out of the editor's unfocused-CPU throttle while a PIE
+			// recording or replay is in flight. UEditorEngine::GetMaxTickRate
+			// hard-codes 3 fps when ShouldThrottleCPUUsage() is true, which
+			// makes scripted PIE sessions (where the editor window doesn't
+			// have OS focus) sample at ~3 Hz regardless of sample_hz / pin_fps.
+			// The engine exposes ShouldDisableCPUThrottlingDelegates for
+			// exactly this case; returning true suppresses the throttle
+			// without mutating the user's project settings.
+			UEditorEngine::FShouldDisableCPUThrottling Suppress;
+			Suppress.BindLambda([]() -> bool
+			{
+				return UEMCPPIE::FPIEInputRecorder::Get().IsActive()
+				    || UEMCPPIE::FPIEInputReplayer::Get().IsActive();
+			});
+			GEditor->ShouldDisableCPUThrottlingDelegates.Add(Suppress);
+
 			return false; // done
 		})
 	);
