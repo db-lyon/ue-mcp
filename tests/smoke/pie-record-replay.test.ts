@@ -132,6 +132,12 @@ describe("pie record/replay — registration + idle behaviour", () => {
     expect(r.ok).toBe(true);
     expect((r.result as { error?: string }).error).toMatch(/not found/i);
   });
+
+  it("pie_snapshot errors cleanly when PIE is not running", async () => {
+    const r = await callBridge(bridge, "pie_snapshot", { target: "BP_Hero_C" });
+    expect(r.ok).toBe(true);
+    expect((r.result as { error?: string }).error).toMatch(/PIE not running|Actor not found/i);
+  });
 });
 
 describe("inject_input primitives — registration", () => {

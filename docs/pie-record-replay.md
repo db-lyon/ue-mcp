@@ -122,6 +122,10 @@ Used internally by the replayer; exposed because they are useful on their own.
 | `inject_input_stop` | Release a hold or stop a tape |
 | `inject_input_tape` | Play a per-frame value array, one entry per end-of-frame |
 
+### One-shot actor snapshot
+
+`pie_snapshot(target, recording_id?, name?, include_components?)` dumps the live state of a PIE actor to JSON in one call. Unlike `track_actors` (per-frame pos/rot/vel sampling), this captures every `BlueprintVisible` `UProperty` plus an optional component dump. Output lands at `<recording_dir>/<recording_id>/snapshots/<name>.json` when a `recording_id` is supplied, otherwise `Saved/MCPSnapshots/<name>.json`.
+
 ### Offline diff
 
 `pie_record_diff(a_id, b_id, position_cm?, rotation_deg?, velocity_cms?, tracked_default?, tracked_thresholds?)` walks two `recording.csv` files in lockstep by frame index and emits a single drift summary. Reflection paths sampled in both recordings show up in `tracked_value_max_deltas` (max |delta| per path). Pass `tracked_default` or `tracked_thresholds` to fold tracked-value drift into `frames_over_threshold`. No PIE required.
