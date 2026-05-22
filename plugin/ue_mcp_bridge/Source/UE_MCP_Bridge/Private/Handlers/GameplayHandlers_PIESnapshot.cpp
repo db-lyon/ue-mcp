@@ -25,21 +25,6 @@ namespace
 {
 	using namespace UEMCPPIE;
 
-	AActor* FindActorById(UWorld* World, const FString& Id)
-	{
-		if (!World || Id.IsEmpty()) return nullptr;
-		for (TActorIterator<AActor> It(World); It; ++It)
-		{
-			AActor* A = *It;
-			if (!A) continue;
-			if (A->GetName() == Id) return A;
-			const UClass* C = A->GetClass();
-			if (C && (C->GetName() == Id || C->GetPathName() == Id)) return A;
-			if (A->GetPathName().EndsWith(Id)) return A;
-		}
-		return nullptr;
-	}
-
 	FString JsonToString(const TSharedRef<FJsonObject>& Obj)
 	{
 		FString Out;
@@ -58,7 +43,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieSnapshot(const TSharedPtr<FJsonObje
 	UWorld* World = GEditor ? GEditor->PlayWorld : nullptr;
 	if (!World) return MCPError(TEXT("PIE not running"));
 
-	AActor* Actor = FindActorById(World, Target);
+	AActor* Actor = UEMCPPIE::FindActorById(World, Target);
 	if (!Actor) return MCPError(FString::Printf(TEXT("Actor not found: %s"), *Target));
 
 	const bool bIncludeComponents = OptionalBool(Params, TEXT("include_components"), true);

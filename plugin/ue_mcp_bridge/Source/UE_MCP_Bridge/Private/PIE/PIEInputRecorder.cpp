@@ -26,24 +26,6 @@ namespace UEMCPPIE
 			return FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
 		}
 
-		// Match an id against an AActor by exact name, class name, or full
-		// path. Returns the first match in iteration order; documented as
-		// "first match wins" in docs/pie-record-replay.md.
-		AActor* FindActorById(UWorld* World, const FString& Id)
-		{
-			if (!World || Id.IsEmpty()) return nullptr;
-			for (TActorIterator<AActor> It(World); It; ++It)
-			{
-				AActor* A = *It;
-				if (!A) continue;
-				if (A->GetName() == Id) return A;
-				const UClass* C = A->GetClass();
-				if (C && (C->GetName() == Id || C->GetPathName() == Id)) return A;
-				if (A->GetPathName().EndsWith(Id)) return A;
-			}
-			return nullptr;
-		}
-
 		void SampleTrackedActors(UWorld* World,
 		                         const TArray<FString>& Ids,
 		                         TMap<FString, TWeakObjectPtr<AActor>>& Cache,

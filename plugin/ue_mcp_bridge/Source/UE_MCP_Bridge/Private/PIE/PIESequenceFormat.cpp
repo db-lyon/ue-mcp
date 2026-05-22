@@ -1,4 +1,7 @@
 #include "PIESequenceFormat.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/Actor.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/DateTime.h"
@@ -865,5 +868,20 @@ namespace UEMCPPIE
 	{
 		const FString Base = Root.IsEmpty() ? DefaultRecordingsRoot() : Root;
 		return Base / Id;
+	}
+
+	AActor* FindActorById(UWorld* World, const FString& Id)
+	{
+		if (!World || Id.IsEmpty()) return nullptr;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			AActor* A = *It;
+			if (!A) continue;
+			if (A->GetName() == Id) return A;
+			const UClass* C = A->GetClass();
+			if (C && (C->GetName() == Id || C->GetPathName() == Id)) return A;
+			if (A->GetPathName().EndsWith(Id)) return A;
+		}
+		return nullptr;
 	}
 }

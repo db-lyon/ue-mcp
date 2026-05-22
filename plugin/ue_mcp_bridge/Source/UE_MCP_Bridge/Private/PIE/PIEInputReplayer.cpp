@@ -76,22 +76,6 @@ namespace UEMCPPIE
 			return Out.IsEmpty() ? FString(TEXT("capture")) : Out;
 		}
 
-		// Mirror of the recorder's actor lookup so replay can re-resolve the
-		// same actor identifiers in the new PIE world.
-		AActor* FindActorById(UWorld* World, const FString& Id)
-		{
-			if (!World || Id.IsEmpty()) return nullptr;
-			for (TActorIterator<AActor> It(World); It; ++It)
-			{
-				AActor* A = *It;
-				if (!A) continue;
-				if (A->GetName() == Id) return A;
-				const UClass* C = A->GetClass();
-				if (C && (C->GetName() == Id || C->GetPathName() == Id)) return A;
-				if (A->GetPathName().EndsWith(Id)) return A;
-			}
-			return nullptr;
-		}
 	}
 
 	FPIEInputReplayer& FPIEInputReplayer::Get()
