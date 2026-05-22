@@ -98,4 +98,10 @@ private:
 	static TSharedPtr<FJsonValue> PieRecordRead(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieRecordDelete(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PieMark(const TSharedPtr<FJsonObject>& Params);
+
+	// PIE replay (arm/disarm/stop/status).
+	static TSharedPtr<FJsonValue> PieReplayArm(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieReplayDisarm(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieReplayStop(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieReplayStatus(const TSharedPtr<FJsonObject>& Params);
 };

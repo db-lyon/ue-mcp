@@ -1,0 +1,143 @@
+// PIE replay handlers: pie_replay_arm / _disarm / _stop / _status.
+// Members of FGameplayHandlers.
+
+#include "GameplayHandlers.h"
+#include "HandlerRegistry.h"
+#include "HandlerUtils.h"
+#include "PIE/PIEInputReplayer.h"
+#include "PIE/PIESequenceFormat.h"
+
+namespace
+{
+	using namespace UEMCPPIE;
+
+	FString StateToString(EReplayerState S)
+	{
+		switch (S)
+		{
+		case EReplayerState::Idle:           return TEXT("idle");
+		case EReplayerState::Armed:          return TEXT("armed");
+		case EReplayerState::WaitingForPawn: return TEXT("waiting_for_pawn");
+		case EReplayerState::Replaying:      return TEXT("replaying");
+		case EReplayerState::Completed:      return TEXT("completed");
+		}
+		return TEXT("idle");
+	}
+
+	void WriteStatusFields(TSharedPtr<FJsonObject> R, const FReplayerStatus& S)
+	{
+		R->SetStringField(TEXT("state"), StateToString(S.State));
+		R->SetStringField(TEXT("source_recording_id"), S.SourceRecordingId);
+		R->SetNumberField(TEXT("current_step"), S.CurrentStep);
+		R->SetNumberField(TEXT("total_steps"), S.TotalSteps);
+		R->SetNumberField(TEXT("elapsed_seconds"), S.ElapsedSeconds);
+		R->SetNumberField(TEXT("max_position_drift_cm"), S.MaxPositionDriftCm);
+		R->SetNumberField(TEXT("max_velocity_drift_cms"), S.MaxVelocityDriftCms);
+	}
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::PieReplayArm(const TSharedPtr<FJsonObject>& Params)
+{
+	MCP_CHECK_GAME_THREAD();
+	FReplayerArmConfig Cfg;
+	Cfg.SourceRecordingId = OptionalString(Params, TEXT("recording_id"));
+	Cfg.SequencePath = OptionalString(Params, TEXT("sequence_path"));
+	Cfg.SourceDir = OptionalString(Params, TEXT("recording_dir"));
+
+	// Inline steps array — parse via the standard sequence reader by wrapping
+	// in a minimal envelope.
+	const TArray<TSharedPtr<FJsonValue>>* StepsArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("steps"), StepsArr) && StepsArr && StepsArr->Num() > 0)
+	{
+		TSharedRef<FJsonObject> Env = MakeShared<FJsonObject>();
+		Env->SetNumberField(TEXT("version"), kFormatVersion);
+		Env->SetNumberField(TEXT("settle_ms"), OptionalInt(Params, TEXT("settle_ms"), 500));
+		Env->SetNumberField(TEXT("sample_hz"), OptionalInt(Params, TEXT("sample_hz"), 60));
+		Env->SetNumberField(TEXT("rng_seed"), OptionalNumber(Params, TEXT("rng_seed"), 0.0));
+		Env->SetArrayField(TEXT("steps"), *StepsArr);
+		FSequence S;
+		FString Err;
+		if (!SequenceFromJson(Env, S, Err)) return MCPError(Err);
+		Cfg.InlineSequence = S;
+		Cfg.bInlineSequenceProvided = true;
+	}
+
+	if (Params->HasField(TEXT("pin_fps")))
+	{
+		int32 Hz = 60;
+		Params->TryGetNumberField(TEXT("pin_fps"), Hz);
+		Cfg.PinFPS = Hz;
+	}
+	if (Params->HasField(TEXT("settle_ms")))
+	{
+		int32 Ms = 500;
+		Params->TryGetNumberField(TEXT("settle_ms"), Ms);
+		Cfg.SettleMs = Ms;
+	}
+	Cfg.bApplyRngSeed = OptionalBool(Params, TEXT("apply_rng_seed"), true);
+	Cfg.bRecordDrift  = OptionalBool(Params, TEXT("record_drift"), true);
+	Cfg.bAutoStopPIE  = OptionalBool(Params, TEXT("auto_stop_pie"), false);
+
+	const TSharedPtr<FJsonObject>* Thr = nullptr;
+	if (Params->TryGetObjectField(TEXT("drift_thresholds"), Thr) && Thr)
+	{
+		double D;
+		if ((*Thr)->TryGetNumberField(TEXT("position_cm"), D)) Cfg.ThrPosCm = static_cast<float>(D);
+		if ((*Thr)->TryGetNumberField(TEXT("rotation_deg"), D)) Cfg.ThrRotDeg = static_cast<float>(D);
+		if ((*Thr)->TryGetNumberField(TEXT("velocity_cms"), D)) Cfg.ThrVelCms = static_cast<float>(D);
+	}
+
+	FString Err, Msg;
+	if (!FPIEInputReplayer::Get().Arm(Cfg, Err, Msg))
+	{
+		return MCPError(Err);
+	}
+
+	const FReplayerStatus S = FPIEInputReplayer::Get().GetStatus();
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("armed"), true);
+	Result->SetStringField(TEXT("message"), Msg);
+	WriteStatusFields(Result, S);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	MCPSetRollback(Result, TEXT("pie_replay_disarm"), Payload);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::PieReplayDisarm(const TSharedPtr<FJsonObject>& /*Params*/)
+{
+	MCP_CHECK_GAME_THREAD();
+	FString Err;
+	const bool OK = FPIEInputReplayer::Get().Disarm(Err);
+	if (!OK) return MCPError(Err);
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("disarmed"), true);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::PieReplayStop(const TSharedPtr<FJsonObject>& /*Params*/)
+{
+	MCP_CHECK_GAME_THREAD();
+	const FReplayerFinishResult F = FPIEInputReplayer::Get().ForceStop();
+	if (!F.bSuccess && !F.Error.IsEmpty()) return MCPError(F.Error);
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("stopped"), true);
+	Result->SetNumberField(TEXT("executed_steps"), F.ExecutedSteps);
+	if (!F.DriftReportPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("drift_report_path"), F.DriftReportPath);
+		Result->SetNumberField(TEXT("max_position_drift_cm"), F.Drift.MaxPositionDriftCm);
+		Result->SetNumberField(TEXT("max_velocity_drift_cms"), F.Drift.MaxVelocityDriftCms);
+		Result->SetNumberField(TEXT("frames_compared"), F.Drift.FramesCompared);
+	}
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGameplayHandlers::PieReplayStatus(const TSharedPtr<FJsonObject>& /*Params*/)
+{
+	MCP_CHECK_GAME_THREAD();
+	const FReplayerStatus S = FPIEInputReplayer::Get().GetStatus();
+	auto Result = MCPSuccess();
+	WriteStatusFields(Result, S);
+	return MCPResult(Result);
+}
