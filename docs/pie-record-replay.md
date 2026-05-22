@@ -230,8 +230,3 @@ tasks:
 ```
 
 For a full example see `plans/pie-record-replay.md` in the repo (gitignored design doc).
-
-## Known limitations (Phase 1)
-
-These are tracked as follow-ups, not present in the first ship:
-
