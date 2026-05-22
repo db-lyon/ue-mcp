@@ -5,6 +5,7 @@ import { categoryTool, bp, type ToolDef } from "../types.js";
 import { deploy, deploySummary, findEngineInstall } from "../deployer.js";
 import { resolveConfigPath, findIniFiles, parseIni, buildTagTree } from "../config-parser.js";
 import { parseHeader, collectFiles, findSourceRoots, resolveModuleDir } from "../cpp-parser.js";
+import { readDeployedBridgeApiVersion } from "../plugin/bridge-api.js";
 
 export const projectTool: ToolDef = categoryTool(
   "project",
@@ -14,10 +15,17 @@ export const projectTool: ToolDef = categoryTool(
       description: "Check server mode and editor connection",
       handler: async (ctx) => {
         const flows = ctx.getFlows?.() ?? [];
+        const bridgeApiVersion = ctx.project.projectDir
+          ? readDeployedBridgeApiVersion(ctx.project.projectDir)
+          : null;
         return {
           mode: ctx.bridge.isConnected ? "live" : "disconnected",
           editorConnected: ctx.bridge.isConnected,
           project: ctx.project.isLoaded ? { name: ctx.project.projectName, path: ctx.project.projectPath, contentDir: ctx.project.contentDir, engineAssociation: ctx.project.engineAssociation, config: Object.keys(ctx.project.config).length > 0 ? ctx.project.config : undefined } : null,
+          // Bridge ABI version of the deployed plugin in this project.
+          // Plugins declaring nativeModule.minBridgeApi compare against
+          // this number; older bridges refuse newer plugins.
+          bridgeApiVersion: bridgeApiVersion ?? undefined,
           // Pre-built sequences for this project. If the user's request
           // matches a flow's name/description, prefer flow(action="run")
           // over composing the sequence by hand. See SERVER_INSTRUCTIONS.

@@ -65,6 +65,38 @@ const FlowEntrySchema = z.object({
   steps: z.record(FlowStepEntrySchema),
 });
 
+/**
+ * Native UE C++ module that ships with this plugin. When present, the CLI
+ * copies `source/` into the user's project Plugins/ at install time and
+ * tracks the deposit for clean uninstall. The plugin's StartupModule is
+ * expected to register handlers via UEMCP::RegisterExternalHandler (see
+ * MCPHandlerRegistration.h shipped under the bridge's Public/).
+ *
+ *   nativeModule:
+ *     uePluginName: VoxelPCGBridge
+ *     minBridgeApi: 1
+ *     source: ue/Plugins/VoxelPCGBridge
+ *     supportedEngineVersions: ["5.5", "5.6"]
+ *     handlers:
+ *       voxel.sample_density: { description: "..." }
+ */
+const NativeModuleSchema = z.object({
+  uePluginName: z.string().min(1),
+  minBridgeApi: z.number().int().nonnegative(),
+  source: z.string().min(1),
+  supportedEngineVersions: z.array(z.string().min(1)).default([]),
+  handlers: z
+    .record(
+      z.object({
+        description: z.string().optional(),
+        timeoutSeconds: z.number().positive().optional(),
+      }),
+    )
+    .default({}),
+});
+
+export type ManifestNativeModule = z.infer<typeof NativeModuleSchema>;
+
 export const PluginManifestSchema = z.object({
   actionPrefix: z.string().regex(/^[a-z][a-z0-9_]*$/, {
     message: "actionPrefix must be a lowercase identifier (letters, digits, underscore; must start with a letter)",
@@ -81,6 +113,7 @@ export const PluginManifestSchema = z.object({
       ProvidedCategorySchema,
     )
     .default({}),
+  nativeModule: NativeModuleSchema.optional(),
   knowledge: z.record(z.string()).default({}),
   tasks: z.record(TaskEntrySchema).default({}),
   flows: z.record(FlowEntrySchema).default({}),

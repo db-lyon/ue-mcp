@@ -20,6 +20,13 @@ import yaml from "js-yaml";
 import { loadManifest } from "./plugin/manifest.js";
 import { satisfiesMinimum } from "./plugin/version.js";
 import { findInstalledPackage } from "./plugin/resolver.js";
+import { readDeployedBridgeApiVersion } from "./plugin/bridge-api.js";
+import {
+  deployNativeModule,
+  readNativeModulesState,
+  undeployNativeModule,
+  writeNativeModulesState,
+} from "./plugin/native-deploy.js";
 import { ALL_TOOLS } from "./tools.js";
 
 const args = process.argv.slice(2);
@@ -202,6 +209,34 @@ function cmdInstall(): void {
     }
   }
 
+  // `provides:` collision check: plugin-owned categories must not shadow
+  // a built-in. Inter-plugin collisions are handled at server-load time
+  // (first writer wins) and not gated here because we can't know what
+  // other plugins claim until the loader runs.
+  for (const provided of Object.keys(manifest.provides)) {
+    if (builtIn.has(provided)) {
+      fail(
+        `${name}: provides category '${provided}' collides with a built-in. Plugins may not override built-ins.`,
+      );
+    }
+  }
+
+  // Native module gate: refuse to install when the deployed bridge can't
+  // support the required ABI. Without a deployed bridge we let the install
+  // proceed and warn — `ue-mcp init` later deploys a current bridge.
+  if (manifest.nativeModule) {
+    const bridgeApi = readDeployedBridgeApiVersion(proj.projectDir);
+    if (bridgeApi !== null && manifest.nativeModule.minBridgeApi > bridgeApi) {
+      fail(
+        `${name}: nativeModule requires bridge ABI >= ${manifest.nativeModule.minBridgeApi}, but the deployed bridge is ${bridgeApi}. ` +
+        `Run \`ue-mcp update\` to refresh the bridge, then retry install.`,
+      );
+    }
+    if (bridgeApi === null) {
+      note(`WARNING: ${name} ships a native UE module but no UE_MCP_Bridge is deployed in this project yet. Run \`ue-mcp init\` to deploy the bridge before launching the editor.`);
+    }
+  }
+
   // Optional UE plugin dependency warning.
   if (manifest.uePluginDependency) {
     const present = uePluginEnabled(proj.projectDir, manifest.uePluginDependency);
@@ -222,12 +257,38 @@ function cmdInstall(): void {
   }
   writePluginsList(proj.configPath, list);
 
+  // Deploy nativeModule (if declared) to <project>/Plugins/<uePluginName>/
+  // and track every copied path so uninstall can clean up.
+  if (manifest.nativeModule) {
+    const native = manifest.nativeModule;
+    try {
+      const result = deployNativeModule(pkgDir, native.source, native.uePluginName, proj.projectDir);
+      const state = readNativeModulesState(proj.projectDir);
+      const pkgJson = JSON.parse(fs.readFileSync(path.join(pkgDir, "package.json"), "utf-8")) as { version?: string };
+      state[name] = {
+        uePluginName: native.uePluginName,
+        pluginVersion: pkgJson.version ?? "0.0.0",
+        installedAt: new Date().toISOString(),
+        files: result.fileList,
+      };
+      writeNativeModulesState(proj.projectDir, state);
+      note(`deployed native module ${native.uePluginName} (${result.filesCopied} files) to ${path.relative(proj.projectDir, result.destDir)}`);
+      note(`REBUILD REQUIRED: run \`npm run build\` (or rebuild the UE project) before launching the editor so the new C++ module compiles in.`);
+    } catch (e) {
+      fail(`${name}: failed to deploy native module: ${(e as Error).message}`);
+    }
+  }
+
   // Summary
   note(`installed ${name}@${manifest.minServerVersion ? `(server-min ${manifest.minServerVersion})` : ""}`);
   note(`actionPrefix: ${manifest.actionPrefix}`);
   for (const [category, actions] of Object.entries(manifest.inject)) {
     const names = Object.keys(actions).map((a) => `${manifest.actionPrefix}_${a}`).join(", ");
     note(`  ${category}: ${names}`);
+  }
+  for (const [category, providedSpec] of Object.entries(manifest.provides)) {
+    const actionNames = Object.keys(providedSpec.actions).join(", ");
+    note(`  ${category} (new category): ${actionNames}`);
   }
   if (Object.keys(manifest.flows).length > 0) {
     note(`flows: ${Object.keys(manifest.flows).join(", ")}`);
@@ -239,6 +300,21 @@ function cmdUninstall(): void {
   const name = args.shift();
   if (!name) fail("usage: ue-mcp plugin uninstall <name>");
   const proj = findProjectDir(process.cwd());
+
+  // Remove any deployed native module BEFORE npm uninstall so we can still
+  // read the manifest (for diagnostics) and so the state file stays
+  // consistent if anything fails midway.
+  const nativeState = readNativeModulesState(proj.projectDir);
+  if (nativeState[name]) {
+    try {
+      const removed = undeployNativeModule(proj.projectDir, name);
+      note(`removed ${removed} native module file(s) for ${name}`);
+    } catch (e) {
+      note(`WARNING: could not fully clean up native module for ${name}: ${(e as Error).message}. ` +
+        `Close the editor if it's running and remove leftover files under Plugins/${nativeState[name].uePluginName}/ manually.`);
+    }
+  }
+
   const list = readPluginsList(proj.configPath).filter((p) => p.name !== name);
   writePluginsList(proj.configPath, list);
   runNpm(["uninstall", name], proj.projectDir);

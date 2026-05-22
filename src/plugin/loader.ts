@@ -10,6 +10,7 @@ import { resolvePackage, type ResolvedPackage } from "./resolver.js";
 import { satisfiesMinimum } from "./version.js";
 import { mergeInjectionsIntoTool, type InjectionPlan } from "./injection.js";
 import { buildProvidedTool, type ProvisionPlan } from "./provision.js";
+import { readDeployedBridgeApiVersion } from "./bridge-api.js";
 
 /** Per-plugin record surfaced to the `plugins` introspection category. */
 export interface PluginRecord {
@@ -86,6 +87,7 @@ export async function loadPlugins(
   }
 
   const builtInCategories = new Set(tools.map((t) => t.name));
+  const bridgeApiVersion = readDeployedBridgeApiVersion(projectDir);
   const records: PluginRecord[] = [];
   const taskRegistrations: Array<{ name: string; ctor: TaskConstructor }> = [];
   const classPathRegistrations: Array<{ classPath: string; ctor: TaskConstructor }> = [];
@@ -104,6 +106,7 @@ export async function loadPlugins(
       projectDir,
       serverVersion,
       builtInCategories,
+      bridgeApiVersion,
     );
     records.push(record.record);
     if (record.record.status !== "active" || !record.payload) continue;
@@ -273,6 +276,7 @@ async function loadOne(
   projectDir: string,
   serverVersion: string,
   builtInCategories: Set<string>,
+  bridgeApiVersion: number | null,
 ): Promise<LoadOneResult> {
   const base = baseRecord(entry);
   let pkg: ResolvedPackage;
@@ -298,6 +302,26 @@ async function loadOne(
 
   if (manifest.minServerVersion && !satisfiesMinimum(serverVersion, manifest.minServerVersion)) {
     return skip(base, `requires server >= ${manifest.minServerVersion} (have ${serverVersion})`);
+  }
+
+  // Native module gate: the plugin ships C++ that registers handlers via
+  // UEMCP::RegisterExternalHandler. Refuse to load if its minBridgeApi
+  // exceeds the bridge ABI currently deployed in this project. We do NOT
+  // hard-fail when bridgeApiVersion is unknown (no bridge deployed yet);
+  // a warning lets users see the manifest but the C++ side won't run
+  // until they `ue-mcp init`/`update` to deploy a bridge.
+  if (manifest.nativeModule) {
+    if (bridgeApiVersion === null) {
+      warn(
+        "plugin",
+        `${entry.name}: declares nativeModule but no UE_MCP_Bridge is deployed yet — run \`ue-mcp init\` or \`ue-mcp update\` to deploy the bridge before invoking its native actions`,
+      );
+    } else if (manifest.nativeModule.minBridgeApi > bridgeApiVersion) {
+      return skip(
+        base,
+        `nativeModule requires bridge ABI >= ${manifest.nativeModule.minBridgeApi} (deployed bridge is ${bridgeApiVersion}). Run \`ue-mcp update\` to refresh the bridge.`,
+      );
+    }
   }
 
   // Target validation: every inject target must be a registered category.
