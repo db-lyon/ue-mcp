@@ -77,6 +77,8 @@ gameplay(action="pie_record_read", id="recording-20260521-143052-7af3", file="dr
 | `pin_fps` | `= sample_hz` | `t.MaxFPS` pin during recording. `0` to skip |
 | `capture_pawn_state` | `true` | Per-row location/rotation/velocity/Speed2D |
 | `capture_montage` | `true` | Per-row `Montage:Section` |
+| `client_id` | `0` | Which local player to sample (multi-client PIE). See [Multi-client PIE](#multi-client-pie) |
+| `take_record` | `false` | Drive Take Recorder Start/Stop in lockstep. See [Take Recorder integration](#take-recorder-integration) |
 | `rng_seed` | auto | Reapplied via `FMath::RandInit` after pawn attach |
 | `run_gap_frames` | `6` | Gap tolerance for axis run extraction in `sequence.json` |
 | `recording_dir` | `Saved/MCPRecordings/` | Override the recordings root |
@@ -114,6 +116,9 @@ Tunables:
 | `apply_rng_seed` | `true` | Reapply sequence `rng_seed` via `FMath::RandInit` |
 | `record_drift` | `true` (when `recording_id`) | Emit `drift.json` |
 | `auto_stop_pie` | `false` | Stop PIE on sequence completion |
+| `mode` | `"replay"` | `"monitor"` switches to passive drift sampling. See [`pie_replay_arm` parameters](#pie_replay_arm-parameters) above |
+| `capture_frame_every` | `0` | Write a viewport screenshot every Nth sampled frame. See [Per-frame video capture](#per-frame-video-capture) |
+| `client_id` | `0` | Which local player to drive / sample (multi-client PIE). See [Multi-client PIE](#multi-client-pie) |
 | `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for the `frames_over_threshold` list. Also accepts `tracked_default` (scalar fallback applied to every tracked path) and `tracked: { "<path>": <threshold> }` for per-path overrides. `0` keeps tracked-value deltas out of `frames_over_threshold`. Max per-path deltas are always reported in `drift.json#tracked_value_max_deltas` regardless of thresholds. |
 
 ### Input injection primitives
@@ -152,7 +157,7 @@ The Take asset path is governed by Take Recorder's own settings (`/Game/Cinemati
 
 ### One-shot actor snapshot
 
-`pie_snapshot(target, recording_id?, name?, include_components?)` dumps the live state of a PIE actor to JSON in one call. Unlike `track_actors` (per-frame pos/rot/vel sampling), this captures every `BlueprintVisible` `UProperty` plus an optional component dump. Output lands at `<recording_dir>/<recording_id>/snapshots/<name>.json` when a `recording_id` is supplied, otherwise `Saved/MCPSnapshots/<name>.json`.
+`pie_snapshot(target, recording_id?, recording_dir?, name?, include_components?)` dumps the live state of a PIE actor to JSON in one call. Unlike `track_actors` (per-frame pos/rot/vel sampling), this captures every `BlueprintVisible` `UProperty` plus an optional component dump. Output lands at `<recording_dir>/<recording_id>/snapshots/<name>.json` when a `recording_id` is supplied, otherwise `Saved/MCPSnapshots/<name>.json`.
 
 ### Offline diff
 
@@ -169,7 +174,7 @@ The Take asset path is governed by Take Recorder's own settings (`/Game/Cinemati
 { "type": "capture",    "delay_ms": 5000, "name": "boss_intro" }
 ```
 
-`capture` writes a viewport screenshot via `FScreenshotRequest::RequestScreenshot`. When replaying a known `recording_id` the file lands in `<recording_dir>/captures/<name>_frame<N>.png`; inline-steps replays write to `Saved/Screenshots/MCPReplay/`. The drift entry records the full path under the `capture:<name>:<path>` marker.
+`capture` writes a viewport screenshot via `FScreenshotRequest::RequestScreenshot`. When replaying a known `recording_id` the file lands in `<recording_dir>/captures/<name>_frame<N>.png`; inline-steps replays write to `Saved/Screenshots/MCPReplay/`. The drift entry records the full path under the `capture:<name>:<path>` marker. The capture `name` is restricted to `[A-Za-z0-9._-]` (other characters become `_`, `..` becomes `__`); empty or fully-stripped names fall back to `capture`.
 
 ### Per-frame video capture
 
@@ -201,6 +206,7 @@ The recorder writes the canonical arity that matches the action's value type, bu
 - Same Enhanced Input values delivered at the same frame numbers as the source
 - Same `t.MaxFPS` pin on both record and replay
 - Same `FMath::RandInit(seed)` applied at the same lifecycle point
+- The editor's "throttle CPU when unfocused" behaviour is suppressed for the duration of any active record or replay. Without this, `UEditorEngine::GetMaxTickRate` clamps to 3 Hz the moment the editor window loses OS focus, which makes scripted PIE record at ~3 Hz regardless of `sample_hz`. The suppression goes through the engine's `ShouldDisableCPUThrottlingDelegates` hook - no project settings are mutated, and normal behaviour resumes the instant the record/replay finishes.
 
 **We do not promise:**
 
