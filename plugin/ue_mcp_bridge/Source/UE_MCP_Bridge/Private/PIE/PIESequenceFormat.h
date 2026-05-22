@@ -4,6 +4,9 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+class UWorld;
+class AActor;
+
 /**
  * On-disk format for the PIE record / replay system.
  *
@@ -238,4 +241,10 @@ namespace UEMCPPIE
 	FString DefaultRecordingsRoot();
 	FString MakeRecordingId(const FString& Override = FString());
 	FString MakeRecordingDir(const FString& Root, const FString& Id);
+
+	// Resolve an actor in a PIE world by exact name, class name, full path,
+	// or path-suffix. First match in TActorIterator order wins. Shared by the
+	// recorder (initial resolve), the replayer (re-resolve in the new world),
+	// and pie_snapshot.
+	AActor* FindActorById(UWorld* World, const FString& Id);
 }
