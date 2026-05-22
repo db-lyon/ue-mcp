@@ -28,6 +28,7 @@ obj/
 
 ## Local planning artifacts (release-note drafts, ship-list scratch)
 plans/
+comms/
 
 ## Announcement / comms drafts (Discord posts, demo recipes — never shipped)
 comms/
