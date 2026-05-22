@@ -120,6 +120,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieRecordArm(const TSharedPtr<FJsonObj
 	if (Params->TryGetBoolField(TEXT("capture_montage"), BV))    Cfg.bCaptureMontage = BV;
 	if (Params->TryGetBoolField(TEXT("take_record"), BV))        Cfg.bTakeRecord = BV;
 
+	int32 ClientId = 0;
+	if (Params->TryGetNumberField(TEXT("client_id"), ClientId)) Cfg.ClientId = FMath::Max(0, ClientId);
+
 	if (Params->HasField(TEXT("rng_seed")))
 	{
 		double SD = 0;

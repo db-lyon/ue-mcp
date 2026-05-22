@@ -128,6 +128,14 @@ Used internally by the replayer; exposed because they are useful on their own.
 | `inject_input_stop` | Release a hold or stop a tape |
 | `inject_input_tape` | Play a per-frame value array, one entry per end-of-frame |
 
+### Multi-client PIE
+
+`pie_record_arm`, `pie_replay_arm`, and the `inject_input*` primitives accept a `client_id` parameter selecting which local player to sample / replay / inject into. `0` (default) is the first local player; `1+` selects subsequent local players in multi-client PIE sessions.
+
+To record both clients in one session, call `pie_record_arm` twice with different `client_id` and `id` values - the recorder writes one recording directory per client. Replay each recording back with its matching `client_id`. The injector caches subsystems per client per tick so concurrent holds / tapes across clients don't trample each other.
+
+The manifest's `client_id` field records which local player produced the recording.
+
 ### Take Recorder integration
 
 Pass `take_record: true` to `pie_record_arm` to also drive Take Recorder `StartRecording` / `StopRecording` in lockstep with BeginPIE / EndPIE. The integration uses UFunction reflection so the bridge does not link against the Take Recorder plugin; if Take Recorder is not enabled or its panel is not open, the recorder logs a diagnostic and continues without it (the input recording itself is unaffected).
@@ -227,4 +235,3 @@ For a full example see `plans/pie-record-replay.md` in the repo (gitignored desi
 
 These are tracked as follow-ups, not present in the first ship:
 
-- **Multi-client PIE** - one local player only

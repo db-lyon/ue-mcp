@@ -64,8 +64,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::InjectInput(const TSharedPtr<FJsonObje
 	if (!Action) return LoadErr;
 
 	const FInputActionValue Value = BuildValueForAction(Action, Params);
+	const int32 ClientIndex = FMath::Max(0, OptionalInt(Params, TEXT("client_id"), 0));
 	FString Err;
-	if (!UEMCPPIE::FPIEInputInjector::InjectOnce(Action, Value, Err))
+	if (!UEMCPPIE::FPIEInputInjector::InjectOnce(Action, Value, Err, ClientIndex))
 	{
 		return MCPError(Err);
 	}
@@ -86,9 +87,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::InjectInputStart(const TSharedPtr<FJso
 
 	const FInputActionValue Value = BuildValueForAction(Action, Params);
 	const FString DesiredId = OptionalString(Params, TEXT("injection_id"));
+	const int32 ClientIndex = FMath::Max(0, OptionalInt(Params, TEXT("client_id"), 0));
 
 	FString Err;
-	const FString Id = UEMCPPIE::FPIEInputInjector::StartHold(Action, Value, DesiredId, Err);
+	const FString Id = UEMCPPIE::FPIEInputInjector::StartHold(Action, Value, DesiredId, Err, ClientIndex);
 	if (Id.IsEmpty()) return MCPError(Err);
 
 	auto Result = MCPSuccess();
@@ -183,9 +185,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::InjectInputTape(const TSharedPtr<FJson
 
 	const int32 Hz = OptionalInt(Params, TEXT("hz"), 60);
 	const FString DesiredId = OptionalString(Params, TEXT("injection_id"));
+	const int32 ClientIndex = FMath::Max(0, OptionalInt(Params, TEXT("client_id"), 0));
 
 	FString Err;
-	const FString Id = UEMCPPIE::FPIEInputInjector::StartTape(Action, Vals, Hz, DesiredId, Err);
+	const FString Id = UEMCPPIE::FPIEInputInjector::StartTape(Action, Vals, Hz, DesiredId, Err, ClientIndex);
 	if (Id.IsEmpty()) return MCPError(Err);
 
 	auto Result = MCPSuccess();

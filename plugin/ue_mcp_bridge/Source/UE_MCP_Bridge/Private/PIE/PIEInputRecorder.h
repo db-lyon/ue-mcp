@@ -51,6 +51,9 @@ namespace UEMCPPIE
 		// Requires the Take Recorder plugin + an open panel; falls back to
 		// a no-op with a diagnostic in TakeRecorderStatus otherwise.
 		bool bTakeRecord = false;
+		// Multi-client PIE: which local player to sample. 0 = first
+		// (single-client default), 1+ selects subsequent local players.
+		int32 ClientId = 0;
 		float AxisThreshold = 0.15f;
 		int32 SampleHz = 60;
 		int32 PinFPS = 60;                // 0 to skip the t.MaxFPS pin

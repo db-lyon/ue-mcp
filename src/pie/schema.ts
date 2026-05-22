@@ -45,6 +45,7 @@ export const Manifest = z.object({
   rng_seed: z.number(),
   pie_world: z.string(),
   pawn_class: z.string(),
+  client_id: z.number().int().nonnegative().optional(),
   axis_threshold: z.number(),
   actions: z.array(ActionSpec),
   tracked_values: z.array(TrackedValueSpec),

@@ -118,6 +118,7 @@ namespace UEMCPPIE
 		O->SetNumberField(TEXT("rng_seed"), static_cast<double>(M.RngSeed));
 		O->SetStringField(TEXT("pie_world"), M.PIEWorld);
 		O->SetStringField(TEXT("pawn_class"), M.PawnClass);
+		O->SetNumberField(TEXT("client_id"), M.ClientId);
 		O->SetNumberField(TEXT("axis_threshold"), M.AxisThreshold);
 
 		TArray<TSharedPtr<FJsonValue>> ActionsArr;
@@ -216,6 +217,9 @@ namespace UEMCPPIE
 		Out.RngSeed = static_cast<int64>(Seed);
 		Obj->TryGetStringField(TEXT("pie_world"), Out.PIEWorld);
 		Obj->TryGetStringField(TEXT("pawn_class"), Out.PawnClass);
+		int32 ClientId = 0;
+		Obj->TryGetNumberField(TEXT("client_id"), ClientId);
+		Out.ClientId = ClientId;
 		double Threshold = 0.15;
 		Obj->TryGetNumberField(TEXT("axis_threshold"), Threshold);
 		Out.AxisThreshold = static_cast<float>(Threshold);

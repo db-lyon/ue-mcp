@@ -2,6 +2,7 @@
 #include "UE_MCP_BridgeModule.h"
 #include "Engine/World.h"
 #include "Engine/LocalPlayer.h"
+#include "Kismet/GameplayStatics.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedPlayerInput.h"
@@ -159,7 +160,9 @@ namespace UEMCPPIE
 	{
 		if (bAttached) return true;
 		if (!PIEWorld) return false;
-		APlayerController* PC = PIEWorld->GetFirstPlayerController();
+		APlayerController* PC = (Config.ClientIndex > 0)
+			? UGameplayStatics::GetPlayerController(PIEWorld, Config.ClientIndex)
+			: PIEWorld->GetFirstPlayerController();
 		if (!PC) return false;
 		APawn* Pawn = PC->GetPawn();
 		if (!Pawn || !Pawn->InputComponent) return false;
@@ -208,7 +211,9 @@ namespace UEMCPPIE
 		Row.Dt = DeltaTime;
 
 		if (!PIEWorld) return Row;
-		APlayerController* PC = PIEWorld->GetFirstPlayerController();
+		APlayerController* PC = (Config.ClientIndex > 0)
+			? UGameplayStatics::GetPlayerController(PIEWorld, Config.ClientIndex)
+			: PIEWorld->GetFirstPlayerController();
 		if (!PC) return Row;
 		APawn* Pawn = PC->GetPawn();
 		if (!Pawn) return Row;
