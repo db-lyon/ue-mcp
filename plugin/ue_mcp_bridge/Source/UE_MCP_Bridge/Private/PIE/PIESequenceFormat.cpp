@@ -21,6 +21,18 @@ namespace UEMCPPIE
 			return Out;
 		}
 
+		// Single-line emitter for the .jsonl path. The default writer is
+		// pretty-printed, which breaks the "one object per line" invariant
+		// JSONL consumers expect.
+		FString WriteJsonToStringCondensed(const TSharedRef<FJsonObject>& Obj)
+		{
+			FString Out;
+			TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+				TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
+			FJsonSerializer::Serialize(Obj, Writer);
+			return Out;
+		}
+
 		bool ReadStringFromFile(const FString& Path, FString& Out, FString& OutError)
 		{
 			if (!FFileHelper::LoadFileToString(Out, *Path))
@@ -784,7 +796,7 @@ namespace UEMCPPIE
 				Actors->SetObjectField(KV.Key, A);
 			}
 			O->SetObjectField(TEXT("actors"), Actors);
-			Buf += WriteJsonToString(O);
+			Buf += WriteJsonToStringCondensed(O);
 			Buf += TEXT("\n");
 		}
 		if (!FFileHelper::SaveStringToFile(Buf, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
