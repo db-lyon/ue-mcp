@@ -3,6 +3,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HandlerUtils.h"
+#include "MCPHandlerRegistration.h"
 
 FMCPHandlerRegistry::FMCPHandlerRegistry()
 {
@@ -33,6 +34,13 @@ float FMCPHandlerRegistry::GetHandlerTimeout(const FString& MethodName) const
 	{
 		return *V;
 	}
+	// External (plugin-contributed) handlers may register their own timeout.
+	UEMCP::FExternalHandlerFn Unused;
+	float ExternalTimeout = 0.0f;
+	if (UEMCP::LookupExternalHandler(MethodName, Unused, ExternalTimeout) && ExternalTimeout > 0.0f)
+	{
+		return ExternalTimeout;
+	}
 	return 0.0f;
 }
 
@@ -58,24 +66,42 @@ TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& Method
 		return ExecutePythonHandler(MethodName, Params);
 	}
 
+	// Plugin-contributed external handler (registered via UEMCP::RegisterExternalHandler).
+	{
+		UEMCP::FExternalHandlerFn External;
+		float Unused = 0.0f;
+		if (UEMCP::LookupExternalHandler(MethodName, External, Unused))
+		{
+			return External(Params);
+		}
+	}
+
 	// Handler not found - return nullptr so BridgeServer sends "Unknown method" error
 	return nullptr;
 }
 
 bool FMCPHandlerRegistry::HasHandler(const FString& MethodName) const
 {
-	return CppHandlers.Contains(MethodName) || PythonHandlers.Contains(MethodName);
+	if (CppHandlers.Contains(MethodName) || PythonHandlers.Contains(MethodName))
+	{
+		return true;
+	}
+	UEMCP::FExternalHandlerFn Unused;
+	float UnusedTimeout = 0.0f;
+	return UEMCP::LookupExternalHandler(MethodName, Unused, UnusedTimeout);
 }
 
 TArray<FString> FMCPHandlerRegistry::GetHandlerNames() const
 {
 	TArray<FString> Names;
 	CppHandlers.GetKeys(Names);
-	
+
 	TArray<FString> PythonNames;
 	PythonHandlers.GetKeys(PythonNames);
 	Names.Append(PythonNames);
-	
+
+	Names.Append(UEMCP::GetExternalHandlerNames());
+
 	return Names;
 }
 
