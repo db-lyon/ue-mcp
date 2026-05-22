@@ -107,4 +107,7 @@ private:
 
 	// Offline pawn-state diff of two recordings.
 	static TSharedPtr<FJsonValue> PieRecordDiff(const TSharedPtr<FJsonObject>& Params);
+
+	// Full UProperty dump of a live PIE actor to JSON (snapshots/<name>.json).
+	static TSharedPtr<FJsonValue> PieSnapshot(const TSharedPtr<FJsonObject>& Params);
 };
