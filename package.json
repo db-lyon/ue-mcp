@@ -71,7 +71,7 @@
     "prepublishOnly": "npx tsc && tsx scripts/generate-default-config.ts && tsx scripts/generate-tool-metadata.ts"
   },
   "dependencies": {
-    "@db-lyon/flowkit": "~0.5.2",
+    "@db-lyon/flowkit": "~0.5.3",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "js-yaml": "^4.1.0",
     "ws": "^8.18.0",
