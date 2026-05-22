@@ -148,6 +148,7 @@ export const gameplayTool: ToolDef = categoryTool(
     pin_fps: z.number().optional().describe("pie_record_arm: t.MaxFPS pin during recording (default = sample_hz; 0 to skip)"),
     capture_pawn_state: z.boolean().optional().describe("pie_record_arm: include pawn location/rotation/velocity/Speed2D per row (default true)"),
     capture_montage: z.boolean().optional().describe("pie_record_arm: include 'Montage:Section' per row (default true)"),
+    take_record: z.boolean().optional().describe("pie_record_arm: also drive Take Recorder Start/Stop in lockstep with BeginPIE / EndPIE. Requires the Take Recorder plugin enabled and an open Take Recorder panel with sources configured. pie_record_stop returns take_recorder_status with the outcome (started / skipped / stopped, plus the reason)."),
     rng_seed: z.number().optional().describe("pie_record_arm: explicit RNG seed (default auto). Reapplied via FMath::RandInit on attach."),
     run_gap_frames: z.number().optional().describe("pie_record_arm: gap-tolerance frames for axis run extraction in sequence.json (default 6)"),
     recording_dir: z.string().optional().describe("pie_record_arm/list/read/delete: override of Saved/MCPRecordings/"),
