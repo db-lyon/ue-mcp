@@ -1,0 +1,193 @@
+# PIE Record / Replay
+
+A first-class **input recording and replay** system for Play-In-Editor sessions, exposed via the `gameplay` category.
+
+Use it to:
+
+- Record every Enhanced Input value and pawn state at 60 Hz while you play
+- Replay the same inputs through the real Enhanced Input pipeline
+- Diff the replay against the source for a drift report - "did the bug actually reproduce"
+
+## What it captures
+
+Per frame, into `<ProjectSavedDir>/MCPRecordings/<id>/`:
+
+| Field | Source |
+|-------|--------|
+| `pos_x/y/z`, `rot_yaw/pitch/roll`, `vel_x/y/z`, `speed2d` | First player pawn |
+| `montage` (`Name:Section`) | `AnimInstance::GetCurrentActiveMontage` |
+| Per-`UInputAction` value | `UEnhancedPlayerInput::GetActionValue` |
+| `<action>_pressed` / `_released` edge events | Computed against `axis_threshold` |
+| Dotted reflection paths you ask for | `track_values=["Hero.AbilitySystem.Health"]` |
+| Labelled markers | `pie_mark(label=...)` while recording |
+
+Artifacts:
+
+- `manifest.json` - schema metadata, action list, markers, file pointers
+- `sequence.json` - replay-ready step list (`input_tape` / `hold` / `mark` / `console` / `capture`)
+- `recording.csv` - one row per frame, self-describing `#` comment header
+- `drift.json` (replay only) - per-frame deltas vs source
+
+## Quick start
+
+```text
+# 1. Arm a recording for the next PIE session
+gameplay(action="pie_record_arm", sample_hz=60,
+         track_values=["Hero.AbilitySystem.Health"])
+
+# 2. Press Play in the editor (or call editor(play_in_editor, pieAction="start"))
+# 3. Play your scenario for as long as you want; stop PIE
+# 4. List recordings
+gameplay(action="pie_record_list")
+
+# 5. Replay it (writes drift.json next to the recording)
+gameplay(action="pie_replay_arm", recording_id="recording-20260521-143052-7af3")
+# Press Play again; the inputs replay automatically.
+
+# 6. Read the drift report
+gameplay(action="pie_record_read", id="recording-20260521-143052-7af3", file="drift")
+```
+
+## Action surface
+
+### Recording
+
+| Action | Purpose |
+|--------|---------|
+| `pie_record_arm` | Arm a recording for the next BeginPIE (or current PIE) |
+| `pie_record_disarm` | Cancel armed state. Errors if a recording is in flight |
+| `pie_record_stop` | Finalize the in-flight recording immediately |
+| `pie_record_status` | `{ state, id, current_frame, elapsed_seconds, tracked_action_count }` |
+| `pie_record_list` | Enumerate `Saved/MCPRecordings/*` newest first |
+| `pie_record_read` | Return one of `manifest` / `sequence` / `csv` / `drift` |
+| `pie_record_delete` | Delete a recording dir (requires `confirm=true`) |
+| `pie_mark` | Insert a labelled marker into the in-flight recording/replay |
+
+#### `pie_record_arm` parameters
+
+| Param | Default | Notes |
+|-------|---------|-------|
+| `actions` | `[]` (all bound) | Whitelist of `UInputAction` asset paths |
+| `track_values` | `[]` | Dotted reflection paths sampled to doubles per frame |
+| `axis_threshold` | `0.15` | Dead zone for axis edge detection |
+| `sample_hz` | `60` | Sample rate. Also the default `pin_fps` |
+| `pin_fps` | `= sample_hz` | `t.MaxFPS` pin during recording. `0` to skip |
+| `capture_pawn_state` | `true` | Per-row location/rotation/velocity/Speed2D |
+| `capture_montage` | `true` | Per-row `Montage:Section` |
+| `rng_seed` | auto | Reapplied via `FMath::RandInit` after pawn attach |
+| `run_gap_frames` | `6` | Gap tolerance for axis run extraction in `sequence.json` |
+| `recording_dir` | `Saved/MCPRecordings/` | Override the recordings root |
+| `id` | auto | Override the auto-generated `recording-<timestamp>-<short>` id |
+
+### Replay
+
+| Action | Purpose |
+|--------|---------|
+| `pie_replay_arm` | Arm a replay for the next BeginPIE (or current PIE) |
+| `pie_replay_disarm` | Cancel armed state |
+| `pie_replay_stop` | Stop the running replay; finalize `drift.json` if applicable |
+| `pie_replay_status` | `{ state, current_step, total_steps, elapsed_seconds, max_position_drift_cm, max_velocity_drift_cms }` |
+
+#### `pie_replay_arm` parameters
+
+Source (one required):
+
+- `recording_id` - loads `<root>/<id>/sequence.json` + `recording.csv` (drift enabled)
+- `sequence_path` - explicit path to a sequence.json
+- `steps` - inline step array (same schema as sequence.json)
+
+Tunables:
+
+| Param | Default | Notes |
+|-------|---------|-------|
+| `settle_ms` | sequence value (500) | Delay after pawn attach before first step |
+| `pin_fps` | sequence `sample_hz` | `t.MaxFPS` pin during replay. `0` to skip |
+| `apply_rng_seed` | `true` | Reapply sequence `rng_seed` via `FMath::RandInit` |
+| `record_drift` | `true` (when `recording_id`) | Emit `drift.json` |
+| `auto_stop_pie` | `false` | Stop PIE on sequence completion |
+| `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for the `frames_over_threshold` list |
+
+### Input injection primitives
+
+Used internally by the replayer; exposed because they are useful on their own.
+
+| Action | Purpose |
+|--------|---------|
+| `inject_input` | One-frame `InjectInputForAction` |
+| `inject_input_start` | Begin a continuous hold, returns `injection_id` |
+| `inject_input_update` | Change the value of a running hold |
+| `inject_input_stop` | Release a hold or stop a tape |
+| `inject_input_tape` | Play a per-frame value array, one entry per end-of-frame |
+
+### Offline diff
+
+`pie_record_diff(a_id, b_id, position_cm?, rotation_deg?, velocity_cms?)` walks two `recording.csv` files in lockstep by frame index and emits a single drift summary. No PIE required.
+
+## Step types in `sequence.json`
+
+```json
+{ "type": "input",      "delay_ms": 0,    "action": "/Game/Input/IA_Jump",   "value_x": 1.0 }
+{ "type": "hold",       "delay_ms": 200,  "action": "/Game/Input/IA_Attack", "value_x": 1.0, "duration_ms": 100 }
+{ "type": "input_tape", "delay_ms": 0,    "action": "/Game/Input/IA_Move",   "values": [[0.5, 0.3], [0.6, 0.3]] }
+{ "type": "mark",       "delay_ms": 1500, "label": "enemy spawned" }
+{ "type": "console",    "delay_ms": 6000, "command": "stat fps" }
+{ "type": "capture",    "delay_ms": 5000, "name": "boss_intro" }
+```
+
+`delay_ms` is **cumulative from sequence start**. The replayer schedules each step against the elapsed time since pawn attach (after `settle_ms`).
+
+`input_tape` values per element:
+
+- `0.5` - scalar (Axis1D)
+- `[0.5, 0.3]` - 2-tuple (Axis2D)
+- `[0.1, 0.2, 0.3]` - 3-tuple (Axis3D)
+
+The recorder writes the canonical arity that matches the action's value type, but the parser accepts any of the three.
+
+## Determinism: what we promise, what we don't
+
+**We promise:**
+
+- Same Enhanced Input values delivered at the same frame numbers as the source
+- Same `t.MaxFPS` pin on both record and replay
+- Same `FMath::RandInit(seed)` applied at the same lifecycle point
+
+**We do not promise:**
+
+- Identical particles, Niagara behaviour, AI behaviour-tree outcomes, physics
+- Anything that uses its own `FRandomStream`, reads real wall-clock, or branches on multi-thread ordering
+
+**What we give you instead:** a per-frame `drift.json` so divergence is *visible*. The drift report lists frames whose position / rotation / velocity deltas exceeded your thresholds, with max-drift summary stats.
+
+This sets correct expectations and turns "did my bug reproduce" from a guess into a number.
+
+## Composition with flows
+
+The flow engine auto-registers every action, so the canonical recipe composes built-ins with no new built-in flow files:
+
+```yaml
+tasks:
+  arm:
+    type: gameplay.pie_record_arm
+    options:
+      sample_hz: 60
+      track_values: ["Hero.AbilitySystem.Health"]
+  play:
+    type: editor.play_in_editor
+    options:
+      pieAction: start
+    needs: [arm]
+```
+
+For a full example see `plans/pie-record-replay.md` in the repo (gitignored design doc).
+
+## Known limitations (Phase 1)
+
+These are tracked as follow-ups, not present in the first ship:
+
+- **Take Recorder integration** (`take_record: true` on arm) - planned, not wired
+- **GIF / video export** of replay - planned, not wired
+- **Monitor mode** (passive observation during manual play) - planned, not wired
+- **Multi-client PIE** - one local player only
+- **`capture` step** during replay - records a marker in `drift.json` but does not yet write the screenshot to disk; combine with `editor(action="screenshot")` between manual replay steps if you need images
+- **Tracked-value drift** - reflection paths sample fine on record, but the drift report only compares pawn pose / velocity, not tracked values
