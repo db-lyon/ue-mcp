@@ -77,6 +77,7 @@ export const gameplayTool: ToolDef = categoryTool(
     pie_replay_disarm:      bp("Cancel an armed (but not yet started) replay. Errors if a replay is already in flight (use pie_replay_stop).", "pie_replay_disarm"),
     pie_replay_stop:        bp("Stop the in-flight replay immediately. Releases all held injections and writes drift.json when applicable. Returns { stopped, executed_steps, drift_report_path?, max_position_drift_cm?, max_velocity_drift_cms?, frames_compared? }.", "pie_replay_stop"),
     pie_replay_status:      bp("Replay state: { state, source_recording_id, current_step, total_steps, elapsed_seconds, max_position_drift_cm, max_velocity_drift_cms }.", "pie_replay_status"),
+    pie_record_diff:        bp("Offline diff of two PIE recordings. Walks both recording.csv files in lockstep by frame index and emits position / rotation / velocity deltas plus the list of frames over the configurable thresholds. Pure file read; no PIE required. Params: a_id, b_id, recording_dir? (override root), position_cm? (default 5), rotation_deg? (default 2), velocity_cms? (default 25).", "pie_record_diff", (p) => ({ a_id: p.a_id, b_id: p.b_id, recording_dir: p.recording_dir, position_cm: p.position_cm, rotation_deg: p.rotation_deg, velocity_cms: p.velocity_cms })),
   },
   undefined,
   {
@@ -163,5 +164,10 @@ export const gameplayTool: ToolDef = categoryTool(
     record_drift: z.boolean().optional().describe("pie_replay_arm: sample replay state and emit drift.json (default true when recording_id is set)"),
     auto_stop_pie: z.boolean().optional().describe("pie_replay_arm: stop PIE on sequence completion (default false)"),
     drift_thresholds: z.record(z.number()).optional().describe("pie_replay_arm: { position_cm?, rotation_deg?, velocity_cms? } cutoffs for over-threshold frame list"),
+    a_id: z.string().optional().describe("pie_record_diff: id of recording A"),
+    b_id: z.string().optional().describe("pie_record_diff: id of recording B"),
+    position_cm: z.number().optional().describe("pie_record_diff: position delta threshold in cm (default 5)"),
+    rotation_deg: z.number().optional().describe("pie_record_diff: rotation delta threshold in degrees (default 2)"),
+    velocity_cms: z.number().optional().describe("pie_record_diff: velocity delta threshold in cm/s (default 25)"),
   },
 );
