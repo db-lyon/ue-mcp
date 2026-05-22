@@ -219,18 +219,46 @@ This sets correct expectations and turns "did my bug reproduce" from a guess int
 
 ## Composition with flows
 
-The flow engine auto-registers every action, so the canonical recipe composes built-ins with no new built-in flow files:
+Every action on this page is also available as a flow task (see [Flows](flows.md)), so you can wire record and replay into shortcuts in your `ue-mcp.yml`.
+
+**Arm a 60 Hz recording with your standard tracking and press Play in one call:**
 
 ```yaml
-tasks:
-  arm:
-    type: gameplay.pie_record_arm
-    options:
-      sample_hz: 60
-      track_values: ["Hero.AbilitySystem.Health"]
-  play:
-    type: editor.play_in_editor
-    options:
-      pieAction: start
-    needs: [arm]
+flows:
+  record:
+    description: Arm a recording (hero + boss tracked, health sampled) and start PIE
+    steps:
+      1:
+        task: gameplay.pie_record_arm
+        options:
+          sample_hz: 60
+          track_actors: ["BP_Hero_C", "BP_Boss_C"]
+          track_values: ["Hero.AbilitySystem.Health"]
+      2:
+        task: editor.play_in_editor
+        options:
+          pieAction: start
 ```
+
+Run it with `flow(action="run", flowName="record")`, play your scenario, stop PIE manually.
+
+**Replay a recording with per-frame capture, auto-stop PIE on completion:**
+
+```yaml
+flows:
+  replay_render:
+    description: Replay a recording at 30 fps PNG capture, auto-stop PIE
+    steps:
+      1:
+        task: gameplay.pie_replay_arm
+        options:
+          recording_id: session-1
+          capture_frame_every: 2
+          auto_stop_pie: true
+      2:
+        task: editor.play_in_editor
+        options:
+          pieAction: start
+```
+
+When PIE auto-stops, call `gameplay(pie_replay_stop)` to read off the `capture_dir` and ffmpeg hint, then run ffmpeg out-of-band to assemble the GIF/MP4.
