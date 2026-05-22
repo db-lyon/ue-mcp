@@ -324,6 +324,7 @@ function toPluginInfo(rec: PluginRecord, project: ProjectContext): PluginInfo {
     uePluginDependency: rec.uePluginDependency,
     uePluginPresent,
     injected: rec.injected,
+    provided: rec.provided,
     knowledge: rec.knowledge,
     flows: rec.flows,
     tasks: rec.tasks,

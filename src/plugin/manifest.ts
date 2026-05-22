@@ -25,6 +25,26 @@ const InjectActionSchema = z.object({
 
 export type ManifestInjectAction = z.infer<typeof InjectActionSchema>;
 
+/**
+ * One action contributed by a `provides:` entry. Same shape as inject but
+ * lives under a plugin-owned category, not a built-in one, so action names
+ * are NOT prefixed - the category itself is the namespace.
+ */
+const ProvidedActionSchema = z.object({
+  task: z.string().min(1),
+  description: z.string().optional(),
+  schema: z.record(SchemaFieldSchema).optional(),
+});
+
+export type ManifestProvidedAction = z.infer<typeof ProvidedActionSchema>;
+
+const ProvidedCategorySchema = z.object({
+  description: z.string().optional(),
+  actions: z.record(ProvidedActionSchema),
+});
+
+export type ManifestProvidedCategory = z.infer<typeof ProvidedCategorySchema>;
+
 const TaskEntrySchema = z.object({
   class_path: z.string().min(1),
   description: z.string().optional(),
@@ -52,6 +72,15 @@ export const PluginManifestSchema = z.object({
   minServerVersion: z.string().optional(),
   uePluginDependency: z.string().optional(),
   inject: z.record(z.record(InjectActionSchema)).default({}),
+  provides: z
+    .record(
+      z.string().regex(/^[a-z][a-z0-9_]*$/, {
+        message:
+          "provided category name must be a lowercase identifier (letters, digits, underscore; must start with a letter)",
+      }),
+      ProvidedCategorySchema,
+    )
+    .default({}),
   knowledge: z.record(z.string()).default({}),
   tasks: z.record(TaskEntrySchema).default({}),
   flows: z.record(FlowEntrySchema).default({}),

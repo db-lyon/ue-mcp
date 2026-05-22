@@ -61,6 +61,8 @@ export interface PluginInfo {
   uePluginDependency?: string;
   uePluginPresent?: boolean;
   injected: Record<string, string[]>;
+  /** Categories this plugin contributes as new top-level MCP tools. */
+  provided: Record<string, string[]>;
   knowledge: Record<string, string>;
   flows: string[];
   tasks: string[];
