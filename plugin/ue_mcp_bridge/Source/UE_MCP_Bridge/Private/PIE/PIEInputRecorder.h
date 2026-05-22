@@ -46,6 +46,11 @@ namespace UEMCPPIE
 		// wins; misses are recorded as { resolved: false } and re-tried each
 		// frame.
 		TArray<FString> TrackedActorIds;
+		// When true the recorder also dispatches StartRecording / StopRecording
+		// on the open Take Recorder panel in lockstep with BeginPIE / EndPIE.
+		// Requires the Take Recorder plugin + an open panel; falls back to
+		// a no-op with a diagnostic in TakeRecorderStatus otherwise.
+		bool bTakeRecord = false;
 		float AxisThreshold = 0.15f;
 		int32 SampleHz = 60;
 		int32 PinFPS = 60;                // 0 to skip the t.MaxFPS pin
@@ -79,6 +84,8 @@ namespace UEMCPPIE
 		double DurationSeconds = 0.0;
 		TArray<FString> DiscoveredActions;
 		TArray<FMarker> Markers;
+		bool bTakeRecordAttempted = false;
+		FString TakeRecorderStatus;
 	};
 
 	class FPIEInputRecorder

@@ -128,6 +128,20 @@ Used internally by the replayer; exposed because they are useful on their own.
 | `inject_input_stop` | Release a hold or stop a tape |
 | `inject_input_tape` | Play a per-frame value array, one entry per end-of-frame |
 
+### Take Recorder integration
+
+Pass `take_record: true` to `pie_record_arm` to also drive Take Recorder `StartRecording` / `StopRecording` in lockstep with BeginPIE / EndPIE. The integration uses UFunction reflection so the bridge does not link against the Take Recorder plugin; if Take Recorder is not enabled or its panel is not open, the recorder logs a diagnostic and continues without it (the input recording itself is unaffected).
+
+Workflow:
+
+1. Enable the Take Recorder plugin (Edit > Plugins > "Take Recorder").
+2. Open the Take Recorder panel (Window > Cinematics > Take Recorder) and configure sources (player pawn, actors of interest, presets).
+3. Call `pie_record_arm(take_record: true, ...)`.
+4. Press Play. The bridge starts the Take in lockstep with PIE; on EndPIE it calls `StopRecording`.
+5. `pie_record_stop` returns `take_recorder_status` with the outcome.
+
+The Take asset path is governed by Take Recorder's own settings (`/Game/Cinematics/Takes/...` by default) and is not written into our manifest.
+
 ### One-shot actor snapshot
 
 `pie_snapshot(target, recording_id?, name?, include_components?)` dumps the live state of a PIE actor to JSON in one call. Unlike `track_actors` (per-frame pos/rot/vel sampling), this captures every `BlueprintVisible` `UProperty` plus an optional component dump. Output lands at `<recording_dir>/<recording_id>/snapshots/<name>.json` when a `recording_id` is supplied, otherwise `Saved/MCPSnapshots/<name>.json`.
@@ -213,5 +227,4 @@ For a full example see `plans/pie-record-replay.md` in the repo (gitignored desi
 
 These are tracked as follow-ups, not present in the first ship:
 
-- **Take Recorder integration** (`take_record: true` on arm) - planned, not wired
 - **Multi-client PIE** - one local player only

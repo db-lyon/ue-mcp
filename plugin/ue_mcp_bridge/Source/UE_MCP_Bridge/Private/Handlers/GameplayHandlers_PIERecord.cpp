@@ -57,6 +57,10 @@ namespace
 		R->SetStringField(TEXT("sequence_path"), F.SequencePath);
 		R->SetNumberField(TEXT("total_frames"), F.TotalFrames);
 		R->SetNumberField(TEXT("duration_seconds"), F.DurationSeconds);
+		if (F.bTakeRecordAttempted)
+		{
+			R->SetStringField(TEXT("take_recorder_status"), F.TakeRecorderStatus);
+		}
 
 		TArray<TSharedPtr<FJsonValue>> Acts;
 		for (const FString& A : F.DiscoveredActions) Acts.Add(MakeShared<FJsonValueString>(A));
@@ -114,6 +118,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieRecordArm(const TSharedPtr<FJsonObj
 	bool BV = true;
 	if (Params->TryGetBoolField(TEXT("capture_pawn_state"), BV)) Cfg.bCapturePawnState = BV;
 	if (Params->TryGetBoolField(TEXT("capture_montage"), BV))    Cfg.bCaptureMontage = BV;
+	if (Params->TryGetBoolField(TEXT("take_record"), BV))        Cfg.bTakeRecord = BV;
 
 	if (Params->HasField(TEXT("rng_seed")))
 	{

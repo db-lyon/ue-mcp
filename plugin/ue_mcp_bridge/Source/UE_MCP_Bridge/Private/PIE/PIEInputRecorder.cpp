@@ -1,4 +1,5 @@
 #include "PIEInputRecorder.h"
+#include "PIETakeRecorderBridge.h"
 #include "UE_MCP_BridgeModule.h"
 #include "Editor.h"
 #include "Engine/Engine.h"
@@ -177,6 +178,14 @@ namespace UEMCPPIE
 		StartedAt = ISOTimestampNow();
 
 		State = ERecorderState::WaitingForPawn;
+
+		if (Pending.bTakeRecord)
+		{
+			FString TakeMsg;
+			const bool bStarted = TakeRecorderBridge::StartFromPanel(TakeMsg);
+			UE_LOG(LogMCPBridge, Log, TEXT("[PIE-REC] take_record: %s (%s)"),
+				bStarted ? TEXT("started") : TEXT("skipped"), *TakeMsg);
+		}
 
 		if (!bEndFrameBound)
 		{
@@ -482,6 +491,18 @@ namespace UEMCPPIE
 		R.SequencePath = SeqPath;
 		R.TotalFrames = M.TotalFrames;
 		R.DurationSeconds = M.DurationSeconds;
+
+		// Drive Take Recorder Stop in lockstep with the input recorder
+		// finalise. Report the outcome so the user knows what happened.
+		if (Pending.bTakeRecord)
+		{
+			FString TakeMsg;
+			const bool bStopped = TakeRecorderBridge::StopFromPanel(TakeMsg);
+			R.bTakeRecordAttempted = true;
+			R.TakeRecorderStatus = bStopped
+				? FString::Printf(TEXT("stopped: %s"), *TakeMsg)
+				: FString::Printf(TEXT("skipped: %s"), *TakeMsg);
+		}
 		for (const FActionSpec& A : M.Actions)
 		{
 			R.DiscoveredActions.Add(FString::Printf(TEXT("%s (%s)"), *A.Name, *ActionValueTypeToString(A.ValueType)));
