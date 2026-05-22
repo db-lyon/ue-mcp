@@ -137,6 +137,8 @@ Used internally by the replayer; exposed because they are useful on their own.
 { "type": "capture",    "delay_ms": 5000, "name": "boss_intro" }
 ```
 
+`capture` writes a viewport screenshot via `FScreenshotRequest::RequestScreenshot`. When replaying a known `recording_id` the file lands in `<recording_dir>/captures/<name>_frame<N>.png`; inline-steps replays write to `Saved/Screenshots/MCPReplay/`. The drift entry records the full path under the `capture:<name>:<path>` marker.
+
 `delay_ms` is **cumulative from sequence start**. The replayer schedules each step against the elapsed time since pawn attach (after `settle_ms`).
 
 `input_tape` values per element:
@@ -192,4 +194,3 @@ These are tracked as follow-ups, not present in the first ship:
 - **GIF / video export** of replay - planned, not wired
 - **Monitor mode** (passive observation during manual play) - planned, not wired
 - **Multi-client PIE** - one local player only
-- **`capture` step** during replay - records a marker in `drift.json` but does not yet write the screenshot to disk; combine with `editor(action="screenshot")` between manual replay steps if you need images

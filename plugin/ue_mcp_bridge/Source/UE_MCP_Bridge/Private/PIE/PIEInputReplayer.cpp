@@ -16,6 +16,7 @@
 #include "Misc/Paths.h"
 #include "Math/UnrealMathUtility.h"
 #include "InputAction.h"
+#include "UnrealClient.h"
 #include "UObject/UObjectGlobals.h"
 
 namespace UEMCPPIE
@@ -410,10 +411,29 @@ namespace UEMCPPIE
 				break;
 			}
 			case EStepType::Capture:
-				// Capture is a no-op in v1 replay; markers in drift.json record
-				// where the step fired so post-processing can grab a frame.
-				Sampler.QueueMarker(FString::Printf(TEXT("capture:%s"), *S.CaptureName));
+			{
+				// Request a viewport screenshot for the next renderable frame.
+				// When replaying a known recording_id we land the file next to
+				// drift.json (<recording_dir>/captures/), otherwise fall back
+				// to Saved/Screenshots/MCPReplay/.
+				FString Dir;
+				if (!CurrentDriftPath.IsEmpty())
+				{
+					Dir = FPaths::GetPath(CurrentDriftPath) / TEXT("captures");
+				}
+				else
+				{
+					Dir = FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("MCPReplay");
+				}
+				IFileManager::Get().MakeDirectory(*Dir, true);
+				const uint64 FrameIdx = static_cast<uint64>(FramesCompared);
+				const FString Safe = S.CaptureName.IsEmpty() ? TEXT("capture") : S.CaptureName;
+				const FString FullPath = Dir / FString::Printf(TEXT("%s_frame%05llu.png"), *Safe, FrameIdx);
+				FScreenshotRequest::RequestScreenshot(FullPath, /*bShowUI*/false, /*bAddFilenameSuffix*/false);
+				Sampler.QueueMarker(FString::Printf(TEXT("capture:%s:%s"), *Safe, *FullPath));
+				UE_LOG(LogMCPBridge, Log, TEXT("[PIE-REP] capture requested: %s"), *FullPath);
 				break;
+			}
 			}
 			NextStepIndex++;
 			ExecutedSteps++;
