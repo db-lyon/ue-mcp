@@ -208,6 +208,52 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieRecordDiff(const TSharedPtr<FJsonOb
 	}
 	Result->SetObjectField(TEXT("tracked_value_max_deltas"), TVD);
 
+	// Actor-scoped diff: optional tracked.jsonl sidecar in both recordings.
+	// Walks in lockstep by row index (frame). Per-actor entries that resolved
+	// in both rows contribute to max position / rotation / velocity deltas;
+	// unresolved frames are counted so consumers can spot intermittent
+	// resolution.
+	const FString JsonlA = Root / A / TEXT("tracked.jsonl");
+	const FString JsonlB = Root / B / TEXT("tracked.jsonl");
+	if (FPaths::FileExists(JsonlA) && FPaths::FileExists(JsonlB))
+	{
+		TArray<FTrackedActorRow> RowsTA, RowsTB;
+		FString TErr;
+		if (LoadTrackedActorsJSONL(JsonlA, RowsTA, TErr) && LoadTrackedActorsJSONL(JsonlB, RowsTB, TErr))
+		{
+			const int32 NT = FMath::Min(RowsTA.Num(), RowsTB.Num());
+			TMap<FString, FActorDrift> ActorAcc;
+			for (int32 i = 0; i < NT; ++i)
+			{
+				for (const TPair<FString, FActorState>& KV : RowsTA[i].Actors)
+				{
+					FActorDrift& Acc = ActorAcc.FindOrAdd(KV.Key);
+					const FActorState* SB = RowsTB[i].Actors.Find(KV.Key);
+					if (!KV.Value.bResolved) { Acc.FramesUnresolvedInSource++; continue; }
+					if (!SB || !SB->bResolved) { Acc.FramesUnresolvedInReplay++; continue; }
+					const float DPos = static_cast<float>((KV.Value.Location - SB->Location).Size());
+					const float DVel = static_cast<float>((KV.Value.Velocity - SB->Velocity).Size());
+					const float DRot = static_cast<float>(FMath::Abs((KV.Value.Rotation - SB->Rotation).Euler().Size()));
+					if (DPos > Acc.MaxPositionCm) Acc.MaxPositionCm = DPos;
+					if (DVel > Acc.MaxVelocityCms) Acc.MaxVelocityCms = DVel;
+					if (DRot > Acc.MaxRotationDeg) Acc.MaxRotationDeg = DRot;
+				}
+			}
+			TSharedRef<FJsonObject> AD = MakeShared<FJsonObject>();
+			for (const TPair<FString, FActorDrift>& KV : ActorAcc)
+			{
+				TSharedRef<FJsonObject> Item = MakeShared<FJsonObject>();
+				Item->SetNumberField(TEXT("max_position_cm"), KV.Value.MaxPositionCm);
+				Item->SetNumberField(TEXT("max_rotation_deg"), KV.Value.MaxRotationDeg);
+				Item->SetNumberField(TEXT("max_velocity_cms"), KV.Value.MaxVelocityCms);
+				Item->SetNumberField(TEXT("frames_unresolved_in_source"), KV.Value.FramesUnresolvedInSource);
+				Item->SetNumberField(TEXT("frames_unresolved_in_replay"), KV.Value.FramesUnresolvedInReplay);
+				AD->SetObjectField(KV.Key, Item);
+			}
+			Result->SetObjectField(TEXT("actor_drift"), AD);
+		}
+	}
+
 	Result->SetArrayField(TEXT("frames_over_threshold"), Over);
 	return MCPResult(Result);
 }

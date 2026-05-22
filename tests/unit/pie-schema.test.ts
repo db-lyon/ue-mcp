@@ -3,6 +3,7 @@ import {
   Manifest,
   Sequence,
   DriftReport,
+  ActorStateRow,
   PIE_FORMAT_VERSION,
 } from "../../src/pie/schema.js";
 
@@ -141,10 +142,40 @@ describe("PIE drift report schema", () => {
       max_rotation_drift_deg: 3.2,
       montage_section_mismatches: 0,
       tracked_value_max_deltas: { "Hero.AbilitySystem.Health": 0 },
+      actor_drift: {
+        "BP_Boss_C": {
+          max_position_cm: 11.7,
+          max_rotation_deg: 0.4,
+          max_velocity_cms: 36.2,
+          frames_unresolved_in_source: 0,
+          frames_unresolved_in_replay: 3,
+        },
+      },
       frames_over_threshold: [
         { frame: 412, position_delta_cm: 12.4, velocity_delta_cms: 47.1, rotation_delta_deg: 0.3 },
       ],
     };
     expect(DriftReport.parse(drift).frames_compared).toBe(745);
+  });
+});
+
+describe("PIE tracked.jsonl schema", () => {
+  it("accepts a row with resolved + unresolved actors", () => {
+    const row = {
+      frame: 17,
+      time: 0.283,
+      actors: {
+        "BP_Hero_C": {
+          resolved: true,
+          pos: [120.5, -30.2, 88.0],
+          rot: [45.0, 0.0, 0.0],
+          vel: [200.1, 0.0, 0.0],
+        },
+        "BP_Boss_C": { resolved: false },
+      },
+    };
+    const parsed = ActorStateRow.parse(row);
+    expect(parsed.actors["BP_Hero_C"].resolved).toBe(true);
+    expect(parsed.actors["BP_Boss_C"].resolved).toBe(false);
   });
 });

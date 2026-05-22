@@ -71,10 +71,30 @@ namespace UEMCPPIE
 		float AxisThreshold = 0.15f;
 		TArray<FActionSpec> Actions;
 		TArray<FTrackedValueSpec> TrackedValues;
+		TArray<FString> TrackedActorIds;
 		TArray<FMarker> Markers;
 		FString CSVFile = TEXT("recording.csv");
 		FString SequenceFile = TEXT("sequence.json");
 		FString DriftFile;
+		FString TrackedActorsFile;
+	};
+
+	// Per-frame position / rotation / velocity for a single tracked actor.
+	// Resolved=false means no actor matched the user's id this frame; deltas
+	// against an unresolved frame are skipped rather than treated as zero.
+	struct FActorState
+	{
+		FVector Location = FVector::ZeroVector;
+		FRotator Rotation = FRotator::ZeroRotator;
+		FVector Velocity = FVector::ZeroVector;
+		bool bResolved = false;
+	};
+
+	struct FTrackedActorRow
+	{
+		uint64 Frame = 0;
+		double Time = 0.0;
+		TMap<FString, FActorState> Actors;
 	};
 
 	enum class EStepType : uint8
@@ -123,6 +143,16 @@ namespace UEMCPPIE
 		float RotationDeltaDeg = 0.f;
 	};
 
+	// Aggregated per-tracked-actor drift across all sampled frames.
+	struct FActorDrift
+	{
+		float MaxPositionCm = 0.f;
+		float MaxRotationDeg = 0.f;
+		float MaxVelocityCms = 0.f;
+		int32 FramesUnresolvedInSource = 0;
+		int32 FramesUnresolvedInReplay = 0;
+	};
+
 	struct FDriftReport
 	{
 		int32 Version = kFormatVersion;
@@ -136,6 +166,7 @@ namespace UEMCPPIE
 		float MaxRotationDriftDeg = 0.f;
 		int32 MontageSectionMismatches = 0;
 		TMap<FString, float> TrackedValueMaxDeltas;
+		TMap<FString, FActorDrift> ActorDrift;
 		TArray<FDriftFrameEntry> FramesOverThreshold;
 	};
 
@@ -178,6 +209,10 @@ namespace UEMCPPIE
 
 	bool SaveDrift(const FString& Path, const FDriftReport& D, FString& OutError);
 	bool LoadDrift(const FString& Path, FDriftReport& Out, FString& OutError);
+
+	// tracked.jsonl: one JSON object per line, ordered by frame.
+	bool SaveTrackedActorsJSONL(const FString& Path, const TArray<FTrackedActorRow>& Rows, FString& OutError);
+	bool LoadTrackedActorsJSONL(const FString& Path, TArray<FTrackedActorRow>& OutRows, FString& OutError);
 
 	// ── CSV writing ──────────────────────────────────────────────────────
 

@@ -163,7 +163,18 @@ namespace UEMCPPIE
 		{
 			Files->SetStringField(TEXT("drift"), M.DriftFile);
 		}
+		if (!M.TrackedActorsFile.IsEmpty())
+		{
+			Files->SetStringField(TEXT("tracked_actors"), M.TrackedActorsFile);
+		}
 		O->SetObjectField(TEXT("files"), Files);
+
+		TArray<TSharedPtr<FJsonValue>> ActorIdsArr;
+		for (const FString& Id : M.TrackedActorIds)
+		{
+			ActorIdsArr.Add(MakeShared<FJsonValueString>(Id));
+		}
+		O->SetArrayField(TEXT("tracked_actors"), ActorIdsArr);
 
 		return O;
 	}
@@ -266,6 +277,17 @@ namespace UEMCPPIE
 			(*Files)->TryGetStringField(TEXT("csv"), Out.CSVFile);
 			(*Files)->TryGetStringField(TEXT("sequence"), Out.SequenceFile);
 			(*Files)->TryGetStringField(TEXT("drift"), Out.DriftFile);
+			(*Files)->TryGetStringField(TEXT("tracked_actors"), Out.TrackedActorsFile);
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* ActorIds = nullptr;
+		if (Obj->TryGetArrayField(TEXT("tracked_actors"), ActorIds) && ActorIds)
+		{
+			for (const TSharedPtr<FJsonValue>& V2 : *ActorIds)
+			{
+				FString S;
+				if (V2.IsValid() && V2->TryGetString(S)) Out.TrackedActorIds.Add(S);
+			}
 		}
 
 		return true;
@@ -471,6 +493,19 @@ namespace UEMCPPIE
 		}
 		O->SetObjectField(TEXT("tracked_value_max_deltas"), TVD);
 
+		TSharedRef<FJsonObject> AD = MakeShared<FJsonObject>();
+		for (const TPair<FString, FActorDrift>& KV : D.ActorDrift)
+		{
+			TSharedRef<FJsonObject> A = MakeShared<FJsonObject>();
+			A->SetNumberField(TEXT("max_position_cm"), KV.Value.MaxPositionCm);
+			A->SetNumberField(TEXT("max_rotation_deg"), KV.Value.MaxRotationDeg);
+			A->SetNumberField(TEXT("max_velocity_cms"), KV.Value.MaxVelocityCms);
+			A->SetNumberField(TEXT("frames_unresolved_in_source"), KV.Value.FramesUnresolvedInSource);
+			A->SetNumberField(TEXT("frames_unresolved_in_replay"), KV.Value.FramesUnresolvedInReplay);
+			AD->SetObjectField(KV.Key, A);
+		}
+		O->SetObjectField(TEXT("actor_drift"), AD);
+
 		TArray<TSharedPtr<FJsonValue>> Frames;
 		for (const FDriftFrameEntry& F : D.FramesOverThreshold)
 		{
@@ -518,6 +553,25 @@ namespace UEMCPPIE
 				{
 					Out.TrackedValueMaxDeltas.Add(KV.Key, static_cast<float>(D2));
 				}
+			}
+		}
+
+		const TSharedPtr<FJsonObject>* AD = nullptr;
+		if (Obj->TryGetObjectField(TEXT("actor_drift"), AD) && AD)
+		{
+			for (const auto& KV : (*AD)->Values)
+			{
+				const TSharedPtr<FJsonObject>* AO = nullptr;
+				if (!KV.Value.IsValid() || !KV.Value->TryGetObject(AO) || !AO) continue;
+				FActorDrift AcDr;
+				double T = 0;
+				(*AO)->TryGetNumberField(TEXT("max_position_cm"), T); AcDr.MaxPositionCm = static_cast<float>(T);
+				T = 0; (*AO)->TryGetNumberField(TEXT("max_rotation_deg"), T); AcDr.MaxRotationDeg = static_cast<float>(T);
+				T = 0; (*AO)->TryGetNumberField(TEXT("max_velocity_cms"), T); AcDr.MaxVelocityCms = static_cast<float>(T);
+				int32 Unresolved = 0;
+				(*AO)->TryGetNumberField(TEXT("frames_unresolved_in_source"), Unresolved); AcDr.FramesUnresolvedInSource = Unresolved;
+				Unresolved = 0; (*AO)->TryGetNumberField(TEXT("frames_unresolved_in_replay"), Unresolved); AcDr.FramesUnresolvedInReplay = Unresolved;
+				Out.ActorDrift.Add(KV.Key, AcDr);
 			}
 		}
 
@@ -682,6 +736,108 @@ namespace UEMCPPIE
 		{
 			OutError = FString::Printf(TEXT("CSV write failed: %s"), *Path);
 			return false;
+		}
+		return true;
+	}
+
+	// ── tracked.jsonl ────────────────────────────────────────────────────
+
+	bool SaveTrackedActorsJSONL(const FString& Path, const TArray<FTrackedActorRow>& Rows, FString& OutError)
+	{
+		FString Buf;
+		Buf.Reserve(Rows.Num() * 96);
+		for (const FTrackedActorRow& Row : Rows)
+		{
+			TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetNumberField(TEXT("frame"), static_cast<double>(Row.Frame));
+			O->SetNumberField(TEXT("time"), Row.Time);
+			TSharedRef<FJsonObject> Actors = MakeShared<FJsonObject>();
+			for (const TPair<FString, FActorState>& KV : Row.Actors)
+			{
+				TSharedRef<FJsonObject> A = MakeShared<FJsonObject>();
+				A->SetBoolField(TEXT("resolved"), KV.Value.bResolved);
+				if (KV.Value.bResolved)
+				{
+					TArray<TSharedPtr<FJsonValue>> Pos;
+					Pos.Add(MakeShared<FJsonValueNumber>(KV.Value.Location.X));
+					Pos.Add(MakeShared<FJsonValueNumber>(KV.Value.Location.Y));
+					Pos.Add(MakeShared<FJsonValueNumber>(KV.Value.Location.Z));
+					A->SetArrayField(TEXT("pos"), Pos);
+					TArray<TSharedPtr<FJsonValue>> Rot;
+					Rot.Add(MakeShared<FJsonValueNumber>(KV.Value.Rotation.Yaw));
+					Rot.Add(MakeShared<FJsonValueNumber>(KV.Value.Rotation.Pitch));
+					Rot.Add(MakeShared<FJsonValueNumber>(KV.Value.Rotation.Roll));
+					A->SetArrayField(TEXT("rot"), Rot);
+					TArray<TSharedPtr<FJsonValue>> Vel;
+					Vel.Add(MakeShared<FJsonValueNumber>(KV.Value.Velocity.X));
+					Vel.Add(MakeShared<FJsonValueNumber>(KV.Value.Velocity.Y));
+					Vel.Add(MakeShared<FJsonValueNumber>(KV.Value.Velocity.Z));
+					A->SetArrayField(TEXT("vel"), Vel);
+				}
+				Actors->SetObjectField(KV.Key, A);
+			}
+			O->SetObjectField(TEXT("actors"), Actors);
+			Buf += WriteJsonToString(O);
+			Buf += TEXT("\n");
+		}
+		if (!FFileHelper::SaveStringToFile(Buf, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			OutError = FString::Printf(TEXT("write failed: %s"), *Path);
+			return false;
+		}
+		return true;
+	}
+
+	bool LoadTrackedActorsJSONL(const FString& Path, TArray<FTrackedActorRow>& OutRows, FString& OutError)
+	{
+		FString Raw;
+		if (!FFileHelper::LoadFileToString(Raw, *Path))
+		{
+			OutError = FString::Printf(TEXT("read failed: %s"), *Path);
+			return false;
+		}
+		TArray<FString> Lines;
+		Raw.ParseIntoArrayLines(Lines, false);
+		for (const FString& L : Lines)
+		{
+			if (L.IsEmpty()) continue;
+			TSharedPtr<FJsonObject> Obj;
+			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(L);
+			if (!FJsonSerializer::Deserialize(Reader, Obj) || !Obj.IsValid()) continue;
+			FTrackedActorRow Row;
+			double F = 0; Obj->TryGetNumberField(TEXT("frame"), F); Row.Frame = static_cast<uint64>(F);
+			Obj->TryGetNumberField(TEXT("time"), Row.Time);
+			const TSharedPtr<FJsonObject>* Actors = nullptr;
+			if (Obj->TryGetObjectField(TEXT("actors"), Actors) && Actors)
+			{
+				for (const auto& KV : (*Actors)->Values)
+				{
+					const TSharedPtr<FJsonObject>* AO = nullptr;
+					if (!KV.Value.IsValid() || !KV.Value->TryGetObject(AO) || !AO) continue;
+					FActorState S;
+					(*AO)->TryGetBoolField(TEXT("resolved"), S.bResolved);
+					if (S.bResolved)
+					{
+						const TArray<TSharedPtr<FJsonValue>>* Pos = nullptr;
+						if ((*AO)->TryGetArrayField(TEXT("pos"), Pos) && Pos && Pos->Num() >= 3)
+						{
+							S.Location = FVector((*Pos)[0]->AsNumber(), (*Pos)[1]->AsNumber(), (*Pos)[2]->AsNumber());
+						}
+						const TArray<TSharedPtr<FJsonValue>>* Rot = nullptr;
+						if ((*AO)->TryGetArrayField(TEXT("rot"), Rot) && Rot && Rot->Num() >= 3)
+						{
+							S.Rotation = FRotator((*Rot)[1]->AsNumber(), (*Rot)[0]->AsNumber(), (*Rot)[2]->AsNumber());
+						}
+						const TArray<TSharedPtr<FJsonValue>>* Vel = nullptr;
+						if ((*AO)->TryGetArrayField(TEXT("vel"), Vel) && Vel && Vel->Num() >= 3)
+						{
+							S.Velocity = FVector((*Vel)[0]->AsNumber(), (*Vel)[1]->AsNumber(), (*Vel)[2]->AsNumber());
+						}
+					}
+					Row.Actors.Add(KV.Key, S);
+				}
+			}
+			OutRows.Add(Row);
 		}
 		return true;
 	}

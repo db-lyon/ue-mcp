@@ -3,8 +3,10 @@
 #include "CoreMinimal.h"
 #include "PIEFrameSampler.h"
 #include "PIESequenceFormat.h"
+#include "UObject/WeakObjectPtrTemplates.h"
 
 class UWorld;
+class AActor;
 
 /**
  * PIE replayer: drives a previously-recorded sequence.json (or an inline
@@ -132,6 +134,12 @@ namespace UEMCPPIE
 		int32 FramesCompared = 0;
 		int32 FramesMissingInReplay = 0;
 		TMap<FString, float> MaxTrackedDeltas;
+
+		// Actor-scoped tracking (tracked.jsonl) loaded from source recording.
+		TArray<FTrackedActorRow> SourceActorRows;
+		TArray<FString> SourceActorIds;
+		TMap<FString, TWeakObjectPtr<AActor>> ReplayActorCache;
+		TMap<FString, FActorDrift> ActorDriftAccum;
 
 		FDelegateHandle BeginPIEHandle;
 		FDelegateHandle EndPIEHandle;
