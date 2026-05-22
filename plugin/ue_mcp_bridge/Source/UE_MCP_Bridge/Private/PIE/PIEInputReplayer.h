@@ -37,6 +37,10 @@ namespace UEMCPPIE
 		bool bApplyRngSeed = true;
 		bool bRecordDrift = true;
 		bool bAutoStopPIE = false;
+		// Monitor mode: skip input injection / step execution but keep drift
+		// sampling running. Lets a human play manually against a reference
+		// recording and watch divergence live via pie_replay_status.
+		bool bMonitor = false;
 		float ThrPosCm = 5.0f;
 		float ThrRotDeg = 2.0f;
 		float ThrVelCms = 25.0f;

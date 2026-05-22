@@ -480,7 +480,7 @@ namespace UEMCPPIE
 			// Settle delay before step processing.
 			const int32 Settle = (Pending.SettleMs >= 0) ? Pending.SettleMs : ActiveSequence.SettleMs;
 			const double ElapsedMs = (Now - AttachTime) * 1000.0;
-			if (ElapsedMs >= Settle)
+			if (ElapsedMs >= Settle && !Pending.bMonitor)
 			{
 				ExecutePendingSteps(ElapsedMs - Settle);
 			}
@@ -577,8 +577,11 @@ namespace UEMCPPIE
 				}
 			}
 
-			// Auto-stop when all steps consumed and all holds released.
-			if (NextStepIndex >= ActiveSequence.Steps.Num() && ActiveHolds.Num() == 0)
+			// Auto-stop when all steps consumed and all holds released. In
+			// monitor mode the steps were never executed so we drive completion
+			// purely off frame count against the source recording.
+			const bool bStepsDone = Pending.bMonitor ? true : (NextStepIndex >= ActiveSequence.Steps.Num() && ActiveHolds.Num() == 0);
+			if (bStepsDone)
 			{
 				// Stay in Replaying for one more sample frame to let drift catch
 				// any straggler frames the source had after the last step.

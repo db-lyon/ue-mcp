@@ -124,6 +124,17 @@ describe("pie record/replay — registration + idle behaviour", () => {
     await callBridge(bridge, "pie_replay_disarm");
   });
 
+  it("pie_replay_arm in monitor mode accepts a recording_id arg shape", async () => {
+    const r = await callBridge(bridge, "pie_replay_arm", {
+      steps: [{ type: "mark", delay_ms: 0, label: "monitor" }],
+      mode: "monitor",
+      sample_hz: 60,
+    });
+    expect(r.ok, r.error).toBe(true);
+    expect((r.result as { armed?: boolean }).armed).toBe(true);
+    await callBridge(bridge, "pie_replay_disarm");
+  });
+
   it("pie_record_diff errors cleanly when one id is missing", async () => {
     const r = await callBridge(bridge, "pie_record_diff", {
       a_id: "missing-a",

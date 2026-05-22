@@ -77,6 +77,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieReplayArm(const TSharedPtr<FJsonObj
 	Cfg.bApplyRngSeed = OptionalBool(Params, TEXT("apply_rng_seed"), true);
 	Cfg.bRecordDrift  = OptionalBool(Params, TEXT("record_drift"), true);
 	Cfg.bAutoStopPIE  = OptionalBool(Params, TEXT("auto_stop_pie"), false);
+	const FString Mode = OptionalString(Params, TEXT("mode"), TEXT("replay")).ToLower();
+	Cfg.bMonitor = (Mode == TEXT("monitor"));
 
 	const TSharedPtr<FJsonObject>* Thr = nullptr;
 	if (Params->TryGetObjectField(TEXT("drift_thresholds"), Thr) && Thr)

@@ -93,6 +93,12 @@ gameplay(action="pie_record_read", id="recording-20260521-143052-7af3", file="dr
 
 #### `pie_replay_arm` parameters
 
+`mode` accepts `replay` (default) or `monitor`. In `monitor` mode the replayer
+skips input injection / step execution but keeps the per-frame drift sampler
+running, so a human can play the same scenario manually and watch divergence
+live via `pie_replay_status`. Combine with `pie_record_arm` on a separate run
+to get a fresh recording while monitoring an existing reference.
+
 Source (one required):
 
 - `recording_id` - loads `<root>/<id>/sequence.json` + `recording.csv` (drift enabled)
@@ -196,5 +202,4 @@ These are tracked as follow-ups, not present in the first ship:
 
 - **Take Recorder integration** (`take_record: true` on arm) - planned, not wired
 - **GIF / video export** of replay - planned, not wired
-- **Monitor mode** (passive observation during manual play) - planned, not wired
 - **Multi-client PIE** - one local player only
