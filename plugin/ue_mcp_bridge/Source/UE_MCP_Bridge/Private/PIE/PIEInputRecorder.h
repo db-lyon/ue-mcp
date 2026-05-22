@@ -3,8 +3,10 @@
 #include "CoreMinimal.h"
 #include "PIEFrameSampler.h"
 #include "PIESequenceFormat.h"
+#include "UObject/WeakObjectPtrTemplates.h"
 
 class UWorld;
+class AActor;
 
 /**
  * PIE input recorder: opt-in arm-then-record. Module-owned singleton, hooked
@@ -39,6 +41,11 @@ namespace UEMCPPIE
 		FString RecordingsRoot;           // empty = ProjectSavedDir/MCPRecordings
 		TArray<FString> ActionPaths;      // empty = record every bound action
 		TArray<FString> TrackedValuePaths;
+		// Tracked world actors. Each id is matched against an actor in the PIE
+		// world by exact name, by class name, or by full path. First match
+		// wins; misses are recorded as { resolved: false } and re-tried each
+		// frame.
+		TArray<FString> TrackedActorIds;
 		float AxisThreshold = 0.15f;
 		int32 SampleHz = 60;
 		int32 PinFPS = 60;                // 0 to skip the t.MaxFPS pin
@@ -123,6 +130,8 @@ namespace UEMCPPIE
 		FString CSVBody;
 		FCSVHeader CSVHdr;
 		TArray<FCSVRow> Rows;
+		TArray<FTrackedActorRow> ActorRows;
+		TMap<FString, TWeakObjectPtr<AActor>> TrackedActorCache;
 		TArray<FMarker> Markers;
 		double StartTime = 0.0;
 		FString StartedAt;

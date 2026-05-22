@@ -48,11 +48,13 @@ export const Manifest = z.object({
   axis_threshold: z.number(),
   actions: z.array(ActionSpec),
   tracked_values: z.array(TrackedValueSpec),
+  tracked_actors: z.array(z.string()).optional(),
   markers: z.array(Marker),
   files: z.object({
     csv: z.string(),
     sequence: z.string(),
     drift: z.string().optional(),
+    tracked_actors: z.string().optional(),
   }),
 });
 export type Manifest = z.infer<typeof Manifest>;
@@ -137,6 +139,15 @@ export const DriftFrameEntry = z.object({
 });
 export type DriftFrameEntry = z.infer<typeof DriftFrameEntry>;
 
+export const ActorDriftEntry = z.object({
+  max_position_cm: z.number(),
+  max_rotation_deg: z.number(),
+  max_velocity_cms: z.number(),
+  frames_unresolved_in_source: z.number().int().nonnegative(),
+  frames_unresolved_in_replay: z.number().int().nonnegative(),
+});
+export type ActorDriftEntry = z.infer<typeof ActorDriftEntry>;
+
 export const DriftReport = z.object({
   version: z.literal(PIE_FORMAT_VERSION),
   source_recording_id: z.string(),
@@ -149,6 +160,25 @@ export const DriftReport = z.object({
   max_rotation_drift_deg: z.number(),
   montage_section_mismatches: z.number().int().nonnegative(),
   tracked_value_max_deltas: z.record(z.number()),
+  actor_drift: z.record(ActorDriftEntry).optional(),
   frames_over_threshold: z.array(DriftFrameEntry),
 });
 export type DriftReport = z.infer<typeof DriftReport>;
+
+// tracked.jsonl: one ActorStateRow per line. Optional sidecar emitted by the
+// recorder when pie_record_arm is called with track_actors=[...]. Joined to
+// recording.csv by frame index.
+export const ActorState = z.object({
+  resolved: z.boolean(),
+  pos: z.tuple([z.number(), z.number(), z.number()]).optional(),
+  rot: z.tuple([z.number(), z.number(), z.number()]).optional(),
+  vel: z.tuple([z.number(), z.number(), z.number()]).optional(),
+});
+export type ActorState = z.infer<typeof ActorState>;
+
+export const ActorStateRow = z.object({
+  frame: z.number().int().nonnegative(),
+  time: z.number(),
+  actors: z.record(ActorState),
+});
+export type ActorStateRow = z.infer<typeof ActorStateRow>;

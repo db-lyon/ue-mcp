@@ -3,6 +3,8 @@
 #include "Editor.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/Actor.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "Misc/CoreDelegates.h"
@@ -10,6 +12,7 @@
 #include "Misc/Paths.h"
 #include "Math/UnrealMathUtility.h"
 #include "Containers/StringConv.h"
+#include "UObject/WeakObjectPtrTemplates.h"
 
 namespace UEMCPPIE
 {
@@ -20,6 +23,53 @@ namespace UEMCPPIE
 			// Approximate ISO 8601 UTC. UE's FDateTime has no timezone awareness,
 			// so we treat it as local and append the local offset.
 			return FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
+		}
+
+		// Match an id against an AActor by exact name, class name, or full
+		// path. Returns the first match in iteration order; documented as
+		// "first match wins" in docs/pie-record-replay.md.
+		AActor* FindActorById(UWorld* World, const FString& Id)
+		{
+			if (!World || Id.IsEmpty()) return nullptr;
+			for (TActorIterator<AActor> It(World); It; ++It)
+			{
+				AActor* A = *It;
+				if (!A) continue;
+				if (A->GetName() == Id) return A;
+				const UClass* C = A->GetClass();
+				if (C && (C->GetName() == Id || C->GetPathName() == Id)) return A;
+				if (A->GetPathName().EndsWith(Id)) return A;
+			}
+			return nullptr;
+		}
+
+		void SampleTrackedActors(UWorld* World,
+		                         const TArray<FString>& Ids,
+		                         TMap<FString, TWeakObjectPtr<AActor>>& Cache,
+		                         FTrackedActorRow& OutRow)
+		{
+			for (const FString& Id : Ids)
+			{
+				FActorState S;
+				AActor* A = nullptr;
+				if (TWeakObjectPtr<AActor>* Cached = Cache.Find(Id))
+				{
+					A = Cached->Get();
+				}
+				if (!A)
+				{
+					A = FindActorById(World, Id);
+					if (A) Cache.Add(Id, A);
+				}
+				if (A)
+				{
+					S.Location = A->GetActorLocation();
+					S.Rotation = A->GetActorRotation();
+					S.Velocity = A->GetVelocity();
+					S.bResolved = true;
+				}
+				OutRow.Actors.Add(Id, S);
+			}
 		}
 	}
 
@@ -121,6 +171,7 @@ namespace UEMCPPIE
 		Sampler.SetConfig(SC);
 
 		Rows.Reset();
+		ActorRows.Reset();
 		Markers.Reset();
 		StartTime = FPlatformTime::Seconds();
 		StartedAt = ISOTimestampNow();
@@ -195,6 +246,15 @@ namespace UEMCPPIE
 					M.Label = E.RightChop(5);
 					Markers.Add(M);
 				}
+			}
+
+			if (Pending.TrackedActorIds.Num() > 0)
+			{
+				FTrackedActorRow AR;
+				AR.Frame = FrameNum;
+				AR.Time = GameTime;
+				SampleTrackedActors(PIEWorld, Pending.TrackedActorIds, TrackedActorCache, AR);
+				ActorRows.Add(MoveTemp(AR));
 			}
 
 			AppendCSVRow(CSVBody, Row, CSVHdr);
@@ -347,6 +407,8 @@ namespace UEMCPPIE
 			CurrentId.Reset();
 			CurrentDir.Reset();
 			Rows.Reset();
+			ActorRows.Reset();
+			TrackedActorCache.Reset();
 			Markers.Reset();
 			return R;
 		}
@@ -392,6 +454,20 @@ namespace UEMCPPIE
 		M.Markers = Markers;
 		M.CSVFile = TEXT("recording.csv");
 		M.SequenceFile = TEXT("sequence.json");
+		M.TrackedActorIds = Pending.TrackedActorIds;
+
+		if (ActorRows.Num() > 0)
+		{
+			const FString JsonlPath = CurrentDir / TEXT("tracked.jsonl");
+			if (!SaveTrackedActorsJSONL(JsonlPath, ActorRows, WriteErr))
+			{
+				UE_LOG(LogMCPBridge, Warning, TEXT("[PIE-REC] tracked.jsonl write failed: %s"), *WriteErr);
+			}
+			else
+			{
+				M.TrackedActorsFile = TEXT("tracked.jsonl");
+			}
+		}
 
 		if (!SaveManifest(ManPath, M, WriteErr))
 		{
@@ -425,6 +501,8 @@ namespace UEMCPPIE
 		CurrentId.Reset();
 		CurrentDir.Reset();
 		Rows.Reset();
+		ActorRows.Reset();
+		TrackedActorCache.Reset();
 		Markers.Reset();
 		return R;
 	}

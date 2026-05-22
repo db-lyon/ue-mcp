@@ -90,6 +90,11 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieRecordArm(const TSharedPtr<FJsonObj
 	{
 		Cfg.TrackedValuePaths = JsonArrayToStringList(TrackedArr);
 	}
+	const TArray<TSharedPtr<FJsonValue>>* TrackedActorsArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("track_actors"), TrackedActorsArr))
+	{
+		Cfg.TrackedActorIds = JsonArrayToStringList(TrackedActorsArr);
+	}
 
 	double AT = 0.15;
 	Params->TryGetNumberField(TEXT("axis_threshold"), AT);
@@ -237,7 +242,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieRecordRead(const TSharedPtr<FJsonOb
 	else if (File == TEXT("sequence")) Filename = TEXT("sequence.json");
 	else if (File == TEXT("csv"))      Filename = TEXT("recording.csv");
 	else if (File == TEXT("drift"))    Filename = TEXT("drift.json");
-	else return MCPError(FString::Printf(TEXT("Unknown file '%s' (manifest|sequence|csv|drift)"), *File));
+	else if (File == TEXT("tracked"))  Filename = TEXT("tracked.jsonl");
+	else return MCPError(FString::Printf(TEXT("Unknown file '%s' (manifest|sequence|csv|drift|tracked)"), *File));
 
 	const FString Path = Root / Id / Filename;
 	FString Raw;

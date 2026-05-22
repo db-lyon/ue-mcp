@@ -19,6 +19,7 @@ Per frame, into `<ProjectSavedDir>/MCPRecordings/<id>/`:
 | Per-`UInputAction` value | `UEnhancedPlayerInput::GetActionValue` |
 | `<action>_pressed` / `_released` edge events | Computed against `axis_threshold` |
 | Dotted reflection paths you ask for | `track_values=["Hero.AbilitySystem.Health"]` |
+| Tracked world actors (pos/rot/vel) | `track_actors=["BP_Hero_C", ...]`; writes `tracked.jsonl` |
 | Labelled markers | `pie_mark(label=...)` while recording |
 
 Artifacts:
@@ -26,7 +27,8 @@ Artifacts:
 - `manifest.json` - schema metadata, action list, markers, file pointers
 - `sequence.json` - replay-ready step list (`input_tape` / `hold` / `mark` / `console` / `capture`)
 - `recording.csv` - one row per frame, self-describing `#` comment header
-- `drift.json` (replay only) - per-frame deltas vs source
+- `tracked.jsonl` (optional) - per-frame state of `track_actors`; one JSON object per line keyed by user-supplied id
+- `drift.json` (replay only) - per-frame deltas vs source, including `actor_drift` per tracked actor when both sides emitted `tracked.jsonl`
 
 ## Quick start
 
@@ -69,6 +71,7 @@ gameplay(action="pie_record_read", id="recording-20260521-143052-7af3", file="dr
 |-------|---------|-------|
 | `actions` | `[]` (all bound) | Whitelist of `UInputAction` asset paths |
 | `track_values` | `[]` | Dotted reflection paths sampled to doubles per frame |
+| `track_actors` | `[]` | World actor ids (name, class name, or full path; first match wins) sampled per frame. Writes `tracked.jsonl` (one JSON object per line) with `{ frame, time, actors: { "<id>": { resolved, pos, rot, vel } } }`. Joined to `recording.csv` by frame index. |
 | `axis_threshold` | `0.15` | Dead zone for axis edge detection |
 | `sample_hz` | `60` | Sample rate. Also the default `pin_fps` |
 | `pin_fps` | `= sample_hz` | `t.MaxFPS` pin during recording. `0` to skip |

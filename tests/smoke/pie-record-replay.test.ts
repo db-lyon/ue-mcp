@@ -42,6 +42,17 @@ describe("pie record/replay — registration + idle behaviour", () => {
     expect((r.result as { id?: string }).id).toMatch(/^recording-/);
   });
 
+  it("pie_record_arm accepts track_actors", async () => {
+    await callBridge(bridge, "pie_record_disarm");
+    const r = await callBridge(bridge, "pie_record_arm", {
+      track_actors: ["BP_Hero_C", "BP_Boss_C"],
+      sample_hz: 60,
+    });
+    expect(r.ok, r.error).toBe(true);
+    expect((r.result as { armed?: boolean }).armed).toBe(true);
+    await callBridge(bridge, "pie_record_disarm");
+  });
+
   it("pie_record_arm with a custom id and seed honours both", async () => {
     await callBridge(bridge, "pie_record_disarm");
     const r = await callBridge(bridge, "pie_record_arm", {

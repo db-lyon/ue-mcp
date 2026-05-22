@@ -5,6 +5,8 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EditorWorldUtils.h"
+#include "EngineUtils.h"
+#include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/PlatformFileManager.h"
 #include "HAL/FileManager.h"
@@ -48,6 +50,23 @@ namespace UEMCPPIE
 			case EInputActionValueType::Axis3D:  return FInputActionValue(V);
 			}
 			return FInputActionValue();
+		}
+
+		// Mirror of the recorder's actor lookup so replay can re-resolve the
+		// same actor identifiers in the new PIE world.
+		AActor* FindActorById(UWorld* World, const FString& Id)
+		{
+			if (!World || Id.IsEmpty()) return nullptr;
+			for (TActorIterator<AActor> It(World); It; ++It)
+			{
+				AActor* A = *It;
+				if (!A) continue;
+				if (A->GetName() == Id) return A;
+				const UClass* C = A->GetClass();
+				if (C && (C->GetName() == Id || C->GetPathName() == Id)) return A;
+				if (A->GetPathName().EndsWith(Id)) return A;
+			}
+			return nullptr;
 		}
 	}
 
@@ -196,6 +215,10 @@ namespace UEMCPPIE
 		FramesMissingInReplay = 0;
 		MaxTrackedDeltas.Reset();
 		SourceTrackedPaths.Reset();
+		SourceActorRows.Reset();
+		SourceActorIds.Reset();
+		ReplayActorCache.Reset();
+		ActorDriftAccum.Reset();
 		NextStepIndex = 0;
 		ExecutedSteps = 0;
 		ActiveHolds.Reset();
@@ -232,6 +255,27 @@ namespace UEMCPPIE
 					// Non-fatal: just disable drift comparison this replay.
 					UE_LOG(LogMCPBridge, Warning, TEXT("[PIE-REP] Drift disabled (%s)"), *Err);
 					SourceFrames.Reset();
+				}
+				// Tracked-actor sidecar is optional and silently disabled
+				// when the recording didn't write one.
+				const FString JsonlPath = Dir / TEXT("tracked.jsonl");
+				if (FPaths::FileExists(JsonlPath))
+				{
+					FString JErr;
+					if (!LoadTrackedActorsJSONL(JsonlPath, SourceActorRows, JErr))
+					{
+						UE_LOG(LogMCPBridge, Warning, TEXT("[PIE-REP] tracked.jsonl read failed: %s"), *JErr);
+						SourceActorRows.Reset();
+					}
+					else
+					{
+						FManifest M;
+						FString MErr;
+						if (LoadManifest(Dir / TEXT("manifest.json"), M, MErr))
+						{
+							SourceActorIds = M.TrackedActorIds;
+						}
+					}
 				}
 			}
 		}
@@ -467,6 +511,44 @@ namespace UEMCPPIE
 					{
 						DriftFrames.Add(E);
 					}
+
+					// Per-tracked-actor drift: walk the same frame index in
+					// the source tracked.jsonl, re-resolve each id in the
+					// replay world, and accumulate max |delta| per id.
+					if (SourceActorRows.Num() > 0 && static_cast<int32>(ReplayFrame) < SourceActorRows.Num())
+					{
+						const FTrackedActorRow& SrcRow = SourceActorRows[static_cast<int32>(ReplayFrame)];
+						for (const TPair<FString, FActorState>& KV : SrcRow.Actors)
+						{
+							FActorDrift& Acc = ActorDriftAccum.FindOrAdd(KV.Key);
+							if (!KV.Value.bResolved)
+							{
+								Acc.FramesUnresolvedInSource++;
+								continue;
+							}
+							AActor* A = nullptr;
+							if (TWeakObjectPtr<AActor>* Cached = ReplayActorCache.Find(KV.Key))
+							{
+								A = Cached->Get();
+							}
+							if (!A)
+							{
+								A = FindActorById(PIEWorld, KV.Key);
+								if (A) ReplayActorCache.Add(KV.Key, A);
+							}
+							if (!A)
+							{
+								Acc.FramesUnresolvedInReplay++;
+								continue;
+							}
+							const float DPos = static_cast<float>((A->GetActorLocation() - KV.Value.Location).Size());
+							const float DVel = static_cast<float>((A->GetVelocity() - KV.Value.Velocity).Size());
+							const float DRot = static_cast<float>(FMath::Abs((A->GetActorRotation() - KV.Value.Rotation).Euler().Size()));
+							if (DPos > Acc.MaxPositionCm) Acc.MaxPositionCm = DPos;
+							if (DVel > Acc.MaxVelocityCms) Acc.MaxVelocityCms = DVel;
+							if (DRot > Acc.MaxRotationDeg) Acc.MaxRotationDeg = DRot;
+						}
+					}
 					FramesCompared++;
 				}
 				else
@@ -527,6 +609,7 @@ namespace UEMCPPIE
 			D.MaxRotationDriftDeg = MaxRotDriftDeg;
 			D.MontageSectionMismatches = MontageMismatches;
 			D.TrackedValueMaxDeltas = MaxTrackedDeltas;
+			D.ActorDrift = ActorDriftAccum;
 			D.FramesOverThreshold = DriftFrames;
 			FString Err;
 			if (SaveDrift(CurrentDriftPath, D, Err))
