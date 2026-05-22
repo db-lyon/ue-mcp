@@ -3,6 +3,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { createFlowTool } from "./flow-tool.js";
 import type { ToolContext } from "../types.js";
 import { info, warn, error as logError } from "../log.js";
+import { subscribeFlowEvents, type FlowEvent } from "./events.js";
 
 type FlowTool = ReturnType<typeof createFlowTool>;
 
@@ -122,6 +123,55 @@ export function startFlowHttpServer(
 
       if (method === "GET" && pathname === "/health") {
         return send(200, { ok: true, port, host });
+      }
+
+      // Server-Sent Events: live per-step + per-run events from the flow
+      // runner. Optional `?runId=...` query filter for clients that only
+      // care about a specific run (the runId is returned in the flow.run
+      // response). Otherwise every event from every concurrent run flows
+      // through.
+      if (method === "GET" && pathname === "/flows/events") {
+        const runIdFilter = url.searchParams.get("runId");
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        // Disable proxy buffering (nginx, etc.) so events flush immediately.
+        res.setHeader("X-Accel-Buffering", "no");
+
+        // Tell the client what id (if any) we're filtering on, then a
+        // ready marker so curl --no-buffer users see something land
+        // even before any flow fires.
+        res.write(`: connected runIdFilter=${runIdFilter ?? "*"}\n\n`);
+
+        const unsubscribe = subscribeFlowEvents((event: FlowEvent) => {
+          if (runIdFilter && event.runId !== runIdFilter) return;
+          try {
+            res.write(`event: ${event.type}\n`);
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+          } catch {
+            // Write failed: connection is dead. Drop the subscription
+            // so we don't keep buffering events for a gone client.
+            unsubscribe();
+          }
+        });
+
+        // Periodic comment lines keep proxies and load balancers from
+        // killing the connection during quiet periods.
+        const keepalive = setInterval(() => {
+          try {
+            res.write(`: keepalive ${Date.now()}\n\n`);
+          } catch {
+            clearInterval(keepalive);
+            unsubscribe();
+          }
+        }, 30_000);
+
+        req.on("close", () => {
+          clearInterval(keepalive);
+          unsubscribe();
+        });
+        return;
       }
 
       send(404, { error: `No route for ${method} ${pathname}` });

@@ -3,6 +3,9 @@ import { FlowRunner } from "@db-lyon/flowkit";
 import type {
   TaskRegistry,
   FlowRunResult,
+  FlowStepResult,
+  FlowRunnerHooks,
+  PlanStep,
   TaskDefinition,
   FlowDefinition,
 } from "@db-lyon/flowkit";
@@ -16,6 +19,12 @@ import {
   pruneOldSnapshots,
   type Snapshot,
 } from "./git-snapshot.js";
+import {
+  emitFlowEvent,
+  nextRunId,
+  trimStepResult,
+  trimError,
+} from "./events.js";
 
 export function createFlowTool(
   registry: TaskRegistry,
@@ -81,7 +90,9 @@ async function planFlow(
   const flowName = params.flowName as string;
   if (!flowName) throw new Error("flowName is required");
 
-  const runner = makeRunner(registry, config, ctx);
+  // Plan mode short-circuits inside the runner before any hooks fire,
+  // so the runId placeholder we pass here is never observed.
+  const runner = makeRunner(registry, config, ctx, nextRunId(), flowName);
   return runner.run({ flowName, plan: true });
 }
 
@@ -97,13 +108,24 @@ async function runFlow(
   const flowParams = params.params as Record<string, unknown> | undefined;
   const rollback_on_failure = params.rollback_on_failure as boolean | undefined;
 
-  const runner = makeRunner(registry, config, ctx);
+  // One runId per top-level call. Every per-step / per-run event we
+  // emit carries this id so SSE subscribers can filter to a specific
+  // run; the response includes it so callers can correlate.
+  const runId = nextRunId();
+  const runner = makeRunner(registry, config, ctx, runId, flowName);
   const result = await runner.run({ flowName, skip, params: flowParams, rollback_on_failure });
 
-  return formatFlowResult(result);
+  const formatted = formatFlowResult(result);
+  return { ...formatted, runId };
 }
 
-function makeRunner(registry: TaskRegistry, config: FlowConfig, ctx: ToolContext): FlowRunner {
+function makeRunner(
+  registry: TaskRegistry,
+  config: FlowConfig,
+  ctx: ToolContext,
+  runId: string,
+  flowName: string,
+): FlowRunner {
   const flowCtx: FlowContext = {
     bridge: ctx.bridge,
     project: ctx.project,
@@ -115,31 +137,74 @@ function makeRunner(registry: TaskRegistry, config: FlowConfig, ctx: ToolContext
   const snapCfg = config.git_snapshot;
   let activeSnapshot: Snapshot | undefined;
   let flowFailed = false;
+  const snapshotEnabled = !!(snapCfg?.enabled && ctx.project.projectDir);
 
-  const hooks = (snapCfg?.enabled && ctx.project.projectDir)
-    ? {
-        beforeRun: async () => {
-          const projectDir = ctx.project.projectDir!;
-          const snapshotDir = snapCfg.snapshot_dir ?? ".ue-mcp/snapshot.git";
-          const absSnap = snapshotDir.startsWith(".") || !snapshotDir.match(/^([a-zA-Z]:|\/)/)
-            ? `${projectDir}/${snapshotDir}`
-            : snapshotDir;
-          pruneOldSnapshots(absSnap, (snapCfg.max_age_hours ?? 24) * 3_600_000);
-          try {
-            activeSnapshot = takeSnapshot(
-              projectDir,
-              snapCfg.paths ?? ["Content", "Config"],
-              snapshotDir,
-            );
-          } catch (e) {
-            // Don't fail the flow on snapshot failure — just log. Handler
-            // rollbacks still apply.
-            console.error(`[ue-mcp] git snapshot failed: ${(e as Error).message}`);
-          }
-        },
-        afterRun: async (result: FlowRunResult) => {
-          flowFailed = !result.success;
-          if (!activeSnapshot || !flowFailed) return;
+  // Always-on per-step observation. Each hook emits a single event on
+  // the module-level bus that the HTTP server's /flows/events SSE
+  // endpoint pipes to subscribed clients.
+  const hooks: FlowRunnerHooks = {
+    beforeRun: async (_name, plan) => {
+      emitFlowEvent({
+        type: "run_started",
+        runId,
+        flowName,
+        plan,
+        timestamp: Date.now(),
+      });
+      if (!snapshotEnabled) return;
+      const projectDir = ctx.project.projectDir!;
+      const snapshotDir = snapCfg!.snapshot_dir ?? ".ue-mcp/snapshot.git";
+      const absSnap = snapshotDir.startsWith(".") || !snapshotDir.match(/^([a-zA-Z]:|\/)/)
+        ? `${projectDir}/${snapshotDir}`
+        : snapshotDir;
+      pruneOldSnapshots(absSnap, (snapCfg!.max_age_hours ?? 24) * 3_600_000);
+      try {
+        activeSnapshot = takeSnapshot(
+          projectDir,
+          snapCfg!.paths ?? ["Content", "Config"],
+          snapshotDir,
+        );
+      } catch (e) {
+        // Don't fail the flow on snapshot failure - just log. Handler
+        // rollbacks still apply.
+        console.error(`[ue-mcp] git snapshot failed: ${(e as Error).message}`);
+      }
+    },
+    beforeStep: async (step: PlanStep) => {
+      emitFlowEvent({
+        type: "step_started",
+        runId,
+        flowName,
+        step,
+        timestamp: Date.now(),
+      });
+    },
+    afterStep: async (step: PlanStep, result: FlowStepResult) => {
+      emitFlowEvent({
+        type: "step_completed",
+        runId,
+        flowName,
+        step,
+        result: trimStepResult(result),
+        timestamp: Date.now(),
+      });
+    },
+    onStepError: async (step: PlanStep, error: Error) => {
+      emitFlowEvent({
+        type: "step_failed",
+        runId,
+        flowName,
+        step,
+        error: trimError(error),
+        timestamp: Date.now(),
+      });
+    },
+    afterRun: async (result: FlowRunResult) => {
+      // Restore the git snapshot first (if enabled and the flow failed)
+      // so the run_completed event is the last thing observers see.
+      if (snapshotEnabled) {
+        flowFailed = !result.success;
+        if (activeSnapshot && flowFailed) {
           try {
             const { changedPaths } = restoreSnapshot(activeSnapshot);
             if (ctx.bridge.isConnected) {
@@ -155,9 +220,20 @@ function makeRunner(registry: TaskRegistry, config: FlowConfig, ctx: ToolContext
               error: (e as Error).message,
             };
           }
-        },
+        }
       }
-    : undefined;
+      emitFlowEvent({
+        type: "run_completed",
+        runId,
+        flowName,
+        success: result.success,
+        duration: result.duration,
+        stepCount: result.steps.length,
+        failedStep: result.steps.find((s) => s.result?.success === false)?.name,
+        timestamp: Date.now(),
+      });
+    },
+  };
 
   return new FlowRunner({
     tasks: config.tasks as Record<string, TaskDefinition>,

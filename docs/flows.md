@@ -303,6 +303,46 @@ git_snapshot:
 
 The shadow repo is completely separate from any project-level git — your real history isn't touched. Snapshot failure doesn't fail the flow; handler-level rollbacks still apply. Restore outcomes surface in `result.snapshotRestore`.
 
+## Live Observation (SSE)
+
+Every flow run emits per-step lifecycle events that observers can subscribe to over a loopback HTTP Server-Sent Events stream. Use this for editor plugins that want a live "what's running" panel, dashboards, CI log streaming, or `curl --no-buffer` debugging.
+
+**Enable the HTTP server** in `ue-mcp.yml`:
+
+```yaml
+ue-mcp:
+  version: 1
+  http:
+    enabled: true
+    port: 7723   # default
+```
+
+The server prints its bearer token to stderr on startup (or honors `UE_MCP_HTTP_TOKEN`). All routes require it.
+
+**Subscribe** to the event stream:
+
+```bash
+curl --no-buffer \
+  -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:7723/flows/events
+```
+
+Filter to a specific run with `?runId=<id>`. The runId is returned in the `flow(action="run")` response so clients can correlate.
+
+**Event types** (one JSON object per SSE `data:` line):
+
+| `type` | Fires when | Payload |
+|--------|-----------|---------|
+| `run_started` | Before any step | `runId`, `flowName`, `plan` (execution plan), `timestamp` |
+| `step_started` | Before each non-skipped step | `runId`, `flowName`, `step`, `timestamp` |
+| `step_completed` | After every step (including skipped) | `runId`, `flowName`, `step`, `result: { success, skipped, duration, attempts, error? }`, `timestamp` |
+| `step_failed` | When a step errors (in addition to `step_completed`) | `runId`, `flowName`, `step`, `error: { message, name }`, `timestamp` |
+| `run_completed` | After the whole flow finishes (including hook phases + rollback) | `runId`, `flowName`, `success`, `duration`, `stepCount`, `failedStep?`, `timestamp` |
+
+`step_completed` deliberately omits `result.data` because shell outputs and CSV rows can be large. The full data is in the `flow.run` response or in handler returns. If you need live stdout from a long-running shell step, the `shell` task streams chunks through the task logger - that's a separate channel from the SSE event bus.
+
+Keepalive comment lines (`: keepalive <ts>`) fire every 30s during quiet periods so proxies and load balancers don't drop the connection.
+
 ## Skipping Steps
 
 Pass step names or numbers in the `skip` array:

@@ -6,3 +6,9 @@ export type { FlowConfig } from "./schema.js";
 export { loadFlowConfig, buildDefaults } from "./loader.js";
 export { buildFlowRegistry } from "./registry.js";
 export { createFlowTool } from "./flow-tool.js";
+export {
+  subscribeFlowEvents,
+  emitFlowEvent,
+  nextRunId,
+} from "./events.js";
+export type { FlowEvent } from "./events.js";
