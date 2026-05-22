@@ -3,6 +3,7 @@
 #include "BridgeServer.h"
 #include "Handlers/DialogHandlers.h"
 #include "PIE/PIEInputInjector.h"
+#include "PIE/PIEInputRecorder.h"
 #include "Editor.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/CoreDelegates.h"
@@ -19,8 +20,9 @@ void FUE_MCP_BridgeModule::StartupModule()
 	G_BridgeServer = MakeShared<FMCPBridgeServer>(9877);
 	FDialogHandlers::InstallDialogHook();
 	UEMCPPIE::FPIEInputInjector::Init();
+	UEMCPPIE::FPIEInputRecorder::Get().Init();
 	// Clear any leftover injections from a previous PIE session so a fresh
-	// EndPIE→BeginPIE pair starts with no ghost holds in the queue.
+	// EndPIE-BeginPIE pair starts with no ghost holds in the queue.
 	FEditorDelegates::EndPIE.AddLambda([](bool /*bIsSimulating*/)
 	{
 		UEMCPPIE::FPIEInputInjector::OnPIEEnded();
@@ -91,6 +93,7 @@ void FUE_MCP_BridgeModule::ShutdownModule()
 {
 	// Stop bridge server
 	FDialogHandlers::RemoveDialogHook();
+	UEMCPPIE::FPIEInputRecorder::Get().Shutdown();
 	UEMCPPIE::FPIEInputInjector::Shutdown();
 
 	if (G_BridgeServer.IsValid())
