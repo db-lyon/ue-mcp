@@ -47,6 +47,9 @@ namespace UEMCPPIE
 		// Document the ffmpeg incantation to assemble a GIF/MP4 from the
 		// resulting PNG sequence.
 		int32 CaptureFrameEvery = 0;
+		// Multi-client PIE: which local player to drive injections / sample
+		// for drift. 0 = first (default), 1+ selects subsequent local players.
+		int32 ClientId = 0;
 		float ThrPosCm = 5.0f;
 		float ThrRotDeg = 2.0f;
 		float ThrVelCms = 25.0f;

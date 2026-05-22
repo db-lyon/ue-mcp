@@ -68,6 +68,7 @@ namespace UEMCPPIE
 		int64 RngSeed = 0;
 		FString PIEWorld;
 		FString PawnClass;
+		int32 ClientId = 0;
 		float AxisThreshold = 0.15f;
 		TArray<FActionSpec> Actions;
 		TArray<FTrackedValueSpec> TrackedValues;

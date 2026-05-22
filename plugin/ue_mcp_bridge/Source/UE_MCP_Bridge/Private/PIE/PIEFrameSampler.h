@@ -43,6 +43,10 @@ namespace UEMCPPIE
 			float AxisThreshold = 0.15f;
 			bool bCapturePawnState = true;
 			bool bCaptureMontage = true;
+			// Local player to sample. 0 = first player controller (the legacy
+			// single-client behaviour); 1+ selects subsequent local players in
+			// multi-player PIE sessions (UGameInstance::GetLocalPlayers order).
+			int32 ClientIndex = 0;
 		};
 
 		FPIEFrameSampler();

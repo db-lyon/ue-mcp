@@ -36,14 +36,15 @@ namespace UEMCPPIE
 		// One-shot: queues a single-frame injection. Returns false + writes
 		// OutError if the EnhancedInput subsystem is not reachable (e.g. PIE
 		// has not yet spawned a local player). The injected value lasts one
-		// frame; the engine clears it on the next tick.
-		static bool InjectOnce(UInputAction* Action, const FInputActionValue& Value, FString& OutError);
+		// frame; the engine clears it on the next tick. ClientIndex selects
+		// which local player (0 = first; 1+ for multi-client PIE).
+		static bool InjectOnce(UInputAction* Action, const FInputActionValue& Value, FString& OutError, int32 ClientIndex = 0);
 
 		// Begin a continuous hold. Re-injects `Value` every end-of-frame
 		// until StopHold is called or PIE ends. If DesiredId is empty, an
 		// id is generated. Returns the id on success; OutError is set and
 		// an empty string returned on failure.
-		static FString StartHold(UInputAction* Action, const FInputActionValue& Value, const FString& DesiredId, FString& OutError);
+		static FString StartHold(UInputAction* Action, const FInputActionValue& Value, const FString& DesiredId, FString& OutError, int32 ClientIndex = 0);
 
 		// Replace the value of a running hold. Returns false if no hold
 		// with that id exists.
@@ -56,7 +57,7 @@ namespace UEMCPPIE
 		// t.MaxFPS during replay). DesiredId / OutError behave as StartHold.
 		// Stores TapeValues by-value so the caller does not need to keep
 		// the array alive. Auto-stops after the last frame.
-		static FString StartTape(UInputAction* Action, const TArray<FVector>& Values, int32 Hz, const FString& DesiredId, FString& OutError);
+		static FString StartTape(UInputAction* Action, const TArray<FVector>& Values, int32 Hz, const FString& DesiredId, FString& OutError, int32 ClientIndex = 0);
 
 		// Stop a tape. Returns false if no tape existed for that id.
 		static bool StopTape(const FString& Id);

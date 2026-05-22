@@ -149,6 +149,7 @@ export const gameplayTool: ToolDef = categoryTool(
     capture_pawn_state: z.boolean().optional().describe("pie_record_arm: include pawn location/rotation/velocity/Speed2D per row (default true)"),
     capture_montage: z.boolean().optional().describe("pie_record_arm: include 'Montage:Section' per row (default true)"),
     take_record: z.boolean().optional().describe("pie_record_arm: also drive Take Recorder Start/Stop in lockstep with BeginPIE / EndPIE. Requires the Take Recorder plugin enabled and an open Take Recorder panel with sources configured. pie_record_stop returns take_recorder_status with the outcome (started / skipped / stopped, plus the reason)."),
+    client_id: z.number().optional().describe("pie_record_arm / pie_replay_arm / inject_input*: which local player to sample, replay, or inject into. 0 (default) = first local player; 1+ selects subsequent local players in multi-client PIE sessions. To record multiple clients in one PIE session, call pie_record_arm once per client_id with different ids."),
     rng_seed: z.number().optional().describe("pie_record_arm: explicit RNG seed (default auto). Reapplied via FMath::RandInit on attach."),
     run_gap_frames: z.number().optional().describe("pie_record_arm: gap-tolerance frames for axis run extraction in sequence.json (default 6)"),
     recording_dir: z.string().optional().describe("pie_record_arm/list/read/delete: override of Saved/MCPRecordings/"),

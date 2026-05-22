@@ -168,6 +168,7 @@ namespace UEMCPPIE
 		SC.AxisThreshold     = Pending.AxisThreshold;
 		SC.bCapturePawnState = Pending.bCapturePawnState;
 		SC.bCaptureMontage   = Pending.bCaptureMontage;
+		SC.ClientIndex       = Pending.ClientId;
 		Sampler.Reset();
 		Sampler.SetConfig(SC);
 
@@ -464,6 +465,7 @@ namespace UEMCPPIE
 		M.CSVFile = TEXT("recording.csv");
 		M.SequenceFile = TEXT("sequence.json");
 		M.TrackedActorIds = Pending.TrackedActorIds;
+		M.ClientId = Pending.ClientId;
 
 		if (ActorRows.Num() > 0)
 		{

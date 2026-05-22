@@ -335,6 +335,7 @@ namespace UEMCPPIE
 		// source CSV header. Telling the sampler about those paths makes
 		// Row.TrackedValues populated on each sampled frame.
 		SC.TrackedValuePaths = SourceTrackedPaths;
+		SC.ClientIndex = Pending.ClientId;
 		Sampler.Reset();
 		Sampler.SetConfig(SC);
 
@@ -369,7 +370,7 @@ namespace UEMCPPIE
 				if (Act)
 				{
 					FString Err;
-					FPIEInputInjector::InjectOnce(Act, VectorToActionValue(Act->ValueType, FVector(S.ValueX, S.ValueY, S.ValueZ)), Err);
+					FPIEInputInjector::InjectOnce(Act, VectorToActionValue(Act->ValueType, FVector(S.ValueX, S.ValueY, S.ValueZ)), Err, Pending.ClientId);
 				}
 				break;
 			}
@@ -379,7 +380,7 @@ namespace UEMCPPIE
 				if (Act)
 				{
 					FString Err;
-					const FString Id = FPIEInputInjector::StartHold(Act, VectorToActionValue(Act->ValueType, FVector(S.ValueX, S.ValueY, S.ValueZ)), FString(), Err);
+					const FString Id = FPIEInputInjector::StartHold(Act, VectorToActionValue(Act->ValueType, FVector(S.ValueX, S.ValueY, S.ValueZ)), FString(), Err, Pending.ClientId);
 					if (!Id.IsEmpty())
 					{
 						FHoldHandle H;
@@ -397,7 +398,7 @@ namespace UEMCPPIE
 				if (Act)
 				{
 					FString Err;
-					FPIEInputInjector::StartTape(Act, S.TapeValues, ActiveSequence.SampleHz, FString(), Err);
+					FPIEInputInjector::StartTape(Act, S.TapeValues, ActiveSequence.SampleHz, FString(), Err, Pending.ClientId);
 				}
 				break;
 			}
