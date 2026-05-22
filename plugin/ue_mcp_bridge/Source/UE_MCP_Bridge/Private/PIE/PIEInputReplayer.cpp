@@ -53,6 +53,29 @@ namespace UEMCPPIE
 			return FInputActionValue();
 		}
 
+		// Strip anything that could escape the captures/ directory or break
+		// the printf-built filename. Restricts to [A-Za-z0-9._-]; empty input
+		// (or input that sanitizes to empty) becomes "capture".
+		FString SanitizeCaptureName(const FString& In)
+		{
+			if (In.IsEmpty()) return TEXT("capture");
+			FString Out;
+			Out.Reserve(In.Len());
+			for (TCHAR C : In)
+			{
+				if (FChar::IsAlnum(C) || C == TEXT('_') || C == TEXT('-') || C == TEXT('.'))
+				{
+					Out.AppendChar(C);
+				}
+				else
+				{
+					Out.AppendChar(TEXT('_'));
+				}
+			}
+			Out.ReplaceInline(TEXT(".."), TEXT("__"));
+			return Out.IsEmpty() ? FString(TEXT("capture")) : Out;
+		}
+
 		// Mirror of the recorder's actor lookup so replay can re-resolve the
 		// same actor identifiers in the new PIE world.
 		AActor* FindActorById(UWorld* World, const FString& Id)
@@ -429,8 +452,15 @@ namespace UEMCPPIE
 					Dir = FPaths::ProjectSavedDir() / TEXT("Screenshots") / TEXT("MCPReplay");
 				}
 				IFileManager::Get().MakeDirectory(*Dir, true);
-				const uint64 FrameIdx = static_cast<uint64>(FramesCompared);
-				const FString Safe = S.CaptureName.IsEmpty() ? TEXT("capture") : S.CaptureName;
+				// Source-backed replays use the drift frame index so the
+				// filename lines up with recording.csv. Inline-step replays
+				// have no drift sampling (FramesCompared stays at 0), so
+				// fall back to the step's own sequence index to avoid every
+				// capture collapsing onto the same filename.
+				const uint64 FrameIdx = (SourceFrames.Num() > 0)
+					? static_cast<uint64>(FramesCompared)
+					: static_cast<uint64>(NextStepIndex);
+				const FString Safe = SanitizeCaptureName(S.CaptureName);
 				const FString FullPath = Dir / FString::Printf(TEXT("%s_frame%05llu.png"), *Safe, FrameIdx);
 				FScreenshotRequest::RequestScreenshot(FullPath, /*bShowUI*/false, /*bAddFilenameSuffix*/false);
 				Sampler.QueueMarker(FString::Printf(TEXT("capture:%s:%s"), *Safe, *FullPath));
