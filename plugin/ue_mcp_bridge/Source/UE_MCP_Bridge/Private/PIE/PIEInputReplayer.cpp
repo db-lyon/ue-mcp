@@ -131,6 +131,20 @@ namespace UEMCPPIE
 		const int32 ColS2    = FindCol(TEXT("speed2d"));
 		const int32 ColMo    = FindCol(TEXT("montage"));
 
+		// Tracked reflection paths live in columns prefixed with "t:". Map
+		// each column index to the path so per-frame deltas can be computed.
+		TArray<TPair<int32, FString>> TrackedCols;
+		SourceTrackedPaths.Reset();
+		for (int32 i = 0; i < Headers.Num(); ++i)
+		{
+			if (Headers[i].StartsWith(TEXT("t:")))
+			{
+				const FString Path = Headers[i].Mid(2);
+				TrackedCols.Add(TPair<int32, FString>(i, Path));
+				SourceTrackedPaths.Add(Path);
+			}
+		}
+
 		auto ReadCol = [](const TArray<FString>& Cols, int32 Idx) -> double
 		{
 			if (Idx < 0 || Idx >= Cols.Num()) return 0.0;
@@ -150,6 +164,10 @@ namespace UEMCPPIE
 			F.PawnVelocity = FVector(ReadCol(Cols, ColVx), ReadCol(Cols, ColVy), ReadCol(Cols, ColVz));
 			F.Speed2D = static_cast<float>(ReadCol(Cols, ColS2));
 			if (ColMo >= 0 && ColMo < Cols.Num()) F.MontageSection = Cols[ColMo];
+			for (const TPair<int32, FString>& TC : TrackedCols)
+			{
+				F.TrackedValues.Add(TC.Value, ReadCol(Cols, TC.Key));
+			}
 			SourceFrames.Add(F);
 		}
 		return true;
@@ -176,6 +194,8 @@ namespace UEMCPPIE
 		MontageMismatches = 0;
 		FramesCompared = 0;
 		FramesMissingInReplay = 0;
+		MaxTrackedDeltas.Reset();
+		SourceTrackedPaths.Reset();
 		NextStepIndex = 0;
 		ExecutedSteps = 0;
 		ActiveHolds.Reset();
@@ -264,6 +284,10 @@ namespace UEMCPPIE
 		SC.AxisThreshold = 0.15f;
 		SC.bCapturePawnState = true;
 		SC.bCaptureMontage = true;
+		// Replay drift compares tracked-value columns recovered from the
+		// source CSV header. Telling the sampler about those paths makes
+		// Row.TrackedValues populated on each sampled frame.
+		SC.TrackedValuePaths = SourceTrackedPaths;
 		Sampler.Reset();
 		Sampler.SetConfig(SC);
 
@@ -415,9 +439,31 @@ namespace UEMCPPIE
 					if (E.VelocityDeltaCms > MaxVelDriftCms) MaxVelDriftCms = E.VelocityDeltaCms;
 					if (E.RotationDeltaDeg > MaxRotDriftDeg) MaxRotDriftDeg = E.RotationDeltaDeg;
 					if (Row.MontageSection != Src.MontageSection) MontageMismatches++;
+
+					// Tracked-value drift: walk every path present in the source
+					// row and accumulate max |delta|. Per-path threshold falls
+					// back to ThrTrackedDefault; <= 0 disables tripping the
+					// over-threshold list from tracked values.
+					bool bTrackedOver = false;
+					for (const TPair<FString, double>& KV : Src.TrackedValues)
+					{
+						const double* Cur = Row.TrackedValues.Find(KV.Key);
+						const double Delta = FMath::Abs((Cur ? *Cur : 0.0) - KV.Value);
+						const float DeltaF = static_cast<float>(Delta);
+						float& Max = MaxTrackedDeltas.FindOrAdd(KV.Key, 0.f);
+						if (DeltaF > Max) Max = DeltaF;
+						const float* PerPath = Pending.TrackedThresholds.Find(KV.Key);
+						const float Thr = PerPath ? *PerPath : Pending.ThrTrackedDefault;
+						if (Thr > 0.f && DeltaF > Thr)
+						{
+							bTrackedOver = true;
+						}
+					}
+
 					if (E.PositionDeltaCm > Pending.ThrPosCm ||
 					    E.VelocityDeltaCms > Pending.ThrVelCms ||
-					    E.RotationDeltaDeg > Pending.ThrRotDeg)
+					    E.RotationDeltaDeg > Pending.ThrRotDeg ||
+					    bTrackedOver)
 					{
 						DriftFrames.Add(E);
 					}
@@ -480,6 +526,7 @@ namespace UEMCPPIE
 			D.MaxVelocityDriftCms = MaxVelDriftCms;
 			D.MaxRotationDriftDeg = MaxRotDriftDeg;
 			D.MontageSectionMismatches = MontageMismatches;
+			D.TrackedValueMaxDeltas = MaxTrackedDeltas;
 			D.FramesOverThreshold = DriftFrames;
 			FString Err;
 			if (SaveDrift(CurrentDriftPath, D, Err))

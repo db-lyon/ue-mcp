@@ -105,7 +105,7 @@ Tunables:
 | `apply_rng_seed` | `true` | Reapply sequence `rng_seed` via `FMath::RandInit` |
 | `record_drift` | `true` (when `recording_id`) | Emit `drift.json` |
 | `auto_stop_pie` | `false` | Stop PIE on sequence completion |
-| `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for the `frames_over_threshold` list |
+| `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for the `frames_over_threshold` list. Also accepts `tracked_default` (scalar fallback applied to every tracked path) and `tracked: { "<path>": <threshold> }` for per-path overrides. `0` keeps tracked-value deltas out of `frames_over_threshold`. Max per-path deltas are always reported in `drift.json#tracked_value_max_deltas` regardless of thresholds. |
 
 ### Input injection primitives
 
@@ -121,7 +121,7 @@ Used internally by the replayer; exposed because they are useful on their own.
 
 ### Offline diff
 
-`pie_record_diff(a_id, b_id, position_cm?, rotation_deg?, velocity_cms?)` walks two `recording.csv` files in lockstep by frame index and emits a single drift summary. No PIE required.
+`pie_record_diff(a_id, b_id, position_cm?, rotation_deg?, velocity_cms?, tracked_default?, tracked_thresholds?)` walks two `recording.csv` files in lockstep by frame index and emits a single drift summary. Reflection paths sampled in both recordings show up in `tracked_value_max_deltas` (max |delta| per path). Pass `tracked_default` or `tracked_thresholds` to fold tracked-value drift into `frames_over_threshold`. No PIE required.
 
 ## Step types in `sequence.json`
 
@@ -190,4 +190,3 @@ These are tracked as follow-ups, not present in the first ship:
 - **Monitor mode** (passive observation during manual play) - planned, not wired
 - **Multi-client PIE** - one local player only
 - **`capture` step** during replay - records a marker in `drift.json` but does not yet write the screenshot to disk; combine with `editor(action="screenshot")` between manual replay steps if you need images
-- **Tracked-value drift** - reflection paths sample fine on record, but the drift report only compares pawn pose / velocity, not tracked values

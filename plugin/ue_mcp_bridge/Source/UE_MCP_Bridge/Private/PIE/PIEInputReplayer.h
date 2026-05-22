@@ -38,6 +38,11 @@ namespace UEMCPPIE
 		float ThrPosCm = 5.0f;
 		float ThrRotDeg = 2.0f;
 		float ThrVelCms = 25.0f;
+		// Default tolerance applied to every tracked reflection path that
+		// does not have an explicit entry in TrackedThresholds. <= 0 means
+		// "don't trip frames_over_threshold from tracked-value deltas".
+		float ThrTrackedDefault = 0.f;
+		TMap<FString, float> TrackedThresholds;
 	};
 
 	struct FReplayerStatus
@@ -93,8 +98,10 @@ namespace UEMCPPIE
 			FVector PawnVelocity = FVector::ZeroVector;
 			float Speed2D = 0.f;
 			FString MontageSection;
+			TMap<FString, double> TrackedValues;
 		};
 		bool LoadSourceFrames(const FString& CSVPath, FString& OutError);
+		TArray<FString> SourceTrackedPaths;
 
 		FReplayerArmConfig Pending;
 		FSequence ActiveSequence;
@@ -124,6 +131,7 @@ namespace UEMCPPIE
 		int32 MontageMismatches = 0;
 		int32 FramesCompared = 0;
 		int32 FramesMissingInReplay = 0;
+		TMap<FString, float> MaxTrackedDeltas;
 
 		FDelegateHandle BeginPIEHandle;
 		FDelegateHandle EndPIEHandle;
