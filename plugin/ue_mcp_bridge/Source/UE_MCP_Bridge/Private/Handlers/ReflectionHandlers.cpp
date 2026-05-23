@@ -36,6 +36,190 @@ void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_enum_entries"), &SetEnumEntries);
 }
 
+namespace
+{
+	/**
+	 * UHT compiles `///` doc comments into ToolTip metadata at build time.
+	 * Returns the ToolTip if present, otherwise an empty string. Caller is
+	 * responsible for omitting empty values from the JSON payload.
+	 */
+	FString ReadTooltip(const UField* Field)
+	{
+#if WITH_EDITOR
+		if (!Field) return FString();
+		// UField::GetMetaData("ToolTip") returns the raw text. Trimming
+		// matches what the editor's tooltip panel does.
+		const FString Raw = Field->GetMetaData(TEXT("ToolTip"));
+		return Raw.TrimStartAndEnd();
+#else
+		return FString();
+#endif
+	}
+
+	FString ReadPropertyTooltip(const FProperty* Prop)
+	{
+#if WITH_EDITOR
+		if (!Prop) return FString();
+		return Prop->GetMetaData(TEXT("ToolTip")).TrimStartAndEnd();
+#else
+		return FString();
+#endif
+	}
+
+	void AddIfNonEmpty(TSharedPtr<FJsonObject> Obj, const TCHAR* Key, const FString& Value)
+	{
+		if (!Value.IsEmpty())
+		{
+			Obj->SetStringField(Key, Value);
+		}
+	}
+
+	/**
+	 * Encode the common EPropertyFlags bits the editor surfaces in its
+	 * property panel + Blueprint nodes. Skips internal bookkeeping flags
+	 * (CPF_NativeAccessSpecifier*, CPF_PersistentInstance, etc.) that aren't
+	 * useful to AI callers reasoning about how to use a property.
+	 */
+	TArray<TSharedPtr<FJsonValue>> EncodePropertyFlags(const FProperty* Prop)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		if (!Prop) return Out;
+		const EPropertyFlags F = Prop->PropertyFlags;
+		auto Push = [&Out](const TCHAR* Name) { Out.Add(MakeShared<FJsonValueString>(Name)); };
+
+		if (F & CPF_Edit)
+		{
+			if (F & CPF_DisableEditOnInstance) Push(TEXT("EditDefaultsOnly"));
+			else if (F & CPF_DisableEditOnTemplate) Push(TEXT("EditInstanceOnly"));
+			else Push(TEXT("EditAnywhere"));
+		}
+		if (F & CPF_EditConst)         Push(TEXT("VisibleAnywhere"));
+		if (F & CPF_BlueprintVisible)
+		{
+			if (F & CPF_BlueprintReadOnly) Push(TEXT("BlueprintReadOnly"));
+			else Push(TEXT("BlueprintReadWrite"));
+		}
+		if (F & CPF_Net)               Push(TEXT("Replicated"));
+		if (F & CPF_RepNotify)         Push(TEXT("RepNotify"));
+		if (F & CPF_Transient)         Push(TEXT("Transient"));
+		if (F & CPF_Config)            Push(TEXT("Config"));
+		if (F & CPF_GlobalConfig)      Push(TEXT("GlobalConfig"));
+		if (F & CPF_SaveGame)          Push(TEXT("SaveGame"));
+		if (F & CPF_Interp)            Push(TEXT("Interp"));
+		if (F & CPF_AdvancedDisplay)   Push(TEXT("AdvancedDisplay"));
+		if (F & CPF_Deprecated)        Push(TEXT("Deprecated"));
+		if (F & CPF_NoClear)           Push(TEXT("NoClear"));
+		if (F & CPF_ExposeOnSpawn)     Push(TEXT("ExposeOnSpawn"));
+		return Out;
+	}
+
+	/**
+	 * Function flags the editor cares about: how Blueprints can call it, how
+	 * the network treats it, and whether it's an Exec console command.
+	 */
+	TArray<TSharedPtr<FJsonValue>> EncodeFunctionFlags(const UFunction* Func)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		if (!Func) return Out;
+		const EFunctionFlags F = Func->FunctionFlags;
+		auto Push = [&Out](const TCHAR* Name) { Out.Add(MakeShared<FJsonValueString>(Name)); };
+
+		if (F & FUNC_BlueprintCallable) Push(TEXT("BlueprintCallable"));
+		if (F & FUNC_BlueprintEvent)    Push(TEXT("BlueprintImplementableEvent"));
+		if (F & FUNC_BlueprintPure)     Push(TEXT("BlueprintPure"));
+		if (F & FUNC_Exec)              Push(TEXT("Exec"));
+		if (F & FUNC_NetServer)         Push(TEXT("Server"));
+		if (F & FUNC_NetClient)         Push(TEXT("Client"));
+		if (F & FUNC_NetMulticast)      Push(TEXT("NetMulticast"));
+		if (F & FUNC_NetReliable)       Push(TEXT("Reliable"));
+		if (F & FUNC_Static)            Push(TEXT("Static"));
+		return Out;
+	}
+
+	/**
+	 * Build the per-property JSON block surfaced under a class/struct's
+	 * `properties:` / `fields:` array. Includes name + type (the old
+	 * contract) plus all metadata the editor exposes: tooltip, category,
+	 * display name, edit-condition predicate, clamp range, and the flag
+	 * names a UHEADER author would have typed.
+	 */
+	TSharedPtr<FJsonObject> SerializePropertyMeta(FProperty* Prop)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Prop->GetName());
+		Obj->SetStringField(TEXT("type"), Prop->GetCPPType());
+#if WITH_EDITOR
+		AddIfNonEmpty(Obj, TEXT("tooltip"),       ReadPropertyTooltip(Prop));
+		AddIfNonEmpty(Obj, TEXT("category"),      Prop->GetMetaData(TEXT("Category")));
+		AddIfNonEmpty(Obj, TEXT("displayName"),   Prop->GetMetaData(TEXT("DisplayName")));
+		AddIfNonEmpty(Obj, TEXT("editCondition"), Prop->GetMetaData(TEXT("EditCondition")));
+		AddIfNonEmpty(Obj, TEXT("clampMin"),      Prop->GetMetaData(TEXT("ClampMin")));
+		AddIfNonEmpty(Obj, TEXT("clampMax"),      Prop->GetMetaData(TEXT("ClampMax")));
+		AddIfNonEmpty(Obj, TEXT("uiMin"),         Prop->GetMetaData(TEXT("UIMin")));
+		AddIfNonEmpty(Obj, TEXT("uiMax"),         Prop->GetMetaData(TEXT("UIMax")));
+		AddIfNonEmpty(Obj, TEXT("units"),         Prop->GetMetaData(TEXT("Units")));
+#endif
+		TArray<TSharedPtr<FJsonValue>> Flags = EncodePropertyFlags(Prop);
+		if (Flags.Num() > 0)
+		{
+			Obj->SetArrayField(TEXT("flags"), Flags);
+		}
+		return Obj;
+	}
+
+	/**
+	 * Build the per-function JSON block surfaced under a class's
+	 * `functions:` array. Returns a structured params array (each with
+	 * name + type + optional out/ref markers) and a separate returnType
+	 * string when the function has a CPF_ReturnParm property.
+	 */
+	TSharedPtr<FJsonObject> SerializeFunctionMeta(UFunction* Func)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Func->GetName());
+#if WITH_EDITOR
+		AddIfNonEmpty(Obj, TEXT("tooltip"),     ReadTooltip(Func));
+		AddIfNonEmpty(Obj, TEXT("category"),    Func->GetMetaData(TEXT("Category")));
+		AddIfNonEmpty(Obj, TEXT("displayName"), Func->GetMetaData(TEXT("DisplayName")));
+		AddIfNonEmpty(Obj, TEXT("keywords"),    Func->GetMetaData(TEXT("Keywords")));
+#endif
+
+		TArray<TSharedPtr<FJsonValue>> Params;
+		FString ReturnType;
+		for (TFieldIterator<FProperty> PIt(Func); PIt; ++PIt)
+		{
+			FProperty* P = *PIt;
+			if (P->PropertyFlags & CPF_ReturnParm)
+			{
+				ReturnType = P->GetCPPType();
+				continue;
+			}
+			TSharedPtr<FJsonObject> ParamObj = MakeShared<FJsonObject>();
+			ParamObj->SetStringField(TEXT("name"), P->GetName());
+			ParamObj->SetStringField(TEXT("type"), P->GetCPPType());
+			if (P->PropertyFlags & CPF_OutParm)       ParamObj->SetBoolField(TEXT("out"), true);
+			if (P->PropertyFlags & CPF_ReferenceParm) ParamObj->SetBoolField(TEXT("byRef"), true);
+			Params.Add(MakeShared<FJsonValueObject>(ParamObj));
+		}
+		Obj->SetArrayField(TEXT("params"), Params);
+		if (!ReturnType.IsEmpty())
+		{
+			Obj->SetStringField(TEXT("returnType"), ReturnType);
+		}
+		else
+		{
+			Obj->SetStringField(TEXT("returnType"), TEXT("void"));
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Flags = EncodeFunctionFlags(Func);
+		if (Flags.Num() > 0)
+		{
+			Obj->SetArrayField(TEXT("flags"), Flags);
+		}
+		return Obj;
+	}
+}
+
 TSharedPtr<FJsonValue> FReflectionHandlers::ReflectClass(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ClassName;
@@ -51,6 +235,11 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectClass(const TSharedPtr<FJsonO
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("className"), Class->GetName());
+	AddIfNonEmpty(Result, TEXT("tooltip"), ReadTooltip(Class));
+#if WITH_EDITOR
+	AddIfNonEmpty(Result, TEXT("displayName"), Class->GetMetaData(TEXT("DisplayName")));
+	AddIfNonEmpty(Result, TEXT("category"),    Class->GetMetaData(TEXT("Category")));
+#endif
 
 	if (Class->GetSuperClass())
 	{
@@ -69,27 +258,22 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectClass(const TSharedPtr<FJsonO
 
 	Result->SetBoolField(TEXT("isAbstract"), Class->HasAnyClassFlags(CLASS_Abstract));
 
-	// Get properties
+	// Properties: name + type plus every metadata field the editor's property
+	// panel renders - tooltip text, category, clamps, replication flags, etc.
 	TArray<TSharedPtr<FJsonValue>> PropertiesArray;
 	for (TFieldIterator<FProperty> PropIt(Class, bIncludeInherited ? EFieldIteratorFlags::IncludeSuper : EFieldIteratorFlags::ExcludeSuper); PropIt; ++PropIt)
 	{
-		FProperty* Prop = *PropIt;
-		TSharedPtr<FJsonObject> PropObj = MakeShared<FJsonObject>();
-		PropObj->SetStringField(TEXT("name"), Prop->GetName());
-		PropObj->SetStringField(TEXT("type"), Prop->GetCPPType());
-		PropertiesArray.Add(MakeShared<FJsonValueObject>(PropObj));
+		PropertiesArray.Add(MakeShared<FJsonValueObject>(SerializePropertyMeta(*PropIt)));
 	}
 	Result->SetArrayField(TEXT("properties"), PropertiesArray);
 	Result->SetNumberField(TEXT("propertyCount"), PropertiesArray.Num());
 
-	// Get functions
+	// Functions: structured params + return type + tooltip + flags so callers
+	// can see how to invoke each function without grepping the header.
 	TArray<TSharedPtr<FJsonValue>> FunctionsArray;
 	for (TFieldIterator<UFunction> FuncIt(Class, bIncludeInherited ? EFieldIteratorFlags::IncludeSuper : EFieldIteratorFlags::ExcludeSuper); FuncIt; ++FuncIt)
 	{
-		UFunction* Func = *FuncIt;
-		TSharedPtr<FJsonObject> FuncObj = MakeShared<FJsonObject>();
-		FuncObj->SetStringField(TEXT("name"), Func->GetName());
-		FunctionsArray.Add(MakeShared<FJsonValueObject>(FuncObj));
+		FunctionsArray.Add(MakeShared<FJsonValueObject>(SerializeFunctionMeta(*FuncIt)));
 	}
 	Result->SetArrayField(TEXT("functions"), FunctionsArray);
 	Result->SetNumberField(TEXT("functionCount"), FunctionsArray.Num());
@@ -110,15 +294,15 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectStruct(const TSharedPtr<FJson
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("structName"), Struct->GetName());
+	AddIfNonEmpty(Result, TEXT("tooltip"), ReadTooltip(Struct));
+#if WITH_EDITOR
+	AddIfNonEmpty(Result, TEXT("displayName"), Struct->GetMetaData(TEXT("DisplayName")));
+#endif
 
 	TArray<TSharedPtr<FJsonValue>> FieldsArray;
 	for (TFieldIterator<FProperty> PropIt(Struct); PropIt; ++PropIt)
 	{
-		FProperty* Prop = *PropIt;
-		TSharedPtr<FJsonObject> FieldObj = MakeShared<FJsonObject>();
-		FieldObj->SetStringField(TEXT("name"), Prop->GetName());
-		FieldObj->SetStringField(TEXT("type"), Prop->GetCPPType());
-		FieldsArray.Add(MakeShared<FJsonValueObject>(FieldObj));
+		FieldsArray.Add(MakeShared<FJsonValueObject>(SerializePropertyMeta(*PropIt)));
 	}
 	Result->SetArrayField(TEXT("fields"), FieldsArray);
 	Result->SetNumberField(TEXT("fieldCount"), FieldsArray.Num());
@@ -139,6 +323,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectEnum(const TSharedPtr<FJsonOb
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("enumName"), Enum->GetName());
+	AddIfNonEmpty(Result, TEXT("tooltip"), ReadTooltip(Enum));
 
 	TArray<TSharedPtr<FJsonValue>> ValuesArray;
 	int32 NumEnums = Enum->NumEnums();
@@ -151,6 +336,13 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectEnum(const TSharedPtr<FJsonOb
 			ValueObj->SetStringField(TEXT("name"), EnumNameStr);
 			ValueObj->SetNumberField(TEXT("value"), Enum->GetValueByIndex(i));
 			ValueObj->SetStringField(TEXT("displayName"), Enum->GetDisplayNameTextByIndex(i).ToString());
+#if WITH_EDITOR
+			// Per-value tooltip - UEnum stores ToolTip metadata per enum
+			// entry, addressable by index. Editor uses the same call to
+			// populate the dropdown tooltips in Details panels.
+			FString ValueTooltip = Enum->GetMetaData(TEXT("ToolTip"), i).TrimStartAndEnd();
+			AddIfNonEmpty(ValueObj, TEXT("tooltip"), ValueTooltip);
+#endif
 			ValuesArray.Add(MakeShared<FJsonValueObject>(ValueObj));
 		}
 	}
@@ -315,34 +507,23 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateGameplayTag(const TSharedPtr<F
 
 UClass* FReflectionHandlers::FindClass(const FString& ClassName)
 {
-	// Try direct lookup
+	// Full-path lookup first: /Script/Engine.Actor, /Script/Foo.UBar, etc.
 	UClass* Class = FindObject<UClass>(nullptr, *ClassName);
 	if (Class)
 	{
 		return Class;
 	}
 
-	// Try with /Script/ prefix
-	FString ScriptPath = FString::Printf(TEXT("/Script/%s"), *ClassName);
-	Class = FindObject<UClass>(nullptr, *ScriptPath);
-	if (Class)
-	{
-		return Class;
-	}
-
-	// Try with common prefixes
-	TArray<FString> Prefixes = { TEXT(""), TEXT("A"), TEXT("U"), TEXT("F") };
+	// Short-name lookup. In UE 5.6+, FindObject(nullptr, "Actor") no longer
+	// scans every package - it only finds top-level objects. FindFirstObject
+	// is the replacement that walks all loaded UClass objects by leaf name.
+	// Try the caller's spelling, then common UE prefixes (A/U/F) that agents
+	// often drop when typing class names.
+	const TArray<FString> Prefixes = { TEXT(""), TEXT("A"), TEXT("U"), TEXT("F") };
 	for (const FString& Prefix : Prefixes)
 	{
-		FString CandidateName = Prefix + ClassName;
-		Class = FindObject<UClass>(nullptr, *CandidateName);
-		if (Class)
-		{
-			return Class;
-		}
-
-		FString CandidatePath = FString::Printf(TEXT("/Script/%s"), *CandidateName);
-		Class = FindObject<UClass>(nullptr, *CandidatePath);
+		const FString Candidate = Prefix + ClassName;
+		Class = FindFirstObject<UClass>(*Candidate, EFindFirstObjectOptions::NativeFirst);
 		if (Class)
 		{
 			return Class;
@@ -361,43 +542,17 @@ UScriptStruct* FReflectionHandlers::FindStruct(const FString& StructName)
 		return Struct;
 	}
 
-	// Try with /Script/ prefix
-	FString ScriptPath = FString::Printf(TEXT("/Script/%s"), *StructName);
-	Struct = FindObject<UScriptStruct>(nullptr, *ScriptPath);
-	if (Struct)
+	// Short-name lookup via FindFirstObject (UE 5.6+ replacement for the
+	// "any package" FindObject pattern). Tries the caller's spelling first,
+	// then F-prefixed - matches the convention agents typically use ("Vector"
+	// vs "FVector").
+	const TArray<FString> Candidates = { StructName, TEXT("F") + StructName };
+	for (const FString& Candidate : Candidates)
 	{
-		return Struct;
-	}
-
-	// Try with F prefix
-	FString FName = TEXT("F") + StructName;
-	Struct = FindObject<UScriptStruct>(nullptr, *FName);
-	if (Struct)
-	{
-		return Struct;
-	}
-
-	FString FPath = FString::Printf(TEXT("/Script/%s"), *FName);
-	Struct = FindObject<UScriptStruct>(nullptr, *FPath);
-	if (Struct)
-	{
-		return Struct;
-	}
-
-	// Iterate all loaded UScriptStruct objects to find by short name
-	// This catches project-defined structs in any module (e.g. /Script/MyModule.FMyStruct)
-	FString NameToFind = StructName;
-	FString FNameToFind = FName;
-	for (TObjectIterator<UScriptStruct> It; It; ++It)
-	{
-		UScriptStruct* Current = *It;
-		if (Current)
+		Struct = FindFirstObject<UScriptStruct>(*Candidate, EFindFirstObjectOptions::NativeFirst);
+		if (Struct)
 		{
-			FString CurrentName = Current->GetName();
-			if (CurrentName == NameToFind || CurrentName == FNameToFind)
-			{
-				return Current;
-			}
+			return Struct;
 		}
 	}
 
@@ -406,34 +561,23 @@ UScriptStruct* FReflectionHandlers::FindStruct(const FString& StructName)
 
 UEnum* FReflectionHandlers::FindEnum(const FString& EnumName)
 {
-	// Try direct lookup
+	// Full-path lookup first: /Script/Engine.ECollisionChannel, etc.
 	UEnum* Enum = FindObject<UEnum>(nullptr, *EnumName);
 	if (Enum)
 	{
 		return Enum;
 	}
 
-	// Try with /Script/ prefix
-	FString ScriptPath = FString::Printf(TEXT("/Script/%s"), *EnumName);
-	Enum = FindObject<UEnum>(nullptr, *ScriptPath);
-	if (Enum)
+	// Short-name lookup via FindFirstObject (UE 5.6+ replacement). Tries
+	// the caller's spelling, then E-prefixed - the standard UE convention.
+	const TArray<FString> Candidates = { EnumName, TEXT("E") + EnumName };
+	for (const FString& Candidate : Candidates)
 	{
-		return Enum;
-	}
-
-	// Try with E prefix
-	FString EName = TEXT("E") + EnumName;
-	Enum = FindObject<UEnum>(nullptr, *EName);
-	if (Enum)
-	{
-		return Enum;
-	}
-
-	FString EPath = FString::Printf(TEXT("/Script/%s"), *EName);
-	Enum = FindObject<UEnum>(nullptr, *EPath);
-	if (Enum)
-	{
-		return Enum;
+		Enum = FindFirstObject<UEnum>(*Candidate, EFindFirstObjectOptions::NativeFirst);
+		if (Enum)
+		{
+			return Enum;
+		}
 	}
 
 	return nullptr;
