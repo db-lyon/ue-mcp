@@ -67,6 +67,8 @@
 
 void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	constexpr float HeavyBlueprintReadTimeoutSeconds = 180.0f;
+
 	Registry.RegisterHandler(TEXT("create_blueprint"), &CreateBlueprint);
 	Registry.RegisterHandler(TEXT("read_blueprint"), &ReadBlueprint);
 	Registry.RegisterHandler(TEXT("add_variable"), &AddVariable);
@@ -80,7 +82,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_function"), &CreateFunction);
 	Registry.RegisterHandler(TEXT("list_blueprint_functions"), &ListBlueprintFunctions);
 	Registry.RegisterHandler(TEXT("add_node"), &AddNode);
-	Registry.RegisterHandler(TEXT("read_blueprint_graph"), &ReadBlueprintGraph);
+	Registry.RegisterHandlerWithTimeout(TEXT("read_blueprint_graph"), &ReadBlueprintGraph, HeavyBlueprintReadTimeoutSeconds);
 	Registry.RegisterHandler(TEXT("add_event_dispatcher"), &AddEventDispatcher);
 	Registry.RegisterHandler(TEXT("rename_function"), &RenameFunction);
 	Registry.RegisterHandler(TEXT("delete_function"), &DeleteFunction);
@@ -88,7 +90,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("connect_pins"), &ConnectPins);
 	Registry.RegisterHandler(TEXT("delete_node"), &DeleteNode);
 	Registry.RegisterHandler(TEXT("set_node_property"), &SetNodeProperty);
-	Registry.RegisterHandler(TEXT("list_blueprint_graphs"), &ListGraphs);
+	Registry.RegisterHandlerWithTimeout(TEXT("list_blueprint_graphs"), &ListGraphs, HeavyBlueprintReadTimeoutSeconds);
 	Registry.RegisterHandler(TEXT("set_blueprint_component_property"), &SetComponentProperty);
 	Registry.RegisterHandler(TEXT("set_capsule_size"), &SetCapsuleSize);
 	Registry.RegisterHandler(TEXT("set_class_default"), &SetClassDefault);
@@ -98,8 +100,8 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_variable_default"), &SetVariableDefault);
 
 	// v0.7.8 stubs
-	Registry.RegisterHandler(TEXT("read_blueprint_graph_summary"), &ReadBlueprintGraphSummary);
-	Registry.RegisterHandler(TEXT("get_blueprint_execution_flow"), &GetBlueprintExecutionFlow);
+	Registry.RegisterHandlerWithTimeout(TEXT("read_blueprint_graph_summary"), &ReadBlueprintGraphSummary, HeavyBlueprintReadTimeoutSeconds);
+	Registry.RegisterHandlerWithTimeout(TEXT("get_blueprint_execution_flow"), &GetBlueprintExecutionFlow, HeavyBlueprintReadTimeoutSeconds);
 	Registry.RegisterHandler(TEXT("get_blueprint_dependencies"), &GetBlueprintDependencies);
 
 	// v0.7.11 — BP authoring depth
