@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { spawn, execSync } from "child_process";
 import * as net from "net";
 import type { ProjectContext } from "./project.js";
+import { findEngineInstall } from "./deployer.js";
 
 // editor-control relies on Windows-only tools (tasklist/taskkill, Build.bat).
 // The MCP server itself is cross-platform; only process control is gated.
@@ -38,9 +39,17 @@ function findUEBuildTool(): string | null {
   return null;
 }
 
-function findEditorExecutable(): string | null {
+function findEditorExecutable(project?: ProjectContext): string | null {
   const envPath = process.env.UE_EDITOR_PATH;
-  if (envPath) return envPath;
+  if (envPath && fs.existsSync(envPath)) return envPath;
+
+  const associatedEngineRoot = findEngineInstall(project?.engineAssociation ?? null);
+  if (associatedEngineRoot) {
+    const associatedEditorExe = path.join(associatedEngineRoot, "Engine", "Binaries", "Win64", "UnrealEditor.exe");
+    if (fs.existsSync(associatedEditorExe)) {
+      return associatedEditorExe;
+    }
+  }
 
   const buildTool = findUEBuildTool();
   if (!buildTool) return null;
@@ -124,7 +133,7 @@ export async function startEditor(project: ProjectContext): Promise<{ success: b
     return { success: false, message: "Editor is already running" };
   }
 
-  const editorExe = findEditorExecutable();
+  const editorExe = findEditorExecutable(project);
   if (!editorExe) {
     return {
       success: false,
@@ -137,7 +146,18 @@ export async function startEditor(project: ProjectContext): Promise<{ success: b
   }
 
   try {
-    const editorProcess = spawn(editorExe, [project.projectPath], {
+    const projectDir = path.dirname(project.projectPath);
+    const localDataCachePath = path.join(projectDir, "Saved", "DerivedDataCache");
+    fs.mkdirSync(localDataCachePath, { recursive: true });
+
+    const editorArgs = [
+      project.projectPath,
+      `-LocalDataCachePath=${localDataCachePath}`,
+      "-AssetGatherAll=false",
+      "-LiveCoding=0",
+    ];
+
+    const editorProcess = spawn(editorExe, editorArgs, {
       stdio: "ignore",
       detached: true,
     });
