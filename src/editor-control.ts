@@ -10,6 +10,7 @@ const IS_WINDOWS = process.platform === "win32";
 
 const WINDOWS_ONLY_MSG =
   "editor start/stop/restart is Windows-only. On macOS/Linux, start and stop the Unreal Editor manually; ue-mcp will reconnect when the bridge is reachable.";
+const DEFAULT_BRIDGE_PORT = Number(process.env.UE_MCP_BRIDGE_PORT ?? 9877);
 
 function findUEBuildTool(): string | null {
   const envPath = process.env.UE_BUILD_TOOL_PATH;
@@ -70,7 +71,7 @@ function isEditorRunning(): boolean {
   }
 }
 
-async function isBridgeAvailable(host = "localhost", port = 9877, timeoutMs = 1000): Promise<boolean> {
+async function isBridgeAvailable(host = "localhost", port = DEFAULT_BRIDGE_PORT, timeoutMs = 1000): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     let resolved = false;

@@ -2,6 +2,8 @@ import WebSocket from "ws";
 import { McpError, ErrorCode } from "./errors.js";
 import { debug, warn } from "./log.js";
 
+const DEFAULT_BRIDGE_PORT = Number(process.env.UE_MCP_BRIDGE_PORT ?? 9877);
+
 export interface BridgeResponse {
   id: string;
   result?: unknown;
@@ -25,15 +27,28 @@ export class EditorBridge implements IBridge {
   private ws: WebSocket | null = null;
   private pending = new Map<string, PendingRequest>();
   private reconnectTimer: ReturnType<typeof setInterval> | null = null;
+  private connectInFlight: Promise<void> | null = null;
   private idCounter = 0;
 
   constructor(
     public host = "localhost",
-    public port = 9877,
+    public port = DEFAULT_BRIDGE_PORT,
   ) {}
 
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  async ensureConnected(timeoutMs = 5000): Promise<void> {
+    if (this.isConnected) return;
+
+    if (!this.connectInFlight) {
+      this.connectInFlight = this.connect(timeoutMs).finally(() => {
+        this.connectInFlight = null;
+      });
+    }
+
+    await this.connectInFlight;
   }
 
   async connect(timeoutMs = 3000): Promise<void> {
@@ -90,24 +105,42 @@ export class EditorBridge implements IBridge {
 
   async call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown> {
     if (!this.isConnected) {
+      await this.ensureConnected();
+    }
+
+    const id = String(++this.idCounter);
+    const request = { id, method, params: params ?? {} };
+    const timeout = timeoutMs ?? 30_000;
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new McpError(
         ErrorCode.NOT_CONNECTED,
         "Not connected to editor bridge. Is Unreal Editor running with the MCP bridge plugin?",
       );
     }
 
-    const id = String(++this.idCounter);
-    const request = { id, method, params: params ?? {} };
-    const timeout = timeoutMs ?? 30_000;
-
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
+        if (this.ws === ws) {
+          ws.terminate();
+          this.ws = null;
+        }
         reject(new McpError(ErrorCode.BRIDGE_TIMEOUT, `Bridge call '${method}' timed out after ${Math.round(timeout / 1000)}s`));
       }, timeout);
 
       this.pending.set(id, { resolve, reject, timer });
-      this.ws!.send(JSON.stringify(request));
+      ws.send(JSON.stringify(request), (err) => {
+        if (!err) return;
+
+        clearTimeout(timer);
+        this.pending.delete(id);
+        if (this.ws === ws) {
+          ws.terminate();
+          this.ws = null;
+        }
+        reject(new McpError(ErrorCode.CONNECTION_LOST, `Failed to send bridge call '${method}': ${err.message}`));
+      });
     });
   }
 
