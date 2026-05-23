@@ -17,10 +17,12 @@
 #include "IAssetTools.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
+#include "Factories/Factory.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "Misc/PackageName.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 // Static mesh actors / components
 #include "Engine/StaticMeshActor.h"
@@ -75,6 +77,19 @@
 // JSON
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+
+namespace
+{
+	UFactory* CreateEditorFactoryByClassPath(const TCHAR* ClassPath)
+	{
+		UClass* FactoryClass = LoadObject<UClass>(nullptr, ClassPath);
+		if (!FactoryClass || !FactoryClass->IsChildOf(UFactory::StaticClass()))
+		{
+			return nullptr;
+		}
+		return NewObject<UFactory>(GetTransientPackage(), FactoryClass);
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -952,15 +967,26 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 		return Result;
 	}
 
-	// Create the system using the factory with the Fountain emitter pre-configured
+	// Create the system using the stock editor factory. The concrete factory
+	// class is NO_API in UE 5.5, so instantiate it reflectively.
 	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
-	UNiagaraSystemFactoryNew* Factory = NewObject<UNiagaraSystemFactoryNew>();
+	UFactory* Factory = CreateEditorFactoryByClassPath(TEXT("/Script/NiagaraEditor.NiagaraSystemFactoryNew"));
+	if (!Factory)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Could not create Niagara system factory"));
+		Result->SetBoolField(TEXT("success"), false);
+		return Result;
+	}
+
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4)
+	UNiagaraSystemFactoryNew* NiagaraFactory = static_cast<UNiagaraSystemFactoryNew*>(Factory);
 	FVersionedNiagaraEmitter VersionedEmitter;
 	VersionedEmitter.Emitter = FountainEmitter;
 	VersionedEmitter.Version = FountainEmitter->GetExposedVersion().VersionGuid;
-	Factory->EmittersToAddToNewSystem.Add(VersionedEmitter);
+	NiagaraFactory->EmittersToAddToNewSystem.Add(VersionedEmitter);
+#endif
 
 	UObject* NSAsset = AssetTools.CreateAsset(
 		TEXT("NS_Demo_Aura"), DemoConstants::MAT_DIR,
@@ -968,13 +994,11 @@ TSharedPtr<FJsonObject> FDemoHandlers::StepNiagaraVfx()
 	UNiagaraSystem* NiagaraSys = Cast<UNiagaraSystem>(NSAsset);
 	if (!NiagaraSys)
 	{
-		Result->SetStringField(TEXT("error"), TEXT("Failed to create NiagaraSystem from Fountain emitter"));
+		Result->SetStringField(TEXT("error"), TEXT("Failed to create NiagaraSystem"));
 		Result->SetBoolField(TEXT("success"), false);
 		return Result;
 	}
 
-	// Initialize and save
-	UNiagaraSystemFactoryNew::InitializeSystem(NiagaraSys, true);
 	UEditorAssetLibrary::SaveAsset(NiagaraSys->GetPathName());
 
 	// Spawn a dedicated actor and attach a NiagaraComponent with the system

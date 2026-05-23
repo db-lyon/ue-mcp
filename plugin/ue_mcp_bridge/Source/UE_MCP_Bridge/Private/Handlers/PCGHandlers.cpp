@@ -24,13 +24,6 @@
 #include "PCGVolume.h"
 #include "Elements/PCGStaticMeshSpawner.h"
 #include "MeshSelectors/PCGMeshSelectorWeighted.h"
-// UPCGEditorGraphNodeBase ships in the PCGEditor module starting in UE 5.5.
-// On 5.4 the editor-node-position round-trip is unavailable; we fall back to
-// the runtime UPCGNode::PositionX/Y instead (only populated when this bridge
-// authored the node).
-#if UE_MCP_HAS_5_5_API
-#include "Nodes/PCGEditorGraphNodeBase.h"
-#endif
 #include "UObject/UObjectIterator.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Brush.h"
@@ -43,11 +36,19 @@
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
 #include "GameFramework/Actor.h"
+#include "EdGraph/EdGraphNode.h"
 #include "UObject/UnrealType.h"
 #include "UObject/PropertyPortFlags.h"
 #include "UObject/SoftObjectPtr.h"
 #include "ScopedTransaction.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include <functional>
+
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4)
+#define UE_MCP_HAS_PCG_EDITOR_GRAPH_NODE_LAYOUT 1
+#else
+#define UE_MCP_HAS_PCG_EDITOR_GRAPH_NODE_LAYOUT 0
+#endif
 
 namespace
 {
@@ -1726,7 +1727,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 		// to the local id when nothing else in the graph already uses it.
 		if (!LocalName.IsEmpty() && NewNode->GetName() != LocalName)
 		{
-			const bool bClashes = (StaticFindObject(nullptr, NewNode->GetOuter(), *LocalName, EFindObjectFlags::ExactClass) != nullptr);
+			const bool bClashes = (StaticFindObject(nullptr, NewNode->GetOuter(), *LocalName, true) != nullptr);
 			if (!bClashes)
 			{
 				NewNode->Rename(*LocalName, NewNode->GetOuter(), REN_DontCreateRedirectors | REN_DoNotDirty);
@@ -1915,14 +1916,16 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 	// only populated when the node was authored through this bridge - the PCG
 	// editor never writes back to it. Build a lookup so editor-authored
 	// graphs round-trip their hand-laid-out positions.
-	// (5.4 lacks UPCGEditorGraphNodeBase; falls back to runtime PositionX/Y below.)
-#if UE_MCP_HAS_5_5_API
-	TMap<const UPCGNode*, const UPCGEditorGraphNodeBase*> EditorNodeByPCGNode;
-	for (TObjectIterator<UPCGEditorGraphNodeBase> It; It; ++It)
+	// Use reflection instead of including private PCG editor graph-node headers.
+#if UE_MCP_HAS_PCG_EDITOR_GRAPH_NODE_LAYOUT
+	TMap<const UPCGNode*, const UEdGraphNode*> EditorNodeByPCGNode;
+	for (TObjectIterator<UEdGraphNode> It; It; ++It)
 	{
-		const UPCGEditorGraphNodeBase* EdNode = *It;
+		const UEdGraphNode* EdNode = *It;
 		if (!EdNode || EdNode->IsTemplate()) continue;
-		const UPCGNode* PCGN = EdNode->GetPCGNode();
+		const FObjectPropertyBase* PCGNodeProp = FindFProperty<FObjectPropertyBase>(EdNode->GetClass(), TEXT("PCGNode"));
+		if (!PCGNodeProp) continue;
+		const UPCGNode* PCGN = Cast<UPCGNode>(PCGNodeProp->GetObjectPropertyValue_InContainer(EdNode));
 		if (!PCGN) continue;
 		if (PCGN->GetTypedOuter<UPCGGraph>() == Graph)
 		{
@@ -1941,8 +1944,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 
 		double PosX = Node->PositionX;
 		double PosY = Node->PositionY;
-#if UE_MCP_HAS_5_5_API
-		if (const UPCGEditorGraphNodeBase* const* EdNodePtr = EditorNodeByPCGNode.Find(Node); EdNodePtr && *EdNodePtr)
+#if UE_MCP_HAS_PCG_EDITOR_GRAPH_NODE_LAYOUT
+		if (const UEdGraphNode* const* EdNodePtr = EditorNodeByPCGNode.Find(Node); EdNodePtr && *EdNodePtr)
 		{
 			PosX = (*EdNodePtr)->NodePosX;
 			PosY = (*EdNodePtr)->NodePosY;

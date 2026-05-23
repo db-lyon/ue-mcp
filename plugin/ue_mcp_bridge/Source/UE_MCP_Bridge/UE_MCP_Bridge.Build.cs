@@ -5,6 +5,8 @@ public class UE_MCP_Bridge : ModuleRules
 	public UE_MCP_Bridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
+		bUseUnity = false;
+		ShadowVariableWarningLevel = WarningLevel.Off;
 
 		PublicDependencyModuleNames.AddRange(
 			new string[]
@@ -57,22 +59,25 @@ public class UE_MCP_Bridge : ModuleRules
 				"MaterialEditor",
 				"MovieScene",
 				"MovieSceneTracks",
+				"MeshDescription",
 				"NavigationSystem",
 				"Niagara",
 				"NiagaraEditor",
 				"PCG",
 				"PCGEditor",
-			"PoseSearch",
-			"PropertyBindingUtils",
-			"PropertyEditor",
+				"PoseSearch",
+				"PropertyBindingUtils",
+				"PropertyEditor",
 				"PythonScriptPlugin",
 				"Sequencer",
 				"Slate",
 				"SlateCore",
-			"StateTreeModule",
-			"StateTreeEditorModule",
-			"SubobjectDataInterface",
-			"ToolMenus",
+				"StructUtils",
+				"StateTreeModule",
+				"StateTreeEditorModule",
+				"StaticMeshDescription",
+				"SubobjectDataInterface",
+				"ToolMenus",
 				"UMG",
 				"UMGEditor",
 				"UnrealEd",

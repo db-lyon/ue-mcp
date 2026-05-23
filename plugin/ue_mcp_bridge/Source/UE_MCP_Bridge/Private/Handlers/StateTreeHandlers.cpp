@@ -3,7 +3,7 @@
 #include "HandlerUtils.h"
 
 // StateTree authoring depends on UStateTreeEditingSubsystem (compile +
-// validate entry points) and the generic FPropertyBindingPath system, both
+// validate entry points) and editor property binding support, both
 // introduced in UE 5.5. On 5.4 we register no handlers and emit a one-line
 // log so the rest of the plugin still loads.
 #if UE_MCP_HAS_5_5_API
@@ -17,10 +17,9 @@
 #include "StateTreeCompilerLog.h"
 #include "StateTreeTypes.h"
 #include "StateTreeNodeBase.h"
-#include "PropertyBindingPath.h"
-#include "PropertyBindingTypes.h"
 
 #include "Editor.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "StructUtils/InstancedStruct.h"
 #include "UObject/UObjectIterator.h"
 #include "GameplayTagContainer.h"
@@ -28,6 +27,11 @@
 #include "StateTreeEvaluatorBase.h"
 #include "StateTreeTaskBase.h"
 #include "StateTreeEditorTypes.h"
+
+#define UE_MCP_HAS_STATETREE_STATE_DESCRIPTION (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
+#define UE_MCP_HAS_STATETREE_STATE_CUSTOM_TICK_RATE (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
+#define UE_MCP_HAS_STATETREE_COMPILER_TOKENIZED_MESSAGES (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
+#define UE_MCP_HAS_STATETREE_EXECUTION_RUNTIME_DATA (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
 
 #endif // UE_MCP_HAS_5_5_API
 
@@ -365,15 +369,19 @@ TSharedPtr<FJsonObject> FStateTreeHandlers::SerializeStateHierarchy(const UState
 	Obj->SetStringField(TEXT("type"), StateTypeToString(State->Type));
 	Obj->SetStringField(TEXT("selectionBehavior"), SelectionBehaviorToString(State->SelectionBehavior));
 	Obj->SetBoolField(TEXT("bEnabled"), State->bEnabled);
+#if UE_MCP_HAS_STATETREE_STATE_DESCRIPTION
 	Obj->SetStringField(TEXT("description"), State->Description);
+#endif
 	if (State->Tag.IsValid())
 	{
 		Obj->SetStringField(TEXT("tag"), State->Tag.ToString());
 	}
+#if UE_MCP_HAS_STATETREE_STATE_CUSTOM_TICK_RATE
 	if (State->bHasCustomTickRate)
 	{
 		Obj->SetNumberField(TEXT("customTickRate"), State->CustomTickRate);
 	}
+#endif
 	if (State->ColorRef.ID.IsValid())
 	{
 		const UStateTreeEditorData* EditorData = Cast<UStateTreeEditorData>(State->GetOuter());
@@ -531,10 +539,12 @@ static bool AddEditorNodeToArray(TArray<FStateTreeEditorNode>& Arr, const FStrin
 		EditorNode.Instance.InitializeAs(InstanceType);
 	}
 
+#if UE_MCP_HAS_STATETREE_EXECUTION_RUNTIME_DATA
 	if (const UScriptStruct* ExecType = Cast<const UScriptStruct>(Node.GetExecutionRuntimeDataType()))
 	{
 		EditorNode.ExecutionRuntimeData.InitializeAs(ExecType);
 	}
+#endif
 
 	if (InstanceProperties.IsValid() && EditorNode.Instance.IsValid())
 	{
@@ -573,6 +583,7 @@ bool FStateTreeHandlers::CompileAndSave(UStateTree* StateTree, TSharedPtr<FJsonO
 	TArray<TSharedPtr<FJsonValue>> Errors;
 	TArray<TSharedPtr<FJsonValue>> Warnings;
 
+#if UE_MCP_HAS_STATETREE_COMPILER_TOKENIZED_MESSAGES
 	for (const TSharedRef<FTokenizedMessage>& Msg : Log.ToTokenizedMessages())
 	{
 		FString MsgText = Msg->ToText().ToString();
@@ -586,6 +597,12 @@ bool FStateTreeHandlers::CompileAndSave(UStateTree* StateTree, TSharedPtr<FJsonO
 			Warnings.Add(MakeShared<FJsonValueString>(MsgText));
 		}
 	}
+#else
+	if (!bSuccess)
+	{
+		Errors.Add(MakeShared<FJsonValueString>(TEXT("CompileStateTree returned failure; detailed compiler diagnostics are not exposed by the UE 5.5 FStateTreeCompilerLog API.")));
+	}
+#endif
 
 	OutResult->SetArrayField(TEXT("errors"), Errors);
 	OutResult->SetArrayField(TEXT("warnings"), Warnings);
@@ -646,7 +663,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadStateTree(const TSharedPtr<FJsonO
 	Result->SetArrayField(TEXT("globalTasks"), GTArr);
 
 	// Root Parameters
-	const FInstancedPropertyBag& RootParams = EditorData->GetRootParametersPropertyBag();
+	const FInstancedPropertyBag& RootParams = EditorData->RootParameters.Parameters;
 	if (RootParams.IsValid())
 	{
 		auto ParamsObj = MakeShared<FJsonObject>();
@@ -887,7 +904,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 	}
 	else if (PropName == TEXT("description"))
 	{
+#if UE_MCP_HAS_STATETREE_STATE_DESCRIPTION
 		State->Description = Value;
+#else
+		return MCPError(TEXT("State description is not available in this UE version"));
+#endif
 	}
 	else if (PropName == TEXT("tag"))
 	{
@@ -907,6 +928,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 	}
 	else if (PropName == TEXT("customTickRate"))
 	{
+#if UE_MCP_HAS_STATETREE_STATE_CUSTOM_TICK_RATE
 		if (Value.IsEmpty())
 		{
 			State->bHasCustomTickRate = false;
@@ -917,6 +939,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 			State->bHasCustomTickRate = true;
 			State->CustomTickRate = FCString::Atof(*Value);
 		}
+#else
+		return MCPError(TEXT("State customTickRate is not available in this UE version"));
+#endif
 	}
 	else if (PropName == TEXT("color"))
 	{
@@ -1792,14 +1817,14 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObje
 	const FString TargetStructIdStr = Params->GetStringField(TEXT("targetStructId"));
 	const FString TargetPathStr = Params->GetStringField(TEXT("targetPath"));
 
-	FPropertyBindingPath SourcePath;
+	FStateTreePropertyPath SourcePath;
 	SourcePath.SetStructID(ParseGuid(SourceStructIdStr));
 	if (!SourcePath.FromString(SourcePathStr))
 	{
 		return MCPError(FString::Printf(TEXT("Failed to parse source path: %s"), *SourcePathStr));
 	}
 
-	FPropertyBindingPath TargetPath;
+	FStateTreePropertyPath TargetPath;
 	TargetPath.SetStructID(ParseGuid(TargetStructIdStr));
 	if (!TargetPath.FromString(TargetPathStr))
 	{
@@ -1827,7 +1852,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonO
 	const FString TargetStructIdStr = Params->GetStringField(TEXT("targetStructId"));
 	const FString TargetPathStr = Params->GetStringField(TEXT("targetPath"));
 
-	FPropertyBindingPath TargetPath;
+	FStateTreePropertyPath TargetPath;
 	TargetPath.SetStructID(ParseGuid(TargetStructIdStr));
 	if (!TargetPath.FromString(TargetPathStr))
 	{
@@ -1841,7 +1866,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonO
 	}
 
 	EditorData->Modify();
-	Bindings->RemoveBindings(TargetPath);
+	Bindings->RemovePropertyBindings(TargetPath);
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("removed"), true);
@@ -2066,7 +2091,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJ
 	State->Modify();
 	TArray<FPropertyBagPropertyDesc> NewDescs;
 	NewDescs.Add(FPropertyBagPropertyDesc(FName(*ParamName), BagType));
-	State->Parameters.Parameters.AddProperties(NewDescs, /*bOverwrite=*/ false);
+	State->Parameters.Parameters.AddProperties(NewDescs);
 
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
@@ -2177,7 +2202,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetRootParameters(const TSharedPtr<FJ
 
 	const TArray<TSharedPtr<FJsonValue>>& ParamsArr = Params->GetArrayField(TEXT("parameters"));
 
-	TArray<UE::PropertyBinding::FPropertyCreationDescriptor> Descs;
+	TArray<FStateTreeEditorPropertyCreationDesc> Descs;
 	for (const TSharedPtr<FJsonValue>& PVal : ParamsArr)
 	{
 		const TSharedPtr<FJsonObject>& PObj = PVal->AsObject();
@@ -2194,12 +2219,12 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetRootParameters(const TSharedPtr<FJ
 		else if (TypeStr == TEXT("string")) BagType = EPropertyBagPropertyType::String;
 		else if (TypeStr == TEXT("double")) BagType = EPropertyBagPropertyType::Double;
 
-		UE::PropertyBinding::FPropertyCreationDescriptor& Desc = Descs.AddDefaulted_GetRef();
+		FStateTreeEditorPropertyCreationDesc& Desc = Descs.AddDefaulted_GetRef();
 		Desc.PropertyDesc = FPropertyBagPropertyDesc(FName(*PropName), BagType);
 	}
 
 	EditorData->Modify();
-	EditorData->CreateRootProperties(Descs);
+	EditorData->CreateParameters(EditorData->RootParameters.ID, Descs);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
