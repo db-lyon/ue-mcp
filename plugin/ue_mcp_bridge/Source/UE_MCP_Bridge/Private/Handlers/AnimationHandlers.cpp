@@ -72,6 +72,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_anim_blueprint"), &ReadAnimBlueprint);
 	Registry.RegisterHandler(TEXT("read_anim_montage"), &ReadAnimMontage);
 	Registry.RegisterHandler(TEXT("read_anim_sequence"), &ReadAnimSequence);
+	Registry.RegisterHandler(TEXT("scan_animation_tracks"), &ScanAnimationTracks);
 	Registry.RegisterHandler(TEXT("create_anim_blueprint"), &CreateAnimBlueprint);
 	Registry.RegisterHandler(TEXT("create_anim_montage"), &CreateMontage);
 	Registry.RegisterHandler(TEXT("create_blendspace"), &CreateBlendspace);
