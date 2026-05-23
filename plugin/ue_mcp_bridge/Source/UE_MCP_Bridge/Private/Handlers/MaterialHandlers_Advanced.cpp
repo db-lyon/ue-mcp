@@ -55,10 +55,19 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DuplicateMaterial(const TSharedPtr<FJs
 	FString DestinationPath;
 	if (auto Err = RequireString(Params, TEXT("destinationPath"), DestinationPath)) return Err;
 
-	UObject* Duplicated = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestinationPath);
+	const FString DestinationPackagePath = FPackageName::ObjectPathToPackageName(DestinationPath);
+	FString DestinationDirectory;
+	FString DestinationAssetName;
+	if (DestinationPackagePath.Split(TEXT("/"), &DestinationDirectory, &DestinationAssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd)
+		&& !UEditorAssetLibrary::DoesDirectoryExist(DestinationDirectory))
+	{
+		UEditorAssetLibrary::MakeDirectory(DestinationDirectory);
+	}
+
+	UObject* Duplicated = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestinationPackagePath);
 	if (!Duplicated)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to duplicate '%s' -> '%s'"), *SourcePath, *DestinationPath));
+		return MCPError(FString::Printf(TEXT("Failed to duplicate '%s' -> '%s'"), *SourcePath, *DestinationPackagePath));
 	}
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
@@ -66,6 +75,153 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DuplicateMaterial(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("sourcePath"), SourcePath);
 	Result->SetStringField(TEXT("destinationPath"), Duplicated->GetPathName());
 	MCPSetDeleteAssetRollback(Result, Duplicated->GetPathName());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FMaterialHandlers::DuplicateMaterialWithBaseColorTint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SourcePath;
+	if (auto Err = RequireString(Params, TEXT("sourcePath"), SourcePath)) return Err;
+	FString DestinationPath;
+	if (auto Err = RequireString(Params, TEXT("destinationPath"), DestinationPath)) return Err;
+
+	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
+	if (!Params->TryGetObjectField(TEXT("color"), ColorObj))
+	{
+		return MCPError(TEXT("Missing 'color' parameter (object with r,g,b,a)"));
+	}
+
+	double R = 1.0, G = 1.0, B = 1.0, A = 1.0;
+	(*ColorObj)->TryGetNumberField(TEXT("r"), R);
+	(*ColorObj)->TryGetNumberField(TEXT("g"), G);
+	(*ColorObj)->TryGetNumberField(TEXT("b"), B);
+	(*ColorObj)->TryGetNumberField(TEXT("a"), A);
+	const FLinearColor TintColor(static_cast<float>(R), static_cast<float>(G), static_cast<float>(B), static_cast<float>(A));
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+
+	const FString DestinationPackagePath = FPackageName::ObjectPathToPackageName(DestinationPath);
+	FString DestinationDirectory;
+	FString DestinationAssetName;
+	if (!DestinationPackagePath.Split(TEXT("/"), &DestinationDirectory, &DestinationAssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd))
+	{
+		return MCPError(FString::Printf(TEXT("Invalid destination material path '%s'"), *DestinationPath));
+	}
+
+	bool bCreated = false;
+	UMaterial* Material = nullptr;
+	if (UEditorAssetLibrary::DoesAssetExist(DestinationPackagePath))
+	{
+		Material = Cast<UMaterial>(UEditorAssetLibrary::LoadAsset(DestinationPackagePath));
+		if (!Material)
+		{
+			return MCPError(FString::Printf(TEXT("Destination exists but is not a material: %s"), *DestinationPackagePath));
+		}
+	}
+	else
+	{
+		if (!UEditorAssetLibrary::DoesDirectoryExist(DestinationDirectory))
+		{
+			UEditorAssetLibrary::MakeDirectory(DestinationDirectory);
+		}
+
+		UObject* Duplicated = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestinationPackagePath);
+		Material = Cast<UMaterial>(Duplicated);
+		if (!Material)
+		{
+			return MCPError(FString::Printf(TEXT("Failed to duplicate material '%s' -> '%s'"), *SourcePath, *DestinationPackagePath));
+		}
+		bCreated = true;
+	}
+
+	UMaterialEditorOnlyData* EditorOnlyData = Material->GetEditorOnlyData();
+	if (!EditorOnlyData)
+	{
+		return MCPError(FString::Printf(TEXT("Material has no editor-only data: %s"), *Material->GetPathName()));
+	}
+
+	FExpressionInput* BaseColorInput = GetMaterialPropertyInput(EditorOnlyData, MP_BaseColor);
+	if (!BaseColorInput)
+	{
+		return MCPError(FString::Printf(TEXT("Material has no supported BaseColor input: %s"), *Material->GetPathName()));
+	}
+
+	static const FString TintNodeName = TEXT("UE_MCP_BaseColorTint");
+	static const FString MultiplyNodeName = TEXT("UE_MCP_BaseColorTintMultiply");
+
+	UMaterialExpression* SourceExpression = BaseColorInput->Expression;
+	int32 SourceOutputIndex = BaseColorInput->OutputIndex;
+
+	UMaterialExpressionMultiply* ExistingMultiply = Cast<UMaterialExpressionMultiply>(FindExpressionByName(Material, MultiplyNodeName));
+	if (ExistingMultiply && SourceExpression == ExistingMultiply && ExistingMultiply->A.Expression)
+	{
+		SourceExpression = ExistingMultiply->A.Expression;
+		SourceOutputIndex = ExistingMultiply->A.OutputIndex;
+	}
+
+	if (!SourceExpression)
+	{
+		return MCPError(FString::Printf(TEXT("Material BaseColor is not connected, cannot preserve source color for tint: %s"), *Material->GetPathName()));
+	}
+
+	Material->PreEditChange(nullptr);
+
+	UMaterialExpressionConstant3Vector* TintExpression = Cast<UMaterialExpressionConstant3Vector>(FindExpressionByName(Material, TintNodeName));
+	if (!TintExpression)
+	{
+		TintExpression = NewObject<UMaterialExpressionConstant3Vector>(Material);
+		TintExpression->Desc = TintNodeName;
+		TintExpression->MaterialExpressionEditorX = SourceExpression->MaterialExpressionEditorX + 260;
+		TintExpression->MaterialExpressionEditorY = SourceExpression->MaterialExpressionEditorY + 160;
+		Material->GetExpressionCollection().AddExpression(TintExpression);
+	}
+	TintExpression->Constant = TintColor;
+
+	UMaterialExpressionMultiply* MultiplyExpression = ExistingMultiply;
+	if (!MultiplyExpression)
+	{
+		MultiplyExpression = NewObject<UMaterialExpressionMultiply>(Material);
+		MultiplyExpression->Desc = MultiplyNodeName;
+		MultiplyExpression->MaterialExpressionEditorX = SourceExpression->MaterialExpressionEditorX + 520;
+		MultiplyExpression->MaterialExpressionEditorY = SourceExpression->MaterialExpressionEditorY;
+		Material->GetExpressionCollection().AddExpression(MultiplyExpression);
+	}
+	MultiplyExpression->A.Connect(SourceOutputIndex, SourceExpression);
+	MultiplyExpression->B.Connect(0, TintExpression);
+	BaseColorInput->Connect(0, MultiplyExpression);
+
+	Material->PostEditChange();
+	Material->MarkPackageDirty();
+	if (bSave)
+	{
+		UEditorAssetLibrary::SaveLoadedAsset(Material);
+	}
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	if (bCreated)
+	{
+		MCPSetCreated(Result);
+		MCPSetDeleteAssetRollback(Result, Material->GetPathName());
+	}
+	else
+	{
+		MCPSetUpdated(Result);
+	}
+	Result->SetStringField(TEXT("sourcePath"), SourcePath);
+	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
+	Result->SetStringField(TEXT("destinationPath"), Material->GetPathName());
+	Result->SetStringField(TEXT("tintNode"), TintExpression->GetDescription());
+	Result->SetStringField(TEXT("multiplyNode"), MultiplyExpression->GetDescription());
+	Result->SetStringField(TEXT("baseColorSourceNode"), SourceExpression->GetDescription());
+	Result->SetNumberField(TEXT("baseColorSourceOutputIndex"), SourceOutputIndex);
+	Result->SetBoolField(TEXT("saved"), bSave);
+
+	TSharedPtr<FJsonObject> ColorResult = MakeShared<FJsonObject>();
+	ColorResult->SetNumberField(TEXT("r"), R);
+	ColorResult->SetNumberField(TEXT("g"), G);
+	ColorResult->SetNumberField(TEXT("b"), B);
+	ColorResult->SetNumberField(TEXT("a"), A);
+	Result->SetObjectField(TEXT("color"), ColorResult);
+
 	return MCPResult(Result);
 }
 

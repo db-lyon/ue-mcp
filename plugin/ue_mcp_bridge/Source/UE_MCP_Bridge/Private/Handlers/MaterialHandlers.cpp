@@ -3,6 +3,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
+#include "MaterialDomain.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceConstant.h"
@@ -66,6 +67,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// v0.7.9 — depth
 	Registry.RegisterHandler(TEXT("duplicate_material"), &DuplicateMaterial);
+	Registry.RegisterHandler(TEXT("duplicate_material_with_base_color_tint"), &DuplicateMaterialWithBaseColorTint);
 	Registry.RegisterHandler(TEXT("validate_material"), &ValidateMaterial);
 	Registry.RegisterHandler(TEXT("get_material_shader_stats"), &GetMaterialShaderStats);
 	Registry.RegisterHandler(TEXT("export_material_graph"), &ExportMaterialGraph);
@@ -1714,7 +1716,7 @@ UMaterialExpression* FMaterialHandlers::FindExpressionByName(UMaterial* Material
 	// Try matching by description first (most specific)
 	for (UMaterialExpression* Expression : Material->GetExpressions())
 	{
-		if (Expression && Expression->GetDescription() == ExpressionName)
+		if (Expression && (Expression->Desc == ExpressionName || Expression->GetDescription() == ExpressionName))
 		{
 			return Expression;
 		}

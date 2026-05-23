@@ -3,6 +3,12 @@
 #include "CoreMinimal.h"
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
+#include "MaterialShared.h"
+
+class UMaterial;
+class UMaterialEditorOnlyData;
+class UMaterialExpression;
+class UMaterialInstanceConstant;
 
 class FMaterialHandlers
 {
@@ -58,6 +64,7 @@ private:
 
 	// v0.7.9 — material depth
 	static TSharedPtr<FJsonValue> DuplicateMaterial(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DuplicateMaterialWithBaseColorTint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ValidateMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetMaterialShaderStats(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ExportMaterialGraph(const TSharedPtr<FJsonObject>& Params);
