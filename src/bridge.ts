@@ -2,8 +2,6 @@ import WebSocket from "ws";
 import { McpError, ErrorCode } from "./errors.js";
 import { debug, warn } from "./log.js";
 
-const DEFAULT_BRIDGE_PORT = Number(process.env.UE_MCP_BRIDGE_PORT ?? 9877);
-
 export interface BridgeResponse {
   id: string;
   result?: unknown;
@@ -32,7 +30,7 @@ export class EditorBridge implements IBridge {
 
   constructor(
     public host = "localhost",
-    public port = DEFAULT_BRIDGE_PORT,
+    public port = 9877,
   ) {}
 
   get isConnected(): boolean {

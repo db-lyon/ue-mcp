@@ -1,15 +1,7 @@
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import { WebSocketServer } from "ws";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-const originalBridgePort = process.env.UE_MCP_BRIDGE_PORT;
-
-afterEach(() => {
-  if (originalBridgePort === undefined) delete process.env.UE_MCP_BRIDGE_PORT;
-  else process.env.UE_MCP_BRIDGE_PORT = originalBridgePort;
-  vi.resetModules();
-});
+import { describe, expect, it } from "vitest";
 
 async function withBridgeServer(
   onRequest: (request: Record<string, unknown>, socket: import("ws").WebSocket) => void,
@@ -45,16 +37,6 @@ async function withBridgeServer(
 }
 
 describe("EditorBridge connection handling", () => {
-  it("uses UE_MCP_BRIDGE_PORT as the default port", async () => {
-    process.env.UE_MCP_BRIDGE_PORT = "19876";
-    vi.resetModules();
-
-    const { EditorBridge } = await import("../../src/bridge.js");
-    const bridge = new EditorBridge();
-
-    expect(bridge.port).toBe(19876);
-  });
-
   it("connects on the first bridge call when the editor bridge is reachable", async () => {
     const server = await withBridgeServer((request, socket) => {
       socket.send(JSON.stringify({ id: request.id, result: { method: request.method, params: request.params } }));
