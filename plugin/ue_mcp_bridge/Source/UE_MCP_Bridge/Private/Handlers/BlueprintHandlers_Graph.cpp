@@ -63,7 +63,8 @@ namespace
 	FString MakeDefaultGraphDumpPath(const FString& AssetPath, const FString& GraphName)
 	{
 		const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
-		const FString BaseName = FPaths::MakeValidFileName(AssetName + TEXT("_") + GraphName);
+		const FString PathHash = FString::Printf(TEXT("%08x"), GetTypeHash(AssetPath + TEXT(":") + GraphName));
+		const FString BaseName = FPaths::MakeValidFileName(AssetName + TEXT("_") + GraphName + TEXT("_") + PathHash);
 		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("UE_MCP"), TEXT("GraphDumps"), BaseName + TEXT(".json"));
 	}
 
@@ -560,6 +561,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 	const bool bIncludeComments = OptionalBool(Params, TEXT("includeComments"), true);
 	const bool bDumpToFile = OptionalBool(Params, TEXT("dumpToFile"), false);
 	const FString OutputPath = OptionalString(Params, TEXT("outputPath"), TEXT(""));
+	const bool bHasOffset = Params->HasField(TEXT("offset"));
 	const bool bHasLimit = Params->HasField(TEXT("limit"));
 	const int32 RequestedOffset = FMath::Max(0, OptionalInt(Params, TEXT("offset"), 0));
 
@@ -581,13 +583,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 	int32 EffectiveLimit = OptionalInt(Params, TEXT("limit"), -1);
 	if (EffectiveLimit <= 0)
 	{
-		EffectiveLimit = bHasLimit ? TotalNodeCount : FMath::Min(TotalNodeCount, DefaultSafeReadGraphLimit);
+		EffectiveLimit = bDumpToFile
+			? TotalNodeCount
+			: (bHasLimit ? TotalNodeCount : FMath::Min(TotalNodeCount, DefaultSafeReadGraphLimit));
 	}
 	EffectiveLimit = FMath::Max(0, EffectiveLimit);
 
 	const int32 StartIndex = FMath::Min(RequestedOffset, TotalNodeCount);
 	const int32 EndIndex = FMath::Min(TotalNodeCount, StartIndex + EffectiveLimit);
-	const bool bAutoPaginated = !bHasLimit && TotalNodeCount > EffectiveLimit;
+	const bool bAutoPaginated = !bDumpToFile && !bHasLimit && EndIndex < TotalNodeCount;
 
 	auto BuildGraphResult = [&](int32 SliceStart, int32 SliceEnd) -> TSharedPtr<FJsonObject>
 	{
@@ -662,7 +666,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 
 	if (bDumpToFile)
 	{
-		const TSharedPtr<FJsonObject> DumpResult = BuildGraphResult(0, TotalNodeCount);
+		const int32 DumpStartIndex = bHasOffset ? StartIndex : 0;
+		const int32 DumpEndIndex = (bHasOffset || bHasLimit) ? EndIndex : TotalNodeCount;
+		const TSharedPtr<FJsonObject> DumpResult = BuildGraphResult(DumpStartIndex, DumpEndIndex);
 		FString ResolvedDumpPath;
 		FString DumpError;
 		if (!WriteJsonObjectToFile(DumpResult, OutputPath, AssetPath, GraphName, ResolvedDumpPath, DumpError))
@@ -675,11 +681,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 		Result->SetStringField(TEXT("graphName"), GraphName);
 		Result->SetBoolField(TEXT("dumpedToFile"), true);
 		Result->SetStringField(TEXT("outputPath"), ResolvedDumpPath);
+		Result->SetNumberField(TEXT("nodeCount"), DumpResult->GetNumberField(TEXT("nodeCount")));
 		Result->SetNumberField(TEXT("totalNodeCount"), TotalNodeCount);
-		Result->SetNumberField(TEXT("offset"), StartIndex);
-		Result->SetNumberField(TEXT("limit"), EndIndex - StartIndex);
-		Result->SetBoolField(TEXT("hasMore"), EndIndex < TotalNodeCount);
-		Result->SetNumberField(TEXT("nextOffset"), EndIndex < TotalNodeCount ? EndIndex : -1);
+		Result->SetNumberField(TEXT("offset"), DumpStartIndex);
+		Result->SetNumberField(TEXT("limit"), DumpEndIndex - DumpStartIndex);
+		Result->SetBoolField(TEXT("hasMore"), DumpEndIndex < TotalNodeCount);
+		Result->SetNumberField(TEXT("nextOffset"), DumpEndIndex < TotalNodeCount ? DumpEndIndex : -1);
 		if (bAutoPaginated)
 		{
 			Result->SetBoolField(TEXT("autoPaginated"), true);

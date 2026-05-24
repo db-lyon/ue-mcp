@@ -102,8 +102,8 @@ export const blueprintTool: ToolDef = categoryTool(
     includePins: z.boolean().optional().describe("Include pins in read_graph results (default true)"),
     includeDefaults: z.boolean().optional().describe("Include pin default values in read_graph results (default true)"),
     includeComments: z.boolean().optional().describe("Include node comments in read_graph results (default true)"),
-    dumpToFile: z.boolean().optional().describe("Write the full read_graph result to a JSON file instead of returning all nodes inline"),
-    outputPath: z.string().optional().describe("Absolute or Saved-relative JSON path for read_graph dumps"),
+    dumpToFile: z.boolean().optional().describe("Write read_graph JSON to a file instead of returning nodes inline; without offset/limit this dumps the full graph, otherwise it dumps the requested slice"),
+    outputPath: z.string().optional().describe("Absolute or Saved-relative JSON path for read_graph dumps; default path includes the asset, graph, and a path hash"),
     parameters: z.array(z.object({
       name: z.string(),
       type: z.string().optional(),
