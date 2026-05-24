@@ -257,7 +257,6 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `list_expression_types` | List available expression types |
 | `recompile` | Recompile material. Pass recompileChildren=true to cascade to every MaterialInstanceConstant whose parent chain reaches this material (#421). Params: `materialPath, recompileChildren?` |
 | `duplicate` | Duplicate material asset. Params: `sourcePath, destinationPath` |
-| `duplicate_tinted` | Duplicate or reuse a material and multiply BaseColor by a tint. Params: `sourcePath, destinationPath, color, save?` |
 | `validate` | Validate material graph - find orphans, broken refs. Params: `assetPath` |
 | `get_shader_stats` | Shader compile stats, sampler+param counts. Params: `assetPath` |
 | `export_graph` | Export material graph as JSON. Params: `assetPath` |
