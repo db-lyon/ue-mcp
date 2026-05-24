@@ -10,6 +10,7 @@
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/AnimComposite.h"
+#include "Animation/AnimData/IAnimationDataModel.h"
 #include "Animation/Skeleton.h"
 #include "AnimationBlueprintLibrary.h"
 #include "Engine/SkeletalMesh.h"
@@ -124,6 +125,132 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimSequence(const TSharedPtr<FJs
 	}
 	Result->SetArrayField(TEXT("curveNames"), CurvesArray);
 
+	return MCPResult(Result);
+}
+
+// ---------------------------------------------------------------------------
+// scan_animation_tracks
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FAnimationHandlers::ScanAnimationTracks(const TSharedPtr<FJsonObject>& Params)
+{
+	const int32 TargetTrackCount = OptionalInt(Params, TEXT("targetTrackCount"), 0);
+	const bool bIncludeTrackNames = OptionalBool(Params, TEXT("includeTrackNames"), false);
+	const bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
+	const FString Directory = OptionalString(Params, TEXT("directory"), TEXT("/Game"));
+	const FString SkeletonFilter = OptionalString(Params, TEXT("skeletonPath"));
+
+	TArray<FString> AssetPaths;
+	const TArray<TSharedPtr<FJsonValue>>* PathsArray = nullptr;
+	if (Params->TryGetArrayField(TEXT("assetPaths"), PathsArray))
+	{
+		for (const TSharedPtr<FJsonValue>& PathValue : *PathsArray)
+		{
+			FString Path;
+			if (PathValue.IsValid() && PathValue->TryGetString(Path) && !Path.IsEmpty())
+			{
+				AssetPaths.Add(Path);
+			}
+		}
+	}
+	else
+	{
+		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		TArray<FAssetData> AssetDataList;
+		AssetRegistry.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/Engine"), TEXT("AnimSequence")), AssetDataList, true);
+		for (const FAssetData& AssetData : AssetDataList)
+		{
+			if (!Directory.IsEmpty() && !AssetData.PackageName.ToString().StartsWith(Directory))
+			{
+				continue;
+			}
+			if (!bRecursive && AssetData.PackagePath.ToString() != Directory)
+			{
+				continue;
+			}
+			AssetPaths.Add(AssetData.GetObjectPathString());
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Sequences;
+	int32 ProblemCount = 0;
+	int32 InspectedCount = 0;
+	int32 FailureCount = 0;
+
+	for (const FString& AssetPath : AssetPaths)
+	{
+		UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+		UAnimSequence* AnimSeq = Cast<UAnimSequence>(LoadedAsset);
+		if (!AnimSeq)
+		{
+			++FailureCount;
+			continue;
+		}
+
+		const IAnimationDataModel* DataModel = AnimSeq->GetDataModel();
+		if (!DataModel)
+		{
+			++FailureCount;
+			continue;
+		}
+
+		USkeleton* Skeleton = AnimSeq->GetSkeleton();
+		const FString SequenceSkeletonPath = Skeleton ? Skeleton->GetPathName() : FString();
+		if (!SkeletonFilter.IsEmpty() && SequenceSkeletonPath != SkeletonFilter)
+		{
+			continue;
+		}
+
+		++InspectedCount;
+		TArray<FName> BoneTrackNames;
+		DataModel->GetBoneTrackNames(BoneTrackNames);
+		const int32 TrackCount = BoneTrackNames.Num();
+		const bool bOverTarget = TargetTrackCount > 0 && TrackCount > TargetTrackCount;
+		if (bOverTarget)
+		{
+			++ProblemCount;
+		}
+
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("assetPath"), AnimSeq->GetPathName());
+		Entry->SetStringField(TEXT("packagePath"), AnimSeq->GetOutermost()->GetName());
+		Entry->SetStringField(TEXT("name"), AnimSeq->GetName());
+		Entry->SetStringField(TEXT("skeleton"), SequenceSkeletonPath);
+		Entry->SetNumberField(TEXT("numBoneTracks"), TrackCount);
+		Entry->SetBoolField(TEXT("overTarget"), bOverTarget);
+
+		if (bIncludeTrackNames)
+		{
+			TArray<TSharedPtr<FJsonValue>> TrackArray;
+			for (const FName& TrackName : BoneTrackNames)
+			{
+				TrackArray.Add(MakeShared<FJsonValueString>(TrackName.ToString()));
+			}
+			Entry->SetArrayField(TEXT("boneTrackNames"), TrackArray);
+		}
+
+		if (TargetTrackCount > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> OverflowArray;
+			for (int32 Index = TargetTrackCount; Index < BoneTrackNames.Num(); ++Index)
+			{
+				OverflowArray.Add(MakeShared<FJsonValueString>(BoneTrackNames[Index].ToString()));
+			}
+			Entry->SetArrayField(TEXT("overflowTrackNames"), OverflowArray);
+		}
+
+		if (bOverTarget || TargetTrackCount <= 0)
+		{
+			Sequences.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("directory"), Directory);
+	Result->SetNumberField(TEXT("targetTrackCount"), TargetTrackCount);
+	Result->SetNumberField(TEXT("inspectedCount"), InspectedCount);
+	Result->SetNumberField(TEXT("problemCount"), ProblemCount);
+	Result->SetNumberField(TEXT("failureCount"), FailureCount);
+	Result->SetArrayField(TEXT("sequences"), Sequences);
 	return MCPResult(Result);
 }
 

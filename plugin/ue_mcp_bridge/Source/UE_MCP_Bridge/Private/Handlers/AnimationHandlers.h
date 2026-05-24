@@ -21,6 +21,7 @@ private:
 	static TSharedPtr<FJsonValue> ReadAnimBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadAnimMontage(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadAnimSequence(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ScanAnimationTracks(const TSharedPtr<FJsonObject>& Params);
 
 	// Read handlers for blendspace
 	static TSharedPtr<FJsonValue> ReadBlendspace(const TSharedPtr<FJsonObject>& Params);

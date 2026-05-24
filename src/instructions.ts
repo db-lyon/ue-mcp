@@ -46,7 +46,7 @@ material — Materials, shading, and graph authoring
   list_expressions, delete_expression, list_expression_types, recompile
 
 animation — Anim assets, skeletons, montages, blendspaces
-  read_anim_blueprint, read_montage, read_sequence, read_blendspace, list,
+  read_anim_blueprint, read_montage, read_sequence, scan_animation_tracks, read_blendspace, list,
   create_montage, create_anim_blueprint, create_blendspace, add_notify,
   get_skeleton_info, list_sockets, list_skeletal_meshes, get_physics_asset,
   create_sequence, set_bone_keyframes, get_bone_transforms,

@@ -277,6 +277,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `read_anim_blueprint` | Read AnimBP structure. Params: `assetPath` |
 | `read_montage` | Read montage. Params: `assetPath` |
 | `read_sequence` | Read anim sequence. Params: `assetPath` |
+| `scan_animation_tracks` | Scan AnimSequence bone-track counts. Params: `directory?, recursive?, assetPaths?, skeletonPath?, targetTrackCount?, includeTrackNames?` |
 | `read_blendspace` | Read blendspace. Params: `assetPath` |
 | `add_blend_sample` | Append a sample to a BlendSpace. Params: `assetPath, animation (AnimSequence path), position {x,y} (or flat x,y) (#248)` |
 | `set_blend_sample` | Move an existing BlendSpace sample or swap its animation. Params: `assetPath, sampleIndex, position? {x,y} (or flat x,y), animation? (#272)` |
