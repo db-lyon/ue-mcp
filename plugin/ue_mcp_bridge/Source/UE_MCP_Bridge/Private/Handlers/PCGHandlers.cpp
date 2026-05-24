@@ -50,6 +50,8 @@
 #define UE_MCP_HAS_PCG_EDITOR_GRAPH_NODE_LAYOUT 0
 #endif
 
+#define UE_MCP_HAS_STATIC_FIND_OBJECT_FLAGS (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7))
+
 namespace
 {
 	// #149: recursive JSON→FProperty setter used by set_pcg_node_settings.
@@ -1727,7 +1729,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 		// to the local id when nothing else in the graph already uses it.
 		if (!LocalName.IsEmpty() && NewNode->GetName() != LocalName)
 		{
+#if UE_MCP_HAS_STATIC_FIND_OBJECT_FLAGS
+			const bool bClashes = (StaticFindObject(nullptr, NewNode->GetOuter(), *LocalName, EFindObjectFlags::ExactClass) != nullptr);
+#else
 			const bool bClashes = (StaticFindObject(nullptr, NewNode->GetOuter(), *LocalName, true) != nullptr);
+#endif
 			if (!bClashes)
 			{
 				NewNode->Rename(*LocalName, NewNode->GetOuter(), REN_DontCreateRedirectors | REN_DoNotDirty);

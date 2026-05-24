@@ -19,7 +19,7 @@ namespace UEMCPPIE
 {
 	namespace
 	{
-		FString ISOTimestampNow()
+		FString RecorderISOTimestampNow()
 		{
 			// Approximate ISO 8601 UTC. UE's FDateTime has no timezone awareness,
 			// so we treat it as local and append the local offset.
@@ -158,7 +158,7 @@ namespace UEMCPPIE
 		ActorRows.Reset();
 		Markers.Reset();
 		StartTime = FPlatformTime::Seconds();
-		StartedAt = ISOTimestampNow();
+		StartedAt = RecorderISOTimestampNow();
 
 		State = ERecorderState::WaitingForPawn;
 
@@ -432,7 +432,7 @@ namespace UEMCPPIE
 		FManifest M;
 		M.Id = CurrentId;
 		M.StartedAt = StartedAt;
-		M.EndedAt = ISOTimestampNow();
+		M.EndedAt = RecorderISOTimestampNow();
 		M.DurationSeconds = Rows.Num() >= 2 ? (Rows.Last().Time - Rows[0].Time) : 0.0;
 		M.TotalFrames = Rows.Num();
 		M.SampleHz = Pending.SampleHz;

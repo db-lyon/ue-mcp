@@ -23,7 +23,7 @@ namespace UEMCPPIE
 {
 	namespace
 	{
-		FString ISOTimestampNow()
+		FString ReplayerISOTimestampNow()
 		{
 			return FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
 		}
@@ -348,7 +348,7 @@ namespace UEMCPPIE
 
 		State = EReplayerState::WaitingForPawn;
 		AttachTime = 0.0;
-		StartedAt = ISOTimestampNow();
+		StartedAt = ReplayerISOTimestampNow();
 
 		if (!bEndFrameBound)
 		{

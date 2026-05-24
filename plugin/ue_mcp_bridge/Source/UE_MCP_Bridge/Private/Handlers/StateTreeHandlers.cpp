@@ -20,6 +20,10 @@
 
 #include "Editor.h"
 #include "Runtime/Launch/Resources/Version.h"
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
+#include "PropertyBindingPath.h"
+#include "PropertyBindingTypes.h"
+#endif
 #include "StructUtils/InstancedStruct.h"
 #include "UObject/UObjectIterator.h"
 #include "GameplayTagContainer.h"
@@ -32,6 +36,15 @@
 #define UE_MCP_HAS_STATETREE_STATE_CUSTOM_TICK_RATE (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
 #define UE_MCP_HAS_STATETREE_COMPILER_TOKENIZED_MESSAGES (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
 #define UE_MCP_HAS_STATETREE_EXECUTION_RUNTIME_DATA (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
+#define UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7))
+
+#if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
+using FUE_MCPStateTreePropertyPath = FPropertyBindingPath;
+using FUE_MCPStateTreePropertyCreationDesc = UE::PropertyBinding::FPropertyCreationDescriptor;
+#else
+using FUE_MCPStateTreePropertyPath = FStateTreePropertyPath;
+using FUE_MCPStateTreePropertyCreationDesc = FStateTreeEditorPropertyCreationDesc;
+#endif
 
 #endif // UE_MCP_HAS_5_5_API
 
@@ -663,7 +676,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadStateTree(const TSharedPtr<FJsonO
 	Result->SetArrayField(TEXT("globalTasks"), GTArr);
 
 	// Root Parameters
+#if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
+	const FInstancedPropertyBag& RootParams = EditorData->GetRootParametersPropertyBag();
+#else
 	const FInstancedPropertyBag& RootParams = EditorData->RootParameters.Parameters;
+#endif
 	if (RootParams.IsValid())
 	{
 		auto ParamsObj = MakeShared<FJsonObject>();
@@ -1817,14 +1834,14 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObje
 	const FString TargetStructIdStr = Params->GetStringField(TEXT("targetStructId"));
 	const FString TargetPathStr = Params->GetStringField(TEXT("targetPath"));
 
-	FStateTreePropertyPath SourcePath;
+	FUE_MCPStateTreePropertyPath SourcePath;
 	SourcePath.SetStructID(ParseGuid(SourceStructIdStr));
 	if (!SourcePath.FromString(SourcePathStr))
 	{
 		return MCPError(FString::Printf(TEXT("Failed to parse source path: %s"), *SourcePathStr));
 	}
 
-	FStateTreePropertyPath TargetPath;
+	FUE_MCPStateTreePropertyPath TargetPath;
 	TargetPath.SetStructID(ParseGuid(TargetStructIdStr));
 	if (!TargetPath.FromString(TargetPathStr))
 	{
@@ -1852,7 +1869,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonO
 	const FString TargetStructIdStr = Params->GetStringField(TEXT("targetStructId"));
 	const FString TargetPathStr = Params->GetStringField(TEXT("targetPath"));
 
-	FStateTreePropertyPath TargetPath;
+	FUE_MCPStateTreePropertyPath TargetPath;
 	TargetPath.SetStructID(ParseGuid(TargetStructIdStr));
 	if (!TargetPath.FromString(TargetPathStr))
 	{
@@ -1866,7 +1883,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonO
 	}
 
 	EditorData->Modify();
+#if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
+	Bindings->RemoveBindings(TargetPath);
+#else
 	Bindings->RemovePropertyBindings(TargetPath);
+#endif
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("removed"), true);
@@ -2091,7 +2112,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJ
 	State->Modify();
 	TArray<FPropertyBagPropertyDesc> NewDescs;
 	NewDescs.Add(FPropertyBagPropertyDesc(FName(*ParamName), BagType));
+#if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
+	State->Parameters.Parameters.AddProperties(NewDescs, /*bOverwrite=*/ false);
+#else
 	State->Parameters.Parameters.AddProperties(NewDescs);
+#endif
 
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
@@ -2202,7 +2227,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetRootParameters(const TSharedPtr<FJ
 
 	const TArray<TSharedPtr<FJsonValue>>& ParamsArr = Params->GetArrayField(TEXT("parameters"));
 
-	TArray<FStateTreeEditorPropertyCreationDesc> Descs;
+	TArray<FUE_MCPStateTreePropertyCreationDesc> Descs;
 	for (const TSharedPtr<FJsonValue>& PVal : ParamsArr)
 	{
 		const TSharedPtr<FJsonObject>& PObj = PVal->AsObject();
@@ -2219,12 +2244,16 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetRootParameters(const TSharedPtr<FJ
 		else if (TypeStr == TEXT("string")) BagType = EPropertyBagPropertyType::String;
 		else if (TypeStr == TEXT("double")) BagType = EPropertyBagPropertyType::Double;
 
-		FStateTreeEditorPropertyCreationDesc& Desc = Descs.AddDefaulted_GetRef();
+		FUE_MCPStateTreePropertyCreationDesc& Desc = Descs.AddDefaulted_GetRef();
 		Desc.PropertyDesc = FPropertyBagPropertyDesc(FName(*PropName), BagType);
 	}
 
 	EditorData->Modify();
+#if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
+	EditorData->CreateRootProperties(Descs);
+#else
 	EditorData->CreateParameters(EditorData->RootParameters.ID, Descs);
+#endif
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);

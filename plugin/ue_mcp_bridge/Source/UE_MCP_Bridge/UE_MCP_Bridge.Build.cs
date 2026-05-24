@@ -5,8 +5,6 @@ public class UE_MCP_Bridge : ModuleRules
 	public UE_MCP_Bridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
-		bUseUnity = false;
-		ShadowVariableWarningLevel = WarningLevel.Off;
 
 		PublicDependencyModuleNames.AddRange(
 			new string[]
