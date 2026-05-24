@@ -41,7 +41,7 @@ function findUEBuildTool(): string | null {
 
 function findEditorExecutable(project?: ProjectContext): string | null {
   const envPath = process.env.UE_EDITOR_PATH;
-  if (envPath && fs.existsSync(envPath)) return envPath;
+  if (envPath) return envPath;
 
   const associatedEngineRoot = findEngineInstall(project?.engineAssociation ?? null);
   if (associatedEngineRoot) {
@@ -146,18 +146,7 @@ export async function startEditor(project: ProjectContext): Promise<{ success: b
   }
 
   try {
-    const projectDir = path.dirname(project.projectPath);
-    const localDataCachePath = path.join(projectDir, "Saved", "DerivedDataCache");
-    fs.mkdirSync(localDataCachePath, { recursive: true });
-
-    const editorArgs = [
-      project.projectPath,
-      `-LocalDataCachePath=${localDataCachePath}`,
-      "-AssetGatherAll=false",
-      "-LiveCoding=0",
-    ];
-
-    const editorProcess = spawn(editorExe, editorArgs, {
+    const editorProcess = spawn(editorExe, [project.projectPath], {
       stdio: "ignore",
       detached: true,
     });
