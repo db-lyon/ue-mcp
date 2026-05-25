@@ -13,6 +13,7 @@ import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js"
 import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import { getInstalledHooks } from "./user-state.js";
+import { detectMcpClients, isProjectScopedClient, writeMcpConfig } from "./mcp-client-config.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */
@@ -51,96 +52,6 @@ const CATEGORIES: ToolCategory[] = [
   // (gated by user approval, but worth surfacing explicitly).
   { name: "feedback",   label: "feedback",      alwaysOn: true },
 ];
-
-/* ------------------------------------------------------------------ */
-/*  MCP client detection                                               */
-/* ------------------------------------------------------------------ */
-
-interface McpClient {
-  name: string;
-  configPath: string;
-  detected: boolean;
-}
-
-/**
- * Project-scoped clients write their MCP config alongside the .uproject,
- * so enabling them only affects this project. Global/Desktop configs touch
- * every project the user opens — they should not be opted in by default.
- */
-function isProjectScopedClient(clientName: string): boolean {
-  return clientName.includes("(project)") || clientName === "Cursor";
-}
-
-function detectMcpClients(projectDir: string): McpClient[] {
-  const home = process.env.HOME || process.env.USERPROFILE || "";
-  const clients: McpClient[] = [];
-
-  const claudeProjectMcp = path.join(projectDir, ".mcp.json");
-  const claudeGlobalMcp = path.join(home, ".claude", ".mcp.json");
-  // "Detected" for both Claude Code scopes means "Claude Code is installed
-  // anywhere on this machine." If we gated project-scope detection on the
-  // project's .mcp.json already existing, first-time users in a fresh
-  // project would never see the project-scope checkbox and would be
-  // funneled into global scope by elimination. Show both scopes whenever
-  // Claude Code has been opened at least once; let the user pick.
-  const claudeInstalled =
-    fs.existsSync(claudeProjectMcp) ||
-    fs.existsSync(path.dirname(claudeGlobalMcp));
-  clients.push({
-    name: "Claude Code (project)",
-    configPath: claudeProjectMcp,
-    detected: claudeInstalled,
-  });
-  clients.push({
-    name: "Claude Code (global)",
-    configPath: claudeGlobalMcp,
-    detected: claudeInstalled,
-  });
-
-  const appData =
-    process.env.APPDATA || path.join(home, "AppData", "Roaming");
-  const claudeDesktop = path.join(
-    appData,
-    "Claude",
-    "claude_desktop_config.json",
-  );
-  clients.push({
-    name: "Claude Desktop",
-    configPath: claudeDesktop,
-    detected: fs.existsSync(path.dirname(claudeDesktop)),
-  });
-
-  const cursorMcp = path.join(projectDir, ".cursor", "mcp.json");
-  clients.push({
-    name: "Cursor",
-    configPath: cursorMcp,
-    detected: fs.existsSync(path.join(projectDir, ".cursor")),
-  });
-
-  return clients;
-}
-
-function writeMcpConfig(configPath: string, uprojectPath: string): void {
-  let existing: Record<string, unknown> = {};
-  if (fs.existsSync(configPath)) {
-    try {
-      existing = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    } catch (e) {
-      logWarn("init", `MCP client config at ${configPath} was not valid JSON - overwriting with a fresh ue-mcp entry`, e);
-    }
-  }
-
-  const mcpServers = (existing.mcpServers ?? {}) as Record<string, unknown>;
-  mcpServers["ue-mcp"] = {
-    command: "npx",
-    args: ["ue-mcp", uprojectPath.replace(/\\/g, "/")],
-  };
-  existing.mcpServers = mcpServers;
-
-  const dir = path.dirname(configPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(configPath, JSON.stringify(existing, null, 2));
-}
 
 /* ------------------------------------------------------------------ */
 /*  ue-mcp.yml config writer                                            */
@@ -422,7 +333,7 @@ async function init() {
 
     for (let i = 0; i < detected.length; i++) {
       if (clientStates[i]) {
-        writeMcpConfig(detected[i].configPath, project.projectPath!);
+        writeMcpConfig(detected[i], project.projectPath!);
         ok(`${detected[i].name} configured`);
         wrote.push({
           what: `${detected[i].name} MCP server entry`,

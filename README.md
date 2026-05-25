@@ -24,7 +24,7 @@ The interactive setup will:
 2. Let you choose which tool categories to enable
 3. Deploy the C++ bridge plugin to your project
 4. Enable required UE plugins (Niagara, PCG, GAS, etc.)
-5. Detect and configure your MCP client (Claude Code, Claude Desktop, Cursor)
+5. Detect and configure your MCP client (Claude Code, Claude Desktop, Cursor, Codex)
 
 Restart the editor once after setup to load the bridge plugin. To update later: `npx ue-mcp update`
 
