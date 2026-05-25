@@ -6,6 +6,7 @@
 #include "PIE/PIEInputRecorder.h"
 #include "PIE/PIEInputReplayer.h"
 #include "PIE/PIEObserver.h"
+#include "UI/SMCPPIEPanel.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "Misc/ConfigCacheIni.h"
@@ -26,6 +27,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 	UEMCPPIE::FPIEInputRecorder::Get().Init();
 	UEMCPPIE::FPIEInputReplayer::Get().Init();
 	UEMCPPIE::FPIEObserver::Get().Init();
+	SMCPPIEPanel::RegisterTab();
 	// Clear any leftover injections from a previous PIE session so a fresh
 	// EndPIE-BeginPIE pair starts with no ghost holds in the queue.
 	FEditorDelegates::EndPIE.AddLambda([](bool /*bIsSimulating*/)
@@ -114,6 +116,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
+	SMCPPIEPanel::UnregisterTab();
 	// Stop bridge server
 	FDialogHandlers::RemoveDialogHook();
 	UEMCPPIE::FPIEObserver::Get().Shutdown();
