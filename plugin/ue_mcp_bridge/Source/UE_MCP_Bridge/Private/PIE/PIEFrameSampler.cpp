@@ -146,6 +146,7 @@ namespace UEMCPPIE
 		TrackedValues.Reset();
 		Tracked.Reset();
 		PendingMarkerLabels.Reset();
+		PrevPawnLocation = FVector::ZeroVector;
 		// Re-seed TrackedValues from config in case the caller calls AttachToPIE again.
 		for (const FString& P : Config.TrackedValuePaths)
 		{
@@ -218,6 +219,41 @@ namespace UEMCPPIE
 		APawn* Pawn = PC->GetPawn();
 		if (!Pawn) return Row;
 
+		// Rescan for late-bound actions (IMCs added after initial attach).
+		if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(Pawn->InputComponent))
+		{
+			TSet<FString> Known;
+			for (const FTrackedAction& T : Tracked) Known.Add(T.Path);
+
+			TSet<FString> Whitelist;
+			for (const FString& P : Config.ActionPaths) Whitelist.Add(P);
+
+			for (const TUniquePtr<FEnhancedInputActionEventBinding>& Bind : EIC->GetActionEventBindings())
+			{
+				const UInputAction* Action = Bind->GetAction();
+				if (!Action) continue;
+				const FString Path = Action->GetPathName();
+				if (Known.Contains(Path)) continue;
+				if (!Whitelist.IsEmpty() && !Whitelist.Contains(Path)) continue;
+				Known.Add(Path);
+
+				FTrackedAction T;
+				T.Action = Action;
+				T.Name = Action->GetName();
+				T.Path = Path;
+				T.ValueType = ConvertValueType(Action->ValueType);
+				Tracked.Add(T);
+
+				FActionSpec Spec;
+				Spec.Name = T.Name;
+				Spec.Path = Path;
+				Spec.ValueType = T.ValueType;
+				Actions.Add(Spec);
+				UE_LOG(LogMCPBridge, Log, TEXT("[PIE-SAMPLER] Late-discovered action: %s (%s)"),
+					*T.Name, *Path);
+			}
+		}
+
 		if (Config.bCapturePawnState)
 		{
 			Row.PawnLocation = Pawn->GetActorLocation();
@@ -232,8 +268,21 @@ namespace UEMCPPIE
 			}
 			else
 			{
-				Row.PawnVelocity = Pawn->GetVelocity();
-				Row.Speed2D = Pawn->GetVelocity().Size2D();
+				FVector Vel = Pawn->GetVelocity();
+				if (Vel.IsNearlyZero())
+				{
+					if (UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Pawn->GetRootComponent()))
+					{
+						Vel = Root->GetPhysicsLinearVelocity();
+					}
+					if (Vel.IsNearlyZero() && FrameNumber > 0)
+					{
+						Vel = (Pawn->GetActorLocation() - PrevPawnLocation) / FMath::Max(DeltaTime, 0.001);
+					}
+				}
+				PrevPawnLocation = Pawn->GetActorLocation();
+				Row.PawnVelocity = Vel;
+				Row.Speed2D = Vel.Size2D();
 			}
 		}
 

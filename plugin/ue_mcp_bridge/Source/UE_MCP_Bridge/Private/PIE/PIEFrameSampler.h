@@ -94,5 +94,6 @@ namespace UEMCPPIE
 		TArray<FTrackedValueSpec> TrackedValues;
 		TArray<FTrackedAction> Tracked;
 		TArray<FString> PendingMarkerLabels;
+		FVector PrevPawnLocation = FVector::ZeroVector;
 	};
 }
