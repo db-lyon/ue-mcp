@@ -242,6 +242,20 @@ namespace UEMCPPIE
 				ActorRows.Add(MoveTemp(AR));
 			}
 
+			// Detect late-discovered actions and rebuild CSV header.
+			const TArray<FActionSpec>& CurrentActions = Sampler.GetActions();
+			if (CurrentActions.Num() != CSVHdr.Actions.Num())
+			{
+				CSVHdr.Actions = CurrentActions;
+				CSVHdr.TrackedValues = Sampler.GetTrackedValues();
+				CSVHeader = BuildCSVHeader(CSVHdr);
+				CSVBody.Reset();
+				for (const FCSVRow& Prev : Rows)
+				{
+					AppendCSVRow(CSVBody, Prev, CSVHdr);
+				}
+			}
+
 			AppendCSVRow(CSVBody, Row, CSVHdr);
 			Rows.Add(MoveTemp(Row));
 		}
