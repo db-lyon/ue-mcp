@@ -6,6 +6,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedPlayerInput.h"
+#include "EnhancedActionKeyMapping.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Character.h"
@@ -200,10 +201,9 @@ namespace UEMCPPIE
 		// IMC mappings: actions polled via GetActionValue() without BindAction.
 		ULocalPlayer* LP = PC->GetLocalPlayer();
 		UEnhancedInputLocalPlayerSubsystem* Sub = LP ? LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
-		UEnhancedPlayerInput* PlayerInput = Sub ? Sub->GetPlayerInput() : nullptr;
-		if (PlayerInput)
+		if (Sub)
 		{
-			for (const FEnhancedActionKeyMapping& Mapping : PlayerInput->GetEnhancedActionMappings())
+			for (const FEnhancedActionKeyMapping& Mapping : Sub->GetAllPlayerMappableActionKeyMappings())
 			{
 				TryAdd(Mapping.Action);
 			}
