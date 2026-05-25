@@ -23,11 +23,6 @@ namespace UEMCPPIE
 {
 	namespace
 	{
-		FString ISOTimestampNow()
-		{
-			return FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
-		}
-
 		UInputAction* LoadAction(const FString& Path)
 		{
 			if (Path.IsEmpty()) return nullptr;

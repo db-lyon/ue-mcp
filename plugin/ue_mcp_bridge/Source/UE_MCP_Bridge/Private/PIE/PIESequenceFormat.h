@@ -247,4 +247,9 @@ namespace UEMCPPIE
 	// recorder (initial resolve), the replayer (re-resolve in the new world),
 	// and pie_snapshot.
 	AActor* FindActorById(UWorld* World, const FString& Id);
+
+	inline FString ISOTimestampNow()
+	{
+		return FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
+	}
 }

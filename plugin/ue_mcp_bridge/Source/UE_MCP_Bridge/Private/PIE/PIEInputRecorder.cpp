@@ -19,13 +19,6 @@ namespace UEMCPPIE
 {
 	namespace
 	{
-		FString ISOTimestampNow()
-		{
-			// Approximate ISO 8601 UTC. UE's FDateTime has no timezone awareness,
-			// so we treat it as local and append the local offset.
-			return FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
-		}
-
 		void SampleTrackedActors(UWorld* World,
 		                         const TArray<FString>& Ids,
 		                         TMap<FString, TWeakObjectPtr<AActor>>& Cache,
