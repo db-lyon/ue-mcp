@@ -153,6 +153,17 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("pie_replay_status"), &PieReplayStatus);
 	Registry.RegisterHandler(TEXT("pie_record_diff"), &PieRecordDiff);
 	Registry.RegisterHandler(TEXT("pie_snapshot"), &PieSnapshot);
+	Registry.RegisterHandler(TEXT("pie_profile_create"), &PieProfileCreate);
+	Registry.RegisterHandler(TEXT("pie_profile_read"), &PieProfileRead);
+	Registry.RegisterHandler(TEXT("pie_profile_update"), &PieProfileUpdate);
+	Registry.RegisterHandler(TEXT("pie_profile_delete"), &PieProfileDelete);
+	Registry.RegisterHandler(TEXT("pie_profile_list"), &PieProfileList);
+	Registry.RegisterHandler(TEXT("pie_observe_arm"), &PieObserveArm);
+	Registry.RegisterHandler(TEXT("pie_observe_disarm"), &PieObserveDisarm);
+	Registry.RegisterHandler(TEXT("pie_observe_stop"), &PieObserveStop);
+	Registry.RegisterHandler(TEXT("pie_observe_status"), &PieObserveStatus);
+	Registry.RegisterHandler(TEXT("pie_observe_list"), &PieObserveList);
+	Registry.RegisterHandler(TEXT("pie_observe_read"), &PieObserveRead);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSharedPtr<FJsonObject>& Params)

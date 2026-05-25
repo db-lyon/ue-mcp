@@ -110,4 +110,17 @@ private:
 
 	// Full UProperty dump of a live PIE actor to JSON (snapshots/<name>.json).
 	static TSharedPtr<FJsonValue> PieSnapshot(const TSharedPtr<FJsonObject>& Params);
+
+	// Observation profile CRUD + observer lifecycle.
+	static TSharedPtr<FJsonValue> PieProfileCreate(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieProfileRead(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieProfileUpdate(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieProfileDelete(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieProfileList(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieObserveArm(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieObserveDisarm(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieObserveStop(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieObserveStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieObserveList(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PieObserveRead(const TSharedPtr<FJsonObject>& Params);
 };

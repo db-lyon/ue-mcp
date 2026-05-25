@@ -5,6 +5,7 @@
 #include "PIE/PIEInputInjector.h"
 #include "PIE/PIEInputRecorder.h"
 #include "PIE/PIEInputReplayer.h"
+#include "PIE/PIEObserver.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "Misc/ConfigCacheIni.h"
@@ -24,6 +25,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 	UEMCPPIE::FPIEInputInjector::Init();
 	UEMCPPIE::FPIEInputRecorder::Get().Init();
 	UEMCPPIE::FPIEInputReplayer::Get().Init();
+	UEMCPPIE::FPIEObserver::Get().Init();
 	// Clear any leftover injections from a previous PIE session so a fresh
 	// EndPIE-BeginPIE pair starts with no ghost holds in the queue.
 	FEditorDelegates::EndPIE.AddLambda([](bool /*bIsSimulating*/)
@@ -100,7 +102,8 @@ void FUE_MCP_BridgeModule::StartupModule()
 			Suppress.BindLambda([]() -> bool
 			{
 				return UEMCPPIE::FPIEInputRecorder::Get().IsActive()
-				    || UEMCPPIE::FPIEInputReplayer::Get().IsActive();
+				    || UEMCPPIE::FPIEInputReplayer::Get().IsActive()
+				    || UEMCPPIE::FPIEObserver::Get().IsActive();
 			});
 			GEditor->ShouldDisableCPUThrottlingDelegates.Add(Suppress);
 
@@ -113,6 +116,7 @@ void FUE_MCP_BridgeModule::ShutdownModule()
 {
 	// Stop bridge server
 	FDialogHandlers::RemoveDialogHook();
+	UEMCPPIE::FPIEObserver::Get().Shutdown();
 	UEMCPPIE::FPIEInputReplayer::Get().Shutdown();
 	UEMCPPIE::FPIEInputRecorder::Get().Shutdown();
 	UEMCPPIE::FPIEInputInjector::Shutdown();
