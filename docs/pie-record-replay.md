@@ -217,6 +217,86 @@ The recorder writes the canonical arity that matches the action's value type, bu
 
 This sets correct expectations and turns "did my bug reproduce" from a guess into a number.
 
+## Observation profiles
+
+Observation is a separate domain from recording and replay. Instead of baking `track_values` and `track_actors` into the recording, define what to watch in a **`UMCPObservationProfile`** data asset and attach it to any PIE session independently.
+
+### Why
+
+- Replay the same recording five times with five different profiles
+- Change what you track without re-recording
+- Edit profiles in the content browser Details panel
+- Share profiles across team members via version control
+
+### Creating a profile
+
+In the editor: Right-click in Content Browser > Miscellaneous > Data Asset > select `MCPObservationProfile`. Edit tracked values, actors, and thresholds in the Details panel.
+
+Through MCP:
+
+```text
+gameplay(action="pie_profile_create",
+         name="CombatDebug",
+         package_path="/Game/Observation",
+         tracked_values=[
+           {"path": "Hero.AbilitySystem.Health", "drift_threshold": 5.0},
+           "Hero.AbilitySystem.Stamina"
+         ],
+         tracked_actors=["BP_Hero_C", "BP_Boss_C"])
+```
+
+### Observing a PIE session
+
+```text
+# 1. Arm the observer with your profile
+gameplay(action="pie_observe_arm",
+         profile="/Game/Observation/CombatDebug")
+
+# 2. Press Play (or start PIE via MCP)
+# 3. Play your scenario; stop PIE
+# 4. Read the observation output
+gameplay(action="pie_observe_list")
+gameplay(action="pie_observe_read", run_id="obs_20260525_120000", file="csv")
+```
+
+The observer hooks into PIE independently from the recorder/replayer. It owns its own frame sampler and writes to `Saved/MCPObservations/<run_id>/`:
+
+- `manifest.json` - profile path, timing, tracked paths/actors
+- `observation.csv` - per-frame samples (same column format as recording.csv)
+- `tracked.jsonl` (when tracked actors are configured) - per-frame actor state
+
+### Profile CRUD actions
+
+| Action | Purpose |
+|--------|---------|
+| `pie_profile_create` | Create a profile data asset |
+| `pie_profile_read` | Read a profile's config |
+| `pie_profile_update` | Update an existing profile |
+| `pie_profile_delete` | Delete a profile (requires `confirm=true`) |
+| `pie_profile_list` | List profiles in a directory |
+
+### Observer lifecycle actions
+
+| Action | Purpose |
+|--------|---------|
+| `pie_observe_arm` | Arm an observer with a profile for the next PIE session |
+| `pie_observe_disarm` | Cancel armed state |
+| `pie_observe_stop` | Stop observation and write output |
+| `pie_observe_status` | Observer state, run id, frames sampled |
+| `pie_observe_list` | List observation runs |
+| `pie_observe_read` | Read an observation artifact (manifest/csv/tracked) |
+
+### Combining with record/replay
+
+Observation is independent - you can arm an observer alongside a recording or replay:
+
+```text
+# Record inputs + observe with a debug profile simultaneously
+gameplay(action="pie_record_arm", sample_hz=60)
+gameplay(action="pie_observe_arm", profile="/Game/Observation/CombatDebug")
+# Press Play - both run in parallel during the same PIE session
+```
+
 ## Composition with flows
 
 Every action on this page is also available as a flow task (see [Flows](flows.md)), so you can wire record and replay into shortcuts in your `ue-mcp.yml`.

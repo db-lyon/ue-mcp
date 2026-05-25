@@ -626,6 +626,17 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `pie_replay_status` | Read replay state, current step, elapsed time, and drift maxima. |
 | `pie_snapshot` | Dump a live PIE actor's UProperty state to JSON. Params: `target, recording_id?, recording_dir?, snapshot_name?, include_components?` |
 | `pie_record_diff` | Offline diff of two PIE recordings. Params: `a_id, b_id, recording_dir?, position_cm?, rotation_deg?, velocity_cms?, tracked_default?, tracked_thresholds?` |
+| `pie_profile_create` | Create an observation profile (UDataAsset). Params: `name, package_path?, tracked_values?, tracked_actors?, capture_pawn_state?, capture_montage?, position_threshold_cm?, rotation_threshold_deg?, velocity_threshold_cms?, tracked_value_default_threshold?, onConflict?` |
+| `pie_profile_read` | Read an observation profile's config. Params: `path` |
+| `pie_profile_update` | Update an existing observation profile. Params: `path, tracked_values?, tracked_actors?, capture_pawn_state?, capture_montage?, position_threshold_cm?, rotation_threshold_deg?, velocity_threshold_cms?, tracked_value_default_threshold?` |
+| `pie_profile_delete` | Delete an observation profile asset. Params: `path, confirm` |
+| `pie_profile_list` | List observation profiles. Params: `directory?` |
+| `pie_observe_arm` | Arm an observer with a profile for the next PIE session. Params: `profile, output_dir?, sample_hz?, pin_fps?, client_id?` |
+| `pie_observe_disarm` | Cancel an armed observation before it starts. |
+| `pie_observe_stop` | Stop in-flight observation and write output artifacts. |
+| `pie_observe_status` | Observer state, run id, profile, frames sampled. |
+| `pie_observe_list` | Enumerate observation runs under `Saved/MCPObservations`. Params: `output_dir?, limit?` |
+| `pie_observe_read` | Read an observation run artifact. Params: `run_id, file? (manifest\|csv\|tracked), output_dir?, limit?, offset?` |
 
 ---
 
