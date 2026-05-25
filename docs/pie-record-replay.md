@@ -126,6 +126,7 @@ Tunables:
 | `apply_rng_seed` | `true` | Reapply sequence `rng_seed` via `FMath::RandInit` |
 | `record_drift` | `true` (when `recording_id`) | Emit `drift.json` |
 | `auto_stop_pie` | `false` | Stop PIE on sequence completion |
+| `eject` | `false` | Eject to a spectator pawn on replay start. Lets you fly around freely and observe the recorded sequence without interfering with inputs. The pawn is teleported to its frame-0 position/rotation before the sequence starts. Re-possesses the original pawn on replay stop. Re-arming during the same PIE session auto-stops, re-teleports, and restarts. |
 | `mode` | `"replay"` | `"monitor"` switches to passive drift sampling. See [`pie_replay_arm` parameters](#pie_replay_arm-parameters) above |
 | `capture_frame_every` | `0` | Write a viewport screenshot every Nth sampled frame. See [Per-frame video capture](#per-frame-video-capture) |
 | `client_id` | `0` | Which local player to drive / sample (multi-client PIE). See [Multi-client PIE](#multi-client-pie) |

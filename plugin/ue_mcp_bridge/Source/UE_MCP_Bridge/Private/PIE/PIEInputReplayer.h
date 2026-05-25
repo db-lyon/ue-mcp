@@ -7,6 +7,8 @@
 
 class UWorld;
 class AActor;
+class APlayerController;
+class APawn;
 
 /**
  * PIE replayer: drives a previously-recorded sequence.json (or an inline
@@ -58,6 +60,7 @@ namespace UEMCPPIE
 		// "don't trip frames_over_threshold from tracked-value deltas".
 		float ThrTrackedDefault = 0.f;
 		TMap<FString, float> TrackedThresholds;
+		bool bEject = false;
 	};
 
 	struct FReplayerStatus
@@ -158,6 +161,14 @@ namespace UEMCPPIE
 		TMap<FString, FActorDrift> ActorDriftAccum;
 		int32 FramesCaptured = 0;
 		FString CaptureDir;
+
+		// Eject state: controller unpossesses pawn on replay start.
+		bool bEjected = false;
+		TWeakObjectPtr<APlayerController> EjectedPC;
+		TWeakObjectPtr<APawn> EjectedPawn;
+		void EjectPlayer(UWorld* PIEWorld);
+		void RepossessPlayer();
+		void TeleportPawnToStart(APawn* Pawn);
 
 		FDelegateHandle BeginPIEHandle;
 		FDelegateHandle EndPIEHandle;

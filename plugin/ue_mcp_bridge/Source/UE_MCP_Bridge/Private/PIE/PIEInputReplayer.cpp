@@ -8,6 +8,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 #include "HAL/PlatformFileManager.h"
 #include "HAL/FileManager.h"
 #include "Misc/CoreDelegates.h"
@@ -18,6 +19,9 @@
 #include "InputAction.h"
 #include "UnrealClient.h"
 #include "UObject/UObjectGlobals.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/SpectatorPawn.h"
+#include "Engine/DebugCameraController.h"
 
 namespace UEMCPPIE
 {
@@ -195,12 +199,73 @@ namespace UEMCPPIE
 		return true;
 	}
 
+	void FPIEInputReplayer::TeleportPawnToStart(APawn* Pawn)
+	{
+		if (!Pawn || SourceFrames.Num() == 0) return;
+		const FSourceFrame& F0 = SourceFrames[0];
+		Pawn->SetActorLocationAndRotation(F0.PawnLocation, F0.PawnRotation, false, nullptr, ETeleportType::ResetPhysics);
+		if (AController* C = Pawn->GetController())
+		{
+			C->SetControlRotation(F0.PawnRotation);
+		}
+		UE_LOG(LogMCPBridge, Log, TEXT("[PIE-REP] Teleported pawn to frame 0: %s %s"),
+			*F0.PawnLocation.ToString(), *F0.PawnRotation.ToString());
+	}
+
+	void FPIEInputReplayer::EjectPlayer(UWorld* PIEWorld)
+	{
+		if (bEjected || !PIEWorld) return;
+		APlayerController* PC = (Pending.ClientId > 0)
+			? UGameplayStatics::GetPlayerController(PIEWorld, Pending.ClientId)
+			: PIEWorld->GetFirstPlayerController();
+		if (!PC) return;
+		APawn* Pawn = PC->GetPawn();
+		if (!Pawn) return;
+
+		EjectedPC = PC;
+		EjectedPawn = Pawn;
+
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		ASpectatorPawn* Spectator = PIEWorld->SpawnActor<ASpectatorPawn>(
+			Pawn->GetActorLocation() + FVector(0, 0, 300),
+			Pawn->GetActorRotation(),
+			SpawnParams);
+		if (Spectator)
+		{
+			PC->UnPossess();
+			PC->Possess(Spectator);
+			bEjected = true;
+			UE_LOG(LogMCPBridge, Log, TEXT("[PIE-REP] Ejected to spectator"));
+		}
+	}
+
+	void FPIEInputReplayer::RepossessPlayer()
+	{
+		if (!bEjected) return;
+		APlayerController* PC = EjectedPC.Get();
+		APawn* Pawn = EjectedPawn.Get();
+		if (PC && Pawn)
+		{
+			APawn* Spectator = PC->GetPawn();
+			PC->UnPossess();
+			PC->Possess(Pawn);
+			if (Spectator && Spectator->IsA<ASpectatorPawn>())
+			{
+				Spectator->Destroy();
+			}
+			UE_LOG(LogMCPBridge, Log, TEXT("[PIE-REP] Re-possessed original pawn"));
+		}
+		bEjected = false;
+		EjectedPC.Reset();
+		EjectedPawn.Reset();
+	}
+
 	bool FPIEInputReplayer::Arm(const FReplayerArmConfig& Cfg, FString& OutError, FString& OutMessage)
 	{
 		if (State == EReplayerState::Replaying || State == EReplayerState::WaitingForPawn)
 		{
-			OutError = TEXT("Replay already in flight; pie_replay_stop first.");
-			return false;
+			ForceStop();
 		}
 
 		Pending = Cfg;
@@ -477,6 +542,24 @@ namespace UEMCPPIE
 					? 0
 					: (Pending.PinFPS > 0 ? Pending.PinFPS : ActiveSequence.SampleHz);
 				ApplyFPSPin(PIEWorld, Hz);
+
+				APlayerController* PC = (Pending.ClientId > 0)
+					? UGameplayStatics::GetPlayerController(PIEWorld, Pending.ClientId)
+					: PIEWorld->GetFirstPlayerController();
+				if (PC)
+				{
+					APawn* Pawn = PC->GetPawn();
+					if (Pawn)
+					{
+						TeleportPawnToStart(Pawn);
+					}
+				}
+
+				if (Pending.bEject)
+				{
+					EjectPlayer(PIEWorld);
+				}
+
 				AttachTime = PIEWorld->GetTimeSeconds();
 				State = EReplayerState::Replaying;
 			}
@@ -682,6 +765,8 @@ namespace UEMCPPIE
 				UE_LOG(LogMCPBridge, Warning, TEXT("[PIE-REP] drift write failed: %s"), *Err);
 			}
 		}
+
+		RepossessPlayer();
 
 		if (bEndFrameBound && OnEndFrameHandle.IsValid())
 		{
