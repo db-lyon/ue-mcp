@@ -128,7 +128,7 @@ export function upsertCodexMcpServer(existingToml: string, uprojectPath: string)
     "[mcp_servers.ue-mcp]",
     'command = "npx"',
     `args = ["ue-mcp", ${tomlString(toMcpPath(uprojectPath))}]`,
-    `cwd = ${tomlString(toMcpPath(path.dirname(uprojectPath)))}`,
+    `cwd = ${tomlString(toMcpPath(getProjectDir(uprojectPath)))}`,
     "enabled = true",
   ].join("\n");
 
@@ -163,6 +163,16 @@ function getTomlTableName(trimmedLine: string): string | undefined {
 
 function toMcpPath(value: string): string {
   return value.replace(/\\/g, "/");
+}
+
+function getProjectDir(uprojectPath: string): string {
+  return looksLikeWindowsPath(uprojectPath)
+    ? path.win32.dirname(uprojectPath)
+    : path.posix.dirname(uprojectPath);
+}
+
+function looksLikeWindowsPath(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(value) || value.includes("\\");
 }
 
 function tomlString(value: string): string {

@@ -6,6 +6,7 @@ import {
   detectMcpClients,
   isProjectScopedClient,
   upsertCodexMcpServer,
+  writeMcpConfig,
   writeCodexMcpConfig,
   writeJsonMcpConfig,
 } from "../../src/mcp-client-config.js";
@@ -126,5 +127,24 @@ describe("Codex MCP client config", () => {
     const result = fs.readFileSync(configPath, "utf-8");
     expect(result).toContain("[mcp_servers.ue-mcp]");
     expect(result).toContain('args = ["ue-mcp", "M:/Game/Game.uproject"]');
+    expect(result).toContain('cwd = "M:/Game"');
+  });
+
+  it("detects and writes Codex config through the init client path without touching the real home", () => {
+    const projectDir = path.join(tmpRoot, "Territory");
+    fs.mkdirSync(projectDir);
+    fs.mkdirSync(path.join(tmpRoot, ".codex"));
+
+    const codex = detectMcpClients(projectDir).find((client) => client.name === "Codex");
+    expect(codex).toBeDefined();
+
+    writeMcpConfig(codex!, "M:\\PerforceWorkspace\\Territory\\Territory.uproject");
+
+    const result = fs.readFileSync(path.join(tmpRoot, ".codex", "config.toml"), "utf-8");
+    expect(result).toContain("[mcp_servers.ue-mcp]");
+    expect(result).toContain('command = "npx"');
+    expect(result).toContain('args = ["ue-mcp", "M:/PerforceWorkspace/Territory/Territory.uproject"]');
+    expect(result).toContain('cwd = "M:/PerforceWorkspace/Territory"');
+    expect(result).toContain("enabled = true");
   });
 });
