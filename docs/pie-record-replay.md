@@ -30,6 +30,16 @@ Artifacts:
 - `tracked.jsonl` (optional) - per-frame state of `track_actors`; one JSON object per line keyed by user-supplied id
 - `drift.json` (replay only) - per-frame deltas vs source, including `actor_drift` per tracked actor when both sides emitted `tracked.jsonl`
 
+## Editor panel
+
+Open **Window > Tools > MCP PIE** to get a dockable Slate panel with:
+
+- **Recorder / Replayer / Observer** - live state display (state, id, frame count, elapsed time) with Arm / Disarm / Stop buttons
+- **Recordings** - list of recordings under `Saved/MCPRecordings/` with one-click Replay buttons
+- **Observation Profiles** - list of `UMCPObservationProfile` data assets with one-click Observe buttons
+
+The panel auto-refreshes every 5 seconds. State labels turn green when a subsystem is actively recording, replaying, or observing.
+
 ## Quick start
 
 ```text
