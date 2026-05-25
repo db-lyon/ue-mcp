@@ -6,7 +6,8 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedPlayerInput.h"
-#include "EnhancedActionKeyMapping.h"
+#include "InputAction.h"
+#include "UObject/UObjectIterator.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Character.h"
@@ -198,14 +199,21 @@ namespace UEMCPPIE
 			}
 		}
 
-		// IMC mappings: actions polled via GetActionValue() without BindAction.
+		// IMC-mapped actions: walk all loaded UInputAction assets and check
+		// which ones have active instance data in the player input. This
+		// catches actions polled via GetActionValue() without BindAction.
 		ULocalPlayer* LP = PC->GetLocalPlayer();
 		UEnhancedInputLocalPlayerSubsystem* Sub = LP ? LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
-		if (Sub)
+		UEnhancedPlayerInput* PlayerInput = Sub ? Sub->GetPlayerInput() : nullptr;
+		if (PlayerInput)
 		{
-			for (const FEnhancedActionKeyMapping& Mapping : Sub->GetAllPlayerMappableActionKeyMappings())
+			for (TObjectIterator<UInputAction> It; It; ++It)
 			{
-				TryAdd(Mapping.Action);
+				const UInputAction* Action = *It;
+				if (Action && PlayerInput->FindActionInstanceData(Action))
+				{
+					TryAdd(Action);
+				}
 			}
 		}
 	}
