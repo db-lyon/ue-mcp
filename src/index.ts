@@ -369,6 +369,9 @@ if (subcmd === "init") {
   import("./feedback-cli.js");
 } else if (subcmd === "resolve") {
   import("./resolve.js");
+} else if (subcmd === "build") {
+  process.argv.splice(2, 1);
+  import("./build-cli.js");
 } else if (subcmd === "plugin") {
   process.argv.splice(2, 1);
   import("./plugin-cli.js");

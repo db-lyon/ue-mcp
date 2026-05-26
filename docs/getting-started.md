@@ -105,6 +105,16 @@ Run from your project directory whenever a new UE-MCP version ships:
 npx ue-mcp update
 ```
 
+## Building the project
+
+To build your project's C++ code from the command line:
+
+```bash
+npx ue-mcp build
+```
+
+Stop the editor first. Pass a `.uproject` path if you're not in the project directory. AI agents can also trigger builds via `editor(action="build_project")`.
+
 ## Unattended agent sessions
 
 If you set up the feedback prompt hook and then leave a long-running agent working, the elicitation approval prompt on `feedback(submit)` will stall the session waiting for you. For unattended runs, switch your personal feedback mode:

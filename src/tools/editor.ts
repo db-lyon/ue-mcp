@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, directive, type ToolDef, type ToolContext } from "../types.js";
-import { startEditor, stopEditor, restartEditor } from "../editor-control.js";
+import { startEditor, stopEditor, restartEditor, buildProject } from "../editor-control.js";
 import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
 import { Vec3, Rotator } from "../schemas.js";
 
@@ -28,6 +28,17 @@ export const editorTool: ToolDef = categoryTool(
       description: "Stop then start the editor",
       handler: async (ctx: ToolContext) => {
         return restartEditor(ctx.project, ctx.bridge);
+      },
+    },
+    build_project: {
+      description: "Build the project's C++ code using Unreal Build Tool. Editor should be stopped first.",
+      handler: async (ctx: ToolContext) => {
+        ctx.project.ensureLoaded();
+        const lines: string[] = [];
+        const result = await buildProject(ctx.project.projectPath!, {
+          onOutput: (text) => lines.push(text),
+        });
+        return { ...result, output: lines.join("") };
       },
     },
     execute_command: bp("Run console command. Params: command", "execute_command"),

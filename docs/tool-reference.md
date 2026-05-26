@@ -478,6 +478,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `start_editor` | Launch Unreal Editor with the current project and reconnect bridge |
 | `stop_editor` | Close Unreal Editor gracefully |
 | `restart_editor` | Stop then start the editor |
+| `build_project` | Build the project's C++ code using Unreal Build Tool. Stop the editor first |
 | `execute_command` | Run console command. Params: `command` |
 | `execute_python` | Run Python in editor. Params: `code` |
 | `run_python_file` | Run a Python file from disk with __file__/__name__ populated (#142). Params: `filePath, args?` |

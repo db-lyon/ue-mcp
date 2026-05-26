@@ -170,3 +170,4 @@ The server can manage the editor process:
 | `editor(action="start_editor")` | Launch UE with the current project |
 | `editor(action="stop_editor")` | Gracefully stop the editor |
 | `editor(action="restart_editor")` | Stop and relaunch |
+| `editor(action="build_project")` | Build the project C++ code via UBT |

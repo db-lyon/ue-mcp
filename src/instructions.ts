@@ -143,7 +143,7 @@ plugins — Introspect npm-distributed plugins that inject actions into other ca
 • For BP scripting: blueprint(action="search_node_types") → blueprint(action="add_node") → blueprint(action="connect_pins").
 • editor(action="execute_python") is the escape hatch for any Unreal Python API call.
 • Animation tools need a skeleton path — use animation(action="list_skeletal_meshes") to find it.
-• Editor lifecycle: editor(action="stop_editor") / editor(action="start_editor") / editor(action="restart_editor") manage the UE process.
+• Editor lifecycle: editor(action="stop_editor") / editor(action="start_editor") / editor(action="restart_editor") manage the UE process. editor(action="build_project") builds the project C++ code (stop the editor first).
 • editor(action="hot_reload") triggers Live Coding compilation without restarting the editor.
 • editor(action="focus_on_actor", actorLabel="MyActor") snaps the viewport to any actor.
 • Log output: editor(action="get_log", category="LogMCPBridge") to see bridge-specific logs.

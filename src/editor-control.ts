@@ -233,3 +233,64 @@ export async function restartEditor(project: ProjectContext, bridge?: { connect:
 
   return startResult;
 }
+
+export interface BuildResult {
+  success: boolean;
+  message: string;
+  exitCode: number | null;
+}
+
+export async function buildProject(
+  projectPath: string,
+  opts: { onOutput?: (line: string) => void } = {},
+): Promise<BuildResult> {
+  if (!IS_WINDOWS) return { success: false, message: WINDOWS_ONLY_MSG, exitCode: null };
+
+  const buildTool = findUEBuildTool();
+  if (!buildTool) {
+    return {
+      success: false,
+      exitCode: null,
+      message:
+        "Unreal Engine build tool not found. Set UE_BUILD_TOOL_PATH or install UE5.3+ to a default location.",
+    };
+  }
+
+  const resolvedPath = path.resolve(projectPath);
+  if (!fs.existsSync(resolvedPath)) {
+    return { success: false, exitCode: null, message: `Project file not found: ${resolvedPath}` };
+  }
+
+  const projectName = path.basename(resolvedPath, ".uproject");
+  const target = `${projectName}Editor`;
+
+  const buildArgs = [target, "Win64", "Development", `-Project="${resolvedPath}"`, "-WaitMutex", "-FromMsBuild"];
+
+  const quotedCommand = `"${buildTool}"`;
+  const fullCommand = `cmd /c "${quotedCommand} ${buildArgs.join(" ")}"`;
+
+  return new Promise((resolve) => {
+    const proc = spawn(fullCommand, [], { shell: true, stdio: "pipe" });
+
+    const forward = (data: Buffer) => {
+      const text = data.toString();
+      if (opts.onOutput) opts.onOutput(text);
+      else process.stdout.write(text);
+    };
+
+    if (proc.stdout) proc.stdout.on("data", forward);
+    if (proc.stderr) proc.stderr.on("data", forward);
+
+    proc.on("close", (code) => {
+      resolve(
+        code === 0
+          ? { success: true, exitCode: 0, message: "Build succeeded" }
+          : { success: false, exitCode: code, message: `Build failed with exit code ${code}` },
+      );
+    });
+
+    proc.on("error", (err) => {
+      resolve({ success: false, exitCode: null, message: `Build error: ${err.message}` });
+    });
+  });
+}
