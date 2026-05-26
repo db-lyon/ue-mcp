@@ -1,259 +1,154 @@
-# PIE Record / Replay
+# PIE Record / Replay / Observe
 
-A first-class **input recording and replay** system for Play-In-Editor sessions, exposed via the `gameplay` category.
+Three independent systems for PIE sessions, each with its own domain:
 
-Use it to:
+1. **Record** - capture inputs and pawn state. Writes a replayable sequence.
+2. **Replay** - play back a recorded sequence through the real Enhanced Input pipeline. Optionally eject to a spectator camera and slow time to 1%.
+3. **Observe** - attach a reusable observation profile to any PIE session (recording, replay, or manual play) to sample tracked values and actors. Change what you watch without re-recording.
 
-- Record every Enhanced Input value and pawn state at 60 Hz while you play
-- Replay the same inputs through the real Enhanced Input pipeline
-- Diff the replay against the source for a drift report - "did the bug actually reproduce"
+All three can run simultaneously in the same PIE session.
 
-## What it captures
+## Editor UI
+
+### PIE toolbar
+
+A **Record** button sits next to Play/Stop in the editor transport bar. Click it to arm the recorder and start PIE in one action.
+
+### MCP PIE panel
+
+Open **Window > Tools > MCP PIE** for a dockable panel with:
+
+- **Recorder** - Record + Play, Arm, Disarm, Stop
+- **Replayer** - Disarm, Stop
+- **Observer** - Disarm, Stop
+- **Time Scale** - slider (1% to 400%) and preset buttons (1%, 10%, 25%, 50%, 100%, 200%). Works during recording, replay, or manual play.
+- **Recordings** - recordings list with one-click Replay
+- **Observation Profiles** - profile list with one-click Observe
+
+State labels turn green when active. Lists auto-refresh every 5 seconds.
+
+## Quick start
+
+```text
+# Record
+gameplay(action="pie_record_arm", sample_hz=60)
+# Press Play, do your thing, stop PIE
+
+# Replay at 10% speed with spectator camera
+gameplay(action="pie_replay_arm",
+         recording_id="air-walk-bug",
+         eject=true,
+         time_scale=0.1)
+# Press Play - watch from a free camera while inputs replay in slow motion
+
+# Observe with a debug profile (works with any of the above)
+gameplay(action="pie_observe_arm",
+         profile="/Game/Observation/CombatDebug")
+```
+
+## Recording
+
+Records Enhanced Input actions and pawn state at a configurable sample rate. Discovers actions from both event bindings and active IMC mappings, including actions added after the initial pawn attach.
+
+### What it captures
 
 Per frame, into `<ProjectSavedDir>/MCPRecordings/<id>/`:
 
 | Field | Source |
 |-------|--------|
-| `pos_x/y/z`, `rot_yaw/pitch/roll`, `vel_x/y/z`, `speed2d` | First player pawn. Velocity falls back through `UCharacterMovementComponent::Velocity`, `AActor::GetVelocity()`, physics linear velocity, then position-delta-over-dt for pawns without a movement component. |
-| `montage` (`Name:Section`) | `AnimInstance::GetCurrentActiveMontage` |
-| Per-`UInputAction` value | `UEnhancedPlayerInput::GetActionValue`. Actions from IMCs added after the initial pawn attach (e.g. deferred input setup) are discovered automatically on subsequent frames. |
-| `<action>_pressed` / `_released` edge events | Computed against `axis_threshold` |
-| Dotted reflection paths you ask for | `track_values=["Hero.AbilitySystem.Health"]` |
-| Tracked world actors (pos/rot/vel) | `track_actors=["BP_Hero_C", ...]`; writes `tracked.jsonl` |
-| Labelled markers | `pie_mark(label=...)` while recording |
+| `pos_x/y/z`, `rot_yaw/pitch/roll`, `vel_x/y/z`, `speed2d` | Player pawn. Velocity uses `UCharacterMovementComponent` when available, then `GetVelocity()`, physics linear velocity, and position-delta-over-dt as fallbacks. Works with any `APawn` subclass. |
+| `montage` (`Name:Section`) | `AnimInstance::GetCurrentActiveMontage` (ACharacter only) |
+| Per-`UInputAction` value | All actions in active IMCs, whether bound via `BindAction` or polled via `GetActionValue` |
+| `<action>_pressed` / `_released` | Edge events computed against `axis_threshold` |
+| Labelled markers | `pie_mark(label=...)` during recording |
 
-Artifacts:
+### Artifacts
 
-- `manifest.json` - schema metadata, action list, markers, file pointers
-- `sequence.json` - replay-ready step list (`input_tape` / `hold` / `mark` / `console` / `capture`)
-- `recording.csv` - one row per frame, self-describing `#` comment header
-- `tracked.jsonl` (optional) - per-frame state of `track_actors`; one JSON object per line keyed by user-supplied id
-- `drift.json` (replay only) - per-frame deltas vs source, including `actor_drift` per tracked actor when both sides emitted `tracked.jsonl`
+- `manifest.json` - metadata, action list, markers, file pointers
+- `sequence.json` - replay-ready step list
+- `recording.csv` - one row per frame
 
-## Editor UI
-
-### PIE toolbar button
-
-A **Record** button is added to the PIE transport toolbar (next to Play/Stop). Click it to arm the recorder and start PIE in one action.
-
-### MCP PIE panel
-
-Open **Window > Tools > MCP PIE** to get a dockable Slate panel with:
-
-- **Recorder** - live state display with Record + Play, Arm, Disarm, and Stop buttons
-- **Replayer** - state display with Disarm and Stop buttons
-- **Observer** - state display with Disarm and Stop buttons
-- **Time Scale** - slider (1% to 400%) and preset buttons (1%, 10%, 25%, 50%, 100%, 200%) for live time dilation during PIE. Works during recording, replay, or manual play.
-- **Recordings** - list of recordings under `Saved/MCPRecordings/` with one-click Replay buttons
-- **Observation Profiles** - list of `UMCPObservationProfile` data assets with one-click Observe buttons
-
-The panel auto-refreshes every 5 seconds. State labels turn green when a subsystem is actively recording, replaying, or observing.
-
-## Quick start
-
-```text
-# 1. Arm a recording for the next PIE session
-gameplay(action="pie_record_arm", sample_hz=60,
-         track_values=["Hero.AbilitySystem.Health"])
-
-# 2. Press Play in the editor (or call editor(play_in_editor, pieAction="start"))
-# 3. Play your scenario for as long as you want; stop PIE
-# 4. List recordings
-gameplay(action="pie_record_list")
-
-# 5. Replay it (writes drift.json next to the recording)
-gameplay(action="pie_replay_arm", recording_id="recording-20260521-143052-7af3")
-# Press Play again; the inputs replay automatically.
-
-# 6. Read the drift report
-gameplay(action="pie_record_read", id="recording-20260521-143052-7af3", file="drift")
-```
-
-## Action surface
-
-### Recording
+### Actions
 
 | Action | Purpose |
 |--------|---------|
-| `pie_record_arm` | Arm a recording for the next BeginPIE (or current PIE) |
-| `pie_record_disarm` | Cancel armed state. Errors if a recording is in flight |
-| `pie_record_stop` | Finalize the in-flight recording immediately |
-| `pie_record_status` | `{ state, id, current_frame, elapsed_seconds, tracked_action_count }` |
-| `pie_record_list` | Enumerate `Saved/MCPRecordings/*` newest first |
-| `pie_record_read` | Return one of `manifest` / `sequence` / `csv` / `drift` |
-| `pie_record_delete` | Delete a recording dir (requires `confirm=true`) |
-| `pie_mark` | Insert a labelled marker into the in-flight recording/replay |
+| `pie_record_arm` | Arm for the next PIE session (or current) |
+| `pie_record_disarm` | Cancel armed state |
+| `pie_record_stop` | Finalize immediately |
+| `pie_record_status` | State, id, frame count, elapsed time |
+| `pie_record_list` | List recordings (newest first) |
+| `pie_record_read` | Read an artifact (manifest, sequence, csv) |
+| `pie_record_delete` | Delete a recording (requires `confirm=true`) |
+| `pie_mark` | Insert a labelled marker into the active recording or replay |
 
-#### `pie_record_arm` parameters
+### `pie_record_arm` parameters
 
 | Param | Default | Notes |
 |-------|---------|-------|
-| `actions` | `[]` (all bound) | Whitelist of `UInputAction` asset paths |
-| `track_values` | `[]` | Dotted reflection paths sampled to doubles per frame |
-| `track_actors` | `[]` | World actor ids (name, class name, or full path; first match wins) sampled per frame. Writes `tracked.jsonl` (one JSON object per line) with `{ frame, time, actors: { "<id>": { resolved, pos, rot, vel } } }`. Joined to `recording.csv` by frame index. |
-| `axis_threshold` | `0.15` | Dead zone for axis edge detection |
-| `sample_hz` | `60` | Sample rate. Also the default `pin_fps` |
-| `pin_fps` | `= sample_hz` | `t.MaxFPS` pin during recording. `0` to skip |
+| `actions` | `[]` (all) | Whitelist of `UInputAction` asset paths. Empty records all discovered actions. |
+| `axis_threshold` | `0.15` | Dead zone for edge detection |
+| `sample_hz` | `60` | Sample rate. Also the default `pin_fps`. |
+| `pin_fps` | `= sample_hz` | `t.MaxFPS` pin. `0` to skip. |
 | `capture_pawn_state` | `true` | Per-row location/rotation/velocity/Speed2D |
 | `capture_montage` | `true` | Per-row `Montage:Section` |
-| `client_id` | `0` | Which local player to sample (multi-client PIE). See [Multi-client PIE](#multi-client-pie) |
-| `take_record` | `false` | Drive Take Recorder Start/Stop in lockstep. See [Take Recorder integration](#take-recorder-integration) |
-| `rng_seed` | auto | Reapplied via `FMath::RandInit` after pawn attach |
-| `run_gap_frames` | `6` | Gap tolerance for axis run extraction in `sequence.json` |
-| `recording_dir` | `Saved/MCPRecordings/` | Override the recordings root |
-| `id` | auto | Override the auto-generated `recording-<timestamp>-<short>` id |
+| `client_id` | `0` | Which local player to sample. See [Multi-client PIE](#multi-client-pie). |
+| `take_record` | `false` | Drive Take Recorder in lockstep. See [Take Recorder](#take-recorder-integration). |
+| `rng_seed` | auto | Applied via `FMath::RandInit` after pawn attach |
+| `run_gap_frames` | `6` | Gap tolerance for axis run extraction |
+| `recording_dir` | `Saved/MCPRecordings/` | Override recordings root |
+| `id` | auto | Override the auto-generated recording id |
 
-### Replay
+## Replay
+
+Drives a recorded sequence through `UEnhancedInputLocalPlayerSubsystem::InjectInputForAction`. Teleports the pawn to its frame-0 position before starting. Re-arming during the same PIE session auto-stops the previous replay, re-teleports, and restarts.
+
+### Actions
 
 | Action | Purpose |
 |--------|---------|
-| `pie_replay_arm` | Arm a replay for the next BeginPIE (or current PIE) |
+| `pie_replay_arm` | Arm for the next PIE session (or current) |
 | `pie_replay_disarm` | Cancel armed state |
-| `pie_replay_stop` | Stop the running replay; finalize `drift.json` if applicable |
-| `pie_replay_status` | `{ state, current_step, total_steps, elapsed_seconds, max_position_drift_cm, max_velocity_drift_cms }` |
+| `pie_replay_stop` | Stop replay; finalize drift report if applicable |
+| `pie_replay_status` | State, step progress, elapsed time, drift maxima |
 
-#### `pie_replay_arm` parameters
+### Source (one required)
 
-`mode` accepts `replay` (default) or `monitor`. In `monitor` mode the replayer
-skips input injection / step execution but keeps the per-frame drift sampler
-running, so a human can play the same scenario manually and watch divergence
-live via `pie_replay_status`. Combine with `pie_record_arm` on a separate run
-to get a fresh recording while monitoring an existing reference.
-
-Source (one required):
-
-- `recording_id` - loads `<root>/<id>/sequence.json` + `recording.csv` (drift enabled)
+- `recording_id` - loads sequence + CSV for drift comparison
 - `sequence_path` - explicit path to a sequence.json
-- `steps` - inline step array (same schema as sequence.json)
+- `steps` - inline step array
 
-Tunables:
+### `pie_replay_arm` parameters
 
 | Param | Default | Notes |
 |-------|---------|-------|
-| `settle_ms` | sequence value (500) | Delay after pawn attach before first step |
-| `pin_fps` | sequence `sample_hz` | `t.MaxFPS` pin during replay. `0` to skip |
-| `apply_rng_seed` | `true` | Reapply sequence `rng_seed` via `FMath::RandInit` |
-| `record_drift` | `true` (when `recording_id`) | Emit `drift.json` |
-| `auto_stop_pie` | `false` | Stop PIE on sequence completion |
-| `eject` | `false` | Eject to a spectator pawn on replay start. Lets you fly around freely and observe the recorded sequence without interfering with inputs. The pawn is teleported to its frame-0 position/rotation before the sequence starts. Re-possesses the original pawn on replay stop. Re-arming during the same PIE session auto-stops, re-teleports, and restarts. |
-| `time_scale` | `1.0` | Global time dilation applied when replay starts. Use `0.01` for 1% speed, `0.1` for 10%, etc. Dilation caps are auto-raised so the engine doesn't clamp. Also controllable live from the MCP PIE panel's Time Scale slider. |
-| `mode` | `"replay"` | `"monitor"` switches to passive drift sampling. See [`pie_replay_arm` parameters](#pie_replay_arm-parameters) above |
-| `capture_frame_every` | `0` | Write a viewport screenshot every Nth sampled frame. See [Per-frame video capture](#per-frame-video-capture) |
-| `client_id` | `0` | Which local player to drive / sample (multi-client PIE). See [Multi-client PIE](#multi-client-pie) |
-| `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for the `frames_over_threshold` list. Also accepts `tracked_default` (scalar fallback applied to every tracked path) and `tracked: { "<path>": <threshold> }` for per-path overrides. `0` keeps tracked-value deltas out of `frames_over_threshold`. Max per-path deltas are always reported in `drift.json#tracked_value_max_deltas` regardless of thresholds. |
-
-### Input injection primitives
-
-Used internally by the replayer; exposed because they are useful on their own.
-
-| Action | Purpose |
-|--------|---------|
-| `inject_input` | One-frame `InjectInputForAction` |
-| `inject_input_start` | Begin a continuous hold, returns `injection_id` |
-| `inject_input_update` | Change the value of a running hold |
-| `inject_input_stop` | Release a hold or stop a tape |
-| `inject_input_tape` | Play a per-frame value array, one entry per end-of-frame |
-
-### Multi-client PIE
-
-`pie_record_arm`, `pie_replay_arm`, and the `inject_input*` primitives accept a `client_id` parameter selecting which local player to sample / replay / inject into. `0` (default) is the first local player; `1+` selects subsequent local players in multi-client PIE sessions.
-
-To record both clients in one session, call `pie_record_arm` twice with different `client_id` and `id` values - the recorder writes one recording directory per client. Replay each recording back with its matching `client_id`. The injector caches subsystems per client per tick so concurrent holds / tapes across clients don't trample each other.
-
-The manifest's `client_id` field records which local player produced the recording.
-
-### Take Recorder integration
-
-Pass `take_record: true` to `pie_record_arm` to also drive Take Recorder `StartRecording` / `StopRecording` in lockstep with BeginPIE / EndPIE. The integration uses UFunction reflection so the bridge does not link against the Take Recorder plugin; if Take Recorder is not enabled or its panel is not open, the recorder logs a diagnostic and continues without it (the input recording itself is unaffected).
-
-Workflow:
-
-1. Enable the Take Recorder plugin (Edit > Plugins > "Take Recorder").
-2. Open the Take Recorder panel (Window > Cinematics > Take Recorder) and configure sources (player pawn, actors of interest, presets).
-3. Call `pie_record_arm(take_record: true, ...)`.
-4. Press Play. The bridge starts the Take in lockstep with PIE; on EndPIE it calls `StopRecording`.
-5. `pie_record_stop` returns `take_recorder_status` with the outcome.
-
-The Take asset path is governed by Take Recorder's own settings (`/Game/Cinematics/Takes/...` by default) and is not written into our manifest.
-
-### One-shot actor snapshot
-
-`pie_snapshot(target, recording_id?, recording_dir?, name?, include_components?)` dumps the live state of a PIE actor to JSON in one call. Unlike `track_actors` (per-frame pos/rot/vel sampling), this captures every `BlueprintVisible` `UProperty` plus an optional component dump. Output lands at `<recording_dir>/<recording_id>/snapshots/<name>.json` when a `recording_id` is supplied, otherwise `Saved/MCPSnapshots/<name>.json`.
-
-### Offline diff
-
-`pie_record_diff(a_id, b_id, position_cm?, rotation_deg?, velocity_cms?, tracked_default?, tracked_thresholds?)` walks two `recording.csv` files in lockstep by frame index and emits a single drift summary. Reflection paths sampled in both recordings show up in `tracked_value_max_deltas` (max |delta| per path). Pass `tracked_default` or `tracked_thresholds` to fold tracked-value drift into `frames_over_threshold`. No PIE required.
-
-## Step types in `sequence.json`
-
-```json
-{ "type": "input",      "delay_ms": 0,    "action": "/Game/Input/IA_Jump",   "value_x": 1.0 }
-{ "type": "hold",       "delay_ms": 200,  "action": "/Game/Input/IA_Attack", "value_x": 1.0, "duration_ms": 100 }
-{ "type": "input_tape", "delay_ms": 0,    "action": "/Game/Input/IA_Move",   "values": [[0.5, 0.3], [0.6, 0.3]] }
-{ "type": "mark",       "delay_ms": 1500, "label": "enemy spawned" }
-{ "type": "console",    "delay_ms": 6000, "command": "stat fps" }
-{ "type": "capture",    "delay_ms": 5000, "name": "boss_intro" }
-```
-
-`capture` writes a viewport screenshot via `FScreenshotRequest::RequestScreenshot`. When replaying a known `recording_id` the file lands in `<recording_dir>/captures/<name>_frame<N>.png`; inline-steps replays write to `Saved/Screenshots/MCPReplay/`. The drift entry records the full path under the `capture:<name>:<path>` marker. The capture `name` is restricted to `[A-Za-z0-9._-]` (other characters become `_`, `..` becomes `__`); empty or fully-stripped names fall back to `capture`.
-
-### Per-frame video capture
-
-Pass `capture_frame_every: N` to `pie_replay_arm` to also write a viewport screenshot every Nth sampled frame to `<recording_dir>/frames/frame_<NNNNN>.png`. `pie_replay_stop` returns `capture_dir` plus ffmpeg hints for assembling the PNG sequence into a GIF or MP4:
-
-```bash
-# GIF
-ffmpeg -framerate 30 -i <capture_dir>/frame_%05d.png -vf 'fps=30,scale=720:-1:flags=lanczos' replay.gif
-# MP4
-ffmpeg -framerate 60 -i <capture_dir>/frame_%05d.png -c:v libx264 -pix_fmt yuv420p replay.mp4
-```
-
-Override `-framerate` to match the replay's `pin_fps` when you used a non-default rate.
-
-`delay_ms` is **cumulative from sequence start**. The replayer schedules each step against the elapsed time since pawn attach (after `settle_ms`).
-
-`input_tape` values per element:
-
-- `0.5` - scalar (Axis1D)
-- `[0.5, 0.3]` - 2-tuple (Axis2D)
-- `[0.1, 0.2, 0.3]` - 3-tuple (Axis3D)
-
-The recorder writes the canonical arity that matches the action's value type, but the parser accepts any of the three.
-
-## Determinism: what we promise, what we don't
-
-**We promise:**
-
-- Same Enhanced Input values delivered at the same frame numbers as the source
-- Same `t.MaxFPS` pin on both record and replay
-- Same `FMath::RandInit(seed)` applied at the same lifecycle point
-- The editor's "throttle CPU when unfocused" behaviour is suppressed for the duration of any active record or replay. Without this, `UEditorEngine::GetMaxTickRate` clamps to 3 Hz the moment the editor window loses OS focus, which makes scripted PIE record at ~3 Hz regardless of `sample_hz`. The suppression goes through the engine's `ShouldDisableCPUThrottlingDelegates` hook - no project settings are mutated, and normal behaviour resumes the instant the record/replay finishes.
-
-**We do not promise:**
-
-- Identical particles, Niagara behaviour, AI behaviour-tree outcomes, physics
-- Anything that uses its own `FRandomStream`, reads real wall-clock, or branches on multi-thread ordering
-
-**What we give you instead:** a per-frame `drift.json` so divergence is *visible*. The drift report lists frames whose position / rotation / velocity deltas exceeded your thresholds, with max-drift summary stats.
-
-This sets correct expectations and turns "did my bug reproduce" from a guess into a number.
+| `eject` | `false` | Eject to a spectator pawn. Fly around freely while inputs drive the original pawn. Re-possesses on stop. |
+| `time_scale` | `1.0` | Global time dilation. `0.01` for 1% speed, `0.1` for 10%. Caps auto-raised. Also controllable live from the panel slider. |
+| `settle_ms` | sequence (500) | Delay after pawn attach before first step |
+| `pin_fps` | sequence `sample_hz` | `t.MaxFPS` pin. `0` to skip. |
+| `apply_rng_seed` | `true` | Reapply `FMath::RandInit` from the sequence |
+| `record_drift` | `true` | Emit `drift.json` when replaying a known recording |
+| `auto_stop_pie` | `false` | Stop PIE when sequence completes |
+| `mode` | `"replay"` | `"monitor"` skips input injection, keeps drift sampling. Play manually against a reference. |
+| `capture_frame_every` | `0` | Write a viewport PNG every Nth frame. See [Video capture](#per-frame-video-capture). |
+| `client_id` | `0` | Which local player to drive |
+| `drift_thresholds` | `{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }` | Cutoffs for `frames_over_threshold`. Also accepts `tracked_default` and per-path `tracked` map. |
 
 ## Observation profiles
 
-Observation is a separate domain from recording and replay. Instead of baking `track_values` and `track_actors` into the recording, define what to watch in a **`UMCPObservationProfile`** data asset and attach it to any PIE session independently.
+Observation is decoupled from recording and replay. Define what to watch in a `UMCPObservationProfile` data asset, then attach it to any PIE session. The observer runs independently, owns its own frame sampler, and writes its own output.
 
-### Why
+### Why profiles
 
-- Replay the same recording five times with five different profiles
+- Replay the same recording with different profiles to investigate different systems
 - Change what you track without re-recording
-- Edit profiles in the content browser Details panel
-- Share profiles across team members via version control
+- Edit in the content browser Details panel
+- Share across team members via version control
 
 ### Creating a profile
 
-In the editor: Right-click in Content Browser > Miscellaneous > Data Asset > select `MCPObservationProfile`. Edit tracked values, actors, and thresholds in the Details panel.
+**In the editor:** Right-click in Content Browser > Miscellaneous > Data Asset > `MCPObservationProfile`. Configure tracked values, actors, and thresholds in the Details panel.
 
-Through MCP:
+**Through MCP:**
 
 ```text
 gameplay(action="pie_profile_create",
@@ -266,100 +161,144 @@ gameplay(action="pie_profile_create",
          tracked_actors=["BP_Hero_C", "BP_Boss_C"])
 ```
 
-### Observing a PIE session
+### Attaching to a session
 
 ```text
-# 1. Arm the observer with your profile
 gameplay(action="pie_observe_arm",
          profile="/Game/Observation/CombatDebug")
-
-# 2. Press Play (or start PIE via MCP)
-# 3. Play your scenario; stop PIE
-# 4. Read the observation output
-gameplay(action="pie_observe_list")
-gameplay(action="pie_observe_read", run_id="obs_20260525_120000", file="csv")
+# Press Play - observer samples alongside any recording or replay
 ```
 
-The observer hooks into PIE independently from the recorder/replayer. It owns its own frame sampler and writes to `Saved/MCPObservations/<run_id>/`:
+Output goes to `Saved/MCPObservations/<run_id>/`:
 
 - `manifest.json` - profile path, timing, tracked paths/actors
-- `observation.csv` - per-frame samples (same column format as recording.csv)
-- `tracked.jsonl` (when tracked actors are configured) - per-frame actor state
+- `observation.csv` - per-frame samples
+- `tracked.jsonl` - per-frame actor state (when tracked actors configured)
 
-### Profile CRUD actions
+### Profile actions
 
 | Action | Purpose |
 |--------|---------|
 | `pie_profile_create` | Create a profile data asset |
-| `pie_profile_read` | Read a profile's config |
+| `pie_profile_read` | Read profile config |
 | `pie_profile_update` | Update an existing profile |
-| `pie_profile_delete` | Delete a profile (requires `confirm=true`) |
-| `pie_profile_list` | List profiles in a directory |
+| `pie_profile_delete` | Delete (requires `confirm=true`) |
+| `pie_profile_list` | List profiles |
 
-### Observer lifecycle actions
+### Observer actions
 
 | Action | Purpose |
 |--------|---------|
-| `pie_observe_arm` | Arm an observer with a profile for the next PIE session |
+| `pie_observe_arm` | Attach a profile to the next PIE session |
 | `pie_observe_disarm` | Cancel armed state |
-| `pie_observe_stop` | Stop observation and write output |
-| `pie_observe_status` | Observer state, run id, frames sampled |
+| `pie_observe_stop` | Stop and write output |
+| `pie_observe_status` | State, run id, frames sampled |
 | `pie_observe_list` | List observation runs |
-| `pie_observe_read` | Read an observation artifact (manifest/csv/tracked) |
+| `pie_observe_read` | Read an observation artifact (manifest, csv, tracked) |
 
-### Combining with record/replay
+## Drift and comparison
 
-Observation is independent - you can arm an observer alongside a recording or replay:
+### Replay drift
+
+When replaying a known `recording_id`, the replayer samples pawn state each frame and compares it to the source recording. The result is `drift.json` with per-frame deltas, max-drift stats, and a list of frames exceeding your thresholds.
+
+### Offline diff
+
+`pie_record_diff` compares two recordings without running PIE. Walks both CSVs in lockstep and emits position/rotation/velocity deltas plus `tracked_value_max_deltas` for reflection paths present in both.
 
 ```text
-# Record inputs + observe with a debug profile simultaneously
-gameplay(action="pie_record_arm", sample_hz=60)
-gameplay(action="pie_observe_arm", profile="/Game/Observation/CombatDebug")
-# Press Play - both run in parallel during the same PIE session
+gameplay(action="pie_record_diff", a_id="run-1", b_id="run-2",
+         position_cm=5, rotation_deg=2)
 ```
+
+### One-shot snapshot
+
+`pie_snapshot` dumps a live PIE actor's full UProperty state to JSON. Complements per-frame tracking with a deep one-time capture including components.
+
+## Input injection
+
+The replay system uses these internally. They are also useful on their own for scripting PIE inputs.
+
+| Action | Purpose |
+|--------|---------|
+| `inject_input` | Single-frame injection |
+| `inject_input_start` | Begin a continuous hold, returns `injection_id` |
+| `inject_input_update` | Change the value of a running hold |
+| `inject_input_stop` | Release a hold or stop a tape |
+| `inject_input_tape` | Play a per-frame value array at a given Hz |
+
+## Step types in `sequence.json`
+
+```json
+{ "type": "input",      "delay_ms": 0,    "action": "/Game/Input/IA_Jump",   "value_x": 1.0 }
+{ "type": "hold",       "delay_ms": 200,  "action": "/Game/Input/IA_Attack", "value_x": 1.0, "duration_ms": 100 }
+{ "type": "input_tape", "delay_ms": 0,    "action": "/Game/Input/IA_Move",   "values": [[0.5, 0.3], [0.6, 0.3]] }
+{ "type": "mark",       "delay_ms": 1500, "label": "enemy spawned" }
+{ "type": "console",    "delay_ms": 6000, "command": "stat fps" }
+{ "type": "capture",    "delay_ms": 5000, "name": "boss_intro" }
+```
+
+`delay_ms` is cumulative from sequence start. The replayer schedules each step against elapsed time since pawn attach (after `settle_ms`).
+
+`input_tape` values: `0.5` (Axis1D), `[0.5, 0.3]` (Axis2D), `[0.1, 0.2, 0.3]` (Axis3D). The parser accepts any arity.
+
+## Per-frame video capture
+
+Pass `capture_frame_every: N` to `pie_replay_arm`. Captures use direct `FViewport::ReadPixels()` with async PNG encoding on a background thread. Output goes to `<recording_dir>/frames/frame_<NNNNN>.png`.
+
+Assemble with ffmpeg:
+
+```bash
+ffmpeg -framerate 30 -i <capture_dir>/frame_%05d.png -vf 'fps=30,scale=720:-1:flags=lanczos' replay.gif
+ffmpeg -framerate 60 -i <capture_dir>/frame_%05d.png -c:v libx264 -pix_fmt yuv420p replay.mp4
+```
+
+## Multi-client PIE
+
+`pie_record_arm`, `pie_replay_arm`, and `inject_input*` accept `client_id` (0 = first local player, 1+ = subsequent). Record multiple clients in one session by calling `pie_record_arm` once per `client_id` with different `id` values.
+
+## Take Recorder integration
+
+Pass `take_record: true` to `pie_record_arm` to drive Take Recorder in lockstep with PIE. Uses UFunction reflection so no link-time dependency on the Take Recorder plugin. If Take Recorder is unavailable, recording continues without it.
+
+## Determinism
+
+**Guaranteed:** same Enhanced Input values at the same frame numbers, same `t.MaxFPS` pin, same `FMath::RandInit(seed)`, CPU throttle suppressed for the session duration.
+
+**Not guaranteed:** particles, Niagara, AI behavior trees, physics, anything using its own `FRandomStream` or real wall-clock time.
+
+**What you get instead:** `drift.json` turns "did the bug reproduce" from a guess into a number.
 
 ## Composition with flows
 
-Every action on this page is also available as a flow task (see [Flows](flows.md)), so you can wire record and replay into shortcuts in your `ue-mcp.yml`.
-
-**Arm a 60 Hz recording with your standard tracking and press Play in one call:**
+Every action is available as a flow task. See [Flows](flows.md).
 
 ```yaml
 flows:
   record:
-    description: Arm a recording (hero + boss tracked, health sampled) and start PIE
+    description: Record at 60Hz and start PIE
     steps:
       1:
         task: gameplay.pie_record_arm
         options:
           sample_hz: 60
-          track_actors: ["BP_Hero_C", "BP_Boss_C"]
-          track_values: ["Hero.AbilitySystem.Health"]
       2:
         task: editor.play_in_editor
         options:
           pieAction: start
-```
 
-Run it with `flow(action="run", flowName="record")`, play your scenario, stop PIE manually.
-
-**Replay a recording with per-frame capture, auto-stop PIE on completion:**
-
-```yaml
-flows:
-  replay_render:
-    description: Replay a recording at 30 fps PNG capture, auto-stop PIE
+  slow_replay:
+    description: Replay at 1% speed with spectator camera
     steps:
       1:
         task: gameplay.pie_replay_arm
         options:
-          recording_id: session-1
-          capture_frame_every: 2
+          recording_id: air-walk-bug
+          eject: true
+          time_scale: 0.01
           auto_stop_pie: true
       2:
         task: editor.play_in_editor
         options:
           pieAction: start
 ```
-
-When PIE auto-stops, call `gameplay(pie_replay_stop)` to read off the `capture_dir` and ffmpeg hint, then run ffmpeg out-of-band to assemble the GIF/MP4.
