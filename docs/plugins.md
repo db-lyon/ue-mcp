@@ -383,7 +383,7 @@ ue-mcp plugin install ue-mcp-plugin-voxel-pro
 
 The CLI now also:
 
-1. Reads `MCPHandlerRegistration.h` from the deployed bridge and checks that `UEMCP_BRIDGE_API_VERSION >= manifest.nativeModule.minBridgeApi`. Install fails fast if the bridge is too old, with a pointer to `ue-mcp update`.
+1. Reads `MCPHandlerRegistration.h` from the deployed bridge and checks that `UEMCP_BRIDGE_API_VERSION >= manifest.nativeModule.minBridgeApi`. Install fails fast if the bridge is too old, with a pointer to `ue-mcp deploy`.
 2. Copies `<pkgDir>/<source>` to `<projectDir>/Plugins/<uePluginName>/`.
 3. Records every copied file in `<projectDir>/.ue-mcp/native-modules.json` so `ue-mcp plugin uninstall` can clean up without nuking user edits.
 4. Prints `REBUILD REQUIRED` - the user must build the UE project before launching the editor so the new module compiles in.
@@ -534,7 +534,7 @@ You restarted the editor but not the MCP server. They're separate processes — 
 
 ### `nativeModule requires bridge ABI >= N`
 
-The plugin needs a newer bridge than the one deployed in this project. Run `ue-mcp update` to refresh the bridge source, then `npm run build` (or rebuild from the editor) before retrying. The deployed ABI is also visible in `project(action="get_status")` as `bridgeApiVersion`.
+The plugin needs a newer bridge than the one deployed in this project. Run `ue-mcp deploy` to refresh the bridge source, then `ue-mcp build` (or rebuild from the editor) before retrying. The deployed ABI is also visible in `project(action="get_status")` as `bridgeApiVersion`.
 
 ### Provided category does not show up as its own MCP tool
 
@@ -545,6 +545,6 @@ The plugin loaded but a name collision skipped its `provides:` entry. Run `plugi
 The C++ side didn't compile in. Two common causes:
 
 1. The user never rebuilt after install. Run `npm run build` from the project (or rebuild from the editor IDE) and confirm the new `.dll` lands under `Binaries/Win64/`.
-2. The build failed silently because the deployed bridge is older than the plugin expects. Run `ue-mcp update` to refresh `MCPHandlerRegistration.h`, then `npm run build`.
+2. The build failed silently because the deployed bridge is older than the plugin expects. Run `ue-mcp deploy` to refresh `MCPHandlerRegistration.h`, then `ue-mcp build`.
 
 If the rebuild succeeds but `Unknown method` persists, you've hit a stale Live Coding patch: delete `<projectDir>/Binaries/Win64/*.patch_*` and rebuild clean. UBT's incremental build can otherwise shadow a freshly built DLL with a leftover patch.

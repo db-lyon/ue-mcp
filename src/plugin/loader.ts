@@ -314,12 +314,12 @@ async function loadOne(
     if (bridgeApiVersion === null) {
       warn(
         "plugin",
-        `${entry.name}: declares nativeModule but no UE_MCP_Bridge is deployed yet — run \`ue-mcp init\` or \`ue-mcp update\` to deploy the bridge before invoking its native actions`,
+        `${entry.name}: declares nativeModule but no UE_MCP_Bridge is deployed yet — run \`ue-mcp init\` or \`ue-mcp deploy\` to deploy the bridge before invoking its native actions`,
       );
     } else if (manifest.nativeModule.minBridgeApi > bridgeApiVersion) {
       return skip(
         base,
-        `nativeModule requires bridge ABI >= ${manifest.nativeModule.minBridgeApi} (deployed bridge is ${bridgeApiVersion}). Run \`ue-mcp update\` to refresh the bridge.`,
+        `nativeModule requires bridge ABI >= ${manifest.nativeModule.minBridgeApi} (deployed bridge is ${bridgeApiVersion}). Run \`ue-mcp deploy\` to refresh the bridge.`,
       );
     }
   }

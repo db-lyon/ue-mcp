@@ -70,7 +70,7 @@ export function deploySummary(r: DeployResult): string {
  *
  * If the plugin is missing or a version mismatch is detected, callers
  * should surface that to the user and ask them to run `ue-mcp init`
- * or `ue-mcp update` explicitly.
+ * or `ue-mcp deploy` explicitly.
  */
 export function attach(context: ProjectContext): AttachResult {
   const result: AttachResult = {
@@ -121,7 +121,7 @@ export function attachSummary(r: AttachResult): string {
     );
   } else if (r.versionMatch === false) {
     notes.push(
-      `bridge version mismatch — installed v${r.installedVersion}, packaged v${r.packagedVersion}. Source left untouched; run \`ue-mcp update <uproject>\` to upgrade.`,
+      `bridge version mismatch — installed v${r.installedVersion}, packaged v${r.packagedVersion}. Source left untouched; run \`ue-mcp deploy <uproject>\` to upgrade.`,
     );
   } else if (r.versionMatch === true) {
     notes.push(`bridge v${r.installedVersion} present (source untouched)`);

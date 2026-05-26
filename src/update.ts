@@ -1,9 +1,6 @@
 #!/usr/bin/env node
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { ProjectContext } from "./project.js";
-import { deploy, deploySummary } from "./deployer.js";
-import { installSkills } from "./skills.js";
+import { execSync } from "node:child_process";
+import { createRequire } from "node:module";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -11,75 +8,93 @@ const GREEN = "\x1b[32m";
 const RED = "\x1b[31m";
 const DIM = "\x1b[2m";
 const CYAN = "\x1b[36m";
+const YELLOW = "\x1b[33m";
 
-const ok = (msg: string) => console.log(`  ${GREEN}\u2713${RESET} ${msg}`);
-const fail = (msg: string) => console.log(`  ${RED}\u2717${RESET} ${msg}`);
+const ok = (msg: string) => console.log(`  ${GREEN}✓${RESET} ${msg}`);
+const fail = (msg: string) => console.log(`  ${RED}✗${RESET} ${msg}`);
+
+function getInstalledVersion(): string {
+  const require = createRequire(import.meta.url);
+  const pkg = require("../package.json");
+  return pkg.version;
+}
+
+function getLatestVersion(): string | null {
+  try {
+    return execSync("npm view ue-mcp version", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function isGlobalInstall(): boolean {
+  try {
+    const globalRoot = execSync("npm root -g", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return import.meta.url.includes(globalRoot.replace(/\\/g, "/"));
+  } catch {
+    return false;
+  }
+}
 
 async function update() {
+  const args = process.argv.slice(2);
+  const shouldDeploy = args.includes("--deploy");
+  const filteredArgs = args.filter((a) => a !== "--deploy");
+
   console.log("");
   console.log(`  ${BOLD}${CYAN}UE-MCP Update${RESET}`);
   console.log("");
 
-  // Find project: CLI arg, then cwd
-  let uprojectPath = process.argv[2] || "";
+  const installed = getInstalledVersion();
+  console.log(`  Installed: ${BOLD}${installed}${RESET}`);
 
-  if (!uprojectPath) {
-    const cwd = process.cwd();
-    const found = fs.readdirSync(cwd).filter((f) => f.endsWith(".uproject"));
-    if (found.length > 0) {
-      uprojectPath = path.join(cwd, found[0]);
-    }
-  }
-
-  if (!uprojectPath) {
-    fail("No .uproject found. Run from your project directory or pass the path.");
+  const latest = getLatestVersion();
+  if (!latest) {
+    fail("Could not reach npm registry. Check your network connection.");
     process.exit(1);
   }
 
-  const project = new ProjectContext();
-  try {
-    project.setProject(uprojectPath);
-  } catch (e) {
-    fail(e instanceof Error ? e.message : String(e));
-    process.exit(1);
-  }
-
-  ok(`Project: ${project.projectName} (UE ${project.engineAssociation ?? "?"})`);
-
-  const result = deploy(project);
-
-  if (result.error) {
-    fail(`Deploy failed: ${result.error}`);
-    process.exit(1);
-  }
-
-  if (result.cppPluginDeployed) {
-    ok("Plugin sources updated - rebuild required");
-  } else {
-    ok("Plugin already up to date");
-  }
-
-  if (result.pythonPluginEnabled) ok("Enabled PythonScriptPlugin");
-  if (result.cppPluginEnabled) ok("Enabled UE_MCP_Bridge");
-
-  // Refresh Claude Code skills if the project is already using them
-  if (fs.existsSync(path.join(project.projectDir!, ".claude"))) {
-    const skillsResult = installSkills(project.projectDir!);
-    if (!skillsResult.error && skillsResult.installed.length > 0) {
-      ok(`Skills refreshed: ${skillsResult.installed.join(", ")}`);
-    }
-  }
-
+  console.log(`  Latest:    ${BOLD}${latest}${RESET}`);
   console.log("");
-  if (result.cppPluginDeployed) {
-    const projName = project.projectName ?? "<Project>";
-    console.log(`  ${DIM}C++ sources changed - the plugin must be rebuilt before the editor will see new handlers.${RESET}`);
-    console.log(`  ${DIM}From the project root:${RESET}`);
-    console.log(`  ${DIM}  Build.bat ${projName}Editor Win64 Development "${project.projectPath}"${RESET}`);
-    console.log(`  ${DIM}Then start (or restart) the editor.${RESET}`);
+
+  if (installed === latest) {
+    ok("Already up to date");
   } else {
-    console.log(`  ${DIM}No changes needed.${RESET}`);
+    console.log(`  ${YELLOW}Updating ue-mcp ${installed} -> ${latest}...${RESET}`);
+    console.log("");
+
+    const global = isGlobalInstall();
+    const cmd = global
+      ? `npm install -g ue-mcp@${latest}`
+      : `npm install ue-mcp@${latest}`;
+
+    try {
+      execSync(cmd, { stdio: "inherit" });
+      console.log("");
+      ok(`Updated to ${latest}`);
+    } catch {
+      console.log("");
+      fail(`npm install failed. Try manually: ${cmd}`);
+      process.exit(1);
+    }
+
+    if (shouldDeploy) {
+      console.log("");
+      console.log(`  ${DIM}Running deploy...${RESET}`);
+      console.log("");
+      const deployArgs = filteredArgs.length > 0 ? ` ${filteredArgs[0]}` : "";
+      try {
+        execSync(`npx ue-mcp deploy${deployArgs}`, { stdio: "inherit" });
+      } catch {
+        fail("Deploy failed after update. Run `ue-mcp deploy` manually.");
+        process.exit(1);
+      }
+    } else {
+      console.log("");
+      console.log(`  ${DIM}Run \`ue-mcp deploy\` to copy the new plugin sources into your project.${RESET}`);
+    }
   }
+
   console.log("");
 }
 

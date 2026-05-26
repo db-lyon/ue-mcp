@@ -229,7 +229,7 @@ function cmdInstall(): void {
     if (bridgeApi !== null && manifest.nativeModule.minBridgeApi > bridgeApi) {
       fail(
         `${name}: nativeModule requires bridge ABI >= ${manifest.nativeModule.minBridgeApi}, but the deployed bridge is ${bridgeApi}. ` +
-        `Run \`ue-mcp update\` to refresh the bridge, then retry install.`,
+        `Run \`ue-mcp deploy\` to refresh the bridge, then retry install.`,
       );
     }
     if (bridgeApi === null) {

@@ -52,7 +52,7 @@ async function main() {
       console.error(`[ue-mcp] Project loaded: ${project.projectName} (engine ${project.engineAssociation ?? "unknown"})`);
 
       // Non-destructive attach — never overwrites local bridge source.
-      // Source deployment is reserved for `ue-mcp init` / `ue-mcp update`.
+      // Source deployment is reserved for `ue-mcp init` / `ue-mcp deploy`.
       const result = attach(project);
       console.error(`[ue-mcp] ${attachSummary(result)}`);
     } catch (e) {
@@ -356,6 +356,9 @@ if (subcmd === "init") {
 } else if (subcmd === "update") {
   process.argv.splice(2, 1);
   import("./update.js");
+} else if (subcmd === "deploy") {
+  process.argv.splice(2, 1);
+  import("./deploy-cli.js");
 } else if (subcmd === "hook") {
   import("./hook-handler.js");
 } else if (subcmd === "uninstall-hooks") {

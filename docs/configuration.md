@@ -151,7 +151,9 @@ The C++ bridge plugin enables these UE plugins (adding them to `.uproject` if mi
 | Command | Description |
 |---------|-------------|
 | `npx ue-mcp init` | Interactive setup wizard. Deploys the C++ bridge plugin, writes MCP client configs, scaffolds `ue-mcp.yml`, optionally installs Claude Code skills + feedback prompt hook, optionally runs the GitHub OAuth device flow. Migrates any legacy `.ue-mcp.json` / `ue-mcp.local.yml` it finds. |
-| `npx ue-mcp update` | Re-deploy the C++ bridge plugin to the project. Use after a ue-mcp version bump. |
+| `npx ue-mcp update` | Check npm for the latest version and install it. Pass `--deploy` to also redeploy the plugin sources. |
+| `npx ue-mcp deploy` | Copy the C++ bridge plugin sources into the project. Use after `ue-mcp update` or to force a redeploy. |
+| `npx ue-mcp build` | Build the project C++ code using Unreal Build Tool. Stop the editor first. |
 | `npx ue-mcp auth` | Run the GitHub device flow standalone so `feedback(submit)` can author issues as your real GitHub user. Same step that lives inside `init`; use this if you skipped it at init time. |
 | `npx ue-mcp uninstall-hooks` | Remove the feedback PostToolUse hook from every Claude Code settings file recorded for this project in `~/.ue-mcp/state.json`. |
 | `npx ue-mcp feedback mode [<mode>]` | Read or set your personal feedback approval mode (`interactive`, `auto-approve`, or `defer`). Stored in `~/.ue-mcp/state.json`. See [Feedback → modes](feedback.md#feedback-modes). |
