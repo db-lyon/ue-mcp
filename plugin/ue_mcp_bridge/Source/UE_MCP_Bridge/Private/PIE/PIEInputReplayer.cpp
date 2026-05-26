@@ -631,8 +631,9 @@ namespace UEMCPPIE
 					}
 					else
 					{
-						UE_LOG(LogMCPBridge, Warning, TEXT("[PIE-REP] No viewport for capture (GEngine->GameViewport=%p Viewport=%p)"),
-							GEngine ? GEngine->GameViewport : nullptr, Viewport);
+						UE_LOG(LogMCPBridge, Warning, TEXT("[PIE-REP] No viewport for capture (GameViewport=%s Viewport=%s)"),
+							(GEngine && GEngine->GameViewport) ? TEXT("valid") : TEXT("null"),
+							Viewport ? TEXT("valid") : TEXT("null"));
 					}
 				}
 				CaptureFrameCounter++;
