@@ -28,6 +28,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 	UEMCPPIE::FPIEInputReplayer::Get().Init();
 	UEMCPPIE::FPIEObserver::Get().Init();
 	SMCPPIEPanel::RegisterTab();
+	SMCPPIEPanel::RegisterToolbarButton();
 	// Clear any leftover injections from a previous PIE session so a fresh
 	// EndPIE-BeginPIE pair starts with no ghost holds in the queue.
 	FEditorDelegates::EndPIE.AddLambda([](bool /*bIsSimulating*/)
@@ -116,6 +117,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
+	SMCPPIEPanel::UnregisterToolbarButton();
 	SMCPPIEPanel::UnregisterTab();
 	// Stop bridge server
 	FDialogHandlers::RemoveDialogHook();

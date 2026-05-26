@@ -15,6 +15,8 @@ public:
 	static void RegisterTab();
 	static void UnregisterTab();
 	static void OpenTab();
+	static void RegisterToolbarButton();
+	static void UnregisterToolbarButton();
 
 	static const FName TabId;
 
@@ -24,8 +26,11 @@ private:
 	TSharedRef<SWidget> BuildRecorderSection();
 	TSharedRef<SWidget> BuildReplayerSection();
 	TSharedRef<SWidget> BuildObserverSection();
+	TSharedRef<SWidget> BuildTimeScaleSection();
 	TSharedRef<SWidget> BuildRecordingsSection();
 	TSharedRef<SWidget> BuildProfilesSection();
+
+	void ApplyTimeScale(float Scale);
 
 	void RefreshRecordings();
 	void RefreshProfiles();
@@ -44,4 +49,8 @@ private:
 	TSharedPtr<SVerticalBox> ProfilesListBox;
 	TArray<FString> CachedProfilePaths;
 	double LastProfilesRefresh = 0.0;
+
+	// Time scale
+	TSharedPtr<STextBlock> TimeScaleText;
+	float CurrentTimeScale = 1.0f;
 };

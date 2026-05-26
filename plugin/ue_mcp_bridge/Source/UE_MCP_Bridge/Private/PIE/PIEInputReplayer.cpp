@@ -22,6 +22,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "Engine/DebugCameraController.h"
+#include "GameFramework/WorldSettings.h"
 #include "Engine/GameViewportClient.h"
 #include "ImageUtils.h"
 #include "Async/Async.h"
@@ -562,6 +563,18 @@ namespace UEMCPPIE
 				if (Pending.bEject)
 				{
 					EjectPlayer(PIEWorld);
+				}
+
+				if (Pending.TimeScale != 1.0f)
+				{
+					AWorldSettings* WS = PIEWorld->GetWorldSettings();
+					if (WS)
+					{
+						WS->MaxGlobalTimeDilation = FMath::Max(WS->MaxGlobalTimeDilation, 1000.f);
+						WS->MinGlobalTimeDilation = FMath::Min(WS->MinGlobalTimeDilation, 0.0001f);
+						UGameplayStatics::SetGlobalTimeDilation(PIEWorld, Pending.TimeScale);
+						UE_LOG(LogMCPBridge, Log, TEXT("[PIE-REP] Time scale: %.2f"), Pending.TimeScale);
+					}
 				}
 
 				AttachTime = PIEWorld->GetTimeSeconds();

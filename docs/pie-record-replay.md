@@ -30,11 +30,20 @@ Artifacts:
 - `tracked.jsonl` (optional) - per-frame state of `track_actors`; one JSON object per line keyed by user-supplied id
 - `drift.json` (replay only) - per-frame deltas vs source, including `actor_drift` per tracked actor when both sides emitted `tracked.jsonl`
 
-## Editor panel
+## Editor UI
+
+### PIE toolbar button
+
+A **Record** button is added to the PIE transport toolbar (next to Play/Stop). Click it to arm the recorder and start PIE in one action.
+
+### MCP PIE panel
 
 Open **Window > Tools > MCP PIE** to get a dockable Slate panel with:
 
-- **Recorder / Replayer / Observer** - live state display (state, id, frame count, elapsed time) with Arm / Disarm / Stop buttons
+- **Recorder** - live state display with Record + Play, Arm, Disarm, and Stop buttons
+- **Replayer** - state display with Disarm and Stop buttons
+- **Observer** - state display with Disarm and Stop buttons
+- **Time Scale** - slider (1% to 400%) and preset buttons (1%, 10%, 25%, 50%, 100%, 200%) for live time dilation during PIE. Works during recording, replay, or manual play.
 - **Recordings** - list of recordings under `Saved/MCPRecordings/` with one-click Replay buttons
 - **Observation Profiles** - list of `UMCPObservationProfile` data assets with one-click Observe buttons
 
@@ -127,6 +136,7 @@ Tunables:
 | `record_drift` | `true` (when `recording_id`) | Emit `drift.json` |
 | `auto_stop_pie` | `false` | Stop PIE on sequence completion |
 | `eject` | `false` | Eject to a spectator pawn on replay start. Lets you fly around freely and observe the recorded sequence without interfering with inputs. The pawn is teleported to its frame-0 position/rotation before the sequence starts. Re-possesses the original pawn on replay stop. Re-arming during the same PIE session auto-stops, re-teleports, and restarts. |
+| `time_scale` | `1.0` | Global time dilation applied when replay starts. Use `0.01` for 1% speed, `0.1` for 10%, etc. Dilation caps are auto-raised so the engine doesn't clamp. Also controllable live from the MCP PIE panel's Time Scale slider. |
 | `mode` | `"replay"` | `"monitor"` switches to passive drift sampling. See [`pie_replay_arm` parameters](#pie_replay_arm-parameters) above |
 | `capture_frame_every` | `0` | Write a viewport screenshot every Nth sampled frame. See [Per-frame video capture](#per-frame-video-capture) |
 | `client_id` | `0` | Which local player to drive / sample (multi-client PIE). See [Multi-client PIE](#multi-client-pie) |

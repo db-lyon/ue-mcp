@@ -9,12 +9,17 @@
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Layout/SExpandableArea.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Input/SSlider.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Framework/Docking/TabManager.h"
+#include "ToolMenus.h"
 #include "WorkspaceMenuStructure.h"
 #include "WorkspaceMenuStructureModule.h"
 #include "Styling/AppStyle.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Editor.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/WorldSettings.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
 
@@ -93,6 +98,40 @@ void SMCPPIEPanel::OpenTab()
 	FGlobalTabmanager::Get()->TryInvokeTab(TabId);
 }
 
+void SMCPPIEPanel::RegisterToolbarButton()
+{
+	UToolMenus* TM = UToolMenus::Get();
+	if (!TM) return;
+
+	UToolMenu* PlayMenu = TM->ExtendMenu("LevelEditor.LevelEditorToolBar.PlayToolBar");
+	if (!PlayMenu) return;
+
+	FToolMenuSection& Section = PlayMenu->FindOrAddSection("MCPPIEButtons");
+	Section.AddEntry(FToolMenuEntry::InitToolBarButton(
+		"MCPRecordAndPlay",
+		FUIAction(FExecuteAction::CreateLambda([]()
+		{
+			UEMCPPIE::FRecorderArmConfig Cfg;
+			FString Err, Msg;
+			UEMCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
+			if (GEditor && !GEditor->PlayWorld)
+			{
+				GEditor->PlayInEditor(GEditor->GetEditorWorldContext().World(), false);
+			}
+		})),
+		FText::FromString(TEXT("Record")),
+		FText::FromString(TEXT("Arm MCP recorder and start PIE")),
+		FSlateIcon(FAppStyle::GetAppStyleSetName(), "PlayWorld.RecordPIE")
+	));
+}
+
+void SMCPPIEPanel::UnregisterToolbarButton()
+{
+	UToolMenus* TM = UToolMenus::Get();
+	if (!TM) return;
+	TM->RemoveSection("LevelEditor.LevelEditorToolBar.PlayToolBar", "MCPPIEButtons");
+}
+
 void SMCPPIEPanel::Construct(const FArguments& InArgs)
 {
 	ChildSlot
@@ -116,6 +155,12 @@ void SMCPPIEPanel::Construct(const FArguments& InArgs)
 
 			+ SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 4)
 			[ BuildObserverSection() ]
+
+			+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
+			[ SNew(SSeparator) ]
+
+			+ SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 4)
+			[ BuildTimeScaleSection() ]
 
 			+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
 			[ SNew(SSeparator) ]
@@ -154,6 +199,22 @@ TSharedRef<SWidget> SMCPPIEPanel::BuildRecorderSection()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
 		[
 			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SButton)
+				.Text(FText::FromString(TEXT("Record + Play")))
+				.OnClicked_Lambda([]()
+				{
+					UEMCPPIE::FRecorderArmConfig Cfg;
+					FString Err, Msg;
+					UEMCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
+					if (GEditor && !GEditor->PlayWorld)
+					{
+						GEditor->PlayInEditor(GEditor->GetEditorWorldContext().World(), false);
+					}
+					return FReply::Handled();
+				})
+			]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
 			[
 				SNew(SButton)
@@ -278,6 +339,107 @@ TSharedRef<SWidget> SMCPPIEPanel::BuildObserverSection()
 					UEMCPPIE::FPIEObserver::Get().ForceStop();
 					return FReply::Handled();
 				})
+			]
+		];
+}
+
+void SMCPPIEPanel::ApplyTimeScale(float Scale)
+{
+	CurrentTimeScale = Scale;
+	UWorld* World = GEditor ? GEditor->PlayWorld : nullptr;
+	if (World)
+	{
+		AWorldSettings* WS = World->GetWorldSettings();
+		if (WS)
+		{
+			WS->MaxGlobalTimeDilation = FMath::Max(WS->MaxGlobalTimeDilation, 1000.f);
+			WS->MinGlobalTimeDilation = FMath::Min(WS->MinGlobalTimeDilation, 0.0001f);
+			UGameplayStatics::SetGlobalTimeDilation(World, Scale);
+		}
+	}
+	if (TimeScaleText.IsValid())
+	{
+		TimeScaleText->SetText(FText::FromString(FString::Printf(TEXT("%.0f%%"), Scale * 100.f)));
+	}
+}
+
+TSharedRef<SWidget> SMCPPIEPanel::BuildTimeScaleSection()
+{
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Font(FAppStyle::GetFontStyle("BoldFont"))
+				.Text(FText::FromString(TEXT("Time Scale")))
+			]
+			+ SHorizontalBox::Slot().FillWidth(1.f)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(4, 0)
+			[
+				SAssignNew(TimeScaleText, STextBlock)
+				.Text(FText::FromString(TEXT("100%")))
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
+		[
+			SNew(SSlider)
+			.MinValue(0.f)
+			.MaxValue(1.f)
+			.Value(0.5f)
+			.OnValueChanged_Lambda([this](float Val)
+			{
+				float Scale;
+				if (Val <= 0.5f)
+				{
+					Scale = FMath::Lerp(0.01f, 1.0f, Val * 2.0f);
+				}
+				else
+				{
+					Scale = FMath::Lerp(1.0f, 4.0f, (Val - 0.5f) * 2.0f);
+				}
+				ApplyTimeScale(Scale);
+			})
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0, 4)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SButton)
+				.Text(FText::FromString(TEXT("1%")))
+				.OnClicked_Lambda([this]() { ApplyTimeScale(0.01f); return FReply::Handled(); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SButton)
+				.Text(FText::FromString(TEXT("10%")))
+				.OnClicked_Lambda([this]() { ApplyTimeScale(0.1f); return FReply::Handled(); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SButton)
+				.Text(FText::FromString(TEXT("25%")))
+				.OnClicked_Lambda([this]() { ApplyTimeScale(0.25f); return FReply::Handled(); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SButton)
+				.Text(FText::FromString(TEXT("50%")))
+				.OnClicked_Lambda([this]() { ApplyTimeScale(0.5f); return FReply::Handled(); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0, 0, 4, 0)
+			[
+				SNew(SButton)
+				.Text(FText::FromString(TEXT("100%")))
+				.OnClicked_Lambda([this]() { ApplyTimeScale(1.0f); return FReply::Handled(); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SButton)
+				.Text(FText::FromString(TEXT("200%")))
+				.OnClicked_Lambda([this]() { ApplyTimeScale(2.0f); return FReply::Handled(); })
 			]
 		];
 }

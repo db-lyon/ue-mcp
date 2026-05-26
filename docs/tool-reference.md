@@ -620,7 +620,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `pie_record_read` | Read a recording artifact. Params: `id, file? (manifest\|sequence\|csv\|drift\|tracked), recording_dir?, record_limit?, record_offset?` |
 | `pie_record_delete` | Delete a recording directory. Params: `id, confirm` |
 | `pie_mark` | Insert a labelled marker into an active recording or replay. Params: `label` |
-| `pie_replay_arm` | Arm a PIE replay or monitor session. Params: `recording_id?, sequence_path?, steps?, settle_ms?, sample_hz?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, mode?, drift_thresholds?, rng_seed?` |
+| `pie_replay_arm` | Arm a PIE replay or monitor session. Params: `recording_id?, sequence_path?, steps?, settle_ms?, sample_hz?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, time_scale?, mode?, drift_thresholds?, rng_seed?` |
 | `pie_replay_disarm` | Cancel an armed replay before it starts. |
 | `pie_replay_stop` | Stop an in-flight replay and write drift output when applicable. |
 | `pie_replay_status` | Read replay state, current step, elapsed time, and drift maxima. |

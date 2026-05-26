@@ -61,6 +61,7 @@ namespace UEMCPPIE
 		float ThrTrackedDefault = 0.f;
 		TMap<FString, float> TrackedThresholds;
 		bool bEject = false;
+		float TimeScale = 1.0f;
 	};
 
 	struct FReplayerStatus
