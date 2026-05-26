@@ -22,6 +22,9 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "Engine/DebugCameraController.h"
+#include "Engine/GameViewportClient.h"
+#include "ImageUtils.h"
+#include "Async/Async.h"
 
 namespace UEMCPPIE
 {
@@ -597,9 +600,26 @@ namespace UEMCPPIE
 				const uint64 FrameIdx = static_cast<uint64>(FramesCompared);
 				if ((FrameIdx % static_cast<uint64>(Pending.CaptureFrameEvery)) == 0)
 				{
-					const FString FullPath = CaptureDir / FString::Printf(TEXT("frame_%05llu.png"), FrameIdx);
-					FScreenshotRequest::RequestScreenshot(FullPath, /*bShowUI*/false, /*bAddFilenameSuffix*/false);
-					FramesCaptured++;
+					UGameViewportClient* VC = PIEWorld->GetGameViewport();
+					FViewport* Viewport = VC ? VC->Viewport : nullptr;
+					if (Viewport)
+					{
+						TArray<FColor> Pixels;
+						if (Viewport->ReadPixels(Pixels))
+						{
+							const int32 W = Viewport->GetSizeXY().X;
+							const int32 H = Viewport->GetSizeXY().Y;
+							const FString FullPath = CaptureDir / FString::Printf(TEXT("frame_%05llu.png"), FrameIdx);
+							AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask,
+								[Pixels = MoveTemp(Pixels), W, H, FullPath]()
+								{
+									TArray64<uint8> PNG;
+									FImageUtils::PNGCompressImageArray(W, H, Pixels, PNG);
+									FFileHelper::SaveArrayToFile(PNG, *FullPath);
+								});
+							FramesCaptured++;
+						}
+					}
 				}
 			}
 
