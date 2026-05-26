@@ -116,7 +116,7 @@ void SMCPPIEPanel::RegisterToolbarButton()
 			UEMCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 			if (GEditor && !GEditor->PlayWorld)
 			{
-				GEditor->PlayInEditor(GEditor->GetEditorWorldContext().World(), false);
+				FRequestPlaySessionParams P; GEditor->RequestPlaySession(P);
 			}
 		})),
 		FText::FromString(TEXT("Record")),
@@ -210,7 +210,7 @@ TSharedRef<SWidget> SMCPPIEPanel::BuildRecorderSection()
 					UEMCPPIE::FPIEInputRecorder::Get().Arm(Cfg, Err, Msg);
 					if (GEditor && !GEditor->PlayWorld)
 					{
-						GEditor->PlayInEditor(GEditor->GetEditorWorldContext().World(), false);
+						FRequestPlaySessionParams P; GEditor->RequestPlaySession(P);
 					}
 					return FReply::Handled();
 				})
