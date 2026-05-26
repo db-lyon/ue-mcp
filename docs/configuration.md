@@ -88,8 +88,8 @@ The `plugins:` array in **`ue-mcp.yml`** declares npm packages that inject new a
 
 ```yaml
 plugins:
-  - name: ue-mcp-plugin-voxel-plugin
-  - name: ue-mcp-plugin-my-other-thing
+  - name: ue-mcp-voxel
+  - name: ue-mcp-my-other-thing
     version: "0.2.x"        # optional - npm semver range
 ```
 

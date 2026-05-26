@@ -31,7 +31,7 @@ describe("mergeInjectionsIntoTool", () => {
     const plan: InjectionPlan = {
       category: "pcg",
       prefix: "vpp",
-      pluginName: "ue-mcp-plugin-voxel-plugin-pro",
+      pluginName: "ue-mcp-voxel-pro",
       actions: {
         scatter_on_terrain: {
           task: "vpp.scatter_on_terrain",

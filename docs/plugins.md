@@ -166,8 +166,8 @@ The reference plugin is `ue-mcp-plugin-voxel-plugin` ([source](https://github.co
 ### Quick scaffolder
 
 ```bash
-ue-mcp plugin create ue-mcp-plugin-my-thing
-cd ue-mcp-plugin-my-thing
+ue-mcp plugin create ue-mcp-my-thing
+cd ue-mcp-my-thing
 npm install
 npm run build
 ```
@@ -177,7 +177,7 @@ That stamps a working package with `ue-mcp.plugin.yml`, `tsconfig.json`, an exam
 ### Package layout
 
 ```
-ue-mcp-plugin-<your-name>/
+ue-mcp-<your-name>/
   package.json
   tsconfig.json
   ue-mcp.plugin.yml          # author declaration: actionPrefix, inject, knowledge, tasks, flows
@@ -199,7 +199,7 @@ Conventions:
 - `class_path` in the declaration is resolved against the plugin's `dist/` (the loader tries `dist/<path>.js` then `dist/tasks/<path>.js`).
 - `src/shared/` holds helpers; never reference it from the declaration.
 - Compile to `dist/` with `tsc` so users need no TypeScript toolchain.
-- The npm package name should start with `ue-mcp-plugin-` so it's discoverable on the registry.
+- The npm package name should start with `ue-mcp-` so it's discoverable on the registry.
 
 ### `package.json`
 
@@ -310,7 +310,7 @@ nativeModule:
 #### Layout inside the npm tarball
 
 ```
-ue-mcp-plugin-<name>/
+ue-mcp-<name>/
   ue-mcp.plugin.yml
   dist/                              # tsc output (TypeScript tasks)
   ue/                                # NEW: native source ships here
@@ -483,7 +483,7 @@ npm publish        # public registry
 Tag your package with the `ue-mcp-plugin` keyword in `package.json` so it shows up in npm searches for the convention. Users install with:
 
 ```bash
-ue-mcp plugin install ue-mcp-plugin-<your-name>
+ue-mcp plugin install ue-mcp-<your-name>
 ```
 
 ## Validation rules

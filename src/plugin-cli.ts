@@ -367,8 +367,8 @@ function cmdUpdate(): void {
 function cmdCreate(): void {
   const name = args.shift();
   if (!name) fail("usage: ue-mcp plugin create <name> [--dir path]");
-  if (!/^ue-mcp-plugin-/.test(name)) {
-    note(`WARNING: package name does not start with 'ue-mcp-plugin-' - registry discoverability will suffer.`);
+  if (!/^ue-mcp-/.test(name)) {
+    note(`WARNING: package name does not start with 'ue-mcp-' - registry discoverability will suffer.`);
   }
 
   let targetDir = path.resolve(process.cwd(), name);
@@ -394,7 +394,7 @@ function cmdCreate(): void {
 }
 
 function deriveDefaultPrefix(pkgName: string): string {
-  const stripped = pkgName.replace(/^ue-mcp-plugin-/, "");
+  const stripped = pkgName.replace(/^ue-mcp-(?:plugin-)?/, "");
   const lowered = stripped.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
   // Take the first 1-3 alphanumeric chars as an action prefix.
   const compact = lowered.split("_").filter(Boolean);
