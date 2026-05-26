@@ -291,6 +291,7 @@ namespace UEMCPPIE
 		ReplayActorCache.Reset();
 		ActorDriftAccum.Reset();
 		FramesCaptured = 0;
+		CaptureFrameCounter = 0;
 		CaptureDir.Reset();
 		NextStepIndex = 0;
 		ExecutedSteps = 0;
@@ -597,18 +598,21 @@ namespace UEMCPPIE
 					}
 					IFileManager::Get().MakeDirectory(*CaptureDir, true);
 				}
-				const uint64 FrameIdx = static_cast<uint64>(FramesCompared);
+				const uint64 FrameIdx = static_cast<uint64>(CaptureFrameCounter);
 				if ((FrameIdx % static_cast<uint64>(Pending.CaptureFrameEvery)) == 0)
 				{
-					UGameViewportClient* VC = PIEWorld->GetGameViewport();
-					FViewport* Viewport = VC ? VC->Viewport : nullptr;
-					if (Viewport)
+					FViewport* Viewport = nullptr;
+					if (GEngine && GEngine->GameViewport)
 					{
+						Viewport = GEngine->GameViewport->Viewport;
+					}
+					if (Viewport && Viewport->GetSizeXY().X > 0)
+					{
+						const int32 W = Viewport->GetSizeXY().X;
+						const int32 H = Viewport->GetSizeXY().Y;
 						TArray<FColor> Pixels;
-						if (Viewport->ReadPixels(Pixels))
+						if (Viewport->ReadPixels(Pixels) && Pixels.Num() == W * H)
 						{
-							const int32 W = Viewport->GetSizeXY().X;
-							const int32 H = Viewport->GetSizeXY().Y;
 							const FString FullPath = CaptureDir / FString::Printf(TEXT("frame_%05llu.png"), FrameIdx);
 							AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask,
 								[Pixels = MoveTemp(Pixels), W, H, FullPath]()
@@ -619,8 +623,19 @@ namespace UEMCPPIE
 								});
 							FramesCaptured++;
 						}
+						else
+						{
+							UE_LOG(LogMCPBridge, Warning, TEXT("[PIE-REP] ReadPixels failed: %dx%d pixels=%d"),
+								W, H, Pixels.Num());
+						}
+					}
+					else
+					{
+						UE_LOG(LogMCPBridge, Warning, TEXT("[PIE-REP] No viewport for capture (GEngine->GameViewport=%p Viewport=%p)"),
+							GEngine ? GEngine->GameViewport : nullptr, Viewport);
 					}
 				}
+				CaptureFrameCounter++;
 			}
 
 			// Drift sampling: sample current pawn state + compare to source by

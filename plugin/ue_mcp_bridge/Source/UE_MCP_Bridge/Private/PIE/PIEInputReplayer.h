@@ -160,6 +160,7 @@ namespace UEMCPPIE
 		TMap<FString, TWeakObjectPtr<AActor>> ReplayActorCache;
 		TMap<FString, FActorDrift> ActorDriftAccum;
 		int32 FramesCaptured = 0;
+		uint64 CaptureFrameCounter = 0;
 		FString CaptureDir;
 
 		// Eject state: controller unpossesses pawn on replay start.
