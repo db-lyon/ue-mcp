@@ -163,6 +163,7 @@ namespace UEMCPPIE
 		int32 FramesCaptured = 0;
 		uint64 CaptureFrameCounter = 0;
 		FString CaptureDir;
+		TSharedPtr<class FPIEViewportCapture> ViewportCapture;
 
 		// Eject state: controller unpossesses pawn on replay start.
 		bool bEjected = false;

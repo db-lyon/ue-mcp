@@ -73,6 +73,8 @@ public class UE_MCP_Bridge : ModuleRules
 			"StateTreeEditorModule",
 			"SubobjectDataInterface",
 			"ToolMenus",
+				"RenderCore",
+				"RHI",
 				"UMG",
 				"UMGEditor",
 				"UnrealEd",

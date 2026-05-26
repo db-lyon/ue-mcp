@@ -1,4 +1,5 @@
 #include "PIEInputReplayer.h"
+#include "PIEViewportCapture.h"
 #include "PIEInputInjector.h"
 #include "UE_MCP_BridgeModule.h"
 #include "Editor.h"
@@ -421,6 +422,12 @@ namespace UEMCPPIE
 			bEndFrameBound = true;
 		}
 
+		if (Pending.CaptureFrameEvery > 0 && !ViewportCapture.IsValid())
+		{
+			ViewportCapture = FSceneViewExtensions::NewExtension<FPIEViewportCapture>();
+			ViewportCapture->SetEnabled(true);
+		}
+
 		UE_LOG(LogMCPBridge, Log, TEXT("[PIE-REP] Armed → BeginPIE, waiting for pawn (%d steps)"), ActiveSequence.Steps.Num());
 	}
 
@@ -597,7 +604,7 @@ namespace UEMCPPIE
 			// Per-frame viewport capture (off by default). Counted off the
 			// drift sampler's frame index so frame_<NNNNN>.png aligns with
 			// recording.csv rows.
-			if (Pending.CaptureFrameEvery > 0)
+			if (Pending.CaptureFrameEvery > 0 && ViewportCapture.IsValid())
 			{
 				if (CaptureDir.IsEmpty())
 				{
@@ -611,43 +618,12 @@ namespace UEMCPPIE
 					}
 					IFileManager::Get().MakeDirectory(*CaptureDir, true);
 				}
+				FramesCaptured = ViewportCapture->GetCapturedCount();
 				const uint64 FrameIdx = static_cast<uint64>(CaptureFrameCounter);
 				if ((FrameIdx % static_cast<uint64>(Pending.CaptureFrameEvery)) == 0)
 				{
-					FViewport* Viewport = nullptr;
-					if (GEngine && GEngine->GameViewport)
-					{
-						Viewport = GEngine->GameViewport->Viewport;
-					}
-					if (Viewport && Viewport->GetSizeXY().X > 0)
-					{
-						const int32 W = Viewport->GetSizeXY().X;
-						const int32 H = Viewport->GetSizeXY().Y;
-						TArray<FColor> Pixels;
-						if (Viewport->ReadPixels(Pixels) && Pixels.Num() == W * H)
-						{
-							const FString FullPath = CaptureDir / FString::Printf(TEXT("frame_%05llu.png"), FrameIdx);
-							AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask,
-								[Pixels = MoveTemp(Pixels), W, H, FullPath]()
-								{
-									TArray64<uint8> PNG;
-									FImageUtils::PNGCompressImageArray(W, H, Pixels, PNG);
-									FFileHelper::SaveArrayToFile(PNG, *FullPath);
-								});
-							FramesCaptured++;
-						}
-						else
-						{
-							UE_LOG(LogMCPBridge, Warning, TEXT("[PIE-REP] ReadPixels failed: %dx%d pixels=%d"),
-								W, H, Pixels.Num());
-						}
-					}
-					else
-					{
-						UE_LOG(LogMCPBridge, Warning, TEXT("[PIE-REP] No viewport for capture (GameViewport=%s Viewport=%s)"),
-							(GEngine && GEngine->GameViewport) ? TEXT("valid") : TEXT("null"),
-							Viewport ? TEXT("valid") : TEXT("null"));
-					}
+					const FString FullPath = CaptureDir / FString::Printf(TEXT("frame_%05llu.png"), FrameIdx);
+					ViewportCapture->RequestCapture(FullPath);
 				}
 				CaptureFrameCounter++;
 			}
@@ -816,6 +792,14 @@ namespace UEMCPPIE
 		}
 
 		RepossessPlayer();
+
+		if (ViewportCapture.IsValid())
+		{
+			FramesCaptured = ViewportCapture->GetCapturedCount();
+			R.FramesCaptured = FramesCaptured;
+			ViewportCapture->SetEnabled(false);
+			ViewportCapture.Reset();
+		}
 
 		if (bEndFrameBound && OnEndFrameHandle.IsValid())
 		{
