@@ -85,16 +85,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::PieReplayArm(const TSharedPtr<FJsonObj
 
 	if (Params->HasField(TEXT("capture_frame_every")))
 	{
-		int32 N = 0;
-		Params->TryGetNumberField(TEXT("capture_frame_every"), N);
-		Cfg.CaptureFrameEvery = FMath::Max(0, N);
+		double D = 0;
+		Params->TryGetNumberField(TEXT("capture_frame_every"), D);
+		Cfg.CaptureFrameEvery = FMath::Max(0, static_cast<int32>(D));
 	}
 
 	if (Params->HasField(TEXT("client_id")))
 	{
-		int32 CId = 0;
-		Params->TryGetNumberField(TEXT("client_id"), CId);
-		Cfg.ClientId = FMath::Max(0, CId);
+		double D = 0;
+		Params->TryGetNumberField(TEXT("client_id"), D);
+		Cfg.ClientId = FMath::Max(0, static_cast<int32>(D));
 	}
 
 	const TSharedPtr<FJsonObject>* Thr = nullptr;
