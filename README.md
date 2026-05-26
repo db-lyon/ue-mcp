@@ -1,5 +1,6 @@
 # UE-MCP
 
+[![SafeSkill 71/100](https://img.shields.io/badge/SafeSkill-71%2F100_Passes%20with%20Notes-yellow)](https://safeskill.dev/scan/db-lyon-ue-mcp)
 **Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->21<!-- /count --> category tools covering <!-- count:actions -->525+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows.
 
 ```mermaid
