@@ -91,8 +91,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_eqs_queries"), &ListEqsQueries);
 	Registry.RegisterHandler(TEXT("list_state_trees"), &ListStateTrees);
 	Registry.RegisterHandler(TEXT("project_point_to_navigation"), &ProjectPointToNavigation);
-	Registry.RegisterHandler(TEXT("create_input_action"), &CreateInputAction);
-	Registry.RegisterHandler(TEXT("create_input_mapping_context"), &CreateInputMappingContext);
+	// create_input_action, create_input_mapping_context moved to pie-transport
 	Registry.RegisterHandler(TEXT("create_blackboard"), &CreateBlackboard);
 	Registry.RegisterHandler(TEXT("create_behavior_tree"), &CreateBehaviorTree);
 	Registry.RegisterHandler(TEXT("create_eqs_query"), &CreateEqsQuery);
@@ -121,19 +120,9 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_smart_object_slot"), &RemoveSmartObjectSlot);
 	Registry.RegisterHandler(TEXT("list_smart_object_slots"), &ListSmartObjectSlots);
 	Registry.RegisterHandler(TEXT("add_smart_object_slot_behavior"), &AddSmartObjectSlotBehavior);
-	Registry.RegisterHandler(TEXT("read_imc"), &ReadImc);
-	Registry.RegisterHandler(TEXT("list_imc_mappings"), &ReadImc);
-	Registry.RegisterHandler(TEXT("add_imc_mapping"), &AddImcMapping);
-	Registry.RegisterHandler(TEXT("set_mapping_modifiers"), &SetMappingModifiers);
-	Registry.RegisterHandler(TEXT("remove_imc_mapping"), &RemoveImcMapping);
-	Registry.RegisterHandler(TEXT("set_imc_mapping_key"), &SetImcMappingKey);
-	Registry.RegisterHandler(TEXT("set_imc_mapping_action"), &SetImcMappingAction);
-	Registry.RegisterHandler(TEXT("inspect_pie"), &InspectPie);
-	Registry.RegisterHandler(TEXT("get_pie_anim_state"), &GetPieAnimState);
-	Registry.RegisterHandler(TEXT("get_pie_anim_properties"), &GetPieAnimProperties);
-	Registry.RegisterHandler(TEXT("get_pie_subsystem_state"), &GetPieSubsystemState);
+	// read_imc through get_pie_subsystem_state moved to pie-transport
 	Registry.RegisterHandler(TEXT("get_navmesh_details"), &GetNavmeshDetails);
-	Registry.RegisterHandler(TEXT("apply_damage_in_pie"), &ApplyDamageInPie);
+	// apply_damage_in_pie moved to pie-transport
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSharedPtr<FJsonObject>& Params)
