@@ -134,36 +134,6 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_pie_subsystem_state"), &GetPieSubsystemState);
 	Registry.RegisterHandler(TEXT("get_navmesh_details"), &GetNavmeshDetails);
 	Registry.RegisterHandler(TEXT("apply_damage_in_pie"), &ApplyDamageInPie);
-	Registry.RegisterHandler(TEXT("inject_input"), &InjectInput);
-	Registry.RegisterHandler(TEXT("inject_input_start"), &InjectInputStart);
-	Registry.RegisterHandler(TEXT("inject_input_update"), &InjectInputUpdate);
-	Registry.RegisterHandler(TEXT("inject_input_stop"), &InjectInputStop);
-	Registry.RegisterHandler(TEXT("inject_input_tape"), &InjectInputTape);
-	Registry.RegisterHandler(TEXT("pie_record_arm"), &PieRecordArm);
-	Registry.RegisterHandler(TEXT("pie_record_disarm"), &PieRecordDisarm);
-	Registry.RegisterHandler(TEXT("pie_record_stop"), &PieRecordStop);
-	Registry.RegisterHandler(TEXT("pie_record_status"), &PieRecordStatus);
-	Registry.RegisterHandler(TEXT("pie_record_list"), &PieRecordList);
-	Registry.RegisterHandler(TEXT("pie_record_read"), &PieRecordRead);
-	Registry.RegisterHandler(TEXT("pie_record_delete"), &PieRecordDelete);
-	Registry.RegisterHandler(TEXT("pie_mark"), &PieMark);
-	Registry.RegisterHandler(TEXT("pie_replay_arm"), &PieReplayArm);
-	Registry.RegisterHandler(TEXT("pie_replay_disarm"), &PieReplayDisarm);
-	Registry.RegisterHandler(TEXT("pie_replay_stop"), &PieReplayStop);
-	Registry.RegisterHandler(TEXT("pie_replay_status"), &PieReplayStatus);
-	Registry.RegisterHandler(TEXT("pie_record_diff"), &PieRecordDiff);
-	Registry.RegisterHandler(TEXT("pie_snapshot"), &PieSnapshot);
-	Registry.RegisterHandler(TEXT("pie_profile_create"), &PieProfileCreate);
-	Registry.RegisterHandler(TEXT("pie_profile_read"), &PieProfileRead);
-	Registry.RegisterHandler(TEXT("pie_profile_update"), &PieProfileUpdate);
-	Registry.RegisterHandler(TEXT("pie_profile_delete"), &PieProfileDelete);
-	Registry.RegisterHandler(TEXT("pie_profile_list"), &PieProfileList);
-	Registry.RegisterHandler(TEXT("pie_observe_arm"), &PieObserveArm);
-	Registry.RegisterHandler(TEXT("pie_observe_disarm"), &PieObserveDisarm);
-	Registry.RegisterHandler(TEXT("pie_observe_stop"), &PieObserveStop);
-	Registry.RegisterHandler(TEXT("pie_observe_status"), &PieObserveStatus);
-	Registry.RegisterHandler(TEXT("pie_observe_list"), &PieObserveList);
-	Registry.RegisterHandler(TEXT("pie_observe_read"), &PieObserveRead);
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSharedPtr<FJsonObject>& Params)
