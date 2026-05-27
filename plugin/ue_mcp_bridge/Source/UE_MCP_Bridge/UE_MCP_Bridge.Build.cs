@@ -6,6 +6,8 @@ public class UE_MCP_Bridge : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
+		PublicIncludePaths.Add(System.IO.Path.Combine(ModuleDirectory, "Private"));
+
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
