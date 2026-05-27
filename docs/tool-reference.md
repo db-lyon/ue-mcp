@@ -1,6 +1,6 @@
 # Tool Reference
 
-UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering **<!-- count:actions -->525+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering **<!-- count:actions -->513+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -478,7 +478,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `start_editor` | Launch Unreal Editor with the current project and reconnect bridge |
 | `stop_editor` | Close Unreal Editor gracefully |
 | `restart_editor` | Stop then start the editor |
-| `build_project` | Build the project's C++ code using Unreal Build Tool. Stop the editor first |
+| `build_project` | Build the project's C++ code using Unreal Build Tool. Editor should be stopped first |
 | `execute_command` | Run console command. Params: `command` |
 | `execute_python` | Run Python in editor. Params: `code` |
 | `run_python_file` | Run a Python file from disk with __file__/__name__ populated (#142). Params: `filePath, args?` |
@@ -564,16 +564,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `get_navmesh_info` | Query nav system |
 | `project_to_nav` | Project point to navmesh. Params: `location, extent?` |
 | `spawn_nav_modifier` | Place nav modifier. Params: `location, extent?, areaClass?` |
-| `create_input_action` | Create InputAction. Params: `name, packagePath?, valueType?` |
-| `create_input_mapping` | Create InputMappingContext. Params: `name, packagePath?` |
 | `list_input_assets` | List input assets. Params: `directory?, recursive?` |
-| `read_imc` | Read InputMappingContext mappings. Params: `imcPath` |
-| `list_input_mappings` | Alias for read_imc. List key→action bindings with triggers/modifiers. Params: `imcPath` |
-| `add_imc_mapping` | Add key mapping to IMC. Params: `imcPath, inputActionPath, key` |
-| `set_mapping_modifiers` | Set modifiers/triggers on an IMC mapping. Params: `imcPath, mappingIndex?, modifiers?, triggers?` |
-| `remove_imc_mapping` | (#158) Remove an IMC mapping. Params: `imcPath, mappingIndex? \\| (inputActionPath? + key?)` |
-| `set_imc_mapping_key` | (#158) Rebind an IMC mapping to a new key. Params: `imcPath, newKey, mappingIndex? \\| key? \\| inputActionPath?` |
-| `set_imc_mapping_action` | (#158) Retarget an IMC mapping to a different InputAction. Params: `imcPath, newInputActionPath, mappingIndex? \\| key? \\| inputActionPath?` |
 | `list_behavior_trees` | List behavior trees. Params: `directory?, recursive?` |
 | `get_behavior_tree_info` | Inspect behavior tree (top-level + blackboard). Params: `assetPath` |
 | `read_behavior_tree_graph` | Walk BT tree: composites, tasks, decorators, services with blackboard keys. Params: `assetPath` |
@@ -595,10 +586,6 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `remove_smart_object_slot` | Remove a slot by index. Idempotent: out-of-range returns alreadyDeleted=true. Params: `assetPath, slotIndex (#416)` |
 | `list_smart_object_slots` | List slots on a SmartObjectDefinition with index, offset, rotation, and raw text. Params: `assetPath (#416)` |
 | `add_smart_object_slot_behavior` | Attach a behavior definition (UBehaviorDefinition asset or class) to a slot's BehaviorDefinitions array. Pass instanceProperties to seed UPROPERTYs on a freshly-spawned class-instance. Params: `assetPath, slotIndex, behaviorClass (asset path or class path), instanceProperties? (#416)` |
-| `inspect_pie` | Inspect PIE runtime. Params: `actorLabel?` |
-| `get_pie_anim_state` | Get PIE anim instance state. Params: `actorLabel` |
-| `get_pie_anim_properties` | Read arbitrary UPROPERTY values on a PIE actor's AnimInstance (#139). Params: `actorLabel, propertyNames? (omit = dump all)` |
-| `get_pie_subsystem_state` | Read UPROPERTY values on a running subsystem in PIE (#139). Params: `subsystemClass, scope? (game\\|world\\|engine\\|localplayer), propertyNames?` |
 | `create_game_mode` | Create GameMode BP. Params: `name, packagePath?, parentClass?, defaults?` |
 | `create_game_state` | Create GameState BP. Params: `name, packagePath?, parentClass?` |
 | `create_player_controller` | Create PlayerController BP. Params: `name, packagePath?, parentClass?` |
@@ -607,37 +594,6 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `set_world_game_mode` | Set level GameMode override. Params: `gameModePath` |
 | `get_framework_info` | Get level framework classes |
 | `get_navmesh_details` | Read RecastNavMesh generation params (cellSize, agentHeight, maxStepHeight, etc.) (#163) |
-| `apply_damage_in_pie` | Apply damage to PIE actor. Params: `actorLabel, baseDamage?, damageTypeClass? (#186)` |
-| `inject_input` | Single-frame Enhanced Input injection during PIE. Params: `action, value_x?, value_y?, value_z?` |
-| `inject_input_start` | Begin holding an Enhanced Input action until stopped. Params: `action, value_x?, value_y?, value_z?, injection_id?` |
-| `inject_input_update` | Change the value of a running hold. Params: `injection_id, value_x?, value_y?` |
-| `inject_input_stop` | Stop a running hold or tape by id. |
-| `inject_input_tape` | Play a per-frame value array through Enhanced Input. Params: `action, values, hz?` |
-| `pie_record_arm` | Arm a PIE input recording. Params: `actions?, track_values?, track_actors?, axis_threshold?, sample_hz?, pin_fps?, capture_pawn_state?, capture_montage?, rng_seed?, run_gap_frames?, recording_dir?, id?` |
-| `pie_record_disarm` | Cancel an armed recording before it starts. |
-| `pie_record_stop` | Finalize an in-flight PIE recording immediately. |
-| `pie_record_status` | Read recorder state and current frame/progress. |
-| `pie_record_list` | Enumerate recordings under `Saved/MCPRecordings`. Params: `recording_dir?, record_limit?` |
-| `pie_record_read` | Read a recording artifact. Params: `id, file? (manifest\|sequence\|csv\|drift\|tracked), recording_dir?, record_limit?, record_offset?` |
-| `pie_record_delete` | Delete a recording directory. Params: `id, confirm` |
-| `pie_mark` | Insert a labelled marker into an active recording or replay. Params: `label` |
-| `pie_replay_arm` | Arm a PIE replay or monitor session. Params: `recording_id?, sequence_path?, steps?, settle_ms?, sample_hz?, pin_fps?, apply_rng_seed?, record_drift?, auto_stop_pie?, eject?, time_scale?, mode?, drift_thresholds?, rng_seed?` |
-| `pie_replay_disarm` | Cancel an armed replay before it starts. |
-| `pie_replay_stop` | Stop an in-flight replay and write drift output when applicable. |
-| `pie_replay_status` | Read replay state, current step, elapsed time, and drift maxima. |
-| `pie_snapshot` | Dump a live PIE actor's UProperty state to JSON. Params: `target, recording_id?, recording_dir?, snapshot_name?, include_components?` |
-| `pie_record_diff` | Offline diff of two PIE recordings. Params: `a_id, b_id, recording_dir?, position_cm?, rotation_deg?, velocity_cms?, tracked_default?, tracked_thresholds?` |
-| `pie_profile_create` | Create an observation profile (UDataAsset). Params: `name, package_path?, tracked_values?, tracked_actors?, capture_pawn_state?, capture_montage?, position_threshold_cm?, rotation_threshold_deg?, velocity_threshold_cms?, tracked_value_default_threshold?, onConflict?` |
-| `pie_profile_read` | Read an observation profile's config. Params: `path` |
-| `pie_profile_update` | Update an existing observation profile. Params: `path, tracked_values?, tracked_actors?, capture_pawn_state?, capture_montage?, position_threshold_cm?, rotation_threshold_deg?, velocity_threshold_cms?, tracked_value_default_threshold?` |
-| `pie_profile_delete` | Delete an observation profile asset. Params: `path, confirm` |
-| `pie_profile_list` | List observation profiles. Params: `directory?` |
-| `pie_observe_arm` | Arm an observer with a profile for the next PIE session. Params: `profile, output_dir?, sample_hz?, pin_fps?, client_id?` |
-| `pie_observe_disarm` | Cancel an armed observation before it starts. |
-| `pie_observe_stop` | Stop in-flight observation and write output artifacts. |
-| `pie_observe_status` | Observer state, run id, profile, frames sampled. |
-| `pie_observe_list` | Enumerate observation runs under `Saved/MCPObservations`. Params: `output_dir?, limit?` |
-| `pie_observe_read` | Read an observation run artifact. Params: `run_id, file? (manifest\|csv\|tracked), output_dir?, limit?, offset?` |
 
 ---
 
