@@ -5,7 +5,7 @@
 #include "Dom/JsonObject.h"
 #include "UObject/UnrealType.h"
 
-class FMCPJsonSerializer
+class UE_MCP_BRIDGE_API FMCPJsonSerializer
 {
 public:
 	// Serialize UE type to JSON value
