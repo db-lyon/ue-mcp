@@ -6,6 +6,7 @@
 #include "Editor.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "ReferenceSkeleton.h"
 #include "CollisionQueryParams.h"
@@ -107,6 +108,10 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// rotation, velocity, angular velocity, scale, and ground state in one
 	// call. Caller is expected to invoke at the desired sample interval.
 	Registry.RegisterHandler(TEXT("read_actor_motion"), &ReadActorMotion);
+	// #434: bulk-add transforms to a HISMC / ISMC component (Python crashes).
+	Registry.RegisterHandler(TEXT("add_hismc_instances"), &AddHismcInstances);
+	Registry.RegisterHandler(TEXT("add_ismc_instances"), &AddHismcInstances);
+	Registry.RegisterHandler(TEXT("add_instances"), &AddHismcInstances);
 	Registry.RegisterHandler(TEXT("snap_actor_to_floor"), &SnapActorToFloor);
 	Registry.RegisterHandler(TEXT("delete_actors"), &DeleteActors);
 	Registry.RegisterHandler(TEXT("add_actor_tag"), &AddActorTag);
@@ -2019,6 +2024,116 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReadActorMotion(const TSharedPtr<FJsonObj
 	Result->SetNumberField(TEXT("timeSeconds"), TargetWorld->GetTimeSeconds());
 	Result->SetArrayField(TEXT("samples"), Samples);
 	if (Missing.Num() > 0) Result->SetArrayField(TEXT("missing"), Missing);
+	return MCPResult(Result);
+}
+
+// #434: add instance transforms to a HISMC / ISMC component. The reporter
+// hit a Python add_instance crash on UE 5.7; the C++ path through
+// UInstancedStaticMeshComponent::AddInstance is stable and HISMC inherits
+// it (UHierarchicalInstancedStaticMeshComponent extends UInstancedStaticMeshComponent).
+//
+// Params:
+//   actorLabel: actor that owns the HISMC/ISMC
+//   componentName?: pick a specific InstancedStaticMeshComponent on the actor;
+//                   omitted = first ISMC/HISMC found
+//   transforms: array of [{location: {x,y,z}, rotation? : {pitch,yaw,roll},
+//                          scale? : {x,y,z}}]
+//   worldSpace? (default true)
+TSharedPtr<FJsonValue> FLevelHandlers::AddHismcInstances(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
+	if (!Actor) return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+
+	FString ComponentName = OptionalString(Params, TEXT("componentName"));
+	UInstancedStaticMeshComponent* ISMC = nullptr;
+	for (UActorComponent* Comp : Actor->GetComponents())
+	{
+		UInstancedStaticMeshComponent* AsISMC = Cast<UInstancedStaticMeshComponent>(Comp);
+		if (!AsISMC) continue;
+		if (ComponentName.IsEmpty()) { ISMC = AsISMC; break; }
+		if (AsISMC->GetName() == ComponentName) { ISMC = AsISMC; break; }
+	}
+	if (!ISMC)
+	{
+		return MCPError(FString::Printf(TEXT("No InstancedStaticMeshComponent / HISMC on actor '%s'%s"),
+			*ActorLabel, ComponentName.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" named '%s'"), *ComponentName)));
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("transforms"), Arr) || !Arr)
+	{
+		return MCPError(TEXT("Missing 'transforms' array ([{location, rotation?, scale?}])"));
+	}
+	const bool bWorldSpace = OptionalBool(Params, TEXT("worldSpace"), true);
+
+	auto ReadVec = [](const TSharedPtr<FJsonObject>& Obj, const TCHAR* Key, FVector& Out, double DefaultX = 0, double DefaultY = 0, double DefaultZ = 0) -> bool
+	{
+		const TSharedPtr<FJsonObject>* VObj = nullptr;
+		if (Obj->TryGetObjectField(Key, VObj) && *VObj)
+		{
+			double X = DefaultX, Y = DefaultY, Z = DefaultZ;
+			(*VObj)->TryGetNumberField(TEXT("x"), X);
+			(*VObj)->TryGetNumberField(TEXT("y"), Y);
+			(*VObj)->TryGetNumberField(TEXT("z"), Z);
+			Out = FVector(X, Y, Z);
+			return true;
+		}
+		return false;
+	};
+
+	TArray<FTransform> Transforms;
+	Transforms.Reserve(Arr->Num());
+	for (const TSharedPtr<FJsonValue>& V : *Arr)
+	{
+		const TSharedPtr<FJsonObject>* TObj = nullptr;
+		if (!V->TryGetObject(TObj) || !*TObj) continue;
+		FVector Location = FVector::ZeroVector;
+		FVector Scale = FVector(1, 1, 1);
+		ReadVec(*TObj, TEXT("location"), Location);
+		ReadVec(*TObj, TEXT("scale"), Scale, 1, 1, 1);
+
+		FRotator Rotator = FRotator::ZeroRotator;
+		const TSharedPtr<FJsonObject>* RObj = nullptr;
+		if ((*TObj)->TryGetObjectField(TEXT("rotation"), RObj) && *RObj)
+		{
+			double P = 0, Y = 0, R = 0;
+			(*RObj)->TryGetNumberField(TEXT("pitch"), P);
+			(*RObj)->TryGetNumberField(TEXT("yaw"), Y);
+			(*RObj)->TryGetNumberField(TEXT("roll"), R);
+			Rotator = FRotator(P, Y, R);
+		}
+
+		Transforms.Add(FTransform(Rotator, Location, Scale));
+	}
+
+	if (Transforms.Num() == 0)
+	{
+		return MCPError(TEXT("transforms array contained no valid entries"));
+	}
+
+	ISMC->Modify();
+	const int32 FirstIndex = ISMC->GetInstanceCount();
+	const TArray<int32> AddedIndices = ISMC->AddInstances(Transforms, /*bShouldReturnIndices*/ true, bWorldSpace);
+	ISMC->MarkRenderStateDirty();
+
+	TArray<TSharedPtr<FJsonValue>> IndicesJson;
+	IndicesJson.Reserve(AddedIndices.Num());
+	for (int32 Idx : AddedIndices) IndicesJson.Add(MakeShared<FJsonValueNumber>(Idx));
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("componentName"), ISMC->GetName());
+	Result->SetStringField(TEXT("componentClass"), ISMC->GetClass()->GetName());
+	Result->SetNumberField(TEXT("addedCount"), AddedIndices.Num());
+	Result->SetNumberField(TEXT("firstIndex"), FirstIndex);
+	Result->SetNumberField(TEXT("totalInstances"), ISMC->GetInstanceCount());
+	Result->SetArrayField(TEXT("instanceIndices"), IndicesJson);
+	Result->SetBoolField(TEXT("worldSpace"), bWorldSpace);
 	return MCPResult(Result);
 }
 

@@ -84,4 +84,7 @@ private:
 	static TSharedPtr<FJsonValue> SnapActorToFloor(const TSharedPtr<FJsonObject>& Params);
 	// #453: per-actor motion snapshot for telemetry / driving probes.
 	static TSharedPtr<FJsonValue> ReadActorMotion(const TSharedPtr<FJsonObject>& Params);
+	// #434: bulk-add transforms to an actor's HISMC/ISMC for foliage / debris
+	// authoring. Python's add_instance crashes in 5.7; the C++ path is fine.
+	static TSharedPtr<FJsonValue> AddHismcInstances(const TSharedPtr<FJsonObject>& Params);
 };
