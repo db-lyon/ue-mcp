@@ -55,10 +55,19 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DuplicateMaterial(const TSharedPtr<FJs
 	FString DestinationPath;
 	if (auto Err = RequireString(Params, TEXT("destinationPath"), DestinationPath)) return Err;
 
-	UObject* Duplicated = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestinationPath);
+	const FString DestinationPackagePath = FPackageName::ObjectPathToPackageName(DestinationPath);
+	FString DestinationDirectory;
+	FString DestinationAssetName;
+	if (DestinationPackagePath.Split(TEXT("/"), &DestinationDirectory, &DestinationAssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd)
+		&& !UEditorAssetLibrary::DoesDirectoryExist(DestinationDirectory))
+	{
+		UEditorAssetLibrary::MakeDirectory(DestinationDirectory);
+	}
+
+	UObject* Duplicated = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestinationPackagePath);
 	if (!Duplicated)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to duplicate '%s' -> '%s'"), *SourcePath, *DestinationPath));
+		return MCPError(FString::Printf(TEXT("Failed to duplicate '%s' -> '%s'"), *SourcePath, *DestinationPackagePath));
 	}
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
@@ -68,7 +77,6 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DuplicateMaterial(const TSharedPtr<FJs
 	MCPSetDeleteAssetRollback(Result, Duplicated->GetPathName());
 	return MCPResult(Result);
 }
-
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ValidateMaterial(const TSharedPtr<FJsonObject>& Params)
 {
