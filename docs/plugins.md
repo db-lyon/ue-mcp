@@ -156,7 +156,7 @@ For source-distributed UE plugins, drop the source under `Plugins/<DepName>/` - 
 
 There is no separate uninstall command - `npm uninstall <package-name>` and delete the entry from `ue-mcp.yml`. On next restart, the actions are gone.
 
-## Available plugins
+## Official plugins
 
 | Plugin | What it does |
 |--------|-------------|
