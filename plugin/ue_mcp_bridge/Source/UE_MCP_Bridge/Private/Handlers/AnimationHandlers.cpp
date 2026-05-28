@@ -11,6 +11,8 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/BlendSpace.h"
+#include "Animation/BlendSpace1D.h"
+#include "Factories/BlendSpaceFactory1D.h"
 #include "Animation/AnimComposite.h"
 #include "PoseSearch/PoseSearchDatabase.h"
 #include "PoseSearch/PoseSearchSchema.h"
@@ -76,9 +78,13 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_anim_blueprint"), &CreateAnimBlueprint);
 	Registry.RegisterHandler(TEXT("create_anim_montage"), &CreateMontage);
 	Registry.RegisterHandler(TEXT("create_blendspace"), &CreateBlendspace);
+	Registry.RegisterHandler(TEXT("create_blendspace_1d"), &CreateBlendspace1D);
 	Registry.RegisterHandler(TEXT("add_blend_sample"), &AddBlendSample);
 	Registry.RegisterHandler(TEXT("set_blend_sample"), &SetBlendSample);
 	Registry.RegisterHandler(TEXT("read_blendspace"), &ReadBlendspace);
+	// #459: configure axis params + bulk-add samples in one call.
+	Registry.RegisterHandler(TEXT("populate_blendspace"), &PopulateBlendspace);
+	Registry.RegisterHandler(TEXT("populate_blendspace_1d"), &PopulateBlendspace);
 	Registry.RegisterHandler(TEXT("add_anim_notify"), &AddAnimNotify);
 	Registry.RegisterHandler(TEXT("create_sequence"), &CreateSequence);
 	Registry.RegisterHandler(TEXT("set_bone_keyframes"), &SetBoneKeyframes);
@@ -823,6 +829,183 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("axisVertical"), AxisVertical);
 	MCPSetDeleteAssetRollback(Result, BlendSpace->GetPathName());
 
+	return MCPResult(Result);
+}
+
+// #459: explicit BlendSpace1D creation. Single-axis locomotion blendspaces
+// (speed → walk/run) are the most common authoring path; the 2D create
+// handler creates a UBlendSpace which won't behave as 1D.
+TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace1D(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FString SkeletonPath;
+	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
+
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
+	FString AxisName = OptionalString(Params, TEXT("axisName"), TEXT("Speed"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	const double AxisMin = OptionalNumber(Params, TEXT("axisMin"), 0.0);
+	const double AxisMax = OptionalNumber(Params, TEXT("axisMax"), 500.0);
+	const int32 GridNum = (int32)OptionalNumber(Params, TEXT("gridNum"), 4.0);
+
+	USkeleton* Skeleton = Cast<USkeleton>(UEditorAssetLibrary::LoadAsset(SkeletonPath));
+	if (!Skeleton) return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
+
+	UBlendSpaceFactory1D* Factory = NewObject<UBlendSpaceFactory1D>();
+	Factory->TargetSkeleton = Skeleton;
+
+	auto Created = MCPCreateAssetIdempotent<UBlendSpace1D>(Name, PackagePath, OnConflict, TEXT("BlendSpace1D"), Factory);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+
+	UBlendSpace1D* BS = Created.Asset;
+	FBlendParameter& BlendParam0 = const_cast<FBlendParameter&>(BS->GetBlendParameter(0));
+	BlendParam0.DisplayName = AxisName;
+	BlendParam0.Min = AxisMin;
+	BlendParam0.Max = AxisMax;
+	BlendParam0.GridNum = GridNum;
+
+	UEditorAssetLibrary::SaveAsset(BS->GetPathName());
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("path"), BS->GetPathName());
+	Result->SetStringField(TEXT("name"), BS->GetName());
+	Result->SetStringField(TEXT("class"), BS->GetClass()->GetName());
+	Result->SetStringField(TEXT("axisName"), AxisName);
+	MCPSetDeleteAssetRollback(Result, BS->GetPathName());
+	return MCPResult(Result);
+}
+
+// #459: one-call axis-params + samples authoring. Replaces the
+// "for each sample, call add_blend_sample" loop and the separate axis
+// configuration in CreateBlendspace - the canonical locomotion authoring
+// flow is "set axis name/range, plot samples at coordinates, save". Works
+// for both UBlendSpace (1D and 2D) and UBlendSpace1D.
+//
+// Params: assetPath, axis (object: { name?, min?, max?, gridNum? }) OR
+//         axisHorizontal/axisVertical with min/max/gridNum (2D-only),
+//         samples: [{ animationPath, x, y? }], clearExisting? (default true).
+TSharedPtr<FJsonValue> FAnimationHandlers::PopulateBlendspace(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	UBlendSpace* BS = LoadAssetByPath<UBlendSpace>(AssetPath);
+	if (!BS) return MCPError(FString::Printf(TEXT("BlendSpace not found at '%s'"), *AssetPath));
+
+	BS->Modify();
+
+	// Apply axis params. Three accepted shapes:
+	// 1. `axis: { name?, min?, max?, gridNum? }` - applies to axis 0 (or pass `axisIndex`).
+	// 2. `axes: [ {...}, {...} ]` - per-axis array.
+	// 3. Top-level axisHorizontal/axisVertical + horizontalMin/horizontalMax/gridNumHorizontal etc.
+	auto ApplyAxis = [&](int32 AxisIdx, const TSharedPtr<FJsonObject>& AxisObj)
+	{
+		FBlendParameter& BP = const_cast<FBlendParameter&>(BS->GetBlendParameter(AxisIdx));
+		FString S; double D = 0; int32 I = 0;
+		if (AxisObj->TryGetStringField(TEXT("name"), S)) BP.DisplayName = S;
+		if (AxisObj->TryGetNumberField(TEXT("min"), D)) BP.Min = D;
+		if (AxisObj->TryGetNumberField(TEXT("max"), D)) BP.Max = D;
+		if (AxisObj->TryGetNumberField(TEXT("gridNum"), I)) BP.GridNum = I;
+	};
+
+	const TArray<TSharedPtr<FJsonValue>>* AxesArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("axes"), AxesArr) && AxesArr)
+	{
+		for (int32 i = 0; i < AxesArr->Num(); ++i)
+		{
+			const TSharedPtr<FJsonObject>* AxisObj = nullptr;
+			if ((*AxesArr)[i]->TryGetObject(AxisObj) && *AxisObj) ApplyAxis(i, *AxisObj);
+		}
+	}
+	const TSharedPtr<FJsonObject>* AxisObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("axis"), AxisObj) && *AxisObj)
+	{
+		int32 AxisIdx = (int32)OptionalNumber(Params, TEXT("axisIndex"), 0.0);
+		ApplyAxis(AxisIdx, *AxisObj);
+	}
+
+	// Top-level back-compat shape (same keys as create_blendspace).
+	{
+		FBlendParameter& BP0 = const_cast<FBlendParameter&>(BS->GetBlendParameter(0));
+		FString S; double D = 0;
+		if (Params->TryGetStringField(TEXT("axisHorizontal"), S)) BP0.DisplayName = S;
+		if (Params->TryGetNumberField(TEXT("horizontalMin"), D)) BP0.Min = D;
+		if (Params->TryGetNumberField(TEXT("horizontalMax"), D)) BP0.Max = D;
+		int32 I = 0;
+		if (Params->TryGetNumberField(TEXT("gridNumHorizontal"), I)) BP0.GridNum = I;
+
+		// Only touch axis 1 if the asset has one (BlendSpace1D returns a stub for index 1 in some versions).
+		const bool bIs1D = BS->IsA<UBlendSpace1D>();
+		if (!bIs1D)
+		{
+			FBlendParameter& BP1 = const_cast<FBlendParameter&>(BS->GetBlendParameter(1));
+			if (Params->TryGetStringField(TEXT("axisVertical"), S)) BP1.DisplayName = S;
+			if (Params->TryGetNumberField(TEXT("verticalMin"), D)) BP1.Min = D;
+			if (Params->TryGetNumberField(TEXT("verticalMax"), D)) BP1.Max = D;
+			if (Params->TryGetNumberField(TEXT("gridNumVertical"), I)) BP1.GridNum = I;
+		}
+	}
+
+	// Clear existing samples (default true) so partial-replace edits don't
+	// pile up stale entries. Set clearExisting=false to append-only.
+	const bool bClear = OptionalBool(Params, TEXT("clearExisting"), true);
+	if (bClear)
+	{
+		const int32 SampleCount = BS->GetNumberOfBlendSamples();
+		for (int32 i = SampleCount - 1; i >= 0; --i)
+		{
+			BS->RemoveSample(i);
+		}
+	}
+
+	// Add samples.
+	TArray<TSharedPtr<FJsonValue>> AddedIndices;
+	TArray<TSharedPtr<FJsonValue>> Failed;
+	const TArray<TSharedPtr<FJsonValue>>* SamplesArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("samples"), SamplesArr) && SamplesArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *SamplesArr)
+		{
+			const TSharedPtr<FJsonObject>* SObj = nullptr;
+			if (!V->TryGetObject(SObj) || !*SObj) continue;
+			FString AnimPath;
+			if (!(*SObj)->TryGetStringField(TEXT("animationPath"), AnimPath))
+				if (!(*SObj)->TryGetStringField(TEXT("animation"), AnimPath))
+					(*SObj)->TryGetStringField(TEXT("path"), AnimPath);
+			if (AnimPath.IsEmpty()) continue;
+			UAnimSequence* Anim = LoadAssetByPath<UAnimSequence>(AnimPath);
+			if (!Anim)
+			{
+				Failed.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("anim not found: %s"), *AnimPath)));
+				continue;
+			}
+			double X = 0, Y = 0;
+			(*SObj)->TryGetNumberField(TEXT("x"), X);
+			(*SObj)->TryGetNumberField(TEXT("y"), Y);
+			const int32 Idx = BS->AddSample(Anim, FVector((float)X, (float)Y, 0.0f));
+			if (Idx < 0)
+			{
+				Failed.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("rejected (%.3f, %.3f) for %s"), X, Y, *AnimPath)));
+				continue;
+			}
+			AddedIndices.Add(MakeShared<FJsonValueNumber>(Idx));
+		}
+	}
+
+	BS->PostEditChange();
+	BS->MarkPackageDirty();
+	UEditorAssetLibrary::SaveLoadedAsset(BS, /*bOnlyIfIsDirty*/ true);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), BS->GetPathName());
+	Result->SetStringField(TEXT("class"), BS->GetClass()->GetName());
+	Result->SetArrayField(TEXT("sampleIndices"), AddedIndices);
+	Result->SetNumberField(TEXT("sampleCount"), BS->GetNumberOfBlendSamples());
+	if (Failed.Num() > 0) Result->SetArrayField(TEXT("failed"), Failed);
 	return MCPResult(Result);
 }
 
