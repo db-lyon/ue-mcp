@@ -39,6 +39,9 @@ tests/ue_mcp/.claude/
 ## Deployed bridge plugin (source of truth lives in plugin/; scripts/deploy.mjs regenerates this on every build)
 tests/ue_mcp/Plugins/UE_MCP_Bridge/
 
+## PIE_Studio lives in its own repo; never commit a test install here
+tests/ue_mcp/Plugins/PIE_Studio/
+
 ## Kantext
 .kantext/
 kantext-mcp-*

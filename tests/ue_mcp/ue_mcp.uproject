@@ -49,10 +49,6 @@
 		{
 			"Name": "UE_MCP_Bridge",
 			"Enabled": true
-		},
-		{
-			"Name": "PIE_Studio",
-			"Enabled": true
 		}
 	]
 }
