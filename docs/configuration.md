@@ -17,6 +17,16 @@ The easiest way to configure UE-MCP is to run `npx ue-mcp init` — it detects y
 }
 ```
 
+Codex uses TOML instead:
+
+```toml
+[mcp_servers.ue-mcp]
+command = "npx"
+args = ["ue-mcp", "C:/path/to/MyGame.uproject"]
+cwd = "C:/path/to"
+enabled = true
+```
+
 ### Where to Put This
 
 | Client | Config File |
@@ -24,6 +34,7 @@ The easiest way to configure UE-MCP is to run `npx ue-mcp init` — it detects y
 | Claude Code | `.mcp.json` in project root, or `~/.claude/` global config |
 | Claude Desktop | `claude_desktop_config.json` |
 | Cursor | `mcp.json` in `.cursor/` or project root |
+| Codex | `~/.codex/config.toml` |
 
 ### Without a Project Path
 
