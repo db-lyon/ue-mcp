@@ -268,14 +268,15 @@ export function findEngineInstall(
   engineAssociation: string | null,
 ): string | null {
   if (!engineAssociation) return null;
+  const normalizedAssociation = engineAssociation.replace(/^\{|\}$/g, "");
 
   const guidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (guidRegex.test(engineAssociation)) {
-    return findEngineByGuid(engineAssociation);
+  if (guidRegex.test(normalizedAssociation)) {
+    return findEngineByGuid(normalizedAssociation);
   }
 
-  return findLauncherEngine(engineAssociation);
+  return findLauncherEngine(normalizedAssociation);
 }
 
 function findEngineByGuid(guid: string): string | null {
