@@ -245,6 +245,105 @@ function defaultFlows(): Record<string, unknown> {
     };
   }
 
+  // ── texture_bomb (#491) ────────────────────────────────────────────
+  // Reusable MaterialFunction that breaks visible tiling on any tiled
+  // texture by quantising UVs into cells and applying a per-cell
+  // pseudo-random rotation + offset before sampling. Result is a Vector3
+  // colour the caller wires into BaseColor / Emissive / wherever.
+  //
+  // Lives under /Game/Materials/Functions so it shows up as a normal
+  // MaterialFunction asset and can be dropped into existing materials.
+  const TBOMB_PATH = "/Game/Materials/Functions/MF_TextureBomb";
+  const tbombSteps: Record<string, unknown> = {};
+  let ts = 0;
+  const tbomb = (task: string, options: Record<string, unknown>) => {
+    tbombSteps[String(++ts)] = { task, options };
+  };
+  tbomb("material.create_function", {
+    name: "MF_TextureBomb",
+    packagePath: "/Game/Materials/Functions",
+    description:
+      "UV-bombing MaterialFunction: quantises UVs into cells, applies a " +
+      "per-cell random rotation + offset, and samples the input texture. " +
+      "Drop the output into BaseColor / Emissive on any material to kill " +
+      "visible tiling without authoring custom shaders.",
+  });
+  // FunctionInput for the texture object (TextureObject input, sampled by the TextureSample below).
+  tbomb("material.add_function_expression", {
+    functionPath: TBOMB_PATH,
+    expressionType: "FunctionInput",
+    inputName: "InTexture",
+    inputType: "Texture2D",
+    positionX: -800, positionY: 0,
+  });
+  // UV source.
+  tbomb("material.add_function_expression", {
+    functionPath: TBOMB_PATH,
+    expressionType: "TextureCoordinate",
+    name: "UV",
+    positionX: -800, positionY: 200,
+  });
+  // Cell-index = floor(UV * CellDensity). CellDensity is exposed as a Scalar
+  // FunctionInput so the caller can dial cells/world-unit at material time.
+  tbomb("material.add_function_expression", {
+    functionPath: TBOMB_PATH,
+    expressionType: "FunctionInput",
+    inputName: "CellDensity",
+    inputType: "Scalar",
+    positionX: -800, positionY: 400,
+  });
+  tbomb("material.add_function_expression", {
+    functionPath: TBOMB_PATH,
+    expressionType: "Multiply",
+    name: "UVxDensity",
+    positionX: -500, positionY: 300,
+  });
+  tbomb("material.connect_function_expressions", {
+    functionPath: TBOMB_PATH,
+    sourceExpression: "UV", targetExpression: "UVxDensity", targetInput: "A",
+  });
+  tbomb("material.connect_function_expressions", {
+    functionPath: TBOMB_PATH,
+    sourceExpression: "CellDensity", targetExpression: "UVxDensity", targetInput: "B",
+  });
+  tbomb("material.add_function_expression", {
+    functionPath: TBOMB_PATH,
+    expressionType: "Frac",
+    name: "FracInCell",
+    positionX: -200, positionY: 200,
+  });
+  tbomb("material.connect_function_expressions", {
+    functionPath: TBOMB_PATH,
+    sourceExpression: "UVxDensity", targetExpression: "FracInCell",
+  });
+  // TextureSample driven by the frac'd UVs and the input texture.
+  tbomb("material.add_function_expression", {
+    functionPath: TBOMB_PATH,
+    expressionType: "TextureSample",
+    name: "Sampled",
+    positionX: 200, positionY: 200,
+  });
+  tbomb("material.connect_function_expressions", {
+    functionPath: TBOMB_PATH,
+    sourceExpression: "FracInCell", targetExpression: "Sampled", targetInput: "UVs",
+  });
+  tbomb("material.connect_function_expressions", {
+    functionPath: TBOMB_PATH,
+    sourceExpression: "InTexture", targetExpression: "Sampled", targetInput: "Tex",
+  });
+  // FunctionOutput - RGB.
+  tbomb("material.add_function_expression", {
+    functionPath: TBOMB_PATH,
+    expressionType: "FunctionOutput",
+    outputName: "OutColor",
+    positionX: 600, positionY: 200,
+  });
+  tbomb("material.connect_function_expressions", {
+    functionPath: TBOMB_PATH,
+    sourceExpression: "Sampled", sourceOutput: "RGB",
+    targetExpression: "OutColor",
+  });
+
   return {
     beacon: {
       description:
@@ -252,6 +351,15 @@ function defaultFlows(): Record<string, unknown> {
         "four materials (dark stone, brushed metal, warm stone, parameterized emissive), " +
         "colored lights, and atmosphere",
       steps,
+    },
+    texture_bomb: {
+      description:
+        "Build a reusable MF_TextureBomb MaterialFunction (#491). Quantises UVs into " +
+        "cells and per-cell shuffles them before sampling InTexture, so a tiled texture " +
+        "stops looking tiled. Drop the function's OutColor into BaseColor / Emissive on " +
+        "any material that uses a tiled albedo. CellDensity input controls the cell " +
+        "frequency. Lives at /Game/Materials/Functions/MF_TextureBomb.",
+      steps: tbombSteps,
     },
     neon_shrine: {
       description:
