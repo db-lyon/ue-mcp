@@ -34,10 +34,13 @@
 #include "PoseSearch/PoseSearchSchema.h"
 #include "PoseSearch/PoseSearchDerivedData.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Animation/AnimComposite.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/Skeleton.h"
+#include "InstancedStruct.h"
 #include "UObject/Package.h"
 #include "Misc/PackageName.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "UObject/SavePackage.h"
 #include "UObject/UnrealType.h"
 #include "UObject/UObjectGlobals.h"
@@ -47,17 +50,52 @@
 #include "Dom/JsonValue.h"
 
 
-// UPoseSearchDatabase's "asset count" accessor was renamed between 5.4 and 5.5:
-//   5.4: GetAnimationAssets().Num()
-//   5.5+: GetNumAnimationAssets()
-// Use one helper so the call sites stay readable.
-static int32 GetPoseSearchAssetCount(const UPoseSearchDatabase* Database)
+#define UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4))
+
+static int32 GetPoseSearchAnimationAssetCount(const UPoseSearchDatabase* Database)
 {
-#if UE_MCP_HAS_5_5_API
+#if UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API
 	return Database->GetNumAnimationAssets();
 #else
-	return GetPoseSearchAssetCount(Database);
+	return Database->AnimationAssets.Num();
 #endif
+}
+
+static bool AddPoseSearchAnimationAsset(UPoseSearchDatabase* Database, UObject* AnimAsset, FString& OutError)
+{
+	FInstancedStruct NewEntry;
+	if (UAnimSequence* Sequence = Cast<UAnimSequence>(AnimAsset))
+	{
+		NewEntry.InitializeAs<FPoseSearchDatabaseSequence>();
+		NewEntry.GetMutablePtr<FPoseSearchDatabaseSequence>()->Sequence = Sequence;
+	}
+	else if (UBlendSpace* BlendSpace = Cast<UBlendSpace>(AnimAsset))
+	{
+		NewEntry.InitializeAs<FPoseSearchDatabaseBlendSpace>();
+		NewEntry.GetMutablePtr<FPoseSearchDatabaseBlendSpace>()->BlendSpace = BlendSpace;
+	}
+	else if (UAnimComposite* Composite = Cast<UAnimComposite>(AnimAsset))
+	{
+		NewEntry.InitializeAs<FPoseSearchDatabaseAnimComposite>();
+		NewEntry.GetMutablePtr<FPoseSearchDatabaseAnimComposite>()->AnimComposite = Composite;
+	}
+	else if (UAnimMontage* Montage = Cast<UAnimMontage>(AnimAsset))
+	{
+		NewEntry.InitializeAs<FPoseSearchDatabaseAnimMontage>();
+		NewEntry.GetMutablePtr<FPoseSearchDatabaseAnimMontage>()->AnimMontage = Montage;
+	}
+	else
+	{
+		OutError = FString::Printf(TEXT("Animation asset type not supported by PoseSearch: %s"), *AnimAsset->GetClass()->GetName());
+		return false;
+	}
+
+#if UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API
+	Database->AddAnimationAsset(MoveTemp(NewEntry));
+#else
+	Database->AnimationAssets.Add(MoveTemp(NewEntry));
+#endif
+	return true;
 }
 
 // ─── State Machine Helpers ────────────────────────────────────────
@@ -984,14 +1022,22 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 				{
 					if (UIKRigDefinition* SrcRig = Cast<UIKRigDefinition>(LoadObject<UObject>(nullptr, *SourceRigPath)))
 					{
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
 						Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Source, SrcRig);
+#else
+						Controller->SetIKRig(ERetargetSourceOrTarget::Source, SrcRig);
+#endif
 					}
 				}
 				if (!TargetRigPath.IsEmpty())
 				{
 					if (UIKRigDefinition* TgtRig = Cast<UIKRigDefinition>(LoadObject<UObject>(nullptr, *TargetRigPath)))
 					{
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
 						Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Target, TgtRig);
+#else
+						Controller->SetIKRig(ERetargetSourceOrTarget::Target, TgtRig);
+#endif
 					}
 				}
 				Controller->AutoMapChains(EAutoMapChainType::Exact, true);
@@ -1170,15 +1216,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSequence(const TSharedPt
 		return MCPError(FString::Printf(TEXT("Animation asset type not supported by PoseSearch: %s"), *AnimAsset->GetClass()->GetName()));
 	}
 
-	const int32 PrevCount = GetPoseSearchAssetCount(Database);
-	FPoseSearchDatabaseAnimationAsset NewEntry;
-	NewEntry.AnimAsset = AnimAsset;
+	const int32 PrevCount = GetPoseSearchAnimationAssetCount(Database);
 	Database->Modify();
-	Database->AddAnimationAsset(NewEntry);
+	FString AddError;
+	if (!AddPoseSearchAnimationAsset(Database, AnimAsset, AddError))
+	{
+		return MCPError(AddError);
+	}
 	Database->PostEditChange();
 	UEditorAssetLibrary::SaveLoadedAsset(Database);
 
-	const int32 NewCount = GetPoseSearchAssetCount(Database);
+	const int32 NewCount = GetPoseSearchAnimationAssetCount(Database);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
@@ -1200,12 +1248,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BuildPoseSearchIndex(const TSharedPtr
 	UPoseSearchDatabase* Database = Cast<UPoseSearchDatabase>(UEditorAssetLibrary::LoadAsset(AssetPath));
 	if (!Database) return MCPError(FString::Printf(TEXT("PoseSearchDatabase not found: %s"), *AssetPath));
 	if (!Database->Schema) return MCPError(TEXT("Database has no Schema set — call set_pose_search_schema first"));
-	if (GetPoseSearchAssetCount(Database) == 0) return MCPError(TEXT("Database has no animation assets — call add_pose_search_sequence first"));
+	if (GetPoseSearchAnimationAssetCount(Database) == 0) return MCPError(TEXT("Database has no animation assets — call add_pose_search_sequence first"));
 
 	using namespace UE::PoseSearch;
 	const ERequestAsyncBuildFlag Flag = bWait
 		? (ERequestAsyncBuildFlag::NewRequest | ERequestAsyncBuildFlag::WaitForCompletion)
 		: ERequestAsyncBuildFlag::NewRequest;
+#if UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API
 	const EAsyncBuildIndexResult Result = FAsyncPoseSearchDatabasesManagement::RequestAsyncBuildIndex(Database, Flag);
 
 	FString ResultStr;
@@ -1216,6 +1265,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BuildPoseSearchIndex(const TSharedPtr
 		case EAsyncBuildIndexResult::InProgress: ResultStr = TEXT("InProgress"); bSuccess = true; break;
 		case EAsyncBuildIndexResult::Failed:     ResultStr = TEXT("Failed"); break;
 	}
+#else
+	const bool bSuccess = FAsyncPoseSearchDatabasesManagement::RequestAsyncBuildIndex(Database, Flag);
+	const FString ResultStr = bSuccess ? TEXT("Success") : TEXT("Failed");
+#endif
 
 	UEditorAssetLibrary::SaveLoadedAsset(Database);
 
@@ -1225,7 +1278,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BuildPoseSearchIndex(const TSharedPtr
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetStringField(TEXT("result"), ResultStr);
 	Res->SetBoolField(TEXT("waitedForCompletion"), bWait);
-	Res->SetNumberField(TEXT("animationAssetCount"), GetPoseSearchAssetCount(Database));
+	Res->SetNumberField(TEXT("animationAssetCount"), GetPoseSearchAnimationAssetCount(Database));
 	return MCPResult(Res);
 }
 
@@ -1242,23 +1295,32 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadPoseSearchDatabase(const TSharedP
 	Res->SetStringField(TEXT("path"), AssetPath);
 	Res->SetStringField(TEXT("name"), Database->GetName());
 	Res->SetStringField(TEXT("schemaPath"), Database->Schema ? Database->Schema->GetPathName() : FString());
+#if UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API
 	Res->SetNumberField(TEXT("continuingPoseCostBias"), Database->ContinuingPoseCostBias);
 	Res->SetNumberField(TEXT("baseCostBias"), Database->BaseCostBias);
 	Res->SetNumberField(TEXT("loopingCostBias"), Database->LoopingCostBias);
+#endif
 	Res->SetNumberField(TEXT("kdTreeQueryNumNeighbors"), Database->KDTreeQueryNumNeighbors);
 
-	const int32 AssetCount = GetPoseSearchAssetCount(Database);
+	const int32 AssetCount = GetPoseSearchAnimationAssetCount(Database);
 	Res->SetNumberField(TEXT("animationAssetCount"), AssetCount);
 
 	TArray<TSharedPtr<FJsonValue>> Animations;
 	for (int32 i = 0; i < AssetCount; ++i)
 	{
-		const FPoseSearchDatabaseAnimationAsset* Entry = Database->GetDatabaseAnimationAsset(i);
+#if UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API
+		const FPoseSearchDatabaseAnimationAssetBase* Entry = Database->GetDatabaseAnimationAsset<FPoseSearchDatabaseAnimationAssetBase>(i);
 		if (!Entry) continue;
+		UObject* AnimationAsset = Entry->GetAnimationAsset();
+#else
+		const FPoseSearchDatabaseAnimationAssetBase* Entry = Database->GetAnimationAssetBase(i);
+		if (!Entry) continue;
+		UObject* AnimationAsset = Entry->GetAnimationAsset();
+#endif
 		TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
 		A->SetNumberField(TEXT("index"), i);
-		A->SetStringField(TEXT("assetPath"), Entry->AnimAsset ? Entry->AnimAsset->GetPathName() : FString());
-		A->SetStringField(TEXT("assetClass"), Entry->AnimAsset ? Entry->AnimAsset->GetClass()->GetName() : FString());
+		A->SetStringField(TEXT("assetPath"), AnimationAsset ? AnimationAsset->GetPathName() : FString());
+		A->SetStringField(TEXT("assetClass"), AnimationAsset ? AnimationAsset->GetClass()->GetName() : FString());
 		A->SetBoolField(TEXT("isLooping"), Entry->IsLooping());
 		A->SetBoolField(TEXT("isRootMotionEnabled"), Entry->IsRootMotionEnabled());
 		Animations.Add(MakeShared<FJsonValueObject>(A));
@@ -1266,7 +1328,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadPoseSearchDatabase(const TSharedP
 	Res->SetArrayField(TEXT("animationAssets"), Animations);
 
 	TArray<TSharedPtr<FJsonValue>> Tags;
+#if UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API
 	for (const FName& T : Database->Tags) Tags.Add(MakeShared<FJsonValueString>(T.ToString()));
+#endif
 	Res->SetArrayField(TEXT("tags"), Tags);
 
 	if (Database->Schema)

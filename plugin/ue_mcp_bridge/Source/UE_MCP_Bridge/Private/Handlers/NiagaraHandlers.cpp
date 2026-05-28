@@ -24,7 +24,6 @@
 #include "NiagaraGraph.h"
 #include "NiagaraNodeFunctionCall.h"
 #include "NiagaraNodeCustomHlsl.h"
-#include "NiagaraScriptFactoryNew.h"
 #include "NiagaraEmitterHandle.h"
 #include "NiagaraEditorUtilities.h"
 #include "Editor.h"
@@ -35,6 +34,19 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraph/EdGraphNode.h"
+
+namespace
+{
+	UFactory* CreateNiagaraEditorFactoryByClassPath(const TCHAR* ClassPath)
+	{
+		UClass* FactoryClass = LoadObject<UClass>(nullptr, ClassPath);
+		if (!FactoryClass || !FactoryClass->IsChildOf(UFactory::StaticClass()))
+		{
+			return nullptr;
+		}
+		return NewObject<UFactory>(GetTransientPackage(), FactoryClass);
+	}
+}
 
 void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -1394,7 +1406,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateModuleFromHlsl(const TSharedPtr<F
 
 	// Use the stock module factory to create a baseline module with Param-map get/set scaffolding,
 	// then add a CustomHLSL node that carries the user's HLSL body.
-	UNiagaraModuleScriptFactory* Factory = NewObject<UNiagaraModuleScriptFactory>();
+	UFactory* Factory = CreateNiagaraEditorFactoryByClassPath(TEXT("/Script/NiagaraEditor.NiagaraModuleScriptFactory"));
+	if (!Factory) return MCPError(TEXT("Failed to create Niagara module factory. Ensure Niagara editor module is available."));
 	auto Created = MCPCreateAssetIdempotent<UNiagaraScript>(Name, PackagePath, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("NiagaraScript"), Factory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 	UNiagaraScript* Script = Created.Asset;
@@ -1453,7 +1466,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateScratchModule(const TSharedPtr<FJ
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/VFX"));
 
 	// Use the stock Niagara module factory to create a baseline module script
-	UNiagaraModuleScriptFactory* Factory = NewObject<UNiagaraModuleScriptFactory>();
+	UFactory* Factory = CreateNiagaraEditorFactoryByClassPath(TEXT("/Script/NiagaraEditor.NiagaraModuleScriptFactory"));
+	if (!Factory) return MCPError(TEXT("Failed to create Niagara module factory. Ensure Niagara editor module is available."));
 	auto Created = MCPCreateAssetIdempotent<UNiagaraScript>(Name, PackagePath, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("NiagaraScript"), Factory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 	UNiagaraScript* Script = Created.Asset;
