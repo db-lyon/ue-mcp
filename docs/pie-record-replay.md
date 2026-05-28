@@ -1,7 +1,7 @@
 # PIE Record / Replay / Observe
 
 !!! note "Plugin required"
-    These actions are provided by the [`pie-transport`](https://github.com/db-lyon/pie-transport) plugin. Install with `ue-mcp plugin install pie-transport`, rebuild, and restart.
+    These actions are provided by the [`pie-studio`](https://github.com/db-lyon/pie-studio) plugin. Install with `ue-mcp plugin install pie-studio`, rebuild, and restart.
 
 Three independent systems for PIE sessions, each with its own domain:
 

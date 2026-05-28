@@ -9,14 +9,14 @@ ue-mcp's plugin system lets npm packages extend the server in three ways:
 Most plugins use only the first shape; the other two are available when injection is the wrong fit. This page covers both sides: installing and managing plugins (consumer), and writing and publishing one (author). The author section starts at [Authoring a plugin](#authoring-a-plugin) - if you're just trying to use a plugin somebody else wrote, you can stop after [Using plugins](#using-plugins).
 
 !!! info "Live reference"
-    [`pie-transport`](https://github.com/db-lyon/pie-transport) ([npm](https://www.npmjs.com/package/pie-transport)) is the canonical reference. It ships 33 native C++ handlers for PIE recording, replay, observation, and input injection - all injected into the `gameplay` category. The examples below mirror its real source.
+    [`pie-studio`](https://github.com/db-lyon/pie-studio) ([npm](https://www.npmjs.com/package/pie-studio)) is the canonical reference. It ships 33 native C++ handlers for PIE recording, replay, observation, and input injection - all injected into the `gameplay` category. The examples below mirror its real source.
 
 ## Quick start
 
 In your Unreal project directory:
 
 ```bash
-ue-mcp plugin install pie-transport
+ue-mcp plugin install pie-studio
 ```
 
 That runs `npm install --save`, validates the plugin's manifest, deploys the native C++ module, and adds an entry to your `ue-mcp.yml`. Rebuild the UE project so the native module compiles in, then restart your MCP client (in Claude Code, `/mcp` reconnects).
@@ -33,14 +33,14 @@ plugins(action="list")
   "active": 1,
   "plugins": [
     {
-      "name": "pie-transport",
+      "name": "pie-studio",
       "version": "0.0.2",
       "actionPrefix": "",
       "status": "active",
       "categories": ["gameplay"],
       "injectedActions": 33,
       "flows": 0,
-      "nativeModule": "UE_MCP_Replay"
+      "nativeModule": "PIE_Studio"
     }
   ]
 }
@@ -80,7 +80,7 @@ Shape A is overwhelmingly the right answer. An action that belongs inside an exi
 
 Shape B is for genuinely new domains. If your plugin's actions don't fit anywhere in the built-in category list, owning a new top-level category is cleaner than forcing a misfit injection.
 
-Shape C is for capability that can't be expressed through orchestration of existing actions. The plugin ships C++ source that compiles into the user's project alongside the bridge, and registers handlers via `UEMCP::RegisterExternalHandler` from its `StartupModule`. Native handlers participate in the same dispatch path as built-in ones. `pie-transport` is a Shape C plugin.
+Shape C is for capability that can't be expressed through orchestration of existing actions. The plugin ships C++ source that compiles into the user's project alongside the bridge, and registers handlers via `UEMCP::RegisterExternalHandler` from its `StartupModule`. Native handlers participate in the same dispatch path as built-in ones. `pie-studio` is a Shape C plugin.
 
 ## Using plugins
 
@@ -107,7 +107,7 @@ The consumer surface is a single block in `ue-mcp.yml`:
 
 ```yaml
 plugins:
-  - name: pie-transport
+  - name: pie-studio
   - name: some-other-plugin
     version: "^0.2.0"     # optional; npm semver range against package.json
 ```
@@ -160,7 +160,7 @@ There is no separate uninstall command - `npm uninstall <package-name>` and dele
 
 | Plugin | What it does |
 |--------|-------------|
-| [`pie-transport`](https://github.com/db-lyon/pie-transport) | PIE recording, replay, observation, and input injection. 33 native C++ handlers injected into `gameplay`. |
+| [`pie-studio`](https://github.com/db-lyon/pie-studio) | PIE recording, replay, observation, and input injection. 33 native C++ handlers injected into `gameplay`. |
 
 ## Authoring a plugin
 
@@ -294,13 +294,13 @@ A plugin can mix `inject:` and `provides:` freely - whatever fits each action be
 
 When the plugin needs engine APIs ue-mcp's bridge doesn't already expose, ship a UE C++ module alongside the npm package. The module compiles into the user's project at install time and registers handlers on the bridge via `UEMCP::RegisterExternalHandler`.
 
-`pie-transport` is a real-world example of this shape. Its manifest:
+`pie-studio` is a real-world example of this shape. Its manifest:
 
 ```yaml
 nativeModule:
-  uePluginName: UE_MCP_Replay           # name of the .uplugin that gets deployed
+  uePluginName: PIE_Studio           # name of the .uplugin that gets deployed
   minBridgeApi: 1                       # gate against UEMCP_BRIDGE_API_VERSION
-  source: ue/Plugins/UE_MCP_Replay      # path inside your npm tarball
+  source: ue/Plugins/PIE_Studio      # path inside your npm tarball
   handlers:
     inject_input:     { description: "Single-frame Enhanced Input inject" }
     pie_record_arm:   { description: "Arm the PIE input recorder" }
@@ -311,16 +311,16 @@ nativeModule:
 #### Layout inside the npm tarball
 
 ```
-pie-transport/
+pie-studio/
   ue-mcp.plugin.yml
   dist/                              # tsc output (TypeScript tasks, if any)
   ue/                                # native source ships here
     Plugins/
-      UE_MCP_Replay/
-        UE_MCP_Replay.uplugin
+      PIE_Studio/
+        PIE_Studio.uplugin
         Source/
-          UE_MCP_Replay/
-            UE_MCP_Replay.Build.cs
+          PIE_Studio/
+            PIE_Studio.Build.cs
             Private/
               Handlers/              # handler .cpp files
               PIE/                   # engine subsystem wrappers
@@ -338,9 +338,9 @@ Update `package.json` `files:` so the `ue/` directory ships with the published t
 Add `UE_MCP_Bridge` to `PrivateDependencyModuleNames` in your `.Build.cs`:
 
 ```csharp
-public class UE_MCP_Replay : ModuleRules
+public class PIE_Studio : ModuleRules
 {
-    public UE_MCP_Replay(ReadOnlyTargetRules Target) : base(Target)
+    public PIE_Studio(ReadOnlyTargetRules Target) : base(Target)
     {
         PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "Json" });
         PrivateDependencyModuleNames.AddRange(new string[] { "UE_MCP_Bridge" });
@@ -353,7 +353,7 @@ Register handlers from `StartupModule`:
 ```cpp
 #include "MCPHandlerRegistration.h"
 
-void FUE_MCP_ReplayModule::StartupModule()
+void FPIE_StudioModule::StartupModule()
 {
     UEMCP::RegisterExternalHandler(
         TEXT("inject_input"),
@@ -366,7 +366,7 @@ void FUE_MCP_ReplayModule::StartupModule()
         });
 }
 
-void FUE_MCP_ReplayModule::ShutdownModule()
+void FPIE_StudioModule::ShutdownModule()
 {
     UEMCP::UnregisterExternalHandler(TEXT("inject_input"));
 }
@@ -377,7 +377,7 @@ The handler's method name (`inject_input`) is what the plugin's TypeScript task 
 #### Install flow
 
 ```bash
-ue-mcp plugin install pie-transport
+ue-mcp plugin install pie-studio
 ```
 
 The CLI now also:
@@ -440,7 +440,7 @@ For each category your plugin injects into, ship a short markdown file under `kn
 Keep it terse - one screenful per category. Concrete examples beat prose. The agent already knows how the category works; the knowledge file is just the delta the plugin introduces.
 
 ```markdown
-# PIE Transport - gameplay actions
+# PIE Studio - gameplay actions
 
 33 actions for PIE input recording, replay, observation, and injection.
 

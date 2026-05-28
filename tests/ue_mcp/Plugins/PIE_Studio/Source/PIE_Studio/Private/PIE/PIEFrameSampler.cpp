@@ -1,5 +1,5 @@
 #include "PIEFrameSampler.h"
-#include "UE_MCP_ReplayModule.h"
+#include "PIE_StudioModule.h"
 #include "Engine/World.h"
 #include "Engine/LocalPlayer.h"
 #include "Kismet/GameplayStatics.h"

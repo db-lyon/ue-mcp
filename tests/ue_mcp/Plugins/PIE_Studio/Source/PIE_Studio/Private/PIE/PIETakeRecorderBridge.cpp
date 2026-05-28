@@ -1,5 +1,5 @@
 #include "PIETakeRecorderBridge.h"
-#include "UE_MCP_ReplayModule.h"
+#include "PIE_StudioModule.h"
 #include "UObject/Class.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"

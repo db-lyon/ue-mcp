@@ -88,7 +88,7 @@ The `plugins:` array in **`ue-mcp.yml`** declares npm packages that inject new a
 
 ```yaml
 plugins:
-  - name: pie-transport
+  - name: pie-studio
   - name: some-other-plugin
     version: "0.2.x"        # optional - npm semver range
 ```

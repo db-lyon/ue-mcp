@@ -13,10 +13,10 @@ import * as path from "node:path";
  *
  *   {
  *     "<npm-package-name>": {
- *       "uePluginName": "UE_MCP_Replay",
+ *       "uePluginName": "PIE_Studio",
  *       "pluginVersion": "0.0.2",
  *       "installedAt": "2026-05-26T00:00:00.000Z",
- *       "files": ["Plugins/UE_MCP_Replay/...", ...]   // relative to projectDir
+ *       "files": ["Plugins/PIE_Studio/...", ...]   // relative to projectDir
  *     }
  *   }
  */

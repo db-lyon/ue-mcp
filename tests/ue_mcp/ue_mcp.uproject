@@ -51,7 +51,7 @@
 			"Enabled": true
 		},
 		{
-			"Name": "UE_MCP_Replay",
+			"Name": "PIE_Studio",
 			"Enabled": true
 		}
 	]

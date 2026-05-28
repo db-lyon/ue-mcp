@@ -5,7 +5,7 @@
 
 DECLARE_LOG_CATEGORY_EXTERN(LogMCPReplay, Log, All);
 
-class FUE_MCP_ReplayModule : public IModuleInterface
+class FPIE_StudioModule : public IModuleInterface
 {
 public:
 	virtual void StartupModule() override;

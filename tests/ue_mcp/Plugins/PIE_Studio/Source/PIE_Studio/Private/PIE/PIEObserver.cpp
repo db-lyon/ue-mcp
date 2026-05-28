@@ -1,7 +1,7 @@
 #include "PIEObserver.h"
 #include "MCPObservationProfile.h"
 #include "PIESequenceFormat.h"
-#include "UE_MCP_ReplayModule.h"
+#include "PIE_StudioModule.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"

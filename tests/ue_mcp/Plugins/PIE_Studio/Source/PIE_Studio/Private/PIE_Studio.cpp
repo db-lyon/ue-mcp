@@ -1,4 +1,4 @@
-#include "UE_MCP_ReplayModule.h"
+#include "PIE_StudioModule.h"
 #include "Modules/ModuleManager.h"
 #include "MCPHandlerRegistration.h"
 #include "Handlers/GameplayHandlers.h"
@@ -12,9 +12,9 @@
 #include "Containers/Ticker.h"
 
 DEFINE_LOG_CATEGORY(LogMCPReplay);
-IMPLEMENT_MODULE(FUE_MCP_ReplayModule, UE_MCP_Replay)
+IMPLEMENT_MODULE(FPIE_StudioModule, PIE_Studio)
 
-void FUE_MCP_ReplayModule::StartupModule()
+void FPIE_StudioModule::StartupModule()
 {
 	UEMCPPIE::FPIEInputInjector::Init();
 	UEMCPPIE::FPIEInputRecorder::Get().Init();
@@ -103,7 +103,7 @@ void FUE_MCP_ReplayModule::StartupModule()
 	UE_LOG(LogMCPReplay, Log, TEXT("[ue-mcp-replay] Registered %d handlers"), 33);
 }
 
-void FUE_MCP_ReplayModule::ShutdownModule()
+void FPIE_StudioModule::ShutdownModule()
 {
 	SMCPPIEPanel::UnregisterToolbarButton();
 	SMCPPIEPanel::UnregisterTab();

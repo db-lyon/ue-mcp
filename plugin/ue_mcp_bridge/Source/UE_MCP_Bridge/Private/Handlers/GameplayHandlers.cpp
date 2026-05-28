@@ -91,7 +91,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_eqs_queries"), &ListEqsQueries);
 	Registry.RegisterHandler(TEXT("list_state_trees"), &ListStateTrees);
 	Registry.RegisterHandler(TEXT("project_point_to_navigation"), &ProjectPointToNavigation);
-	// create_input_action, create_input_mapping_context moved to pie-transport
+	// create_input_action, create_input_mapping_context moved to pie-studio
 	Registry.RegisterHandler(TEXT("create_blackboard"), &CreateBlackboard);
 	Registry.RegisterHandler(TEXT("create_behavior_tree"), &CreateBehaviorTree);
 	Registry.RegisterHandler(TEXT("create_eqs_query"), &CreateEqsQuery);
@@ -120,9 +120,9 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_smart_object_slot"), &RemoveSmartObjectSlot);
 	Registry.RegisterHandler(TEXT("list_smart_object_slots"), &ListSmartObjectSlots);
 	Registry.RegisterHandler(TEXT("add_smart_object_slot_behavior"), &AddSmartObjectSlotBehavior);
-	// read_imc through get_pie_subsystem_state moved to pie-transport
+	// read_imc through get_pie_subsystem_state moved to pie-studio
 	Registry.RegisterHandler(TEXT("get_navmesh_details"), &GetNavmeshDetails);
-	// apply_damage_in_pie moved to pie-transport
+	// apply_damage_in_pie moved to pie-studio
 }
 
 TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSharedPtr<FJsonObject>& Params)

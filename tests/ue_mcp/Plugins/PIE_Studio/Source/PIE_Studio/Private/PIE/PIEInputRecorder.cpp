@@ -1,6 +1,6 @@
 #include "PIEInputRecorder.h"
 #include "PIETakeRecorderBridge.h"
-#include "UE_MCP_ReplayModule.h"
+#include "PIE_StudioModule.h"
 #include "Editor.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
