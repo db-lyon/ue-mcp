@@ -115,6 +115,11 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("spawn_nav_modifier_volume"), &SpawnNavModifierVolume);
 	Registry.RegisterHandler(TEXT("set_world_game_mode"), &SetWorldGameMode);
 	Registry.RegisterHandler(TEXT("add_blackboard_key"), &AddBlackboardKey);
+	// #469: set parent on BlackboardData so a child Blackboard can extend the
+	// parent's keys (canonical UE pattern for extending third-party AI assets).
+	Registry.RegisterHandler(TEXT("set_blackboard_parent"), &SetBlackboardParent);
+	Registry.RegisterHandler(TEXT("remove_blackboard_key"), &RemoveBlackboardKey);
+	Registry.RegisterHandler(TEXT("read_blackboard"), &ReadBlackboard);
 	Registry.RegisterHandler(TEXT("set_behavior_tree_blackboard"), &SetBehaviorTreeBlackboard);
 	Registry.RegisterHandler(TEXT("rebuild_navigation"), &RebuildNavmesh);
 	Registry.RegisterHandler(TEXT("find_nav_path"), &FindNavPath);
@@ -1181,8 +1186,180 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("keyName"), KeyName);
 	Result->SetStringField(TEXT("keyType"), KeyType);
 	Result->SetNumberField(TEXT("totalKeys"), BlackboardAsset->Keys.Num());
-	// No rollback: no paired remove_blackboard_key handler.
+	// #469: rollback via remove_blackboard_key.
+	TSharedPtr<FJsonObject> RollPayload = MakeShared<FJsonObject>();
+	RollPayload->SetStringField(TEXT("blackboardPath"), BlackboardPath);
+	RollPayload->SetStringField(TEXT("keyName"), KeyName);
+	MCPSetRollback(Result, TEXT("remove_blackboard_key"), RollPayload);
 
+	return MCPResult(Result);
+}
+
+// #469: set Parent on BlackboardData. Canonical UE pattern for extending a
+// third-party blackboard (e.g. plugin's ACFAIBB) without duplicating its
+// keys. Optionally prune duplicate own-keys that the parent already defines.
+TSharedPtr<FJsonValue> FGameplayHandlers::SetBlackboardParent(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlackboardPath;
+	if (auto Err = RequireString(Params, TEXT("blackboardPath"), BlackboardPath)) return Err;
+
+	FString ParentPath;
+	const bool bHasParent = Params->TryGetStringField(TEXT("parentPath"), ParentPath);
+
+	const bool bAutoPrune = OptionalBool(Params, TEXT("autoPruneDuplicateKeys"), true);
+
+	UBlackboardData* Child = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
+	if (!Child) return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+
+	const FString PrevParentPath = Child->Parent ? Child->Parent->GetPathName() : TEXT("None");
+
+	UBlackboardData* Parent = nullptr;
+	if (bHasParent && !ParentPath.IsEmpty() && !ParentPath.Equals(TEXT("None"), ESearchCase::IgnoreCase))
+	{
+		Parent = LoadObject<UBlackboardData>(nullptr, *ParentPath);
+		if (!Parent) return MCPError(FString::Printf(TEXT("Parent BlackboardData not found: %s"), *ParentPath));
+		if (Parent == Child) return MCPError(TEXT("Cannot set blackboard parent to itself"));
+		// Walk parent chain to guard against cycles.
+		for (UBlackboardData* Walk = Parent->Parent; Walk; Walk = Walk->Parent)
+		{
+			if (Walk == Child) return MCPError(TEXT("Cycle detected in blackboard parent chain"));
+		}
+	}
+
+	Child->Modify();
+	Child->Parent = Parent;
+
+	TArray<TSharedPtr<FJsonValue>> Pruned;
+	if (bAutoPrune && Parent)
+	{
+		// Collect parent keys for set-membership.
+		TSet<FName> ParentKeyNames;
+		for (UBlackboardData* Walk = Parent; Walk; Walk = Walk->Parent)
+		{
+			for (const FBlackboardEntry& E : Walk->Keys)
+			{
+				ParentKeyNames.Add(E.EntryName);
+			}
+		}
+		for (int32 i = Child->Keys.Num() - 1; i >= 0; --i)
+		{
+			if (ParentKeyNames.Contains(Child->Keys[i].EntryName))
+			{
+				Pruned.Add(MakeShared<FJsonValueString>(Child->Keys[i].EntryName.ToString()));
+				Child->Keys.RemoveAt(i);
+			}
+		}
+	}
+
+	// Refresh runtime key index cache.
+	Child->UpdatePersistentKeys();
+
+	Child->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(Child->GetPathName());
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
+	Result->SetStringField(TEXT("parentPath"), Parent ? Parent->GetPathName() : TEXT("None"));
+	Result->SetArrayField(TEXT("prunedDuplicates"), Pruned);
+	Result->SetNumberField(TEXT("ownKeyCount"), Child->Keys.Num());
+
+	TSharedPtr<FJsonObject> RollPayload = MakeShared<FJsonObject>();
+	RollPayload->SetStringField(TEXT("blackboardPath"), BlackboardPath);
+	RollPayload->SetStringField(TEXT("parentPath"), PrevParentPath);
+	RollPayload->SetBoolField(TEXT("autoPruneDuplicateKeys"), false);
+	MCPSetRollback(Result, TEXT("set_blackboard_parent"), RollPayload);
+
+	return MCPResult(Result);
+}
+
+// #469: remove a single key from a Blackboard by name. Idempotent.
+TSharedPtr<FJsonValue> FGameplayHandlers::RemoveBlackboardKey(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlackboardPath;
+	if (auto Err = RequireString(Params, TEXT("blackboardPath"), BlackboardPath)) return Err;
+	FString KeyName;
+	if (auto Err = RequireString(Params, TEXT("keyName"), KeyName)) return Err;
+
+	UBlackboardData* BB = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
+	if (!BB) return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+
+	const FName KeyFName(*KeyName);
+	int32 RemovedIdx = INDEX_NONE;
+	FString RemovedType;
+	for (int32 i = 0; i < BB->Keys.Num(); ++i)
+	{
+		if (BB->Keys[i].EntryName == KeyFName)
+		{
+			RemovedIdx = i;
+			RemovedType = BB->Keys[i].KeyType ? BB->Keys[i].KeyType->GetClass()->GetName() : TEXT("Unknown");
+			break;
+		}
+	}
+	if (RemovedIdx == INDEX_NONE)
+	{
+		auto Noop = MCPSuccess();
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		Noop->SetStringField(TEXT("blackboardPath"), BlackboardPath);
+		Noop->SetStringField(TEXT("keyName"), KeyName);
+		return MCPResult(Noop);
+	}
+	BB->Modify();
+	BB->Keys.RemoveAt(RemovedIdx);
+	BB->UpdatePersistentKeys();
+	BB->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(BB->GetPathName());
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
+	Result->SetStringField(TEXT("keyName"), KeyName);
+	Result->SetNumberField(TEXT("remainingKeys"), BB->Keys.Num());
+	return MCPResult(Result);
+}
+
+// #469: read parent + own keys + inherited keys for a Blackboard.
+TSharedPtr<FJsonValue> FGameplayHandlers::ReadBlackboard(const TSharedPtr<FJsonObject>& Params)
+{
+	FString BlackboardPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("blackboardPath"), TEXT("assetPath"), BlackboardPath)) return Err;
+
+	UBlackboardData* BB = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
+	if (!BB) return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+
+	auto KeyArrayFor = [](UBlackboardData* From) -> TArray<TSharedPtr<FJsonValue>>
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FBlackboardEntry& E : From->Keys)
+		{
+			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+			Obj->SetStringField(TEXT("name"), E.EntryName.ToString());
+			Obj->SetStringField(TEXT("type"), E.KeyType ? E.KeyType->GetClass()->GetName() : TEXT("Unknown"));
+			Out.Add(MakeShared<FJsonValueObject>(Obj));
+		}
+		return Out;
+	};
+
+	TArray<TSharedPtr<FJsonValue>> InheritedKeys;
+	for (UBlackboardData* Walk = BB->Parent; Walk; Walk = Walk->Parent)
+	{
+		for (const FBlackboardEntry& E : Walk->Keys)
+		{
+			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+			Obj->SetStringField(TEXT("name"), E.EntryName.ToString());
+			Obj->SetStringField(TEXT("type"), E.KeyType ? E.KeyType->GetClass()->GetName() : TEXT("Unknown"));
+			Obj->SetStringField(TEXT("from"), Walk->GetPathName());
+			InheritedKeys.Add(MakeShared<FJsonValueObject>(Obj));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
+	Result->SetStringField(TEXT("parentPath"), BB->Parent ? BB->Parent->GetPathName() : TEXT("None"));
+	Result->SetArrayField(TEXT("ownKeys"), KeyArrayFor(BB));
+	Result->SetArrayField(TEXT("inheritedKeys"), InheritedKeys);
+	Result->SetNumberField(TEXT("ownKeyCount"), BB->Keys.Num());
+	Result->SetNumberField(TEXT("inheritedKeyCount"), InheritedKeys.Num());
 	return MCPResult(Result);
 }
 

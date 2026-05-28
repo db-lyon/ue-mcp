@@ -44,6 +44,10 @@ private:
 	static TSharedPtr<FJsonValue> ListNavInvokers(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetWorldGameMode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddBlackboardKey(const TSharedPtr<FJsonObject>& Params);
+	// #469: child-of-parent blackboard pattern + per-key removal + read.
+	static TSharedPtr<FJsonValue> SetBlackboardParent(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveBlackboardKey(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadBlackboard(const TSharedPtr<FJsonObject>& Params);
 	// #250: rebind a BehaviorTree asset's BlackboardAsset (the C++ field is
 	// protected, so reflection is the only way to write it cleanly).
 	static TSharedPtr<FJsonValue> SetBehaviorTreeBlackboard(const TSharedPtr<FJsonObject>& Params);
