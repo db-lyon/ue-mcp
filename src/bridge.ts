@@ -29,8 +29,13 @@ export class EditorBridge implements IBridge {
   private idCounter = 0;
 
   constructor(
-    public host = "localhost",
-    public port = 9877,
+    // #497: default to 127.0.0.1 so the client picks the loopback IPv4 the
+    // plugin actually binds to. "localhost" can resolve to ::1 on systems
+    // where the IPv6 stack wins DNS, leaving the client stuck connecting to
+    // an empty IPv6 socket while the plugin owns 127.0.0.1:9877.
+    // UE_MCP_HOST overrides the default for non-standard topologies.
+    public host = process.env.UE_MCP_HOST ?? "127.0.0.1",
+    public port = Number.parseInt(process.env.UE_MCP_PORT ?? "", 10) || 9877,
   ) {}
 
   get isConnected(): boolean {

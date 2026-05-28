@@ -94,7 +94,7 @@ function isEditorRunning(): boolean {
   }
 }
 
-async function isBridgeAvailable(host = "localhost", port = 9877, timeoutMs = 1000): Promise<boolean> {
+async function isBridgeAvailable(host = process.env.UE_MCP_HOST ?? "127.0.0.1", port = 9877, timeoutMs = 1000): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     let resolved = false;
