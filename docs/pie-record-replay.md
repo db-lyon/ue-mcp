@@ -17,9 +17,9 @@ All three can run simultaneously in the same PIE session.
 
 A **Record** button sits next to Play/Stop in the editor transport bar. Click it to arm the recorder and start PIE in one action.
 
-### MCP PIE panel
+### PIE Studio panel
 
-Open **Window > Tools > MCP PIE** for a dockable panel with:
+Open **Window > Tools > PIE Studio** for a dockable panel with:
 
 - **Recorder** - Record + Play, Arm, Disarm, Stop
 - **Replayer** - Disarm, Stop

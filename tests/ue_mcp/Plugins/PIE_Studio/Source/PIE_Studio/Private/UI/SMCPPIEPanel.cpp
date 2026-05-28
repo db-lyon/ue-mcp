@@ -79,13 +79,13 @@ void SMCPPIEPanel::RegisterTab()
 		{
 			return SNew(SDockTab)
 				.TabRole(NomadTab)
-				.Label(FText::FromString(TEXT("MCP PIE")))
+				.Label(FText::FromString(TEXT("PIE Studio")))
 				[
 					SNew(SMCPPIEPanel)
 				];
 		}))
-		.SetDisplayName(FText::FromString(TEXT("MCP PIE")))
-		.SetTooltipText(FText::FromString(TEXT("PIE Record / Replay / Observe")))
+		.SetDisplayName(FText::FromString(TEXT("PIE Studio")))
+		.SetTooltipText(FText::FromString(TEXT("PIE Studio — Record / Replay / Observe")))
 		.SetGroup(WorkspaceMenu::GetMenuStructure().GetToolsCategory());
 }
 
