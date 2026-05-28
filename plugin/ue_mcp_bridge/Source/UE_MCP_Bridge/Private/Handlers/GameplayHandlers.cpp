@@ -91,7 +91,18 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_eqs_queries"), &ListEqsQueries);
 	Registry.RegisterHandler(TEXT("list_state_trees"), &ListStateTrees);
 	Registry.RegisterHandler(TEXT("project_point_to_navigation"), &ProjectPointToNavigation);
-	// create_input_action, create_input_mapping_context moved to pie-studio
+	// Enhanced Input asset authoring stays here. pie-studio owns PIE-time
+	// inject/record/replay; authoring InputAction / InputMappingContext
+	// assets and editing IMC mappings is core ue-mcp.
+	Registry.RegisterHandler(TEXT("create_input_action"), &CreateInputAction);
+	Registry.RegisterHandler(TEXT("create_input_mapping_context"), &CreateInputMappingContext);
+	Registry.RegisterHandler(TEXT("read_imc"), &ReadImc);
+	Registry.RegisterHandler(TEXT("list_imc_mappings"), &ReadImc);
+	Registry.RegisterHandler(TEXT("add_imc_mapping"), &AddImcMapping);
+	Registry.RegisterHandler(TEXT("set_mapping_modifiers"), &SetMappingModifiers);
+	Registry.RegisterHandler(TEXT("remove_imc_mapping"), &RemoveImcMapping);
+	Registry.RegisterHandler(TEXT("set_imc_mapping_key"), &SetImcMappingKey);
+	Registry.RegisterHandler(TEXT("set_imc_mapping_action"), &SetImcMappingAction);
 	Registry.RegisterHandler(TEXT("create_blackboard"), &CreateBlackboard);
 	Registry.RegisterHandler(TEXT("create_behavior_tree"), &CreateBehaviorTree);
 	Registry.RegisterHandler(TEXT("create_eqs_query"), &CreateEqsQuery);

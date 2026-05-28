@@ -18,7 +18,16 @@ private:
 	static TSharedPtr<FJsonValue> ListEqsQueries(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListStateTrees(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ProjectPointToNavigation(const TSharedPtr<FJsonObject>& Params);
-	// CreateInputAction, CreateInputMappingContext moved to pie-studio
+	// Enhanced Input asset authoring lives here (core authoring, not test
+	// automation). pie-studio handles PIE record/replay/inject of inputs.
+	static TSharedPtr<FJsonValue> CreateInputAction(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CreateInputMappingContext(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadImc(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddImcMapping(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetMappingModifiers(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveImcMapping(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetImcMappingKey(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetImcMappingAction(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateBlackboard(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateBehaviorTree(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateEqsQuery(const TSharedPtr<FJsonObject>& Params);
