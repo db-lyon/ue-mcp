@@ -78,6 +78,15 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	Registry.RegisterHandler(TEXT("create_material_simple"), &CreateMaterialSimple);
 	Registry.RegisterHandler(TEXT("set_material_usage"), &SetMaterialUsage);
+
+	// #463: MaterialFunction authoring.
+	Registry.RegisterHandler(TEXT("create_material_function"), &CreateMaterialFunction);
+	Registry.RegisterHandler(TEXT("add_material_function_expression"), &AddMaterialFunctionExpression);
+	Registry.RegisterHandler(TEXT("add_expression_in_function"), &AddMaterialFunctionExpression);
+	Registry.RegisterHandler(TEXT("connect_material_function_expressions"), &ConnectMaterialFunctionExpressions);
+	Registry.RegisterHandler(TEXT("connect_expressions_in_function"), &ConnectMaterialFunctionExpressions);
+	Registry.RegisterHandler(TEXT("list_material_function_expressions"), &ListMaterialFunctionExpressions);
+	Registry.RegisterHandler(TEXT("list_expressions_in_function"), &ListMaterialFunctionExpressions);
 }
 
 UMaterial* FMaterialHandlers::LoadMaterialFromPath(const FString& AssetPath)
