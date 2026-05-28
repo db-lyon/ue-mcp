@@ -564,7 +564,16 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `get_navmesh_info` | Query nav system |
 | `project_to_nav` | Project point to navmesh. Params: `location, extent?` |
 | `spawn_nav_modifier` | Place nav modifier. Params: `location, extent?, areaClass?` |
+| `create_input_action` | Create an InputAction asset. Params: `name, packagePath?, valueType? (Bool\|Axis1D\|Axis2D\|Axis3D)` |
+| `create_input_mapping` | Create an InputMappingContext asset. Params: `name, packagePath?` |
 | `list_input_assets` | List input assets. Params: `directory?, recursive?` |
+| `read_imc` | Read an InputMappingContext's key bindings. Returns `{key, inputAction, triggers[], modifiers[]}`. Params: `imcPath` |
+| `list_input_mappings` | Alias for `read_imc` |
+| `add_imc_mapping` | Append a key mapping to an IMC. Params: `imcPath, inputActionPath, key` |
+| `set_mapping_modifiers` | Replace modifiers/triggers on an IMC mapping. Params: `imcPath, mappingIndex?, modifiers?, triggers?` |
+| `remove_imc_mapping` | Remove an IMC mapping. Params: `imcPath, mappingIndex? \| (inputActionPath? + key?)` |
+| `set_imc_mapping_key` | Rebind an IMC mapping to a new key. Params: `imcPath, newKey, mappingIndex? \| key? \| inputActionPath?` |
+| `set_imc_mapping_action` | Retarget an IMC mapping to a different InputAction. Params: `imcPath, newInputActionPath, mappingIndex? \| key? \| inputActionPath?` |
 | `list_behavior_trees` | List behavior trees. Params: `directory?, recursive?` |
 | `get_behavior_tree_info` | Inspect behavior tree (top-level + blackboard). Params: `assetPath` |
 | `read_behavior_tree_graph` | Walk BT tree: composites, tasks, decorators, services with blackboard keys. Params: `assetPath` |
