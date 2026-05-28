@@ -1674,6 +1674,22 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DuplicateBlueprint(const TSharedPtr<F
 	if (auto Err = RequireString(Params, TEXT("destinationPath"), DestinationPath)) return Err;
 
 	UObject* Dup = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestinationPath);
+	if (!Dup)
+	{
+		// #441: DoesAssetExist can return false for valid Blueprint paths in
+		// 5.7. Fall back to loading the source and driving AssetTools directly.
+		UObject* SourceObj = UEditorAssetLibrary::LoadAsset(SourcePath);
+		if (!SourceObj) SourceObj = LoadObject<UObject>(nullptr, *SourcePath);
+		if (SourceObj)
+		{
+			FString DestPkg, DestName;
+			if (DestinationPath.Split(TEXT("/"), &DestPkg, &DestName, ESearchCase::CaseSensitive, ESearchDir::FromEnd))
+			{
+				IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+				Dup = AssetTools.DuplicateAsset(DestName, DestPkg, SourceObj);
+			}
+		}
+	}
 	if (!Dup) return MCPError(FString::Printf(TEXT("Failed to duplicate '%s'"), *SourcePath));
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();

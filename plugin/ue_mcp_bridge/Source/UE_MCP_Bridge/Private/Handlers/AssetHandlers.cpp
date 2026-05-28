@@ -666,7 +666,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::DuplicateAsset(const TSharedPtr<FJsonObje
 
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	if (!UEditorAssetLibrary::DoesAssetExist(SourcePath))
+	// #441: DoesAssetExist returns false for some Blueprints in 5.7 even when
+	// the registry/loader can resolve them. Confirm via load-or-load_blueprint
+	// before erroring out so duplicate doesn't bounce off valid paths.
+	UObject* SourceObj = UEditorAssetLibrary::LoadAsset(SourcePath);
+	if (!SourceObj)
+	{
+		SourceObj = LoadObject<UObject>(nullptr, *SourcePath);
+	}
+	if (!SourceObj)
 	{
 		return MCPError(FString::Printf(TEXT("Source asset not found: %s"), *SourcePath));
 	}
@@ -686,6 +694,17 @@ TSharedPtr<FJsonValue> FAssetHandlers::DuplicateAsset(const TSharedPtr<FJsonObje
 	}
 
 	UObject* Dup = UEditorAssetLibrary::DuplicateAsset(SourcePath, DestPath);
+	if (!Dup)
+	{
+		// Fallback: drive AssetTools directly off the loaded UObject. Same path
+		// the Python workaround in #441 used.
+		FString DestPkg, DestName;
+		if (DestPath.Split(TEXT("/"), &DestPkg, &DestName, ESearchCase::CaseSensitive, ESearchDir::FromEnd))
+		{
+			IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+			Dup = AssetTools.DuplicateAsset(DestName, DestPkg, SourceObj);
+		}
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
