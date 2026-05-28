@@ -12,6 +12,7 @@
 #include "Engine/StaticMeshSocket.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/SkeletalMeshSocket.h"
+#include "Animation/Skeleton.h"
 #include "UObject/Package.h"
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
@@ -222,7 +223,67 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		return MCPResult(Result);
 	}
 
-	return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
+	// #465: Skeleton assets own their own socket array. Mesh-level sockets
+	// live on USkeletalMesh; rig-level sockets live on USkeleton. Both flow
+	// through asset.add_socket so callers don't have to know which one a
+	// given socket belongs to.
+	if (USkeleton* Skel = Cast<USkeleton>(Asset))
+	{
+		const FString BoneName = OptionalString(Params, TEXT("boneName"), TEXT("root"));
+
+		for (USkeletalMeshSocket* Existing : Skel->Sockets)
+		{
+			if (Existing && Existing->SocketName == FName(*SocketName))
+			{
+				if (OnConflict == TEXT("error"))
+				{
+					return MCPError(FString::Printf(TEXT("Socket '%s' already exists on Skeleton"), *SocketName));
+				}
+				if (OnConflict == TEXT("update"))
+				{
+					Skel->Modify();
+					Existing->Modify();
+					if (bHasLoc)   Existing->RelativeLocation = RelLoc;
+					if (bHasRot)   Existing->RelativeRotation = RelRot;
+					if (bHasScale) Existing->RelativeScale = RelScale;
+					Skel->MarkPackageDirty();
+					auto UpdatedResult = MCPSuccess();
+					MCPSetUpdated(UpdatedResult);
+					UpdatedResult->SetStringField(TEXT("socketName"), SocketName);
+					UpdatedResult->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+					return MCPResult(UpdatedResult);
+				}
+				auto ExistingResult = MCPSuccess();
+				MCPSetExisted(ExistingResult);
+				ExistingResult->SetStringField(TEXT("socketName"), SocketName);
+				ExistingResult->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+				return MCPResult(ExistingResult);
+			}
+		}
+
+		USkeletalMeshSocket* NewSocket = NewObject<USkeletalMeshSocket>(Skel);
+		NewSocket->SocketName = FName(*SocketName);
+		NewSocket->BoneName = FName(*BoneName);
+		NewSocket->RelativeLocation = RelLoc;
+		NewSocket->RelativeRotation = RelRot;
+		NewSocket->RelativeScale = RelScale;
+		Skel->Modify();
+		Skel->Sockets.Add(NewSocket);
+		Skel->MarkPackageDirty();
+
+		auto Result = MCPSuccess();
+		MCPSetCreated(Result);
+		Result->SetStringField(TEXT("socketName"), SocketName);
+		Result->SetStringField(TEXT("boneName"), BoneName);
+		Result->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("socketName"), SocketName);
+		MCPSetRollback(Result, TEXT("remove_socket"), Payload);
+		return MCPResult(Result);
+	}
+
+	return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh, SkeletalMesh, or Skeleton"), *AssetPath));
 }
 
 
@@ -285,7 +346,31 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 		return MCPResult(Noop);
 	}
 
-	return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
+	// #465: Skeleton-level socket removal.
+	if (USkeleton* Skel = Cast<USkeleton>(Asset))
+	{
+		for (int32 i = 0; i < Skel->Sockets.Num(); ++i)
+		{
+			if (Skel->Sockets[i] && Skel->Sockets[i]->SocketName == FName(*SocketName))
+			{
+				Skel->Modify();
+				Skel->Sockets.RemoveAt(i);
+				Skel->MarkPackageDirty();
+				auto Result = MCPSuccess();
+				Result->SetStringField(TEXT("removed"), SocketName);
+				Result->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+				Result->SetBoolField(TEXT("deleted"), true);
+				return MCPResult(Result);
+			}
+		}
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("socketName"), SocketName);
+		Noop->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
+	}
+
+	return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh, SkeletalMesh, or Skeleton"), *AssetPath));
 }
 
 
@@ -365,9 +450,37 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 		}
 		Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
 	}
+	else if (USkeleton* Skel = Cast<USkeleton>(Asset))
+	{
+		// #465: rig-level sockets live here. List them with the same shape as mesh sockets.
+		for (USkeletalMeshSocket* Socket : Skel->Sockets)
+		{
+			if (!Socket) continue;
+			TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+			S->SetStringField(TEXT("name"), Socket->SocketName.ToString());
+			S->SetStringField(TEXT("boneName"), Socket->BoneName.ToString());
+			TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
+			Loc->SetNumberField(TEXT("x"), Socket->RelativeLocation.X);
+			Loc->SetNumberField(TEXT("y"), Socket->RelativeLocation.Y);
+			Loc->SetNumberField(TEXT("z"), Socket->RelativeLocation.Z);
+			S->SetObjectField(TEXT("relativeLocation"), Loc);
+			TSharedPtr<FJsonObject> Rot = MakeShared<FJsonObject>();
+			Rot->SetNumberField(TEXT("pitch"), Socket->RelativeRotation.Pitch);
+			Rot->SetNumberField(TEXT("yaw"), Socket->RelativeRotation.Yaw);
+			Rot->SetNumberField(TEXT("roll"), Socket->RelativeRotation.Roll);
+			S->SetObjectField(TEXT("relativeRotation"), Rot);
+			TSharedPtr<FJsonObject> Scale = MakeShared<FJsonObject>();
+			Scale->SetNumberField(TEXT("x"), Socket->RelativeScale.X);
+			Scale->SetNumberField(TEXT("y"), Socket->RelativeScale.Y);
+			Scale->SetNumberField(TEXT("z"), Socket->RelativeScale.Z);
+			S->SetObjectField(TEXT("relativeScale"), Scale);
+			SocketArray.Add(MakeShared<FJsonValueObject>(S));
+		}
+		Result->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+	}
 	else
 	{
-		return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh or SkeletalMesh"), *AssetPath));
+		return MCPError(FString::Printf(TEXT("'%s' is not a StaticMesh, SkeletalMesh, or Skeleton"), *AssetPath));
 	}
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
