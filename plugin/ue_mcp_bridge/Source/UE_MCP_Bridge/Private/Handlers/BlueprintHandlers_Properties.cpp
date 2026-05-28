@@ -31,6 +31,10 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/MeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Engine/TimelineTemplate.h"
+#include "Curves/CurveFloat.h"
+#include "Curves/CurveVector.h"
+#include "Curves/CurveLinearColor.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Actor.h"
 #include "Engine/StaticMesh.h"
@@ -1221,6 +1225,183 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentOverrideMaterials(const T
 	Payload->SetArrayField(TEXT("materialPaths"), PrevPaths);
 	MCPSetRollback(Result, TEXT("set_component_override_materials"), Payload);
 
+	return MCPResult(Result);
+}
+
+// #457: Timeline track authoring. Create or look up a UTimelineTemplate by
+// timeline name (matching the K2Node_Timeline TimelineName), append a
+// float/vector/linear-color/event track with the given keys, and recompile
+// the Blueprint so the K2Node_Timeline regenerates its output pins.
+//
+// Params:
+//   assetPath, timelineName, trackName,
+//   trackType ("float" | "vector" | "color" | "event"),
+//   keyframes ([{time, value}]) - value: number for float/event,
+//     {x,y,z} for vector, {r,g,b,a} for color.
+TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	FString TimelineName;
+	if (auto Err = RequireString(Params, TEXT("timelineName"), TimelineName)) return Err;
+	FString TrackName;
+	if (auto Err = RequireString(Params, TEXT("trackName"), TrackName)) return Err;
+	const FString TrackType = OptionalString(Params, TEXT("trackType"), TEXT("float")).ToLower();
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	// Find or create the UTimelineTemplate that backs the K2Node_Timeline.
+	const FName TimelineFName(*TimelineName);
+	UTimelineTemplate* Timeline = nullptr;
+	for (UTimelineTemplate* T : Blueprint->Timelines)
+	{
+		if (T && T->GetVariableName() == TimelineFName) { Timeline = T; break; }
+	}
+	if (!Timeline)
+	{
+		// Mirror what FBlueprintEditorUtils does for new timelines: name the
+		// template "<TimelineName>_Template" so K2Node_Timeline lookup matches.
+		const FString TemplateName = UTimelineTemplate::TimelineVariableNameToTemplateName(TimelineFName);
+		Timeline = NewObject<UTimelineTemplate>(Blueprint, FName(*TemplateName), RF_Transactional);
+		Blueprint->Timelines.Add(Timeline);
+	}
+
+	// Read keyframes array. Float/event keys carry numeric values; vector
+	// keys are {x,y,z}; color keys are {r,g,b,a}.
+	const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
+	Params->TryGetArrayField(TEXT("keyframes"), Keys);
+
+	const FName TrackFName(*TrackName);
+	Timeline->Modify();
+
+	auto BumpLength = [&](float Time)
+	{
+		if (Time > Timeline->TimelineLength) Timeline->TimelineLength = Time;
+	};
+
+	if (TrackType == TEXT("float"))
+	{
+		// Build a CurveFloat asset bound to the timeline.
+		UCurveFloat* Curve = NewObject<UCurveFloat>(Timeline, NAME_None, RF_Transactional);
+		if (Keys)
+		{
+			for (const TSharedPtr<FJsonValue>& KV : *Keys)
+			{
+				const TSharedPtr<FJsonObject>* KObj = nullptr;
+				if (!KV->TryGetObject(KObj) || !*KObj) continue;
+				double T = 0, V = 0;
+				(*KObj)->TryGetNumberField(TEXT("time"), T);
+				(*KObj)->TryGetNumberField(TEXT("value"), V);
+				Curve->FloatCurve.UpdateOrAddKey((float)T, (float)V);
+				BumpLength((float)T);
+			}
+		}
+		FTTFloatTrack Track;
+		Track.SetTrackName(TrackFName, Timeline);
+		Track.CurveFloat = Curve;
+		Timeline->FloatTracks.Add(Track);
+	}
+	else if (TrackType == TEXT("vector"))
+	{
+		UCurveVector* Curve = NewObject<UCurveVector>(Timeline, NAME_None, RF_Transactional);
+		if (Keys)
+		{
+			for (const TSharedPtr<FJsonValue>& KV : *Keys)
+			{
+				const TSharedPtr<FJsonObject>* KObj = nullptr;
+				if (!KV->TryGetObject(KObj) || !*KObj) continue;
+				double T = 0;
+				(*KObj)->TryGetNumberField(TEXT("time"), T);
+				double X = 0, Y = 0, Z = 0;
+				const TSharedPtr<FJsonObject>* VObj = nullptr;
+				if ((*KObj)->TryGetObjectField(TEXT("value"), VObj) && *VObj)
+				{
+					(*VObj)->TryGetNumberField(TEXT("x"), X);
+					(*VObj)->TryGetNumberField(TEXT("y"), Y);
+					(*VObj)->TryGetNumberField(TEXT("z"), Z);
+				}
+				Curve->FloatCurves[0].UpdateOrAddKey((float)T, (float)X);
+				Curve->FloatCurves[1].UpdateOrAddKey((float)T, (float)Y);
+				Curve->FloatCurves[2].UpdateOrAddKey((float)T, (float)Z);
+				BumpLength((float)T);
+			}
+		}
+		FTTVectorTrack Track;
+		Track.SetTrackName(TrackFName, Timeline);
+		Track.CurveVector = Curve;
+		Timeline->VectorTracks.Add(Track);
+	}
+	else if (TrackType == TEXT("color"))
+	{
+		UCurveLinearColor* Curve = NewObject<UCurveLinearColor>(Timeline, NAME_None, RF_Transactional);
+		if (Keys)
+		{
+			for (const TSharedPtr<FJsonValue>& KV : *Keys)
+			{
+				const TSharedPtr<FJsonObject>* KObj = nullptr;
+				if (!KV->TryGetObject(KObj) || !*KObj) continue;
+				double T = 0;
+				(*KObj)->TryGetNumberField(TEXT("time"), T);
+				double R = 0, G = 0, B = 0, A = 1;
+				const TSharedPtr<FJsonObject>* VObj = nullptr;
+				if ((*KObj)->TryGetObjectField(TEXT("value"), VObj) && *VObj)
+				{
+					(*VObj)->TryGetNumberField(TEXT("r"), R);
+					(*VObj)->TryGetNumberField(TEXT("g"), G);
+					(*VObj)->TryGetNumberField(TEXT("b"), B);
+					(*VObj)->TryGetNumberField(TEXT("a"), A);
+				}
+				Curve->FloatCurves[0].UpdateOrAddKey((float)T, (float)R);
+				Curve->FloatCurves[1].UpdateOrAddKey((float)T, (float)G);
+				Curve->FloatCurves[2].UpdateOrAddKey((float)T, (float)B);
+				Curve->FloatCurves[3].UpdateOrAddKey((float)T, (float)A);
+				BumpLength((float)T);
+			}
+		}
+		FTTLinearColorTrack Track;
+		Track.SetTrackName(TrackFName, Timeline);
+		Track.CurveLinearColor = Curve;
+		Timeline->LinearColorTracks.Add(Track);
+	}
+	else if (TrackType == TEXT("event"))
+	{
+		FTTEventTrack EventTrack;
+		EventTrack.SetTrackName(TrackFName, Timeline);
+		UCurveFloat* Curve = NewObject<UCurveFloat>(Timeline, NAME_None, RF_Transactional);
+		if (Keys)
+		{
+			for (const TSharedPtr<FJsonValue>& KV : *Keys)
+			{
+				const TSharedPtr<FJsonObject>* KObj = nullptr;
+				if (!KV->TryGetObject(KObj) || !*KObj) continue;
+				double T = 0;
+				(*KObj)->TryGetNumberField(TEXT("time"), T);
+				Curve->FloatCurve.UpdateOrAddKey((float)T, 1.0f);
+				BumpLength((float)T);
+			}
+		}
+		EventTrack.CurveKeys = Curve;
+		Timeline->EventTracks.Add(EventTrack);
+	}
+	else
+	{
+		return MCPError(FString::Printf(TEXT("Unknown trackType '%s'. Use 'float' | 'vector' | 'color' | 'event'."), *TrackType));
+	}
+
+	// Recompile so K2Node_Timeline regenerates its output pins for the new track.
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	SaveAssetPackage(Blueprint);
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("timelineName"), TimelineName);
+	Result->SetStringField(TEXT("trackName"), TrackName);
+	Result->SetStringField(TEXT("trackType"), TrackType);
+	Result->SetNumberField(TEXT("keyCount"), Keys ? Keys->Num() : 0);
+	Result->SetNumberField(TEXT("timelineLength"), Timeline->TimelineLength);
 	return MCPResult(Result);
 }
 

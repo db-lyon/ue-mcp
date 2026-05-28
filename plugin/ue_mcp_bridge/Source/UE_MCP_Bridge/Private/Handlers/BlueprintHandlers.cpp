@@ -95,6 +95,8 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #442: dedicated OverrideMaterials writer that takes a materialPaths array
 	// directly, avoiding any value coercion concerns on the generic path.
 	Registry.RegisterHandler(TEXT("set_component_override_materials"), &SetComponentOverrideMaterials);
+	// #457: timeline track authoring (float/vector/color/event) on a Blueprint.
+	Registry.RegisterHandler(TEXT("add_timeline_track"), &AddTimelineTrack);
 	Registry.RegisterHandler(TEXT("set_capsule_size"), &SetCapsuleSize);
 	Registry.RegisterHandler(TEXT("set_class_default"), &SetClassDefault);
 	Registry.RegisterHandler(TEXT("remove_component"), &RemoveComponent);
