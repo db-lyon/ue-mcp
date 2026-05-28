@@ -41,6 +41,9 @@ private:
 
 	// Notify handlers
 	static TSharedPtr<FJsonValue> AddAnimNotify(const TSharedPtr<FJsonObject>& Params);
+	// #471: per-name removal so migration scripts can prune obsolete notifies
+	// without scanning through Python's AnimationLibrary.
+	static TSharedPtr<FJsonValue> RemoveAnimNotify(const TSharedPtr<FJsonObject>& Params);
 
 	// Animation sequence authoring
 	static TSharedPtr<FJsonValue> CreateSequence(const TSharedPtr<FJsonObject>& Params);

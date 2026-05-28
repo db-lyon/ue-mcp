@@ -86,6 +86,8 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("populate_blendspace"), &PopulateBlendspace);
 	Registry.RegisterHandler(TEXT("populate_blendspace_1d"), &PopulateBlendspace);
 	Registry.RegisterHandler(TEXT("add_anim_notify"), &AddAnimNotify);
+	Registry.RegisterHandler(TEXT("remove_anim_notify"), &RemoveAnimNotify);
+	Registry.RegisterHandler(TEXT("remove_animation_notify"), &RemoveAnimNotify);
 	Registry.RegisterHandler(TEXT("create_sequence"), &CreateSequence);
 	Registry.RegisterHandler(TEXT("set_bone_keyframes"), &SetBoneKeyframes);
 	Registry.RegisterHandler(TEXT("get_bone_transforms"), &GetBoneTransforms);
@@ -768,8 +770,87 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	{
 		Result->SetStringField(TEXT("notifyClass"), NewNotify->GetClass()->GetName());
 	}
-	// No rollback: no paired remove_anim_notify handler yet.
+	// #471: paired remove handler now exists.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("notifyName"), NotifyName);
+	MCPSetRollback(Result, TEXT("remove_anim_notify"), Payload);
 
+	return MCPResult(Result);
+}
+
+// #471: remove notifies by name (and optionally by class). Idempotent -
+// returns alreadyDeleted=true if no matching notifies exist. Useful for
+// ability/montage migration scripts that need to prune obsolete notify
+// instances (AuraFireLoopReady, AuraFire, etc.) before adding new ones.
+//
+// Params: assetPath, notifyName? (string), notifyClass? (string class name
+//         or AnimNotify_ prefixed). Pass either or both - both filters
+//         apply (AND). Returns the count and timestamps of removed
+//         instances.
+TSharedPtr<FJsonValue> FAnimationHandlers::RemoveAnimNotify(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	FString NotifyName = OptionalString(Params, TEXT("notifyName"));
+	FString NotifyClassName = OptionalString(Params, TEXT("notifyClass"));
+	if (NotifyName.IsEmpty() && NotifyClassName.IsEmpty())
+	{
+		return MCPError(TEXT("Pass at least one of 'notifyName' or 'notifyClass'"));
+	}
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UAnimSequenceBase* AnimAsset = Cast<UAnimSequenceBase>(LoadedAsset);
+	if (!AnimAsset)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load AnimSequenceBase at '%s'"), *AssetPath));
+	}
+
+	UClass* MatchClass = nullptr;
+	if (!NotifyClassName.IsEmpty())
+	{
+		MatchClass = FindFirstObject<UClass>(*NotifyClassName);
+		if (!MatchClass) MatchClass = FindFirstObject<UClass>(*(TEXT("AnimNotify_") + NotifyClassName));
+	}
+
+	const FName NotifyFName(*NotifyName);
+	TArray<TSharedPtr<FJsonValue>> RemovedTimes;
+	for (int32 i = AnimAsset->Notifies.Num() - 1; i >= 0; --i)
+	{
+		const FAnimNotifyEvent& E = AnimAsset->Notifies[i];
+		const bool bNameMatches = NotifyName.IsEmpty() || E.NotifyName == NotifyFName;
+		const bool bClassMatches = NotifyClassName.IsEmpty() ||
+			(E.Notify && MatchClass && E.Notify->GetClass()->IsChildOf(MatchClass));
+		if (bNameMatches && bClassMatches)
+		{
+			RemovedTimes.Add(MakeShared<FJsonValueNumber>(E.GetTime()));
+			AnimAsset->Notifies.RemoveAt(i);
+		}
+	}
+
+	if (RemovedTimes.Num() == 0)
+	{
+		auto Noop = MCPSuccess();
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		Noop->SetStringField(TEXT("assetPath"), AssetPath);
+		Noop->SetStringField(TEXT("notifyName"), NotifyName);
+		Noop->SetStringField(TEXT("notifyClass"), NotifyClassName);
+		return MCPResult(Noop);
+	}
+
+	AnimAsset->SortNotifies();
+	AnimAsset->PostEditChange();
+	AnimAsset->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("notifyName"), NotifyName);
+	Result->SetStringField(TEXT("notifyClass"), NotifyClassName);
+	Result->SetNumberField(TEXT("removedCount"), RemovedTimes.Num());
+	Result->SetArrayField(TEXT("removedTimes"), RemovedTimes);
 	return MCPResult(Result);
 }
 
