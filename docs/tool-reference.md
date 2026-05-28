@@ -74,6 +74,10 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `read_datatable` | Read DataTable rows. Params: `assetPath, rowFilter?` |
 | `create_datatable` | Create DataTable. Params: `name, packagePath?, rowStruct` |
 | `reimport_datatable` | Reimport DataTable from JSON. Params: `assetPath, jsonPath?, jsonString?` |
+| `set_datatable_row` | Append or overwrite a single row. Params: `assetPath, rowName, row` (partial updates merge with existing row) (#437) |
+| `add_datatable_row` | Alias for `set_datatable_row` (#437) |
+| `update_datatable_row` | Alias for `set_datatable_row` (#437) |
+| `remove_datatable_row` | Remove a row by name. Idempotent. Params: `assetPath, rowName` (#437) |
 | `list_textures` | List textures. Params: `directory?, recursive?` |
 | `get_texture_info` | Get texture details. Params: `assetPath` |
 | `set_texture_settings` | Set texture settings. Params: `assetPath, settings (object with compressionSettings?, lodGroup?, sRGB?, neverStream?)` |
@@ -130,6 +134,8 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `add_component` | Add BP component. Params: `assetPath, componentClass, componentName?, parentComponent? (SCS parent for hierarchy - #115)` |
 | `remove_component` | Remove SCS component. Params: `assetPath, componentName` |
 | `set_component_property` | Set property on SCS or inherited component. Inherited components go through the child BP's InheritableComponentHandler override template so the parent stays untouched. Pass value=null to clear a TObjectPtr/SoftObject/WeakObject/UClass/Interface reference (e.g. clear AnimClass on CharacterMesh0) (#420). Params: `assetPath, componentName, propertyName, value` |
+| `set_component_override_materials` | Write `OverrideMaterials` on a mesh-component template (Static/Skeletal/any UMeshComponent). Pass `materialPaths` as a string[] of material asset paths; empty array clears (#442). Params: `assetPath, componentName, materialPaths` |
+| `add_timeline_track` | Add a track to a Blueprint timeline. Creates the UTimelineTemplate if missing, builds the matching curve asset, applies keyframes, recompiles so K2Node_Timeline regenerates pins. Params: `assetPath, timelineName, trackName, trackType ('float'\|'vector'\|'color'\|'event'), keyframes ([{time, value}])` (#457) |
 | `set_capsule_size` | Call UCapsuleComponent::SetCapsuleSize on a CapsuleComponent template (CharacterMovement-friendly path; raw property writes leave the visualizer stale). Pass either or both of halfHeight/radius. Returns the new + previous values. Params: `assetPath, componentName, halfHeight?, radius? (#419)` |
 | `get_component_property` | Read a single property value from an SCS or inherited component template. Returns the ICH override value for child BPs if one exists. Params: `assetPath, componentName, propertyName` |
 | `set_class_default` | Set UPROPERTY on Blueprint CDO. Pass value=null to clear an object/class/interface reference (#420). Params: `assetPath, propertyName, value` |
@@ -207,6 +213,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `get_relative_transform` | Compute target's transform in reference's local space (location/rotation/scale). Common dungeon/calibration workflow. Params: `target (actor label), reference (actor label), world? (#386/#387)` |
 | `resolve_actor` | Resolve internal/runtime actor name to editor label. Params: `internalName (e.g. StaticMeshActor_141)` |
 | `set_actor_property` | Set per-instance UPROPERTY on a level actor. Params: `actorLabel ('WorldSettings' targets the world settings actor), propertyName (dotted paths like 'Foo.Bar' supported), value (string/number/bool/object/array; an actor label resolves to AActor* refs), force? (bypass EditDefaultsOnly), world? (editor\\|pie) (#202/#230)` |
+| `read_actor_motion` | Snapshot motion telemetry for one or many actors: location, rotation, velocity, scale, angularVelocity (when simulating physics), grounded + distanceToGround. Loop at your sample interval for long telemetry probes. Params: `actorLabel? OR actorLabels (string[]), world? ('pie'\\|'editor')` (#453) |
 | `delete_actors` | Bulk-delete actors. Params: `at least one of labelPrefix, className, tag; dryRun? to preview` |
 | `add_actor_tag` | Append a tag to an actor's Tags array. Params: `actorLabel, tag (#219)` |
 | `remove_actor_tag` | Remove a tag from an actor's Tags array. Params: `actorLabel, tag (#219)` |
@@ -242,6 +249,10 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `disconnect_property` | Disconnect a material property input. Params: `materialPath, property` |
 | `create_instance` | Create material instance. Params: `parentPath, name?, packagePath?` |
 | `create` | Create material. Params: `name, packagePath?` |
+| `create_function` | Create a MaterialFunction asset. Params: `name, packagePath? (default /Game/Materials/Functions), description?` (#463) |
+| `add_function_expression` | Add an expression to a MaterialFunction graph. Params: `functionPath, expressionType, positionX?, positionY?, inputName? (for FunctionInput), inputType? (Scalar\|Vector2\|Vector3\|Vector4\|Texture2D\|TextureCube\|StaticBool\|MaterialAttributes), outputName? (for FunctionOutput)` (#463) |
+| `connect_function_expressions` | Wire two expressions inside a MaterialFunction. Params: `functionPath, sourceExpression (name or index), sourceOutput?, targetExpression (name or index), targetInput?` (#463) |
+| `list_function_expressions` | List expressions inside a MaterialFunction. Params: `functionPath` (#463) |
 | `create_simple` | Single-call simple material. Params: `name, packagePath?, baseColor? ({r,g,b}), metallic?, specular?, roughness?, emissive?, usages?[] (e.g. InstancedStaticMeshes, Nanite, NiagaraSprites)` |
 | `set_usage` | Set EMaterialUsage flag(s) on a material. Params: `assetPath, usage OR usages[], enabled? (default true)` |
 | `set_shading_model` | Set shading model. Params: `assetPath, shadingModel` |
@@ -284,7 +295,10 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `list` | List anim assets. Params: `directory?, recursive?` |
 | `create_montage` | Create montage. Params: `animSequencePath, name?, packagePath?` |
 | `create_anim_blueprint` | Create AnimBP. Params: `skeletonPath, name?, packagePath?, parentClass?` |
-| `create_blendspace` | Create blendspace. Params: `skeletonPath, name?, packagePath?, axisHorizontal?, axisVertical?` |
+| `create_blendspace` | Create blendspace (2D). Params: `skeletonPath, name?, packagePath?, axisHorizontal?, axisVertical?` |
+| `create_blendspace_1d` | Create BlendSpace1D. Params: `skeletonPath, name?, packagePath?, axisName? (default Speed), axisMin?, axisMax?, gridNum?` (#459) |
+| `populate_blendspace` | One-call axis params + samples authoring for 1D/2D. Params: `assetPath, axis? ({name?, min?, max?, gridNum?}) OR blendspaceAxes? OR axisHorizontal/axisVertical + horizontalMin/horizontalMax/...; samples ([{animationPath, x, y?}]); clearExisting? (default true)` (#459) |
+| `remove_notify` | Remove notify(s) by name and/or class. Pass at least one filter; both AND. Idempotent. Params: `assetPath, notifyName?, notifyClass?` (#471) |
 | `add_notify` | Add notify. Params: `assetPath, notifyName, triggerTime, notifyClass?` |
 | `get_skeleton_info` | Read skeleton. Params: `assetPath` |
 | `list_sockets` | List sockets. Params: `assetPath` |
@@ -487,6 +501,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `get_runtime_value` | Read PIE actor property. Params: `actorLabel, propertyName (supports dotted paths: component.field or component.struct.field for nested reads on component subobjects, #344/#381)` |
 | `get_pie_pawn` | Resolve the controlled pawn in the active PIE world. Params: `playerIndex? (default 0)` |
 | `invoke_function` | Call a BlueprintCallable / Exec UFUNCTION on a target actor or one of its components. Params: `actorLabel, functionName, component? (component subobject name; redirects target from the actor to that component, #382), args? (object), actorArgs? (object mapping UObject* parameter name to actor label, resolved against live actors in the active world; #383), world? (editor\\|pie)` |
+| `list_function_libraries` | Enumerate UBlueprintFunctionLibrary subclasses (GeometryScript, Kismet, Animation, user-defined). Filter by case-insensitive substring; returns library name + each static BlueprintCallable function with its tooltip. Pair with `invoke_function` to drive any library op from MCP. Params: `pattern?, includeFunctions? (default true)` (#455) |
 | `set_pie_time_scale` | Fast-forward PIE game time. Params: `factor (>0)` |
 | `hot_reload` | Hot reload C++ |
 | `undo` | Undo last transaction |
@@ -579,6 +594,10 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `read_behavior_tree_graph` | Walk BT tree: composites, tasks, decorators, services with blackboard keys. Params: `assetPath` |
 | `create_blackboard` | Create Blackboard. Params: `name, packagePath?` |
 | `add_blackboard_key` | Add a typed key to a Blackboard asset. Params: `blackboardPath, keyName, keyType (Bool\\|Int\\|Float\\|String\\|Name\\|Vector\\|Rotator\\|Object\\|Class\\|Enum), baseClass? (for Object/Class types; e.g. /Script/Engine.Actor) (#250)` |
+| `remove_blackboard_key` | Remove a key from a Blackboard asset by name. Idempotent. Params: `blackboardPath, keyName` (#469) |
+| `set_blackboard_parent` | Set Parent on a BlackboardData asset (canonical UE child-of-parent pattern). `autoPruneDuplicateKeys` (default true) prunes own-keys the parent chain already defines. Params: `blackboardPath, parentPath, autoPruneDuplicateKeys?` (#469) |
+| `read_blackboard` | Read a Blackboard asset: parent path, ownKeys, inheritedKeys (walks the parent chain). Params: `blackboardPath` (#469) |
+| `list_bt_node_classes` | Enumerate every concrete BehaviorTree node class on this build (composites, tasks, decorators, services). Filter by `kind` to narrow. Useful for discovering plugin-supplied node classes (#494) |
 | `set_behavior_tree_blackboard` | Rebind a BehaviorTree asset's BlackboardAsset reference. Params: `behaviorTreePath, blackboardPath` |
 | `create_behavior_tree` | Create behavior tree. Params: `name, packagePath?, blackboardPath?` |
 | `create_eqs_query` | Create EQS query. Params: `name, packagePath?` |
