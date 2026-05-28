@@ -270,6 +270,36 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 			continue;
 		}
 
+		// #466: dotted paths like "Settings.VignetteIntensity" descend into
+		// nested structs (PostProcessVolume.Settings is the marquee case). When
+		// the key writes into FPostProcessSettings, also auto-flip the matching
+		// bOverride_* flag so the change actually takes effect.
+		if (Pair.Key.Contains(TEXT(".")))
+		{
+			FString SetErr;
+			TArray<FString> Parts;
+			Pair.Key.ParseIntoArray(Parts, TEXT("."));
+			if (MCPJsonProperty::SetDottedPropertyFromJson(TargetActor, Pair.Key, Pair.Value, SetErr))
+			{
+				if (Parts.Num() >= 2)
+				{
+					const FString& Container = Parts[0];
+					const FString& Leaf = Parts.Last();
+					if (!Leaf.StartsWith(TEXT("bOverride_")))
+					{
+						const FString OverrideKey = FString::Printf(TEXT("%s.bOverride_%s"), *Container, *Leaf);
+						FString OverrideErr;
+						TSharedPtr<FJsonValue> True = MakeShared<FJsonValueBoolean>(true);
+						MCPJsonProperty::SetDottedPropertyFromJson(TargetActor, OverrideKey, True, OverrideErr);
+					}
+				}
+				Changes.Add(MakeShared<FJsonValueString>(Pair.Key));
+				continue;
+			}
+			Skipped.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%s: %s"), *Pair.Key, *SetErr)));
+			continue;
+		}
+
 		FProperty* Prop = TargetActor->GetClass()->FindPropertyByName(*Pair.Key);
 		if (!Prop)
 		{
@@ -281,24 +311,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 		Prop->ExportText_Direct(PrevStr, Prop->ContainerPtrToValuePtr<void>(TargetActor),
 			Prop->ContainerPtrToValuePtr<void>(TargetActor), TargetActor, PPF_None);
 
-		FString ValueStr;
-		bool bApplied = false;
-		if (Pair.Value->TryGetString(ValueStr))
-		{
-			Prop->ImportText_Direct(*ValueStr, Prop->ContainerPtrToValuePtr<void>(TargetActor), TargetActor, PPF_None);
-			bApplied = true;
-		}
-		else
-		{
-			double NumVal;
-			if (Pair.Value->TryGetNumber(NumVal))
-			{
-				ValueStr = FString::SanitizeFloat(NumVal);
-				Prop->ImportText_Direct(*ValueStr, Prop->ContainerPtrToValuePtr<void>(TargetActor), TargetActor, PPF_None);
-				bApplied = true;
-			}
-		}
-
+		// #466: route every value through MCPJsonProperty so JSON dicts (e.g.
+		// {x,y,z,w} for FVector4) reach struct properties, not just strings.
+		void* ValueAddr = Prop->ContainerPtrToValuePtr<void>(TargetActor);
+		FString SetErr;
+		bool bApplied = MCPJsonProperty::SetJsonOnProperty(Prop, ValueAddr, Pair.Value, SetErr);
 		if (bApplied)
 		{
 			Changes.Add(MakeShared<FJsonValueString>(Pair.Key));
@@ -306,7 +323,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 		}
 		else
 		{
-			Skipped.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%s: value type not coercible"), *Pair.Key)));
+			Skipped.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%s: %s"), *Pair.Key, *SetErr)));
 		}
 	}
 
