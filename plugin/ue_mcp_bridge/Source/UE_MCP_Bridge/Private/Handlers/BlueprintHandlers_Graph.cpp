@@ -27,6 +27,7 @@
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 #include "K2Node_DynamicCast.h"
+#include "K2Node_ComponentBoundEvent.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_CallDelegate.h"
 #include "K2Node_ConstructObjectFromClass.h"
@@ -495,6 +496,51 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 				if (FObjectProperty* Prop = CastField<FObjectProperty>(NewNode->GetClass()->FindPropertyByName(TEXT("InputAction"))))
 				{
 					Prop->SetObjectPropertyValue_InContainer(NewNode, IA);
+				}
+			}
+		}
+	}
+
+	// #427: K2Node_ComponentBoundEvent identity = (componentName,
+	// delegateName). Without these the node title shows "BoundEvent None"
+	// and pin types don't match the delegate signature. Resolve the
+	// component from the BP's SCS by name, find the multicast delegate by
+	// name on the component class, and call InitializeComponentBoundEventParams.
+	if (NodeParams && NewNode->GetClass()->GetName() == TEXT("K2Node_ComponentBoundEvent"))
+	{
+		FString ComponentName;
+		FString DelegateName;
+		(*NodeParams)->TryGetStringField(TEXT("componentName"), ComponentName);
+		if (!(*NodeParams)->TryGetStringField(TEXT("delegateName"), DelegateName))
+			(*NodeParams)->TryGetStringField(TEXT("eventName"), DelegateName);
+
+		if (!ComponentName.IsEmpty() && !DelegateName.IsEmpty())
+		{
+			// Find the FObjectProperty on the BP's generated class for the component.
+			FObjectProperty* CompProp = nullptr;
+			if (Blueprint->SkeletonGeneratedClass)
+			{
+				for (TFieldIterator<FObjectProperty> It(Blueprint->SkeletonGeneratedClass); It; ++It)
+				{
+					if (It->GetName() == ComponentName) { CompProp = *It; break; }
+				}
+			}
+			if (CompProp)
+			{
+				FMulticastDelegateProperty* DelegateProp = nullptr;
+				if (UClass* CompClass = CompProp->PropertyClass)
+				{
+					for (TFieldIterator<FMulticastDelegateProperty> It(CompClass); It; ++It)
+					{
+						if (It->GetName() == DelegateName) { DelegateProp = *It; break; }
+					}
+				}
+				if (DelegateProp)
+				{
+					if (auto* BoundEvent = Cast<UK2Node_ComponentBoundEvent>(NewNode))
+					{
+						BoundEvent->InitializeComponentBoundEventParams(CompProp, DelegateProp);
+					}
 				}
 			}
 		}
