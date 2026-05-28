@@ -479,6 +479,52 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		}
 	}
 
+	// #443: K2Node_EnhancedInputAction.InputAction must be set before AllocateDefaultPins,
+	// otherwise pins like ActionValue come out as bool instead of Vector2D and the
+	// node title stays "EnhancedInputAction None". Accept inputAction (path) or
+	// InputAction (nodeParams nested key).
+	if (NodeParams && NewNode->GetClass()->GetName() == TEXT("K2Node_EnhancedInputAction"))
+	{
+		FString InputActionPath;
+		if (!(*NodeParams)->TryGetStringField(TEXT("inputAction"), InputActionPath))
+			(*NodeParams)->TryGetStringField(TEXT("InputAction"), InputActionPath);
+		if (!InputActionPath.IsEmpty())
+		{
+			if (UObject* IA = StaticLoadObject(UObject::StaticClass(), nullptr, *InputActionPath))
+			{
+				if (FObjectProperty* Prop = CastField<FObjectProperty>(NewNode->GetClass()->FindPropertyByName(TEXT("InputAction"))))
+				{
+					Prop->SetObjectPropertyValue_InContainer(NewNode, IA);
+				}
+			}
+		}
+	}
+
+	// #443: K2Node_GetSubsystem (and PC variant) need CustomClass set so pin types
+	// resolve to the concrete subsystem rather than UInvalidSubsystem. Accept
+	// customClass / CustomClass / subsystemClass (string class path).
+	if (NodeParams && (NewNode->GetClass()->GetName() == TEXT("K2Node_GetSubsystem")
+		|| NewNode->GetClass()->GetName() == TEXT("K2Node_GetSubsystemFromPC")))
+	{
+		FString SubsystemClass;
+		if (!(*NodeParams)->TryGetStringField(TEXT("customClass"), SubsystemClass))
+			if (!(*NodeParams)->TryGetStringField(TEXT("CustomClass"), SubsystemClass))
+				(*NodeParams)->TryGetStringField(TEXT("subsystemClass"), SubsystemClass);
+		if (!SubsystemClass.IsEmpty())
+		{
+			UClass* Resolved = LoadClass<UObject>(nullptr, *SubsystemClass);
+			if (!Resolved) Resolved = LoadObject<UClass>(nullptr, *SubsystemClass);
+			if (!Resolved) Resolved = FindClassByShortName(SubsystemClass);
+			if (Resolved)
+			{
+				if (FClassProperty* Prop = CastField<FClassProperty>(NewNode->GetClass()->FindPropertyByName(TEXT("CustomClass"))))
+				{
+					Prop->SetObjectPropertyValue_InContainer(NewNode, Resolved);
+				}
+			}
+		}
+	}
+
 	// #201/#231: K2Node_ConstructObjectFromClass-derived nodes (SpawnActorFromClass,
 	// ConstructObject, AddComponent, etc.) assert in PostPlacedNewNode if the
 	// owning graph has not been Modify()'d first - the assert lives in
