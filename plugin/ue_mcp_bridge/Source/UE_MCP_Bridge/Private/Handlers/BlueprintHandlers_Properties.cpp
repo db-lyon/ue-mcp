@@ -29,6 +29,8 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/MeshComponent.h"
+#include "Materials/MaterialInterface.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Actor.h"
 #include "Engine/StaticMesh.h"
@@ -1128,6 +1130,96 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::GetCdoProperties(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("classShortName"), Class->GetName());
 	Result->SetObjectField(TEXT("properties"), PropsObj);
 	Result->SetNumberField(TEXT("count"), PropsObj->Values.Num());
+
+	return MCPResult(Result);
+}
+
+// #442: dedicated OverrideMaterials writer for mesh-component templates
+// (StaticMeshComponent, SkeletalMeshComponent, anything deriving from
+// UMeshComponent). Takes materialPaths directly so the caller never has to
+// route a TArray through the generic set_component_property path.
+//
+// Params: assetPath, componentName, materialPaths (string[]). Pass an empty
+// array to clear the override list.
+TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentOverrideMaterials(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	FString ComponentName;
+	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
+
+	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("materialPaths"), PathsArr) || !PathsArr)
+	{
+		return MCPError(TEXT("Missing 'materialPaths' (string array)"));
+	}
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	bool bIsInherited = false;
+	TArray<FString> Available;
+	UActorComponent* Template = ResolveComponentTemplate(
+		Blueprint, ComponentName, /*bForWrite*/ true, bIsInherited, Available);
+	if (!Template)
+	{
+		return MCPError(FString::Printf(TEXT("Component '%s' not found. Available: [%s]"),
+			*ComponentName, *FString::Join(Available, TEXT(", "))));
+	}
+
+	UMeshComponent* MeshComp = Cast<UMeshComponent>(Template);
+	if (!MeshComp)
+	{
+		return MCPError(FString::Printf(TEXT("Component '%s' is %s, not a MeshComponent"),
+			*ComponentName, *Template->GetClass()->GetName()));
+	}
+
+	TArray<UMaterialInterface*> Loaded;
+	TArray<FString> ResolvedPaths;
+	for (const TSharedPtr<FJsonValue>& V : *PathsArr)
+	{
+		FString Path;
+		if (!V->TryGetString(Path) || Path.IsEmpty())
+		{
+			Loaded.Add(nullptr);
+			ResolvedPaths.Add(TEXT("None"));
+			continue;
+		}
+		UMaterialInterface* M = Cast<UMaterialInterface>(StaticLoadObject(UMaterialInterface::StaticClass(), nullptr, *Path));
+		if (!M) return MCPError(FString::Printf(TEXT("Material not found: %s"), *Path));
+		Loaded.Add(M);
+		ResolvedPaths.Add(M->GetPathName());
+	}
+
+	// Capture the prior OverrideMaterials list for rollback.
+	TArray<TSharedPtr<FJsonValue>> PrevPaths;
+	for (UMaterialInterface* Prev : MeshComp->OverrideMaterials)
+	{
+		PrevPaths.Add(MakeShared<FJsonValueString>(Prev ? Prev->GetPathName() : FString(TEXT("None"))));
+	}
+
+	Template->Modify();
+	MeshComp->OverrideMaterials = Loaded;
+	Template->PostEditChange();
+
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	SaveAssetPackage(Blueprint);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("componentName"), ComponentName);
+	Result->SetNumberField(TEXT("materialCount"), Loaded.Num());
+	TArray<TSharedPtr<FJsonValue>> ResolvedArr;
+	for (const FString& P : ResolvedPaths) ResolvedArr.Add(MakeShared<FJsonValueString>(P));
+	Result->SetArrayField(TEXT("materialPaths"), ResolvedArr);
+	Result->SetBoolField(TEXT("inherited"), bIsInherited);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("path"), AssetPath);
+	Payload->SetStringField(TEXT("componentName"), ComponentName);
+	Payload->SetArrayField(TEXT("materialPaths"), PrevPaths);
+	MCPSetRollback(Result, TEXT("set_component_override_materials"), Payload);
 
 	return MCPResult(Result);
 }
