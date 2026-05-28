@@ -48,6 +48,9 @@ private:
 	static TSharedPtr<FJsonValue> SetBlackboardParent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveBlackboardKey(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadBlackboard(const TSharedPtr<FJsonObject>& Params);
+	// #494: discover available BT node classes so authoring scripts can
+	// build asset-specific BTs without grepping the engine source.
+	static TSharedPtr<FJsonValue> ListBTNodeClasses(const TSharedPtr<FJsonObject>& Params);
 	// #250: rebind a BehaviorTree asset's BlackboardAsset (the C++ field is
 	// protected, so reflection is the only way to write it cleanly).
 	static TSharedPtr<FJsonValue> SetBehaviorTreeBlackboard(const TSharedPtr<FJsonObject>& Params);

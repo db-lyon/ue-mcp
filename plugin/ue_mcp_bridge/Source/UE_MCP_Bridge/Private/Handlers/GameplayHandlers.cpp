@@ -120,6 +120,8 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_blackboard_parent"), &SetBlackboardParent);
 	Registry.RegisterHandler(TEXT("remove_blackboard_key"), &RemoveBlackboardKey);
 	Registry.RegisterHandler(TEXT("read_blackboard"), &ReadBlackboard);
+	// #494: discover available BT node classes (composites, tasks, decorators, services).
+	Registry.RegisterHandler(TEXT("list_bt_node_classes"), &ListBTNodeClasses);
 	Registry.RegisterHandler(TEXT("set_behavior_tree_blackboard"), &SetBehaviorTreeBlackboard);
 	Registry.RegisterHandler(TEXT("rebuild_navigation"), &RebuildNavmesh);
 	Registry.RegisterHandler(TEXT("find_nav_path"), &FindNavPath);
@@ -1360,6 +1362,49 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadBlackboard(const TSharedPtr<FJsonO
 	Result->SetArrayField(TEXT("inheritedKeys"), InheritedKeys);
 	Result->SetNumberField(TEXT("ownKeyCount"), BB->Keys.Num());
 	Result->SetNumberField(TEXT("inheritedKeyCount"), InheritedKeys.Num());
+	return MCPResult(Result);
+}
+
+// #494: enumerate every concrete BT node class (composite, task, decorator,
+// service). Gives authoring scripts a discoverable list of node classes to
+// pass to a future add_bt_node handler, and lets them resolve plugin-supplied
+// custom decorators (UBTDecorator_*) without grepping engine + plugin source.
+//
+// Params: kind? ("composite"|"task"|"decorator"|"service" - default: all)
+TSharedPtr<FJsonValue> FGameplayHandlers::ListBTNodeClasses(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString KindFilter = OptionalString(Params, TEXT("kind"), TEXT("")).ToLower();
+	const bool bAll = KindFilter.IsEmpty();
+
+	auto PushClass = [](TArray<TSharedPtr<FJsonValue>>& Out, UClass* C, const TCHAR* Kind)
+	{
+		if (!C || C->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists)) return;
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), C->GetName());
+		Obj->SetStringField(TEXT("path"), C->GetPathName());
+		Obj->SetStringField(TEXT("kind"), Kind);
+		Out.Add(MakeShared<FJsonValueObject>(Obj));
+	};
+
+	TArray<TSharedPtr<FJsonValue>> Composites, Tasks, Decorators, Services;
+	for (TObjectIterator<UClass> It; It; ++It)
+	{
+		UClass* C = *It;
+		if (C->IsChildOf(UBTCompositeNode::StaticClass())) PushClass(Composites, C, TEXT("composite"));
+		else if (C->IsChildOf(UBTTaskNode::StaticClass())) PushClass(Tasks, C, TEXT("task"));
+		else if (C->IsChildOf(UBTDecorator::StaticClass())) PushClass(Decorators, C, TEXT("decorator"));
+		else if (C->IsChildOf(UBTService::StaticClass())) PushClass(Services, C, TEXT("service"));
+	}
+
+	auto Result = MCPSuccess();
+	if (bAll || KindFilter == TEXT("composite")) Result->SetArrayField(TEXT("composites"), Composites);
+	if (bAll || KindFilter == TEXT("task")) Result->SetArrayField(TEXT("tasks"), Tasks);
+	if (bAll || KindFilter == TEXT("decorator")) Result->SetArrayField(TEXT("decorators"), Decorators);
+	if (bAll || KindFilter == TEXT("service")) Result->SetArrayField(TEXT("services"), Services);
+	Result->SetNumberField(TEXT("compositeCount"), Composites.Num());
+	Result->SetNumberField(TEXT("taskCount"), Tasks.Num());
+	Result->SetNumberField(TEXT("decoratorCount"), Decorators.Num());
+	Result->SetNumberField(TEXT("serviceCount"), Services.Num());
 	return MCPResult(Result);
 }
 
