@@ -279,6 +279,23 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 		return MCPResult(Existed);
 	}
 
+	// #446: Pre-flight - reject state names that would collide with another
+	// graph in the same outer. The crash report happened when add_state's
+	// Rename call landed on a name already owned by another sibling graph;
+	// CompileBlueprint then walked the duplicate-named graph and asserted.
+	{
+		UObject* GraphOuter = SMGraph->GetOuter();
+		if (GraphOuter)
+		{
+			if (UObject* Existing = StaticFindObject(nullptr, GraphOuter, *StateName, /*ExactClass*/ false))
+			{
+				return MCPError(FString::Printf(
+					TEXT("Cannot create state '%s' - name collides with existing %s in the state machine graph outer. Pick a unique stateName."),
+					*StateName, *Existing->GetClass()->GetName()));
+			}
+		}
+	}
+
 	// Create state node
 	UAnimStateNode* NewState = NewObject<UAnimStateNode>(SMGraph);
 	SMGraph->AddNode(NewState, false, false);
@@ -286,10 +303,31 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 	NewState->PostPlacedNewNode();
 	NewState->AllocateDefaultPins();
 
-	// Set the state name via the BoundGraph (the state's internal graph)
+	// Set the state name via the BoundGraph (the state's internal graph).
+	// #446: rename via RenameGraph so redirectors are not authored under the
+	// asset, and bail with a clear error if the rename is refused instead of
+	// continuing into Compile (which then crashes on the half-renamed graph).
 	if (NewState->BoundGraph)
 	{
-		NewState->BoundGraph->Rename(*StateName);
+		UObject* GraphOuter = NewState->BoundGraph->GetOuter();
+		const FString DesiredName = StateName;
+		if (UObject* Collision = StaticFindObject(nullptr, GraphOuter, *DesiredName, /*ExactClass*/ false))
+		{
+			if (Collision != NewState->BoundGraph)
+			{
+				SMGraph->RemoveNode(NewState);
+				return MCPError(FString::Printf(
+					TEXT("State name collision while renaming BoundGraph to '%s' (collides with %s). Rolled back the unfinished state."),
+					*DesiredName, *Collision->GetClass()->GetName()));
+			}
+		}
+		if (!NewState->BoundGraph->Rename(*DesiredName, GraphOuter, REN_DontCreateRedirectors))
+		{
+			SMGraph->RemoveNode(NewState);
+			return MCPError(FString::Printf(
+				TEXT("Failed to rename BoundGraph to '%s' (RenameGraph returned false). Rolled back the unfinished state."),
+				*DesiredName));
+		}
 	}
 
 	// Position states in a grid
