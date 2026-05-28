@@ -38,6 +38,11 @@
 #include "Containers/Queue.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 
 // Kismet libraries used by K2 node construction (AddNode etc.)
 #include "Kismet/GameplayStatics.h"
@@ -50,6 +55,51 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "Engine/InheritableComponentHandler.h"
+
+namespace
+{
+	constexpr int32 DefaultSafeReadGraphLimit = 128;
+
+	FString MakeDefaultGraphDumpPath(const FString& AssetPath, const FString& GraphName)
+	{
+		const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
+		const FString PathHash = FString::Printf(TEXT("%08x"), GetTypeHash(AssetPath + TEXT(":") + GraphName));
+		const FString BaseName = FPaths::MakeValidFileName(AssetName + TEXT("_") + GraphName + TEXT("_") + PathHash);
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("UE_MCP"), TEXT("GraphDumps"), BaseName + TEXT(".json"));
+	}
+
+	bool WriteJsonObjectToFile(const TSharedPtr<FJsonObject>& JsonObject, const FString& RequestedPath, const FString& AssetPath, const FString& GraphName, FString& OutResolvedPath, FString& OutError)
+	{
+		OutResolvedPath = RequestedPath.IsEmpty() ? MakeDefaultGraphDumpPath(AssetPath, GraphName) : RequestedPath;
+		if (FPaths::IsRelative(OutResolvedPath))
+		{
+			OutResolvedPath = FPaths::Combine(FPaths::ProjectSavedDir(), OutResolvedPath);
+		}
+
+		const FString Directory = FPaths::GetPath(OutResolvedPath);
+		if (!Directory.IsEmpty() && !IFileManager::Get().MakeDirectory(*Directory, true))
+		{
+			OutError = FString::Printf(TEXT("Failed to create dump directory: %s"), *Directory);
+			return false;
+		}
+
+		FString JsonText;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonText);
+		if (!FJsonSerializer::Serialize(JsonObject.ToSharedRef(), Writer))
+		{
+			OutError = TEXT("Failed to serialize graph JSON");
+			return false;
+		}
+
+		if (!FFileHelper::SaveStringToFile(JsonText, *OutResolvedPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+		{
+			OutError = FString::Printf(TEXT("Failed to write graph dump: %s"), *OutResolvedPath);
+			return false;
+		}
+
+		return true;
+	}
+}
 
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>& Params)
@@ -506,6 +556,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
 	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
+	const bool bIncludePins = OptionalBool(Params, TEXT("includePins"), true);
+	const bool bIncludeDefaults = OptionalBool(Params, TEXT("includeDefaults"), true);
+	const bool bIncludeComments = OptionalBool(Params, TEXT("includeComments"), true);
+	const bool bDumpToFile = OptionalBool(Params, TEXT("dumpToFile"), false);
+	const FString OutputPath = OptionalString(Params, TEXT("outputPath"), TEXT(""));
+	const bool bHasOffset = Params->HasField(TEXT("offset"));
+	const bool bHasLimit = Params->HasField(TEXT("limit"));
+	const int32 RequestedOffset = FMath::Max(0, OptionalInt(Params, TEXT("offset"), 0));
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -521,43 +579,122 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
-	TArray<TSharedPtr<FJsonValue>> Nodes;
-	for (UEdGraphNode* Node : TargetGraph->Nodes)
+	const int32 TotalNodeCount = TargetGraph->Nodes.Num();
+	int32 EffectiveLimit = OptionalInt(Params, TEXT("limit"), -1);
+	if (EffectiveLimit <= 0)
 	{
-		if (!Node) continue;
+		EffectiveLimit = bDumpToFile
+			? TotalNodeCount
+			: (bHasLimit ? TotalNodeCount : FMath::Min(TotalNodeCount, DefaultSafeReadGraphLimit));
+	}
+	EffectiveLimit = FMath::Max(0, EffectiveLimit);
 
-		TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
-		NodeObj->SetStringField(TEXT("id"), Node->NodeGuid.ToString());
-		NodeObj->SetStringField(TEXT("class"), Node->GetClass()->GetName());
-		NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
-		NodeObj->SetNumberField(TEXT("posX"), Node->NodePosX);
-		NodeObj->SetNumberField(TEXT("posY"), Node->NodePosY);
-		NodeObj->SetStringField(TEXT("comment"), Node->NodeComment);
+	const int32 StartIndex = FMath::Min(RequestedOffset, TotalNodeCount);
+	const int32 EndIndex = FMath::Min(TotalNodeCount, StartIndex + EffectiveLimit);
+	const bool bAutoPaginated = !bDumpToFile && !bHasLimit && EndIndex < TotalNodeCount;
 
-		// List pins
-		TArray<TSharedPtr<FJsonValue>> Pins;
-		for (UEdGraphPin* Pin : Node->Pins)
+	auto BuildGraphResult = [&](int32 SliceStart, int32 SliceEnd) -> TSharedPtr<FJsonObject>
+	{
+		TArray<TSharedPtr<FJsonValue>> Nodes;
+		for (int32 Index = SliceStart; Index < SliceEnd; ++Index)
 		{
-			if (!Pin) continue;
-			TSharedPtr<FJsonObject> PinObj = MakeShared<FJsonObject>();
-			PinObj->SetStringField(TEXT("name"), Pin->PinName.ToString());
-			PinObj->SetStringField(TEXT("type"), Pin->PinType.PinCategory.ToString());
-			PinObj->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("Input") : TEXT("Output"));
-			PinObj->SetStringField(TEXT("defaultValue"), Pin->DefaultValue);
-			PinObj->SetBoolField(TEXT("connected"), Pin->LinkedTo.Num() > 0);
-			Pins.Add(MakeShared<FJsonValueObject>(PinObj));
-		}
-		NodeObj->SetArrayField(TEXT("pins"), Pins);
+			UEdGraphNode* Node = TargetGraph->Nodes[Index];
+			if (!Node) continue;
 
-		Nodes.Add(MakeShared<FJsonValueObject>(NodeObj));
+			TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+			NodeObj->SetStringField(TEXT("id"), Node->NodeGuid.ToString());
+			NodeObj->SetStringField(TEXT("class"), Node->GetClass()->GetName());
+			NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+			NodeObj->SetNumberField(TEXT("posX"), Node->NodePosX);
+			NodeObj->SetNumberField(TEXT("posY"), Node->NodePosY);
+			if (bIncludeComments)
+			{
+				NodeObj->SetStringField(TEXT("comment"), Node->NodeComment);
+			}
+
+			if (bIncludePins)
+			{
+				TArray<TSharedPtr<FJsonValue>> Pins;
+				for (UEdGraphPin* Pin : Node->Pins)
+				{
+					if (!Pin) continue;
+					TSharedPtr<FJsonObject> PinObj = MakeShared<FJsonObject>();
+					PinObj->SetStringField(TEXT("name"), Pin->PinName.ToString());
+					PinObj->SetStringField(TEXT("type"), Pin->PinType.PinCategory.ToString());
+					PinObj->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("Input") : TEXT("Output"));
+					if (bIncludeDefaults)
+					{
+						PinObj->SetStringField(TEXT("defaultValue"), Pin->DefaultValue);
+					}
+					PinObj->SetBoolField(TEXT("connected"), Pin->LinkedTo.Num() > 0);
+					Pins.Add(MakeShared<FJsonValueObject>(PinObj));
+				}
+				NodeObj->SetArrayField(TEXT("pins"), Pins);
+			}
+
+			Nodes.Add(MakeShared<FJsonValueObject>(NodeObj));
+		}
+
+		auto Result = MCPSuccess();
+		Result->SetStringField(TEXT("path"), AssetPath);
+		Result->SetStringField(TEXT("graphName"), GraphName);
+		Result->SetArrayField(TEXT("nodes"), Nodes);
+		Result->SetNumberField(TEXT("nodeCount"), Nodes.Num());
+		Result->SetNumberField(TEXT("totalNodeCount"), TotalNodeCount);
+		Result->SetNumberField(TEXT("offset"), SliceStart);
+		Result->SetNumberField(TEXT("limit"), SliceEnd - SliceStart);
+		Result->SetBoolField(TEXT("hasMore"), SliceEnd < TotalNodeCount);
+		Result->SetNumberField(TEXT("nextOffset"), SliceEnd < TotalNodeCount ? SliceEnd : -1);
+		if (bAutoPaginated)
+		{
+			Result->SetBoolField(TEXT("autoPaginated"), true);
+		}
+		if (!bIncludePins)
+		{
+			Result->SetBoolField(TEXT("includePins"), false);
+		}
+		if (!bIncludeDefaults)
+		{
+			Result->SetBoolField(TEXT("includeDefaults"), false);
+		}
+		if (!bIncludeComments)
+		{
+			Result->SetBoolField(TEXT("includeComments"), false);
+		}
+		return Result;
+	};
+
+	if (bDumpToFile)
+	{
+		const int32 DumpStartIndex = bHasOffset ? StartIndex : 0;
+		const int32 DumpEndIndex = (bHasOffset || bHasLimit) ? EndIndex : TotalNodeCount;
+		const TSharedPtr<FJsonObject> DumpResult = BuildGraphResult(DumpStartIndex, DumpEndIndex);
+		FString ResolvedDumpPath;
+		FString DumpError;
+		if (!WriteJsonObjectToFile(DumpResult, OutputPath, AssetPath, GraphName, ResolvedDumpPath, DumpError))
+		{
+			return MCPError(DumpError);
+		}
+
+		auto Result = MCPSuccess();
+		Result->SetStringField(TEXT("path"), AssetPath);
+		Result->SetStringField(TEXT("graphName"), GraphName);
+		Result->SetBoolField(TEXT("dumpedToFile"), true);
+		Result->SetStringField(TEXT("outputPath"), ResolvedDumpPath);
+		Result->SetNumberField(TEXT("nodeCount"), DumpResult->GetNumberField(TEXT("nodeCount")));
+		Result->SetNumberField(TEXT("totalNodeCount"), TotalNodeCount);
+		Result->SetNumberField(TEXT("offset"), DumpStartIndex);
+		Result->SetNumberField(TEXT("limit"), DumpEndIndex - DumpStartIndex);
+		Result->SetBoolField(TEXT("hasMore"), DumpEndIndex < TotalNodeCount);
+		Result->SetNumberField(TEXT("nextOffset"), DumpEndIndex < TotalNodeCount ? DumpEndIndex : -1);
+		if (bAutoPaginated)
+		{
+			Result->SetBoolField(TEXT("autoPaginated"), true);
+		}
+		return MCPResult(Result);
 	}
 
-	auto Result = MCPSuccess();
-	Result->SetStringField(TEXT("path"), AssetPath);
-	Result->SetStringField(TEXT("graphName"), GraphName);
-	Result->SetArrayField(TEXT("nodes"), Nodes);
-	Result->SetNumberField(TEXT("nodeCount"), Nodes.Num());
-	return MCPResult(Result);
+	return MCPResult(BuildGraphResult(StartIndex, EndIndex));
 }
 
 
