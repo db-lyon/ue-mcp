@@ -33,6 +33,9 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_attribute"), &AddAttribute);
 	Registry.RegisterHandler(TEXT("set_ability_tags"), &SetAbilityTags);
 	Registry.RegisterHandler(TEXT("set_effect_modifier"), &SetEffectModifier);
+	Registry.RegisterHandler(TEXT("apply_effect"), &ApplyEffect);
+	Registry.RegisterHandler(TEXT("set_attribute"), &SetAttribute);
+	Registry.RegisterHandler(TEXT("get_attribute"), &GetAttribute);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateGasBlueprint(

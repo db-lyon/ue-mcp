@@ -14,6 +14,9 @@ export const gasTool: ToolDef = categoryTool(
     set_effect_modifier: bp("Add modifier. Params: effectPath, attribute, operation?, magnitude?", "set_effect_modifier"),
     create_cue:          bp("Create GameplayCue. Params: name, packagePath?, cueType?", "create_gameplay_cue"),
     get_info:            bp("Inspect GAS setup. Params: blueprintPath", "get_gas_info"),
+    apply_effect:        bp("Apply a GameplayEffect to a live actor's ASC (agnostic stat/damage stimulus - uses the game's own effect). Params: actorLabel, effectClass (content path or class name), level?, setByCaller? ({tag-or-name: magnitude}), world? (auto|pie|editor, default auto)", "apply_effect"),
+    set_attribute:       bp("Set a gameplay attribute's base value on a live actor's ASC (recalculates CurrentValue through the aggregator). Params: actorLabel, attribute (Health | SetName.Health), value, world?", "set_attribute"),
+    get_attribute:       bp("Read gameplay attribute base + current values on a live actor's ASC. Omit attribute to list all. Params: actorLabel, attribute?, world?", "get_attribute"),
   },
   undefined,
   {
@@ -37,5 +40,12 @@ export const gasTool: ToolDef = categoryTool(
     magnitude: z.number().optional(),
     durationPolicy: z.string().optional(),
     cueType: z.string().optional(),
+    // Runtime GAS control (apply_effect / set_attribute / get_attribute)
+    actorLabel: z.string().optional().describe("Live actor label/name for runtime GAS actions"),
+    effectClass: z.string().optional().describe("apply_effect: GameplayEffect content path or class name"),
+    level: z.number().optional().describe("apply_effect: effect level (default 1)"),
+    setByCaller: z.record(z.number()).optional().describe("apply_effect: SetByCaller magnitudes keyed by gameplay tag or name"),
+    value: z.number().optional().describe("set_attribute: new base value"),
+    world: z.string().optional().describe("Runtime world scope: auto (default) | pie | editor"),
   },
 );
