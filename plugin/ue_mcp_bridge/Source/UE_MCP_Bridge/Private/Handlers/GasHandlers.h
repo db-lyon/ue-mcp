@@ -33,9 +33,16 @@ private:
 	static TSharedPtr<FJsonValue> SetAbilityTags(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetEffectModifier(const TSharedPtr<FJsonObject>& Params);
 
+	// Wire an AttributeSet (with optional init DataTable) onto a Blueprint's ASC
+	// component template via DefaultStartingData. Authoring; in GasHandlers.cpp.
+	static TSharedPtr<FJsonValue> SetAscDefaults(const TSharedPtr<FJsonObject>& Params);
+
 	// Runtime GAS control (operates on a live actor's AbilitySystemComponent,
 	// PIE by default). Implemented in GasHandlers_Runtime.cpp.
 	static TSharedPtr<FJsonValue> ApplyEffect(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetAttribute(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetAttribute(const TSharedPtr<FJsonObject>& Params);
+	// InitAbilityActorInfo + optionally GetOrCreateAttributeSubobject on a live
+	// actor, so a bridge-authored GAS actor has live attributes to test against.
+	static TSharedPtr<FJsonValue> InitAsc(const TSharedPtr<FJsonObject>& Params);
 };

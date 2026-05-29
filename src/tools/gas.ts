@@ -14,9 +14,11 @@ export const gasTool: ToolDef = categoryTool(
     set_effect_modifier: bp("Add modifier. Params: effectPath, attribute, operation?, magnitude?", "set_effect_modifier"),
     create_cue:          bp("Create GameplayCue. Params: name, packagePath?, cueType?", "create_gameplay_cue"),
     get_info:            bp("Inspect GAS setup. Params: blueprintPath", "get_gas_info"),
+    set_asc_defaults:    bp("Wire an AttributeSet onto a Blueprint's ASC component (DefaultStartingData) so attributes exist at runtime. Params: blueprintPath, attributeSet (content path or class name), componentName?, initDataTable? (starting values). Run add_ability_system_component first.", "set_asc_defaults"),
     apply_effect:        bp("Apply a GameplayEffect to a live actor's ASC (agnostic stat/damage stimulus - uses the game's own effect). Params: actorLabel, effectClass (content path or class name), level?, setByCaller? ({tag-or-name: magnitude}), world? (auto|pie|editor, default auto)", "apply_effect"),
     set_attribute:       bp("Set a gameplay attribute's base value on a live actor's ASC (recalculates CurrentValue through the aggregator). Params: actorLabel, attribute (Health | SetName.Health), value, world?", "set_attribute"),
     get_attribute:       bp("Read gameplay attribute base + current values on a live actor's ASC. Omit attribute to list all. Params: actorLabel, attribute?, world?", "get_attribute"),
+    init_asc:            bp("Initialize a live actor's ASC (InitAbilityActorInfo) and optionally instantiate an AttributeSet so attributes are live - the runtime setup step for testing a bridge-authored GAS actor. Params: actorLabel, attributeSet? (content path or class name), world?", "init_asc"),
   },
   undefined,
   {
@@ -47,5 +49,7 @@ export const gasTool: ToolDef = categoryTool(
     setByCaller: z.record(z.number()).optional().describe("apply_effect: SetByCaller magnitudes keyed by gameplay tag or name"),
     value: z.number().optional().describe("set_attribute: new base value"),
     world: z.string().optional().describe("Runtime world scope: auto (default) | pie | editor"),
+    attributeSet: z.string().optional().describe("set_asc_defaults / init_asc: AttributeSet content path or class name"),
+    initDataTable: z.string().optional().describe("set_asc_defaults: optional DataTable of starting attribute values"),
   },
 );

@@ -109,30 +109,29 @@ namespace
 		Obj->SetNumberField(TEXT("currentValue"), ASC->GetNumericAttribute(Attr));
 	}
 
-	// Resolve a UGameplayEffect subclass from a content path or short class name.
-	UClass* ResolveEffectClass(const FString& Spec)
+	// Resolve a UClass deriving from Base from a content path or short class name.
+	// Handles native classes, Blueprint generated classes (path + "_C"), and a
+	// Blueprint-asset fallback. Returns nullptr unless the result is a Base subclass.
+	UClass* ResolveClassDeriving(const FString& Spec, UClass* Base)
 	{
-		auto IsEffect = [](UClass* C) { return C && C->IsChildOf(UGameplayEffect::StaticClass()); };
+		auto Ok = [Base](UClass* C) { return C && Base && C->IsChildOf(Base); };
 
 		if (Spec.Contains(TEXT("/")))
 		{
-			// Direct class load (native or already-_C class path).
-			if (UClass* C = LoadObject<UClass>(nullptr, *Spec); IsEffect(C)) return C;
-			// Blueprint generated class: "/Game/Foo/GE_Bar" -> ".../GE_Bar.GE_Bar_C".
+			if (UClass* C = LoadObject<UClass>(nullptr, *Spec); Ok(C)) return C;
 			FString AssetName;
 			Spec.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::CaseSensitive, ESearchDir::FromEnd);
 			const FString ClassPath = Spec + TEXT(".") + AssetName + TEXT("_C");
-			if (UClass* C = LoadObject<UClass>(nullptr, *ClassPath); IsEffect(C)) return C;
-			// Fall back to loading the Blueprint and taking its generated class.
+			if (UClass* C = LoadObject<UClass>(nullptr, *ClassPath); Ok(C)) return C;
 			if (UBlueprint* BP = LoadAssetByPath<UBlueprint>(Spec))
 			{
-				if (IsEffect(BP->GeneratedClass)) return BP->GeneratedClass;
+				if (Ok(BP->GeneratedClass)) return BP->GeneratedClass;
 			}
 			return nullptr;
 		}
 
 		UClass* C = FindClassByShortName(Spec);
-		return IsEffect(C) ? C : nullptr;
+		return Ok(C) ? C : nullptr;
 	}
 }
 
@@ -148,7 +147,7 @@ TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& 
 	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Err);
 	if (!ASC) return Err;
 
-	UClass* EffectClass = ResolveEffectClass(EffectSpec);
+	UClass* EffectClass = ResolveClassDeriving(EffectSpec, UGameplayEffect::StaticClass());
 	if (!EffectClass)
 	{
 		return MCPError(FString::Printf(
@@ -296,5 +295,66 @@ TSharedPtr<FJsonValue> FGasHandlers::GetAttribute(const TSharedPtr<FJsonObject>&
 	}
 	Result->SetArrayField(TEXT("attributes"), Rows);
 	Result->SetNumberField(TEXT("count"), Rows.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGasHandlers::InitAsc(const TSharedPtr<FJsonObject>& Params)
+{
+	MCP_CHECK_GAME_THREAD();
+
+	AActor* Actor = nullptr;
+	TSharedPtr<FJsonValue> Err;
+	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Err);
+	if (!ASC) return Err;
+
+	// Establish owner/avatar so abilities activate and effect contexts target
+	// correctly. Safe to call again; a game's own pawn may also init the ASC.
+	ASC->InitAbilityActorInfo(Actor, Actor);
+
+	// Optionally guarantee an attribute set exists on the ASC. This is what lets
+	// a bridge-authored test actor have live attributes without shipping an init
+	// DataTable: spawn the set (with its default values) and register it if it
+	// isn't already present. GetOrCreateAttributeSubobject is protected, so use
+	// the public GetAttributeSet + AddSpawnedAttribute pair.
+	FString CreatedSet;
+	const FString AttrSetSpec = OptionalString(Params, TEXT("attributeSet"));
+	if (!AttrSetSpec.IsEmpty())
+	{
+		UClass* AttrSetClass = ResolveClassDeriving(AttrSetSpec, UAttributeSet::StaticClass());
+		if (!AttrSetClass)
+		{
+			return MCPError(FString::Printf(
+				TEXT("AttributeSet class not found: %s (pass a content path or class name)"), *AttrSetSpec));
+		}
+		const UAttributeSet* Existing = ASC->GetAttributeSet(AttrSetClass);
+		if (!Existing)
+		{
+			UAttributeSet* NewSet = NewObject<UAttributeSet>(Actor, AttrSetClass);
+			ASC->AddSpawnedAttribute(NewSet);
+			CreatedSet = NewSet->GetClass()->GetName();
+		}
+		else
+		{
+			CreatedSet = Existing->GetClass()->GetName();
+		}
+	}
+
+	// Count attributes now live across all spawned sets.
+	int32 AttrCount = 0;
+	for (const UAttributeSet* Set : ASC->GetSpawnedAttributes())
+	{
+		if (!Set) continue;
+		for (TFieldIterator<FProperty> It(Set->GetClass()); It; ++It)
+		{
+			FStructProperty* SProp = CastField<FStructProperty>(*It);
+			if (SProp && SProp->Struct == FGameplayAttributeData::StaticStruct()) ++AttrCount;
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetBoolField(TEXT("initialized"), true);
+	if (!CreatedSet.IsEmpty()) Result->SetStringField(TEXT("attributeSet"), CreatedSet);
+	Result->SetNumberField(TEXT("attributeCount"), AttrCount);
 	return MCPResult(Result);
 }
