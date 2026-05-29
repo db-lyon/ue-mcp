@@ -143,8 +143,9 @@ describe("nativeHandlerInjection", () => {
     // Plan actions are keyed by the BARE handler name; the prefix is applied
     // by mergeInjectionsIntoTool, matching the rest of the inject pipeline.
     expect(Object.keys(plan.actions).sort()).toEqual(["apply_damage", "record_arm"]);
+    // required is forced false (see the optional-params test below).
     expect(plan.actions.apply_damage.schema).toEqual({
-      amount: { type: "number", required: true },
+      amount: { type: "number", required: false },
     });
 
     // Dispatch tasks are registered under `<category>.<prefix>_<handler>` so
@@ -154,6 +155,22 @@ describe("nativeHandlerInjection", () => {
       "gameplay.pie_apply_damage",
       "gameplay.pie_record_arm",
     ]);
+  });
+
+  it("forces surfaced params optional so they can't be required across the shared category", () => {
+    const manifest = manifestWith({
+      uePluginName: "PIE_Studio",
+      minBridgeApi: 1,
+      source: "ue/Plugins/PIE_Studio",
+      category: "gameplay",
+      handlers: {
+        inject_input: {
+          schema: { action_path: { type: "string", required: true } },
+        },
+      },
+    });
+    const { plan } = nativeHandlerInjection(manifest, "pie-studio")!;
+    expect(plan.actions.inject_input.schema?.action_path.required).toBe(false);
   });
 
   it("produces actions that merge into the host category as pie_-prefixed", () => {

@@ -461,12 +461,21 @@ export function nativeHandlerInjection(
   const taskRegistrations: Array<{ name: string; ctor: TaskConstructor }> = [];
 
   for (const [hName, hSpec] of Object.entries(native.handlers)) {
+    // One flat schema backs every action in the host category, so a
+    // schema-level required param would be forced onto unrelated actions.
+    // Native handlers validate their own params (RequireString), so force
+    // every surfaced param optional regardless of what the manifest declares.
+    const optionalSchema = hSpec.schema
+      ? Object.fromEntries(
+          Object.entries(hSpec.schema).map(([k, f]) => [k, { ...f, required: false }]),
+        )
+      : undefined;
     // `task` is synthetic — mergeInjectionsIntoTool reads only description and
     // schema; dispatch is wired through the registry registration below.
     actions[hName] = {
       task: `${manifest.actionPrefix}.${hName}`,
       description: hSpec.description,
-      schema: hSpec.schema,
+      schema: optionalSchema,
     };
     const dispatchName = `${cat}.${manifest.actionPrefix}_${hName}`;
     const timeoutMs = hSpec.timeoutSeconds

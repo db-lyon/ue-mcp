@@ -311,8 +311,8 @@ nativeModule:
       description: "Single-frame Enhanced Input inject"
       timeoutSeconds: 5
       schema:
-        actionName: { type: string, required: true }
-        value:      { type: number }
+        action_path: { type: string, description: "InputAction asset path (required)" }
+        value_x:     { type: number }
     # ... more handlers
 ```
 
@@ -322,7 +322,7 @@ Set `category` to a built-in category, and ue-mcp surfaces every handler as an a
 
 Two rules that bite if missed:
 
-- **Declare params under each handler's `schema:`.** The MCP SDK strips any param not in the action's schema before it reaches the bridge, so an undeclared param silently never arrives. Same field types as `inject:` schemas. Params-free handlers (status polls, list calls) need no schema.
+- **Declare params under each handler's `schema:`.** The MCP SDK strips any param not in the action's schema before it reaches the bridge, so an undeclared param silently never arrives. Same field types as `inject:` schemas. Params-free handlers (status polls, list calls) need no schema. Leave params **optional** (don't set `required: true`): one flat schema backs every action in the category, so a required param would be forced onto unrelated actions - let your C++ handler validate and return a clear error instead, and note "(required)" in the param description.
 - **`timeoutSeconds`** sets the bridge-call timeout for that action (default 30s). Raise it for long-running handlers.
 
 Omit `category` entirely and handlers are still registered on the bridge but exposed as no MCP action - useful only if another task calls them internally. For an agent-facing plugin you almost always want `category`.
