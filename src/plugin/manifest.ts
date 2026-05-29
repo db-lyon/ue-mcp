@@ -84,11 +84,20 @@ const NativeModuleSchema = z.object({
   minBridgeApi: z.number().int().nonnegative(),
   source: z.string().min(1),
   supportedEngineVersions: z.array(z.string().min(1)).default([]),
+  // Built-in category to surface this module's handlers into as MCP actions.
+  // When set, each handler `h` becomes `<category>(action="<actionPrefix>_h")`
+  // dispatching to the bare bridge method `h`. When omitted, handlers are
+  // registered on the bridge but not exposed as actions (back-compat).
+  category: z.string().min(1).optional(),
   handlers: z
     .record(
       z.object({
         description: z.string().optional(),
         timeoutSeconds: z.number().positive().optional(),
+        // Param declarations for the surfaced action. Required for any param
+        // the handler reads: the MCP SDK strips keys absent from the action's
+        // schema before they reach the bridge.
+        schema: z.record(SchemaFieldSchema).optional(),
       }),
     )
     .default({}),

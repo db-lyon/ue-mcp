@@ -9,7 +9,7 @@ ue-mcp's plugin system lets npm packages extend the server in three ways:
 Most plugins use only the first shape; the other two are available when injection is the wrong fit. This page covers both sides: installing and managing plugins (consumer), and writing and publishing one (author). The author section starts at [Authoring a plugin](#authoring-a-plugin) - if you're just trying to use a plugin somebody else wrote, you can stop after [Using plugins](#using-plugins).
 
 !!! info "Live reference"
-    [`pie-studio`](https://github.com/db-lyon/pie-studio) ([npm](https://www.npmjs.com/package/pie-studio)) is the canonical reference. It ships 33 native C++ handlers for PIE recording, replay, observation, and input injection - all injected into the `gameplay` category. The examples below mirror its real source.
+    [`pie-studio`](https://github.com/db-lyon/pie-studio) ([npm](https://www.npmjs.com/package/pie-studio)) is the canonical native-module reference. It ships C++ handlers for PIE recording, replay, observation, and input injection, surfaced into the `gameplay` category via `nativeModule.category`. See [Shipping native C++](#shipping-native-c).
 
 ## Quick start
 
@@ -74,7 +74,7 @@ The injection happens before any tool is registered with the MCP client, so by t
 |-------|-----------------|----------------------|
 | **A. Inject only** | `inject:` | The action belongs inside an existing category. Default choice. |
 | **B. Provide a new category** | `provides:` (with or without `inject:`) | The plugin opens a whole new domain - audio middleware, build pipelines, networking layers - that doesn't fit inside any built-in category. |
-| **C. Ship native C++** | `nativeModule:` (plus `inject:` or `provides:`) | The plugin needs engine APIs ue-mcp's built-in handlers don't expose. The plugin ships a UE C++ module that registers handlers on the editor bridge. |
+| **C. Ship native C++** | `nativeModule:` (with `category:` to surface its handlers) | The plugin needs engine APIs ue-mcp's built-in handlers don't expose. The plugin ships a UE C++ module that registers handlers on the editor bridge; `nativeModule.category` surfaces them as actions with no TypeScript. |
 
 Shape A is overwhelmingly the right answer. An action that belongs inside an existing category is best discovered where agents are already working.
 
@@ -297,16 +297,35 @@ When the plugin needs engine APIs ue-mcp's bridge doesn't already expose, ship a
 `pie-studio` is a real-world example of this shape. Its manifest:
 
 ```yaml
+actionPrefix: pie                    # surfaced action names are prefixed with this
+
 nativeModule:
   uePluginName: PIE_Studio           # name of the .uplugin that gets deployed
-  minBridgeApi: 1                       # gate against UEMCP_BRIDGE_API_VERSION
+  minBridgeApi: 1                    # gate against UEMCP_BRIDGE_API_VERSION
   source: ue/Plugins/PIE_Studio      # path inside your npm tarball
+  category: gameplay                 # surface handlers as gameplay(...) actions
   handlers:
-    inject_input:     { description: "Single-frame Enhanced Input inject" }
-    pie_record_arm:   { description: "Arm the PIE input recorder" }
-    pie_replay_arm:   { description: "Arm the PIE input replayer" }
-    # ... 30 more handlers
+    record_arm:   { description: "Arm the PIE input recorder" }
+    replay_arm:   { description: "Arm the PIE input replayer" }
+    inject_input:
+      description: "Single-frame Enhanced Input inject"
+      timeoutSeconds: 5
+      schema:
+        actionName: { type: string, required: true }
+        value:      { type: number }
+    # ... more handlers
 ```
+
+#### How handlers become MCP actions
+
+Set `category` to a built-in category, and ue-mcp surfaces every handler as an action there: handler `record_arm` with `actionPrefix: pie` becomes `gameplay(action="pie_record_arm")`, dispatching to the bare bridge method `record_arm` your C++ registered. Handler names are bare in the manifest; ue-mcp applies the prefix. This is what lets a native-only plugin expose actions with no TypeScript task classes at all - the C++ handler *is* the implementation.
+
+Two rules that bite if missed:
+
+- **Declare params under each handler's `schema:`.** The MCP SDK strips any param not in the action's schema before it reaches the bridge, so an undeclared param silently never arrives. Same field types as `inject:` schemas. Params-free handlers (status polls, list calls) need no schema.
+- **`timeoutSeconds`** sets the bridge-call timeout for that action (default 30s). Raise it for long-running handlers.
+
+Omit `category` entirely and handlers are still registered on the bridge but exposed as no MCP action - useful only if another task calls them internally. For an agent-facing plugin you almost always want `category`.
 
 #### Layout inside the npm tarball
 
@@ -372,7 +391,7 @@ void FPIE_StudioModule::ShutdownModule()
 }
 ```
 
-The handler's method name (`inject_input`) is what the plugin's TypeScript task addresses through `this.call("inject_input", ...)` or what the bridge looks up when an MCP action dispatches.
+The handler's method name (`inject_input`) is the bare bridge method. It's what an auto-surfaced action (`gameplay(action="pie_inject_input")`, via `nativeModule.category`) dispatches to, what a TypeScript task can address through `this.call(...)`, and what the bridge looks up on any dispatch. Register it bare - ue-mcp adds the `actionPrefix` when it surfaces the action.
 
 #### Install flow
 

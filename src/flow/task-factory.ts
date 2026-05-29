@@ -10,6 +10,7 @@ export function bridgeTaskClass(
   name: string,
   method: string,
   mapParams?: (p: Record<string, unknown>) => Record<string, unknown>,
+  timeoutMs?: number,
 ): TaskConstructor {
   class FactoryBridgeTask extends UeMcpTask {
     get taskName() { return name; }
@@ -17,7 +18,7 @@ export function bridgeTaskClass(
       const params = mapParams
         ? mapParams(this.options as Record<string, unknown>)
         : this.options as Record<string, unknown>;
-      const data = await this.bridge.call(method, params);
+      const data = await this.bridge.call(method, params, timeoutMs);
       return {
         success: true,
         data: typeof data === "object" && data !== null

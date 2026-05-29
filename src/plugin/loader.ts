@@ -5,7 +5,8 @@ import type { TaskConstructor, TaskDefinition, FlowDefinition } from "@db-lyon/f
 import type { ToolDef } from "../types.js";
 import type { FlowConfig, PluginEntry } from "../flow/schema.js";
 import { warn, info } from "../log.js";
-import { loadManifest, type PluginManifest } from "./manifest.js";
+import { loadManifest, type PluginManifest, type ManifestInjectAction } from "./manifest.js";
+import { bridgeTaskClass } from "../flow/task-factory.js";
 import { resolvePackage, type ResolvedPackage } from "./resolver.js";
 import { satisfiesMinimum } from "./version.js";
 import { mergeInjectionsIntoTool, type InjectionPlan } from "./injection.js";
@@ -163,6 +164,21 @@ export async function loadPlugins(
         const dispatchName = `${category}.${manifest.actionPrefix}_${bareName}`;
         taskRegistrations.push({ name: dispatchName, ctor });
       }
+    }
+
+    // Native handler auto-surfacing: when `nativeModule.category` is set, every
+    // declared handler becomes `<category>(action="<prefix>_<handler>")`
+    // dispatching to the bare bridge method the C++ module registers. No TS
+    // task class is needed — a generic BridgeTask carries the method. This is
+    // the path that makes a native-only plugin usable without per-handler
+    // wrappers; without `category`, handlers stay bridge-only (back-compat).
+    const nativeSurface = nativeHandlerInjection(manifest, pkg.name);
+    if (nativeSurface) {
+      const { plan, taskRegistrations: nativeRegs } = nativeSurface;
+      taskRegistrations.push(...nativeRegs);
+      const list = plansByCategory.get(plan.category) ?? [];
+      list.push(plan);
+      plansByCategory.set(plan.category, list);
     }
 
     // Provided categories: claim each name (first writer wins). Subsequent
@@ -334,6 +350,15 @@ async function loadOne(
     }
   }
 
+  // The native-handler surfacing target must likewise be a real category.
+  const nativeCategory = manifest.nativeModule?.category;
+  if (nativeCategory && !builtInCategories.has(nativeCategory)) {
+    return skip(
+      base,
+      `nativeModule.category '${nativeCategory}' is not a registered category. Valid: ${[...builtInCategories].sort().join(", ")}`,
+    );
+  }
+
   // Provided categories must not collide with built-in category names.
   // Cross-plugin collisions are detected in the second pass in loadPlugins,
   // where all active plugins' provides: blocks are visible.
@@ -409,6 +434,54 @@ function skip(rec: PluginRecord, reason: string): LoadOneResult {
   rec.status = "skipped";
   rec.statusReason = reason;
   return { record: rec };
+}
+
+/**
+ * Build the injection plan and dispatch task registrations that surface a
+ * native module's handlers as MCP actions. Returns null when the manifest
+ * declares no `nativeModule.category` (handlers stay bridge-only).
+ *
+ * Each handler `h` maps to action `<actionPrefix>_h` in the target category,
+ * dispatching to the bare bridge method `h` via a generic BridgeTask. The
+ * handler's `schema` becomes the action's params and `timeoutSeconds` its
+ * bridge-call timeout. Pure and disk-free so it can be unit-tested directly.
+ */
+export function nativeHandlerInjection(
+  manifest: PluginManifest,
+  pluginName: string,
+): {
+  plan: InjectionPlan;
+  taskRegistrations: Array<{ name: string; ctor: TaskConstructor }>;
+} | null {
+  const native = manifest.nativeModule;
+  if (!native?.category) return null;
+
+  const cat = native.category;
+  const actions: Record<string, ManifestInjectAction> = {};
+  const taskRegistrations: Array<{ name: string; ctor: TaskConstructor }> = [];
+
+  for (const [hName, hSpec] of Object.entries(native.handlers)) {
+    // `task` is synthetic — mergeInjectionsIntoTool reads only description and
+    // schema; dispatch is wired through the registry registration below.
+    actions[hName] = {
+      task: `${manifest.actionPrefix}.${hName}`,
+      description: hSpec.description,
+      schema: hSpec.schema,
+    };
+    const dispatchName = `${cat}.${manifest.actionPrefix}_${hName}`;
+    const timeoutMs = hSpec.timeoutSeconds
+      ? hSpec.timeoutSeconds * 1000
+      : undefined;
+    taskRegistrations.push({
+      name: dispatchName,
+      ctor: bridgeTaskClass(dispatchName, hName, undefined, timeoutMs),
+    });
+  }
+
+  return {
+    plan: { category: cat, prefix: manifest.actionPrefix, pluginName, actions },
+    taskRegistrations,
+  };
 }
 
 /**
