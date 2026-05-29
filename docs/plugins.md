@@ -53,7 +53,7 @@ Once `status: "active"`, the injected actions (e.g. `gameplay(action="pie_record
 A plugin is a normal npm package that ships:
 
 - A `ue-mcp.plugin.yml` manifest declaring an `actionPrefix`, the actions it injects into which host categories, and the task classes that back them.
-- Compiled task classes (one per injected action) under `dist/`, each extending `BaseTask` from [`@db-lyon/flowkit`](https://github.com/db-lyon/flowkit).
+- Compiled task classes (one per injected action) under `dist/`, each extending `UeMcpTask` from [`ue-mcp/task`](#writing-tasks).
 - Optional `knowledge/<category>.md` markdown that the server attaches to the host category's AI-facing docs at boot.
 - Optional `flows:` entries that compose injected actions with built-ins.
 
@@ -184,7 +184,7 @@ my-plugin/
   ue-mcp.plugin.yml          # author declaration: actionPrefix, inject, knowledge, tasks, flows
   src/                       # author writes TypeScript here
     tasks/
-      MyAction.ts            # one BaseTask subclass per file, default export
+      MyAction.ts            # one UeMcpTask subclass per file, default export
     shared/                  # optional cross-task helpers (never referenced from the declaration)
   dist/                      # tsc output - what actually ships and loads
     tasks/
@@ -196,7 +196,7 @@ my-plugin/
 
 Conventions:
 
-- One task class per file, default export, extending `BaseTask` from `@db-lyon/flowkit`.
+- One task class per file, default export, extending `UeMcpTask` from `ue-mcp/task`.
 - `class_path` in the declaration is resolved against the plugin's `dist/` (the loader tries `dist/<path>.js` then `dist/tasks/<path>.js`).
 - `src/shared/` holds helpers; never reference it from the declaration.
 - Compile to `dist/` with `tsc` so users need no TypeScript toolchain.
@@ -213,10 +213,10 @@ Conventions:
   "files": ["dist", "ue-mcp.plugin.yml", "knowledge", "README.md"],
   "keywords": ["unreal-engine"],
   "peerDependencies": {
-    "@db-lyon/flowkit": ">=0.5.0"
+    "ue-mcp": ">=1.0.65"
   },
   "devDependencies": {
-    "@db-lyon/flowkit": "~0.5.2",
+    "ue-mcp": "^1.0.65",
     "typescript": "^5.7.0"
   },
   "scripts": {
@@ -225,7 +225,7 @@ Conventions:
 }
 ```
 
-The peer-dep on `@db-lyon/flowkit` is what gives `BaseTask` its shape - your tasks must extend the same class the server uses, so a peer dep (not a regular dep) is what keeps the two copies in sync.
+`UeMcpTask` (and the types you import alongside it) come from `ue-mcp/task` - a thin, server-free entry point that the consumer's installed `ue-mcp` already provides. That's why `ue-mcp` is a **peer** dependency: the running server supplies the copy at load time, so your task extends the same base class the server uses. The matching **dev** dependency is only there to type-check your build. You never depend on the underlying flow runtime directly - it stays an implementation detail behind `ue-mcp/task`.
 
 ### `ue-mcp.plugin.yml`
 
@@ -401,14 +401,14 @@ The response includes `bridgeApiVersion` when a bridge is deployed.
 
 ```ts
 // src/tasks/InspectSomething.ts
-import { BaseTask, type TaskResult } from "@db-lyon/flowkit";
+import { UeMcpTask, type TaskResult } from "ue-mcp/task";
 
 interface Options {
   actorLabel: string;
   includeComponents?: boolean;
 }
 
-export default class InspectSomething extends BaseTask<Options> {
+export default class InspectSomething extends UeMcpTask<Options> {
   get taskName() { return "mypfx.inspect_something"; }
 
   async execute(): Promise<TaskResult> {
@@ -428,7 +428,7 @@ export default class InspectSomething extends BaseTask<Options> {
 
 Notes:
 
-- Compose existing actions through `this.call('<category>.<action>', params)`. Don't reach into the bridge directly unless you have to - composition gives you free observability and rollback hooks.
+- Compose existing actions through `this.call('<category>.<action>', params)`. Don't reach into the bridge directly unless you have to - composition gives you free observability and rollback hooks. When you do need a raw bridge method that no task wraps, `UeMcpTask` gives you a typed `this.bridge.call(method, params)` and a typed `this.ctx` (`bridge`, `project`) with no casting.
 - Use the **real** parameter names of the host task you're calling. Param name drift between TS and C++ is how silent failures start.
 - If your task makes multi-step mutations, return a `rollback` record so users can opt into `rollback_on_failure: true` on the wrapping flow.
 - Throw, don't return success-with-error-data. The runtime catches throws and turns them into structured failures.

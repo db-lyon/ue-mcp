@@ -398,6 +398,11 @@ function deriveDefaultPrefix(pkgName: string): string {
 
 function writeScaffold(dir: string, pkgName: string, prefix: string): void {
   const className = "Hello";
+  // The scaffold's task imports `ue-mcp/task`, which only exists from the
+  // version that introduced it. Default the floor to the running server's
+  // version so a freshly scaffolded plugin declares a dependency that can
+  // actually resolve the import; an explicit env override still wins.
+  const minServer = process.env.UE_MCP_PLUGIN_MIN_SERVER ?? readServerVersion();
   const pkgJson = {
     name: pkgName,
     version: "0.1.0",
@@ -407,10 +412,10 @@ function writeScaffold(dir: string, pkgName: string, prefix: string): void {
     files: ["dist", "ue-mcp.plugin.yml", "knowledge", "README.md"],
     keywords: ["unreal-engine"],
     peerDependencies: {
-      "@db-lyon/flowkit": "~0.5.2",
+      "ue-mcp": `>=${minServer}`,
     },
     devDependencies: {
-      "@db-lyon/flowkit": "~0.5.2",
+      "ue-mcp": `^${minServer}`,
       typescript: "^5.7.0",
     },
     scripts: {
@@ -439,7 +444,7 @@ function writeScaffold(dir: string, pkgName: string, prefix: string): void {
 
   const manifestYaml =
 `actionPrefix: ${prefix}
-minServerVersion: ${process.env.UE_MCP_PLUGIN_MIN_SERVER ?? "1.0.0"}
+minServerVersion: ${minServer}
 
 inject:
   project:
@@ -458,13 +463,13 @@ flows: {}
   fs.writeFileSync(path.join(dir, "ue-mcp.plugin.yml"), manifestYaml);
 
   const helloTs =
-`import { BaseTask, type TaskResult } from "@db-lyon/flowkit";
+`import { UeMcpTask, type TaskResult } from "ue-mcp/task";
 
 interface Options {
   name?: string;
 }
 
-export default class ${className} extends BaseTask<Options> {
+export default class ${className} extends UeMcpTask<Options> {
   get taskName() { return "${prefix}.hello"; }
 
   async execute(): Promise<TaskResult> {
@@ -524,6 +529,18 @@ function uePluginEnabled(projectDir: string, name: string): boolean | undefined 
     return entry.Enabled !== false;
   } catch {
     return undefined;
+  }
+}
+
+/** Read the running ue-mcp server's version from its own package.json. */
+function readServerVersion(): string {
+  try {
+    const pkgJson = JSON.parse(
+      fs.readFileSync(path.join(__dirnameOrCwd(), "..", "package.json"), "utf-8"),
+    ) as { version?: string };
+    return pkgJson.version ?? "1.0.0";
+  } catch {
+    return "1.0.0";
   }
 }
 

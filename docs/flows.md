@@ -442,13 +442,13 @@ The built-in `asset.list` is now replaced by your class. The dynamic loader will
 
 ### Writing a Custom Task
 
-Create a file that exports a class extending `BaseTask`:
+Create a file that exports a class extending `UeMcpTask`:
 
 ```typescript
 // tasks/FilteredAssetList.ts
-import { BaseTask, type TaskResult } from '@db-lyon/flowkit';
+import { UeMcpTask, type TaskResult } from 'ue-mcp/task';
 
-export default class FilteredAssetList extends BaseTask {
+export default class FilteredAssetList extends UeMcpTask {
   get taskName() {
     return 'asset.filtered_list';
   }
@@ -485,21 +485,21 @@ tasks:
 Key points:
 
 - **Export as default** — the loader looks for a default export, or a named export matching the filename.
-- **Must extend `BaseTask`** — the registry validates this at load time.
+- **Must extend `UeMcpTask`** — the registry validates this at load time.
 - **`this.options`** — receives the merged options (task defaults + step overrides).
-- **`this.ctx`** — the shared context with `bridge` (editor WebSocket) and `project` (path resolution).
+- **`this.ctx`** — the shared context, typed for you as `FlowContext`: `bridge` (editor WebSocket) and `project` (path resolution). `UeMcpTask` also exposes a `this.bridge` shortcut.
 - **`this.call(name, opts)`** — resolve and execute another task by name. The original built-in task is still in the registry even when you override it via YAML `class_path`.
 - **`this.resolve(name, opts)`** — like `call()` but returns the task instance without running it, in case you need to inspect or configure it first.
 
 ### Extending a Bridge Task
 
-If your custom task needs to call the editor, extend `BridgeTask`:
+If your custom task needs to call the editor, `UeMcpTask` gives you `this.call(...)` for task composition and a typed `this.bridge` for raw bridge methods:
 
 ```typescript
 // tasks/SafeBuild.ts
-import { BaseTask, type TaskResult } from '@db-lyon/flowkit';
+import { UeMcpTask, type TaskResult } from 'ue-mcp/task';
 
-export default class SafeBuild extends BaseTask {
+export default class SafeBuild extends UeMcpTask {
   get taskName() {
     return 'safe_build';
   }
@@ -544,9 +544,9 @@ A custom task can orchestrate multiple tasks:
 
 ```typescript
 // tasks/FullSetup.ts
-import { BaseTask, type TaskResult } from '@db-lyon/flowkit';
+import { UeMcpTask, type TaskResult } from 'ue-mcp/task';
 
-export default class FullSetup extends BaseTask {
+export default class FullSetup extends UeMcpTask {
   get taskName() {
     return 'full_setup';
   }
@@ -657,19 +657,21 @@ When you set `class_path` to a file path (e.g., `./tasks/MyTask`), the registry 
 3. `{cwd}/tasks/MyTask/index.ts`
 4. `{cwd}/tasks/MyTask/index.js`
 
-The loaded module must export a class that extends `BaseTask`, either as the default export or as a named export matching the filename.
+The loaded module must export a class that extends `UeMcpTask`, either as the default export or as a named export matching the filename.
 
 Dynamically loaded classes are cached — the file is only imported once per class path per session.
 
-## BaseTask Reference
+## UeMcpTask Reference
 
-All custom tasks extend `BaseTask` from `@db-lyon/flowkit`:
+All custom tasks extend `UeMcpTask` from `ue-mcp/task`. It builds on the flow engine's base task, narrowing the context to ue-mcp's `FlowContext` and adding a `this.bridge` shortcut, so you import one symbol from `ue-mcp` and never touch the underlying runtime directly:
 
 ```typescript
-abstract class BaseTask<TOpts = Record<string, unknown>> {
-  protected ctx: TaskContext;           // Shared context (bridge, project, registry)
+abstract class UeMcpTask<TOpts = Record<string, unknown>> {
+  protected ctx: FlowContext;           // Shared context, typed: bridge, project, registry
   protected options: TOpts;             // Merged options for this execution
   protected logger: Logger;             // Scoped logger
+
+  protected get bridge(): IBridge;      // Shortcut for this.ctx.bridge
 
   abstract get taskName(): string;      // Descriptive name for logging
   abstract execute(): Promise<TaskResult>;  // Your task logic
@@ -677,7 +679,7 @@ abstract class BaseTask<TOpts = Record<string, unknown>> {
   protected validate(): void;           // Option validation (override, called before execute)
 
   // Composition — resolve/run other tasks from within your task
-  protected resolve(taskName: string, options?: Record<string, unknown>): Promise<BaseTask>;
+  protected resolve(taskName: string, options?: Record<string, unknown>): Promise<UeMcpTask>;
   protected call(taskName: string, options?: Record<string, unknown>): Promise<TaskResult>;
 
   // Lifecycle — called by the engine, not by you
