@@ -1254,7 +1254,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBlackboardParent(const TSharedPtr<F
 	}
 
 	// Refresh runtime key index cache.
-	Child->UpdatePersistentKeys();
+	Child->UpdateKeyIDs();
 
 	Child->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(Child->GetPathName());
@@ -1308,7 +1308,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveBlackboardKey(const TSharedPtr<F
 	}
 	BB->Modify();
 	BB->Keys.RemoveAt(RemovedIdx);
-	BB->UpdatePersistentKeys();
+	BB->UpdateKeyIDs();
 	BB->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(BB->GetPathName());
 

@@ -1038,7 +1038,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::PopulateBlendspace(const TSharedPtr<F
 		const int32 SampleCount = BS->GetNumberOfBlendSamples();
 		for (int32 i = SampleCount - 1; i >= 0; --i)
 		{
-			BS->RemoveSample(i);
+			BS->DeleteSample(i);
 		}
 	}
 
