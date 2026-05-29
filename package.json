@@ -9,7 +9,8 @@
     "./task": {
       "types": "./dist/task.d.ts",
       "default": "./dist/task.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "bin": {
     "ue-mcp": "dist/index.js",
