@@ -1,4 +1,5 @@
-import { BaseTask, type TaskResult, type TaskConstructor, type TaskContext } from "@db-lyon/flowkit";
+import type { TaskResult, TaskConstructor } from "@db-lyon/flowkit";
+import { UeMcpTask } from "../task.js";
 import type { FlowContext } from "./context.js";
 
 /**
@@ -10,14 +11,13 @@ export function bridgeTaskClass(
   method: string,
   mapParams?: (p: Record<string, unknown>) => Record<string, unknown>,
 ): TaskConstructor {
-  class FactoryBridgeTask extends BaseTask {
+  class FactoryBridgeTask extends UeMcpTask {
     get taskName() { return name; }
     async execute(): Promise<TaskResult> {
-      const ctx = this.ctx as FlowContext;
       const params = mapParams
         ? mapParams(this.options as Record<string, unknown>)
         : this.options as Record<string, unknown>;
-      const data = await ctx.bridge.call(method, params);
+      const data = await this.bridge.call(method, params);
       return {
         success: true,
         data: typeof data === "object" && data !== null
@@ -38,10 +38,10 @@ export function handlerTaskClass(
   name: string,
   fn: (ctx: FlowContext, params: Record<string, unknown>) => Promise<unknown>,
 ): TaskConstructor {
-  class FactoryHandlerTask extends BaseTask {
+  class FactoryHandlerTask extends UeMcpTask {
     get taskName() { return name; }
     async execute(): Promise<TaskResult> {
-      const data = await fn(this.ctx as FlowContext, this.options as Record<string, unknown>);
+      const data = await fn(this.ctx, this.options as Record<string, unknown>);
       return {
         success: true,
         data: typeof data === "object" && data !== null

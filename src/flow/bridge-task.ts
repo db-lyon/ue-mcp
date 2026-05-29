@@ -1,5 +1,5 @@
-import { BaseTask, type TaskResult, type RollbackRecord } from "@db-lyon/flowkit";
-import type { FlowContext } from "./context.js";
+import type { TaskResult, RollbackRecord } from "@db-lyon/flowkit";
+import { UeMcpTask } from "../task.js";
 
 /**
  * Generic task for bridge-delegation actions.
@@ -18,7 +18,7 @@ import type { FlowContext } from "./context.js";
  * When present, it is lifted onto `TaskResult.rollback` so the flow runner
  * can invoke the inverse on failure when `rollback_on_failure` is enabled.
  */
-export class BridgeTask extends BaseTask {
+export class BridgeTask extends UeMcpTask {
   get taskName() {
     return `bridge:${(this.options as Record<string, unknown>).method ?? "unknown"}`;
   }
@@ -28,8 +28,7 @@ export class BridgeTask extends BaseTask {
     if (!method || typeof method !== "string") {
       throw new Error('BridgeTask requires a "method" option');
     }
-    const ctx = this.ctx as FlowContext;
-    const raw = await ctx.bridge.call(method as string, params);
+    const raw = await this.bridge.call(method as string, params);
 
     if (typeof raw !== "object" || raw === null) {
       return { success: true, data: { result: raw } };
