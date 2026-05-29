@@ -9,7 +9,7 @@ ue-mcp's plugin system lets npm packages extend the server in three ways:
 Most plugins use only the first shape; the other two are available when injection is the wrong fit. This page covers both sides: installing and managing plugins (consumer), and writing and publishing one (author). The author section starts at [Authoring a plugin](#authoring-a-plugin) - if you're just trying to use a plugin somebody else wrote, you can stop after [Using plugins](#using-plugins).
 
 !!! info "Live reference"
-    [`pie-studio`](https://github.com/db-lyon/pie-studio) ([npm](https://www.npmjs.com/package/pie-studio)) is the canonical native-module reference. It ships C++ handlers for PIE recording, replay, observation, and input injection, surfaced into the `gameplay` category via `nativeModule.category`. See [Shipping native C++](#shipping-native-c).
+    [`pie-studio`](https://github.com/db-lyon/pie-studio) ([npm](https://www.npmjs.com/package/pie-studio)) is the canonical native-module reference. It ships C++ handlers for PIE recording, replay, observation, and input injection, surfaced as a `pie` category it provisions via `nativeModule.category`. See [Shipping native C++](#shipping-native-c).
 
 ## Quick start
 
@@ -297,13 +297,14 @@ When the plugin needs engine APIs ue-mcp's bridge doesn't already expose, ship a
 `pie-studio` is a real-world example of this shape. Its manifest:
 
 ```yaml
-actionPrefix: pie                    # surfaced action names are prefixed with this
+actionPrefix: pie                    # used only when injecting into a built-in
 
 nativeModule:
   uePluginName: PIE_Studio           # name of the .uplugin that gets deployed
   minBridgeApi: 1                    # gate against UEMCP_BRIDGE_API_VERSION
   source: ue/Plugins/PIE_Studio      # path inside your npm tarball
-  category: gameplay                 # surface handlers as gameplay(...) actions
+  category: pie                      # surface handlers under a pie(...) tool
+  categoryDescription: "PIE record, replay, observe, and input injection"
   handlers:
     record_arm:   { description: "Arm the PIE input recorder" }
     replay_arm:   { description: "Arm the PIE input replayer" }
@@ -318,11 +319,14 @@ nativeModule:
 
 #### How handlers become MCP actions
 
-Set `category` to a built-in category, and ue-mcp surfaces every handler as an action there: handler `record_arm` with `actionPrefix: pie` becomes `gameplay(action="pie_record_arm")`, dispatching to the bare bridge method `record_arm` your C++ registered. Handler names are bare in the manifest; ue-mcp applies the prefix. This is what lets a native-only plugin expose actions with no TypeScript task classes at all - the C++ handler *is* the implementation.
+Set `category` and ue-mcp surfaces every handler as an MCP action that dispatches to the bare bridge method your C++ registered (`record_arm` above). No TypeScript task class is involved - the C++ handler *is* the implementation. The category value picks one of two shapes:
+
+- **A new (non-built-in) category** - as in the `pie` example above - is **provisioned as its own top-level tool** the plugin owns. Actions are **not** prefixed (the category is the namespace): `pie(action="record_arm")`. Set `categoryDescription` for the tool's summary. This is the right choice when the handlers form their own domain. Cross-plugin name collisions resolve first-wins, like `provides:`.
+- **A built-in category** (e.g. `gameplay`) **injects** the handlers into that existing tool, prefixed with `actionPrefix`: handler `record_arm` becomes `gameplay(action="pie_record_arm")`. Choose this when the handlers belong inside a category that already exists.
 
 Two rules that bite if missed:
 
-- **Declare params under each handler's `schema:`.** The MCP SDK strips any param not in the action's schema before it reaches the bridge, so an undeclared param silently never arrives. Same field types as `inject:` schemas. Params-free handlers (status polls, list calls) need no schema. Leave params **optional** (don't set `required: true`): one flat schema backs every action in the category, so a required param would be forced onto unrelated actions - let your C++ handler validate and return a clear error instead, and note "(required)" in the param description.
+- **Declare params under each handler's `schema:`.** The MCP SDK strips any param not in the action's schema before it reaches the bridge, so an undeclared param silently never arrives. Same field types as `inject:` schemas. Params-free handlers (status polls, list calls) need no schema. Leave params **optional** (ue-mcp forces them optional regardless): one flat schema backs every action in a category, so a required param would be forced onto unrelated actions - let your C++ handler validate and return a clear error, and note "(required)" in the param description.
 - **`timeoutSeconds`** sets the bridge-call timeout for that action (default 30s). Raise it for long-running handlers.
 
 Omit `category` entirely and handlers are still registered on the bridge but exposed as no MCP action - useful only if another task calls them internally. For an agent-facing plugin you almost always want `category`.

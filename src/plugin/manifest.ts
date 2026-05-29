@@ -84,11 +84,17 @@ const NativeModuleSchema = z.object({
   minBridgeApi: z.number().int().nonnegative(),
   source: z.string().min(1),
   supportedEngineVersions: z.array(z.string().min(1)).default([]),
-  // Built-in category to surface this module's handlers into as MCP actions.
-  // When set, each handler `h` becomes `<category>(action="<actionPrefix>_h")`
-  // dispatching to the bare bridge method `h`. When omitted, handlers are
-  // registered on the bridge but not exposed as actions (back-compat).
+  // Category to surface this module's handlers into as MCP actions. When it
+  // names a built-in category, each handler `h` is injected as
+  // `<category>(action="<actionPrefix>_h")`. When it names a new (non-built-in)
+  // category, that category is provisioned as a top-level tool the plugin owns
+  // and handlers surface unprefixed: `<category>(action="h")`. Either way the
+  // action dispatches to the bare bridge method `h`. Omitted → handlers stay
+  // registered on the bridge but exposed as no action (back-compat).
   category: z.string().min(1).optional(),
+  // Summary shown on a provisioned (new) category's tool. Ignored when
+  // `category` is a built-in.
+  categoryDescription: z.string().min(1).optional(),
   handlers: z
     .record(
       z.object({
