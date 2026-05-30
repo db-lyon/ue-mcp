@@ -114,6 +114,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("capture_scene_png"), &CaptureScenePng);
 	Registry.RegisterHandler(TEXT("get_pie_pawn"), &GetPiePawn);
 	Registry.RegisterHandler(TEXT("invoke_function"), &InvokeFunction);
+	Registry.RegisterHandler(TEXT("invoke_static_function"), &InvokeStaticFunction);
 	Registry.RegisterHandler(TEXT("configure_pie"), &ConfigurePie);
 	Registry.RegisterHandler(TEXT("get_pie_config"), &GetPieConfig);
 	// #455: discover UBlueprintFunctionLibrary classes (GeometryScript,

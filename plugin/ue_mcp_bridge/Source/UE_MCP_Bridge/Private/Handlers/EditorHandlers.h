@@ -164,6 +164,8 @@ private:
 	// #228/#229: PIE pawn lookup + UFUNCTION invocation for PIE actors
 	static TSharedPtr<FJsonValue> GetPiePawn(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> InvokeFunction(const TSharedPtr<FJsonObject>& Params);
+	// Call a static UFUNCTION on a UBlueprintFunctionLibrary (no actor instance).
+	static TSharedPtr<FJsonValue> InvokeStaticFunction(const TSharedPtr<FJsonObject>& Params);
 	// #384: configure ULevelEditorPlaySettings (multi-client PIE, net mode, etc.)
 	static TSharedPtr<FJsonValue> ConfigurePie(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetPieConfig(const TSharedPtr<FJsonObject>& Params);
