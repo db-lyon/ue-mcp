@@ -171,9 +171,21 @@ ue-mcp plugin create my-thing
 cd my-thing
 npm install
 npm run build
+npm run check     # validate the manifest + task wiring
 ```
 
-That stamps a working package with `ue-mcp.plugin.yml`, `tsconfig.json`, an example task in `src/tasks/`, and CI scaffolding. From there, replace the example with your own actions and publish.
+The scaffold is a **superset**: it ships every way a plugin can extend ue-mcp, wired and working, so you never have to discover a capability before using it. Keep the shapes you want and delete the rest.
+
+| Shape | What it scaffolds |
+|-------|-------------------|
+| `inject` | An action added onto a built-in category, e.g. `project(action="<prefix>_hello")`. |
+| `provides` | A brand-new top-level category the plugin owns (actions unprefixed), e.g. `<prefix>(action="greet")`. |
+| `flows` | A chained, one-call orchestration (`<prefix>_demo`). |
+| `nativeModule` | A compile-ready C++ handler skeleton under `ue/Plugins/<UePlugin>/`, **dormant** by default. |
+
+The native C++ module is the one shape that is scaffolded but not active: declaring `nativeModule:` makes `ue-mcp plugin install` deploy the module and force a UE rebuild, so the manifest block ships commented out. The C++ source still lands on disk - uncomment the block in `ue-mcp.plugin.yml` and reinstall to activate it. No separate flag, no compile cost until you opt in.
+
+The scaffold also stamps `package.json`, `tsconfig.json`, a `src/index.ts` entry, `knowledge/`, a `scripts/check.mjs` validator, `LICENSE`, and `.gitignore`.
 
 ### Package layout
 
@@ -181,16 +193,23 @@ That stamps a working package with `ue-mcp.plugin.yml`, `tsconfig.json`, an exam
 my-plugin/
   package.json
   tsconfig.json
-  ue-mcp.plugin.yml          # author declaration: actionPrefix, inject, knowledge, tasks, flows
+  ue-mcp.plugin.yml          # author declaration: actionPrefix, inject, provides, tasks, flows, nativeModule
   src/                       # author writes TypeScript here
+    index.ts                 # package entry (tasks load by class_path, but `main` points here)
     tasks/
       MyAction.ts            # one UeMcpTask subclass per file, default export
     shared/                  # optional cross-task helpers (never referenced from the declaration)
   dist/                      # tsc output - what actually ships and loads
     tasks/
       MyAction.js
+  ue/                        # dormant native C++ module (only deployed when nativeModule: is uncommented)
+    Plugins/
+      MyPlugin/
+  scripts/
+    check.mjs                # pre-publish validator: manifest parses, task refs resolve
   knowledge/
     gameplay.md              # one markdown file per target category
+  LICENSE
   README.md
 ```
 
