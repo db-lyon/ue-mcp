@@ -626,16 +626,45 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 	FString PropertyName;
 	if (Params->TryGetStringField(TEXT("propertyName"), PropertyName) && !PropertyName.IsEmpty())
 	{
-		FProperty* Prop = Asset->GetClass()->FindPropertyByName(*PropertyName);
-		if (!Prop)
+		// Resolve dotted/indexed paths into nested structs, array elements, and
+		// instanced subobjects (#527), e.g. "Config.Traits[1].Params.Field".
+		FProperty* Prop = nullptr;
+		void* ValuePtr = nullptr;
+		UObject* LeafOwner = nullptr;
+		FString ResolveErr;
+		if (!MCPJsonProperty::ResolveDottedPath(Asset, PropertyName, Prop, ValuePtr, LeafOwner, ResolveErr))
 		{
-			return MCPError(FString::Printf(TEXT("Property not found: %s"), *PropertyName));
+			return MCPError(ResolveErr);
 		}
+		FString ValueStr;
+		Prop->ExportText_Direct(ValueStr, ValuePtr, ValuePtr, LeafOwner, PPF_None);
+
 		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("propertyName"), PropertyName);
 		Result->SetStringField(TEXT("type"), Prop->GetCPPType());
-		Result->SetStringField(TEXT("value"), ExportPropertyValue(Prop, Asset, Asset));
+		Result->SetStringField(TEXT("value"), ValueStr);
+
+		// When the path lands on an array of instanced subobjects, also
+		// enumerate each element's index and concrete class so callers can
+		// pick a trait to descend into next (#527).
+		if (FArrayProperty* ArrProp = CastField<FArrayProperty>(Prop))
+		{
+			if (FObjectProperty* InnerObj = CastField<FObjectProperty>(ArrProp->Inner))
+			{
+				FScriptArrayHelper H(ArrProp, ValuePtr);
+				TArray<TSharedPtr<FJsonValue>> Elems;
+				for (int32 i = 0; i < H.Num(); ++i)
+				{
+					UObject* Sub = InnerObj->GetObjectPropertyValue(H.GetRawPtr(i));
+					TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+					E->SetNumberField(TEXT("index"), i);
+					E->SetStringField(TEXT("class"), Sub ? Sub->GetClass()->GetName() : TEXT("None"));
+					Elems.Add(MakeShared<FJsonValueObject>(E));
+				}
+				Result->SetArrayField(TEXT("elements"), Elems);
+			}
+		}
 		return MCPResult(Result);
 	}
 
@@ -2264,57 +2293,30 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
 	}
 
-	TArray<FString> PathParts;
-	PropertyName.ParseIntoArray(PathParts, TEXT("."));
-	if (PathParts.Num() == 0) return MCPError(TEXT("Empty propertyName"));
-
-	UStruct* CurrentStruct = Asset->GetClass();
-	void* CurrentContainer = Asset;
+	// Resolve the (possibly indexed, possibly subobject-descending) path.
+	// Supports "Config.Traits[1].Params.RepresentationActorManagementClass"
+	// style writes into instanced subobjects held in arrays (#527).
 	FProperty* FinalProp = nullptr;
-	for (int32 i = 0; i < PathParts.Num(); ++i)
+	void* ValuePtr = nullptr;
+	UObject* LeafOwner = nullptr;
+	FString ResolveErr;
+	if (!MCPJsonProperty::ResolveDottedPath(Asset, PropertyName, FinalProp, ValuePtr, LeafOwner, ResolveErr))
 	{
-		FProperty* SegmentProp = CurrentStruct->FindPropertyByName(FName(*PathParts[i]));
-		if (!SegmentProp)
-		{
-			return MCPError(FString::Printf(TEXT("Property '%s' not found at '%s'"), *PathParts[i], *PropertyName));
-		}
-		if (i < PathParts.Num() - 1)
-		{
-			if (FStructProperty* SP = CastField<FStructProperty>(SegmentProp))
-			{
-				CurrentContainer = SP->ContainerPtrToValuePtr<void>(CurrentContainer);
-				CurrentStruct = SP->Struct;
-			}
-			else if (FObjectProperty* OP = CastField<FObjectProperty>(SegmentProp))
-			{
-				UObject* Sub = OP->GetObjectPropertyValue(OP->ContainerPtrToValuePtr<void>(CurrentContainer));
-				if (!Sub) return MCPError(FString::Printf(TEXT("Sub-object '%s' is null - cannot descend"), *PathParts[i]));
-				Sub->Modify();
-				CurrentContainer = Sub;
-				CurrentStruct = Sub->GetClass();
-			}
-			else
-			{
-				return MCPError(FString::Printf(TEXT("'%s' is not a struct or sub-object - cannot descend"), *PathParts[i]));
-			}
-		}
-		else
-		{
-			FinalProp = SegmentProp;
-		}
+		return MCPError(ResolveErr);
 	}
 
-	void* ValuePtr = FinalProp->ContainerPtrToValuePtr<void>(CurrentContainer);
 	FString PrevValue;
 	FinalProp->ExportText_Direct(PrevValue, ValuePtr, ValuePtr, nullptr, PPF_None);
 
 	Asset->Modify();
+	if (LeafOwner && LeafOwner != Asset) LeafOwner->Modify();
 	FString SetErr;
 	if (!MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, *ValueField, SetErr))
 	{
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
 	}
 
+	if (LeafOwner) LeafOwner->PostEditChange();
 	Asset->PostEditChange();
 	Asset->MarkPackageDirty();
 

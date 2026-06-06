@@ -380,30 +380,95 @@ namespace MCPJsonProperty
 		return true;
 	}
 
-	// Walk dotted property names into nested structs before assigning.
-	// Enables "SplineMeshDescriptor.StaticMesh" style keys.
-	inline bool SetDottedPropertyFromJson(UObject* Owner, const FString& DottedName, const TSharedPtr<FJsonValue>& Value, FString& OutError)
+	// Resolve a dotted property path that may index arrays ("Traits[2]") and
+	// follow object references (instanced subobjects), e.g.
+	// "Config.Traits[1].Params.RepresentationActorManagementClass" on a
+	// MassEntityConfigAsset. Descends through nested structs (in place), array
+	// elements (by index), and FObjectProperty pointers (switching the
+	// container to the referenced UObject and its class). On success OutProp is
+	// the leaf property, OutValueAddr its value address, and OutOwner the
+	// UObject that ultimately owns the leaf (Root, or a followed subobject) so
+	// callers can Modify()/MarkPackageDirty the right object. (#527)
+	inline bool ResolveDottedPath(UObject* Root, const FString& DottedName,
+		FProperty*& OutProp, void*& OutValueAddr, UObject*& OutOwner, FString& OutError)
 	{
+		if (!Root) { OutError = TEXT("null root object"); return false; }
+
 		TArray<FString> Parts;
 		DottedName.ParseIntoArray(Parts, TEXT("."));
 		if (Parts.Num() == 0) { OutError = TEXT("empty property name"); return false; }
 
-		void* Container = Owner;
-		UStruct* ContainerStruct = Owner->GetClass();
-		FProperty* Prop = nullptr;
+		void* Container = Root;
+		UStruct* ContainerStruct = Root->GetClass();
+		UObject* Owner = Root;
+
 		for (int32 i = 0; i < Parts.Num(); ++i)
 		{
-			Prop = ContainerStruct->FindPropertyByName(FName(*Parts[i]));
-			if (!Prop) { OutError = FString::Printf(TEXT("property '%s' not found at '%s'"), *Parts[i], *DottedName); return false; }
-			if (i < Parts.Num() - 1)
+			FString Token = Parts[i];
+			int32 Index = INDEX_NONE;
+			int32 BracketPos;
+			if (Token.FindChar(TEXT('['), BracketPos))
 			{
-				FStructProperty* SP = CastField<FStructProperty>(Prop);
-				if (!SP) { OutError = FString::Printf(TEXT("'%s' is not a struct — cannot descend"), *Parts[i]); return false; }
-				Container = SP->ContainerPtrToValuePtr<void>(Container);
+				int32 ClosePos;
+				if (Token.FindChar(TEXT(']'), ClosePos) && ClosePos > BracketPos)
+				{
+					Index = FCString::Atoi(*Token.Mid(BracketPos + 1, ClosePos - BracketPos - 1));
+					Token = Token.Left(BracketPos);
+				}
+			}
+
+			FProperty* Prop = ContainerStruct->FindPropertyByName(FName(*Token));
+			if (!Prop) { OutError = FString::Printf(TEXT("property '%s' not found at '%s'"), *Token, *DottedName); return false; }
+			void* ValueAddr = Prop->ContainerPtrToValuePtr<void>(Container);
+
+			if (Index != INDEX_NONE)
+			{
+				FArrayProperty* ArrProp = CastField<FArrayProperty>(Prop);
+				if (!ArrProp) { OutError = FString::Printf(TEXT("'%s' is not an array but was indexed [%d]"), *Token, Index); return false; }
+				FScriptArrayHelper H(ArrProp, ValueAddr);
+				if (Index < 0 || Index >= H.Num()) { OutError = FString::Printf(TEXT("index %d out of range on '%s' (num=%d)"), Index, *Token, H.Num()); return false; }
+				Prop = ArrProp->Inner;
+				ValueAddr = H.GetRawPtr(Index);
+			}
+
+			if (i == Parts.Num() - 1)
+			{
+				OutProp = Prop;
+				OutValueAddr = ValueAddr;
+				OutOwner = Owner;
+				return true;
+			}
+
+			// Descend for the next token.
+			if (FStructProperty* SP = CastField<FStructProperty>(Prop))
+			{
+				Container = ValueAddr;
 				ContainerStruct = SP->Struct;
 			}
+			else if (FObjectProperty* OP = CastField<FObjectProperty>(Prop))
+			{
+				UObject* Sub = OP->GetObjectPropertyValue(ValueAddr);
+				if (!Sub) { OutError = FString::Printf(TEXT("'%s' object reference is null — cannot descend"), *Token); return false; }
+				Container = Sub;
+				ContainerStruct = Sub->GetClass();
+				Owner = Sub;
+			}
+			else { OutError = FString::Printf(TEXT("'%s' is not a struct or object reference — cannot descend"), *Token); return false; }
 		}
-		void* ValueAddr = Prop->ContainerPtrToValuePtr<void>(Container);
+
+		OutError = TEXT("path resolution fell through");
+		return false;
+	}
+
+	// Walk dotted property names into nested structs/arrays/subobjects before
+	// assigning. Enables "SplineMeshDescriptor.StaticMesh" and
+	// "Config.Traits[1].Params.Field" style keys.
+	inline bool SetDottedPropertyFromJson(UObject* Owner, const FString& DottedName, const TSharedPtr<FJsonValue>& Value, FString& OutError)
+	{
+		FProperty* Prop = nullptr;
+		void* ValueAddr = nullptr;
+		UObject* LeafOwner = nullptr;
+		if (!ResolveDottedPath(Owner, DottedName, Prop, ValueAddr, LeafOwner, OutError)) return false;
 		return SetJsonOnProperty(Prop, ValueAddr, Value, OutError);
 	}
 }
