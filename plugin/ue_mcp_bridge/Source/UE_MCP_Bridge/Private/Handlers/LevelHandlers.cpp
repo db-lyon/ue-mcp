@@ -1881,6 +1881,53 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 		}
 	}
 
+	// #538: a TArray of actor references populated from a JSON array of actor
+	// labels (e.g. TArray<APointLight*>). The generic setter would treat each
+	// string as an asset path; resolve labels against the world instead. Tolerate
+	// a stringified JSON array ("[\"A\",\"B\"]") the same way the keystone fix does.
+	if (FArrayProperty* ArrProp = CastField<FArrayProperty>(Prop))
+	{
+		if (FObjectProperty* InnerObj = CastField<FObjectProperty>(ArrProp->Inner);
+			InnerObj && InnerObj->PropertyClass && InnerObj->PropertyClass->IsChildOf(AActor::StaticClass()))
+		{
+			TSharedPtr<FJsonValue> ArrValue = Value;
+			if (ArrValue->Type == EJson::String)
+			{
+				const FString Trimmed = ArrValue->AsString().TrimStartAndEnd();
+				if (Trimmed.StartsWith(TEXT("[")))
+				{
+					TSharedPtr<FJsonValue> Reparsed;
+					const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Trimmed);
+					if (FJsonSerializer::Deserialize(Reader, Reparsed) && Reparsed.IsValid()) ArrValue = Reparsed;
+				}
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+			if (ArrValue->TryGetArray(Items) && Items)
+			{
+				FScriptArrayHelper H(ArrProp, ValuePtr);
+				H.Resize(Items->Num());
+				for (int32 i = 0; i < Items->Num(); ++i)
+				{
+					FString Label;
+					(*Items)[i]->TryGetString(Label);
+					AActor* Ref = FindActorByLabel(World, Label);
+					if (!Ref)
+					{
+						Prop->PropertyFlags = OriginalFlags;
+						return MCPError(FString::Printf(TEXT("Actor not found for '%s' element [%d]: '%s'"), *PropertyName, i, *Label));
+					}
+					if (!Ref->IsA(InnerObj->PropertyClass))
+					{
+						Prop->PropertyFlags = OriginalFlags;
+						return MCPError(FString::Printf(TEXT("Actor '%s' is not a %s (element [%d] of '%s')"), *Label, *InnerObj->PropertyClass->GetName(), i, *PropertyName));
+					}
+					InnerObj->SetObjectPropertyValue(H.GetRawPtr(i), Ref);
+				}
+				goto WriteDone;
+			}
+		}
+	}
+
 	{
 		FString SetErr;
 		if (!MCPJsonProperty::SetJsonOnProperty(Prop, ValuePtr, Value, SetErr))
