@@ -335,6 +335,15 @@ export function formatDoctor(d: DoctorReport): string {
       `npx runs it, so global updates do nothing. Fix: remove the dependency from package.json and delete node_modules/ue-mcp, ` +
       `or pin .mcp.json to \`npx -y ue-mcp@latest\`. Then run \`ue-mcp update --build\`.`,
     );
+  } else if (latest && d.npmGlobal.version && d.npmGlobal.version !== latest) {
+    // No shadow, but the global package is behind latest: a bare `npx ue-mcp`
+    // (or any fresh launch) would run an old version next time. This must keep
+    // the verdict from claiming "aligned" even when the running server happens
+    // to be current (e.g. launched via `npx -y ue-mcp@latest`).
+    problems.push(
+      `npm global is ${d.npmGlobal.version}, latest is ${latest}. The running server is fine, but the next launch via bare \`npx ue-mcp\` would be stale. ` +
+      `Run \`ue-mcp update\` (or npm i -g ue-mcp@latest).`,
+    );
   }
   for (const cfg of d.bareNpxConfigs) {
     const rel = path.relative(process.cwd(), cfg).replace(/\\/g, "/") || cfg;
