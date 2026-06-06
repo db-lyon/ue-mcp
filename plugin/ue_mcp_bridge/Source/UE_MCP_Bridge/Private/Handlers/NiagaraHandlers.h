@@ -17,6 +17,8 @@ private:
 	static TSharedPtr<FJsonValue> ListEmittersInSystem(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateNiagaraEmitter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SpawnNiagaraAtLocation(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SpawnNiagaraActor(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReactivateNiagara(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetNiagaraParameter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddEmitterToSystem(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetEmitterProperty(const TSharedPtr<FJsonObject>& Params);

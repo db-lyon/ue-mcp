@@ -8,7 +8,9 @@ export const niagaraTool: ToolDef = categoryTool(
   {
     list:           bp("List Niagara assets. Params: directory?, recursive?", "list_niagara_systems"),
     get_info:       bp("Inspect system. Params: assetPath", "get_niagara_info"),
-    spawn:          bp("Spawn VFX. Params: systemPath, location, rotation?, label?", "spawn_niagara_at_location"),
+    spawn:          bp("Spawn VFX as a transient component (GC's before offscreen capture). For a findable preview use spawn_actor. Params: systemPath, location, rotation?, label?", "spawn_niagara_at_location"),
+    spawn_actor:    bp("Spawn a PERSISTENT, labeled NiagaraActor in the editor world (findable, re-activatable, survives capture - unlike spawn). Assigns the system and activates. Params: systemPath, location?, rotation?, label?, activate? (default true) (#537)", "spawn_niagara_actor", (p) => ({ systemPath: p.systemPath, location: p.location, rotation: p.rotation, label: p.label, activate: p.activate })),
+    reactivate:     bp("Reset + reactivate the NiagaraComponent on a placed actor (replay a burst before capturing). Params: actorLabel (#537)", "reactivate_niagara", (p) => ({ actorLabel: p.actorLabel })),
     set_parameter:  bp("Set parameter. Params: actorLabel, parameterName, value, parameterType?", "set_niagara_parameter"),
     create:         bp("Create system. Params: name, packagePath?", "create_niagara_system"),
     create_emitter: bp("Create Niagara emitter. Params: name, packagePath?, templatePath?", "create_niagara_emitter"),
@@ -64,6 +66,7 @@ export const niagaraTool: ToolDef = categoryTool(
     directory: z.string().optional(), recursive: z.boolean().optional(),
     systemPath: z.string().optional(), emitterPath: z.string().optional(),
     location: Vec3.optional(),
+    activate: z.boolean().optional().describe("spawn_actor: activate the system on spawn (default true) (#537)"),
     rotation: Rotator.optional(),
     label: z.string().optional(),
     parameterName: z.string().optional(),

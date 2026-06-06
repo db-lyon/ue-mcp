@@ -112,6 +112,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #126: fast-forward PIE game time
 	Registry.RegisterHandler(TEXT("set_pie_time_scale"), &SetPieTimeScale);
 	Registry.RegisterHandler(TEXT("capture_scene_png"), &CaptureScenePng);
+	Registry.RegisterHandler(TEXT("set_realtime"), &SetRealtime);
 	Registry.RegisterHandler(TEXT("get_pie_pawn"), &GetPiePawn);
 	Registry.RegisterHandler(TEXT("invoke_function"), &InvokeFunction);
 	Registry.RegisterHandler(TEXT("invoke_static_function"), &InvokeStaticFunction);
@@ -316,6 +317,34 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	return MCPResult(Result);
+}
+
+// set_realtime -- toggle realtime update on the level editor viewports so the
+// editor-world simulation (Niagara, animations) ticks. capture_scene_png
+// renders without ticking the sim otherwise, producing empty/identical stills.
+// (#537) Params: enabled (bool, default true).
+TSharedPtr<FJsonValue> FEditorHandlers::SetRealtime(const TSharedPtr<FJsonObject>& Params)
+{
+	const bool bEnabled = OptionalBool(Params, TEXT("enabled"), true);
+
+	if (!GEditor)
+	{
+		return MCPError(TEXT("GEditor not available"));
+	}
+
+	int32 ViewportsChanged = 0;
+	for (FLevelEditorViewportClient* ViewportClient : GEditor->GetLevelViewportClients())
+	{
+		if (!ViewportClient) continue;
+		ViewportClient->SetRealtime(bEnabled);
+		ViewportsChanged++;
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetBoolField(TEXT("enabled"), bEnabled);
+	Result->SetNumberField(TEXT("viewportsChanged"), ViewportsChanged);
 	return MCPResult(Result);
 }
 
