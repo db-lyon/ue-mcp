@@ -7,6 +7,45 @@ import { resolveConfigPath, findIniFiles, parseIni, buildTagTree } from "../conf
 import { parseHeader, collectFiles, findSourceRoots, resolveModuleDir } from "../cpp-parser.js";
 import { readDeployedBridgeApiVersion } from "../plugin/bridge-api.js";
 
+/**
+ * Resolve a module name to its Source/<Module> directory, searching the project
+ * Source roots AND every plugin under Plugins/<*>/Source/ (which findSourceRoots
+ * does not cover). Empty moduleName returns the project's first module dir.
+ * (#543: plugin-module source authoring.)
+ */
+function resolveSourceModuleDir(projectDir: string, projectName: string | null, moduleName: string): string | null {
+  const roots = [...findSourceRoots(projectDir, projectName)];
+  // Add each plugin's Source dir as a search root.
+  const pluginsDir = path.join(projectDir, "Plugins");
+  if (fs.existsSync(pluginsDir)) {
+    const walk = (dir: string, depth: number) => {
+      if (depth > 3) return;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.name === "Source") roots.push(full);
+        else walk(full, depth + 1);
+      }
+    };
+    try { walk(pluginsDir, 0); } catch { /* ignore unreadable plugin dirs */ }
+  }
+  for (const root of roots) {
+    if (!moduleName) {
+      // First module dir that holds a Build.cs.
+      if (!fs.existsSync(root)) continue;
+      for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+        if (entry.isDirectory() && fs.existsSync(path.join(root, entry.name, `${entry.name}.Build.cs`))) {
+          return path.join(root, entry.name);
+        }
+      }
+    } else {
+      const modDir = path.join(root, moduleName);
+      if (fs.existsSync(path.join(modDir, `${moduleName}.Build.cs`))) return modDir;
+    }
+  }
+  return null;
+}
+
 export const projectTool: ToolDef = categoryTool(
   "project",
   "Project status, config INI files, and C++ source inspection.",
@@ -398,6 +437,61 @@ export const projectTool: ToolDef = categoryTool(
         return { path: resolved, bytes: content.length, content };
       },
     },
+    write_source_file: {
+      description:
+        "Write a .h/.cpp/.inl into a named module's Public/Private folder (resolves the module dir for you, including plugin modules under Plugins/*/Source/ that write_cpp_file refuses). After a new file, build_project + restart; after a body edit, live_coding_compile. Params: module (module name, default the project's primary module), visibility (Public|Private, default Private), fileName, content.",
+      handler: async (ctx, p) => {
+        ctx.project.ensureLoaded();
+        const moduleName = (p.module as string) ?? "";
+        const fileName = p.fileName as string;
+        if (!fileName) throw new Error("Missing 'fileName' parameter");
+        const content = p.content as string;
+        if (typeof content !== "string") throw new Error("Missing or invalid 'content' parameter (must be a string)");
+        const visibility = ((p.visibility as string) || "Private");
+        const vis = /^public$/i.test(visibility) ? "Public" : /^private$/i.test(visibility) ? "Private" : "";
+
+        const moduleDir = resolveSourceModuleDir(ctx.project.projectDir!, ctx.project.projectName, moduleName);
+        if (!moduleDir) throw new Error(`Module not found: '${moduleName || "(default)"}'. Use list_modules to see available modules.`);
+
+        const target = vis ? path.join(moduleDir, vis, fileName) : path.join(moduleDir, fileName);
+        if (!/\.(h|cpp|inl)$/i.test(target)) throw new Error(`write_source_file only accepts .h/.cpp/.inl files (got '${path.extname(target)}')`);
+
+        const overwrote = fs.existsSync(target);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, content, "utf-8");
+        return {
+          module: path.basename(moduleDir),
+          path: target,
+          bytesWritten: Buffer.byteLength(content, "utf-8"),
+          overwrote,
+          hint: overwrote
+            ? "Overwrote existing file. live_coding_compile for body edits, build_project for structural changes."
+            : "New file written. Run build_project and restart the editor for UE to register new types.",
+        };
+      },
+    },
+    read_source_file: {
+      description:
+        "Read a .h/.cpp/.inl from a named module's folder (companion to write_source_file; resolves plugin modules too). With no visibility it tries Public then Private then the module root. Params: module, visibility?, fileName.",
+      handler: async (ctx, p) => {
+        ctx.project.ensureLoaded();
+        const moduleName = (p.module as string) ?? "";
+        const fileName = p.fileName as string;
+        if (!fileName) throw new Error("Missing 'fileName' parameter");
+        const visibility = (p.visibility as string) || "";
+
+        const moduleDir = resolveSourceModuleDir(ctx.project.projectDir!, ctx.project.projectName, moduleName);
+        if (!moduleDir) throw new Error(`Module not found: '${moduleName || "(default)"}'`);
+
+        const candidates = visibility
+          ? [path.join(moduleDir, /^public$/i.test(visibility) ? "Public" : "Private", fileName)]
+          : [path.join(moduleDir, "Public", fileName), path.join(moduleDir, "Private", fileName), path.join(moduleDir, fileName)];
+        const found = candidates.find(c => fs.existsSync(c));
+        if (!found) throw new Error(`Source file not found: ${fileName} in module '${path.basename(moduleDir)}'`);
+        const content = fs.readFileSync(found, "utf-8");
+        return { module: path.basename(moduleDir), path: found, bytes: content.length, content };
+      },
+    },
     add_module_dependency: {
       description:
         "Add a module to a target module's Build.cs dependency array. Params: moduleName (the Build.cs to edit — must exist in the project), dependency (module name to add, e.g. 'UMG'), access? ('public'|'private', default 'private'). Creates the corresponding AddRange block if missing. Rebuild required afterward.",
@@ -572,6 +666,9 @@ export const projectTool: ToolDef = categoryTool(
     path: z.string().optional().describe("For write_cpp_file: path to write (relative to Source/ or absolute within Source/)."),
     content: z.string().optional().describe("For write_cpp_file: full file contents."),
     sourcePath: z.string().optional().describe("For read_cpp_source: path to .cpp (relative to Source/ or absolute)."),
+    module: z.string().optional().describe("For write_source_file/read_source_file: module name (default project's primary module). Plugin modules are resolved too (#543)."),
+    visibility: z.string().optional().describe("For write_source_file/read_source_file: Public or Private (default Private on write)."),
+    fileName: z.string().optional().describe("For write_source_file/read_source_file: file name e.g. MyComponent.h."),
     dependency: z.string().optional().describe("For add_module_dependency: module name to add (e.g. 'UMG')."),
     declaration: z.string().optional().describe("For add_cpp_member: full UPROPERTY(...) / UFUNCTION(...) block plus the member or function signature."),
     memberName: z.string().optional().describe("For add_cpp_member: the identifier the declaration introduces (used for idempotency)."),
