@@ -15,5 +15,6 @@ private:
 	static TSharedPtr<FJsonValue> SetCollisionProfile(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetPhysicsEnabled(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetCollisionEnabled(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetCollision(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetBodyProperties(const TSharedPtr<FJsonObject>& Params);
 };
