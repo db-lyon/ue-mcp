@@ -186,11 +186,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 			FString FunctionName;
 			FString TargetClassName;
 
-			// Accept flat params: functionName, targetClass
+			// Accept flat params: functionName, targetClass. className is also
+			// accepted (#546) — agents commonly pass the owning class as
+			// `className` for a custom C++ UFUNCTION, which previously bound to
+			// nothing and produced an unbound stub.
 			if (!(*NodeParams)->TryGetStringField(TEXT("functionName"), FunctionName))
 				(*NodeParams)->TryGetStringField(TEXT("memberName"), FunctionName);
 			if (!(*NodeParams)->TryGetStringField(TEXT("targetClass"), TargetClassName))
-				(*NodeParams)->TryGetStringField(TEXT("memberParent"), TargetClassName);
+				if (!(*NodeParams)->TryGetStringField(TEXT("memberParent"), TargetClassName))
+					(*NodeParams)->TryGetStringField(TEXT("className"), TargetClassName);
 
 			// Also accept nested: {"FunctionReference":{"MemberName":"X","MemberParent":"Y"}}
 			if (FunctionName.IsEmpty())
@@ -255,6 +259,44 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 						FoundFunc = Lib->FindFunctionByName(FName(*FunctionName));
 						if (FoundFunc) break;
 					}
+				}
+
+				// 4. #546: search the Blueprint's own component classes — a very
+				// common case is calling a BlueprintCallable UFUNCTION on a custom
+				// C++ component the BP owns, without naming the class explicitly.
+				if (!FoundFunc && Blueprint->SimpleConstructionScript)
+				{
+					for (USCS_Node* SCSNode : Blueprint->SimpleConstructionScript->GetAllNodes())
+					{
+						if (SCSNode && SCSNode->ComponentClass)
+						{
+							FoundFunc = SCSNode->ComponentClass->FindFunctionByName(FName(*FunctionName));
+							if (FoundFunc) break;
+						}
+					}
+				}
+
+				// 5. #546: last resort — scan loaded classes for a single
+				// BlueprintCallable function with this exact name. Resolves
+				// freshly-compiled custom C++ UFUNCTIONs that the palette index
+				// has not picked up. Only binds on an unambiguous match.
+				if (!FoundFunc)
+				{
+					UFunction* UniqueMatch = nullptr;
+					int32 MatchCount = 0;
+					for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt)
+					{
+						UFunction* Candidate = ClassIt->FindFunctionByName(FName(*FunctionName), EIncludeSuperFlag::ExcludeSuper);
+						if (Candidate && Candidate->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure))
+						{
+							if (Candidate != UniqueMatch)
+							{
+								UniqueMatch = Candidate;
+								if (++MatchCount > 1) break;
+							}
+						}
+					}
+					if (MatchCount == 1) FoundFunc = UniqueMatch;
 				}
 
 				if (FoundFunc)
