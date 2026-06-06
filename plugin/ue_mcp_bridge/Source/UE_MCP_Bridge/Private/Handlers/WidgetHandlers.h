@@ -17,6 +17,8 @@ private:
 	static TSharedPtr<FJsonValue> CreateEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetWidgetProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetWidgetFullProperties(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListWidgetBindings(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ClearWidgetBinding(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetWidgetProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadWidgetAnimations(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RunEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params);

@@ -356,6 +356,92 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetFullProperties(const TSharedPtr
 	return MCPResult(Result);
 }
 
+// list_widget_bindings -- enumerate the designer property bindings stored on a
+// WidgetBlueprint (UWidgetBlueprint::Bindings), which the UE 5.7 Python API
+// keeps protected. Returns {widgetName, propertyName, functionName,
+// bindingType}. Optional filterWidgetName / filterProperty narrow the list.
+// (#530)
+TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetBindings(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	const FString FilterWidget = OptionalString(Params, TEXT("filterWidgetName"));
+	const FString FilterProperty = OptionalString(Params, TEXT("filterProperty"));
+
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!WidgetBP)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BindingsArr;
+	for (const FDelegateEditorBinding& B : WidgetBP->Bindings)
+	{
+		const FString WidgetObj = B.ObjectName;
+		const FString PropName = B.PropertyName.ToString();
+		if (!FilterWidget.IsEmpty() && !WidgetObj.Equals(FilterWidget, ESearchCase::IgnoreCase)) continue;
+		if (!FilterProperty.IsEmpty() && !PropName.Equals(FilterProperty, ESearchCase::IgnoreCase)) continue;
+
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("widgetName"), WidgetObj);
+		Obj->SetStringField(TEXT("propertyName"), PropName);
+		Obj->SetStringField(TEXT("functionName"), B.FunctionName.ToString());
+		Obj->SetStringField(TEXT("bindingType"), B.Kind == EBindingKind::Function ? TEXT("Function") : TEXT("Property"));
+		BindingsArr.Add(MakeShared<FJsonValueObject>(Obj));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("bindingCount"), BindingsArr.Num());
+	Result->SetArrayField(TEXT("bindings"), BindingsArr);
+	return MCPResult(Result);
+}
+
+// clear_widget_binding -- remove designer binding(s) matching widgetName (and
+// optional propertyName) from a WidgetBlueprint, without opening the editor.
+// Idempotent: removing a non-existent binding reports removed=0. (#530)
+TSharedPtr<FJsonValue> FWidgetHandlers::ClearWidgetBinding(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	FString WidgetName;
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
+
+	const FString PropertyName = OptionalString(Params, TEXT("propertyName"));
+
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!WidgetBP)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+	}
+
+	WidgetBP->Modify();
+	const int32 Removed = WidgetBP->Bindings.RemoveAll([&](const FDelegateEditorBinding& B)
+	{
+		if (!FString(B.ObjectName).Equals(WidgetName, ESearchCase::IgnoreCase)) return false;
+		if (!PropertyName.IsEmpty() && !B.PropertyName.ToString().Equals(PropertyName, ESearchCase::IgnoreCase)) return false;
+		return true;
+	});
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("widgetName"), WidgetName);
+	Result->SetNumberField(TEXT("removed"), Removed);
+	if (Removed == 0)
+	{
+		MCPSetExisted(Result);
+		return MCPResult(Result);
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBP);
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+	UEditorAssetLibrary::SaveAsset(AssetPath);
+	MCPSetUpdated(Result);
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
