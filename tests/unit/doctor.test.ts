@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { findLocalShadow, findBareNpxConfigs } from "../../src/doctor.js";
+import { findLocalShadow, findBareNpxConfigs, parseServerInvocation } from "../../src/doctor.js";
 
 let root: string;
 
@@ -67,5 +67,34 @@ describe("findBareNpxConfigs", () => {
   it("ignores a malformed .mcp.json without throwing", () => {
     fs.writeFileSync(path.join(root, ".mcp.json"), "{ not json");
     expect(findBareNpxConfigs(root)).toEqual([]);
+  });
+});
+
+describe("parseServerInvocation", () => {
+  it("parses a server launched with a project directory", () => {
+    const cmd = "node C:\\Users\\david\\Projects\\UE\\ue-mcp\\dist\\index.js C:\\Users\\david\\Projects\\UE\\ue-mcp\\tests\\ue_mcp";
+    const r = parseServerInvocation(cmd);
+    expect(r?.project).toContain("ue_mcp");
+    expect(r?.script.toLowerCase()).toContain("ue-mcp/dist/index.js");
+  });
+
+  it("parses a quoted local-node_modules server with a .uproject arg", () => {
+    const cmd = '"node" "C:\\Users\\david\\Projects\\UE\\Vale\\node_modules\\.bin\\..\\ue-mcp\\dist\\index.js" C:/Users/david/Projects/UE/Vale/Vale.uproject';
+    const r = parseServerInvocation(cmd);
+    expect(r).not.toBeNull();
+    expect(r?.project).toBe("C:/Users/david/Projects/UE/Vale/Vale.uproject");
+  });
+
+  it("rejects a --help invocation (not a server)", () => {
+    expect(parseServerInvocation("node C:/x/ue-mcp/dist/index.js --help")).toBeNull();
+  });
+
+  it("rejects a subcommand invocation (doctor/update)", () => {
+    expect(parseServerInvocation("node /x/ue-mcp/dist/index.js doctor")).toBeNull();
+    expect(parseServerInvocation("node /x/ue-mcp/dist/index.js update --build")).toBeNull();
+  });
+
+  it("returns null for a non-ue-mcp process", () => {
+    expect(parseServerInvocation("node /some/other/server.js project")).toBeNull();
   });
 });
