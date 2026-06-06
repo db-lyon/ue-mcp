@@ -4,7 +4,6 @@
 #include "Handlers/BlueprintHandlers_Internal.h"
 #include "Components/PrimitiveComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
-#include "PhysicsEngine/CollisionProfile.h"
 #include "Engine/Blueprint.h"
 #include "Engine/World.h"
 #include "Editor.h"
@@ -28,8 +27,8 @@ void FPhysicsHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 namespace
 {
 	// Resolve a collision channel by canonical enum name ("ECC_Visibility",
-	// "Visibility") or by the project display name ("Visibility", "Pawn",
-	// custom "GameTraceChannel1") via the collision profile table.
+	// "Visibility", "WorldStatic", "Pawn", "GameTraceChannel1"). Bare names are
+	// retried with the ECC_ prefix the enum uses.
 	bool ResolveCollisionChannel(const FString& Name, ECollisionChannel& Out)
 	{
 		if (UEnum* E = StaticEnum<ECollisionChannel>())
@@ -40,11 +39,6 @@ namespace
 				V = E->GetValueByNameString(FString(TEXT("ECC_")) + Name);
 			}
 			if (V != INDEX_NONE) { Out = static_cast<ECollisionChannel>(V); return true; }
-		}
-		if (const UCollisionProfile* Profile = UCollisionProfile::Get())
-		{
-			const int32 Idx = Profile->ReturnContainerIndexFromChannelName(FName(*Name));
-			if (Idx != INDEX_NONE) { Out = static_cast<ECollisionChannel>(Idx); return true; }
 		}
 		return false;
 	}

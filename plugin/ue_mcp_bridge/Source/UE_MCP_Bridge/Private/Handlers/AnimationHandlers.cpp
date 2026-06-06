@@ -768,13 +768,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 
 	AnimAsset->SortNotifies();
 
-	// #528: refresh montage branching-point markers so the notify fires as a
-	// branching point at runtime, with the name just written.
-	if (UAnimMontage* Montage = Cast<UAnimMontage>(AnimAsset))
-	{
-		Montage->RefreshBranchingPointMarkers();
-	}
-
+	// #528: PostEditChange + save rebuilds the montage's branching-point markers
+	// from the notifies (RefreshBranchingPointMarkers itself is private), so the
+	// notify fires as a branching point with the name just written.
 	AnimAsset->PostEditChange();
 	AnimAsset->MarkPackageDirty();
 
