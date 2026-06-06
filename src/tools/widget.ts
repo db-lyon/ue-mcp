@@ -7,7 +7,7 @@ export const widgetTool: ToolDef = categoryTool(
   {
     read_tree:         bp("Read widget hierarchy. Params: assetPath", "read_widget_tree"),
     get_details:       bp("Inspect widget. Params: assetPath, widgetName", "get_widget_details"),
-    set_property:      bp("Set widget property. Params: assetPath, widgetName, propertyName, value", "set_widget_property"),
+    set_property:      bp("Set widget property. Slot struct props take UE struct text that persists every field - `Slot.Size`=`(Value=1.0,SizeRule=Fill)`, `Slot.Padding`=`(Left=8,Top=8,Right=8,Bottom=8)` - or a nested field path like `Slot.Size.Value` / `Slot.Padding.Left`; an invalid value errors instead of silently writing 0 (#532). Params: assetPath, widgetName, propertyName, value", "set_widget_property"),
     list:              bp("List Widget BPs. Params: directory?, recursive?", "list_widget_blueprints"),
     read_animations:   bp("Read UMG animations. Params: assetPath", "read_widget_animations"),
     create:            bp("Create Widget BP. Params: name, packagePath?, parentClass?", "create_widget_blueprint"),

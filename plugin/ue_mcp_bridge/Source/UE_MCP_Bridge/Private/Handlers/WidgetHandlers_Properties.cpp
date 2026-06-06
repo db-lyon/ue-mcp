@@ -504,9 +504,61 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 
 			FString SlotPropName = PropertyName.Mid(5); // strip "slot."
 
+			// #532: a UE struct-text value ("(Value=2,SizeRule=Fill)",
+			// "(Left=26,Top=22,Right=26,Bottom=24)") or a nested field path
+			// ("Size.Value", "Padding.Left") must write through the real struct,
+			// not the positional comma-parsers below — those split struct text on
+			// commas and silently wrote 0 to the numeric fields while reporting
+			// success. Resolve the path rooted at the SLOT and ImportText into the
+			// struct so every field persists. A genuine parse failure is surfaced
+			// as an error instead of falling through to the lossy parser.
+			{
+				const FString TrimmedVal = PropertyValue.TrimStartAndEnd();
+				const bool bStructText = TrimmedVal.StartsWith(TEXT("("));
+				const bool bNestedPath = SlotPropName.Contains(TEXT("."));
+				if (bStructText || bNestedPath)
+				{
+					TArray<FString> SlotParts;
+					SlotPropName.ParseIntoArray(SlotParts, TEXT("."));
+					UStruct* CurStruct = Slot->GetClass();
+					void* CurContainer = Slot;
+					FProperty* LeafProp = nullptr;
+					for (int32 i = 0; i < SlotParts.Num(); ++i)
+					{
+						FProperty* P = CurStruct->FindPropertyByName(FName(*SlotParts[i]));
+						if (!P) { LeafProp = nullptr; break; }
+						if (i < SlotParts.Num() - 1)
+						{
+							FStructProperty* SP = CastField<FStructProperty>(P);
+							if (!SP) { LeafProp = nullptr; break; }
+							CurContainer = SP->ContainerPtrToValuePtr<void>(CurContainer);
+							CurStruct = SP->Struct;
+						}
+						else
+						{
+							LeafProp = P;
+						}
+					}
+					if (LeafProp)
+					{
+						void* LeafAddr = LeafProp->ContainerPtrToValuePtr<void>(CurContainer);
+						if (LeafProp->ImportText_Direct(*PropertyValue, LeafAddr, Slot, PPF_None))
+						{
+							bPropertySet = true;
+						}
+						else
+						{
+							return MCPError(FString::Printf(
+								TEXT("Value '%s' is not valid for slot property '%s' (type %s). Use UE struct text, e.g. `(Value=1.0,SizeRule=Fill)` for Size or `(Left=8,Top=8,Right=8,Bottom=8)` for Padding."),
+								*PropertyValue, *SlotPropName, *LeafProp->GetCPPType()));
+						}
+					}
+				}
+			}
+
 			// Well-known CanvasPanelSlot properties
 			UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot);
-			if (CanvasSlot)
+			if (!bPropertySet && CanvasSlot)
 			{
 				if (SlotPropName == TEXT("anchors") || SlotPropName == TEXT("Anchors"))
 				{
