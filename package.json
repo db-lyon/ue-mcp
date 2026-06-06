@@ -1,7 +1,7 @@
 {
   "name": "ue-mcp",
   "version": "1.0.74",
-  "description": "Unreal Engine MCP server - 21 tools, 513+ actions for AI-driven editor control",
+  "description": "Unreal Engine MCP server - 21 tools, 566+ actions for AI-driven editor control",
   "type": "module",
   "main": "dist/index.js",
   "exports": {
