@@ -1,6 +1,6 @@
 # Tool Reference
 
-UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering **<!-- count:actions -->566+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering **<!-- count:actions -->569+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -537,7 +537,10 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `focus_on_actor` | Focus on actor. Params: `actorLabel` |
 | `create_sequence` | Create Level Sequence. Params: `name, packagePath?` |
 | `get_sequence_info` | Read sequence. Params: `assetPath, includeSectionDetails? (attach sockets, first transform key values per track)` |
-| `add_sequence_track` | Add track. Params: `assetPath, trackType, actorLabel?` |
+| `add_sequence_track` | Add an empty track. Params: `assetPath, trackType, actorLabel?` |
+| `add_sequence_section` | Add a section to a track (creating the track if needed), set its start/end in seconds, and for a CameraCut track bind it to a camera. Returns the section index + channel names to key. Params: `sequencePath, trackType (Transform\\|Float\\|Fade\\|CameraCut\\|Audio\\|Event\\|SkeletalAnimation), actorLabel? (binding scope), startSeconds?, endSeconds?, cameraActorLabel? (#548)` |
+| `set_sequence_keyframes` | Add keyframes to a section channel. Transform channels: Location.X/Y/Z, Rotation.X/Y/Z (or friendly x/y/z, yaw/pitch/roll); Fade/Float: the float channel. Params: `sequencePath, trackType, actorLabel?, sectionIndex? (default 0), channel, keyframes ([{seconds, value}]), interpolation? (cubic\\|linear) (#548)` |
+| `set_sequence_playback_range` | Set a Level Sequence's playback range in seconds. Params: `sequencePath, startSeconds, endSeconds (#548)` |
 | `play_sequence` | Play/stop/pause sequence. Params: `assetPath, sequenceAction` |
 | `build_all` | Build all (geometry, lighting, paths, HLOD) |
 | `build_geometry` | Rebuild BSP geometry |
