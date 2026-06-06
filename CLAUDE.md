@@ -72,7 +72,7 @@ CI **gates the publish job** on a single pre-staged input: the draft GitHub rele
    ...
    ```
    **Headline rules** (enforced by CI; format violations fail the publish job):
-   - 1-6 items, each 3-60 chars.
+   - 1-6 items, each 3-30 chars (keep them tight; concrete noun phrases).
    - Allowed characters: letters, digits, spaces, `_ - / ( ) . , +`.
    - **Forbidden:** `:`, `;`, `?`, `!`, the `·` joiner, leading/trailing whitespace.
    - Joined string (`items.join(" · ")`) must be ≤140 chars.

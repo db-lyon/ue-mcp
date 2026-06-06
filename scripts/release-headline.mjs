@@ -25,7 +25,7 @@
  *
  * Validation:
  *   - 1-6 items
- *   - each item 3-50 chars
+ *   - each item 3-30 chars
  *   - each item matches /^[A-Za-z0-9][A-Za-z0-9 _\-/().,+]*$/ (no sentence
  *     punctuation : ; ? ! and no embedded middle-dots)
  *   - joined string (items.join(" · ")) <= 140 chars
@@ -39,7 +39,7 @@ export const ITEM_RE = /^[A-Za-z0-9][A-Za-z0-9 _\-/().,+]*$/;
 export const MIN_ITEMS = 1;
 export const MAX_ITEMS = 6;
 export const MIN_ITEM_LEN = 3;
-export const MAX_ITEM_LEN = 60;
+export const MAX_ITEM_LEN = 30;
 export const MAX_JOINED_LEN = 140;
 export const SEP = " · ";
 

@@ -39,29 +39,24 @@ describe("release-headline parser", () => {
 });
 
 describe("release-headline validation", () => {
-  it("accepts every historical good headline", () => {
+  it("accepts well-formed headlines (each item <= 30 chars)", () => {
     const cases: string[][] = [
       ["10 new actions", "Flow over HTTP", "Blueprint reparent"],
-      ["Headless PNG capture", "PCG unstick actions", "JSON values in component_property"],
+      ["Headless PNG capture", "PCG unstick actions", "JSON component values"],
       ["Relicensed to BUSL-1.1"],
-      [
-        "PCG persistence fix",
-        "animation authoring (bake root motion, batch seq props)",
-        "SKM material slots",
-        "registry diagnose",
-      ],
-      ["agent_prompt and Anthropic SDK removed", "flows stay deterministic", "reasoning stays in the parent agent"],
-      ["Runtime UMG inspection", "Image brush authoring", "IMC rebind/remove"],
+      ["PCG persistence fix", "SKM material slots", "registry diagnose"],
+      ["agent_prompt removed", "deterministic flows", "IMC rebind/remove"],
+      ["Runtime UMG inspection", "Image brush authoring", "actor bounds"],
       [
         "CDO property access",
-        "actor bounds",
         "mesh collision/nav",
-        "construction script preview",
-        "property serializer overhaul",
+        "construction preview",
+        "property serializer fix",
         "IMC crash fix",
       ],
     ];
     for (const items of cases) {
+      for (const item of items) expect(item.length).toBeLessThanOrEqual(MAX_ITEM_LEN);
       expect(() => validate(items)).not.toThrow();
     }
   });
@@ -91,15 +86,18 @@ describe("release-headline validation", () => {
   });
 
   it("rejects items shorter than the minimum length", () => {
-    expect(() => validate(["ab"])).toThrowError(/3-60/);
+    expect(() => validate(["ab"])).toThrowError(/3-30/);
   });
 
   it("rejects items longer than the maximum length", () => {
-    expect(() => validate(["a".repeat(MAX_ITEM_LEN + 1)])).toThrowError(/3-60/);
+    expect(() => validate(["a".repeat(MAX_ITEM_LEN + 1)])).toThrowError(/3-30/);
   });
 
   it("rejects joined strings over the GitHub status cap", () => {
-    const items = Array.from({ length: 6 }, () => "a".repeat(50));
+    // Each item is within the per-item cap, but together they exceed the
+    // joined-string cap (6 x 28 + separators > 140).
+    const items = Array.from({ length: 6 }, () => "a".repeat(28));
+    for (const item of items) expect(item.length).toBeLessThanOrEqual(MAX_ITEM_LEN);
     expect(() => validate(items)).toThrowError(new RegExp(String(MAX_JOINED_LEN)));
   });
 
