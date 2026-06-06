@@ -752,9 +752,28 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	if (NewNotify)
 	{
 		NewEvent.Notify = NewNotify;
+
+		// #528: UAnimNotify_PlayMontageNotify::BranchingPointNotify broadcasts the
+		// NOTIFY OBJECT's own NotifyName, not the FAnimNotifyEvent's. We only set
+		// the event name above, so any name-based routing in user code received
+		// 'None'. Mirror the requested name onto the notify object's NotifyName
+		// property (present on PlayMontageNotify / PlayMontageNotifyWindow) so
+		// OnPlayMontageNotifyBegin broadcasts the correct name.
+		if (FNameProperty* NameProp = CastField<FNameProperty>(NewNotify->GetClass()->FindPropertyByName(TEXT("NotifyName"))))
+		{
+			NameProp->SetPropertyValue_InContainer(NewNotify, NotifyFName);
+		}
 	}
 
 	AnimAsset->SortNotifies();
+
+	// #528: refresh montage branching-point markers so the notify fires as a
+	// branching point at runtime, with the name just written.
+	if (UAnimMontage* Montage = Cast<UAnimMontage>(AnimAsset))
+	{
+		Montage->RefreshBranchingPointMarkers();
+	}
+
 	AnimAsset->PostEditChange();
 	AnimAsset->MarkPackageDirty();
 
