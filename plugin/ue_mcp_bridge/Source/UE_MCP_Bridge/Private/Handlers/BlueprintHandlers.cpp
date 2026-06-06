@@ -55,6 +55,7 @@
 #include "Engine/InheritableComponentHandler.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/ChildActorComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
 #include "EditorAssetLibrary.h"
@@ -1300,6 +1301,38 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 				{
 					Subsystem->RenameSubobject(NewHandle, FText::FromString(ComponentName));
 				}
+
+				// #526: when adding a ChildActorComponent, let callers set its
+				// ChildActorClass in the same call. Accepts a Blueprint asset path
+				// (with or without the _C generated-class suffix) or a C++ class.
+				FString ChildActorClassPath;
+				if (Params->TryGetStringField(TEXT("childActorClass"), ChildActorClassPath) && !ChildActorClassPath.IsEmpty())
+				{
+					if (const FSubobjectData* NewData = NewHandle.GetData())
+					{
+						if (UChildActorComponent* CAC = Cast<UChildActorComponent>(const_cast<UObject*>(NewData->GetObject())))
+						{
+							UClass* ChildCls = LoadClass<AActor>(nullptr, *ChildActorClassPath);
+							if (!ChildCls && !ChildActorClassPath.EndsWith(TEXT("_C")))
+							{
+								ChildCls = LoadClass<AActor>(nullptr, *(ChildActorClassPath + TEXT("_C")));
+							}
+							if (!ChildCls)
+							{
+								if (UBlueprint* ChildBP = Cast<UBlueprint>(StaticLoadObject(UBlueprint::StaticClass(), nullptr, *ChildActorClassPath)))
+								{
+									ChildCls = ChildBP->GeneratedClass;
+								}
+							}
+							if (ChildCls)
+							{
+								CAC->Modify();
+								CAC->SetChildActorClass(ChildCls);
+							}
+						}
+					}
+				}
+
 				bSuccess = true;
 			}
 		}
