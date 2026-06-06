@@ -6,7 +6,8 @@ export const widgetTool: ToolDef = categoryTool(
   "UMG Widget Blueprints, Editor Utility Widgets, and Editor Utility Blueprints.",
   {
     read_tree:         bp("Read widget hierarchy. Params: assetPath", "read_widget_tree"),
-    get_details:       bp("Inspect widget. Params: assetPath, widgetName", "get_widget_details"),
+    get_details:       bp("Inspect widget (curated subset). Params: assetPath, widgetName", "get_widget_details"),
+    get_properties:    bp("Full reflected property dump for a widget - every UPROPERTY (RenderOpacity, Visibility, ColorAndOpacity, Border padding/colors, Image brush TintColor/ImageSize, fonts, etc.) plus the slot block, for diagnosing visual bugs get_details omits. Pass includeSubtree to also dump children (#547). Params: assetPath, widgetName, includeSubtree?", "get_widget_properties", (p) => ({ assetPath: p.assetPath, widgetName: p.widgetName, includeSubtree: p.includeSubtree })),
     set_property:      bp("Set widget property. Slot struct props take UE struct text that persists every field - `Slot.Size`=`(Value=1.0,SizeRule=Fill)`, `Slot.Padding`=`(Left=8,Top=8,Right=8,Bottom=8)` - or a nested field path like `Slot.Size.Value` / `Slot.Padding.Left`; an invalid value errors instead of silently writing 0 (#532). Params: assetPath, widgetName, propertyName, value", "set_widget_property"),
     list:              bp("List Widget BPs. Params: directory?, recursive?", "list_widget_blueprints"),
     read_animations:   bp("Read UMG animations. Params: assetPath", "read_widget_animations"),
@@ -29,6 +30,7 @@ export const widgetTool: ToolDef = categoryTool(
   {
     assetPath: z.string().optional(),
     widgetName: z.string().optional(),
+    includeSubtree: z.boolean().optional().describe("get_properties: also dump descendant widgets (#547)"),
     widgetClass: z.string().optional(),
     parentWidgetName: z.string().optional(),
     newParentWidgetName: z.string().optional(),

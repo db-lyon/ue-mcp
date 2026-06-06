@@ -66,6 +66,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_editor_utility_widget"), &CreateEditorUtilityWidget);
 	Registry.RegisterHandler(TEXT("create_editor_utility_blueprint"), &CreateEditorUtilityBlueprint);
 	Registry.RegisterHandler(TEXT("get_widget_details"), &GetWidgetProperties);
+	Registry.RegisterHandler(TEXT("get_widget_properties"), &GetWidgetFullProperties);
 	Registry.RegisterHandler(TEXT("set_widget_property"), &SetWidgetProperty);
 	Registry.RegisterHandler(TEXT("read_widget_animations"), &ReadWidgetAnimations);
 	Registry.RegisterHandler(TEXT("run_editor_utility_widget"), &RunEditorUtilityWidget);

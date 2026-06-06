@@ -249,6 +249,113 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetProperties(const TSharedPtr<FJs
 }
 
 
+// get_widget_properties -- full reflected property dump for a named widget,
+// unlike get_widget_details which returns only a curated subset. Returns every
+// UPROPERTY (RenderOpacity, Visibility, ColorAndOpacity, Border padding/colors,
+// Image brush fields, fonts, etc.) plus the slot block, so visual bugs can be
+// diagnosed without execute_python reflection. Optional includeSubtree walks
+// children. (#547)
+TSharedPtr<FJsonValue> FWidgetHandlers::GetWidgetFullProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	FString WidgetName;
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
+
+	const bool bIncludeSubtree = OptionalBool(Params, TEXT("includeSubtree"), false);
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(LoadedAsset);
+	if (!WidgetBP)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to load WidgetBlueprint at '%s'"), *AssetPath));
+	}
+	if (!WidgetBP->WidgetTree)
+	{
+		return MCPError(TEXT("WidgetTree is null"));
+	}
+
+	UWidget* FoundWidget = nullptr;
+	WidgetBP->WidgetTree->ForEachWidget([&](UWidget* Widget)
+	{
+		if (Widget && Widget->GetName() == WidgetName) FoundWidget = Widget;
+	});
+	if (!FoundWidget)
+	{
+		return MCPError(FString::Printf(TEXT("Widget not found: '%s'"), *WidgetName));
+	}
+
+	// Reflect every UPROPERTY on a widget (and its slot) into a JSON object.
+	auto DumpWidget = [](UWidget* W) -> TSharedPtr<FJsonObject>
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), W->GetName());
+		Obj->SetStringField(TEXT("class"), W->GetClass()->GetName());
+
+		TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
+		for (TFieldIterator<FProperty> It(W->GetClass()); It; ++It)
+		{
+			FProperty* Prop = *It;
+			FString ValueStr;
+			const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(W);
+			Prop->ExportText_Direct(ValueStr, ValuePtr, ValuePtr, W, PPF_None);
+			Props->SetStringField(Prop->GetName(), ValueStr);
+		}
+		Obj->SetObjectField(TEXT("properties"), Props);
+
+		if (UPanelSlot* Slot = W->Slot)
+		{
+			TSharedPtr<FJsonObject> SlotObj = MakeShared<FJsonObject>();
+			SlotObj->SetStringField(TEXT("class"), Slot->GetClass()->GetName());
+			TSharedPtr<FJsonObject> SlotProps = MakeShared<FJsonObject>();
+			for (TFieldIterator<FProperty> It(Slot->GetClass()); It; ++It)
+			{
+				FProperty* Prop = *It;
+				FString ValueStr;
+				const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Slot);
+				Prop->ExportText_Direct(ValueStr, ValuePtr, ValuePtr, Slot, PPF_None);
+				SlotProps->SetStringField(Prop->GetName(), ValueStr);
+			}
+			SlotObj->SetObjectField(TEXT("properties"), SlotProps);
+			Obj->SetObjectField(TEXT("slot"), SlotObj);
+		}
+		return Obj;
+	};
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetObjectField(TEXT("widget"), DumpWidget(FoundWidget));
+
+	if (bIncludeSubtree)
+	{
+		TArray<TSharedPtr<FJsonValue>> Children;
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(FoundWidget))
+		{
+			TArray<UWidget*> Stack;
+			for (int32 i = 0; i < Panel->GetChildrenCount(); ++i)
+			{
+				if (UWidget* C = Panel->GetChildAt(i)) Stack.Add(C);
+			}
+			while (Stack.Num() > 0)
+			{
+				UWidget* W = Stack.Pop();
+				Children.Add(MakeShared<FJsonValueObject>(DumpWidget(W)));
+				if (UPanelWidget* CP = Cast<UPanelWidget>(W))
+				{
+					for (int32 i = 0; i < CP->GetChildrenCount(); ++i)
+					{
+						if (UWidget* GC = CP->GetChildAt(i)) Stack.Add(GC);
+					}
+				}
+			}
+		}
+		Result->SetArrayField(TEXT("subtree"), Children);
+	}
+
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
