@@ -1240,6 +1240,197 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRow(const TSharedPtr<FJson
 	return MCPResult(Result);
 }
 
+// #535: read a single row's fields without dumping the whole table.
+// Params: assetPath, rowName.
+TSharedPtr<FJsonValue> FAssetHandlers::GetDataTableRow(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	FString RowName;
+	if (auto Err = RequireString(Params, TEXT("rowName"), RowName)) return Err;
+
+	UDataTable* DataTable = Cast<UDataTable>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!DataTable) return MCPError(FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
+	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	if (!RowStruct) return MCPError(TEXT("DataTable has no row struct"));
+
+	const FName RowKey(*RowName);
+	uint8* const* RowPtr = DataTable->GetRowMap().Find(RowKey);
+	if (!RowPtr || !*RowPtr) return MCPError(FString::Printf(TEXT("Row not found: %s"), *RowName));
+
+	TSharedPtr<FJsonObject> Fields = MakeShared<FJsonObject>();
+	for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+	{
+		FProperty* Prop = *It;
+		FString ValueStr;
+		const void* ValueAddr = Prop->ContainerPtrToValuePtr<void>(*RowPtr);
+		Prop->ExportText_Direct(ValueStr, ValueAddr, ValueAddr, nullptr, PPF_None);
+		Fields->SetStringField(Prop->GetAuthoredName(), ValueStr);
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("rowName"), RowName);
+	Result->SetStringField(TEXT("rowStruct"), RowStruct->GetName());
+	Result->SetObjectField(TEXT("fields"), Fields);
+	return MCPResult(Result);
+}
+
+// #535: write a single field on a single row. Thin wrapper over the row-merge
+// upsert (SetDataTableRow), which seeds from the existing row so only the named
+// cell changes. Params: assetPath, rowName, fieldName, value.
+TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableCell(const TSharedPtr<FJsonObject>& Params)
+{
+	FString FieldName;
+	if (auto Err = RequireString(Params, TEXT("fieldName"), FieldName)) return Err;
+	const TSharedPtr<FJsonValue>* ValueField = Params->Values.Find(TEXT("value"));
+	if (!ValueField || !(*ValueField).IsValid())
+	{
+		return MCPError(TEXT("Missing 'value' parameter"));
+	}
+
+	// Build a one-field row object and delegate to the row upsert, which
+	// requires the row to exist for a cell edit (no accidental row creation).
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	FString RowName;
+	if (auto Err = RequireString(Params, TEXT("rowName"), RowName)) return Err;
+	UDataTable* DataTable = Cast<UDataTable>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!DataTable) return MCPError(FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
+	if (!DataTable->GetRowMap().Contains(FName(*RowName)))
+	{
+		return MCPError(FString::Printf(TEXT("Row not found: %s (use set_datatable_row to create it)"), *RowName));
+	}
+
+	TSharedPtr<FJsonObject> RowObj = MakeShared<FJsonObject>();
+	RowObj->SetField(FieldName, *ValueField);
+	TSharedPtr<FJsonObject> Delegated = MakeShared<FJsonObject>();
+	Delegated->SetStringField(TEXT("assetPath"), AssetPath);
+	Delegated->SetStringField(TEXT("rowName"), RowName);
+	Delegated->SetObjectField(TEXT("row"), RowObj);
+	return SetDataTableRow(Delegated);
+}
+
+// #535: rename a row key, preserving its field values. Params: assetPath,
+// oldName, newName.
+TSharedPtr<FJsonValue> FAssetHandlers::RenameDataTableRow(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+	FString OldName;
+	if (auto Err = RequireStringAlt(Params, TEXT("oldName"), TEXT("rowName"), OldName)) return Err;
+	FString NewName;
+	if (auto Err = RequireString(Params, TEXT("newName"), NewName)) return Err;
+
+	UDataTable* DataTable = Cast<UDataTable>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!DataTable) return MCPError(FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
+	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	if (!RowStruct) return MCPError(TEXT("DataTable has no row struct"));
+
+	const FName OldKey(*OldName);
+	const FName NewKey(*NewName);
+	if (OldKey == NewKey)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetStringField(TEXT("assetPath"), AssetPath);
+		return MCPResult(Noop);
+	}
+	uint8* const* OldPtr = DataTable->GetRowMap().Find(OldKey);
+	if (!OldPtr || !*OldPtr) return MCPError(FString::Printf(TEXT("Row not found: %s"), *OldName));
+	if (DataTable->GetRowMap().Contains(NewKey))
+	{
+		return MCPError(FString::Printf(TEXT("Target row already exists: %s"), *NewName));
+	}
+
+	// Copy the existing row struct into a fresh buffer under the new key.
+	const int32 StructSize = RowStruct->GetStructureSize();
+	const int32 MinAlign = RowStruct->GetMinAlignment();
+	uint8* NewRow = (uint8*)FMemory::Malloc(StructSize, MinAlign);
+	RowStruct->InitializeStruct(NewRow);
+	RowStruct->CopyScriptStruct(NewRow, *OldPtr);
+
+	DataTable->AddRow(NewKey, *reinterpret_cast<FTableRowBase*>(NewRow));
+	DataTable->RemoveRow(OldKey);
+	RowStruct->DestroyStruct(NewRow);
+	FMemory::Free(NewRow);
+
+	DataTable->MarkPackageDirty();
+	UEditorAssetLibrary::SaveLoadedAsset(DataTable, /*bOnlyIfIsDirty*/ true);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("oldName"), OldName);
+	Result->SetStringField(TEXT("newName"), NewName);
+	return MCPResult(Result);
+}
+
+// #535: bulk-upsert rows from a JSON object ({rowName: {field: value, ...}})
+// without touching unrelated rows (unlike reimport_datatable, which replaces
+// the whole table). Params: assetPath, rows (object) or jsonString.
+TSharedPtr<FJsonValue> FAssetHandlers::FillDataTableFromJson(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+
+	const TSharedPtr<FJsonObject>* RowsObj = nullptr;
+	TSharedPtr<FJsonObject> ParsedRows;
+	if (!Params->TryGetObjectField(TEXT("rows"), RowsObj))
+	{
+		// Accept a jsonString carrying the {rowName: {fields}} object.
+		FString JsonStr;
+		if (Params->TryGetStringField(TEXT("jsonString"), JsonStr) && !JsonStr.IsEmpty())
+		{
+			const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
+			if (FJsonSerializer::Deserialize(Reader, ParsedRows) && ParsedRows.IsValid())
+			{
+				RowsObj = &ParsedRows;
+			}
+		}
+	}
+	if (!RowsObj || !(*RowsObj).IsValid())
+	{
+		return MCPError(TEXT("Missing 'rows' object (or 'jsonString') mapping rowName -> {field: value}"));
+	}
+
+	UDataTable* DataTable = Cast<UDataTable>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!DataTable) return MCPError(FString::Printf(TEXT("Asset is not a DataTable: %s"), *AssetPath));
+	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
+	if (!RowStruct) return MCPError(TEXT("DataTable has no row struct"));
+
+	int32 Upserted = 0;
+	for (const auto& RowPair : (*RowsObj)->Values)
+	{
+		const TSharedPtr<FJsonObject>* FieldsObj = nullptr;
+		if (!RowPair.Value->TryGetObject(FieldsObj) || !FieldsObj || !(*FieldsObj).IsValid())
+		{
+			return MCPError(FString::Printf(TEXT("Row '%s' is not an object of fields"), *RowPair.Key));
+		}
+		TSharedPtr<FJsonObject> Delegated = MakeShared<FJsonObject>();
+		Delegated->SetStringField(TEXT("assetPath"), AssetPath);
+		Delegated->SetStringField(TEXT("rowName"), RowPair.Key);
+		Delegated->SetObjectField(TEXT("row"), *FieldsObj);
+		TSharedPtr<FJsonValue> RowResult = SetDataTableRow(Delegated);
+		// SetDataTableRow returns an MCP error object on failure; surface it.
+		const TSharedPtr<FJsonObject>* ResObj = nullptr;
+		if (RowResult.IsValid() && RowResult->TryGetObject(ResObj) && ResObj)
+		{
+			bool bSuccess = false;
+			(*ResObj)->TryGetBoolField(TEXT("success"), bSuccess);
+			if (!bSuccess) return RowResult;
+		}
+		++Upserted;
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("rowsUpserted"), Upserted);
+	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
+	return MCPResult(Result);
+}
+
 // --- Reimport ---------------------------------------------------------
 
 

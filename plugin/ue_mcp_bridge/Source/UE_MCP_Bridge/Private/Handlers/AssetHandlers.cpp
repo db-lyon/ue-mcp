@@ -205,6 +205,11 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("update_datatable_row"), &SetDataTableRow);
 	Registry.RegisterHandler(TEXT("remove_datatable_row"), &RemoveDataTableRow);
 	Registry.RegisterHandler(TEXT("delete_datatable_row"), &RemoveDataTableRow);
+	// #535: single-row read, single-cell write, row rename, and bulk JSON fill.
+	Registry.RegisterHandler(TEXT("get_datatable_row"), &GetDataTableRow);
+	Registry.RegisterHandler(TEXT("set_datatable_cell"), &SetDataTableCell);
+	Registry.RegisterHandler(TEXT("rename_datatable_row"), &RenameDataTableRow);
+	Registry.RegisterHandler(TEXT("fill_datatable_from_json"), &FillDataTableFromJson);
 
 	// Generic reimport / export
 	Registry.RegisterHandler(TEXT("reimport_asset"), &ReimportAsset);
