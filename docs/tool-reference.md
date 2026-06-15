@@ -642,7 +642,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `create_player_controller` | Create PlayerController BP. Params: `name, packagePath?, parentClass?` |
 | `create_player_state` | Create PlayerState BP. Params: `name, packagePath?` |
 | `create_hud` | Create HUD BP. Params: `name, packagePath?` |
-| `set_world_game_mode` | Set level GameMode override. Params: `gameModePath` |
+| `set_world_game_mode` | Set level GameMode override. Params: `gameModeClass (or legacy gameModePath)` |
 | `get_framework_info` | Get level framework classes |
 | `get_navmesh_details` | Read RecastNavMesh generation params (cellSize, agentHeight, maxStepHeight, etc.) (#163) |
 
