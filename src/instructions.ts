@@ -40,7 +40,9 @@ level — Level actors, selection, components, volumes, lights, splines
   get_spline_info, set_spline_points
 
 material — Materials, shading, and graph authoring
-  read, list_parameters, set_parameter, create_instance, create,
+  read, list_parameters, set_parameter, read_instance, set_instance_parent,
+  clear_instance_parameters, list_static_switches, set_static_switch,
+  create_instance, create,
   set_shading_model, set_base_color, connect_texture,
   add_expression, connect_expressions, connect_to_property,
   list_expressions, delete_expression, list_expression_types, recompile
