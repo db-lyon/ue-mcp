@@ -276,14 +276,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListSockets(const TSharedPtr<FJsonObj
 	auto Result = MCPSuccess();
 
 	TArray<TSharedPtr<FJsonValue>> SocketsArray;
-	const TArray<USkeletalMeshSocket*>& Sockets = Skeleton->Sockets;
-	for (const USkeletalMeshSocket* Socket : Sockets)
+	auto AppendSocket = [&SocketsArray](const USkeletalMeshSocket* Socket, const TCHAR* Source)
 	{
-		if (!Socket) continue;
+		if (!Socket) return;
 
 		TSharedPtr<FJsonObject> SocketObj = MakeShared<FJsonObject>();
 		SocketObj->SetStringField(TEXT("name"), Socket->SocketName.ToString());
 		SocketObj->SetStringField(TEXT("boneName"), Socket->BoneName.ToString());
+		SocketObj->SetStringField(TEXT("source"), Source);
 
 		TSharedPtr<FJsonObject> LocationObj = MakeShared<FJsonObject>();
 		LocationObj->SetNumberField(TEXT("x"), Socket->RelativeLocation.X);
@@ -304,6 +304,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListSockets(const TSharedPtr<FJsonObj
 		SocketObj->SetObjectField(TEXT("relativeScale"), ScaleObj);
 
 		SocketsArray.Add(MakeShared<FJsonValueObject>(SocketObj));
+	};
+
+	for (const USkeletalMeshSocket* Socket : SkeletalMesh->GetMeshOnlySocketList())
+	{
+		AppendSocket(Socket, TEXT("mesh"));
+	}
+
+	for (const USkeletalMeshSocket* Socket : Skeleton->Sockets)
+	{
+		AppendSocket(Socket, TEXT("skeleton"));
 	}
 
 	Result->SetArrayField(TEXT("sockets"), SocketsArray);
