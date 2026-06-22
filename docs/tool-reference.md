@@ -48,7 +48,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 
 ## asset
 
-*Asset management: list, search, read, CRUD, import meshes/textures, datatables.*
+*Asset management: list, search, read, CRUD, import meshes/textures, datatables, and curvetables.*
 
 | Action | Description |
 |--------|-------------|
@@ -84,6 +84,16 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `set_datatable_cell` | Write a single field on a single existing row (merges, leaves other cells untouched). Errors if the row doesn't exist. Params: `assetPath, rowName, fieldName, value (#535)` |
 | `rename_datatable_row` | Rename a row key, preserving its values. Params: `assetPath, oldName, newName (#535)` |
 | `fill_datatable_from_json` | Bulk-upsert rows from a {rowName: {field: value}} object without touching unrelated rows (non-destructive, unlike reimport_datatable). Params: `assetPath, rows (object) or jsonString (#535)` |
+| `create_curvetable` | Create CurveTable asset. Params: `name, packagePath?, onConflict?` |
+| `read_curvetable` | Read CurveTable rows and keys. Params: `assetPath, rowFilter?` |
+| `list_curvetable_rows` | Alias for read_curvetable. Params: `assetPath, rowFilter?` |
+| `import_curvetable` | Import CurveTable from JSON/CSV string or file. Params: `assetPath, jsonString?, csvString?, filePath?, format?, interpMode?` |
+| `add_curvetable_row` | Add CurveTable row. Params: `assetPath, rowName, curveType? ('simple'|'rich'), interpMode?` |
+| `remove_curvetable_row` | Remove CurveTable row. Idempotent if missing. Params: `assetPath, rowName` |
+| `rename_curvetable_row` | Rename CurveTable row. Params: `assetPath, oldName, newName` |
+| `get_curvetable_keys` | Read keys from one CurveTable row. Params: `assetPath, rowName` |
+| `set_curvetable_keys` | Replace keys on one CurveTable row. Params: `assetPath, rowName, keys:[{time,value,interpMode?,arriveTangent?,leaveTangent?}]` |
+| `add_curvetable_key` | Add or update one key on a CurveTable row. Params: `assetPath, rowName, time, value, interpMode?, keyTimeTolerance?` |
 | `list_textures` | List textures. Params: `directory?, recursive?` |
 | `get_texture_info` | Get texture details. Params: `assetPath` |
 | `set_texture_settings` | Set texture settings. Params: `assetPath, settings (object with compressionSettings?, lodGroup?, sRGB?, neverStream?)` |

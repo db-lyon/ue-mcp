@@ -40,6 +40,17 @@ private:
 	static TSharedPtr<FJsonValue> RenameDataTableRow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> FillDataTableFromJson(const TSharedPtr<FJsonObject>& Params);
 
+	// CurveTable handlers
+	static TSharedPtr<FJsonValue> CreateCurveTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadCurveTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ImportCurveTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddCurveTableRow(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveCurveTableRow(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RenameCurveTableRow(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetCurveTableKeys(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetCurveTableKeys(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddCurveTableKey(const TSharedPtr<FJsonObject>& Params);
+
 	// FBX import handlers
 	static TSharedPtr<FJsonValue> ImportStaticMesh(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ImportSkeletalMesh(const TSharedPtr<FJsonObject>& Params);
