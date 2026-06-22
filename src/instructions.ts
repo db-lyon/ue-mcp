@@ -79,7 +79,8 @@ widget — UMG widgets and editor utilities
   create_utility_blueprint, run_utility_blueprint
 
 editor — Console, Python, PIE, viewport, sequencer, perf, build pipeline, logs
-  execute_command, execute_python, set_property, play_in_editor,
+  execute_command, execute_python, set_property, get_property,
+  describe_object, play_in_editor,
   get_runtime_value, hot_reload, undo, redo,
   get_perf_stats, run_stat, set_scalability, capture_screenshot,
   get_viewport, set_viewport, focus_on_actor,

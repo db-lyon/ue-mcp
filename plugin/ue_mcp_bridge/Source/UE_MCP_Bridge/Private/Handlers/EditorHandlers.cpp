@@ -56,9 +56,84 @@
 #include "HAL/PlatformProcess.h"
 #include "Misc/MonitoredProcess.h"
 #include "HandlerJsonProperty.h"
+#include "JsonSerializer.h"
 #include "Engine/Blueprint.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
+
+namespace
+{
+	bool ResolveEditorObjectFromPath(const FString& ObjectPath, UObject*& OutObject, FString& OutResolvedKind, FString& OutError)
+	{
+		UObject* Object = LoadObject<UObject>(nullptr, *ObjectPath);
+		if (!Object)
+		{
+			Object = StaticFindObject(UObject::StaticClass(), nullptr, *ObjectPath);
+		}
+		if (!Object)
+		{
+			Object = UEditorAssetLibrary::LoadAsset(ObjectPath);
+		}
+		if (!Object)
+		{
+			OutError = FString::Printf(TEXT("Object not found: %s"), *ObjectPath);
+			return false;
+		}
+
+		OutResolvedKind = TEXT("object");
+		if (UClass* Cls = Cast<UClass>(Object))
+		{
+			Object = Cls->GetDefaultObject();
+			OutResolvedKind = TEXT("classDefaultObject");
+		}
+		else if (UBlueprint* BP = Cast<UBlueprint>(Object))
+		{
+			if (!BP->GeneratedClass)
+			{
+				OutError = FString::Printf(TEXT("Blueprint has no generated class: %s"), *ObjectPath);
+				return false;
+			}
+			Object = BP->GeneratedClass->GetDefaultObject();
+			OutResolvedKind = TEXT("blueprintDefaultObject");
+		}
+
+		if (!Object)
+		{
+			OutError = FString::Printf(TEXT("Resolved object is null: %s"), *ObjectPath);
+			return false;
+		}
+
+		OutObject = Object;
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> DescribeProperty(FProperty* Prop, const void* ValuePtr, UObject* Owner, bool bIncludeValue)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		if (!Prop)
+		{
+			return Obj;
+		}
+
+		Obj->SetStringField(TEXT("name"), Prop->GetName());
+		Obj->SetStringField(TEXT("type"), Prop->GetCPPType());
+		Obj->SetBoolField(TEXT("editable"), Prop->HasAnyPropertyFlags(CPF_Edit));
+		Obj->SetBoolField(TEXT("blueprintVisible"), Prop->HasAnyPropertyFlags(CPF_BlueprintVisible));
+		Obj->SetBoolField(TEXT("config"), Prop->HasAnyPropertyFlags(CPF_Config));
+		Obj->SetBoolField(TEXT("transient"), Prop->HasAnyPropertyFlags(CPF_Transient));
+
+		if (bIncludeValue && ValuePtr)
+		{
+			Obj->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, Prop));
+
+			FString ValueText;
+			Prop->ExportText_Direct(ValueText, ValuePtr, ValuePtr, Owner, PPF_None);
+			Obj->SetStringField(TEXT("valueText"), ValueText);
+		}
+
+		return Obj;
+	}
+}
 
 void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -69,6 +144,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("execute_python"), &ExecutePython);
 	Registry.RegisterHandler(TEXT("run_python_file"), &RunPythonFile);
 	Registry.RegisterHandler(TEXT("set_property"), &SetProperty);
+	Registry.RegisterHandler(TEXT("get_property"), &GetProperty);
+	Registry.RegisterHandler(TEXT("describe_object"), &DescribeObject);
 	Registry.RegisterHandler(TEXT("set_config"), &SetConfig);
 	Registry.RegisterHandler(TEXT("get_viewport_info"), &GetViewportInfo);
 	Registry.RegisterHandler(TEXT("hit_test_viewport_pixel"), &HitTestViewportPixel);
@@ -260,35 +337,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
-	// Load asset (works for /Game/X.X full paths or short /Game/X paths).
-	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
-	if (!Asset)
+	UObject* Asset = nullptr;
+	FString ResolvedKind;
+	FString ResolveObjectErr;
+	if (!ResolveEditorObjectFromPath(AssetPath, Asset, ResolvedKind, ResolveObjectErr))
 	{
-		// Try the LoadAsset fallback so /Game/Foo (no .Foo suffix) resolves.
-		Asset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	}
-	if (!Asset)
-	{
-		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
-	}
-
-	// #210/#211: many data assets are edited via their CDO when assetPath is a
-	// Blueprint generated class (e.g. /Game/Foo/BP_Bar.BP_Bar_C). If the loaded
-	// object is a UClass, redirect to its default object so set-property writes
-	// to the per-class defaults the user expects.
-	if (UClass* Cls = Cast<UClass>(Asset))
-	{
-		Asset = Cls->GetDefaultObject();
-	}
-	else if (UBlueprint* BP = Cast<UBlueprint>(Asset))
-	{
-		if (BP->GeneratedClass) Asset = BP->GeneratedClass->GetDefaultObject();
-	}
-
-	FProperty* Property = Asset->GetClass()->FindPropertyByName(*PropertyName);
-	if (!Property)
-	{
-		return MCPError(FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName, *Asset->GetClass()->GetName()));
+		return MCPError(ResolveObjectErr);
 	}
 
 	TSharedPtr<FJsonValue> ValueJsonRef = Params->TryGetField(TEXT("value"));
@@ -297,8 +351,20 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 		return MCPError(TEXT("Missing 'value' parameter"));
 	}
 
-	void* PropertyValue = Property->ContainerPtrToValuePtr<void>(Asset);
+	FProperty* Property = nullptr;
+	void* PropertyValue = nullptr;
+	UObject* LeafOwner = nullptr;
+	FString ResolvePropertyErr;
+	if (!MCPJsonProperty::ResolveDottedPath(Asset, PropertyName, Property, PropertyValue, LeafOwner, ResolvePropertyErr))
+	{
+		return MCPError(ResolvePropertyErr);
+	}
+
 	Asset->Modify();
+	if (LeafOwner && LeafOwner != Asset)
+	{
+		LeafOwner->Modify();
+	}
 
 	// #210/#221: route through the recursive setter so JSON objects, arrays,
 	// asset-path strings (FObjectProperty), and nested structs all apply
@@ -310,13 +376,140 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	}
 
 	FPropertyChangedEvent ChangeEvent(Property);
-	Asset->PostEditChangeProperty(ChangeEvent);
+	(LeafOwner ? LeafOwner : Asset)->PostEditChangeProperty(ChangeEvent);
 	Asset->MarkPackageDirty();
 	UEditorAssetLibrary::SaveLoadedAsset(Asset, /*bOnlyIfIsDirty=*/true);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("resolvedPath"), Asset->GetPathName());
+	Result->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("type"), Property->GetCPPType());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::GetProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ObjectPath;
+	if (!Params->TryGetStringField(TEXT("objectPath"), ObjectPath))
+	{
+		if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), ObjectPath)) return Err;
+	}
+
+	FString PropertyName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
+
+	UObject* Object = nullptr;
+	FString ResolvedKind;
+	FString ResolveObjectErr;
+	if (!ResolveEditorObjectFromPath(ObjectPath, Object, ResolvedKind, ResolveObjectErr))
+	{
+		return MCPError(ResolveObjectErr);
+	}
+
+	FProperty* Property = nullptr;
+	void* ValuePtr = nullptr;
+	UObject* LeafOwner = nullptr;
+	FString ResolvePropertyErr;
+	if (!MCPJsonProperty::ResolveDottedPath(Object, PropertyName, Property, ValuePtr, LeafOwner, ResolvePropertyErr))
+	{
+		return MCPError(ResolvePropertyErr);
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), ObjectPath);
+	Result->SetStringField(TEXT("resolvedPath"), Object->GetPathName());
+	Result->SetStringField(TEXT("resolvedKind"), ResolvedKind);
+	Result->SetStringField(TEXT("className"), Object->GetClass()->GetName());
+	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("leafPropertyName"), Property->GetName());
+	Result->SetStringField(TEXT("type"), Property->GetCPPType());
+	Result->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, Property));
+
+	FString ValueText;
+	Property->ExportText_Direct(ValueText, ValuePtr, ValuePtr, LeafOwner ? LeafOwner : Object, PPF_None);
+	Result->SetStringField(TEXT("valueText"), ValueText);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::DescribeObject(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ObjectPath;
+	if (!Params->TryGetStringField(TEXT("objectPath"), ObjectPath))
+	{
+		if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), ObjectPath)) return Err;
+	}
+
+	UObject* Object = nullptr;
+	FString ResolvedKind;
+	FString ResolveObjectErr;
+	if (!ResolveEditorObjectFromPath(ObjectPath, Object, ResolvedKind, ResolveObjectErr))
+	{
+		return MCPError(ResolveObjectErr);
+	}
+
+	const bool bIncludeProperties = OptionalBool(Params, TEXT("includeProperties"), true);
+	const bool bIncludeValues = OptionalBool(Params, TEXT("includeValues"), false);
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), ObjectPath);
+	Result->SetStringField(TEXT("resolvedPath"), Object->GetPathName());
+	Result->SetStringField(TEXT("resolvedKind"), ResolvedKind);
+	Result->SetStringField(TEXT("name"), Object->GetName());
+	Result->SetStringField(TEXT("className"), Object->GetClass()->GetName());
+	Result->SetStringField(TEXT("outerPath"), Object->GetOuter() ? Object->GetOuter()->GetPathName() : FString());
+
+	if (!bIncludeProperties)
+	{
+		TArray<TSharedPtr<FJsonValue>> EmptyProperties;
+		Result->SetNumberField(TEXT("propertyCount"), 0);
+		Result->SetArrayField(TEXT("properties"), EmptyProperties);
+		return MCPResult(Result);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Properties;
+	const TArray<TSharedPtr<FJsonValue>>* PropertyNames = nullptr;
+	if (Params->TryGetArrayField(TEXT("propertyNames"), PropertyNames) && PropertyNames)
+	{
+		for (const TSharedPtr<FJsonValue>& NameValue : *PropertyNames)
+		{
+			FString PropertyName;
+			if (!NameValue.IsValid() || !NameValue->TryGetString(PropertyName) || PropertyName.IsEmpty())
+			{
+				continue;
+			}
+
+			FProperty* Property = nullptr;
+			void* ValuePtr = nullptr;
+			UObject* LeafOwner = nullptr;
+			FString ResolvePropertyErr;
+			if (!MCPJsonProperty::ResolveDottedPath(Object, PropertyName, Property, ValuePtr, LeafOwner, ResolvePropertyErr))
+			{
+				TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+				Entry->SetStringField(TEXT("name"), PropertyName);
+				Entry->SetStringField(TEXT("error"), ResolvePropertyErr);
+				Properties.Add(MakeShared<FJsonValueObject>(Entry));
+				continue;
+			}
+
+			TSharedPtr<FJsonObject> Entry = DescribeProperty(Property, ValuePtr, LeafOwner ? LeafOwner : Object, bIncludeValues);
+			Entry->SetStringField(TEXT("path"), PropertyName);
+			Properties.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+	}
+	else
+	{
+		for (TFieldIterator<FProperty> It(Object->GetClass()); It; ++It)
+		{
+			FProperty* Property = *It;
+			const void* ValuePtr = bIncludeValues ? Property->ContainerPtrToValuePtr<void>(Object) : nullptr;
+			Properties.Add(MakeShared<FJsonValueObject>(DescribeProperty(Property, ValuePtr, Object, bIncludeValues)));
+		}
+	}
+
+	Result->SetNumberField(TEXT("propertyCount"), Properties.Num());
+	Result->SetArrayField(TEXT("properties"), Properties);
 	return MCPResult(Result);
 }
 

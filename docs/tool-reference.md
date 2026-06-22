@@ -513,7 +513,9 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `execute_command` | Run console command. Params: `command` |
 | `execute_python` | Run Python in editor. Params: `code` |
 | `run_python_file` | Run a Python file from disk with __file__/__name__ populated (#142). Params: `filePath, args?` |
-| `set_property` | Set UObject property. Params: `objectPath, propertyName, value` |
+| `set_property` | Set UObject property. Supports dotted/indexed paths into structs, arrays, and subobjects. Params: `objectPath, propertyName, value` |
+| `get_property` | Read a UObject property as structured JSON plus UE export text. Supports dotted/indexed paths into structs, arrays, and subobjects. Params: `objectPath, propertyName` |
+| `describe_object` | Describe a UObject, resolving Blueprint/class paths to their CDOs and optionally returning reflected property metadata/values. Params: `objectPath, includeProperties?, includeValues?, propertyNames?` |
 | `play_in_editor` | PIE control. Params: `pieAction (start\\|stop\\|status), waitForAssetRegistry? (start only; default true - block until the AssetRegistry initial scan completes before requesting PIE, otherwise PIE silently no-ops on cold editor starts), assetRegistryTimeoutSeconds? (default 180) (#406)` |
 | `get_runtime_value` | Read PIE actor property. Params: `actorLabel, propertyName (supports dotted paths: component.field or component.struct.field for nested reads on component subobjects, #344/#381)` |
 | `get_pie_pawn` | Resolve the controlled pawn in the active PIE world. Params: `playerIndex? (default 0)` |
