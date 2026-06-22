@@ -215,6 +215,15 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("reimport_asset"), &ReimportAsset);
 	Registry.RegisterHandler(TEXT("export_asset"), &ExportAsset);
 
+	// StringTable handlers
+	Registry.RegisterHandler(TEXT("create_stringtable"), &CreateStringTable);
+	Registry.RegisterHandler(TEXT("read_stringtable"), &ReadStringTable);
+	Registry.RegisterHandler(TEXT("list_stringtable_keys"), &ListStringTableKeys);
+	Registry.RegisterHandler(TEXT("get_stringtable_entry"), &GetStringTableEntry);
+	Registry.RegisterHandler(TEXT("set_stringtable_entry"), &SetStringTableEntry);
+	Registry.RegisterHandler(TEXT("remove_stringtable_entry"), &RemoveStringTableEntry);
+	Registry.RegisterHandler(TEXT("import_stringtable"), &ImportStringTable);
+
 	// v0.7.8 stubs — FTS5-backed asset search
 	Registry.RegisterHandler(TEXT("search_assets_fts"), &SearchAssetsFTS);
 	Registry.RegisterHandler(TEXT("reindex_assets_fts"), &ReindexAssetsFTS);

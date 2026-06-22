@@ -4,7 +4,7 @@ import { Vec3, Rotator } from "../schemas.js";
 
 export const assetTool: ToolDef = categoryTool(
   "asset",
-  "Asset management: list, search, read, CRUD, import meshes/textures, datatables.",
+  "Asset management: list, search, read, CRUD, import meshes/textures, datatables, stringtables.",
   {
     list: bp(
       "List assets via the AssetRegistry (sees /Game and every mounted plugin root). Params: directory? (default /Game), classFilter?, recursive? (default true), maxResults? (default 2000)",
@@ -82,6 +82,13 @@ export const assetTool: ToolDef = categoryTool(
       ...(p.sRGB !== undefined ? { sRGB: p.sRGB } : {}),
       ...(p.neverStream !== undefined ? { neverStream: p.neverStream } : {}),
     })),
+    create_stringtable:   bp("Create a StringTable asset. Params: name, packagePath?, namespace?, onConflict?", "create_stringtable"),
+    read_stringtable:     bp("Read StringTable entries and keys. Params: assetPath, keyFilter?", "read_stringtable", (p) => ({ assetPath: p.assetPath, path: p.path, keyFilter: p.keyFilter })),
+    list_stringtable_keys: bp("List StringTable keys. Params: assetPath, keyFilter?", "list_stringtable_keys", (p) => ({ assetPath: p.assetPath, path: p.path, keyFilter: p.keyFilter })),
+    get_stringtable_entry: bp("Read one StringTable entry. Params: assetPath, key", "get_stringtable_entry", (p) => ({ assetPath: p.assetPath, path: p.path, key: p.key })),
+    set_stringtable_entry: bp("Create or update one StringTable entry. Params: assetPath, key, sourceString (or value)", "set_stringtable_entry", (p) => ({ assetPath: p.assetPath, path: p.path, key: p.key, sourceString: p.sourceString, value: p.value })),
+    remove_stringtable_entry: bp("Remove one StringTable entry. Idempotent (alreadyDeleted=true if missing). Params: assetPath, key", "remove_stringtable_entry", (p) => ({ assetPath: p.assetPath, path: p.path, key: p.key })),
+    import_stringtable:   bp("Import StringTable entries from CSV. Params: assetPath, filePath (or csvPath)", "import_stringtable", (p) => ({ assetPath: p.assetPath, path: p.path, filePath: p.filePath ?? p.csvPath })),
     add_input_mapping:    bp("Append an Enhanced Input key mapping to an InputMappingContext (InputAction + key by name string e.g. 'Mouse2D','LeftMouseButton'). Idempotent on (action,key). For modifiers/triggers use gameplay(set_mapping_modifiers). Same as gameplay(add_imc_mapping) (#525). Params: mappingContext (IMC path), inputAction (IA path), key", "add_imc_mapping", (p) => ({ imcPath: p.mappingContext ?? p.imcPath ?? p.assetPath, inputActionPath: p.inputAction ?? p.inputActionPath, key: p.key })),
     remove_input_mapping: bp("Remove an IMC key mapping. Same as gameplay(remove_imc_mapping) (#525). Params: mappingContext (IMC path), mappingIndex? | (inputAction? + key?)", "remove_imc_mapping", (p) => ({ imcPath: p.mappingContext ?? p.imcPath ?? p.assetPath, mappingIndex: p.mappingIndex, inputActionPath: p.inputAction ?? p.inputActionPath, key: p.key })),
     list_input_mappings:  bp("List an IMC's key->action bindings with triggers/modifiers. Same as gameplay(read_imc) (#525). Params: mappingContext (IMC path)", "read_imc", (p) => ({ imcPath: p.mappingContext ?? p.imcPath ?? p.assetPath })),
@@ -135,6 +142,7 @@ export const assetTool: ToolDef = categoryTool(
     filePath: z.string().optional().describe("Absolute file path for imports"),
     name: z.string().optional().describe("Asset name (defaults to filename)"),
     packagePath: z.string().optional().describe("Destination package path (e.g. /Game/Meshes)"),
+    onConflict: z.string().optional().describe("Asset-creation conflict policy: skip (default) | error | overwrite"),
     groups: z.record(z.array(z.string())).optional().describe("set_texture_settings_by_type: { normal?: [...], grayscale?: [...], baseColor?: [...], hdr?: [...] }"),
     meshType: z.string().optional().describe("create_interchange_pipeline: 'skeletal' (default) or 'static'"),
     options: z.record(z.unknown()).optional().describe("create_interchange_pipeline: dotted-path overrides"),
@@ -151,7 +159,11 @@ export const assetTool: ToolDef = categoryTool(
     inputAction: z.string().optional().describe("InputAction asset path for add_input_mapping (#525)"),
     imcPath: z.string().optional(),
     inputActionPath: z.string().optional(),
-    key: z.string().optional().describe("Key name for add_input_mapping (e.g. 'Mouse2D', 'LeftMouseButton') (#525)"),
+    key: z.string().optional().describe("Key name for add_input_mapping or StringTable entry key (e.g. 'Mouse2D', 'LeftMouseButton') (#525)"),
+    sourceString: z.string().optional().describe("StringTable entry source string"),
+    namespace: z.string().optional().describe("StringTable namespace for create_stringtable"),
+    keyFilter: z.string().optional().describe("Filter StringTable keys by substring"),
+    csvPath: z.string().optional().describe("StringTable CSV import path"),
     mappingIndex: z.number().optional().describe("Index of an IMC mapping for remove_input_mapping (#525)"),
     fieldName: z.string().optional().describe("DataTable field/column name for set_datatable_cell (#535)"),
     oldName: z.string().optional().describe("Existing row key for rename_datatable_row (#535)"),
