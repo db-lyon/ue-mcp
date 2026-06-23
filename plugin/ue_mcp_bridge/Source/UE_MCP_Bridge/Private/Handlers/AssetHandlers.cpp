@@ -8,6 +8,7 @@
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Engine/AssetManager.h"
 #include "Engine/AssetManagerTypes.h"
+#include "Engine/Blueprint.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "Editor.h"
 #include "FileHelpers.h"
@@ -637,6 +638,25 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAsset(const TSharedPtr<FJsonObject>& 
 	return MCPResult(Result);
 }
 
+// #568: loading a Blueprint asset path yields the UBlueprint wrapper, whose
+// own properties (ParentClass, etc.) are rarely what a caller wants. Resolve to
+// the generated-class CDO so asset property reads/writes hit the real defaults
+// and can author Instanced sub-object arrays. Non-Blueprint assets pass through.
+static UObject* MCPResolveAssetToCDO(UObject* Asset)
+{
+	if (UBlueprint* BP = Cast<UBlueprint>(Asset))
+	{
+		if (UClass* GenClass = BP->GeneratedClass)
+		{
+			if (UObject* CDO = GenClass->GetDefaultObject())
+			{
+				return CDO;
+			}
+		}
+	}
+	return Asset;
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -647,6 +667,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 	{
 		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
+	Asset = MCPResolveAssetToCDO(Asset); // #568
 
 	FString ValueFormat;
 	Params->TryGetStringField(TEXT("valueFormat"), ValueFormat);
@@ -2506,6 +2527,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 	{
 		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
 	}
+	Asset = MCPResolveAssetToCDO(Asset); // #568 - author the generated-class CDO for Blueprint paths
 
 	// Resolve the (possibly indexed, possibly subobject-descending) path.
 	// Supports "Config.Traits[1].Params.RepresentationActorManagementClass"
