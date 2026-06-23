@@ -27,6 +27,8 @@ private:
 	static TSharedPtr<FJsonValue> GetSelectedActors(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListVolumes(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> MoveActor(const TSharedPtr<FJsonObject>& Params);
+	// #566 point an actor at a target point or actor (computed look-at)
+	static TSharedPtr<FJsonValue> AimActorAt(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SelectActors(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SpawnLight(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetLightProperties(const TSharedPtr<FJsonObject>& Params);

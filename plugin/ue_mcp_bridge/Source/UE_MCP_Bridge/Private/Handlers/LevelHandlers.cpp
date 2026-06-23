@@ -83,6 +83,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_selected_actors"), &GetSelectedActors);
 	Registry.RegisterHandler(TEXT("list_volumes"), &ListVolumes);
 	Registry.RegisterHandler(TEXT("move_actor"), &MoveActor);
+	Registry.RegisterHandler(TEXT("aim_actor_at"), &AimActorAt);
 	Registry.RegisterHandler(TEXT("select_actors"), &SelectActors);
 	Registry.RegisterHandler(TEXT("spawn_light"), &SpawnLight);
 	Registry.RegisterHandler(TEXT("set_light_properties"), &SetLightProperties);
@@ -849,6 +850,67 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 	Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(PreviousLocation));
 	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(PreviousRotation));
 	Payload->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(PreviousScale));
+	MCPSetRollback(Result, TEXT("move_actor"), Payload);
+
+	return MCPResult(Result);
+}
+
+// #566 aim_actor_at - rotate an actor so its +X (forward) points at a target
+// point or another actor. Saves the "frame this from the bridge" round-trip of
+// reading two transforms and computing the look-at client-side.
+TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+
+	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
+	if (!Actor) return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+
+	// Resolve the target point: an explicit target Vec3, or another actor's location.
+	FVector TargetLocation;
+	const FString TargetActorLabel = OptionalString(Params, TEXT("targetActor"));
+	if (!TargetActorLabel.IsEmpty())
+	{
+		AActor* TargetActor = FindActorByLabel(World, TargetActorLabel);
+		if (!TargetActor) return MCPError(FString::Printf(TEXT("Target actor not found: %s"), *TargetActorLabel));
+		TargetLocation = TargetActor->GetActorLocation();
+	}
+	else if (Params->HasField(TEXT("target")))
+	{
+		TargetLocation = OptionalVec3(Params, TEXT("target"), FVector::ZeroVector);
+	}
+	else
+	{
+		return MCPError(TEXT("Supply 'target' (Vec3) or 'targetActor' (label)"));
+	}
+
+	const FVector ActorLocation = Actor->GetActorLocation();
+	const FVector Direction = TargetLocation - ActorLocation;
+	if (Direction.IsNearlyZero())
+	{
+		return MCPError(TEXT("Actor and target are at the same location; look-at is undefined"));
+	}
+
+	const FRotator PreviousRotation = Actor->GetActorRotation();
+	FRotator LookAt = FRotationMatrix::MakeFromX(Direction).Rotator();
+	const double Roll = OptionalNumber(Params, TEXT("roll"), 0.0);
+	LookAt.Roll = Roll;
+	Actor->SetActorRotation(LookAt);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Actor->GetActorRotation()));
+	Result->SetObjectField(TEXT("target"), MCPVec3ToJsonObject(TargetLocation));
+
+	// Rollback: restore the prior rotation via move_actor.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(PreviousRotation));
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 
 	return MCPResult(Result);

@@ -212,6 +212,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `delete_actor` | Remove actor. Params: `actorLabel` |
 | `get_actor_details` | Inspect actor. Params: `actorLabel OR actorPath, includeProperties?, propertyName?, world? (editor\\|pie)` |
 | `move_actor` | Transform actor. Params: `actorLabel, location?, rotation?, scale?` |
+| `aim_actor_at` | Rotate an actor so its forward (+X) points at a target. Params: `actorLabel, targetPoint (Vec3) OR targetActor (label), roll? (default 0), world? (editor\\|pie) (#566)` |
 | `select` | Select actors. Params: `actorLabels[]` |
 | `get_selected` | Get selection |
 | `add_component` | Add component to actor. Params: `actorLabel, componentClass, componentName?` |
