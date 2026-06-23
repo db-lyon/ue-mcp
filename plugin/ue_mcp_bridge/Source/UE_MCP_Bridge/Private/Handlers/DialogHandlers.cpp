@@ -3,6 +3,8 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "Misc/CoreDelegates.h"
+#include "Misc/MessageDialog.h"     // #603 re-show real dialog
+#include "GameThreadExecutor.h"     // #603 IsHandlerInFlight
 #include "GenericPlatform/GenericPlatformMisc.h" // EAppMsgCategory
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
@@ -82,8 +84,25 @@ EAppReturnType::Type FDialogHandlers::HandleModalDialog(EAppMsgType::Type MsgTyp
 		}
 	}
 
-	// No policy matched — fall through to default UE behavior
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Dialog shown (no policy match): title='%s' message='%s'"),
+	// #603: No policy matched. If this modal was NOT raised by an in-flight
+	// bridge request, it belongs to the human (e.g. a Content Browser rename
+	// confirm) - synthesizing Cancel/No silently eats the user's action. Detach
+	// the hook momentarily and re-show the real dialog so the user can answer.
+	// The always-on safety-net policies above still auto-answer overwrite/save/
+	// shutdown prompts regardless of origin, so automation and editor-stop never hang.
+	if (!FMCPGameThreadExecutor::IsHandlerInFlight())
+	{
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] User-initiated dialog passed through (no bridge request in flight): title='%s'"), *TitleStr);
+		FCoreDelegates::ModalMessageDialog.Unbind();
+		const EAppReturnType::Type UserAnswer = FMessageDialog::Open(MsgType, Text, Title);
+		// Reattach for subsequent dialogs.
+		FCoreDelegates::ModalMessageDialog.BindStatic(&FDialogHandlers::HandleModalDialogV2);
+		return UserAnswer;
+	}
+
+	// Bridge-initiated dialog with no matching policy — synthesize a safe default
+	// so the in-flight request does not block forever.
+	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Bridge dialog auto-defaulted (no policy match): title='%s' message='%s'"),
 		*TitleStr, *MessageStr.Left(200));
 
 	// Return the "default" response based on message type
