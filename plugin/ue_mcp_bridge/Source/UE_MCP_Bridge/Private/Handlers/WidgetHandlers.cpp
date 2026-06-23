@@ -424,6 +424,32 @@ static UClass* ResolveWidgetClass(const FString& ClassName)
 		return GuessClass;
 	}
 
+	// #576: custom user widget BP classes live in content and aren't loaded yet,
+	// so FindObject misses them. LoadObject a content path (with or without the
+	// generated-class _C suffix), or load the WidgetBlueprint and take its class.
+	if (ClassName.StartsWith(TEXT("/")))
+	{
+		if (UClass* PathClass = LoadObject<UClass>(nullptr, *ClassName))
+		{
+			if (PathClass->IsChildOf(UWidget::StaticClass())) return PathClass;
+		}
+		const FString WithC = ClassName.EndsWith(TEXT("_C")) ? ClassName : (ClassName + TEXT("_C"));
+		if (UClass* GenClass = LoadObject<UClass>(nullptr, *WithC))
+		{
+			if (GenClass->IsChildOf(UWidget::StaticClass())) return GenClass;
+		}
+		if (UObject* Asset = LoadObject<UObject>(nullptr, *ClassName))
+		{
+			if (UBlueprint* BP = Cast<UBlueprint>(Asset))
+			{
+				if (BP->GeneratedClass && BP->GeneratedClass->IsChildOf(UWidget::StaticClass()))
+				{
+					return BP->GeneratedClass;
+				}
+			}
+		}
+	}
+
 	return nullptr;
 }
 
