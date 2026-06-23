@@ -3,6 +3,8 @@
 #include "HandlerUtils.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "Scalability.h"
+#include "HAL/IConsoleManager.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UnrealType.h"
 #include "Editor/EditorEngine.h"
@@ -177,6 +179,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// New handlers
 	Registry.RegisterHandler(TEXT("run_stat_command"), &RunStatCommand);
 	Registry.RegisterHandler(TEXT("set_scalability"), &SetScalability);
+	Registry.RegisterHandler(TEXT("set_cvars"), &SetCVars);
 	Registry.RegisterHandler(TEXT("build_geometry"), &BuildGeometry);
 	Registry.RegisterHandler(TEXT("build_hlod"), &BuildHlod);
 	Registry.RegisterHandler(TEXT("list_crashes"), &ListCrashes);
@@ -1510,29 +1513,105 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetScalability(const TSharedPtr<FJsonObj
 	else if (Level == TEXT("High")) Idx = 2;
 	else if (Level == TEXT("Epic")) Idx = 3;
 	else if (Level == TEXT("Cinematic")) Idx = 4;
+	else return MCPError(FString::Printf(TEXT("Unknown level '%s' (expected Low/Medium/High/Epic/Cinematic)"), *Level));
 
-	REQUIRE_EDITOR_WORLD(World);
+	// #591: setting the sg.* cvars via Exec does not reliably apply the quality
+	// group in-editor. Drive the Scalability system directly so the cached
+	// quality levels actually take effect, then persist them.
+	Scalability::FQualityLevels QL = Scalability::GetQualityLevels();
+	QL.SetFromSingleQualityLevel(Idx);
+	Scalability::SetQualityLevels(QL, /*bForce=*/true);
+	Scalability::SaveState(GGameUserSettingsIni);
 
-	TArray<FString> Commands = {
-		FString::Printf(TEXT("sg.ViewDistanceQuality %d"), Idx),
-		FString::Printf(TEXT("sg.AntiAliasingQuality %d"), Idx),
-		FString::Printf(TEXT("sg.ShadowQuality %d"), Idx),
-		FString::Printf(TEXT("sg.GlobalIlluminationQuality %d"), Idx),
-		FString::Printf(TEXT("sg.ReflectionQuality %d"), Idx),
-		FString::Printf(TEXT("sg.PostProcessQuality %d"), Idx),
-		FString::Printf(TEXT("sg.TextureQuality %d"), Idx),
-		FString::Printf(TEXT("sg.EffectsQuality %d"), Idx),
-		FString::Printf(TEXT("sg.FoliageQuality %d"), Idx),
-		FString::Printf(TEXT("sg.ShadingQuality %d"), Idx),
-	};
-
-	for (const FString& Cmd : Commands)
-	{
-		GEditor->Exec(World, *Cmd);
-	}
+	const Scalability::FQualityLevels Applied = Scalability::GetQualityLevels();
+	TSharedPtr<FJsonObject> Levels = MakeShared<FJsonObject>();
+	Levels->SetNumberField(TEXT("viewDistance"), Applied.ViewDistanceQuality);
+	Levels->SetNumberField(TEXT("antiAliasing"), Applied.AntiAliasingQuality);
+	Levels->SetNumberField(TEXT("shadow"), Applied.ShadowQuality);
+	Levels->SetNumberField(TEXT("globalIllumination"), Applied.GlobalIlluminationQuality);
+	Levels->SetNumberField(TEXT("reflection"), Applied.ReflectionQuality);
+	Levels->SetNumberField(TEXT("postProcess"), Applied.PostProcessQuality);
+	Levels->SetNumberField(TEXT("texture"), Applied.TextureQuality);
+	Levels->SetNumberField(TEXT("effects"), Applied.EffectsQuality);
+	Levels->SetNumberField(TEXT("foliage"), Applied.FoliageQuality);
+	Levels->SetNumberField(TEXT("shading"), Applied.ShadingQuality);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("level"), Level);
+	Result->SetNumberField(TEXT("qualityLevel"), Idx);
+	Result->SetObjectField(TEXT("appliedLevels"), Levels);
+	return MCPResult(Result);
+}
+
+// #591 bulk console-variable setter. Accepts a {name: value} object (or array
+// of {name, value}) and applies each via the console manager with SetByConsole
+// priority. Returns per-cvar old/new values so callers can confirm the write.
+TSharedPtr<FJsonValue> FEditorHandlers::SetCVars(const TSharedPtr<FJsonObject>& Params)
+{
+	// Collect requested (name, value) pairs from either shape.
+	TArray<TPair<FString, FString>> Requests;
+	const TSharedPtr<FJsonObject>* CVarObj = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* CVarArr = nullptr;
+	if (Params->TryGetObjectField(TEXT("cvars"), CVarObj) && CVarObj && CVarObj->IsValid())
+	{
+		for (const auto& Pair : (*CVarObj)->Values)
+		{
+			FString ValStr;
+			if (Pair.Value.IsValid() && Pair.Value->TryGetString(ValStr))
+			{
+				Requests.Add({ Pair.Key, ValStr });
+			}
+			else if (Pair.Value.IsValid())
+			{
+				// numbers/bools arrive as non-string JSON; stringify them.
+				double Num = 0.0; bool bBool = false;
+				if (Pair.Value->TryGetNumber(Num)) Requests.Add({ Pair.Key, FString::SanitizeFloat(Num) });
+				else if (Pair.Value->TryGetBool(bBool)) Requests.Add({ Pair.Key, bBool ? TEXT("1") : TEXT("0") });
+			}
+		}
+	}
+	else if (Params->TryGetArrayField(TEXT("cvars"), CVarArr) && CVarArr)
+	{
+		for (const TSharedPtr<FJsonValue>& Entry : *CVarArr)
+		{
+			const TSharedPtr<FJsonObject>* EObj = nullptr;
+			if (Entry.IsValid() && Entry->TryGetObject(EObj) && EObj && EObj->IsValid())
+			{
+				FString Name = (*EObj)->GetStringField(TEXT("name"));
+				FString ValStr;
+				if (!Name.IsEmpty() && (*EObj)->TryGetStringField(TEXT("value"), ValStr))
+				{
+					Requests.Add({ Name, ValStr });
+				}
+			}
+		}
+	}
+	if (Requests.Num() == 0) return MCPError(TEXT("Supply 'cvars' as a {name: value} object or an array of {name, value}"));
+
+	IConsoleManager& CM = IConsoleManager::Get();
+	TArray<TSharedPtr<FJsonValue>> Applied;
+	TArray<TSharedPtr<FJsonValue>> NotFound;
+	for (const TPair<FString, FString>& Req : Requests)
+	{
+		IConsoleVariable* CVar = CM.FindConsoleVariable(*Req.Key);
+		if (!CVar)
+		{
+			NotFound.Add(MakeShared<FJsonValueString>(Req.Key));
+			continue;
+		}
+		const FString OldValue = CVar->GetString();
+		CVar->Set(*Req.Value, ECVF_SetByConsole);
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("name"), Req.Key);
+		Row->SetStringField(TEXT("oldValue"), OldValue);
+		Row->SetStringField(TEXT("newValue"), CVar->GetString());
+		Applied.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("applied"), Applied);
+	Result->SetNumberField(TEXT("appliedCount"), Applied.Num());
+	if (NotFound.Num() > 0) Result->SetArrayField(TEXT("notFound"), NotFound);
 	return MCPResult(Result);
 }
 TSharedPtr<FJsonValue> FEditorHandlers::ListCrashes(const TSharedPtr<FJsonObject>& Params)
