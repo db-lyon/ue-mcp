@@ -211,6 +211,18 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("rename_datatable_row"), &RenameDataTableRow);
 	Registry.RegisterHandler(TEXT("fill_datatable_from_json"), &FillDataTableFromJson);
 
+	// CurveTable handlers
+	Registry.RegisterHandler(TEXT("create_curvetable"), &CreateCurveTable);
+	Registry.RegisterHandler(TEXT("read_curvetable"), &ReadCurveTable);
+	Registry.RegisterHandler(TEXT("list_curvetable_rows"), &ReadCurveTable);
+	Registry.RegisterHandler(TEXT("import_curvetable"), &ImportCurveTable);
+	Registry.RegisterHandler(TEXT("add_curvetable_row"), &AddCurveTableRow);
+	Registry.RegisterHandler(TEXT("remove_curvetable_row"), &RemoveCurveTableRow);
+	Registry.RegisterHandler(TEXT("rename_curvetable_row"), &RenameCurveTableRow);
+	Registry.RegisterHandler(TEXT("get_curvetable_keys"), &GetCurveTableKeys);
+	Registry.RegisterHandler(TEXT("set_curvetable_keys"), &SetCurveTableKeys);
+	Registry.RegisterHandler(TEXT("add_curvetable_key"), &AddCurveTableKey);
+
 	// Generic reimport / export
 	Registry.RegisterHandler(TEXT("reimport_asset"), &ReimportAsset);
 	Registry.RegisterHandler(TEXT("export_asset"), &ExportAsset);
