@@ -157,7 +157,7 @@ namespace
 		return Obj;
 	}
 
-	TSharedPtr<FJsonObject> MaterialInstanceOverrideCounts(const UMaterialInstanceConstant* Instance)
+	TSharedPtr<FJsonObject> MaterialInstanceOverrideCounts(UMaterialInstanceConstant* Instance)
 	{
 		TSharedPtr<FJsonObject> Counts = MakeShared<FJsonObject>();
 		if (!Instance)
@@ -184,7 +184,7 @@ namespace
 		return Counts;
 	}
 
-	int32 CountTotalMaterialInstanceOverrides(const UMaterialInstanceConstant* Instance)
+	int32 CountTotalMaterialInstanceOverrides(UMaterialInstanceConstant* Instance)
 	{
 		if (!Instance)
 		{
