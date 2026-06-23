@@ -110,6 +110,9 @@ private:
 	// issue #588 — AssetRegistry forward dependencies for a set of packages
 	static TSharedPtr<FJsonValue> GetDependencies(const TSharedPtr<FJsonObject>& Params);
 
+	// issue #579 — AssetManager primary-asset-id enumeration / verification
+	static TSharedPtr<FJsonValue> GetPrimaryAssetIds(const TSharedPtr<FJsonObject>& Params);
+
 	// v1.0.0-rc.2 — #155 (asset gaps)
 	static TSharedPtr<FJsonValue> SetSkeletalMeshMaterialSlots(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DiagnoseRegistry(const TSharedPtr<FJsonObject>& Params);

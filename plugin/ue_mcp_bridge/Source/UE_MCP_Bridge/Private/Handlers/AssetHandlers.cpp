@@ -6,6 +6,8 @@
 #include "JsonSerializer.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
+#include "Engine/AssetManager.h"
+#include "Engine/AssetManagerTypes.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "Editor.h"
 #include "FileHelpers.h"
@@ -246,6 +248,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_asset_referencers"), &GetReferencers);
 	Registry.RegisterHandler(TEXT("get_asset_dependencies"), &GetDependencies);
 	Registry.RegisterHandler(TEXT("list_skeleton_bones"), &ListSkeletonBones);
+	Registry.RegisterHandler(TEXT("get_primary_asset_ids"), &GetPrimaryAssetIds);
 
 	// v1.0.0-rc.2 — #155 (asset gaps)
 	Registry.RegisterHandler(TEXT("set_sk_material_slots"), &SetSkeletalMeshMaterialSlots);
@@ -1951,6 +1954,60 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetDependencies(const TSharedPtr<FJsonObj
 	Result->SetObjectField(TEXT("dependenciesByPackage"), ByPkg);
 	Result->SetNumberField(TEXT("totalDependencies"), TotalDeps);
 	Result->SetNumberField(TEXT("queriedPackages"), Packages.Num());
+	return MCPResult(Result);
+}
+// ─── #579 asset(get_primary_asset_ids) ──────────────────────────────
+// Enumerate AssetManager-registered FPrimaryAssetIds, optionally filtered to a
+// single type, so callers can verify a primary-asset registration without
+// Python. Each entry carries the id, type, name, and resolved asset path.
+TSharedPtr<FJsonValue> FAssetHandlers::GetPrimaryAssetIds(const TSharedPtr<FJsonObject>& Params)
+{
+	UAssetManager* AM = UAssetManager::GetIfInitialized();
+	if (!AM) return MCPError(TEXT("AssetManager is not initialized for this project"));
+
+	const FString TypeFilter = OptionalString(Params, TEXT("type"));
+	const int32 MaxResults = OptionalInt(Params, TEXT("maxResults"), 1000);
+
+	TArray<FPrimaryAssetType> Types;
+	if (!TypeFilter.IsEmpty())
+	{
+		Types.Add(FPrimaryAssetType(*TypeFilter));
+	}
+	else
+	{
+		TArray<FPrimaryAssetTypeInfo> TypeInfos;
+		AM->GetPrimaryAssetTypeInfoList(TypeInfos);
+		for (const FPrimaryAssetTypeInfo& Info : TypeInfos)
+		{
+			Types.Add(FPrimaryAssetType(Info.PrimaryAssetType));
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Out;
+	int32 Total = 0;
+	for (const FPrimaryAssetType& Type : Types)
+	{
+		TArray<FPrimaryAssetId> Ids;
+		AM->GetPrimaryAssetIdList(Type, Ids);
+		for (const FPrimaryAssetId& Id : Ids)
+		{
+			++Total;
+			if (Out.Num() >= MaxResults) continue;
+			TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+			E->SetStringField(TEXT("primaryAssetId"), Id.ToString());
+			E->SetStringField(TEXT("type"), Id.PrimaryAssetType.ToString());
+			E->SetStringField(TEXT("name"), Id.PrimaryAssetName.ToString());
+			E->SetStringField(TEXT("assetPath"), AM->GetPrimaryAssetPath(Id).ToString());
+			Out.Add(MakeShared<FJsonValueObject>(E));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("primaryAssetIds"), Out);
+	Result->SetNumberField(TEXT("count"), Out.Num());
+	Result->SetNumberField(TEXT("total"), Total);
+	Result->SetNumberField(TEXT("typeCount"), Types.Num());
+	if (Total > Out.Num()) Result->SetBoolField(TEXT("truncated"), true);
 	return MCPResult(Result);
 }
 TSharedPtr<FJsonValue> FAssetHandlers::DiagnoseRegistry(const TSharedPtr<FJsonObject>& Params)

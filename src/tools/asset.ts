@@ -120,6 +120,7 @@ export const assetTool: ToolDef = categoryTool(
     get_referencers:      bp("Reverse dependency lookup (what references this). Params: packages[] OR packagePath (#150). Returns {referencersByPackage, totalReferencers}.", "get_asset_referencers", (p) => ({ packages: p.packages, packagePath: p.packagePath })),
     get_dependencies:     bp("Forward dependency lookup (what packages this asset references). Params: packages[] OR packagePath, hard? (default true), soft? (default true) (#588). Returns {dependenciesByPackage, totalDependencies}.", "get_asset_dependencies", (p) => ({ packages: p.packages, packagePath: p.packagePath, hard: p.hard, soft: p.soft })),
     list_skeleton_bones:  bp("List bones (names + rest-pose local and component-space transforms) from a SkeletalMesh or Skeleton asset, no live actor needed. Params: assetPath, includeTransforms? (default true) (#593). Returns {bones, boneCount, sourceKind}.", "list_skeleton_bones", (p) => ({ assetPath: p.assetPath, includeTransforms: p.includeTransforms })),
+    get_primary_asset_ids: bp("Enumerate AssetManager-registered FPrimaryAssetIds (verify a primary-asset registration). Params: type? (FPrimaryAssetType; omit for all types), maxResults? (default 1000) (#579). Returns {primaryAssetIds:[{primaryAssetId, type, name, assetPath}], count, total}.", "get_primary_asset_ids", (p) => ({ type: p.type, maxResults: p.maxResults })),
     // v1.0.0-rc.2 — #155 (asset gaps)
     set_sk_material_slots: bp("Set materials on a USkeletalMesh by slot name or slotIndex (bypasses the blueprint override-materials path that UE's ICH silently reverts). Params: assetPath, slots[{slotName?|slotIndex?, materialPath}]", "set_sk_material_slots"),
     diagnose_registry:    bp("Scan a content path and compare disk vs AssetRegistry (including in-memory pending-kill entries). Returns onDiskCount, inMemoryIncludedCount, ghostCount and paths. Params: path, recursive? (default true), reconcile? (forceRescan=true)", "diagnose_registry"),
@@ -221,6 +222,7 @@ export const assetTool: ToolDef = categoryTool(
     hard: z.boolean().optional().describe("get_dependencies: include hard dependencies (default true)"),
     soft: z.boolean().optional().describe("get_dependencies: include soft dependencies (default true)"),
     includeTransforms: z.boolean().optional().describe("list_skeleton_bones: include rest-pose transforms (default true)"),
+    type: z.string().optional().describe("get_primary_asset_ids: FPrimaryAssetType filter (omit for all types) (#579)"),
     // #155
     slots: z.array(z.object({
       slotName: z.string().optional(),
