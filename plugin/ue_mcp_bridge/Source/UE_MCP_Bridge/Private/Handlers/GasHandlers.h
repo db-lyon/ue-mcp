@@ -45,4 +45,7 @@ private:
 	// InitAbilityActorInfo + optionally GetOrCreateAttributeSubobject on a live
 	// actor, so a bridge-authored GAS actor has live attributes to test against.
 	static TSharedPtr<FJsonValue> InitAsc(const TSharedPtr<FJsonObject>& Params);
+	// #587: introspect a live ASC - granted ability specs (class, level, input,
+	// active, dynamic tags) + owned gameplay tags.
+	static TSharedPtr<FJsonValue> GetAscState(const TSharedPtr<FJsonObject>& Params);
 };

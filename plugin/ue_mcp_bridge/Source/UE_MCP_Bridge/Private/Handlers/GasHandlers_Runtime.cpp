@@ -298,6 +298,57 @@ TSharedPtr<FJsonValue> FGasHandlers::GetAttribute(const TSharedPtr<FJsonObject>&
 	return MCPResult(Result);
 }
 
+// #587 get_asc_state - introspect a live ASC: granted ability specs (class,
+// level, input id, active state, dynamic source tags) plus the ASC's owned
+// gameplay tags. The read half of #587 (input injection lives in pie-studio).
+TSharedPtr<FJsonValue> FGasHandlers::GetAscState(const TSharedPtr<FJsonObject>& Params)
+{
+	MCP_CHECK_GAME_THREAD();
+
+	AActor* Actor = nullptr;
+	TSharedPtr<FJsonValue> Err;
+	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Err);
+	if (!ASC) return Err;
+
+	// Granted / activatable ability specs.
+	TArray<TSharedPtr<FJsonValue>> Abilities;
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		TSharedPtr<FJsonObject> A = MakeShared<FJsonObject>();
+		A->SetStringField(TEXT("class"), Spec.Ability ? Spec.Ability->GetClass()->GetName() : TEXT("None"));
+		A->SetNumberField(TEXT("level"), Spec.Level);
+		A->SetNumberField(TEXT("inputID"), Spec.InputID);
+		A->SetStringField(TEXT("handle"), Spec.Handle.ToString());
+		A->SetBoolField(TEXT("active"), Spec.IsActive());
+		A->SetNumberField(TEXT("activeCount"), Spec.ActiveCount);
+
+		TArray<TSharedPtr<FJsonValue>> DynTags;
+		for (const FGameplayTag& T : Spec.GetDynamicSpecSourceTags())
+		{
+			DynTags.Add(MakeShared<FJsonValueString>(T.ToString()));
+		}
+		A->SetArrayField(TEXT("dynamicTags"), DynTags);
+		Abilities.Add(MakeShared<FJsonValueObject>(A));
+	}
+
+	// Owned gameplay tags currently on the ASC.
+	FGameplayTagContainer Owned;
+	ASC->GetOwnedGameplayTags(Owned);
+	TArray<TSharedPtr<FJsonValue>> OwnedJson;
+	for (const FGameplayTag& T : Owned)
+	{
+		OwnedJson.Add(MakeShared<FJsonValueString>(T.ToString()));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetArrayField(TEXT("abilities"), Abilities);
+	Result->SetNumberField(TEXT("abilityCount"), Abilities.Num());
+	Result->SetArrayField(TEXT("ownedTags"), OwnedJson);
+	Result->SetNumberField(TEXT("ownedTagCount"), OwnedJson.Num());
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FGasHandlers::InitAsc(const TSharedPtr<FJsonObject>& Params)
 {
 	MCP_CHECK_GAME_THREAD();
