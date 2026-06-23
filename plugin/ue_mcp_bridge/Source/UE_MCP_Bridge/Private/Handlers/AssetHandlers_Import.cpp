@@ -45,6 +45,9 @@
 #include "Editor.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "Factories/DataTableFactory.h"
+#include "Internationalization/StringTable.h"
+#include "Internationalization/StringTableCore.h"
+#include "Internationalization/TextKey.h"
 #include "Exporters/Exporter.h"
 #include "AssetExportTask.h"
 
@@ -2026,6 +2029,355 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillDataTableFromJson(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("rowsUpserted"), Upserted);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
+	return MCPResult(Result);
+}
+
+// ============================================================================
+// StringTable handlers
+// ============================================================================
+
+namespace
+{
+	TSharedPtr<FJsonValue> LoadStringTableAsset(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, UStringTable*& OutStringTable)
+	{
+		if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), OutAssetPath)) return Err;
+
+		UObject* Asset = UEditorAssetLibrary::LoadAsset(OutAssetPath);
+		if (!Asset)
+		{
+			return MCPError(FString::Printf(TEXT("Asset not found: %s"), *OutAssetPath));
+		}
+
+		OutStringTable = Cast<UStringTable>(Asset);
+		if (!OutStringTable)
+		{
+			return MCPError(FString::Printf(TEXT("Asset is not a StringTable: %s"), *OutAssetPath));
+		}
+		return nullptr;
+	}
+
+	int32 AppendStringTableEntries(
+		const UStringTable* StringTable,
+		const FString& KeyFilter,
+		TArray<TSharedPtr<FJsonValue>>& OutEntries,
+		TArray<TSharedPtr<FJsonValue>>& OutKeys,
+		const bool bIncludeEntries = true)
+	{
+		if (!StringTable)
+		{
+			return 0;
+		}
+
+		const FString FilterLower = KeyFilter.ToLower();
+		int32 TotalEntryCount = 0;
+		StringTable->GetStringTable()->EnumerateKeysAndSourceStrings(
+			[&](const FTextKey& Key, const FString& SourceString)
+			{
+				++TotalEntryCount;
+				const FString KeyString = Key.ToString();
+				if (!FilterLower.IsEmpty() && !KeyString.ToLower().Contains(FilterLower))
+				{
+					return true;
+				}
+
+				OutKeys.Add(MakeShared<FJsonValueString>(KeyString));
+
+				if (bIncludeEntries)
+				{
+					TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+					Entry->SetStringField(TEXT("key"), KeyString);
+					Entry->SetStringField(TEXT("sourceString"), SourceString);
+					OutEntries.Add(MakeShared<FJsonValueObject>(Entry));
+				}
+				return true;
+			});
+
+		return TotalEntryCount;
+	}
+
+	void SetStringTableInfoFields(TSharedPtr<FJsonObject> Result, UStringTable* StringTable)
+	{
+		if (!Result.IsValid() || !StringTable)
+		{
+			return;
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Entries;
+		TArray<TSharedPtr<FJsonValue>> Keys;
+		const int32 EntryCount = AppendStringTableEntries(StringTable, TEXT(""), Entries, Keys, false);
+
+		Result->SetStringField(TEXT("assetPath"), StringTable->GetPathName());
+		Result->SetStringField(TEXT("tableId"), StringTable->GetStringTableId().ToString());
+		Result->SetStringField(TEXT("namespace"), StringTable->GetStringTable()->GetNamespace());
+		Result->SetNumberField(TEXT("entryCount"), EntryCount);
+	}
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::CreateStringTable(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/StringTables"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+	const FString TableNamespace = OptionalString(Params, TEXT("namespace"));
+
+	auto Created = MCPCreateAssetIdempotentNewObject<UStringTable>(Name, PackagePath, OnConflict, TEXT("StringTable"));
+	if (Created.EarlyReturn)
+	{
+		if (TSharedPtr<FJsonObject> ExistingObj = Created.EarlyReturn->AsObject())
+		{
+			bool bExisted = false;
+			if (ExistingObj->TryGetBoolField(TEXT("existed"), bExisted) && bExisted)
+			{
+				FString ExistingAssetPath;
+				ExistingObj->TryGetStringField(TEXT("path"), ExistingAssetPath);
+				if (UStringTable* Existing = LoadObject<UStringTable>(nullptr, *ExistingAssetPath))
+				{
+					SetStringTableInfoFields(ExistingObj, Existing);
+				}
+			}
+		}
+		return Created.EarlyReturn;
+	}
+
+	UStringTable* StringTable = Created.Asset;
+	if (!StringTable)
+	{
+		return MCPError(TEXT("Failed to create StringTable"));
+	}
+
+	if (!TableNamespace.IsEmpty())
+	{
+		StringTable->Modify(true);
+		StringTable->GetMutableStringTable()->SetNamespace(FTextKey(TableNamespace));
+	}
+	SaveAssetPackage(StringTable);
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("name"), Name);
+	Result->SetStringField(TEXT("packagePath"), PackagePath);
+	SetStringTableInfoFields(Result, StringTable);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), StringTable->GetPathName());
+	MCPSetRollback(Result, TEXT("delete_asset"), Payload);
+
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::ReadStringTable(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	UStringTable* StringTable = nullptr;
+	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+
+	const FString KeyFilter = OptionalString(Params, TEXT("keyFilter"));
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	TArray<TSharedPtr<FJsonValue>> Keys;
+	const int32 TotalEntryCount = AppendStringTableEntries(StringTable, KeyFilter, Entries, Keys);
+
+	auto Result = MCPSuccess();
+	SetStringTableInfoFields(Result, StringTable);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetArrayField(TEXT("entries"), Entries);
+	Result->SetArrayField(TEXT("keys"), Keys);
+	Result->SetNumberField(TEXT("totalEntryCount"), TotalEntryCount);
+	Result->SetNumberField(TEXT("filteredCount"), Entries.Num());
+	if (!KeyFilter.IsEmpty())
+	{
+		Result->SetStringField(TEXT("keyFilter"), KeyFilter);
+	}
+
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::ListStringTableKeys(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	UStringTable* StringTable = nullptr;
+	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+
+	const FString KeyFilter = OptionalString(Params, TEXT("keyFilter"));
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	TArray<TSharedPtr<FJsonValue>> Keys;
+	const int32 TotalEntryCount = AppendStringTableEntries(StringTable, KeyFilter, Entries, Keys, false);
+
+	auto Result = MCPSuccess();
+	SetStringTableInfoFields(Result, StringTable);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetArrayField(TEXT("keys"), Keys);
+	Result->SetNumberField(TEXT("totalEntryCount"), TotalEntryCount);
+	Result->SetNumberField(TEXT("filteredCount"), Keys.Num());
+	if (!KeyFilter.IsEmpty())
+	{
+		Result->SetStringField(TEXT("keyFilter"), KeyFilter);
+	}
+
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::GetStringTableEntry(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	UStringTable* StringTable = nullptr;
+	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+
+	FString Key;
+	if (auto Err = RequireString(Params, TEXT("key"), Key)) return Err;
+
+	FString SourceString;
+	if (!StringTable->GetStringTable()->GetSourceString(FTextKey(Key), SourceString))
+	{
+		return MCPError(FString::Printf(TEXT("StringTable entry not found: %s"), *Key));
+	}
+
+	auto Result = MCPSuccess();
+	SetStringTableInfoFields(Result, StringTable);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("key"), Key);
+	Result->SetStringField(TEXT("sourceString"), SourceString);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::SetStringTableEntry(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	UStringTable* StringTable = nullptr;
+	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+
+	FString Key;
+	if (auto Err = RequireString(Params, TEXT("key"), Key)) return Err;
+
+	FString SourceString;
+	bool bHasSourceString = Params->TryGetStringField(TEXT("sourceString"), SourceString);
+	if (!bHasSourceString)
+	{
+		bHasSourceString = Params->TryGetStringField(TEXT("value"), SourceString);
+	}
+	if (!bHasSourceString)
+	{
+		return MCPError(TEXT("Missing 'sourceString' parameter"));
+	}
+
+	const FTextKey EntryKey(Key);
+	FString PreviousSourceString;
+	const bool bExisted = StringTable->GetStringTable()->GetSourceString(EntryKey, PreviousSourceString);
+
+	StringTable->Modify(true);
+	StringTable->GetMutableStringTable()->SetSourceString(EntryKey, SourceString);
+	SaveAssetPackage(StringTable);
+
+	auto Result = MCPSuccess();
+	if (bExisted) MCPSetUpdated(Result); else MCPSetCreated(Result);
+	SetStringTableInfoFields(Result, StringTable);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("key"), Key);
+	Result->SetStringField(TEXT("sourceString"), SourceString);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("key"), Key);
+	if (bExisted)
+	{
+		Payload->SetStringField(TEXT("sourceString"), PreviousSourceString);
+		MCPSetRollback(Result, TEXT("set_stringtable_entry"), Payload);
+	}
+	else
+	{
+		MCPSetRollback(Result, TEXT("remove_stringtable_entry"), Payload);
+	}
+
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::RemoveStringTableEntry(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	UStringTable* StringTable = nullptr;
+	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+
+	FString Key;
+	if (auto Err = RequireString(Params, TEXT("key"), Key)) return Err;
+
+	const FTextKey EntryKey(Key);
+	FString PreviousSourceString;
+	if (!StringTable->GetStringTable()->GetSourceString(EntryKey, PreviousSourceString))
+	{
+		auto Noop = MCPSuccess();
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		Noop->SetStringField(TEXT("assetPath"), AssetPath);
+		Noop->SetStringField(TEXT("key"), Key);
+		return MCPResult(Noop);
+	}
+
+	StringTable->Modify(true);
+	StringTable->GetMutableStringTable()->RemoveSourceString(EntryKey);
+	SaveAssetPackage(StringTable);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	SetStringTableInfoFields(Result, StringTable);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("key"), Key);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("key"), Key);
+	Payload->SetStringField(TEXT("sourceString"), PreviousSourceString);
+	MCPSetRollback(Result, TEXT("set_stringtable_entry"), Payload);
+
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTable(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	UStringTable* StringTable = nullptr;
+	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
+
+	FString FilePath;
+	if (!Params->TryGetStringField(TEXT("filePath"), FilePath) || FilePath.IsEmpty())
+	{
+		if (!Params->TryGetStringField(TEXT("filename"), FilePath) || FilePath.IsEmpty())
+		{
+			Params->TryGetStringField(TEXT("csvPath"), FilePath);
+		}
+	}
+	if (FilePath.IsEmpty())
+	{
+		return MCPError(TEXT("Missing 'filePath' parameter"));
+	}
+	if (!FPaths::FileExists(FilePath))
+	{
+		return MCPError(FString::Printf(TEXT("StringTable import file not found: %s"), *FilePath));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BeforeEntries;
+	TArray<TSharedPtr<FJsonValue>> BeforeKeys;
+	const int32 BeforeCount = AppendStringTableEntries(StringTable, TEXT(""), BeforeEntries, BeforeKeys, false);
+
+	StringTable->Modify(true);
+	const bool bImported = StringTable->GetMutableStringTable()->ImportStrings(FilePath);
+	if (!bImported)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to import StringTable from: %s"), *FilePath));
+	}
+	SaveAssetPackage(StringTable);
+
+	TArray<TSharedPtr<FJsonValue>> Entries;
+	TArray<TSharedPtr<FJsonValue>> Keys;
+	const int32 AfterCount = AppendStringTableEntries(StringTable, TEXT(""), Entries, Keys, false);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	SetStringTableInfoFields(Result, StringTable);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("filePath"), FilePath);
+	Result->SetNumberField(TEXT("entryCountBefore"), BeforeCount);
+	Result->SetNumberField(TEXT("entryCountAfter"), AfterCount);
+	Result->SetArrayField(TEXT("keys"), Keys);
 	return MCPResult(Result);
 }
 

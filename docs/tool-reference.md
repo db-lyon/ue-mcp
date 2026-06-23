@@ -97,6 +97,13 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `list_textures` | List textures. Params: `directory?, recursive?` |
 | `get_texture_info` | Get texture details. Params: `assetPath` |
 | `set_texture_settings` | Set texture settings. Params: `assetPath, settings (object with compressionSettings?, lodGroup?, sRGB?, neverStream?)` |
+| `create_stringtable` | Create a StringTable asset. Params: `name, packagePath?, namespace?, onConflict?` |
+| `read_stringtable` | Read StringTable entries and keys. Params: `assetPath, keyFilter?` |
+| `list_stringtable_keys` | List StringTable keys. Params: `assetPath, keyFilter?` |
+| `get_stringtable_entry` | Read one StringTable entry. Params: `assetPath, key` |
+| `set_stringtable_entry` | Create or update one StringTable entry. Params: `assetPath, key, sourceString (or value)` |
+| `remove_stringtable_entry` | Remove one StringTable entry. Idempotent (alreadyDeleted=true if missing). Params: `assetPath, key` |
+| `import_stringtable` | Import StringTable entries from CSV. Params: `assetPath, filePath (or csvPath)` |
 | `add_input_mapping` | Append an Enhanced Input key mapping to an InputMappingContext (InputAction + key by name string e.g. 'Mouse2D','LeftMouseButton'). Idempotent on (action,key). For modifiers/triggers use gameplay(set_mapping_modifiers). Same as gameplay(add_imc_mapping) (#525). Params: `mappingContext (IMC path), inputAction (IA path), key` |
 | `remove_input_mapping` | Remove an IMC key mapping. Same as gameplay(remove_imc_mapping) (#525). Params: `mappingContext (IMC path), mappingIndex? \\| (inputAction? + key?)` |
 | `list_input_mappings` | List an IMC's key->action bindings with triggers/modifiers. Same as gameplay(read_imc) (#525). Params: `mappingContext (IMC path)` |

@@ -69,6 +69,15 @@ private:
 	// #430: one-call batch of texture imports - loops AssetImportTasks inside the editor.
 	static TSharedPtr<FJsonValue> ImportTextureBatch(const TSharedPtr<FJsonObject>& Params);
 
+	// StringTable handlers
+	static TSharedPtr<FJsonValue> CreateStringTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadStringTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListStringTableKeys(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetStringTableEntry(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetStringTableEntry(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveStringTableEntry(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ImportStringTable(const TSharedPtr<FJsonObject>& Params);
+
 	// Export
 	static TSharedPtr<FJsonValue> ExportAsset(const TSharedPtr<FJsonObject>& Params);
 
