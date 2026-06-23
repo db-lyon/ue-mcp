@@ -3,6 +3,7 @@
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerAssetCreate.h"
+#include "JsonSerializer.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Subsystems/AssetEditorSubsystem.h"
@@ -641,6 +642,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
+	FString ValueFormat;
+	Params->TryGetStringField(TEXT("valueFormat"), ValueFormat);
+	const bool bJsonValues = ValueFormat.Equals(TEXT("json"), ESearchCase::IgnoreCase);
+
 	// Helper lambda to export a property value as string (#48 — reads arrays, structs, sub-objects)
 	auto ExportPropertyValue = [](FProperty* Prop, const void* Container, UObject* Outer) -> FString
 	{
@@ -670,7 +675,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("propertyName"), PropertyName);
 		Result->SetStringField(TEXT("type"), Prop->GetCPPType());
-		Result->SetStringField(TEXT("value"), ValueStr);
+		if (bJsonValues)
+		{
+			Result->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, Prop));
+		}
+		else
+		{
+			Result->SetStringField(TEXT("value"), ValueStr);
+		}
 
 		// When the path lands on an array of instanced subobjects, also
 		// enumerate each element's index and concrete class so callers can
@@ -706,7 +718,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 		P->SetStringField(TEXT("type"), (*It)->GetCPPType());
 		if (bIncludeValues)
 		{
-			P->SetStringField(TEXT("value"), ExportPropertyValue(*It, Asset, Asset));
+			if (bJsonValues)
+			{
+				const void* ValuePtr = (*It)->ContainerPtrToValuePtr<void>(Asset);
+				P->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, *It));
+			}
+			else
+			{
+				P->SetStringField(TEXT("value"), ExportPropertyValue(*It, Asset, Asset));
+			}
 		}
 		PropsArray.Add(MakeShared<FJsonValueObject>(P));
 	}

@@ -55,7 +55,9 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `list` | List assets via the AssetRegistry (sees /Game and every mounted plugin root). Params: `directory? (default /Game), classFilter?, recursive? (default true), maxResults? (default 2000)` |
 | `search` | Search by name/class/path. Params: `query, directory?, maxResults?, searchAll?` |
 | `read` | Read asset via reflection. Params: `assetPath` |
-| `read_properties` | Read asset properties with values. propertyName accepts dotted/indexed paths into nested structs, array elements, and instanced subobjects (e.g. `Config.Traits[1].Params.Field`); landing on an array of subobjects also lists each element's index+class (#527). Params: `assetPath, propertyName?, includeValues?` |
+| `read_properties` | Read asset properties with values. propertyName accepts dotted/indexed paths into nested structs, array elements, and instanced subobjects (e.g. `Config.Traits[1].Params.Field`); landing on an array of subobjects also lists each element's index+class (#527). Params: `assetPath, propertyName?, includeValues?, valueFormat?` |
+| `list_properties` | List reflected properties on any asset. Params: `assetPath, includeValues?, valueFormat? ('text'\|'json')` |
+| `get_properties` | Read property values on any asset. propertyName accepts dotted/indexed paths into nested structs, array elements, and instanced subobjects. valueFormat='json' returns structured values. Params: `assetPath, propertyName?, includeValues?, valueFormat?` |
 | `duplicate` | Duplicate asset. Params: `sourcePath, destinationPath` |
 | `rename` | Rename asset. Params: `assetPath, newName (or sourcePath, destinationPath), force?` |
 | `bulk_rename` | Batched rename using IAssetTools::RenameAssets - single transaction with one redirector-fixup pass (matches Content Browser drag). Use this over looped rename for scene-referenced assets. World assets are rejected (status=rejected_world); use rename_asset which handles WP externals atomically (#409). Params: `renames[] where each entry is {sourcePath, destinationPath} OR {assetPath, newName}` |
