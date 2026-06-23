@@ -20,6 +20,7 @@
 #include "EditorFramework/AssetImportData.h"
 #include "UObject/Package.h"
 #include "Misc/PackageName.h"
+#include "HAL/FileManager.h"
 #include "Misc/Paths.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -1301,8 +1302,12 @@ namespace
 	struct FDeleteDiagnostics
 	{
 		bool bOpenInEditor = false;
-		TArray<FString> Referencers;
-		FString Reason;     // open_in_editor | has_referencers | unknown
+		TArray<FString> Referencers;       // on-disk (AssetRegistry) referencers
+		TArray<FString> InMemoryReferencers; // live UObject referencers (#601)
+		bool bInMemoryReferenced = false;  // #601
+		bool bPackageReadOnly = false;     // #601 - file read-only on disk
+		bool bPackageDirty = false;        // #601 - unsaved changes block delete
+		FString Reason;     // open_in_editor | has_referencers | in_memory_referenced | package_read_only | package_dirty | unknown
 	};
 
 	bool TryCloseAssetEditors(const FString& AssetPath, bool& bOutHadOpenEditor)
@@ -1352,9 +1357,45 @@ namespace
 			}
 		}
 
-		if (Diag.bOpenInEditor)         Diag.Reason = TEXT("open_in_editor");
-		else if (Diag.Referencers.Num()) Diag.Reason = TEXT("has_referencers");
-		else                             Diag.Reason = TEXT("unknown");
+		// #601: when there are no editors/on-disk referencers the delete still
+		// fails for non-obvious reasons. Gather the common culprits so callers
+		// get something actionable instead of a bare "unknown".
+		if (UObject* Asset = UEditorAssetLibrary::LoadAsset(AssetPath))
+		{
+			// Live (in-memory) references beyond the asset's own package.
+			FReferencerInformationList RefInfo;
+			if (IsReferenced(Asset, RF_Public | RF_Standalone, EInternalObjectFlags::Garbage, /*bCheckSubObjects=*/true, &RefInfo))
+			{
+				for (const FReferencerInformation& Ext : RefInfo.ExternalReferences)
+				{
+					if (Ext.Referencer && Ext.Referencer->GetOutermost() != Asset->GetOutermost())
+					{
+						Diag.bInMemoryReferenced = true;
+						if (Diag.InMemoryReferencers.Num() < 20)
+						{
+							Diag.InMemoryReferencers.Add(Ext.Referencer->GetPathName());
+						}
+					}
+				}
+			}
+
+			if (UPackage* Pkg = Asset->GetOutermost())
+			{
+				Diag.bPackageDirty = Pkg->IsDirty();
+				FString PkgFilename;
+				if (FPackageName::DoesPackageExist(Pkg->GetName(), &PkgFilename))
+				{
+					Diag.bPackageReadOnly = IFileManager::Get().IsReadOnly(*PkgFilename);
+				}
+			}
+		}
+
+		if (Diag.bOpenInEditor)               Diag.Reason = TEXT("open_in_editor");
+		else if (Diag.Referencers.Num())      Diag.Reason = TEXT("has_referencers");
+		else if (Diag.bInMemoryReferenced)    Diag.Reason = TEXT("in_memory_referenced");
+		else if (Diag.bPackageReadOnly)       Diag.Reason = TEXT("package_read_only");
+		else if (Diag.bPackageDirty)          Diag.Reason = TEXT("package_dirty");
+		else                                  Diag.Reason = TEXT("unknown");
 		return Diag;
 	}
 
@@ -1368,6 +1409,20 @@ namespace
 			RefsJson.Add(MakeShared<FJsonValueString>(R));
 		}
 		Out->SetArrayField(TEXT("referencers"), RefsJson);
+
+		// #601 richer diagnostics for the formerly-"unknown" cases.
+		Out->SetBoolField(TEXT("inMemoryReferenced"), Diag.bInMemoryReferenced);
+		if (Diag.InMemoryReferencers.Num() > 0)
+		{
+			TArray<TSharedPtr<FJsonValue>> InMemJson;
+			for (const FString& R : Diag.InMemoryReferencers)
+			{
+				InMemJson.Add(MakeShared<FJsonValueString>(R));
+			}
+			Out->SetArrayField(TEXT("inMemoryReferencers"), InMemJson);
+		}
+		Out->SetBoolField(TEXT("packageReadOnly"), Diag.bPackageReadOnly);
+		Out->SetBoolField(TEXT("packageDirty"), Diag.bPackageDirty);
 	}
 }
 
