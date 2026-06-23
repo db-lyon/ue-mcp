@@ -98,6 +98,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_world_settings"), &SetWorldSettings);
 	Registry.RegisterHandler(TEXT("set_fog_properties"), &SetFogProperties);
 	Registry.RegisterHandler(TEXT("get_actors_by_class"), &GetActorsByClass);
+	Registry.RegisterHandler(TEXT("get_actors_by_component_class"), &GetActorsByComponentClass);
 	Registry.RegisterHandler(TEXT("count_actors_by_class"), &CountActorsByClass);
 	Registry.RegisterHandler(TEXT("get_runtime_virtual_texture_summary"), &GetRVTSummary);
 	Registry.RegisterHandler(TEXT("set_water_body_property"), &SetWaterBodyProperty);
@@ -1588,6 +1589,55 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByClass(const TSharedPtr<FJsonOb
 			E->SetStringField(TEXT("label"), A->GetActorLabel());
 			E->SetStringField(TEXT("class"), CName);
 			E->SetStringField(TEXT("path"), A->GetPathName());
+			Out.Add(MakeShared<FJsonValueObject>(E));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("actors"), Out);
+	Result->SetNumberField(TEXT("count"), Out.Num());
+	return MCPResult(Result);
+}
+
+// #582 find actors that own a component of a given class. Matches by component
+// class name (exact or substring), mirroring get_actors_by_class. Reports the
+// matched component name(s) so callers can target them directly afterwards.
+TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByComponentClass(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ComponentClass;
+	if (auto Err = RequireStringAlt(Params, TEXT("componentClass"), TEXT("className"), ComponentClass)) return Err;
+
+	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	TArray<TSharedPtr<FJsonValue>> Out;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* A = *It;
+		if (!A) continue;
+
+		TArray<TSharedPtr<FJsonValue>> Matched;
+		for (UActorComponent* Comp : A->GetComponents())
+		{
+			if (!Comp) continue;
+			const FString CompCName = Comp->GetClass()->GetName();
+			if (CompCName == ComponentClass || CompCName.Contains(ComponentClass))
+			{
+				TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
+				C->SetStringField(TEXT("name"), Comp->GetName());
+				C->SetStringField(TEXT("class"), CompCName);
+				Matched.Add(MakeShared<FJsonValueObject>(C));
+			}
+		}
+
+		if (Matched.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+			E->SetStringField(TEXT("label"), A->GetActorLabel());
+			E->SetStringField(TEXT("class"), A->GetClass()->GetName());
+			E->SetStringField(TEXT("path"), A->GetPathName());
+			E->SetArrayField(TEXT("matchedComponents"), Matched);
 			Out.Add(MakeShared<FJsonValueObject>(E));
 		}
 	}
