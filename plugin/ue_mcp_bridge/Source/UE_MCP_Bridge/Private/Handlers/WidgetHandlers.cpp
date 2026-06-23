@@ -1056,6 +1056,33 @@ namespace WidgetRuntime_Internal
 			Obj->SetNumberField(TEXT("value"), Slider->GetValue());
 		}
 
+		// #592: style properties needed to verify visuals at runtime, not just
+		// tree/text. RenderOpacity applies to every UWidget; ColorAndOpacity and
+		// Border tint are per-type.
+		{
+			auto ColorJson = [](const FLinearColor& C)
+			{
+				TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+				O->SetNumberField(TEXT("r"), C.R); O->SetNumberField(TEXT("g"), C.G);
+				O->SetNumberField(TEXT("b"), C.B); O->SetNumberField(TEXT("a"), C.A);
+				return O;
+			};
+			Obj->SetNumberField(TEXT("renderOpacity"), Widget->GetRenderOpacity());
+			if (UTextBlock* TextW = Cast<UTextBlock>(Widget))
+			{
+				Obj->SetObjectField(TEXT("colorAndOpacity"), ColorJson(TextW->GetColorAndOpacity().GetSpecifiedColor()));
+			}
+			else if (UImage* ImgW = Cast<UImage>(Widget))
+			{
+				Obj->SetObjectField(TEXT("colorAndOpacity"), ColorJson(ImgW->GetColorAndOpacity()));
+			}
+			else if (UBorder* BorderW = Cast<UBorder>(Widget))
+			{
+				Obj->SetObjectField(TEXT("brushColor"), ColorJson(BorderW->GetBrushColor()));
+				Obj->SetObjectField(TEXT("contentColorAndOpacity"), ColorJson(BorderW->GetContentColorAndOpacity()));
+			}
+		}
+
 		if (Depth >= MaxDepth) return Obj;
 
 		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))

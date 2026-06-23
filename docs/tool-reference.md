@@ -524,7 +524,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `wrap_root` | Wrap the current root in a new panel widget (UMG 'Wrap With'). Params: `assetPath, wrapperClass (must be a UPanelWidget subclass), wrapperName? (#365)` |
 | `list_classes` | List available widget classes |
 | `list_runtime` | (#160) List live UUserWidget instances in the PIE world. Params: `classFilter?, namePrefix?, viewportOnly?` |
-| `get_runtime` | (#160) Inspect a live PIE widget tree with text/visibility/brush/percent values. Params: `widgetName? \\| className?, childName?, maxDepth?` |
+| `get_runtime` | (#160) Inspect a live PIE widget tree with text/visibility/brush/percent plus style values: renderOpacity (all), colorAndOpacity (TextBlock/Image), Border brushColor/contentColorAndOpacity (#592). Params: `widgetName? \\| className?, childName?, maxDepth?` |
 | `get_runtime_delegates` | (#161) Read delegate binding state on a live PIE widget. Params: `widgetName, className?` |
 
 ---
