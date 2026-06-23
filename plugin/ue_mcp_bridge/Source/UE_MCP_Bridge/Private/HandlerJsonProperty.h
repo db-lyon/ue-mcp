@@ -130,6 +130,40 @@ namespace MCPJsonProperty
 			// else: fall through to ImportText fallback below.
 		}
 
+		// TMap. JSON object fields become map keys; field values recurse through
+		// the same setter, so tag/name/string keys and object/struct values work.
+		else if (FMapProperty* MapProp = CastField<FMapProperty>(Prop))
+		{
+			const TSharedPtr<FJsonObject>* Obj = nullptr;
+			if (Value->TryGetObject(Obj) && Obj && (*Obj).IsValid())
+			{
+				FScriptMapHelper H(MapProp, ValueAddr);
+				H.EmptyValues();
+				for (const auto& Pair : (*Obj)->Values)
+				{
+					const int32 Idx = H.AddDefaultValue_Invalid_NeedsRehash();
+					FString E;
+					if (!SetJsonOnProperty(MapProp->KeyProp, H.GetKeyPtr(Idx), MakeShared<FJsonValueString>(Pair.Key), E))
+					{
+						H.EmptyValues();
+						H.Rehash();
+						OutError = FString::Printf(TEXT("map key '%s': %s"), *Pair.Key, *E);
+						return false;
+					}
+					if (!SetJsonOnProperty(MapProp->ValueProp, H.GetValuePtr(Idx), Pair.Value, E))
+					{
+						H.EmptyValues();
+						H.Rehash();
+						OutError = FString::Printf(TEXT("map value '%s': %s"), *Pair.Key, *E);
+						return false;
+					}
+				}
+				H.Rehash();
+				return true;
+			}
+			// else: fall through to ImportText fallback below.
+		}
+
 		// Struct: recurse on JSON object fields; otherwise fall through to ImportText
 		if (FStructProperty* StructProp = CastField<FStructProperty>(Prop))
 		{

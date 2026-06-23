@@ -116,6 +116,8 @@ private:
 	// #142: run a Python file with __file__/__name__ context populated
 	static TSharedPtr<FJsonValue> RunPythonFile(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetProperty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetProperty(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DescribeObject(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetConfig(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetViewportInfo(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> HitTestViewportPixel(const TSharedPtr<FJsonObject>& Params);
