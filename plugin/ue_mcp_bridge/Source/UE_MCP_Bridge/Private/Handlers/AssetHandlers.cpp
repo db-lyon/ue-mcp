@@ -189,6 +189,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_interchange_pipeline"), &CreateInterchangePipeline);
 	Registry.RegisterHandler(TEXT("remove_socket"), &RemoveSocket);
 	Registry.RegisterHandler(TEXT("list_sockets"), &ListSockets);
+	Registry.RegisterHandler(TEXT("list_asset_sockets"), &ListSockets);
 	Registry.RegisterHandler(TEXT("reload_package"), &ReloadPackage);
 	// #279: detect/recover stuck-unloadable assets
 	Registry.RegisterHandler(TEXT("asset_health_check"), &HealthCheck);
