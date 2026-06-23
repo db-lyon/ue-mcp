@@ -266,6 +266,11 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `read` | Read material structure. Params: `assetPath` |
 | `list_parameters` | List overridable parameters. Params: `assetPath` |
 | `set_parameter` | Set parameter on MaterialInstance. Params: `assetPath, parameterName, parameterType, value` |
+| `read_instance` | Read a MaterialInstanceConstant parent and override summary. Params: `assetPath` |
+| `set_instance_parent` | Set a MaterialInstanceConstant parent. Params: `assetPath, newParentPath (or parentPath)` |
+| `clear_instance_parameters` | Clear all MaterialInstanceConstant parameter overrides. Params: `assetPath` |
+| `list_static_switches` | List static switch parameters on a Material or MaterialInstance. Params: `assetPath` |
+| `set_static_switch` | Set a MaterialInstanceConstant static switch parameter. Params: `assetPath, parameterName, value, association?, parameterIndex?` |
 | `set_expression_value` | Set value on expression node. Params: `materialPath, expressionIndex, value` |
 | `disconnect_property` | Disconnect a material property input. Params: `materialPath, property` |
 | `create_instance` | Create material instance. Params: `parentPath, name?, packagePath?` |
