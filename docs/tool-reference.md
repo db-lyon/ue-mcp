@@ -145,8 +145,8 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `read` | Read BP structure incl. SCS components AND inherited native components from the CDO (CharacterMesh0, CharMoveComp, etc.). Params: `assetPath, includeComponentProperties? (dump UPROPERTY name/type/value per component template; off by default) (#353/#370)` |
 | `list_variables` | List variables. Params: `assetPath` |
 | `list_functions` | List functions/graphs. Params: `assetPath` |
-| `read_graph` | Read graph nodes. Supports pagination and file dumps. Params: `assetPath, graphName, offset?, limit?, includePins?, includeDefaults?, includeComments?, dumpToFile?, outputPath?` |
-| `read_graph_summary` | Lightweight graph summary (nodes+edges only, ~10KB). Params: `assetPath, graphName?` |
+| `read_graph` | Read graph nodes. Supports pagination, file dumps, and title/class node filters. Params: `assetPath, graphName, offset?, limit?, includePins?, includeDefaults?, includeComments?, dumpToFile?, outputPath?, titleFilter?, classFilter? (#560)` |
+| `read_graph_summary` | Lightweight graph summary (nodes+edges only, ~10KB). Filterable node list. Params: `assetPath, graphName?, titleFilter?, classFilter? (#560)` |
 | `get_execution_flow` | Trace exec pins from an entry point. Params: `assetPath, graphName?, entryPoint?` |
 | `get_dependencies` | Forward (classes/functions/assets) or reverse (referencers) deps. Params: `assetPath, reverse?` |
 | `create` | Create Blueprint. Params: `assetPath, parentClass?` |

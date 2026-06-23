@@ -155,6 +155,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraphSummary(const TShar
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
+	// #560 optional node filters (case-insensitive substring); edges are left
+	// complete so a caller can still see what connects to a matched node.
+	const FString TitleFilter = OptionalString(Params, TEXT("titleFilter"), TEXT(""));
+	const FString ClassFilter = OptionalString(Params, TEXT("classFilter"), TEXT(""));
+	const bool bFiltering = !TitleFilter.IsEmpty() || !ClassFilter.IsEmpty();
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
@@ -171,11 +176,19 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraphSummary(const TShar
 	{
 		if (!Node) continue;
 
-		TSharedPtr<FJsonObject> N = MakeShared<FJsonObject>();
-		N->SetStringField(TEXT("id"), Node->NodeGuid.ToString(EGuidFormats::Short));
-		N->SetStringField(TEXT("class"), Node->GetClass()->GetName());
-		N->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::ListView).ToString());
-		Nodes.Add(MakeShared<FJsonValueObject>(N));
+		const FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
+		bool bIncludeNode = true;
+		if (!TitleFilter.IsEmpty() && !NodeTitle.Contains(TitleFilter, ESearchCase::IgnoreCase)) bIncludeNode = false;
+		if (!ClassFilter.IsEmpty() && !Node->GetClass()->GetName().Contains(ClassFilter, ESearchCase::IgnoreCase)) bIncludeNode = false;
+
+		if (bIncludeNode)
+		{
+			TSharedPtr<FJsonObject> N = MakeShared<FJsonObject>();
+			N->SetStringField(TEXT("id"), Node->NodeGuid.ToString(EGuidFormats::Short));
+			N->SetStringField(TEXT("class"), Node->GetClass()->GetName());
+			N->SetStringField(TEXT("title"), NodeTitle);
+			Nodes.Add(MakeShared<FJsonValueObject>(N));
+		}
 
 		// Walk output pins only (one edge per connection, no dup).
 		for (UEdGraphPin* Pin : Node->Pins)
@@ -220,6 +233,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraphSummary(const TShar
 	Result->SetArrayField(TEXT("execEdges"), ExecEdges);
 	Result->SetArrayField(TEXT("dataEdges"), DataEdges);
 	Result->SetNumberField(TEXT("nodeCount"), Nodes.Num());
+	if (bFiltering)
+	{
+		Result->SetBoolField(TEXT("filtered"), true);
+		if (!TitleFilter.IsEmpty()) Result->SetStringField(TEXT("titleFilter"), TitleFilter);
+		if (!ClassFilter.IsEmpty()) Result->SetStringField(TEXT("classFilter"), ClassFilter);
+	}
 	return MCPResult(Result);
 }
 
