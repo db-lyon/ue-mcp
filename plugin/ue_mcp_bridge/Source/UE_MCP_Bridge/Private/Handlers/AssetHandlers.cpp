@@ -655,7 +655,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 		Result->SetStringField(TEXT("type"), Prop->GetCPPType());
 		if (bJsonValues)
 		{
-			Result->SetField(TEXT("value"), FMCPJsonSerializer::SerializePropertyValue(ValuePtr, Prop));
+			Result->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, Prop));
 		}
 		else
 		{
@@ -699,7 +699,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 			if (bJsonValues)
 			{
 				const void* ValuePtr = (*It)->ContainerPtrToValuePtr<void>(Asset);
-				P->SetField(TEXT("value"), FMCPJsonSerializer::SerializePropertyValue(ValuePtr, *It));
+				P->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValuePtr, *It));
 			}
 			else
 			{
