@@ -6,6 +6,10 @@
 #include "Editor.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "ReferenceSkeleton.h"
@@ -629,6 +633,25 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 					}
 				}
 			}
+		}
+
+		// #581: dynamically-spawned FX components' runtime state, so visual
+		// verification doesn't need Python. NiagaraComponent: asset/active/visible;
+		// AudioComponent: sound/playing. Works in editor or PIE (world scope).
+		if (UNiagaraComponent* Niagara = Cast<UNiagaraComponent>(Comp))
+		{
+			TSharedPtr<FJsonObject> Fx = MakeShared<FJsonObject>();
+			if (UNiagaraSystem* Sys = Niagara->GetAsset()) Fx->SetStringField(TEXT("asset"), Sys->GetPathName());
+			Fx->SetBoolField(TEXT("active"), Niagara->IsActive());
+			Fx->SetBoolField(TEXT("visible"), Niagara->IsVisible());
+			C->SetObjectField(TEXT("niagara"), Fx);
+		}
+		else if (UAudioComponent* Audio = Cast<UAudioComponent>(Comp))
+		{
+			TSharedPtr<FJsonObject> Fx = MakeShared<FJsonObject>();
+			if (USoundBase* Snd = Audio->GetSound()) Fx->SetStringField(TEXT("sound"), Snd->GetPathName());
+			Fx->SetBoolField(TEXT("playing"), Audio->IsPlaying());
+			C->SetObjectField(TEXT("audio"), Fx);
 		}
 
 		if (bIncludeProperties)
