@@ -8,6 +8,8 @@
 #include "Components/CapsuleComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraSystem.h"
+#include "NavigationSystem.h"
+#include "NavigationData.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -88,6 +90,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_volumes"), &ListVolumes);
 	Registry.RegisterHandler(TEXT("move_actor"), &MoveActor);
 	Registry.RegisterHandler(TEXT("aim_actor_at"), &AimActorAt);
+	Registry.RegisterHandler(TEXT("nav_project_point"), &NavProjectPoint);
 	Registry.RegisterHandler(TEXT("select_actors"), &SelectActors);
 	Registry.RegisterHandler(TEXT("spawn_light"), &SpawnLight);
 	Registry.RegisterHandler(TEXT("set_light_properties"), &SetLightProperties);
@@ -945,6 +948,35 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(PreviousRotation));
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 
+	return MCPResult(Result);
+}
+
+// #585 nav_project_point - project a world point onto the navmesh, returning the
+// nearest navigable location and whether the point is on the navmesh. Works in
+// editor or PIE (navmesh must be built/generated for the world).
+TSharedPtr<FJsonValue> FLevelHandlers::NavProjectPoint(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params->HasField(TEXT("point"))) return MCPError(TEXT("Missing 'point' (Vec3)"));
+	const FVector Point = OptionalVec3(Params, TEXT("point"), FVector::ZeroVector);
+
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	UNavigationSystemV1* Nav = UNavigationSystemV1::GetCurrent(World);
+	if (!Nav) return MCPError(TEXT("No navigation system in this world (add a NavMeshBoundsVolume and build navigation)"));
+
+	const FVector Extent = Params->HasField(TEXT("extent"))
+		? OptionalVec3(Params, TEXT("extent"), FVector(100.f, 100.f, 100.f))
+		: FVector(100.f, 100.f, 100.f);
+
+	FNavLocation Out;
+	const bool bOnNav = Nav->ProjectPointToNavigation(Point, Out, Extent);
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("onNavMesh"), bOnNav);
+	Result->SetObjectField(TEXT("queryPoint"), MCPVec3ToJsonObject(Point));
+	if (bOnNav) Result->SetObjectField(TEXT("projectedLocation"), MCPVec3ToJsonObject(Out.Location));
 	return MCPResult(Result);
 }
 

@@ -215,6 +215,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `get_actor_details` | Inspect actor. Params: `actorLabel OR actorPath, includeProperties?, propertyName?, world? (editor\\|pie)` |
 | `move_actor` | Transform actor (world:pie moves a live PIE actor, resolving labels/names from get_outliner {world:pie} #586). Params: `actorLabel, location?, rotation?, scale?, world? (editor\\|pie)` |
 | `aim_actor_at` | Rotate an actor so its forward (+X) points at a target. Params: `actorLabel, targetPoint (Vec3) OR targetActor (label), roll? (default 0), world? (editor\\|pie) (#566)` |
+| `nav_project_point` | Project a world point onto the navmesh. Returns onNavMesh + projectedLocation. Params: `point (Vec3), extent? (Vec3, default 100), world? (editor\\|pie) (#585)` |
 | `select` | Select actors. Params: `actorLabels[]` |
 | `get_selected` | Get selection |
 | `add_component` | Add component to actor. Params: `actorLabel, componentClass, componentName?` |

@@ -29,6 +29,8 @@ private:
 	static TSharedPtr<FJsonValue> MoveActor(const TSharedPtr<FJsonObject>& Params);
 	// #566 point an actor at a target point or actor (computed look-at)
 	static TSharedPtr<FJsonValue> AimActorAt(const TSharedPtr<FJsonObject>& Params);
+	// #585 project a world point onto the navmesh
+	static TSharedPtr<FJsonValue> NavProjectPoint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SelectActors(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SpawnLight(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetLightProperties(const TSharedPtr<FJsonObject>& Params);
