@@ -28,8 +28,10 @@
 #include "Components/ActorComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "EnhancedPlayerInput.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "Kismet/GameplayStatics.h"
 #include "InputModifiers.h"
 #include "InputTriggers.h"
 #include "Animation/AnimInstance.h"
@@ -201,6 +203,62 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadImc(const TSharedPtr<FJsonObject>&
 // #57 / #60  add_imc_mapping — Add key mapping to an IMC
 // ─────────────────────────────────────────────────────────────
 
+
+// ─────────────────────────────────────────────────────────────
+// #604  get_applied_imcs — read a live PIE player's applied Input Mapping
+// Contexts (this is a runtime READ; PIE input injection lives in pie-studio).
+// ─────────────────────────────────────────────────────────────
+TSharedPtr<FJsonValue> FGameplayHandlers::GetAppliedImcs(const TSharedPtr<FJsonObject>& Params)
+{
+	UWorld* World = GEditor ? GEditor->PlayWorld : nullptr;
+	if (!World) return MCPError(TEXT("No PIE world available. Start Play-In-Editor first."));
+
+	const int32 PlayerIndex = OptionalInt(Params, TEXT("playerIndex"), 0);
+	APlayerController* PC = UGameplayStatics::GetPlayerController(World, PlayerIndex);
+	if (!PC) return MCPError(FString::Printf(TEXT("No PlayerController at index %d"), PlayerIndex));
+
+	ULocalPlayer* LP = PC->GetLocalPlayer();
+	if (!LP) return MCPError(TEXT("PlayerController has no LocalPlayer"));
+
+	UEnhancedInputLocalPlayerSubsystem* Sub = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	if (!Sub) return MCPError(TEXT("EnhancedInputLocalPlayerSubsystem not available (project may not use Enhanced Input)"));
+
+	UEnhancedPlayerInput* EPI = Sub->GetPlayerInput();
+	if (!EPI) return MCPError(TEXT("No EnhancedPlayerInput on the local player"));
+
+	// GetAppliedInputContextData() is protected, so read the UPROPERTY map via
+	// reflection: keys are UInputMappingContext object refs, values are the
+	// FAppliedInputContextData struct (Priority, RegistrationCount).
+	TArray<TSharedPtr<FJsonValue>> Contexts;
+	FMapProperty* MapProp = CastField<FMapProperty>(EPI->GetClass()->FindPropertyByName(TEXT("AppliedInputContextData")));
+	if (MapProp)
+	{
+		FObjectPropertyBase* KeyObjProp = CastField<FObjectPropertyBase>(MapProp->KeyProp);
+		FStructProperty* ValStruct = CastField<FStructProperty>(MapProp->ValueProp);
+		FIntProperty* PriorityProp = ValStruct ? CastField<FIntProperty>(ValStruct->Struct->FindPropertyByName(TEXT("Priority"))) : nullptr;
+		FIntProperty* RegProp = ValStruct ? CastField<FIntProperty>(ValStruct->Struct->FindPropertyByName(TEXT("RegistrationCount"))) : nullptr;
+		FScriptMapHelper Helper(MapProp, MapProp->ContainerPtrToValuePtr<void>(EPI));
+		for (int32 i = 0; i < Helper.GetMaxIndex(); ++i)
+		{
+			if (!Helper.IsValidIndex(i)) continue;
+			UObject* IMC = KeyObjProp ? KeyObjProp->GetObjectPropertyValue(Helper.GetKeyPtr(i)) : nullptr;
+			if (!IMC) continue;
+			void* ValPtr = Helper.GetValuePtr(i);
+			TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
+			C->SetStringField(TEXT("imc"), IMC->GetPathName());
+			C->SetStringField(TEXT("name"), IMC->GetName());
+			if (PriorityProp) C->SetNumberField(TEXT("priority"), PriorityProp->GetPropertyValue_InContainer(ValPtr));
+			if (RegProp) C->SetNumberField(TEXT("registrationCount"), RegProp->GetPropertyValue_InContainer(ValPtr));
+			Contexts.Add(MakeShared<FJsonValueObject>(C));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetNumberField(TEXT("playerIndex"), PlayerIndex);
+	Result->SetArrayField(TEXT("appliedContexts"), Contexts);
+	Result->SetNumberField(TEXT("count"), Contexts.Num());
+	return MCPResult(Result);
+}
 
 // ─────────────────────────────────────────────────────────────
 // #57 / #60  add_imc_mapping — Add key mapping to an IMC

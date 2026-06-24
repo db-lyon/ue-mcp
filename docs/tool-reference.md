@@ -639,6 +639,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `create_input_mapping` | Create InputMappingContext. Params: `name, packagePath?` |
 | `list_input_assets` | List input assets. Params: `directory?, recursive?` |
 | `read_imc` | Read InputMappingContext mappings. Params: `imcPath` |
+| `get_applied_imcs` | Read a live PIE player's currently-applied Input Mapping Contexts (priority + registrationCount). Requires PIE. Params: `playerIndex? (default 0) (#604)` |
 | `list_input_mappings` | Alias for read_imc. List key→action bindings with triggers/modifiers. Params: `imcPath` |
 | `add_imc_mapping` | Add key mapping to IMC. Params: `imcPath, inputActionPath, key` |
 | `set_mapping_modifiers` | Set modifiers/triggers on an IMC mapping. Params: `imcPath, mappingIndex?, modifiers?, triggers?` |

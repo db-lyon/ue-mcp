@@ -21,6 +21,7 @@ export const gameplayTool: ToolDef = categoryTool(
     create_input_mapping:   bp("Create InputMappingContext. Params: name, packagePath?", "create_input_mapping_context"),
     list_input_assets:      bp("List input assets. Params: directory?, recursive?", "list_input_assets"),
     read_imc:               bp("Read InputMappingContext mappings. Params: imcPath. Returns {key, inputAction, triggers[], modifiers[]}.", "read_imc"),
+    get_applied_imcs:       bp("Read a live PIE player's currently-applied Input Mapping Contexts (with priority + registrationCount). Requires PIE running. Params: playerIndex? (default 0) (#604)", "get_applied_imcs", (p) => ({ playerIndex: p.playerIndex })),
     list_input_mappings:    bp("Alias for read_imc. List key→action bindings with triggers/modifiers. Params: imcPath", "list_imc_mappings"),
     add_imc_mapping:        bp("Add key mapping to IMC. Params: imcPath, inputActionPath, key", "add_imc_mapping"),
     set_mapping_modifiers:  bp("Set modifiers/triggers on an IMC mapping. Params: imcPath, mappingIndex?, modifiers?, triggers?", "set_mapping_modifiers"),
@@ -65,6 +66,7 @@ export const gameplayTool: ToolDef = categoryTool(
   {
     actorLabel: z.string().optional(),
     profileName: z.string().optional(),
+    playerIndex: z.number().optional().describe("get_applied_imcs: PIE player index (default 0) (#604)"),
     simulate: z.boolean().optional(),
     collisionEnabled: z.string().optional(),
     collisionProfile: z.string().optional().describe("set_collision: collision profile/preset name (applied before per-channel overrides)"),
