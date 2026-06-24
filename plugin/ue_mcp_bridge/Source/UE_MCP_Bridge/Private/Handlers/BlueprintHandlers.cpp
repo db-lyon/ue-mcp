@@ -121,6 +121,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_node_property"), &ReadNodeProperty);
 	Registry.RegisterHandler(TEXT("reparent_component"), &ReparentComponent);
 	Registry.RegisterHandler(TEXT("reparent_blueprint"), &ReparentBlueprint);
+	Registry.RegisterHandler(TEXT("flush_inheritable_component_handler"), &FlushInheritableComponentHandler);
 	Registry.RegisterHandler(TEXT("set_actor_tick_settings"), &SetActorTickSettings);
 
 	// v0.7.12 — issue #128 — single-property read (inherited-aware)
@@ -2006,6 +2007,63 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentBlueprint(const TSharedPtr<FJ
 	}
 	return MCPResult(Result);
 }
+
+// #580 flush orphaned InheritableComponentHandler records. Invalid override
+// records (e.g. for components removed from a parent) survive read/remove_
+// component because they're keyed by a now-dead component key. ValidateTemplates()
+// drops them; this exposes that cleanup natively.
+TSharedPtr<FJsonValue> FBlueprintHandlers::FlushInheritableComponentHandler(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+
+	UInheritableComponentHandler* ICH = Blueprint->GetInheritableComponentHandler(/*bCreateIfNecessary=*/false);
+	if (!ICH)
+	{
+		auto NoIch = MCPSuccess();
+		NoIch->SetStringField(TEXT("path"), AssetPath);
+		NoIch->SetBoolField(TEXT("hadInheritableComponentHandler"), false);
+		NoIch->SetBoolField(TEXT("flushed"), false);
+		return MCPResult(NoIch);
+	}
+
+	// Count override records before/after via reflection (Records is private).
+	auto CountRecords = [ICH]() -> int32
+	{
+		if (FArrayProperty* RP = CastField<FArrayProperty>(ICH->GetClass()->FindPropertyByName(TEXT("Records"))))
+		{
+			FScriptArrayHelper H(RP, RP->ContainerPtrToValuePtr<void>(ICH));
+			return H.Num();
+		}
+		return -1;
+	};
+
+	const int32 Before = CountRecords();
+	Blueprint->Modify();
+	ICH->ValidateTemplates();
+	const int32 After = CountRecords();
+
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	SaveAssetPackage(Blueprint);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetBoolField(TEXT("hadInheritableComponentHandler"), true);
+	Result->SetBoolField(TEXT("flushed"), true);
+	Result->SetBoolField(TEXT("isEmpty"), ICH->IsEmpty());
+	if (Before >= 0)
+	{
+		Result->SetNumberField(TEXT("recordsBefore"), Before);
+		Result->SetNumberField(TEXT("recordsAfter"), After);
+		Result->SetNumberField(TEXT("recordsRemoved"), FMath::Max(0, Before - After));
+	}
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FBlueprintHandlers::RunConstructionScript(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
