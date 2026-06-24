@@ -44,6 +44,7 @@ export const animationTool: ToolDef = categoryTool(
     create_ik_rig:        bp("Create IKRigDefinition asset, optionally with retargetRoot + chains[]. Params: name, skeletalMeshPath, packagePath?, retargetRoot?, chains?: [{name, startBone, endBone, goal?}]", "create_ik_rig"),
     read_ik_rig:          bp("Read IK Rig chains, solvers, skeleton. Params: assetPath", "read_ik_rig"),
     list_control_rig_variables: bp("List ControlRig variables and hierarchy. Params: assetPath", "list_control_rig_variables"),
+    read_control_rig_hierarchy: bp("Read a Control Rig's per-element hierarchy metadata: each element's name, type (Bone|Control|Null|Curve...), index, and parent. Params: assetPath (#619)", "read_control_rig_hierarchy", (p) => ({ assetPath: p.assetPath })),
     set_root_motion:    bp("Set root motion settings on AnimSequence. Params: assetPath, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?", "set_root_motion_settings", (p) => ({ path: p.assetPath, enableRootMotion: p.enableRootMotion, forceRootLock: p.forceRootLock, useNormalizedRootMotionScale: p.useNormalizedRootMotionScale, rootMotionRootLock: p.rootMotionRootLock })),
     add_virtual_bone:   bp("Add virtual bone. Params: skeletonPath, sourceBone, targetBone", "add_virtual_bone"),
     remove_virtual_bone: bp("Remove virtual bone. Params: skeletonPath, virtualBoneName", "remove_virtual_bone"),

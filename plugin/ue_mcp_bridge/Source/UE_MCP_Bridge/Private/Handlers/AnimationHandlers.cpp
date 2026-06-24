@@ -59,6 +59,7 @@
 
 // Control Rig (#11) — ControlRigBlueprint removed in UE 5.7, use reflection
 #include "ControlRig.h"
+#include "Rigs/RigHierarchy.h"
 
 // Curve identifiers for UE5 animation data controller
 #include "Animation/AnimCurveTypes.h"
@@ -119,6 +120,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Control Rig (#11)
 	Registry.RegisterHandler(TEXT("list_control_rig_variables"), &ListControlRigVariables);
+	Registry.RegisterHandler(TEXT("read_control_rig_hierarchy"), &ReadControlRigHierarchy);
 
 	// v0.7.11 — depth
 	Registry.RegisterHandler(TEXT("set_root_motion_settings"), &SetRootMotionSettings);
@@ -1700,6 +1702,48 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListControlRigVariables(const TShared
 	}
 	Result->SetArrayField(TEXT("graphs"), GraphsArray);
 
+	return MCPResult(Result);
+}
+
+// #619 read_control_rig_hierarchy - per-element hierarchy metadata (name, type,
+// index, parent) from a Control Rig asset's URigHierarchy. ControlRigBlueprint
+// is gone in 5.7, so reach the 'Hierarchy' UPROPERTY via reflection.
+TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigHierarchy(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UBlueprint* CRBlueprint = Cast<UBlueprint>(LoadedAsset);
+	if (!CRBlueprint) return MCPError(FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *AssetPath));
+
+	FObjectProperty* HierProp = CastField<FObjectProperty>(CRBlueprint->GetClass()->FindPropertyByName(TEXT("Hierarchy")));
+	if (!HierProp) return MCPError(TEXT("Asset has no 'Hierarchy' property - is this a Control Rig?"));
+
+	URigHierarchy* Hierarchy = Cast<URigHierarchy>(HierProp->GetObjectPropertyValue_InContainer(CRBlueprint));
+	if (!Hierarchy) return MCPError(TEXT("Control Rig Hierarchy is null"));
+
+	const UEnum* TypeEnum = StaticEnum<ERigElementType>();
+	TArray<TSharedPtr<FJsonValue>> Elements;
+	for (const FRigElementKey& Key : Hierarchy->GetAllKeys(/*bTraverse=*/true))
+	{
+		TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+		E->SetStringField(TEXT("name"), Key.Name.ToString());
+		E->SetStringField(TEXT("type"), TypeEnum ? TypeEnum->GetNameStringByValue((int64)Key.Type) : FString::FromInt((int32)Key.Type));
+		E->SetNumberField(TEXT("index"), Hierarchy->GetIndex(Key));
+		const FRigElementKey Parent = Hierarchy->GetFirstParent(Key);
+		if (Parent.IsValid())
+		{
+			E->SetStringField(TEXT("parent"), Parent.Name.ToString());
+			E->SetStringField(TEXT("parentType"), TypeEnum ? TypeEnum->GetNameStringByValue((int64)Parent.Type) : FString());
+		}
+		Elements.Add(MakeShared<FJsonValueObject>(E));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("elementCount"), Elements.Num());
+	Result->SetArrayField(TEXT("elements"), Elements);
 	return MCPResult(Result);
 }
 

@@ -364,6 +364,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `create_ik_rig` | Create IKRigDefinition asset, optionally with retargetRoot + chains[]. Params: `name, skeletalMeshPath, packagePath?, retargetRoot?, chains?: [{name, startBone, endBone, goal?}]` |
 | `read_ik_rig` | Read IK Rig chains, solvers, skeleton. Params: `assetPath` |
 | `list_control_rig_variables` | List ControlRig variables and hierarchy. Params: `assetPath` |
+| `read_control_rig_hierarchy` | Read a Control Rig's per-element hierarchy metadata: name, type (Bone\\|Control\\|Null\\|Curve...), index, parent. Params: `assetPath (#619)` |
 | `set_root_motion` | Set root motion settings on AnimSequence. Params: `assetPath, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?` |
 | `add_virtual_bone` | Add virtual bone. Params: `skeletonPath, sourceBone, targetBone` |
 | `remove_virtual_bone` | Remove virtual bone. Params: `skeletonPath, virtualBoneName` |

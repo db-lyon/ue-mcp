@@ -79,6 +79,8 @@ private:
 
 	// Control Rig (#11)
 	static TSharedPtr<FJsonValue> ListControlRigVariables(const TSharedPtr<FJsonObject>& Params);
+	// #619 per-element Control Rig hierarchy metadata (name, type, index, parent)
+	static TSharedPtr<FJsonValue> ReadControlRigHierarchy(const TSharedPtr<FJsonObject>& Params);
 
 	// v0.7.11 — depth
 	static TSharedPtr<FJsonValue> SetRootMotionSettings(const TSharedPtr<FJsonObject>& Params);
