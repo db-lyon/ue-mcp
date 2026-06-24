@@ -438,6 +438,24 @@ namespace
 		if (FDoubleProperty* DP = CastField<FDoubleProperty>(Prop)) { Out->SetNumberField(Field, DP->GetPropertyValue(ValuePtr)); return true; }
 		if (FNameProperty* NP = CastField<FNameProperty>(Prop))   { Out->SetStringField(Field, NP->GetPropertyValue(ValuePtr).ToString()); return true; }
 		if (FTextProperty* TP = CastField<FTextProperty>(Prop))   { Out->SetStringField(Field, TP->GetPropertyValue(ValuePtr).ToString()); return true; }
+		// #598: soft refs derive from FObjectPropertyBase but GetObjectPropertyValue
+		// returns null when the target is not loaded - reporting a false "None".
+		// Read the soft path string instead so unloaded soft refs report their path.
+		if (FSoftObjectProperty* SoftObjP = CastField<FSoftObjectProperty>(Prop))
+		{
+			const FSoftObjectPtr& Ptr = SoftObjP->GetPropertyValue(ValuePtr);
+			const FString PathStr = Ptr.ToString();
+			if (PathStr.IsEmpty()) { Out->SetField(Field, MakeShared<FJsonValueNull>()); }
+			else { Out->SetStringField(Field, PathStr); }
+			return true;
+		}
+		if (FSoftClassProperty* SoftClsP = CastField<FSoftClassProperty>(Prop))
+		{
+			const FString PathStr = SoftClsP->GetPropertyValue(ValuePtr).ToString();
+			if (PathStr.IsEmpty()) { Out->SetField(Field, MakeShared<FJsonValueNull>()); }
+			else { Out->SetStringField(Field, PathStr); }
+			return true;
+		}
 		if (FObjectPropertyBase* OP = CastField<FObjectPropertyBase>(Prop))
 		{
 			UObject* Obj = OP->GetObjectPropertyValue(ValuePtr);
