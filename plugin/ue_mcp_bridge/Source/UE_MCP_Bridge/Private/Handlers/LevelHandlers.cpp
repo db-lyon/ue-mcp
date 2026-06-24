@@ -240,7 +240,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 	FString ActorClass;
 	if (auto Err = RequireString(Params, TEXT("actorClass"), ActorClass)) return Err;
 
-	REQUIRE_EDITOR_WORLD(World);
+	// #585: respect world:pie so the actor spawns into the running PIE world
+	// instead of silently landing in the editor world.
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
 
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	const FString Label = OptionalString(Params, TEXT("label"));
@@ -834,9 +838,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 	FString ActorLabel;
 	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	REQUIRE_EDITOR_WORLD(World);
+	// #586: support the PIE world so a label from get_outliner {world:pie}
+	// resolves and the live actor moves. FindActorByLabelOrName also matches the
+	// runtime instance name PIE shows.
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
 
-	AActor* Actor = FindActorByLabel(World, ActorLabel);
+	AActor* Actor = FindActorByLabelOrName(World, ActorLabel);
 	if (!Actor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));

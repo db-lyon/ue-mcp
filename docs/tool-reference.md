@@ -210,10 +210,10 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | Action | Description |
 |--------|-------------|
 | `get_outliner` | List actors. Params: `classFilter?, nameFilter?, world? (editor\\|pie\\|auto), limit?` |
-| `place_actor` | Spawn actor. Params: `actorClass, label?, location?, rotation?, scale?, staticMesh?, material?` |
+| `place_actor` | Spawn actor (world:pie spawns into the running PIE world #585). Params: `actorClass, label?, location?, rotation?, scale?, staticMesh?, material?, world? (editor\\|pie)` |
 | `delete_actor` | Remove actor. Params: `actorLabel` |
 | `get_actor_details` | Inspect actor. Params: `actorLabel OR actorPath, includeProperties?, propertyName?, world? (editor\\|pie)` |
-| `move_actor` | Transform actor. Params: `actorLabel, location?, rotation?, scale?` |
+| `move_actor` | Transform actor (world:pie moves a live PIE actor, resolving labels/names from get_outliner {world:pie} #586). Params: `actorLabel, location?, rotation?, scale?, world? (editor\\|pie)` |
 | `aim_actor_at` | Rotate an actor so its forward (+X) points at a target. Params: `actorLabel, targetPoint (Vec3) OR targetActor (label), roll? (default 0), world? (editor\\|pie) (#566)` |
 | `select` | Select actors. Params: `actorLabels[]` |
 | `get_selected` | Get selection |

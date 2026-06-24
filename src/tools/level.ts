@@ -7,10 +7,10 @@ export const levelTool: ToolDef = categoryTool(
   "Level actors, selection, components, level management, volumes, lights, and splines.",
   {
     get_outliner:       bp("List actors. Params: classFilter?, nameFilter?, world? (editor|pie|auto), limit?", "get_world_outliner"),
-    place_actor:        bp("Spawn actor. Params: actorClass, label?, location?, rotation?, scale?, staticMesh?, material?", "place_actor"),
+    place_actor:        bp("Spawn actor. Pass world:pie to spawn into the running PIE world (#585). Params: actorClass, label?, location?, rotation?, scale?, staticMesh?, material?, world? (editor|pie)", "place_actor"),
     delete_actor:       bp("Remove actor. Params: actorLabel", "delete_actor"),
     get_actor_details:  bp("Inspect actor. Params: actorLabel OR actorPath, includeProperties?, propertyName?, world? (editor|pie)", "get_actor_details"),
-    move_actor:         bp("Transform actor. Params: actorLabel, location?, rotation?, scale?", "move_actor"),
+    move_actor:         bp("Transform actor. Pass world:pie to move a live PIE actor (resolves labels/names from get_outliner {world:pie}) (#586). Params: actorLabel, location?, rotation?, scale?, world? (editor|pie)", "move_actor", (p) => ({ actorLabel: p.actorLabel, location: p.location, rotation: p.rotation, scale: p.scale, world: p.world })),
     aim_actor_at:       bp("Rotate an actor so its forward (+X) points at a target. Params: actorLabel, targetPoint (Vec3) OR targetActor (label), roll? (default 0), world? (editor|pie) (#566)", "aim_actor_at", (p) => ({ actorLabel: p.actorLabel, target: p.targetPoint, targetActor: p.targetActor, roll: p.roll, world: p.world })),
     select:             bp("Select actors. Params: actorLabels[]", "select_actors"),
     get_selected:       bp("Get selection", "get_selected_actors"),
