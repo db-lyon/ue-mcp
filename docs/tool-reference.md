@@ -282,6 +282,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `set_parameter` | Set parameter on MaterialInstance. Params: `assetPath, parameterName, parameterType, value` |
 | `read_instance` | Read a MaterialInstanceConstant parent and override summary. Params: `assetPath` |
 | `set_instance_parent` | Set a MaterialInstanceConstant parent. Params: `assetPath, newParentPath (or parentPath)` |
+| `batch_set_instances` | Batch reparent + reassign parameters across many Material Instances. Params: `instances[] = [{assetPath, parentPath?, parameters?:[{name, type (scalar\\|vector\\|texture), value}]}] (#594)` |
 | `clear_instance_parameters` | Clear all MaterialInstanceConstant parameter overrides. Params: `assetPath` |
 | `list_static_switches` | List static switch parameters on a Material or MaterialInstance. Params: `assetPath` |
 | `set_static_switch` | Set a MaterialInstanceConstant static switch parameter. Params: `assetPath, parameterName, value, association?, parameterIndex?` |

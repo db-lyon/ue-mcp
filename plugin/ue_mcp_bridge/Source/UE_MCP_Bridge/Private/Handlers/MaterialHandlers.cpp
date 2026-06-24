@@ -60,6 +60,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_material_parameter"), &SetMaterialParameter);
 	Registry.RegisterHandler(TEXT("read_material_instance"), &ReadMaterialInstance);
 	Registry.RegisterHandler(TEXT("set_material_instance_parent"), &SetMaterialInstanceParent);
+	Registry.RegisterHandler(TEXT("batch_set_material_instances"), &BatchSetInstances);
 	Registry.RegisterHandler(TEXT("clear_material_instance_parameters"), &ClearMaterialInstanceParameters);
 	Registry.RegisterHandler(TEXT("list_material_static_switches"), &ListMaterialStaticSwitches);
 	Registry.RegisterHandler(TEXT("set_material_static_switch"), &SetMaterialStaticSwitch);
@@ -1639,6 +1640,100 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialInstanceParent(const TShare
 		MCPSetRollback(Result, TEXT("set_material_instance_parent"), Payload);
 	}
 
+	return MCPResult(Result);
+}
+
+// #594 batch reparent + reassign parameters across many Material Instances in
+// one call. Each entry: {assetPath, parentPath?, parameters?:[{name,type,value}]}
+// where type is scalar | vector | texture. Loops the proven per-instance ops.
+TSharedPtr<FJsonValue> FMaterialHandlers::BatchSetInstances(const TSharedPtr<FJsonObject>& Params)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Instances = nullptr;
+	if (!Params->TryGetArrayField(TEXT("instances"), Instances) || !Instances)
+	{
+		return MCPError(TEXT("Missing 'instances' array of {assetPath, parentPath?, parameters?}"));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	int32 Updated = 0, Failed = 0;
+	for (const TSharedPtr<FJsonValue>& Entry : *Instances)
+	{
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (!Entry.IsValid() || !Entry->TryGetObject(Obj) || !Obj) continue;
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		FString AssetPath = (*Obj)->GetStringField(TEXT("assetPath"));
+		Row->SetStringField(TEXT("assetPath"), AssetPath);
+
+		UMaterialInstanceConstant* MIC = LoadMaterialInstanceFromPath(AssetPath);
+		if (!MIC)
+		{
+			Row->SetBoolField(TEXT("ok"), false);
+			Row->SetStringField(TEXT("error"), TEXT("not a MaterialInstanceConstant or not found"));
+			Results.Add(MakeShared<FJsonValueObject>(Row)); ++Failed; continue;
+		}
+
+		MIC->Modify(true);
+		FString ParentPath;
+		if ((*Obj)->TryGetStringField(TEXT("parentPath"), ParentPath) && !ParentPath.IsEmpty())
+		{
+			if (UMaterialInterface* NewParent = LoadAssetByPath<UMaterialInterface>(ParentPath))
+			{
+				if (NewParent != MIC) { MIC->SetParentEditorOnly(NewParent, true); Row->SetStringField(TEXT("parent"), NewParent->GetPathName()); }
+			}
+			else { Row->SetStringField(TEXT("parentError"), FString::Printf(TEXT("parent not found: %s"), *ParentPath)); }
+		}
+
+		int32 ParamsSet = 0;
+		const TArray<TSharedPtr<FJsonValue>>* ParamArr = nullptr;
+		if ((*Obj)->TryGetArrayField(TEXT("parameters"), ParamArr) && ParamArr)
+		{
+			for (const TSharedPtr<FJsonValue>& PV : *ParamArr)
+			{
+				const TSharedPtr<FJsonObject>* PObj = nullptr;
+				if (!PV.IsValid() || !PV->TryGetObject(PObj) || !PObj) continue;
+				const FString PName = (*PObj)->GetStringField(TEXT("name"));
+				const FString PType = (*PObj)->GetStringField(TEXT("type")).ToLower();
+				if (PName.IsEmpty()) continue;
+				if (PType == TEXT("scalar"))
+				{
+					double V = 0; (*PObj)->TryGetNumberField(TEXT("value"), V);
+					MIC->SetScalarParameterValueEditorOnly(FName(*PName), (float)V); ++ParamsSet;
+				}
+				else if (PType == TEXT("vector") || PType == TEXT("color"))
+				{
+					const TSharedPtr<FJsonObject>* CObj = nullptr;
+					if ((*PObj)->TryGetObjectField(TEXT("value"), CObj) && *CObj)
+					{
+						double R=0,G=0,B=0,A=1;
+						(*CObj)->TryGetNumberField(TEXT("r"), R); (*CObj)->TryGetNumberField(TEXT("g"), G);
+						(*CObj)->TryGetNumberField(TEXT("b"), B); (*CObj)->TryGetNumberField(TEXT("a"), A);
+						MIC->SetVectorParameterValueEditorOnly(FName(*PName), FLinearColor((float)R,(float)G,(float)B,(float)A)); ++ParamsSet;
+					}
+				}
+				else if (PType == TEXT("texture"))
+				{
+					FString TexPath; (*PObj)->TryGetStringField(TEXT("value"), TexPath);
+					if (UTexture* Tex = LoadAssetByPath<UTexture>(TexPath))
+					{
+						MIC->SetTextureParameterValueEditorOnly(FName(*PName), Tex); ++ParamsSet;
+					}
+				}
+			}
+		}
+
+		MIC->PostEditChange();
+		SaveAssetPackage(MIC);
+		Row->SetBoolField(TEXT("ok"), true);
+		Row->SetNumberField(TEXT("parametersSet"), ParamsSet);
+		Results.Add(MakeShared<FJsonValueObject>(Row)); ++Updated;
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("results"), Results);
+	Result->SetNumberField(TEXT("updated"), Updated);
+	Result->SetNumberField(TEXT("failed"), Failed);
+	Result->SetNumberField(TEXT("total"), Instances->Num());
 	return MCPResult(Result);
 }
 
