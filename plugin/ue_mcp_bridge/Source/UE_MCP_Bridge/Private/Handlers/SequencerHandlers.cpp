@@ -230,6 +230,25 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 		TrackObj->SetArrayField(TEXT("sections"), SectionsArr);
 	};
 
+	// #556: collect the Sequencer binding tags (group labels) that reference a
+	// given binding guid, from the MovieScene's tagged-binding map.
+	auto TagsForGuid = [MovieScene](const FGuid& Guid) -> TArray<TSharedPtr<FJsonValue>>
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const TPair<FName, FMovieSceneObjectBindingIDs>& Pair : MovieScene->AllTaggedBindings())
+		{
+			for (const FMovieSceneObjectBindingID& ID : Pair.Value.IDs)
+			{
+				if (ID.GetGuid() == Guid)
+				{
+					Out.Add(MakeShared<FJsonValueString>(Pair.Key.ToString()));
+					break;
+				}
+			}
+		}
+		return Out;
+	};
+
 	// Bindings (possessables and spawnables)
 	TArray<TSharedPtr<FJsonValue>> BindingsArray;
 	for (int32 i = 0; i < MovieScene->GetPossessableCount(); ++i)
@@ -239,6 +258,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 		BindingObj->SetStringField(TEXT("name"), Possessable.GetName());
 		BindingObj->SetStringField(TEXT("guid"), Possessable.GetGuid().ToString());
 		BindingObj->SetStringField(TEXT("type"), TEXT("possessable"));
+		BindingObj->SetArrayField(TEXT("tags"), TagsForGuid(Possessable.GetGuid()));
 
 		// List tracks for this binding (with optional section detail)
 		TArray<TSharedPtr<FJsonValue>> TrackArr;
@@ -267,6 +287,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 		BindingObj->SetStringField(TEXT("name"), Spawnable.GetName());
 		BindingObj->SetStringField(TEXT("guid"), Spawnable.GetGuid().ToString());
 		BindingObj->SetStringField(TEXT("type"), TEXT("spawnable"));
+		BindingObj->SetArrayField(TEXT("tags"), TagsForGuid(Spawnable.GetGuid()));
 
 		TArray<TSharedPtr<FJsonValue>> TrackArr;
 		const FMovieSceneBinding* Binding = MovieScene->FindBinding(Spawnable.GetGuid());

@@ -569,7 +569,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `set_viewport` | Set viewport camera. Params: `location?, rotation?` |
 | `focus_on_actor` | Focus on actor. Params: `actorLabel` |
 | `create_sequence` | Create Level Sequence. Params: `name, packagePath?` |
-| `get_sequence_info` | Read sequence. Params: `assetPath, includeSectionDetails? (attach sockets, first transform key values per track)` |
+| `get_sequence_info` | Read sequence: bindings (possessable/spawnable) with Sequencer tags (#556), tracks, optional section detail. Params: `assetPath, includeSectionDetails? (attach sockets, first transform key values per track)` |
 | `add_sequence_track` | Add an empty track. Params: `assetPath, trackType, actorLabel?` |
 | `add_sequence_section` | Add a section to a track (creating the track if needed), set its start/end in seconds, and for a CameraCut track bind it to a camera. Returns the section index + channel names to key. Params: `sequencePath, trackType (Transform\\|Float\\|Fade\\|CameraCut\\|Audio\\|Event\\|SkeletalAnimation), actorLabel? (binding scope), startSeconds?, endSeconds?, cameraActorLabel? (#548)` |
 | `set_sequence_keyframes` | Add keyframes to a section channel. Transform channels: Location.X/Y/Z, Rotation.X/Y/Z (or friendly x/y/z, yaw/pitch/roll); Fade/Float: the float channel. Params: `sequencePath, trackType, actorLabel?, sectionIndex? (default 0), channel, keyframes ([{seconds, value}]), interpolation? (cubic\\|linear) (#548)` |
