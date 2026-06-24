@@ -69,7 +69,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `save_all_dirty` | Flush every dirty package to disk in one call. End-of-workflow shortcut after bulk import/edit. Params: `saveMapPackages? (default true), saveContentPackages? (default true)` |
 | `set_mesh_material` | Assign material to static mesh slot. Params: `assetPath, materialPath, slotIndex?` |
 | `recenter_pivot` | Move static mesh pivot to geometry center. Params: `assetPath OR assetPaths` |
-| `import_static_mesh` | Import from FBX/OBJ. Params: `filePath, name?, packagePath?, combineMeshes?, importMaterials?, importTextures?, generateLightmapUVs?` |
+| `import_static_mesh` | Import from FBX, OBJ, or GLB/glTF (glTF routes through Interchange) (#549). Params: `filePath, name?, packagePath?, combineMeshes?, importMaterials?, importTextures?, generateLightmapUVs?` |
 | `import_skeletal_mesh` | Import skeletal mesh from FBX. Params: `filePath, name?, packagePath?, skeletonPath?, importMaterials?, importTextures?` |
 | `import_animation` | Import anim from FBX. Params: `filePath, name?, packagePath?, skeletonPath` |
 | `import_texture` | Import image. Params: `filePath, name?, packagePath?` |

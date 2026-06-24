@@ -173,40 +173,51 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("File not found: %s"), *FileName));
 	}
 
-	UFbxFactory* FbxFactory = NewObject<UFbxFactory>();
-	FGCRootScope FactoryRoot(FbxFactory);
+	// #549: pick the right import path by extension. FBX and OBJ go through
+	// UFbxFactory (OBJ via bIsObjImport); GLB/glTF leave the factory null so
+	// AssetTools/Interchange auto-selects the glTF translator.
+	const FString Ext = FPaths::GetExtension(FileName).ToLower();
+	const bool bIsObj = (Ext == TEXT("obj"));
+	const bool bIsGltf = (Ext == TEXT("glb") || Ext == TEXT("gltf"));
 
-	UFbxImportUI* ImportUI = NewObject<UFbxImportUI>();
-	ImportUI->bImportMesh = true;
-	ImportUI->bImportAnimations = false;
-	ImportUI->bImportMaterials = true;
-	ImportUI->bImportTextures = true;
-	ImportUI->bIsObjImport = false;
-	ImportUI->MeshTypeToImport = FBXIT_StaticMesh;
+	UFbxFactory* FbxFactory = nullptr;
+	if (!bIsGltf)
+	{
+		FbxFactory = NewObject<UFbxFactory>();
 
-	// Apply optional settings
-	bool bImportMaterials = true;
-	if (Params->TryGetBoolField(TEXT("importMaterials"), bImportMaterials))
-	{
-		ImportUI->bImportMaterials = bImportMaterials;
-	}
-	bool bImportTextures = true;
-	if (Params->TryGetBoolField(TEXT("importTextures"), bImportTextures))
-	{
-		ImportUI->bImportTextures = bImportTextures;
-	}
-	bool bCombineMeshes = false;
-	if (Params->TryGetBoolField(TEXT("combineMeshes"), bCombineMeshes))
-	{
-		ImportUI->StaticMeshImportData->bCombineMeshes = bCombineMeshes;
-	}
-	bool bGenerateLightmapUVs = true;
-	if (Params->TryGetBoolField(TEXT("generateLightmapUVs"), bGenerateLightmapUVs))
-	{
-		ImportUI->StaticMeshImportData->bGenerateLightmapUVs = bGenerateLightmapUVs;
-	}
+		UFbxImportUI* ImportUI = NewObject<UFbxImportUI>();
+		ImportUI->bImportMesh = true;
+		ImportUI->bImportAnimations = false;
+		ImportUI->bImportMaterials = true;
+		ImportUI->bImportTextures = true;
+		ImportUI->bIsObjImport = bIsObj;
+		ImportUI->MeshTypeToImport = FBXIT_StaticMesh;
 
-	FbxFactory->ImportUI = ImportUI;
+		// Apply optional settings
+		bool bImportMaterials = true;
+		if (Params->TryGetBoolField(TEXT("importMaterials"), bImportMaterials))
+		{
+			ImportUI->bImportMaterials = bImportMaterials;
+		}
+		bool bImportTextures = true;
+		if (Params->TryGetBoolField(TEXT("importTextures"), bImportTextures))
+		{
+			ImportUI->bImportTextures = bImportTextures;
+		}
+		bool bCombineMeshes = false;
+		if (Params->TryGetBoolField(TEXT("combineMeshes"), bCombineMeshes))
+		{
+			ImportUI->StaticMeshImportData->bCombineMeshes = bCombineMeshes;
+		}
+		bool bGenerateLightmapUVs = true;
+		if (Params->TryGetBoolField(TEXT("generateLightmapUVs"), bGenerateLightmapUVs))
+		{
+			ImportUI->StaticMeshImportData->bGenerateLightmapUVs = bGenerateLightmapUVs;
+		}
+
+		FbxFactory->ImportUI = ImportUI;
+	}
+	FGCRootScope FactoryRoot(FbxFactory); // no-op when null (glTF/Interchange)
 
 	UAssetImportTask* Task = NewObject<UAssetImportTask>();
 	FGCRootScope TaskRoot(Task);
@@ -215,7 +226,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 	Task->bSave = false;
 	Task->Filename = FileName;
 	Task->DestinationPath = DestinationPath;
-	Task->Factory = FbxFactory;
+	Task->Factory = FbxFactory; // null for glTF -> Interchange auto-selects
 
 	// Optional asset name
 	FString AssetName;
