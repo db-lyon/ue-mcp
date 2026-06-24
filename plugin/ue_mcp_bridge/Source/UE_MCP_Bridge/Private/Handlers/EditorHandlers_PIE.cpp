@@ -617,15 +617,26 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 		AActor* Actor = *It;
 		if (!Actor) continue;
 
-		// classFilter empty => every actor. Match against actor class OR any
-		// component class so callers can target component types directly.
-		bool bActorMatch = ClassFilter.IsEmpty() || Actor->GetClass()->GetName() == ClassFilter;
+		// classFilter empty => every actor. #569: match by substring (not exact)
+		// against actor class OR any component class, walking the parent-class
+		// chain, so a filter like "Character" matches "BP_MyCharacter_C" and a
+		// base-class filter matches subclasses. Exact match never hit PIE _C names.
+		auto ClassMatches = [&ClassFilter](UClass* Cls) -> bool
+		{
+			if (ClassFilter.IsEmpty()) return true;
+			for (UClass* C = Cls; C; C = C->GetSuperClass())
+			{
+				if (C->GetName().Contains(ClassFilter)) return true;
+			}
+			return false;
+		};
+		bool bActorMatch = ClassFilter.IsEmpty() || ClassMatches(Actor->GetClass());
 		UActorComponent* ComponentMatch = nullptr;
 		if (!bActorMatch)
 		{
 			for (UActorComponent* Comp : Actor->GetComponents())
 			{
-				if (Comp && Comp->GetClass()->GetName() == ClassFilter)
+				if (Comp && ClassMatches(Comp->GetClass()))
 				{
 					ComponentMatch = Comp;
 					bActorMatch = true;
