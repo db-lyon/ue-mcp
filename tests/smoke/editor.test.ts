@@ -60,6 +60,37 @@ describe("editor — safe commands", () => {
     expect(r.ok, r.error).toBe(true);
   });
 
+  it("capture_screenshot target=pie captures a file", async () => {
+    const before = await callBridge(bridge, "pie_control", { action: "status" });
+    expect(before.ok, before.error).toBe(true);
+    const wasPlaying = Boolean((before.result as Record<string, unknown>).isPlaying);
+
+    if (!wasPlaying) {
+      const start = await callBridge(bridge, "pie_control", { action: "start" });
+      expect(start.ok, start.error).toBe(true);
+      for (let i = 0; i < 20; i++) {
+        const status = await callBridge(bridge, "pie_control", { action: "status" });
+        if ((status.result as Record<string, unknown>).isPlaying) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    try {
+      const r = await callBridge(bridge, "capture_screenshot", {
+        filename: "mcp_pie_view_smoke.png",
+        target: "pie",
+      });
+      expect(r.ok, r.error).toBe(true);
+      const result = r.result as Record<string, unknown>;
+      expect(result.target).toBe("pie");
+      expect(result.sizeBytes).toBeGreaterThan(0);
+    } finally {
+      if (!wasPlaying) {
+        await callBridge(bridge, "pie_control", { action: "stop" });
+      }
+    }
+  }, 60000);
+
   it("capture_scene_png", async () => {
     const r = await callBridge(bridge, "capture_scene_png", {
       outputPath: "Saved/Screenshots/mcp_scene_smoke.png",

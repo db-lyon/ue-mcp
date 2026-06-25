@@ -29,6 +29,8 @@
 #include "Misc/App.h"
 #include "Logging/MessageLog.h"
 #include "HighResScreenshot.h"
+#include "ImageUtils.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -1013,9 +1015,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		return MCPError(TEXT("Editor not available"));
 	}
 
-	// #226: target=pie (or auto-detect when PIE is running) routes through
-	// HighResShot in the active PIE world so we capture the player viewport
-	// instead of whatever the editor camera was last looking at.
+	// #226/#575: target=pie (or auto-detect when PIE is running) reads the
+	// live game viewport. HighResShot can be dispatched into PIE but still
+	// capture from the editor/free camera path in practice.
 	const FString Target = OptionalString(Params, TEXT("target"), TEXT("auto")).ToLower();
 	UWorld* PieWorld = nullptr;
 	if (FWorldContext* PieCtx = GEditor->GetPIEWorldContext())
@@ -1026,22 +1028,64 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 
 	if (bUsePie && PieWorld)
 	{
-		int32 Width = OptionalInt(Params, TEXT("width"), 1920);
-		int32 Height = OptionalInt(Params, TEXT("height"), 1080);
-		// Some callers pass a single 'resolution' (long edge); honour it as width.
-		double ResolutionScalar = 0.0;
-		if (Params->TryGetNumberField(TEXT("resolution"), ResolutionScalar) && ResolutionScalar > 0)
+		UGameViewportClient* GameViewport = PieWorld->GetGameViewport();
+		FViewport* Viewport = GameViewport ? GameViewport->GetGameViewport() : nullptr;
+		if (!Viewport)
 		{
-			Width = (int32)ResolutionScalar;
-			Height = (int32)(ResolutionScalar * 9.0 / 16.0);
+			return MCPError(TEXT("PIE game viewport not available"));
 		}
-		const FString ConsoleCmd = FString::Printf(TEXT("HighResShot %dx%d"), Width, Height);
-		GEngine->Exec(PieWorld, *ConsoleCmd);
+
+		FString FullPath = Filename;
+		if (FPaths::IsRelative(FullPath))
+		{
+			FullPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), FullPath);
+		}
+		if (!FullPath.EndsWith(TEXT(".png")))
+		{
+			FullPath = FPaths::ChangeExtension(FullPath, TEXT("png"));
+		}
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(FullPath), /*Tree*/ true);
+
+		Viewport->Invalidate();
+		FlushRenderingCommands();
+
+		TArray<FColor> Bitmap;
+		if (!GetViewportScreenShot(Viewport, Bitmap) || Bitmap.Num() == 0)
+		{
+			return MCPError(TEXT("Failed to read pixels from PIE game viewport"));
+		}
+
+		FIntPoint Size = Viewport->GetRenderTargetTextureSizeXY();
+		if (Size.X <= 0 || Size.Y <= 0 || Bitmap.Num() != Size.X * Size.Y)
+		{
+			Size = Viewport->GetSizeXY();
+		}
+		if (Size.X <= 0 || Size.Y <= 0 || Bitmap.Num() != Size.X * Size.Y)
+		{
+			return MCPError(FString::Printf(TEXT("PIE viewport size mismatch: %d pixels for %dx%d"), Bitmap.Num(), Size.X, Size.Y));
+		}
+
+		TArray<uint8> Compressed;
+		FImageUtils::ThumbnailCompressImageArray(Size.X, Size.Y, Bitmap, Compressed);
+		if (!FFileHelper::SaveArrayToFile(Compressed, *FullPath))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to write PIE viewport screenshot: %s"), *FullPath));
+		}
+
+		const int64 SizeBytes = IFileManager::Get().FileSize(*FullPath);
+		if (SizeBytes < 0)
+		{
+			return MCPError(FString::Printf(TEXT("PIE viewport screenshot was not written: %s"), *FullPath));
+		}
+
 		auto Result = MCPSuccess();
-		Result->SetStringField(TEXT("filename"), Filename);
+		Result->SetStringField(TEXT("filename"), FullPath);
+		Result->SetStringField(TEXT("path"), FullPath);
 		Result->SetStringField(TEXT("target"), TEXT("pie"));
-		Result->SetStringField(TEXT("consoleCommand"), ConsoleCmd);
-		Result->SetStringField(TEXT("note"), TEXT("HighResShot dispatched into PIE world; output lands in Saved/Screenshots/<map>/."));
+		Result->SetNumberField(TEXT("width"), Size.X);
+		Result->SetNumberField(TEXT("height"), Size.Y);
+		Result->SetNumberField(TEXT("sizeBytes"), (double)SizeBytes);
+		Result->SetStringField(TEXT("note"), TEXT("Captured the live PIE game viewport synchronously."));
 		return MCPResult(Result);
 	}
 

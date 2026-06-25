@@ -564,7 +564,7 @@ UE-MCP exposes **<!-- count:tools -->21<!-- /count --> category tools** covering
 | `run_stat` | Run stat command. Params: `command` |
 | `set_scalability` | Set rendering quality via the Scalability system (actually applies + persists, not just sg.* cvars). Returns appliedLevels. Params: `level (Low\\|Medium\\|High\\|Epic\\|Cinematic) (#591)` |
 | `set_cvars` | Bulk-set console variables. Returns per-cvar old/new values and any notFound names. Params: `cvars ({name: value} object OR [{name, value}] array) (#591)` |
-| `capture_screenshot` | Screenshot. Params: `filename?, resolution?, target? (auto\\|pie\\|editor; auto routes to PIE viewport when PIE is running) (#226)` |
+| `capture_screenshot` | Screenshot. Params: `filename?, resolution?, target? (auto\\|pie\\|editor; auto reads the live PIE game viewport when PIE is running) (#226/#575)` |
 | `capture_scene_png` | Headless PNG screenshot via SceneCapture2D (works unfocused, guaranteed fresh RGBA8 LDR after render flush). Params: `outputPath, location?, rotation?, width? (default 1280), height? (default 720), fov? (default 90), world? (editor\\|pie\\|auto; default editor) (#148/#575)` |
 | `set_realtime` | Toggle realtime update on the level editor viewports so the editor-world sim (Niagara, anims) ticks - otherwise capture_scene_png renders an unticked, empty sim. Params: `enabled (default true) (#537)` |
 | `get_viewport` | Get viewport camera |
