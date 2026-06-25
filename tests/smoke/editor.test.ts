@@ -58,6 +58,9 @@ describe("editor — safe commands", () => {
   it("capture_screenshot", async () => {
     const r = await callBridge(bridge, "capture_screenshot", { filename: "mcp_smoke_test" });
     expect(r.ok, r.error).toBe(true);
+    const result = r.result as Record<string, unknown>;
+    expect(result.target).toBe("editor");
+    expect(result.sizeBytes).toBeGreaterThan(0);
   });
 
   it("capture_screenshot target=pie captures a file", async () => {

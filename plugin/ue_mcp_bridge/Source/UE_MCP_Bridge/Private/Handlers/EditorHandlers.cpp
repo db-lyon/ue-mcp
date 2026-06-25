@@ -68,6 +68,55 @@
 
 namespace
 {
+	bool SaveViewportPng(FViewport* Viewport, const FString& FullPath, FIntPoint& OutSize, int64& OutSizeBytes, FString& OutError)
+	{
+		if (!Viewport)
+		{
+			OutError = TEXT("Viewport not available");
+			return false;
+		}
+
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(FullPath), /*Tree*/ true);
+
+		Viewport->Invalidate();
+		FlushRenderingCommands();
+
+		TArray<FColor> Bitmap;
+		if (!GetViewportScreenShot(Viewport, Bitmap) || Bitmap.Num() == 0)
+		{
+			OutError = TEXT("Failed to read pixels from viewport");
+			return false;
+		}
+
+		OutSize = Viewport->GetRenderTargetTextureSizeXY();
+		if (OutSize.X <= 0 || OutSize.Y <= 0 || Bitmap.Num() != OutSize.X * OutSize.Y)
+		{
+			OutSize = Viewport->GetSizeXY();
+		}
+		if (OutSize.X <= 0 || OutSize.Y <= 0 || Bitmap.Num() != OutSize.X * OutSize.Y)
+		{
+			OutError = FString::Printf(TEXT("Viewport size mismatch: %d pixels for %dx%d"), Bitmap.Num(), OutSize.X, OutSize.Y);
+			return false;
+		}
+
+		TArray<uint8> Compressed;
+		FImageUtils::ThumbnailCompressImageArray(OutSize.X, OutSize.Y, Bitmap, Compressed);
+		if (!FFileHelper::SaveArrayToFile(Compressed, *FullPath))
+		{
+			OutError = FString::Printf(TEXT("Failed to write viewport screenshot: %s"), *FullPath);
+			return false;
+		}
+
+		OutSizeBytes = IFileManager::Get().FileSize(*FullPath);
+		if (OutSizeBytes < 0)
+		{
+			OutError = FString::Printf(TEXT("Viewport screenshot was not written: %s"), *FullPath);
+			return false;
+		}
+
+		return true;
+	}
+
 	bool ResolveEditorObjectFromPath(const FString& ObjectPath, UObject*& OutObject, FString& OutResolvedKind, FString& OutError)
 	{
 		UObject* Object = LoadObject<UObject>(nullptr, *ObjectPath);
@@ -1044,38 +1093,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		{
 			FullPath = FPaths::ChangeExtension(FullPath, TEXT("png"));
 		}
-		IFileManager::Get().MakeDirectory(*FPaths::GetPath(FullPath), /*Tree*/ true);
 
-		Viewport->Invalidate();
-		FlushRenderingCommands();
-
-		TArray<FColor> Bitmap;
-		if (!GetViewportScreenShot(Viewport, Bitmap) || Bitmap.Num() == 0)
+		FIntPoint Size;
+		int64 SizeBytes = 0;
+		FString Error;
+		if (!SaveViewportPng(Viewport, FullPath, Size, SizeBytes, Error))
 		{
-			return MCPError(TEXT("Failed to read pixels from PIE game viewport"));
-		}
-
-		FIntPoint Size = Viewport->GetRenderTargetTextureSizeXY();
-		if (Size.X <= 0 || Size.Y <= 0 || Bitmap.Num() != Size.X * Size.Y)
-		{
-			Size = Viewport->GetSizeXY();
-		}
-		if (Size.X <= 0 || Size.Y <= 0 || Bitmap.Num() != Size.X * Size.Y)
-		{
-			return MCPError(FString::Printf(TEXT("PIE viewport size mismatch: %d pixels for %dx%d"), Bitmap.Num(), Size.X, Size.Y));
-		}
-
-		TArray<uint8> Compressed;
-		FImageUtils::ThumbnailCompressImageArray(Size.X, Size.Y, Bitmap, Compressed);
-		if (!FFileHelper::SaveArrayToFile(Compressed, *FullPath))
-		{
-			return MCPError(FString::Printf(TEXT("Failed to write PIE viewport screenshot: %s"), *FullPath));
-		}
-
-		const int64 SizeBytes = IFileManager::Get().FileSize(*FullPath);
-		if (SizeBytes < 0)
-		{
-			return MCPError(FString::Printf(TEXT("PIE viewport screenshot was not written: %s"), *FullPath));
+			return MCPError(FString::Printf(TEXT("Failed to capture PIE game viewport: %s"), *Error));
 		}
 
 		auto Result = MCPSuccess();
@@ -1116,6 +1140,27 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 	else
 	{
 		FullPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), Filename);
+	}
+
+	if (FullPath.EndsWith(TEXT(".png")) && ViewportClient->Viewport)
+	{
+		FIntPoint Size;
+		int64 SizeBytes = 0;
+		FString Error;
+		if (!SaveViewportPng(ViewportClient->Viewport, FullPath, Size, SizeBytes, Error))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to capture editor viewport: %s"), *Error));
+		}
+
+		auto Result = MCPSuccess();
+		Result->SetStringField(TEXT("filename"), FullPath);
+		Result->SetStringField(TEXT("path"), FullPath);
+		Result->SetStringField(TEXT("target"), TEXT("editor"));
+		Result->SetNumberField(TEXT("width"), Size.X);
+		Result->SetNumberField(TEXT("height"), Size.Y);
+		Result->SetNumberField(TEXT("sizeBytes"), (double)SizeBytes);
+		Result->SetStringField(TEXT("note"), TEXT("Captured the editor viewport synchronously."));
+		return MCPResult(Result);
 	}
 
 	// Request the screenshot
