@@ -70,7 +70,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_anim_assets"), &ListAnimAssets);
 	Registry.RegisterHandler(TEXT("list_skeletal_meshes"), &ListSkeletalMeshes);
 	Registry.RegisterHandler(TEXT("get_skeleton_info"), &GetSkeletonInfo);
-	Registry.RegisterHandler(TEXT("list_sockets"), &ListSockets);
+	Registry.RegisterHandler(TEXT("list_animation_sockets"), &ListSockets);
 	Registry.RegisterHandler(TEXT("get_physics_asset_info"), &GetPhysicsAssetInfo);
 	Registry.RegisterHandler(TEXT("read_anim_blueprint"), &ReadAnimBlueprint);
 	Registry.RegisterHandler(TEXT("read_anim_montage"), &ReadAnimMontage);

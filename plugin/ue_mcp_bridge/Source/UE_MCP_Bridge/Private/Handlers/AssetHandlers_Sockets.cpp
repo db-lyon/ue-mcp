@@ -90,6 +90,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 					MCPSetUpdated(UpdatedResult);
 					UpdatedResult->SetStringField(TEXT("socketName"), SocketName);
 					UpdatedResult->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+					UpdatedResult->SetStringField(TEXT("source"), TEXT("mesh"));
 
 					// Rollback: restore the previous transform via set_socket_transform.
 					TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
@@ -117,6 +118,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 				MCPSetExisted(ExistingResult);
 				ExistingResult->SetStringField(TEXT("socketName"), SocketName);
 				ExistingResult->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+				ExistingResult->SetStringField(TEXT("source"), TEXT("mesh"));
 				return MCPResult(ExistingResult);
 			}
 		}
@@ -134,6 +136,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("socketName"), SocketName);
 		Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+		Result->SetStringField(TEXT("source"), TEXT("mesh"));
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("assetPath"), AssetPath);
 		Payload->SetStringField(TEXT("socketName"), SocketName);
@@ -171,6 +174,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 					MCPSetUpdated(UpdatedResult);
 					UpdatedResult->SetStringField(TEXT("socketName"), SocketName);
 					UpdatedResult->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+					UpdatedResult->SetStringField(TEXT("source"), TEXT("mesh"));
 
 					TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 					Payload->SetStringField(TEXT("assetPath"), AssetPath);
@@ -197,6 +201,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 				MCPSetExisted(ExistingResult);
 				ExistingResult->SetStringField(TEXT("socketName"), SocketName);
 				ExistingResult->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+				ExistingResult->SetStringField(TEXT("source"), TEXT("mesh"));
 				return MCPResult(ExistingResult);
 			}
 		}
@@ -207,6 +212,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		NewSocket->RelativeLocation = RelLoc;
 		NewSocket->RelativeRotation = RelRot;
 		NewSocket->RelativeScale = RelScale;
+		SKM->Modify();
 		SKM->GetMeshOnlySocketList().Add(NewSocket);
 		SKM->MarkPackageDirty();
 		SKM->PostEditChange();
@@ -216,6 +222,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		Result->SetStringField(TEXT("socketName"), SocketName);
 		Result->SetStringField(TEXT("boneName"), BoneName);
 		Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+		Result->SetStringField(TEXT("source"), TEXT("mesh"));
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("assetPath"), AssetPath);
 		Payload->SetStringField(TEXT("socketName"), SocketName);
@@ -247,16 +254,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 					if (bHasRot)   Existing->RelativeRotation = RelRot;
 					if (bHasScale) Existing->RelativeScale = RelScale;
 					Skel->MarkPackageDirty();
+					Skel->PostEditChange();
 					auto UpdatedResult = MCPSuccess();
 					MCPSetUpdated(UpdatedResult);
 					UpdatedResult->SetStringField(TEXT("socketName"), SocketName);
 					UpdatedResult->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+					UpdatedResult->SetStringField(TEXT("source"), TEXT("skeleton"));
 					return MCPResult(UpdatedResult);
 				}
 				auto ExistingResult = MCPSuccess();
 				MCPSetExisted(ExistingResult);
 				ExistingResult->SetStringField(TEXT("socketName"), SocketName);
 				ExistingResult->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+				ExistingResult->SetStringField(TEXT("source"), TEXT("skeleton"));
 				return MCPResult(ExistingResult);
 			}
 		}
@@ -270,12 +280,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 		Skel->Modify();
 		Skel->Sockets.Add(NewSocket);
 		Skel->MarkPackageDirty();
+		Skel->PostEditChange();
 
 		auto Result = MCPSuccess();
 		MCPSetCreated(Result);
 		Result->SetStringField(TEXT("socketName"), SocketName);
 		Result->SetStringField(TEXT("boneName"), BoneName);
 		Result->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+		Result->SetStringField(TEXT("source"), TEXT("skeleton"));
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("assetPath"), AssetPath);
 		Payload->SetStringField(TEXT("socketName"), SocketName);
@@ -312,6 +324,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 
 				auto Result = MCPSuccess();
 				Result->SetStringField(TEXT("removed"), SocketName);
+				Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+				Result->SetStringField(TEXT("source"), TEXT("mesh"));
 				Result->SetBoolField(TEXT("deleted"), true);
 				return MCPResult(Result);
 			}
@@ -319,6 +333,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 		// Idempotent: socket already absent.
 		auto Noop = MCPSuccess();
 		Noop->SetStringField(TEXT("socketName"), SocketName);
+		Noop->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+		Noop->SetStringField(TEXT("source"), TEXT("mesh"));
 		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
 		return MCPResult(Noop);
 	}
@@ -330,18 +346,24 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 		{
 			if (Sockets[i] && Sockets[i]->SocketName == FName(*SocketName))
 			{
+				SKM->Modify();
+				Sockets[i]->Modify();
 				Sockets.RemoveAt(i);
 				SKM->MarkPackageDirty();
 				SKM->PostEditChange();
 
 				auto Result = MCPSuccess();
 				Result->SetStringField(TEXT("removed"), SocketName);
+				Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+				Result->SetStringField(TEXT("source"), TEXT("mesh"));
 				Result->SetBoolField(TEXT("deleted"), true);
 				return MCPResult(Result);
 			}
 		}
 		auto Noop = MCPSuccess();
 		Noop->SetStringField(TEXT("socketName"), SocketName);
+		Noop->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+		Noop->SetStringField(TEXT("source"), TEXT("mesh"));
 		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
 		return MCPResult(Noop);
 	}
@@ -354,11 +376,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 			if (Skel->Sockets[i] && Skel->Sockets[i]->SocketName == FName(*SocketName))
 			{
 				Skel->Modify();
+				Skel->Sockets[i]->Modify();
 				Skel->Sockets.RemoveAt(i);
 				Skel->MarkPackageDirty();
+				Skel->PostEditChange();
 				auto Result = MCPSuccess();
 				Result->SetStringField(TEXT("removed"), SocketName);
 				Result->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+				Result->SetStringField(TEXT("source"), TEXT("skeleton"));
 				Result->SetBoolField(TEXT("deleted"), true);
 				return MCPResult(Result);
 			}
@@ -366,6 +391,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 		auto Noop = MCPSuccess();
 		Noop->SetStringField(TEXT("socketName"), SocketName);
 		Noop->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
+		Noop->SetStringField(TEXT("source"), TEXT("skeleton"));
 		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
 		return MCPResult(Noop);
 	}
@@ -387,6 +413,37 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 
 	auto Result = MCPSuccess();
 	TArray<TSharedPtr<FJsonValue>> SocketArray;
+	int32 MeshSocketCount = 0;
+	int32 SkeletonSocketCount = 0;
+
+	auto AppendSkeletalSocket = [&SocketArray](const USkeletalMeshSocket* Socket, const TCHAR* Source)
+	{
+		if (!Socket) return;
+		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+		S->SetStringField(TEXT("name"), Socket->SocketName.ToString());
+		S->SetStringField(TEXT("boneName"), Socket->BoneName.ToString());
+		S->SetStringField(TEXT("source"), Source);
+
+		TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
+		Loc->SetNumberField(TEXT("x"), Socket->RelativeLocation.X);
+		Loc->SetNumberField(TEXT("y"), Socket->RelativeLocation.Y);
+		Loc->SetNumberField(TEXT("z"), Socket->RelativeLocation.Z);
+		S->SetObjectField(TEXT("relativeLocation"), Loc);
+
+		TSharedPtr<FJsonObject> Rot = MakeShared<FJsonObject>();
+		Rot->SetNumberField(TEXT("pitch"), Socket->RelativeRotation.Pitch);
+		Rot->SetNumberField(TEXT("yaw"), Socket->RelativeRotation.Yaw);
+		Rot->SetNumberField(TEXT("roll"), Socket->RelativeRotation.Roll);
+		S->SetObjectField(TEXT("relativeRotation"), Rot);
+
+		TSharedPtr<FJsonObject> Scale = MakeShared<FJsonObject>();
+		Scale->SetNumberField(TEXT("x"), Socket->RelativeScale.X);
+		Scale->SetNumberField(TEXT("y"), Socket->RelativeScale.Y);
+		Scale->SetNumberField(TEXT("z"), Socket->RelativeScale.Z);
+		S->SetObjectField(TEXT("relativeScale"), Scale);
+
+		SocketArray.Add(MakeShared<FJsonValueObject>(S));
+	};
 
 	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
 	{
@@ -396,6 +453,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 			TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
 			S->SetStringField(TEXT("name"), Socket->SocketName.ToString());
 			S->SetStringField(TEXT("tag"), Socket->Tag);
+			S->SetStringField(TEXT("source"), TEXT("mesh"));
 
 			TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
 			Loc->SetNumberField(TEXT("x"), Socket->RelativeLocation.X);
@@ -416,6 +474,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 			S->SetObjectField(TEXT("relativeScale"), Scale);
 
 			SocketArray.Add(MakeShared<FJsonValueObject>(S));
+			++MeshSocketCount;
 		}
 		Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
 	}
@@ -424,29 +483,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 		for (USkeletalMeshSocket* Socket : SKM->GetMeshOnlySocketList())
 		{
 			if (!Socket) continue;
-			TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
-			S->SetStringField(TEXT("name"), Socket->SocketName.ToString());
-			S->SetStringField(TEXT("boneName"), Socket->BoneName.ToString());
-
-			TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
-			Loc->SetNumberField(TEXT("x"), Socket->RelativeLocation.X);
-			Loc->SetNumberField(TEXT("y"), Socket->RelativeLocation.Y);
-			Loc->SetNumberField(TEXT("z"), Socket->RelativeLocation.Z);
-			S->SetObjectField(TEXT("relativeLocation"), Loc);
-
-			TSharedPtr<FJsonObject> Rot = MakeShared<FJsonObject>();
-			Rot->SetNumberField(TEXT("pitch"), Socket->RelativeRotation.Pitch);
-			Rot->SetNumberField(TEXT("yaw"), Socket->RelativeRotation.Yaw);
-			Rot->SetNumberField(TEXT("roll"), Socket->RelativeRotation.Roll);
-			S->SetObjectField(TEXT("relativeRotation"), Rot);
-
-			TSharedPtr<FJsonObject> Scale = MakeShared<FJsonObject>();
-			Scale->SetNumberField(TEXT("x"), Socket->RelativeScale.X);
-			Scale->SetNumberField(TEXT("y"), Socket->RelativeScale.Y);
-			Scale->SetNumberField(TEXT("z"), Socket->RelativeScale.Z);
-			S->SetObjectField(TEXT("relativeScale"), Scale);
-
-			SocketArray.Add(MakeShared<FJsonValueObject>(S));
+			AppendSkeletalSocket(Socket, TEXT("mesh"));
+			++MeshSocketCount;
+		}
+		if (USkeleton* Skel = SKM->GetSkeleton())
+		{
+			Result->SetStringField(TEXT("skeletonPath"), Skel->GetPathName());
+			for (USkeletalMeshSocket* Socket : Skel->Sockets)
+			{
+				if (!Socket) continue;
+				AppendSkeletalSocket(Socket, TEXT("skeleton"));
+				++SkeletonSocketCount;
+			}
 		}
 		Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
 	}
@@ -456,25 +504,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 		for (USkeletalMeshSocket* Socket : Skel->Sockets)
 		{
 			if (!Socket) continue;
-			TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
-			S->SetStringField(TEXT("name"), Socket->SocketName.ToString());
-			S->SetStringField(TEXT("boneName"), Socket->BoneName.ToString());
-			TSharedPtr<FJsonObject> Loc = MakeShared<FJsonObject>();
-			Loc->SetNumberField(TEXT("x"), Socket->RelativeLocation.X);
-			Loc->SetNumberField(TEXT("y"), Socket->RelativeLocation.Y);
-			Loc->SetNumberField(TEXT("z"), Socket->RelativeLocation.Z);
-			S->SetObjectField(TEXT("relativeLocation"), Loc);
-			TSharedPtr<FJsonObject> Rot = MakeShared<FJsonObject>();
-			Rot->SetNumberField(TEXT("pitch"), Socket->RelativeRotation.Pitch);
-			Rot->SetNumberField(TEXT("yaw"), Socket->RelativeRotation.Yaw);
-			Rot->SetNumberField(TEXT("roll"), Socket->RelativeRotation.Roll);
-			S->SetObjectField(TEXT("relativeRotation"), Rot);
-			TSharedPtr<FJsonObject> Scale = MakeShared<FJsonObject>();
-			Scale->SetNumberField(TEXT("x"), Socket->RelativeScale.X);
-			Scale->SetNumberField(TEXT("y"), Socket->RelativeScale.Y);
-			Scale->SetNumberField(TEXT("z"), Socket->RelativeScale.Z);
-			S->SetObjectField(TEXT("relativeScale"), Scale);
-			SocketArray.Add(MakeShared<FJsonValueObject>(S));
+			AppendSkeletalSocket(Socket, TEXT("skeleton"));
+			++SkeletonSocketCount;
 		}
 		Result->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
 	}
@@ -485,6 +516,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListSockets(const TSharedPtr<FJsonObject>
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("socketCount"), SocketArray.Num());
+	Result->SetNumberField(TEXT("count"), SocketArray.Num());
+	Result->SetNumberField(TEXT("meshSocketCount"), MeshSocketCount);
+	Result->SetNumberField(TEXT("skeletonSocketCount"), SkeletonSocketCount);
 	Result->SetArrayField(TEXT("sockets"), SocketArray);
 
 	return MCPResult(Result);
@@ -592,6 +626,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSocketTransform(const TSharedPtr<FJson
 				MCPSetUpdated(Result);
 				Result->SetStringField(TEXT("socketName"), SocketName);
 				Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
+				Result->SetStringField(TEXT("source"), TEXT("mesh"));
 				MCPSetRollback(Result, TEXT("set_socket_transform"), BuildRollback(PrevLoc, PrevRot, PrevScale));
 				return MCPResult(Result);
 			}
@@ -620,6 +655,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSocketTransform(const TSharedPtr<FJson
 				MCPSetUpdated(Result);
 				Result->SetStringField(TEXT("socketName"), SocketName);
 				Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
+				Result->SetStringField(TEXT("source"), TEXT("mesh"));
 				MCPSetRollback(Result, TEXT("set_socket_transform"), BuildRollback(PrevLoc, PrevRot, PrevScale));
 				return MCPResult(Result);
 			}

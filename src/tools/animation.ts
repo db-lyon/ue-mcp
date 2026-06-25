@@ -22,7 +22,7 @@ export const animationTool: ToolDef = categoryTool(
     add_notify:           bp("Add notify. For PlayMontageNotify the notifyName is also written onto the spawned notify object so OnPlayMontageNotifyBegin broadcasts it (not 'None'), and montage branching-point markers refresh (#528). Params: assetPath, notifyName, triggerTime, notifyClass?", "add_anim_notify"),
     remove_notify:        bp("Remove notify(s) by name and/or class. Pass at least one of notifyName/notifyClass; both filters AND. Idempotent: alreadyDeleted=true if no match. Params: assetPath, notifyName?, notifyClass? (#471)", "remove_anim_notify", (p) => ({ assetPath: p.assetPath, notifyName: p.notifyName, notifyClass: p.notifyClass })),
     get_skeleton_info:    bp("Read skeleton. Params: assetPath", "get_skeleton_info"),
-    list_sockets:         bp("List sockets. Params: assetPath", "list_sockets"),
+    list_sockets:         bp("List sockets. Params: assetPath", "list_animation_sockets"),
     list_skeletal_meshes: bp("List skeletal meshes. Params: directory?, recursive?", "list_skeletal_meshes"),
     get_physics_asset:    bp("Read physics asset. Params: assetPath", "get_physics_asset_info"),
     create_sequence:      bp("Create blank AnimSequence. Params: name, skeletonPath, packagePath?, numFrames?, frameRate?", "create_sequence"),
