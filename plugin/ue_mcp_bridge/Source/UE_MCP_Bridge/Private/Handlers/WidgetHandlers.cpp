@@ -1203,6 +1203,20 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddToPIEViewport(const TSharedPtr<FJsonO
 	{
 		WidgetClass = ResolveWidgetClass(AssetPath);
 	}
+	if (!WidgetClass && AssetPath.StartsWith(TEXT("/")))
+	{
+		FString PackagePath = AssetPath;
+		FString ObjectName;
+		if (!AssetPath.Split(TEXT("."), &PackagePath, &ObjectName, ESearchCase::CaseSensitive, ESearchDir::FromEnd))
+		{
+			ObjectName = FPackageName::GetShortName(PackagePath);
+		}
+		if (!ObjectName.EndsWith(TEXT("_C")))
+		{
+			ObjectName += TEXT("_C");
+		}
+		WidgetClass = LoadClass<UUserWidget>(nullptr, *(PackagePath + TEXT(".") + ObjectName));
+	}
 	if (!WidgetClass || !WidgetClass->IsChildOf(UUserWidget::StaticClass()))
 	{
 		return MCPError(FString::Printf(TEXT("assetPath must resolve to a UserWidget Blueprint/class: %s"), *AssetPath));
