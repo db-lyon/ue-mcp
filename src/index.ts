@@ -374,7 +374,12 @@ if (subcmd === "init") {
   import("./uninstall-hooks.js");
 } else if (subcmd === "auth") {
   process.argv.splice(2, 1);
-  import("./auth-cli.js");
+  // #620: invoked via the index.js bin, argv[1] is index.js so auth-cli's
+  // own "am I the entry point" guard never fires. Call the export directly.
+  import("./auth-cli.js").then((m) => m.runFeedbackAuthStep()).catch((e) => {
+    console.error(`[ue-mcp] auth failed: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  });
 } else if (subcmd === "feedback") {
   process.argv.splice(2, 1);
   import("./feedback-cli.js");

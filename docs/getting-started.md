@@ -99,21 +99,15 @@ See the [Tool Reference](tool-reference.md) for everything available.
 
 ## Updating
 
-Update, deploy, and rebuild in one command (run from a **plain terminal, not through your MCP client**):
+Always update with `--build`, from a **plain terminal** (not your MCP client):
 
 ```bash
-ue-mcp update --build          # update npm package, deploy plugin, rebuild editor, print the doctor table
+ue-mcp update --build          # update npm package, deploy plugin, rebuild editor
 ```
 
-Or do less:
+The editor half is a C++ plugin that has to be recompiled, which `--build` handles. A bare `ue-mcp update` only bumps the npm package, so editor-side fixes never load until you rebuild.
 
-```bash
-ue-mcp update --deploy         # update + deploy plugin sources (no rebuild)
-ue-mcp update                  # update the npm package only
-ue-mcp deploy                  # copy plugin sources into your project
-```
-
-`update` cannot restart the MCP server it was spawned by, so finish with: **quit your MCP client → `ue-mcp update --build` → relaunch the client.**
+Then quit your MCP client and relaunch so it picks up the new server, and restart the editor so the rebuilt plugin loads.
 
 ### `ue-mcp doctor`
 

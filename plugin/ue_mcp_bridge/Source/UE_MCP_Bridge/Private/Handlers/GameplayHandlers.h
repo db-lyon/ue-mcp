@@ -23,6 +23,8 @@ private:
 	static TSharedPtr<FJsonValue> CreateInputAction(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateInputMappingContext(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadImc(const TSharedPtr<FJsonObject>& Params);
+	// #604 read a live PIE player's applied Input Mapping Contexts
+	static TSharedPtr<FJsonValue> GetAppliedImcs(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddImcMapping(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMappingModifiers(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveImcMapping(const TSharedPtr<FJsonObject>& Params);

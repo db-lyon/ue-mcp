@@ -27,6 +27,10 @@ private:
 	static TSharedPtr<FJsonValue> GetSelectedActors(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListVolumes(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> MoveActor(const TSharedPtr<FJsonObject>& Params);
+	// #566 point an actor at a target point or actor (computed look-at)
+	static TSharedPtr<FJsonValue> AimActorAt(const TSharedPtr<FJsonObject>& Params);
+	// #585 project a world point onto the navmesh
+	static TSharedPtr<FJsonValue> NavProjectPoint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SelectActors(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SpawnLight(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetLightProperties(const TSharedPtr<FJsonObject>& Params);
@@ -44,6 +48,8 @@ private:
 	// #94: Fog + sky helpers
 	static TSharedPtr<FJsonValue> SetFogProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetActorsByClass(const TSharedPtr<FJsonObject>& Params);
+	// #582 find actors that own a component of a given class
+	static TSharedPtr<FJsonValue> GetActorsByComponentClass(const TSharedPtr<FJsonObject>& Params);
 	// v0.7.19 issue #146 — actor class histogram (counts by class name)
 	static TSharedPtr<FJsonValue> CountActorsByClass(const TSharedPtr<FJsonObject>& Params);
 	// v0.7.19 issue #150 — RuntimeVirtualTextureVolume / component summary

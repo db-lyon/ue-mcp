@@ -695,6 +695,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 	const bool bIncludeComments = OptionalBool(Params, TEXT("includeComments"), true);
 	const bool bDumpToFile = OptionalBool(Params, TEXT("dumpToFile"), false);
 	const FString OutputPath = OptionalString(Params, TEXT("outputPath"), TEXT(""));
+	// #560 optional node filters (case-insensitive substring match)
+	const FString TitleFilter = OptionalString(Params, TEXT("titleFilter"), TEXT(""));
+	const FString ClassFilter = OptionalString(Params, TEXT("classFilter"), TEXT(""));
 	const bool bHasOffset = Params->HasField(TEXT("offset"));
 	const bool bHasLimit = Params->HasField(TEXT("limit"));
 	const int32 RequestedOffset = FMath::Max(0, OptionalInt(Params, TEXT("offset"), 0));
@@ -713,7 +716,27 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 		return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
 	}
 
-	const int32 TotalNodeCount = TargetGraph->Nodes.Num();
+	// #560 build the working node list, applying title/class filters when present.
+	// Pagination below operates over FilteredNodes so offset/limit stay consistent.
+	const bool bFiltering = !TitleFilter.IsEmpty() || !ClassFilter.IsEmpty();
+	TArray<UEdGraphNode*> FilteredNodes;
+	FilteredNodes.Reserve(TargetGraph->Nodes.Num());
+	for (UEdGraphNode* Node : TargetGraph->Nodes)
+	{
+		if (!Node) continue;
+		if (!TitleFilter.IsEmpty())
+		{
+			const FString NodeTitle = Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString();
+			if (!NodeTitle.Contains(TitleFilter, ESearchCase::IgnoreCase)) continue;
+		}
+		if (!ClassFilter.IsEmpty())
+		{
+			if (!Node->GetClass()->GetName().Contains(ClassFilter, ESearchCase::IgnoreCase)) continue;
+		}
+		FilteredNodes.Add(Node);
+	}
+
+	const int32 TotalNodeCount = FilteredNodes.Num();
 	int32 EffectiveLimit = OptionalInt(Params, TEXT("limit"), -1);
 	if (EffectiveLimit <= 0)
 	{
@@ -732,7 +755,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 		TArray<TSharedPtr<FJsonValue>> Nodes;
 		for (int32 Index = SliceStart; Index < SliceEnd; ++Index)
 		{
-			UEdGraphNode* Node = TargetGraph->Nodes[Index];
+			UEdGraphNode* Node = FilteredNodes[Index];
 			if (!Node) continue;
 
 			TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
@@ -775,6 +798,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 		Result->SetArrayField(TEXT("nodes"), Nodes);
 		Result->SetNumberField(TEXT("nodeCount"), Nodes.Num());
 		Result->SetNumberField(TEXT("totalNodeCount"), TotalNodeCount);
+		if (bFiltering)
+		{
+			Result->SetBoolField(TEXT("filtered"), true);
+			Result->SetNumberField(TEXT("unfilteredNodeCount"), TargetGraph->Nodes.Num());
+			if (!TitleFilter.IsEmpty()) Result->SetStringField(TEXT("titleFilter"), TitleFilter);
+			if (!ClassFilter.IsEmpty()) Result->SetStringField(TEXT("classFilter"), ClassFilter);
+		}
 		Result->SetNumberField(TEXT("offset"), SliceStart);
 		Result->SetNumberField(TEXT("limit"), SliceEnd - SliceStart);
 		Result->SetBoolField(TEXT("hasMore"), SliceEnd < TotalNodeCount);

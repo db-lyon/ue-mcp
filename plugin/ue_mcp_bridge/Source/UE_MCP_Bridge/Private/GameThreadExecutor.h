@@ -21,6 +21,11 @@ public:
 	// Check if we're on game thread
 	static bool IsGameThread();
 
+	// #603: true while a bridge handler is executing on the game thread. Lets the
+	// dialog hook tell a bridge-initiated modal (auto-answer) from a user-raised
+	// one (must reach the human). Game-thread only.
+	static bool IsHandlerInFlight();
+
 	// Mark the editor as fully initialized and ready to process requests
 	void SetEditorReady();
 

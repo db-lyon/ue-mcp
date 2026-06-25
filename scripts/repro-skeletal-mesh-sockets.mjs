@@ -19,7 +19,7 @@ const bridge = new EditorBridge(
 
 try {
   await bridge.connect(5000);
-  const result = await bridge.call("list_sockets", { assetPath }, 120000);
+  const result = await bridge.call("list_asset_sockets", { assetPath }, 120000);
   const sockets = Array.isArray(result?.sockets) ? result.sockets : [];
   const has = (name, source) => sockets.some((s) => s?.name === name && s?.source === source);
 

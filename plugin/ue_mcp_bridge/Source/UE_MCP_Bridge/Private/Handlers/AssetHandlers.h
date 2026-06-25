@@ -40,6 +40,17 @@ private:
 	static TSharedPtr<FJsonValue> RenameDataTableRow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> FillDataTableFromJson(const TSharedPtr<FJsonObject>& Params);
 
+	// CurveTable handlers
+	static TSharedPtr<FJsonValue> CreateCurveTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadCurveTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ImportCurveTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddCurveTableRow(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveCurveTableRow(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RenameCurveTableRow(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetCurveTableKeys(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetCurveTableKeys(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddCurveTableKey(const TSharedPtr<FJsonObject>& Params);
+
 	// FBX import handlers
 	static TSharedPtr<FJsonValue> ImportStaticMesh(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ImportSkeletalMesh(const TSharedPtr<FJsonObject>& Params);
@@ -57,6 +68,15 @@ private:
 	static TSharedPtr<FJsonValue> ImportTexture(const TSharedPtr<FJsonObject>& Params);
 	// #430: one-call batch of texture imports - loops AssetImportTasks inside the editor.
 	static TSharedPtr<FJsonValue> ImportTextureBatch(const TSharedPtr<FJsonObject>& Params);
+
+	// StringTable handlers
+	static TSharedPtr<FJsonValue> CreateStringTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadStringTable(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListStringTableKeys(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetStringTableEntry(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetStringTableEntry(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveStringTableEntry(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ImportStringTable(const TSharedPtr<FJsonObject>& Params);
 
 	// Export
 	static TSharedPtr<FJsonValue> ExportAsset(const TSharedPtr<FJsonObject>& Params);
@@ -87,6 +107,12 @@ private:
 	// v0.7.19 issue #150 — AssetRegistry referencers for a set of packages
 	static TSharedPtr<FJsonValue> GetReferencers(const TSharedPtr<FJsonObject>& Params);
 
+	// issue #588 — AssetRegistry forward dependencies for a set of packages
+	static TSharedPtr<FJsonValue> GetDependencies(const TSharedPtr<FJsonObject>& Params);
+
+	// issue #579 — AssetManager primary-asset-id enumeration / verification
+	static TSharedPtr<FJsonValue> GetPrimaryAssetIds(const TSharedPtr<FJsonObject>& Params);
+
 	// v1.0.0-rc.2 — #155 (asset gaps)
 	static TSharedPtr<FJsonValue> SetSkeletalMeshMaterialSlots(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DiagnoseRegistry(const TSharedPtr<FJsonObject>& Params);
@@ -95,6 +121,8 @@ private:
 	static TSharedPtr<FJsonValue> GetMeshBounds(const TSharedPtr<FJsonObject>& Params);
 	// #431: one-call mesh QA - bounds + materials + LOD/vertex/skeleton.
 	static TSharedPtr<FJsonValue> GetMeshInfo(const TSharedPtr<FJsonObject>& Params);
+	// #593: list bones (names + rest-pose transforms) from a SkeletalMesh/Skeleton asset.
+	static TSharedPtr<FJsonValue> ListSkeletonBones(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetMeshCollision(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> MoveFolder(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMeshNav(const TSharedPtr<FJsonObject>& Params);

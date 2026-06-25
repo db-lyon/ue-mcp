@@ -110,6 +110,24 @@ When `ue-mcp` is a dependency in the project's `package.json`, `npx ue-mcp` runs
 
 Then quit and relaunch your MCP client so it spawns the updated server.
 
+## A Fix Shipped but the Editor Behaves the Same (stale compiled plugin)
+
+Different from the case above. Here the version is correct - `ue-mcp doctor` shows latest, the server is up to date - but a fix that changes **editor behavior** (a dialog being auto-cancelled, an actor placed wrong, anything the C++ plugin does) still happens.
+
+Cause: the bridge's editor-side half is a C++ plugin shipped as source. Your editor runs the **compiled** version of it, and a plain `ue-mcp update` neither deploys the new source into your project nor recompiles it. The version `doctor` reports is the npm/server half, so it looks up to date while the loaded plugin is stale. The fix never reaches the editor.
+
+Fix: rebuild the plugin, then restart the editor so the new binary loads.
+
+```bash
+ue-mcp update --build
+```
+
+If `--build` reports success but the behavior still persists, force a clean rebuild (incremental builds and Live Coding can load stale patches over a fresh build):
+
+1. Delete `<Project>/Plugins/UE_MCP_Bridge/Binaries/` and `<Project>/Plugins/UE_MCP_Bridge/Intermediate/`.
+2. Delete any `*.patch_*.{dll,pdb,lib,exp}` under `<Project>/Binaries/Win64/`.
+3. Run `ue-mcp update --build` again, then restart the editor.
+
 ## Search Not Finding Assets
 
 If `asset(action="search")` misses assets in plugin directories:

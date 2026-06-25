@@ -23,7 +23,16 @@ private:
 	static TSharedPtr<FJsonValue> RecompileMaterial(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateMaterialInstance(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialParameter(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadMaterialInstance(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetMaterialInstanceParent(const TSharedPtr<FJsonObject>& Params);
+	// #594 batch reparent + reassign params across many Material Instances
+	static TSharedPtr<FJsonValue> BatchSetInstances(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ClearMaterialInstanceParameters(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListMaterialStaticSwitches(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetMaterialStaticSwitch(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetExpressionValue(const TSharedPtr<FJsonObject>& Params);
+	// #617 read/write a MaterialExpressionCustom's HLSL Code, inputs, output type
+	static TSharedPtr<FJsonValue> SetCustomExpression(const TSharedPtr<FJsonObject>& Params);
 
 	// Name-based handlers matching TS tool expectations
 	static TSharedPtr<FJsonValue> ConnectTextureToMaterial(const TSharedPtr<FJsonObject>& Params);

@@ -22,6 +22,26 @@ bool FMCPGameThreadExecutor::IsGameThread()
 
 namespace
 {
+	// #603: depth of bridge handlers currently running on the game thread.
+	// Game-thread only, so a plain int is safe (no atomics needed). Modal
+	// dialogs are also raised on the game thread, so the hook can read this
+	// to know whether the modal came from an in-flight bridge request.
+	int32 GHandlerInFlightDepth = 0;
+
+	struct FHandlerInFlightScope
+	{
+		FHandlerInFlightScope() { ++GHandlerInFlightDepth; }
+		~FHandlerInFlightScope() { --GHandlerInFlightDepth; }
+	};
+}
+
+bool FMCPGameThreadExecutor::IsHandlerInFlight()
+{
+	return IsInGameThread() && GHandlerInFlightDepth > 0;
+}
+
+namespace
+{
 	// Shared between the calling thread (which may abandon the wait on
 	// timeout) and the game-thread ticker lambda (which completes the work).
 	// Captured by value into the lambda so its lifetime extends past the
@@ -50,6 +70,7 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 	if (IsGameThread())
 	{
 		// Already on game thread, execute directly
+		FHandlerInFlightScope InFlight; // #603
 		return Handler(Params);
 	}
 
@@ -81,6 +102,7 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 			}
 			else
 			{
+				FHandlerInFlightScope InFlight; // #603
 				State->Result = Handler(Params);
 			}
 

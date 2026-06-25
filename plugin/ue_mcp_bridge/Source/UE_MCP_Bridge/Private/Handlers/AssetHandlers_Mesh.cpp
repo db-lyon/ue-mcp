@@ -393,6 +393,89 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshInfo(const TSharedPtr<FJsonObject>
 	return MCPResult(Result);
 }
 
+// #593 list_skeleton_bones - bone names + rest-pose transforms straight from a
+// SkeletalMesh or Skeleton asset (no live actor required). Complements the
+// actor-based animation(list_bones). Returns local and component-space rest
+// transforms so callers can place attachments without spawning anything.
+TSharedPtr<FJsonValue> FAssetHandlers::ListSkeletonBones(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	const bool bIncludeTransforms = OptionalBool(Params, TEXT("includeTransforms"), true);
+
+	FString SourceKind;
+	const FReferenceSkeleton* RefPtr = nullptr;
+	if (USkeletalMesh* SkelMesh = LoadAssetByPath<USkeletalMesh>(AssetPath))
+	{
+		RefPtr = &SkelMesh->GetRefSkeleton();
+		SourceKind = TEXT("SkeletalMesh");
+	}
+	else if (USkeleton* Skeleton = LoadAssetByPath<USkeleton>(AssetPath))
+	{
+		RefPtr = &Skeleton->GetReferenceSkeleton();
+		SourceKind = TEXT("Skeleton");
+	}
+	else
+	{
+		return MCPError(FString::Printf(TEXT("No SkeletalMesh or Skeleton found at '%s'"), *AssetPath));
+	}
+
+	const FReferenceSkeleton& Ref = *RefPtr;
+	const int32 NumBones = Ref.GetNum();
+	const TArray<FTransform>& RefPose = Ref.GetRefBonePose();
+
+	// Component-space accumulation. Bones are stored parent-before-child, so a
+	// single forward pass yields valid parent transforms for every child.
+	TArray<FTransform> CompSpace;
+	if (bIncludeTransforms)
+	{
+		CompSpace.SetNum(NumBones);
+		for (int32 i = 0; i < NumBones; ++i)
+		{
+			const int32 ParentIdx = Ref.GetParentIndex(i);
+			CompSpace[i] = (ParentIdx != INDEX_NONE && RefPose.IsValidIndex(i))
+				? RefPose[i] * CompSpace[ParentIdx]
+				: (RefPose.IsValidIndex(i) ? RefPose[i] : FTransform::Identity);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Bones;
+	for (int32 i = 0; i < NumBones; ++i)
+	{
+		TSharedPtr<FJsonObject> B = MakeShared<FJsonObject>();
+		B->SetStringField(TEXT("name"), Ref.GetBoneName(i).ToString());
+		B->SetNumberField(TEXT("index"), i);
+		const int32 ParentIdx = Ref.GetParentIndex(i);
+		B->SetNumberField(TEXT("parentIndex"), ParentIdx);
+		if (ParentIdx != INDEX_NONE) B->SetStringField(TEXT("parentName"), Ref.GetBoneName(ParentIdx).ToString());
+
+		if (bIncludeTransforms && RefPose.IsValidIndex(i))
+		{
+			const FTransform& Local = RefPose[i];
+			TSharedPtr<FJsonObject> LocalObj = MakeShared<FJsonObject>();
+			LocalObj->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Local.GetLocation()));
+			const FRotator LocalRot = Local.Rotator();
+			TSharedPtr<FJsonObject> LocalRotObj = MakeShared<FJsonObject>();
+			LocalRotObj->SetNumberField(TEXT("pitch"), LocalRot.Pitch);
+			LocalRotObj->SetNumberField(TEXT("yaw"), LocalRot.Yaw);
+			LocalRotObj->SetNumberField(TEXT("roll"), LocalRot.Roll);
+			LocalObj->SetObjectField(TEXT("rotation"), LocalRotObj);
+			LocalObj->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Local.GetScale3D()));
+			B->SetObjectField(TEXT("localTransform"), LocalObj);
+
+			B->SetObjectField(TEXT("componentSpaceLocation"), MCPVec3ToJsonObject(CompSpace[i].GetLocation()));
+		}
+		Bones.Add(MakeShared<FJsonValueObject>(B));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("sourceKind"), SourceKind);
+	Result->SetNumberField(TEXT("boneCount"), NumBones);
+	Result->SetArrayField(TEXT("bones"), Bones);
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::GetMeshBounds(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;

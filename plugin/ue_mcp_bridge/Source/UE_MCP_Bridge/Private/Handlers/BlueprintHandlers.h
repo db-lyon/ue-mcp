@@ -71,6 +71,8 @@ private:
 
 	// v0.7.18 issue #138: reparent a Blueprint to a new parent class.
 	static TSharedPtr<FJsonValue> ReparentBlueprint(const TSharedPtr<FJsonObject>& Params);
+	// #580 flush orphaned InheritableComponentHandler override records
+	static TSharedPtr<FJsonValue> FlushInheritableComponentHandler(const TSharedPtr<FJsonObject>& Params);
 
 	// issues #182/#183: C++ class CDO property access
 	static TSharedPtr<FJsonValue> SetCdoProperty(const TSharedPtr<FJsonObject>& Params);

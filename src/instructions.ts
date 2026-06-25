@@ -18,7 +18,7 @@ project — Project status, config INI, C++ source
   set_config, read_cpp_header, read_module, list_modules, search_cpp
 
 asset — Assets: list, search, CRUD, import, export, datatables, textures
-  list, search, read, read_properties, duplicate, rename, move, delete, save,
+  list, search, read, read_properties, list_properties, get_properties, duplicate, rename, move, delete, save,
   import_static_mesh, import_skeletal_mesh, import_animation, import_texture,
   read_datatable, create_datatable, reimport_datatable, list_textures,
   get_texture_info, set_texture_settings,
@@ -40,7 +40,9 @@ level — Level actors, selection, components, volumes, lights, splines
   get_spline_info, set_spline_points
 
 material — Materials, shading, and graph authoring
-  read, list_parameters, set_parameter, create_instance, create,
+  read, list_parameters, set_parameter, read_instance, set_instance_parent,
+  clear_instance_parameters, list_static_switches, set_static_switch,
+  create_instance, create,
   set_shading_model, set_base_color, connect_texture,
   add_expression, connect_expressions, connect_to_property,
   list_expressions, delete_expression, list_expression_types, recompile
@@ -79,7 +81,8 @@ widget — UMG widgets and editor utilities
   create_utility_blueprint, run_utility_blueprint
 
 editor — Console, Python, PIE, viewport, sequencer, perf, build pipeline, logs
-  execute_command, execute_python, set_property, play_in_editor,
+  execute_command, execute_python, set_property, get_property,
+  describe_object, play_in_editor,
   get_runtime_value, hot_reload, undo, redo,
   get_perf_stats, run_stat, set_scalability, capture_screenshot,
   get_viewport, set_viewport, focus_on_actor,

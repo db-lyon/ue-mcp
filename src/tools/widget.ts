@@ -25,7 +25,7 @@ export const widgetTool: ToolDef = categoryTool(
     wrap_root:                bp("Wrap the current root in a new panel widget (UMG 'Wrap With'). Params: assetPath, wrapperClass (must be a UPanelWidget subclass), wrapperName? (#365)", "wrap_root_widget", (p) => ({ assetPath: p.assetPath, path: p.path, wrapperClass: p.wrapperClass, widgetClass: p.widgetClass, wrapperName: p.wrapperName })),
     list_classes:             bp("List available widget classes", "list_widget_classes"),
     list_runtime:             bp("(#160) List live UUserWidget instances in the PIE world. Params: classFilter?, namePrefix?, viewportOnly?", "list_runtime_widgets"),
-    get_runtime:              bp("(#160) Inspect a live PIE widget tree with text/visibility/brush/percent values. Params: widgetName? | className?, childName?, maxDepth?", "get_runtime_widget"),
+    get_runtime:              bp("(#160) Inspect a live PIE widget tree with text/visibility/brush/percent plus style values: renderOpacity (all), colorAndOpacity (TextBlock/Image), Border brushColor/contentColorAndOpacity (#592). Params: widgetName? | className?, childName?, maxDepth?", "get_runtime_widget"),
     get_runtime_delegates:    bp("(#161) Read delegate binding state on a live PIE widget. Params: widgetName, className?. Returns array of {delegateName, isBound, numBindings}", "get_runtime_delegates"),
   },
   undefined,

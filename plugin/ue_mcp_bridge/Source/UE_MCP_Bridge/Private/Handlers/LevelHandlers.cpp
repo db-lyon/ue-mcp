@@ -6,6 +6,12 @@
 #include "Editor.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
+#include "NavigationSystem.h"
+#include "NavigationData.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "ReferenceSkeleton.h"
@@ -83,6 +89,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_selected_actors"), &GetSelectedActors);
 	Registry.RegisterHandler(TEXT("list_volumes"), &ListVolumes);
 	Registry.RegisterHandler(TEXT("move_actor"), &MoveActor);
+	Registry.RegisterHandler(TEXT("aim_actor_at"), &AimActorAt);
+	Registry.RegisterHandler(TEXT("nav_project_point"), &NavProjectPoint);
 	Registry.RegisterHandler(TEXT("select_actors"), &SelectActors);
 	Registry.RegisterHandler(TEXT("spawn_light"), &SpawnLight);
 	Registry.RegisterHandler(TEXT("set_light_properties"), &SetLightProperties);
@@ -98,6 +106,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_world_settings"), &SetWorldSettings);
 	Registry.RegisterHandler(TEXT("set_fog_properties"), &SetFogProperties);
 	Registry.RegisterHandler(TEXT("get_actors_by_class"), &GetActorsByClass);
+	Registry.RegisterHandler(TEXT("get_actors_by_component_class"), &GetActorsByComponentClass);
 	Registry.RegisterHandler(TEXT("count_actors_by_class"), &CountActorsByClass);
 	Registry.RegisterHandler(TEXT("get_runtime_virtual_texture_summary"), &GetRVTSummary);
 	Registry.RegisterHandler(TEXT("set_water_body_property"), &SetWaterBodyProperty);
@@ -234,7 +243,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 	FString ActorClass;
 	if (auto Err = RequireString(Params, TEXT("actorClass"), ActorClass)) return Err;
 
-	REQUIRE_EDITOR_WORLD(World);
+	// #585: respect world:pie so the actor spawns into the running PIE world
+	// instead of silently landing in the editor world.
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
 
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 	const FString Label = OptionalString(Params, TEXT("label"));
@@ -629,6 +642,25 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 			}
 		}
 
+		// #581: dynamically-spawned FX components' runtime state, so visual
+		// verification doesn't need Python. NiagaraComponent: asset/active/visible;
+		// AudioComponent: sound/playing. Works in editor or PIE (world scope).
+		if (UNiagaraComponent* Niagara = Cast<UNiagaraComponent>(Comp))
+		{
+			TSharedPtr<FJsonObject> Fx = MakeShared<FJsonObject>();
+			if (UNiagaraSystem* Sys = Niagara->GetAsset()) Fx->SetStringField(TEXT("asset"), Sys->GetPathName());
+			Fx->SetBoolField(TEXT("active"), Niagara->IsActive());
+			Fx->SetBoolField(TEXT("visible"), Niagara->IsVisible());
+			C->SetObjectField(TEXT("niagara"), Fx);
+		}
+		else if (UAudioComponent* Audio = Cast<UAudioComponent>(Comp))
+		{
+			TSharedPtr<FJsonObject> Fx = MakeShared<FJsonObject>();
+			if (USoundBase* Snd = Audio->GetSound()) Fx->SetStringField(TEXT("sound"), Snd->GetPathName());
+			Fx->SetBoolField(TEXT("playing"), Audio->IsPlaying());
+			C->SetObjectField(TEXT("audio"), Fx);
+		}
+
 		if (bIncludeProperties)
 		{
 			TArray<TSharedPtr<FJsonValue>> Props;
@@ -809,9 +841,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 	FString ActorLabel;
 	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
-	REQUIRE_EDITOR_WORLD(World);
+	// #586: support the PIE world so a label from get_outliner {world:pie}
+	// resolves and the live actor moves. FindActorByLabelOrName also matches the
+	// runtime instance name PIE shows.
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
 
-	AActor* Actor = FindActorByLabel(World, ActorLabel);
+	AActor* Actor = FindActorByLabelOrName(World, ActorLabel);
 	if (!Actor)
 	{
 		return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
@@ -850,6 +887,96 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 	Payload->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(PreviousScale));
 	MCPSetRollback(Result, TEXT("move_actor"), Payload);
 
+	return MCPResult(Result);
+}
+
+// #566 aim_actor_at - rotate an actor so its +X (forward) points at a target
+// point or another actor. Saves the "frame this from the bridge" round-trip of
+// reading two transforms and computing the look-at client-side.
+TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+
+	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	AActor* Actor = FindActorByLabel(World, ActorLabel);
+	if (!Actor) return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+
+	// Resolve the target point: an explicit target Vec3, or another actor's location.
+	FVector TargetLocation;
+	const FString TargetActorLabel = OptionalString(Params, TEXT("targetActor"));
+	if (!TargetActorLabel.IsEmpty())
+	{
+		AActor* TargetActor = FindActorByLabel(World, TargetActorLabel);
+		if (!TargetActor) return MCPError(FString::Printf(TEXT("Target actor not found: %s"), *TargetActorLabel));
+		TargetLocation = TargetActor->GetActorLocation();
+	}
+	else if (Params->HasField(TEXT("target")))
+	{
+		TargetLocation = OptionalVec3(Params, TEXT("target"), FVector::ZeroVector);
+	}
+	else
+	{
+		return MCPError(TEXT("Supply 'target' (Vec3) or 'targetActor' (label)"));
+	}
+
+	const FVector ActorLocation = Actor->GetActorLocation();
+	const FVector Direction = TargetLocation - ActorLocation;
+	if (Direction.IsNearlyZero())
+	{
+		return MCPError(TEXT("Actor and target are at the same location; look-at is undefined"));
+	}
+
+	const FRotator PreviousRotation = Actor->GetActorRotation();
+	FRotator LookAt = FRotationMatrix::MakeFromX(Direction).Rotator();
+	const double Roll = OptionalNumber(Params, TEXT("roll"), 0.0);
+	LookAt.Roll = Roll;
+	Actor->SetActorRotation(LookAt);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Actor->GetActorRotation()));
+	Result->SetObjectField(TEXT("target"), MCPVec3ToJsonObject(TargetLocation));
+
+	// Rollback: restore the prior rotation via move_actor.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(PreviousRotation));
+	MCPSetRollback(Result, TEXT("move_actor"), Payload);
+
+	return MCPResult(Result);
+}
+
+// #585 nav_project_point - project a world point onto the navmesh, returning the
+// nearest navigable location and whether the point is on the navmesh. Works in
+// editor or PIE (navmesh must be built/generated for the world).
+TSharedPtr<FJsonValue> FLevelHandlers::NavProjectPoint(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params->HasField(TEXT("point"))) return MCPError(TEXT("Missing 'point' (Vec3)"));
+	const FVector Point = OptionalVec3(Params, TEXT("point"), FVector::ZeroVector);
+
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	UNavigationSystemV1* Nav = UNavigationSystemV1::GetCurrent(World);
+	if (!Nav) return MCPError(TEXT("No navigation system in this world (add a NavMeshBoundsVolume and build navigation)"));
+
+	const FVector Extent = Params->HasField(TEXT("extent"))
+		? OptionalVec3(Params, TEXT("extent"), FVector(100.f, 100.f, 100.f))
+		: FVector(100.f, 100.f, 100.f);
+
+	FNavLocation Out;
+	const bool bOnNav = Nav->ProjectPointToNavigation(Point, Out, Extent);
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("onNavMesh"), bOnNav);
+	Result->SetObjectField(TEXT("queryPoint"), MCPVec3ToJsonObject(Point));
+	if (bOnNav) Result->SetObjectField(TEXT("projectedLocation"), MCPVec3ToJsonObject(Out.Location));
 	return MCPResult(Result);
 }
 
@@ -1588,6 +1715,55 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByClass(const TSharedPtr<FJsonOb
 			E->SetStringField(TEXT("label"), A->GetActorLabel());
 			E->SetStringField(TEXT("class"), CName);
 			E->SetStringField(TEXT("path"), A->GetPathName());
+			Out.Add(MakeShared<FJsonValueObject>(E));
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("actors"), Out);
+	Result->SetNumberField(TEXT("count"), Out.Num());
+	return MCPResult(Result);
+}
+
+// #582 find actors that own a component of a given class. Matches by component
+// class name (exact or substring), mirroring get_actors_by_class. Reports the
+// matched component name(s) so callers can target them directly afterwards.
+TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByComponentClass(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ComponentClass;
+	if (auto Err = RequireStringAlt(Params, TEXT("componentClass"), TEXT("className"), ComponentClass)) return Err;
+
+	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	TArray<TSharedPtr<FJsonValue>> Out;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* A = *It;
+		if (!A) continue;
+
+		TArray<TSharedPtr<FJsonValue>> Matched;
+		for (UActorComponent* Comp : A->GetComponents())
+		{
+			if (!Comp) continue;
+			const FString CompCName = Comp->GetClass()->GetName();
+			if (CompCName == ComponentClass || CompCName.Contains(ComponentClass))
+			{
+				TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
+				C->SetStringField(TEXT("name"), Comp->GetName());
+				C->SetStringField(TEXT("class"), CompCName);
+				Matched.Add(MakeShared<FJsonValueObject>(C));
+			}
+		}
+
+		if (Matched.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+			E->SetStringField(TEXT("label"), A->GetActorLabel());
+			E->SetStringField(TEXT("class"), A->GetClass()->GetName());
+			E->SetStringField(TEXT("path"), A->GetPathName());
+			E->SetArrayField(TEXT("matchedComponents"), Matched);
 			Out.Add(MakeShared<FJsonValueObject>(E));
 		}
 	}

@@ -424,6 +424,32 @@ static UClass* ResolveWidgetClass(const FString& ClassName)
 		return GuessClass;
 	}
 
+	// #576: custom user widget BP classes live in content and aren't loaded yet,
+	// so FindObject misses them. LoadObject a content path (with or without the
+	// generated-class _C suffix), or load the WidgetBlueprint and take its class.
+	if (ClassName.StartsWith(TEXT("/")))
+	{
+		if (UClass* PathClass = LoadObject<UClass>(nullptr, *ClassName))
+		{
+			if (PathClass->IsChildOf(UWidget::StaticClass())) return PathClass;
+		}
+		const FString WithC = ClassName.EndsWith(TEXT("_C")) ? ClassName : (ClassName + TEXT("_C"));
+		if (UClass* GenClass = LoadObject<UClass>(nullptr, *WithC))
+		{
+			if (GenClass->IsChildOf(UWidget::StaticClass())) return GenClass;
+		}
+		if (UObject* Asset = LoadObject<UObject>(nullptr, *ClassName))
+		{
+			if (UBlueprint* BP = Cast<UBlueprint>(Asset))
+			{
+				if (BP->GeneratedClass && BP->GeneratedClass->IsChildOf(UWidget::StaticClass()))
+				{
+					return BP->GeneratedClass;
+				}
+			}
+		}
+	}
+
 	return nullptr;
 }
 
@@ -1028,6 +1054,33 @@ namespace WidgetRuntime_Internal
 		else if (USlider* Slider = Cast<USlider>(Widget))
 		{
 			Obj->SetNumberField(TEXT("value"), Slider->GetValue());
+		}
+
+		// #592: style properties needed to verify visuals at runtime, not just
+		// tree/text. RenderOpacity applies to every UWidget; ColorAndOpacity and
+		// Border tint are per-type.
+		{
+			auto ColorJson = [](const FLinearColor& C)
+			{
+				TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+				O->SetNumberField(TEXT("r"), C.R); O->SetNumberField(TEXT("g"), C.G);
+				O->SetNumberField(TEXT("b"), C.B); O->SetNumberField(TEXT("a"), C.A);
+				return O;
+			};
+			Obj->SetNumberField(TEXT("renderOpacity"), Widget->GetRenderOpacity());
+			if (UTextBlock* TextW = Cast<UTextBlock>(Widget))
+			{
+				Obj->SetObjectField(TEXT("colorAndOpacity"), ColorJson(TextW->GetColorAndOpacity().GetSpecifiedColor()));
+			}
+			else if (UImage* ImgW = Cast<UImage>(Widget))
+			{
+				Obj->SetObjectField(TEXT("colorAndOpacity"), ColorJson(ImgW->GetColorAndOpacity()));
+			}
+			else if (UBorder* BorderW = Cast<UBorder>(Widget))
+			{
+				Obj->SetObjectField(TEXT("brushColor"), ColorJson(BorderW->GetBrushColor()));
+				Obj->SetObjectField(TEXT("contentColorAndOpacity"), ColorJson(BorderW->GetContentColorAndOpacity()));
+			}
 		}
 
 		if (Depth >= MaxDepth) return Obj;
