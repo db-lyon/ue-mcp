@@ -43,6 +43,7 @@
 #include "GameFramework/Actor.h"
 #include "EditorValidatorSubsystem.h"
 #include "SceneView.h"
+#include "RenderingThread.h"
 #include "Components/PrimitiveComponent.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Materials/MaterialInterface.h"
@@ -1742,7 +1743,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CheckForCrashes(const TSharedPtr<FJsonOb
 }
 TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonObject>& Params)
 {
-	REQUIRE_EDITOR_WORLD(World);
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World)
+	{
+		return MCPError(FString::Printf(TEXT("World '%s' not available"), *WorldScope));
+	}
 
 	FString OutputPath;
 	if (auto Err = RequireString(Params, TEXT("outputPath"), OutputPath)) return Err;
@@ -1794,6 +1800,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	Comp->TextureTarget = RT;
 
 	Comp->CaptureScene();
+	FlushRenderingCommands();
 
 	// Split outputPath into directory + filename for ExportRenderTarget.
 	FString AbsPath = OutputPath;
@@ -1820,6 +1827,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("height"), Height);
 	Result->SetNumberField(TEXT("sizeBytes"), (double)Size);
 	Result->SetStringField(TEXT("actorLabel"), CaptureLabel);
+	Result->SetStringField(TEXT("world"), WorldScope);
 	return MCPResult(Result);
 }
 

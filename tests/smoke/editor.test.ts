@@ -60,6 +60,19 @@ describe("editor — safe commands", () => {
     expect(r.ok, r.error).toBe(true);
   });
 
+  it("capture_scene_png", async () => {
+    const r = await callBridge(bridge, "capture_scene_png", {
+      outputPath: "Saved/Screenshots/mcp_scene_smoke.png",
+      location: { x: 0, y: -300, z: 200 },
+      rotation: { pitch: -20, yaw: 90, roll: 0 },
+      width: 320,
+      height: 180,
+      world: "editor",
+    });
+    expect(r.ok, r.error).toBe(true);
+    expect((r.result as Record<string, unknown>).sizeBytes).toBeGreaterThan(0);
+  });
+
   it("set_viewport_camera", async () => {
     const r = await callBridge(bridge, "set_viewport_camera", {
       location: { x: 0, y: 0, z: 300 },
