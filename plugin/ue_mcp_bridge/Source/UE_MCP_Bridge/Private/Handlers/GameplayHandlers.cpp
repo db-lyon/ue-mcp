@@ -1675,7 +1675,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 			FString PErr;
 			if (MCPJsonProperty::SetJsonOnProperty(P, P->ContainerPtrToValuePtr<void>(Cfg), KV.Value, PErr))
 			{
-				AppliedProps.Add(KV.Key);
+				AppliedProps.Add(FString(*KV.Key));
 			}
 		}
 	}

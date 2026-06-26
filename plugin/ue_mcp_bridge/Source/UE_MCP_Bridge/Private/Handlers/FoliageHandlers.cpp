@@ -275,7 +275,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SetFoliageTypeSettings(const TSharedPtr
 
 	for (const auto& KV : (*SettingsObj)->Values)
 	{
-		FString PropertyName = KV.Key;
+		FString PropertyName(*KV.Key);
 		FString PropertyValue;
 
 		// Convert the JSON value to a string for ImportText
@@ -402,7 +402,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageType(const TSharedPtr<FJso
 	{
 		for (const auto& KV : (*SettingsObj)->Values)
 		{
-			FString PropertyName = KV.Key;
+			FString PropertyName(*KV.Key);
 			FString PropertyValue;
 
 			if (KV.Value->Type == EJson::String)
