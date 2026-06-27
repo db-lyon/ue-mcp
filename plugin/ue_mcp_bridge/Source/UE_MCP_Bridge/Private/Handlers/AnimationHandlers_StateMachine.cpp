@@ -37,7 +37,7 @@
 #include "Animation/AnimComposite.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/Skeleton.h"
-#include "InstancedStruct.h"
+#include "StructUtils/InstancedStruct.h"
 #include "UObject/Package.h"
 #include "Misc/PackageName.h"
 #include "Runtime/Launch/Resources/Version.h"

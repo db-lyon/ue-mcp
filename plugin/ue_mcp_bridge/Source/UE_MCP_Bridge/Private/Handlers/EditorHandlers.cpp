@@ -1556,17 +1556,18 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetCVars(const TSharedPtr<FJsonObject>& 
 	{
 		for (const auto& Pair : (*CVarObj)->Values)
 		{
+			const FString CVarName(*Pair.Key);
 			FString ValStr;
 			if (Pair.Value.IsValid() && Pair.Value->TryGetString(ValStr))
 			{
-				Requests.Add({ Pair.Key, ValStr });
+				Requests.Add({ CVarName, ValStr });
 			}
 			else if (Pair.Value.IsValid())
 			{
 				// numbers/bools arrive as non-string JSON; stringify them.
 				double Num = 0.0; bool bBool = false;
-				if (Pair.Value->TryGetNumber(Num)) Requests.Add({ Pair.Key, FString::SanitizeFloat(Num) });
-				else if (Pair.Value->TryGetBool(bBool)) Requests.Add({ Pair.Key, bBool ? TEXT("1") : TEXT("0") });
+				if (Pair.Value->TryGetNumber(Num)) Requests.Add({ CVarName, FString::SanitizeFloat(Num) });
+				else if (Pair.Value->TryGetBool(bBool)) Requests.Add({ CVarName, bBool ? TEXT("1") : TEXT("0") });
 			}
 		}
 	}

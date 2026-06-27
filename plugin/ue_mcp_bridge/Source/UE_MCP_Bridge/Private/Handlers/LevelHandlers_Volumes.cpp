@@ -225,14 +225,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 	{
 		if (Pair.Key == TEXT("actorLabel") || Pair.Key == TEXT("action") || Pair.Key == TEXT("properties"))
 			continue;
-		Pairs.Emplace(Pair.Key, Pair.Value);
+		Pairs.Emplace(FString(*Pair.Key), Pair.Value);
 	}
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj && (*PropsObj).IsValid())
 	{
 		for (auto& Pair : (*PropsObj)->Values)
 		{
-			Pairs.Emplace(Pair.Key, Pair.Value);
+			Pairs.Emplace(FString(*Pair.Key), Pair.Value);
 		}
 	}
 	for (auto& Pair : Pairs)

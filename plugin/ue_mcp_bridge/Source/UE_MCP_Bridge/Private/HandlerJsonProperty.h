@@ -141,20 +141,21 @@ namespace MCPJsonProperty
 				H.EmptyValues();
 				for (const auto& Pair : (*Obj)->Values)
 				{
+					const FString Key(*Pair.Key);
 					const int32 Idx = H.AddDefaultValue_Invalid_NeedsRehash();
 					FString E;
-					if (!SetJsonOnProperty(MapProp->KeyProp, H.GetKeyPtr(Idx), MakeShared<FJsonValueString>(Pair.Key), E))
+					if (!SetJsonOnProperty(MapProp->KeyProp, H.GetKeyPtr(Idx), MakeShared<FJsonValueString>(Key), E))
 					{
 						H.EmptyValues();
 						H.Rehash();
-						OutError = FString::Printf(TEXT("map key '%s': %s"), *Pair.Key, *E);
+						OutError = FString::Printf(TEXT("map key '%s': %s"), *Key, *E);
 						return false;
 					}
 					if (!SetJsonOnProperty(MapProp->ValueProp, H.GetValuePtr(Idx), Pair.Value, E))
 					{
 						H.EmptyValues();
 						H.Rehash();
-						OutError = FString::Printf(TEXT("map value '%s': %s"), *Pair.Key, *E);
+						OutError = FString::Printf(TEXT("map value '%s': %s"), *Key, *E);
 						return false;
 					}
 				}

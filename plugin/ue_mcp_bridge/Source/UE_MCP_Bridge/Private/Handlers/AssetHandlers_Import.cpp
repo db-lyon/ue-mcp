@@ -1749,10 +1749,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableRow(const TSharedPtr<FJsonObj
 	bool bOk = true;
 	for (const auto& Pair : (*RowObj)->Values)
 	{
+		const FString FieldName(*Pair.Key);
 		FProperty* FieldProp = nullptr;
 		for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
 		{
-			if (It->GetName() == Pair.Key || It->GetAuthoredName() == Pair.Key)
+			if (It->GetName() == FieldName || It->GetAuthoredName() == FieldName)
 			{
 				FieldProp = *It;
 				break;
@@ -1760,7 +1761,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableRow(const TSharedPtr<FJsonObj
 		}
 		if (!FieldProp)
 		{
-			SetErr = FString::Printf(TEXT("row struct '%s' has no field '%s'"), *RowStruct->GetName(), *Pair.Key);
+			SetErr = FString::Printf(TEXT("row struct '%s' has no field '%s'"), *RowStruct->GetName(), *FieldName);
 			bOk = false;
 			break;
 		}
@@ -1768,7 +1769,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableRow(const TSharedPtr<FJsonObj
 		FString E;
 		if (!MCPJsonProperty::SetJsonOnProperty(FieldProp, FieldAddr, Pair.Value, E))
 		{
-			SetErr = FString::Printf(TEXT("%s: %s"), *Pair.Key, *E);
+			SetErr = FString::Printf(TEXT("%s: %s"), *FieldName, *E);
 			bOk = false;
 			break;
 		}
@@ -2277,7 +2278,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetStringTableEntry(const TSharedPtr<FJso
 	const bool bExisted = StringTable->GetStringTable()->GetSourceString(EntryKey, PreviousSourceString);
 
 	StringTable->Modify(true);
+#if WITH_EDITORONLY_DATA
+	StringTable->GetMutableStringTable()->SetSourceString(EntryKey, SourceString, FString());
+#else
 	StringTable->GetMutableStringTable()->SetSourceString(EntryKey, SourceString);
+#endif
 	SaveAssetPackage(StringTable);
 
 	auto Result = MCPSuccess();

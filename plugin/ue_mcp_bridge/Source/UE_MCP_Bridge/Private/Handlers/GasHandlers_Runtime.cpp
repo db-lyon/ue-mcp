@@ -183,7 +183,7 @@ TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& 
 			{
 				SpecHandle.Data->SetSetByCallerMagnitude(FName(*KV.Key), static_cast<float>(Mag));
 			}
-			AppliedKeys.Add(KV.Key);
+			AppliedKeys.Add(FString(*KV.Key));
 		}
 	}
 
