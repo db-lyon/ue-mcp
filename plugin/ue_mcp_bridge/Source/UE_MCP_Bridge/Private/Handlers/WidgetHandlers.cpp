@@ -54,6 +54,8 @@
 #include "EditorUtilityWidgetBlueprint.h"
 #include "EditorUtilityBlueprint.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/PlayerController.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"
 #include "EngineUtils.h"
@@ -80,6 +82,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("wrap_root_widget"), &WrapRoot);
 	Registry.RegisterHandler(TEXT("list_widget_classes"), &ListWidgetClasses);
 	Registry.RegisterHandler(TEXT("list_runtime_widgets"), &ListRuntimeWidgets);
+	Registry.RegisterHandler(TEXT("add_widget_to_pie_viewport"), &AddToPIEViewport);
 	Registry.RegisterHandler(TEXT("get_runtime_widget"), &GetRuntimeWidget);
 	// #161: Runtime delegate inspection
 	Registry.RegisterHandler(TEXT("get_runtime_delegates"), &GetRuntimeDelegates);
@@ -1016,6 +1019,17 @@ namespace WidgetRuntime_Internal
 		return TEXT("Unknown");
 	}
 
+	static bool TryParseVisibility(const FString& In, ESlateVisibility& Out)
+	{
+		const FString Value = In.Replace(TEXT("_"), TEXT("")).Replace(TEXT(" "), TEXT("")).ToLower();
+		if (Value == TEXT("visible")) { Out = ESlateVisibility::Visible; return true; }
+		if (Value == TEXT("collapsed")) { Out = ESlateVisibility::Collapsed; return true; }
+		if (Value == TEXT("hidden")) { Out = ESlateVisibility::Hidden; return true; }
+		if (Value == TEXT("hittestinvisible")) { Out = ESlateVisibility::HitTestInvisible; return true; }
+		if (Value == TEXT("selfhittestinvisible")) { Out = ESlateVisibility::SelfHitTestInvisible; return true; }
+		return false;
+	}
+
 	static TSharedPtr<FJsonObject> BuildRuntimeNode(UWidget* Widget, int32 Depth, int32 MaxDepth)
 	{
 		if (!Widget) return nullptr;
@@ -1164,6 +1178,98 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListRuntimeWidgets(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("world"), World->GetName());
 	Result->SetArrayField(TEXT("widgets"), WidgetsArr);
 	Result->SetNumberField(TEXT("count"), WidgetsArr.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::AddToPIEViewport(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace WidgetRuntime_Internal;
+
+	UWorld* World = ResolveRuntimeWorld();
+	if (!World)
+	{
+		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+	}
+
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	UClass* WidgetClass = nullptr;
+	if (UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(UEditorAssetLibrary::LoadAsset(AssetPath)))
+	{
+		WidgetClass = WidgetBP->GeneratedClass;
+	}
+	if (!WidgetClass)
+	{
+		WidgetClass = ResolveWidgetClass(AssetPath);
+	}
+	if (!WidgetClass && AssetPath.StartsWith(TEXT("/")))
+	{
+		FString PackagePath = AssetPath;
+		FString ObjectName;
+		if (!AssetPath.Split(TEXT("."), &PackagePath, &ObjectName, ESearchCase::CaseSensitive, ESearchDir::FromEnd))
+		{
+			ObjectName = FPackageName::GetShortName(PackagePath);
+		}
+		if (!ObjectName.EndsWith(TEXT("_C")))
+		{
+			ObjectName += TEXT("_C");
+		}
+		WidgetClass = LoadClass<UUserWidget>(nullptr, *(PackagePath + TEXT(".") + ObjectName));
+	}
+	if (!WidgetClass || !WidgetClass->IsChildOf(UUserWidget::StaticClass()))
+	{
+		return MCPError(FString::Printf(TEXT("assetPath must resolve to a UserWidget Blueprint/class: %s"), *AssetPath));
+	}
+
+	const int32 PlayerIndex = OptionalInt(Params, TEXT("playerIndex"), 0);
+	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(World, PlayerIndex);
+	if (!PlayerController)
+	{
+		return MCPError(FString::Printf(TEXT("Player controller %d not found in PIE world"), PlayerIndex));
+	}
+
+	const int32 ZOrder = OptionalInt(Params, TEXT("zOrder"), 0);
+	UUserWidget* Widget = CreateWidget<UUserWidget>(PlayerController, WidgetClass);
+	if (!Widget)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to create widget from %s"), *WidgetClass->GetPathName()));
+	}
+
+	FString VisibilityName = OptionalString(Params, TEXT("visibility"), TEXT(""));
+	if (!VisibilityName.IsEmpty())
+	{
+		ESlateVisibility ParsedVisibility;
+		if (!TryParseVisibility(VisibilityName, ParsedVisibility))
+		{
+			return MCPError(FString::Printf(TEXT("Unknown visibility '%s'. Use Visible, Hidden, Collapsed, HitTestInvisible, or SelfHitTestInvisible."), *VisibilityName));
+		}
+		Widget->SetVisibility(ParsedVisibility);
+	}
+	else if (OptionalBool(Params, TEXT("forceVisible"), false))
+	{
+		Widget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+	}
+
+	Widget->AddToViewport(ZOrder);
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("name"), Widget->GetName());
+	Result->SetStringField(TEXT("class"), WidgetClass->GetName());
+	Result->SetStringField(TEXT("classPath"), WidgetClass->GetPathName());
+	Result->SetStringField(TEXT("visibility"), VisibilityToString(Widget->GetVisibility()));
+	Result->SetBoolField(TEXT("isVisible"), Widget->IsVisible());
+	Result->SetBoolField(TEXT("inViewport"), Widget->IsInViewport());
+	Result->SetNumberField(TEXT("playerIndex"), PlayerIndex);
+	Result->SetNumberField(TEXT("zOrder"), ZOrder);
+	Result->SetStringField(TEXT("world"), World->GetName());
+	if (Widget->WidgetTree && Widget->WidgetTree->RootWidget)
+	{
+		Result->SetStringField(TEXT("rootWidgetName"), Widget->WidgetTree->RootWidget->GetName());
+		Result->SetStringField(TEXT("rootWidgetClass"), Widget->WidgetTree->RootWidget->GetClass()->GetName());
+	}
 	return MCPResult(Result);
 }
 
