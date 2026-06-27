@@ -622,8 +622,22 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	TargetGraph->Modify();
 	TargetGraph->AddNode(NewNode, false, false);
 	NewNode->CreateNewGuid();
-	NewNode->PostPlacedNewNode();
+
+	// #627: AllocateDefaultPins MUST run BEFORE PostPlacedNewNode. The engine's own
+	// spawner (UBlueprintNodeSpawner::SpawnEdGraphNode) allocates pins first and only
+	// then calls PostPlacedNewNode. Several node types dereference their own pins inside
+	// PostPlacedNewNode, so if the pins have not been allocated yet the lookup crashes
+	// the editor:
+	//   - K2Node_ConstructObjectFromClass (incl. K2Node_SpawnActorFromClass) reaches
+	//     GetResultPin() -> FindPinChecked(PN_ReturnValue), which asserts at
+	//     EdGraphNode.h:586 (check(Result) in FindPinChecked) when the result pin is absent.
+	//   - K2Node_AssignDelegate dereferences GetDelegatePin()->LinkedTo, a null-deref when
+	//     the "Delegate" pin has not been created yet.
+	// Allocating first matches the engine order and fixes both node families. (The
+	// AddDelegate base unconditionally creates the "Delegate" pin in AllocateDefaultPins,
+	// so AssignDelegate is safe even when its delegate reference is unbound.)
 	NewNode->AllocateDefaultPins();
+	NewNode->PostPlacedNewNode();
 
 	// #101/#118: after AllocateDefaultPins, force ReconstructNode so typed output pin
 	// ("As ClassName") appears for DynamicCast and typed pins appear for VariableGet.
