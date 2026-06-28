@@ -30,6 +30,7 @@
 #include "K2Node_ComponentBoundEvent.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_CallDelegate.h"
+#include "K2Node_BaseMCDelegate.h"
 #include "K2Node_ConstructObjectFromClass.h"
 #include "UObject/UnrealType.h"
 #include "UObject/Package.h"
@@ -522,6 +523,73 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		}
 	}
 
+	// #627: bind-style multicast-delegate nodes (K2Node_AddDelegate and its child
+	// K2Node_AssignDelegate, plus Remove/ClearDelegate). CallDelegate is matched by the
+	// earlier else-if, so this branch only catches the bind family. Setting the
+	// DelegateReference BEFORE AllocateDefaultPins makes the "Delegate" pin resolve to
+	// the dispatcher's signature; combined with the corrected
+	// AllocateDefaultPins-before-PostPlacedNewNode order, AssignDelegate's
+	// PostPlacedNewNode then auto-creates and wires the paired Custom Event — a fully
+	// bound "Bind Event to <Dispatcher>" in one add_node call. Without these params the
+	// node still places (unbound) and does not crash.
+	if (UK2Node_BaseMCDelegate* MCDelegateNode = Cast<UK2Node_BaseMCDelegate>(NewNode))
+	{
+		if (NodeParams && !MCDelegateNode->IsA<UK2Node_CallDelegate>())
+		{
+			FString DelegateName;
+			FString OwnerClass;
+
+			if (!(*NodeParams)->TryGetStringField(TEXT("delegateName"), DelegateName))
+			{
+				if (!(*NodeParams)->TryGetStringField(TEXT("functionName"), DelegateName))
+					(*NodeParams)->TryGetStringField(TEXT("memberName"), DelegateName);
+			}
+			if (!(*NodeParams)->TryGetStringField(TEXT("ownerClass"), OwnerClass))
+			{
+				if (!(*NodeParams)->TryGetStringField(TEXT("targetClass"), OwnerClass))
+					(*NodeParams)->TryGetStringField(TEXT("memberParent"), OwnerClass);
+			}
+
+			if (DelegateName.IsEmpty())
+			{
+				const TSharedPtr<FJsonObject>* DelRef = nullptr;
+				if ((*NodeParams)->TryGetObjectField(TEXT("DelegateReference"), DelRef))
+				{
+					(*DelRef)->TryGetStringField(TEXT("MemberName"), DelegateName);
+					if (OwnerClass.IsEmpty())
+						(*DelRef)->TryGetStringField(TEXT("MemberParent"), OwnerClass);
+				}
+			}
+
+			if (!DelegateName.IsEmpty())
+			{
+				if (!OwnerClass.IsEmpty())
+				{
+					UClass* Owner = LoadObject<UClass>(nullptr, *OwnerClass);
+					if (!Owner && !OwnerClass.EndsWith(TEXT("_C")))
+						Owner = LoadObject<UClass>(nullptr, *(OwnerClass + TEXT("_C")));
+					if (!Owner) Owner = FindClassByShortName(OwnerClass);
+					if (Owner)
+					{
+						FProperty* Prop = Owner->FindPropertyByName(FName(*DelegateName));
+						bool bIsSelf = Blueprint->ParentClass && Blueprint->ParentClass->IsChildOf(Owner);
+						if (Prop)
+							MCDelegateNode->SetFromProperty(Prop, bIsSelf, Owner);
+						else if (bIsSelf)
+							MCDelegateNode->DelegateReference.SetSelfMember(FName(*DelegateName));
+						else
+							MCDelegateNode->DelegateReference.SetExternalMember(FName(*DelegateName), Owner);
+					}
+				}
+				else
+				{
+					// Self member — dispatcher belongs to the Blueprint's own class
+					MCDelegateNode->DelegateReference.SetSelfMember(FName(*DelegateName));
+				}
+			}
+		}
+	}
+
 	// #443: K2Node_EnhancedInputAction.InputAction must be set before AllocateDefaultPins,
 	// otherwise pins like ActionValue come out as bool instead of Vector2D and the
 	// node title stays "EnhancedInputAction None". Accept inputAction (path) or
@@ -622,8 +690,22 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	TargetGraph->Modify();
 	TargetGraph->AddNode(NewNode, false, false);
 	NewNode->CreateNewGuid();
-	NewNode->PostPlacedNewNode();
+
+	// #627: AllocateDefaultPins MUST run BEFORE PostPlacedNewNode. The engine's own
+	// spawner (UBlueprintNodeSpawner::SpawnEdGraphNode) allocates pins first and only
+	// then calls PostPlacedNewNode. Several node types dereference their own pins inside
+	// PostPlacedNewNode, so if the pins have not been allocated yet the lookup crashes
+	// the editor:
+	//   - K2Node_ConstructObjectFromClass (incl. K2Node_SpawnActorFromClass) reaches
+	//     GetResultPin() -> FindPinChecked(PN_ReturnValue), which asserts at
+	//     EdGraphNode.h:586 (check(Result) in FindPinChecked) when the result pin is absent.
+	//   - K2Node_AssignDelegate dereferences GetDelegatePin()->LinkedTo, a null-deref when
+	//     the "Delegate" pin has not been created yet.
+	// Allocating first matches the engine order and fixes both node families. (The
+	// AddDelegate base unconditionally creates the "Delegate" pin in AllocateDefaultPins,
+	// so AssignDelegate is safe even when its delegate reference is unbound.)
 	NewNode->AllocateDefaultPins();
+	NewNode->PostPlacedNewNode();
 
 	// #101/#118: after AllocateDefaultPins, force ReconstructNode so typed output pin
 	// ("As ClassName") appears for DynamicCast and typed pins appear for VariableGet.
