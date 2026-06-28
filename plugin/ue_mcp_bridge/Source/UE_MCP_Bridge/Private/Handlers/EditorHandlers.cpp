@@ -29,6 +29,8 @@
 #include "Misc/App.h"
 #include "Logging/MessageLog.h"
 #include "HighResScreenshot.h"
+#include "ImageUtils.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -43,6 +45,7 @@
 #include "GameFramework/Actor.h"
 #include "EditorValidatorSubsystem.h"
 #include "SceneView.h"
+#include "RenderingThread.h"
 #include "Components/PrimitiveComponent.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Materials/MaterialInterface.h"
@@ -65,6 +68,55 @@
 
 namespace
 {
+	bool SaveViewportPng(FViewport* Viewport, const FString& FullPath, FIntPoint& OutSize, int64& OutSizeBytes, FString& OutError)
+	{
+		if (!Viewport)
+		{
+			OutError = TEXT("Viewport not available");
+			return false;
+		}
+
+		IFileManager::Get().MakeDirectory(*FPaths::GetPath(FullPath), /*Tree*/ true);
+
+		Viewport->Invalidate();
+		FlushRenderingCommands();
+
+		TArray<FColor> Bitmap;
+		if (!GetViewportScreenShot(Viewport, Bitmap) || Bitmap.Num() == 0)
+		{
+			OutError = TEXT("Failed to read pixels from viewport");
+			return false;
+		}
+
+		OutSize = Viewport->GetRenderTargetTextureSizeXY();
+		if (OutSize.X <= 0 || OutSize.Y <= 0 || Bitmap.Num() != OutSize.X * OutSize.Y)
+		{
+			OutSize = Viewport->GetSizeXY();
+		}
+		if (OutSize.X <= 0 || OutSize.Y <= 0 || Bitmap.Num() != OutSize.X * OutSize.Y)
+		{
+			OutError = FString::Printf(TEXT("Viewport size mismatch: %d pixels for %dx%d"), Bitmap.Num(), OutSize.X, OutSize.Y);
+			return false;
+		}
+
+		TArray<uint8> Compressed;
+		FImageUtils::ThumbnailCompressImageArray(OutSize.X, OutSize.Y, Bitmap, Compressed);
+		if (!FFileHelper::SaveArrayToFile(Compressed, *FullPath))
+		{
+			OutError = FString::Printf(TEXT("Failed to write viewport screenshot: %s"), *FullPath);
+			return false;
+		}
+
+		OutSizeBytes = IFileManager::Get().FileSize(*FullPath);
+		if (OutSizeBytes < 0)
+		{
+			OutError = FString::Printf(TEXT("Viewport screenshot was not written: %s"), *FullPath);
+			return false;
+		}
+
+		return true;
+	}
+
 	bool ResolveEditorObjectFromPath(const FString& ObjectPath, UObject*& OutObject, FString& OutResolvedKind, FString& OutError)
 	{
 		UObject* Object = LoadObject<UObject>(nullptr, *ObjectPath);
@@ -1012,9 +1064,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		return MCPError(TEXT("Editor not available"));
 	}
 
-	// #226: target=pie (or auto-detect when PIE is running) routes through
-	// HighResShot in the active PIE world so we capture the player viewport
-	// instead of whatever the editor camera was last looking at.
+	// #226/#575: target=pie (or auto-detect when PIE is running) reads the
+	// live game viewport. HighResShot can be dispatched into PIE but still
+	// capture from the editor/free camera path in practice.
 	const FString Target = OptionalString(Params, TEXT("target"), TEXT("auto")).ToLower();
 	UWorld* PieWorld = nullptr;
 	if (FWorldContext* PieCtx = GEditor->GetPIEWorldContext())
@@ -1025,22 +1077,39 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 
 	if (bUsePie && PieWorld)
 	{
-		int32 Width = OptionalInt(Params, TEXT("width"), 1920);
-		int32 Height = OptionalInt(Params, TEXT("height"), 1080);
-		// Some callers pass a single 'resolution' (long edge); honour it as width.
-		double ResolutionScalar = 0.0;
-		if (Params->TryGetNumberField(TEXT("resolution"), ResolutionScalar) && ResolutionScalar > 0)
+		UGameViewportClient* GameViewport = PieWorld->GetGameViewport();
+		FViewport* Viewport = GameViewport ? GameViewport->GetGameViewport() : nullptr;
+		if (!Viewport)
 		{
-			Width = (int32)ResolutionScalar;
-			Height = (int32)(ResolutionScalar * 9.0 / 16.0);
+			return MCPError(TEXT("PIE game viewport not available"));
 		}
-		const FString ConsoleCmd = FString::Printf(TEXT("HighResShot %dx%d"), Width, Height);
-		GEngine->Exec(PieWorld, *ConsoleCmd);
+
+		FString FullPath = Filename;
+		if (FPaths::IsRelative(FullPath))
+		{
+			FullPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), FullPath);
+		}
+		if (!FullPath.EndsWith(TEXT(".png")))
+		{
+			FullPath = FPaths::ChangeExtension(FullPath, TEXT("png"));
+		}
+
+		FIntPoint Size;
+		int64 SizeBytes = 0;
+		FString Error;
+		if (!SaveViewportPng(Viewport, FullPath, Size, SizeBytes, Error))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to capture PIE game viewport: %s"), *Error));
+		}
+
 		auto Result = MCPSuccess();
-		Result->SetStringField(TEXT("filename"), Filename);
+		Result->SetStringField(TEXT("filename"), FullPath);
+		Result->SetStringField(TEXT("path"), FullPath);
 		Result->SetStringField(TEXT("target"), TEXT("pie"));
-		Result->SetStringField(TEXT("consoleCommand"), ConsoleCmd);
-		Result->SetStringField(TEXT("note"), TEXT("HighResShot dispatched into PIE world; output lands in Saved/Screenshots/<map>/."));
+		Result->SetNumberField(TEXT("width"), Size.X);
+		Result->SetNumberField(TEXT("height"), Size.Y);
+		Result->SetNumberField(TEXT("sizeBytes"), (double)SizeBytes);
+		Result->SetStringField(TEXT("note"), TEXT("Captured the live PIE game viewport synchronously."));
 		return MCPResult(Result);
 	}
 
@@ -1071,6 +1140,27 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 	else
 	{
 		FullPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), Filename);
+	}
+
+	if (FullPath.EndsWith(TEXT(".png")) && ViewportClient->Viewport)
+	{
+		FIntPoint Size;
+		int64 SizeBytes = 0;
+		FString Error;
+		if (!SaveViewportPng(ViewportClient->Viewport, FullPath, Size, SizeBytes, Error))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to capture editor viewport: %s"), *Error));
+		}
+
+		auto Result = MCPSuccess();
+		Result->SetStringField(TEXT("filename"), FullPath);
+		Result->SetStringField(TEXT("path"), FullPath);
+		Result->SetStringField(TEXT("target"), TEXT("editor"));
+		Result->SetNumberField(TEXT("width"), Size.X);
+		Result->SetNumberField(TEXT("height"), Size.Y);
+		Result->SetNumberField(TEXT("sizeBytes"), (double)SizeBytes);
+		Result->SetStringField(TEXT("note"), TEXT("Captured the editor viewport synchronously."));
+		return MCPResult(Result);
 	}
 
 	// Request the screenshot
@@ -1743,7 +1833,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CheckForCrashes(const TSharedPtr<FJsonOb
 }
 TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonObject>& Params)
 {
-	REQUIRE_EDITOR_WORLD(World);
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World)
+	{
+		return MCPError(FString::Printf(TEXT("World '%s' not available"), *WorldScope));
+	}
 
 	FString OutputPath;
 	if (auto Err = RequireString(Params, TEXT("outputPath"), OutputPath)) return Err;
@@ -1795,6 +1890,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	Comp->TextureTarget = RT;
 
 	Comp->CaptureScene();
+	FlushRenderingCommands();
 
 	// Split outputPath into directory + filename for ExportRenderTarget.
 	FString AbsPath = OutputPath;
@@ -1821,6 +1917,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("height"), Height);
 	Result->SetNumberField(TEXT("sizeBytes"), (double)Size);
 	Result->SetStringField(TEXT("actorLabel"), CaptureLabel);
+	Result->SetStringField(TEXT("world"), WorldScope);
 	return MCPResult(Result);
 }
 
