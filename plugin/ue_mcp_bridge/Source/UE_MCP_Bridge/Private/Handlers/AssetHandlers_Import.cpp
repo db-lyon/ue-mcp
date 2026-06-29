@@ -2278,7 +2278,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetStringTableEntry(const TSharedPtr<FJso
 	const bool bExisted = StringTable->GetStringTable()->GetSourceString(EntryKey, PreviousSourceString);
 
 	StringTable->Modify(true);
-#if WITH_EDITORONLY_DATA
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7)
+	StringTable->GetMutableStringTable()->SetSourceString(EntryKey, SourceString);
+#elif WITH_EDITORONLY_DATA
 	StringTable->GetMutableStringTable()->SetSourceString(EntryKey, SourceString, FString());
 #else
 	StringTable->GetMutableStringTable()->SetSourceString(EntryKey, SourceString);
