@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { EpicCatalog } from "./epic-enrich.js";
 
 /**
@@ -57,4 +58,30 @@ export function loadCatalogCache(projectDir?: string): EpicCatalog | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Load the catalog snapshot baked into the shipped package
+ * (assets/epic-catalog.snapshot.json). This is the deterministic default source
+ * so the Epic tool surface appears on the very first startup, with no editor and
+ * no prior cache, and matches the generated docs (same snapshot feeds both).
+ * Returns null if the asset is missing (e.g. a dev build before the snapshot is
+ * generated).
+ */
+export function loadBakedCatalog(): EpicCatalog | null {
+  // dist/epic-cache.js -> package root is one level up; assets/ ships there.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.join(here, "..", "assets", "epic-catalog.snapshot.json"),
+    path.join(here, "..", "..", "assets", "epic-catalog.snapshot.json"),
+  ];
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      return JSON.parse(fs.readFileSync(file, "utf-8")) as EpicCatalog;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }

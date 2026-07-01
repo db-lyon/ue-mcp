@@ -62,7 +62,11 @@ const CATEGORIES: ToolCategory[] = [
  * block. Preserves anything already in the file (version, plugins, tasks,
  * flows, http, feedback, etc.).
  */
-function writeProjectConfig(projectDir: string, disabled: string[]): void {
+function writeProjectConfig(
+  projectDir: string,
+  disabled: string[],
+  nativeTools?: { enabled: boolean; exclude: string[] },
+): void {
   const configPath = path.join(projectDir, "ue-mcp.yml");
   let existing: Record<string, unknown> = {};
   if (fs.existsSync(configPath)) {
@@ -81,6 +85,16 @@ function writeProjectConfig(projectDir: string, disabled: string[]): void {
     block.disable = disabled;
   } else {
     delete block.disable;
+  }
+
+  // Native (Epic 5.8) tools are on by default, so only persist nativeTools when
+  // it diverges from the default: disabled entirely, or enabled-with-exclusions.
+  if (nativeTools) {
+    const nt: Record<string, unknown> = {};
+    if (!nativeTools.enabled) nt.enabled = false;
+    else if (nativeTools.exclude.length > 0) nt.exclude = nativeTools.exclude;
+    if (Object.keys(nt).length > 0) block.nativeTools = nt;
+    else delete block.nativeTools;
   }
 
   if (!Array.isArray(block.contentRoots) || (block.contentRoots as unknown[]).length === 0) {
@@ -217,6 +231,40 @@ async function init() {
   const disabled: string[] = [];
   for (let i = 0; i < optional.length; i++) {
     if (!states[i]) disabled.push(optional[i].name);
+  }
+
+  console.log("");
+
+  // 2b. Native (Epic 5.8) MCP tools — on by default. Wraps Unreal's own
+  // ToolsetRegistry (the plugin behind Unreal's experimental MCP server) so
+  // every official toolset is surfaced as first-class actions inside the
+  // matching ue-mcp category. Requires UE 5.8+ with the ToolsetRegistry plugin.
+  const existingNative = (project.config.nativeTools ?? {}) as { enabled?: boolean; exclude?: string[] };
+  const nativeEnableStates = await checkboxSelect("Native Unreal tools (Epic 5.8)", [
+    {
+      label: "Enable native Epic 5.8 MCP tools",
+      checked: existingNative.enabled !== false, // on by default (opt-out)
+      suffix: "Wraps Unreal's ToolsetRegistry (GAS, Niagara, PCG, UMG, ...) as first-class actions in the matching categories",
+    },
+  ]);
+  const nativeEnabled = nativeEnableStates[0];
+
+  // Categories that receive Epic tools (mirrors routeToolset targets). Only
+  // offer ones the user hasn't already disabled above.
+  const ENRICHABLE = [
+    "gas", "niagara", "pcg", "widget", "statetree", "animation",
+    "gameplay", "material", "landscape", "foliage", "level", "asset", "blueprint",
+  ];
+  let nativeExclude: string[] = [];
+  if (nativeEnabled) {
+    const existingExclude = new Set(existingNative.exclude ?? []);
+    const offer = ENRICHABLE.filter((c) => !disabled.includes(c));
+    const includeStates = await checkboxSelect(
+      "Include native tools in these categories (uncheck to skip)",
+      offer.map((c) => ({ label: c, checked: !existingExclude.has(c) })),
+    );
+    nativeExclude = offer.filter((_, i) => !includeStates[i]);
+    console.log("");
   }
 
   console.log("");
@@ -500,7 +548,7 @@ async function init() {
   // feedback toggle from step 9 is captured. contentRoots seeding lives
   // inside writeProjectConfig.
   const ueMcpYmlPath = path.join(project.projectDir!, "ue-mcp.yml");
-  writeProjectConfig(project.projectDir!, disabled);
+  writeProjectConfig(project.projectDir!, disabled, { enabled: nativeEnabled, exclude: nativeExclude });
   ok("ue-mcp.yml written");
   wrote.push({ what: "tool surface + content roots", where: ueMcpYmlPath });
 

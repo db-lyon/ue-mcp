@@ -23,7 +23,7 @@ import yaml from "js-yaml";
 
 import { ALL_TOOLS } from "./tools.js";
 import { enrichToolsWithEpicCatalog, type EpicCatalog } from "./epic-enrich.js";
-import { saveCatalogCache, loadCatalogCache } from "./epic-cache.js";
+import { saveCatalogCache, loadCatalogCache, loadBakedCatalog } from "./epic-cache.js";
 
 type TextBlock = { type: "text"; text: string };
 
@@ -86,32 +86,48 @@ async function main() {
   // are dispatchable and advertised. When the editor is not up yet, the `epic`
   // gateway still works; a server restart picks up enrichment. (Re-enrichment on
   // late connect would require tools/list_changed and is a follow-up.)
-  try {
-    let catalog: EpicCatalog | null = null;
-    if (!bridge.isConnected) {
-      await bridge.connect(2000).catch(() => {});
-    }
-    if (bridge.isConnected) {
-      // Live editor: fetch the current catalog and refresh the cache.
-      catalog = (await bridge.call("epic_list_toolsets", { includeSchemas: true }, 20000)) as EpicCatalog;
-      saveCatalogCache(configDir, catalog, project.engineAssociation);
-    } else {
-      // Offline: surface the last-seen catalog so the tool set stays stable
-      // across sessions and is inspectable without a running editor.
-      catalog = loadCatalogCache(configDir);
+  const nativeCfg = project.config.nativeTools ?? {};
+  const nativeEnabled = nativeCfg.enabled !== false; // on by default (opt-out)
+  if (!nativeEnabled) {
+    console.error("[ue-mcp] Native Epic tools disabled via ue-mcp.yml (nativeTools.enabled=false); epic gateway still available");
+  } else {
+    try {
+      // Source priority: live editor (most current, refreshes the cache) ->
+      // project cache (last-seen) -> baked snapshot shipped with the package
+      // (deterministic default so the surface appears on first cold startup and
+      // matches the generated docs). First available wins.
+      let catalog: EpicCatalog | null = null;
+      let source = "";
+      if (!bridge.isConnected) {
+        await bridge.connect(2000).catch(() => {});
+      }
+      if (bridge.isConnected) {
+        catalog = (await bridge.call("epic_list_toolsets", { includeSchemas: true }, 20000)) as EpicCatalog;
+        if (catalog?.toolsets?.length) {
+          saveCatalogCache(configDir, catalog, project.engineAssociation);
+          source = "live editor";
+        }
+      }
+      if (!catalog?.toolsets?.length) {
+        catalog = loadCatalogCache(configDir);
+        if (catalog?.toolsets?.length) source = "project cache";
+      }
+      if (!catalog?.toolsets?.length) {
+        catalog = loadBakedCatalog();
+        if (catalog?.toolsets?.length) source = "baked snapshot";
+      }
       if (catalog?.toolsets?.length) {
-        console.error("[ue-mcp] Epic toolsets: editor offline, enriching from cached catalog");
+        const enriched = enrichToolsWithEpicCatalog(activeTools, catalog, {
+          excludeCategories: nativeCfg.exclude,
+        });
+        if (enriched.injected > 0) {
+          const summary = Object.entries(enriched.byCategory).map(([c, n]) => `${c}:${n}`).join(", ");
+          console.error(`[ue-mcp] Epic 5.8 toolsets (${source}): surfaced ${enriched.injected} tools (${summary})`);
+        }
       }
+    } catch (e) {
+      console.error(`[ue-mcp] Epic toolset enrichment skipped: ${e instanceof Error ? e.message : e}`);
     }
-    if (catalog) {
-      const enriched = enrichToolsWithEpicCatalog(activeTools, catalog);
-      if (enriched.injected > 0) {
-        const summary = Object.entries(enriched.byCategory).map(([c, n]) => `${c}:${n}`).join(", ");
-        console.error(`[ue-mcp] Epic 5.8 toolsets: surfaced ${enriched.injected} tools (${summary})`);
-      }
-    }
-  } catch (e) {
-    console.error(`[ue-mcp] Epic toolset enrichment skipped: ${e instanceof Error ? e.message : e}`);
   }
 
   // Lazy flow accessor — reads ue-mcp.yml fresh each call so agents see

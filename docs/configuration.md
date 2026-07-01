@@ -53,6 +53,10 @@ ue-mcp:
   disable:
     - gas
     - networking
+  nativeTools:
+    enabled: true
+    exclude:
+      - animation
   http:
     enabled: false
 
@@ -77,7 +81,18 @@ plugins: []
 | `version` | `1` | `1` | Schema version; required. Set automatically by init. |
 | `contentRoots` | `string[]` | `["/Game/"]` | Content paths to search when using `asset(action="search")`. Add plugin content roots here if your project uses plugins with their own assets. |
 | `disable` | `string[]` | `[]` | Tool categories to disable. Disabled categories are not registered with the MCP server, reducing context noise for the AI. Use `"feedback"` here to opt out of the feedback tool entirely. |
+| `nativeTools` | `object` | `{ enabled: true }` | Native (Epic 5.8 ToolsetRegistry) tool surfacing. `enabled` (bool, default `true`) turns the whole feature on/off; when off, only the `epic` discovery gateway remains. `exclude` (`string[]`) names ue-mcp categories that should not be enriched with Epic tools (they stay reachable via `epic(call_tool)`). See [Native Epic tools](#native-epic-5-8-tools) below. |
 | `http` | `object` | `undefined` (HTTP server off) | Optional REST surface for the flow engine. Object with `enabled` (bool), `port` (default `7723`), `host` (default `127.0.0.1`). When `enabled: true`, the MCP server also serves `GET /flows`, `GET /flows/<name>/plan`, `POST /flows/<name>/run`, and the Server-Sent Events stream at `GET /flows/events` (live per-step lifecycle events; see [Live Observation](flows.md#live-observation-sse)) over HTTP so external tools can drive and observe flows without an MCP client. |
+
+### Native Epic 5.8 tools
+
+Unreal Engine 5.8 ships an experimental AI Toolset Registry (the plugin behind Unreal's own MCP server). ue-mcp reaches that registry in-process and surfaces every official toolset as first-class actions inside the matching ue-mcp category - Epic's GAS tools appear in `gas`, Niagara in `niagara`, and so on - so an agent discovers them in context. Toolsets with no natural home are reachable through the `epic` gateway (`status` / `list_toolsets` / `describe_toolset` / `call_tool`).
+
+- **On by default.** `npx ue-mcp init` includes a "Native Unreal tools (Epic 5.8)" page where you enable the feature and optionally exclude specific categories. The choice is written to `nativeTools` in `ue-mcp.yml`.
+- **Requires UE 5.8+** with the `ToolsetRegistry` plugin (and the toolset plugins you want) enabled in your project. On older engines or when the plugin is absent, enrichment is skipped and `epic(status)` reports `available: false`.
+- **Deterministic surface.** The catalog is sourced from the live editor when connected, falling back to a per-project cache and then a snapshot baked into the ue-mcp package, so the wrapped tools appear even on a cold first start and match the generated [tool reference](tool-reference.md) (both are built from the same snapshot). The 🧩 badge in the tool reference marks every wrapped official tool.
+
+To turn it off entirely, set `nativeTools.enabled: false` (the `epic` gateway stays available). To keep it on but drop a noisy domain, add that category to `nativeTools.exclude`.
 
 The feedback approval mode (`interactive` / `auto-approve` / `defer`) is intentionally **not** in `ue-mcp.yml` — it varies per developer and per machine, so it lives in `~/.ue-mcp/state.json` and is managed with `npx ue-mcp feedback mode ...` or the `UE_MCP_FEEDBACK_MODE` env var. See [Feedback → modes](feedback.md#feedback-modes).
 

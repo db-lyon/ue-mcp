@@ -22,7 +22,7 @@ import { enrichToolsWithEpicCatalog } from "../dist/epic-enrich.js";
 import { categoryTool } from "../dist/types.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SNAPSHOT = path.join(ROOT, "scripts", "data", "epic-catalog.snapshot.json");
+const SNAPSHOT = path.join(ROOT, "assets", "epic-catalog.snapshot.json");
 const DOC = path.join(ROOT, "docs", "tool-reference.md");
 const BADGE = "🧩"; // Official Epic 5.8 tool marker (legend added near the top).
 

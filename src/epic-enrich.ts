@@ -102,9 +102,10 @@ export interface EnrichResult {
 export function enrichToolsWithEpicCatalog(
   tools: ToolDef[],
   catalog: EpicCatalog,
-  opts: { epicCategoryName?: string } = {},
+  opts: { epicCategoryName?: string; excludeCategories?: string[] } = {},
 ): EnrichResult {
   const epicName = opts.epicCategoryName ?? "epic";
+  const excluded = new Set(opts.excludeCategories ?? []);
   const byName = new Map(tools.map((t) => [t.name, t]));
   const epicTool = byName.get(epicName);
   const result: EnrichResult = { injected: 0, byCategory: {} };
@@ -127,6 +128,9 @@ export function enrichToolsWithEpicCatalog(
   for (const ts of catalog.toolsets) {
     if (!ts?.name || !ts.tools?.length) continue;
     const targetCat = routeToolset(ts.name) ?? epicName;
+    // Excluded categories are not enriched (tools stay reachable via the epic
+    // gateway's call_tool). Excluding the epic umbrella drops unrouted tools.
+    if (excluded.has(targetCat)) continue;
     const target = byName.get(targetCat) ?? epicTool;
     if (!target) continue;
 

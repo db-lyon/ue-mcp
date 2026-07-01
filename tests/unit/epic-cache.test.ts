@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { saveCatalogCache, loadCatalogCache } from "../../src/epic-cache.js";
+import { saveCatalogCache, loadCatalogCache, loadBakedCatalog } from "../../src/epic-cache.js";
 import type { EpicCatalog } from "../../src/epic-enrich.js";
 
 const CATALOG: EpicCatalog = {
@@ -25,5 +25,12 @@ describe("epic-cache", () => {
   it("returns null for an undefined project dir (never throws)", () => {
     expect(loadCatalogCache(undefined)).toBeNull();
     expect(() => saveCatalogCache(undefined, CATALOG)).not.toThrow();
+  });
+
+  it("loads the baked snapshot shipped in assets/", () => {
+    const baked = loadBakedCatalog();
+    expect(baked).not.toBeNull();
+    expect(Array.isArray(baked?.toolsets)).toBe(true);
+    expect((baked?.toolsets?.length ?? 0)).toBeGreaterThan(0);
   });
 });

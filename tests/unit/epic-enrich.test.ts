@@ -116,4 +116,13 @@ describe("enrichToolsWithEpicCatalog", () => {
     const r = enrichToolsWithEpicCatalog(tools, { toolsets: [] });
     expect(r.injected).toBe(0);
   });
+
+  it("skips categories listed in excludeCategories", () => {
+    const tools = fixtureTools();
+    const r = enrichToolsWithEpicCatalog(tools, CATALOG, { excludeCategories: ["gas"] });
+    expect(r.byCategory.gas).toBeUndefined();
+    expect(r.byCategory.niagara).toBe(1);
+    const gas = tools.find((t) => t.name === "gas")!;
+    expect(Object.keys(gas.actions).some((a) => a.startsWith("epic_"))).toBe(false);
+  });
 });
