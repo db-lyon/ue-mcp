@@ -150,8 +150,10 @@ function regenerateToolReference(counts: Counts): string {
     for (const [actionName, spec] of Object.entries(t.actions)) {
       const { desc, params } = splitDescription(spec.description);
       const left = "`" + actionName + "`";
-      const merged = params ? `${desc}. Params: \`${cell(params)}\`` : desc;
-      lines.push(`| ${left} | ${cell(merged) || "-"} |`);
+      // Escape each part exactly once. Escaping the already-escaped `merged`
+      // again double-escaped pipes (`\\|`) and broke the MDX table renderer.
+      const merged = params ? `${cell(desc)}. Params: \`${cell(params)}\`` : cell(desc);
+      lines.push(`| ${left} | ${merged || "-"} |`);
     }
     lines.push("");
     lines.push("---");
