@@ -34,8 +34,28 @@ interface Counts {
   bridgeActions: number;
   localActions: number;
   perTool: Record<string, number>;
+  /** Official Unreal 5.8 ToolsetRegistry toolsets ue-mcp wraps (from the baked
+   *  catalog snapshot). These surface as first-class actions at runtime but are
+   *  not part of the static `actions` count. */
+  nativeToolsets: number;
+  /** Total official Epic tools wrapped across all native toolsets. */
+  nativeToolActions: number;
   generatedAt: string;
   version: string;
+}
+
+/** Count the wrapped Epic tools from the shipped catalog snapshot. */
+function computeNativeCounts(): { nativeToolsets: number; nativeToolActions: number } {
+  try {
+    const snap = JSON.parse(
+      fs.readFileSync(path.join(repo, "assets", "epic-catalog.snapshot.json"), "utf8"),
+    ) as { toolsets?: Array<{ tools?: unknown[] }> };
+    const toolsets = snap.toolsets ?? [];
+    const tools = toolsets.reduce((n, t) => n + (t.tools?.length ?? 0), 0);
+    return { nativeToolsets: toolsets.length, nativeToolActions: tools };
+  } catch {
+    return { nativeToolsets: 0, nativeToolActions: 0 };
+  }
 }
 
 function computeCounts(): Counts {
@@ -48,12 +68,15 @@ function computeCounts(): Counts {
   }
   const bridge = enumerateBridgeActions().length;
   const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8"));
+  const native = computeNativeCounts();
   return {
     tools: ALL_TOOLS.length,
     actions: total,
     bridgeActions: bridge,
     localActions: total - bridge,
     perTool,
+    nativeToolsets: native.nativeToolsets,
+    nativeToolActions: native.nativeToolActions,
     generatedAt: new Date().toISOString(),
     version: pkg.version,
   };
