@@ -49,7 +49,7 @@ async function main() {
     log('  1. Install UE5.3+ to default location, OR');
     log('  2. Set UE_EDITOR_PATH environment variable to your UnrealEditor.exe path');
     log('');
-    log('Example: set UE_EDITOR_PATH=C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Binaries\\Win64\\UnrealEditor.exe');
+    log('Example: set UE_EDITOR_PATH=C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor.exe');
     process.exit(1);
   }
 

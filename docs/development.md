@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+
-- Unreal Engine 5.4–5.7 (for live testing)
+- Unreal Engine 5.4–5.8 (for live testing)
 - A UE project to test against
 
 ## Setup

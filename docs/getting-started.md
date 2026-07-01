@@ -6,7 +6,7 @@ UE-MCP lets you tell an AI assistant what you want done in Unreal. It can place 
 
 ## Prerequisites
 
-1. Install [**Unreal Engine 5.4 to 5.7**](https://www.unrealengine.com/en-US/download "Free download via the Epic Games Launcher.")
+1. Install [**Unreal Engine 5.4 to 5.8**](https://www.unrealengine.com/en-US/download "Free download via the Epic Games Launcher.")
 2. Install [**Node.js 18 or newer**](https://nodejs.org/ "JavaScript runtime that UE-MCP needs to run.")
 3. Install an MCP-capable AI client (e.g. [**Claude Code**](https://docs.anthropic.com/en/docs/claude-code "Anthropic's official CLI agent."))
 

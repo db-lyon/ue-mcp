@@ -45,7 +45,7 @@ The C++ bridge links against many UE modules. If compilation fails:
     - `Niagara`
     - `PCG`
 
-2. **UE version mismatch.** The plugin is tested with UE 5.4–5.7. Older versions may have API differences. Check the build log for specific errors.
+2. **UE version mismatch.** The plugin is tested with UE 5.4–5.8. Older versions may have API differences. Check the build log for specific errors.
 
 3. **Rebuild from clean.** Delete `<Project>/Plugins/UE_MCP_Bridge/Binaries/` and `<Project>/Plugins/UE_MCP_Bridge/Intermediate/`, then rebuild.
 

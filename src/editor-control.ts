@@ -16,7 +16,7 @@ function findUEBuildTool(): string | null {
   const envPath = process.env.UE_BUILD_TOOL_PATH;
   if (envPath) return envPath;
 
-  const versions = ["5.7", "5.6", "5.5", "5.4", "5.3"];
+  const versions = ["5.8", "5.7", "5.6", "5.5", "5.4", "5.3"];
   const scriptName = IS_WINDOWS ? "Build.bat" : "Build.sh";
 
   const searchRoots: string[] = IS_WINDOWS

@@ -86,7 +86,7 @@ async function main() {
     log('  1. Install UE5.3+ to default location, OR');
     log('  2. Set UE_BUILD_TOOL_PATH environment variable to your Build.bat path');
     log('');
-    log('Example: set UE_BUILD_TOOL_PATH=C:\\Program Files\\Epic Games\\UE_5.7\\Engine\\Build\\BatchFiles\\Build.bat');
+    log('Example: set UE_BUILD_TOOL_PATH=C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Build\\BatchFiles\\Build.bat');
     process.exit(1);
   }
 
