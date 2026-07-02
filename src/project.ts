@@ -31,6 +31,12 @@ export interface UeMcpConfig {
   bridge?: {
     port?: number;
   };
+  /** Per-asset exclusive locking for concurrent agents (see locking.ts).
+   *  Opt-in; disabled by default. */
+  locking?: {
+    enabled?: boolean;
+    ttlSeconds?: number;
+  };
   /** Optional HTTP surface for flow.run (#144). Disabled by default. */
   http?: {
     enabled?: boolean;

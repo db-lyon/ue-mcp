@@ -12,6 +12,9 @@ export enum ErrorCode {
   PROJECT_NOT_LOADED = "PROJECT_NOT_LOADED",
   NOT_FOUND = "NOT_FOUND",
   INVALID_PARAMS = "INVALID_PARAMS",
+  /** Another session holds the exclusive lock on an asset this call would
+   *  mutate. Retryable: the holder's lease expires or it releases the lock. */
+  ASSET_LOCKED = "ASSET_LOCKED",
 }
 
 export class McpError extends Error {

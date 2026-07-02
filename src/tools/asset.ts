@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { Vec3, Rotator } from "../schemas.js";
+import { SESSION_ID } from "../locking.js";
 
 export const assetTool: ToolDef = categoryTool(
   "asset",
@@ -132,6 +133,13 @@ export const assetTool: ToolDef = categoryTool(
     create_folder:        bp("Create empty content browser folder(s). Params: path OR paths[] (e.g. /Game/Foo, /Game/Bar/Baz). Returns per-path created/existed/failed (#212)", "create_folder", (p) => ({ path: p.path, paths: p.paths })),
     delete_folder:        bp("Delete content browser folder(s) - counterpart to delete_asset, which leaves the parent directory entry behind as an orphan. Empty folders only by default; pass force=true to also delete any assets still inside (Content Browser 'Delete folder' equivalent). Per-path status (deleted/absent/failed) with reason (invalid_path/protected_path/not_empty/delete_failed) and a sample of contained assets on not_empty entries. Params: path OR paths[], force?", "delete_folder", (p) => ({ path: p.path, paths: p.paths, force: p.force })),
     set_mesh_nav:         bp("Set StaticMesh nav contribution. Params: assetPath, bHasNavigationData?, clearNavCollision? (#167)", "set_mesh_nav"),
+    // Per-asset exclusive locking for concurrent agents. The lock registry
+    // lives in the bridge (the shared editor), keyed by asset path with a TTL
+    // so a crashed session never wedges an asset. sessionId defaults to this
+    // server process; pass it explicitly to coordinate across processes.
+    lock:                 bp("Acquire an exclusive lock on an asset for this session. Returns acquired=true, or acquired=false with holder{sessionId,ttlSecondsRemaining} when another session holds it. Params: assetPath, ttlSeconds? (default 300), sessionId?", "acquire_lock", (p) => ({ path: p.assetPath ?? p.path, sessionId: p.sessionId ?? SESSION_ID, ttlSeconds: p.ttlSeconds })),
+    unlock:               bp("Release an asset lock held by this session (or force=true to break any holder's lock). Params: assetPath, force?, sessionId?", "release_lock", (p) => ({ path: p.assetPath ?? p.path, sessionId: p.sessionId ?? SESSION_ID, force: p.force })),
+    list_locks:           bp("List all currently-held asset locks with holder session id, acquiredAt, and ttlSecondsRemaining.", "list_locks"),
   },
   undefined,
   {

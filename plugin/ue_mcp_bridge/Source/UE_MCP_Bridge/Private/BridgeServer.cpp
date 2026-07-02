@@ -39,6 +39,7 @@
 #include "Handlers/DemoHandlers.h"
 #include "Handlers/StateTreeHandlers.h"
 #include "Handlers/EpicHandlers.h"
+#include "Handlers/LockHandlers.h"
 
 // Platform-specific socket includes
 #if PLATFORM_WINDOWS
@@ -96,6 +97,7 @@ FMCPBridgeServer::FMCPBridgeServer(int32 Port)
 	FProjectHandlers::RegisterHandlers(HandlerRegistry);
 	FStateTreeHandlers::RegisterHandlers(HandlerRegistry);
 	FEpicHandlers::RegisterHandlers(HandlerRegistry);
+	FLockHandlers::RegisterHandlers(HandlerRegistry);
 }
 
 FMCPBridgeServer::~FMCPBridgeServer()
