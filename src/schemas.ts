@@ -58,16 +58,6 @@ export const UeMcpConfigSchema = z
         strategy: z.enum(["full", "lean"]).optional(),
       })
       .optional(),
-    // Long-lived relay daemon. Enabled by default (opt-out): stdio sessions
-    // attach to a shared daemon that holds one warm editor connection, survives
-    // client restarts, and buffers requests across editor restarts. See proxy.ts.
-    proxy: z
-      .object({
-        enabled: z.boolean().optional(),
-        port: z.number().int().min(1).max(65535).optional(),
-        host: z.string().optional(),
-      })
-      .optional(),
   })
   .passthrough();
 export type UeMcpConfigFile = z.infer<typeof UeMcpConfigSchema>;

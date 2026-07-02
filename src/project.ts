@@ -39,14 +39,6 @@ export interface UeMcpConfig {
   context?: {
     strategy?: "full" | "lean";
   };
-  /** Long-lived relay daemon. Enabled by default (opt-out). See proxy.ts. */
-  proxy?: {
-    enabled?: boolean;
-    /** Default 9876. Bound to 127.0.0.1 only. */
-    port?: number;
-    /** Override bind host. Defaults to 127.0.0.1 - do not expose externally. */
-    host?: string;
-  };
 }
 
 export class ProjectContext {
