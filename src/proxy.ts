@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import * as fs from "node:fs";
+import * as net from "node:net";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { EditorBridge } from "./bridge.js";
@@ -42,6 +43,66 @@ const RELAY_GRACE_MS = 8000;
 
 /** Shut the daemon down after this long with zero connected clients. */
 const DEFAULT_IDLE_SHUTDOWN_MS = 5 * 60 * 1000;
+
+/** How many ports to try above the derived one before giving up. The derived
+ *  port can be OS-reserved (Windows excludes chunks of the dynamic range with
+ *  EACCES) or simply taken, so we walk up and publish the bound port. */
+const MAX_PORT_WALK = 64;
+
+type BindResult =
+  | { kind: "ok"; wss: WebSocketServer; port: number }
+  | { kind: "busy" }
+  | { kind: "failed"; code: string };
+
+/** Attempt to listen on one port, resolving the error code instead of throwing. */
+function tryListen(host: string, port: number): Promise<{ wss?: WebSocketServer; code?: string }> {
+  return new Promise((resolve) => {
+    const wss = new WebSocketServer({ host, port });
+    const onError = (err: NodeJS.ErrnoException) => {
+      wss.removeListener("listening", onListening);
+      try { wss.close(); } catch { /* ignore */ }
+      resolve({ code: err.code ?? "EUNKNOWN" });
+    };
+    const onListening = () => {
+      wss.removeListener("error", onError);
+      resolve({ wss });
+    };
+    wss.once("error", onError);
+    wss.once("listening", onListening);
+  });
+}
+
+/**
+ * Bind the hub, walking up from the derived port. EADDRINUSE on the very first
+ * (derived) port means a peer daemon already owns this project's endpoint, so
+ * we yield. EADDRINUSE on a walked port, or EACCES/EADDRNOTAVAIL from an
+ * OS-reserved port, just means "try the next one".
+ */
+async function bindWithWalk(host: string, startPort: number, maxWalk: number): Promise<BindResult> {
+  let lastCode = "EUNKNOWN";
+  for (let i = 0; i < maxWalk; i++) {
+    const p = startPort + i;
+    if (p >= 65536) break;
+    const r = await tryListen(host, p);
+    if (r.wss) return { kind: "ok", wss: r.wss, port: p };
+    lastCode = r.code ?? "EUNKNOWN";
+    if (r.code === "EADDRINUSE" && i === 0) return { kind: "busy" };
+  }
+  return { kind: "failed", code: lastCode };
+}
+
+/** Is something accepting connections at host:port right now? */
+function isLive(host: string, port: number, timeoutMs = 400): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = net.connect({ host, port });
+    let settled = false;
+    const done = (open: boolean) => { if (settled) return; settled = true; sock.destroy(); resolve(open); };
+    sock.setTimeout(timeoutMs);
+    sock.once("connect", () => done(true));
+    sock.once("timeout", () => done(false));
+    sock.once("error", () => done(false));
+  });
+}
 
 export interface ProxyLockfile {
   port: number;
@@ -205,18 +266,37 @@ export async function startProxyDaemon(project: ProjectContext, opts: StartProxy
     }, idleShutdownMs);
   };
 
-  const wss = new WebSocketServer({ host, port });
+  const yieldToPeer = (reason: string): never => {
+    info("proxy", reason);
+    clearInterval(seenTimer);
+    editor.disconnect();
+    process.exit(0);
+  };
 
-  wss.on("error", (err: NodeJS.ErrnoException) => {
-    if (err.code === "EADDRINUSE") {
-      // Another daemon for this project already owns the port. Yield to it.
-      info("proxy", `port ${host}:${port} already in use - a daemon is already running; exiting`);
-      clearInterval(seenTimer);
-      editor.disconnect();
-      process.exit(0);
+  const bound = await bindWithWalk(host, port, MAX_PORT_WALK);
+  if (bound.kind === "busy") {
+    return yieldToPeer(`port ${host}:${port} already owned by a daemon - exiting`);
+  }
+  if (bound.kind === "failed") {
+    warn("proxy", `could not bind any port in [${port}, ${port + MAX_PORT_WALK}) (${bound.code}) - exiting`);
+    clearInterval(seenTimer);
+    editor.disconnect();
+    process.exit(1);
+  }
+  const wss = bound.wss;
+  const boundPort = bound.port;
+
+  // If we had to walk off the derived port and a peer already published a live
+  // lockfile on a different port, yield rather than run a duplicate daemon.
+  if (boundPort !== port) {
+    const existing = readProxyLockfile(projectPath);
+    if (existing && existing.port !== boundPort && (await isLive(existing.host, existing.port))) {
+      try { wss.close(); } catch { /* ignore */ }
+      yieldToPeer(`peer daemon already owns ${existing.host}:${existing.port} - exiting`);
     }
-    warn("proxy", "websocket server error", err);
-  });
+  }
+
+  wss.on("error", (err: Error) => warn("proxy", "websocket server error", err));
 
   wss.on("connection", (client: WebSocket) => {
     clientCount++;
@@ -256,20 +336,15 @@ export async function startProxyDaemon(project: ProjectContext, opts: StartProxy
     client.on("error", (err) => debug("proxy", "client socket error", err));
   });
 
-  await new Promise<void>((resolve) => {
-    wss.on("listening", () => {
-      writeProxyLockfile(projectPath, {
-        port,
-        host,
-        pid: process.pid,
-        startedAt: new Date().toISOString(),
-        projectPath,
-      });
-      info("proxy", `relay listening on ws://${host}:${port} for ${path.basename(projectPath)} (loopback only)`);
-      armIdle();
-      resolve();
-    });
+  writeProxyLockfile(projectPath, {
+    port: boundPort,
+    host,
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+    projectPath,
   });
+  info("proxy", `relay listening on ws://${host}:${boundPort} for ${path.basename(projectPath)} (loopback only)`);
+  armIdle();
 
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
     process.on(sig, () => shutdown(`received ${sig}`));

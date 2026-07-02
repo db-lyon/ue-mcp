@@ -53,13 +53,26 @@ export function isPortOpen(host: string, port: number, timeoutMs = 500): Promise
   });
 }
 
-async function waitForPort(host: string, port: number, timeoutMs: number): Promise<boolean> {
+/**
+ * After spawning, wait for the daemon to become reachable. It may bind the
+ * derived port, or walk off it (OS-reserved / taken) and publish the real port
+ * to the lockfile, so we watch both.
+ */
+async function waitForDaemon(
+  projectPath: string,
+  derived: ProxyTarget,
+  timeoutMs: number,
+): Promise<ProxyTarget | null> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await isPortOpen(host, port, 500)) return true;
+    const lock = readProxyLockfile(projectPath);
+    if (lock && (await isPortOpen(lock.host, lock.port, 500))) {
+      return { host: lock.host, port: lock.port };
+    }
+    if (await isPortOpen(derived.host, derived.port, 500)) return derived;
     await new Promise((r) => setTimeout(r, 250));
   }
-  return false;
+  return null;
 }
 
 /** Path to the compiled daemon entrypoint that sits beside this module. */
@@ -105,9 +118,10 @@ export async function ensureProxy(project: ProjectContext): Promise<ProxyTarget 
   }
 
   spawnDaemon(project.projectPath!);
-  if (await waitForPort(target.host, target.port, 8000)) {
-    console.error(`[ue-mcp] Started relay daemon at ${target.host}:${target.port}`);
-    return target;
+  const found = await waitForDaemon(project.projectPath!, target, 8000);
+  if (found) {
+    console.error(`[ue-mcp] Started relay daemon at ${found.host}:${found.port}`);
+    return found;
   }
 
   console.error("[ue-mcp] Relay daemon did not come up in time - connecting directly to the editor");
