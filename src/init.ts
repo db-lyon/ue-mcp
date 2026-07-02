@@ -66,6 +66,7 @@ function writeProjectConfig(
   projectDir: string,
   disabled: string[],
   nativeTools?: { enabled: boolean; exclude: string[] },
+  contextStrategy?: "full" | "lean",
 ): void {
   const configPath = path.join(projectDir, "ue-mcp.yml");
   let existing: Record<string, unknown> = {};
@@ -95,6 +96,14 @@ function writeProjectConfig(
     else if (nativeTools.exclude.length > 0) nt.exclude = nativeTools.exclude;
     if (Object.keys(nt).length > 0) block.nativeTools = nt;
     else delete block.nativeTools;
+  }
+
+  // Context strategy is `full` by default, so only persist the block when the
+  // user picks `lean` - keeps the scaffold clean for the common case.
+  if (contextStrategy === "lean") {
+    block.context = { strategy: "lean" };
+  } else if (contextStrategy === "full") {
+    delete block.context;
   }
 
   if (!Array.isArray(block.contentRoots) || (block.contentRoots as unknown[]).length === 0) {
@@ -266,6 +275,22 @@ async function init() {
     nativeExclude = offer.filter((_, i) => !includeStates[i]);
     console.log("");
   }
+
+  console.log("");
+
+  // 2c. Context strategy — how much of the action catalog is seeded at startup.
+  // `full` (default) advertises every action inline; `lean` collapses tool
+  // descriptions to a summary and serves the catalog on demand (catalog/describe),
+  // trimming the MCP initialize payload for token-constrained clients.
+  const existingLean = project.config.context?.strategy === "lean";
+  const contextStates = await checkboxSelect("Context strategy", [
+    {
+      label: "Use lean context (smaller startup, actions discovered on demand)",
+      checked: existingLean,
+      suffix: "Trims the initialize payload; agents call catalog(search)/<tool>(describe) to find actions. Default is full (every action listed inline).",
+    },
+  ]);
+  const contextStrategy: "full" | "lean" = contextStates[0] ? "lean" : "full";
 
   console.log("");
 
@@ -548,7 +573,7 @@ async function init() {
   // feedback toggle from step 9 is captured. contentRoots seeding lives
   // inside writeProjectConfig.
   const ueMcpYmlPath = path.join(project.projectDir!, "ue-mcp.yml");
-  writeProjectConfig(project.projectDir!, disabled, { enabled: nativeEnabled, exclude: nativeExclude });
+  writeProjectConfig(project.projectDir!, disabled, { enabled: nativeEnabled, exclude: nativeExclude }, contextStrategy);
   ok("ue-mcp.yml written");
   wrote.push({ what: "tool surface + content roots", where: ueMcpYmlPath });
 

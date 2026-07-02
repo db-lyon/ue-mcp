@@ -152,13 +152,23 @@ The **`lean`** strategy keeps the exact same 22 typed category tools and their v
 
 Because the typed enum is retained, an unknown action is still rejected up front rather than failing silently. Nothing is removed - the agent pulls the details it needs when it needs them.
 
+Set it with the standalone command (writes `ue-mcp.yml` for you):
+
+```
+npx ue-mcp context lean      # switch to lean
+npx ue-mcp context full      # switch back to full (default)
+npx ue-mcp context           # show the current strategy
+```
+
+`npx ue-mcp init` also has a **Context strategy** page that toggles it. Or edit `ue-mcp.yml` directly:
+
 ```yaml
 ue-mcp:
   context:
     strategy: lean
 ```
 
-Or per session, without editing the file: `UE_MCP_CONTEXT_STRATEGY=lean` (the env var wins over the config value). Anything other than `lean` resolves to `full`.
+Or per session, without editing the file: `UE_MCP_CONTEXT_STRATEGY=lean` (the env var wins over the config value). Anything other than `lean` resolves to `full`. Restart your MCP client (`/mcp` in Claude Code) after changing the strategy.
 
 ## Bridge Connection
 
@@ -212,6 +222,7 @@ The C++ bridge plugin enables these UE plugins (adding them to `.uproject` if mi
 | `npx ue-mcp plugin install <name>` | Install a ue-mcp plugin from npm and register it in `ue-mcp.yml`. See [Configuration → Plugins](#plugins). |
 | `npx ue-mcp plugin uninstall <name>` | Inverse of install. |
 | `npx ue-mcp plugin create <name>` | Scaffold a new plugin package. See [Plugins](plugins.md). |
+| `npx ue-mcp context [lean\|full]` | Read or set the [context strategy](#context-strategy-full-vs-lean) in `ue-mcp.yml`. No argument prints the current strategy. |
 
 ## Editor Lifecycle
 

@@ -458,6 +458,9 @@ if (subcmd === "init") {
 } else if (subcmd === "plugin") {
   process.argv.splice(2, 1);
   import("./plugin-cli.js");
+} else if (subcmd === "context") {
+  process.argv.splice(2, 1);
+  import("./context-cli.js");
 } else if (subcmd === "version" || subcmd === "--version" || subcmd === "-v") {
   const { createRequire } = await import("node:module");
   const require = createRequire(import.meta.url);
