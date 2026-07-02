@@ -75,6 +75,7 @@
     "test:networking": "vitest run tests/smoke/networking.test.ts",
     "test:gas": "vitest run tests/smoke/gas.test.ts",
     "test:smoke": "node scripts/smoke-test.js",
+    "context-tax": "node scripts/context-tax.mjs",
     "generate": "tsx scripts/generate-default-config.ts",
     "generate:metadata": "tsx scripts/generate-tool-metadata.ts",
     "prepublishOnly": "npx tsc && tsx scripts/generate-default-config.ts && tsx scripts/generate-tool-metadata.ts",
