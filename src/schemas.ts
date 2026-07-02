@@ -48,6 +48,26 @@ export const UeMcpConfigSchema = z
         host: z.string().optional(),
       })
       .optional(),
+    // Context-seeding strategy. `full` (default) advertises every action inline
+    // in each category tool's description + trimmed server instructions. `lean`
+    // collapses tool descriptions to a one-line summary, trims the instructions,
+    // and moves the action catalog behind on-demand discovery (the `catalog`
+    // tool + per-category `describe` action). See lean-context.ts.
+    context: z
+      .object({
+        strategy: z.enum(["full", "lean"]).optional(),
+      })
+      .optional(),
+    // Long-lived relay daemon. Enabled by default (opt-out): stdio sessions
+    // attach to a shared daemon that holds one warm editor connection, survives
+    // client restarts, and buffers requests across editor restarts. See proxy.ts.
+    proxy: z
+      .object({
+        enabled: z.boolean().optional(),
+        port: z.number().int().min(1).max(65535).optional(),
+        host: z.string().optional(),
+      })
+      .optional(),
   })
   .passthrough();
 export type UeMcpConfigFile = z.infer<typeof UeMcpConfigSchema>;

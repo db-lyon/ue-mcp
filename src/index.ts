@@ -5,7 +5,8 @@ import { z } from "zod";
 import { EditorBridge } from "./bridge.js";
 import { ProjectContext } from "./project.js";
 import { attach, attachSummary } from "./deployer.js";
-import { SERVER_INSTRUCTIONS } from "./instructions.js";
+import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN } from "./instructions.js";
+import { resolveContextStrategy, applyLeanContext } from "./lean-context.js";
 import { isDirectiveResponse, type ToolDef, type ToolContext, type PluginInfo, type ElicitFn } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { info, warn } from "./log.js";
@@ -130,6 +131,17 @@ async function main() {
     }
   }
 
+  // ── Context-seeding strategy (full | lean) ───────────────────────
+  // Applied AFTER plugin + Epic enrichment so the lean catalog/search index
+  // covers those injected actions too, and BEFORE the flow registry + MCP
+  // registration below so the `catalog` tool and per-category `describe`
+  // actions are dispatchable and advertised.
+  const contextStrategy = resolveContextStrategy(project.config.context?.strategy);
+  const seededTools = contextStrategy === "lean" ? applyLeanContext(activeTools) : activeTools;
+  if (contextStrategy === "lean") {
+    console.error(`[ue-mcp] Context strategy: lean — ${activeTools.length} categories, action catalog served on demand (catalog/describe)`);
+  }
+
   // Lazy flow accessor — reads ue-mcp.yml fresh each call so agents see
   // edits without a server restart. project(get_status) uses this so the
   // first call agents make in any session reveals the registered flows.
@@ -172,7 +184,7 @@ async function main() {
   const ctx: ToolContext = { bridge, project, getFlows, getPlugins };
 
   // ── Flow engine: task registry ──────────────────────────────────
-  const registry = buildFlowRegistry(activeTools);
+  const registry = buildFlowRegistry(seededTools);
   for (const { name, ctor } of pluginLoad.taskRegistrations) {
     registry.register(name, ctor);
   }
@@ -186,9 +198,10 @@ async function main() {
   // budget as SERVER_INSTRUCTIONS itself; deeper plugin docs remain
   // readable on demand via the file-reading surface.
   const knowledgeBlock = buildKnowledgeBlock(pluginLoad.knowledgeByCategory);
+  const baseInstructions = contextStrategy === "lean" ? SERVER_INSTRUCTIONS_LEAN : SERVER_INSTRUCTIONS;
   const serverInstructions = knowledgeBlock
-    ? `${SERVER_INSTRUCTIONS}\n\n═══ PLUGIN KNOWLEDGE ═══\n${knowledgeBlock}`
-    : SERVER_INSTRUCTIONS;
+    ? `${baseInstructions}\n\n═══ PLUGIN KNOWLEDGE ═══\n${knowledgeBlock}`
+    : baseInstructions;
 
   const server = new McpServer({
     name: "ue-mcp",
@@ -200,7 +213,7 @@ async function main() {
   ctx.elicit = buildElicit(server);
 
   const disabled = new Set(project.config.disable ?? []);
-  const tools = activeTools.filter((t) => !disabled.has(t.name));
+  const tools = seededTools.filter((t) => !disabled.has(t.name));
 
   // ── Register category tools — dispatched through the task registry ──
   for (const tool of tools) {

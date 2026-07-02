@@ -198,3 +198,36 @@ If the user agrees, call feedback(action="submit") with:
   • idealTool — what tool/action should handle this natively
 This creates a GitHub issue so the maintainers can add proper support.
 `;
+
+// Compact instructions used when context.strategy = "lean". The per-action
+// catalog is intentionally omitted: agents pull it on demand via the `catalog`
+// tool or a category's `describe` action. This keeps the initialize handshake
+// small for token-constrained clients while preserving full capability.
+export const SERVER_INSTRUCTIONS_LEAN = `UE-MCP (lean mode): Unreal Engine editor bridge (C++ plugin). 22 category tools; the per-action catalog is loaded on demand to keep context small.
+
+Every tool takes an "action" parameter that selects the operation. Start with project(action="get_status").
+
+═══ DISCOVER ACTIONS ═══
+Tool descriptions are trimmed in lean mode. Find the action you need with:
+- catalog(action="search", query="spawn actor") — rank matching actions across every category
+- catalog(action="list_categories") — the 22 categories with one-line summaries
+- <category>(action="describe") — every action in one category (e.g. blueprint(action="describe"))
+
+Each category's "action" parameter is still a validated enum, so unknown actions are rejected up front. Call describe/search first when you are unsure of the exact action name.
+
+═══ CATEGORIES ═══
+project, asset, blueprint, level, material, animation, landscape, pcg, foliage,
+niagara, audio, widget, editor, reflection, gameplay, gas, networking, demo,
+feedback, statetree, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+).
+
+═══ FLOWS ═══
+Before chaining 3+ tool calls, check the \`flows\` field from project(action="get_status")
+and run a matching flow with flow(action="run", flowName="<name>") instead of rebuilding it.
+
+═══ FEEDBACK ═══
+If you had to fall back to editor(action="execute_python") because a native tool could not
+do the job, tell the user when done and offer to feedback(action="submit") the gap.
+
+Full mode (every action listed inline) is the default. This lean surface is selected by
+context.strategy: lean in ue-mcp.yml or UE_MCP_CONTEXT_STRATEGY=lean.
+`;
