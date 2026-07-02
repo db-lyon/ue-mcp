@@ -1,5 +1,7 @@
 #include "LockRegistry.h"
 #include "HAL/PlatformTime.h"
+#include "HAL/CriticalSection.h"
+#include "Misc/ScopeLock.h"
 
 FMCPLockRegistry& FMCPLockRegistry::Get()
 {

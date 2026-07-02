@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Misc/DateTime.h"
+#include "HAL/CriticalSection.h"
 
 /**
  * A single held asset lock. AcquiredAtUtc is for display; ExpiresMono is the
