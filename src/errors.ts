@@ -15,6 +15,9 @@ export enum ErrorCode {
   /** A source-control guard refused a mutating bridge call before it ran
    *  (e.g. the target is checked out by another user, or checkout failed). */
   WRITE_BLOCKED = "WRITE_BLOCKED",
+  /** Another session holds the exclusive lock on an asset this call would
+   *  mutate. Retryable: the holder's lease expires or it releases the lock. */
+  ASSET_LOCKED = "ASSET_LOCKED",
 }
 
 export class McpError extends Error {

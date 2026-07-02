@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { Vec3, Rotator } from "../schemas.js";
+import { SESSION_ID } from "../locking.js";
 
 export const assetTool: ToolDef = categoryTool(
   "asset",
@@ -139,6 +140,13 @@ export const assetTool: ToolDef = categoryTool(
     create_user_defined_enum: bp("Create a UserDefinedEnum content asset, optionally pre-populated with values. Params: name, packagePath? (default /Game), values? ([display-name strings]), onConflict? (#686)", "create_user_defined_enum", (p) => ({ name: p.name, packagePath: p.packagePath, values: p.values, onConflict: p.onConflict })),
     list_enum_values:     bp("List a UEnum's enumerators (index, authored short name, display name, value). Works on native and UserDefinedEnum assets. Params: assetPath (#686)", "list_enum_values", (p) => ({ assetPath: p.assetPath })),
     edit_user_defined_enum: bp("Author a UserDefinedEnum content asset. op=add_value appends an enumerator (authored name is auto-assigned; pass displayName - or name - to set the editable display text). op=rename_value sets a new displayName on the enumerator resolved by index or name (matches short or display name). op=remove_value deletes it. Recompiles dependents automatically. Native UEnums are not editable. Params: assetPath, op (add_value|rename_value|remove_value), displayName?, name?, index? (#686)", "edit_user_defined_enum", (p) => ({ assetPath: p.assetPath, op: p.op, displayName: p.displayName, name: p.name, index: p.index })),
+    // Per-asset exclusive locking for concurrent agents. The lock registry
+    // lives in the bridge (the shared editor), keyed by asset path with a TTL
+    // so a crashed session never wedges an asset. sessionId defaults to this
+    // server process; pass it explicitly to coordinate across processes.
+    lock:                 bp("Acquire an exclusive lock on an asset for this session. Returns acquired=true, or acquired=false with holder{sessionId,ttlSecondsRemaining} when another session holds it. Params: assetPath, ttlSeconds? (default 300), sessionId?", "acquire_lock", (p) => ({ path: p.assetPath ?? p.path, sessionId: p.sessionId ?? SESSION_ID, ttlSeconds: p.ttlSeconds })),
+    unlock:               bp("Release an asset lock held by this session (or force=true to break any holder's lock). Params: assetPath, force?, sessionId?", "release_lock", (p) => ({ path: p.assetPath ?? p.path, sessionId: p.sessionId ?? SESSION_ID, force: p.force })),
+    list_locks:           bp("List all currently-held asset locks with holder session id, acquiredAt, and ttlSecondsRemaining.", "list_locks"),
   },
   undefined,
   {

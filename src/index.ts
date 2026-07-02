@@ -21,6 +21,7 @@ import { startFlowHttpServer } from "./flow/http-server.js";
 import type { FlowContext } from "./flow/context.js";
 import type { FlowConfig, PluginEntry } from "./flow/schema.js";
 import { loadPlugins, type PluginRecord } from "./plugin/loader.js";
+import { withAssetLocks, resolveLockingConfig } from "./locking.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
@@ -216,6 +217,13 @@ async function main() {
   const guardedBridge = new GuardedBridge(bridge, guardRegistry, makeResolveExistingFile(project));
   const ctx: ToolContext = { bridge: guardedBridge, project, getFlows, getPlugins };
 
+  // Per-asset locking for concurrent agents. Opt-in; when off, withAssetLocks
+  // is a passthrough. The registry itself lives in the C++ bridge.
+  const lockingCfg = resolveLockingConfig(project.config.locking);
+  if (lockingCfg.enabled) {
+    console.error(`[ue-mcp] Per-asset locking enabled (TTL ${lockingCfg.ttlSeconds}s)`);
+  }
+
   // ── Flow engine: task registry ──────────────────────────────────
   const registry = buildFlowRegistry(registryTools);
   for (const { name, ctor } of pluginLoad.taskRegistrations) {
@@ -276,7 +284,7 @@ async function main() {
 
       try {
         const task = await registry.create(taskName, flowCtx, taskParams);
-        const result = await task.run();
+        const result = await withAssetLocks(bridge, lockingCfg, taskName, taskParams, () => task.run());
 
         if (!result.success) {
           const msg = result.error?.message ?? `Task ${taskName} failed`;
