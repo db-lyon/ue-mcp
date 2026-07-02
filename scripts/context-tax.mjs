@@ -72,21 +72,28 @@ async function countTokens(text) {
   return { tokens: json.input_tokens, exact: true };
 }
 
-const full = await seed("full");
-const lean = await seed("lean");
-const ft = await countTokens(full.payload);
-const lt = await countTokens(lean.payload);
+const STRATEGIES = ["full", "lean", "micro"];
+const rows = [];
+for (const s of STRATEGIES) {
+  const seeded = await seed(s);
+  const t = await countTokens(seeded.payload);
+  rows.push({ strategy: s, ...seeded, tokens: t.tokens, exact: t.exact });
+}
 
 const pad = (v, w) => String(v).padStart(w);
 const pct = (a, b) => (a === 0 ? "0.0" : (100 * (1 - b / a)).toFixed(1));
+const full = rows[0];
+const exact = rows.every((r) => r.exact);
 
 console.log("");
-console.log(`  Context tax  (project: ${path.basename(PROJECT)}, tokens ${ft.exact ? "exact via count_tokens" : "~ chars/4 estimate, set ANTHROPIC_API_KEY for exact"})`);
+console.log(`  Context tax  (project: ${path.basename(PROJECT)}, tokens ${exact ? "exact via count_tokens" : "~ chars/4 estimate, set ANTHROPIC_API_KEY for exact"})`);
 console.log("");
-console.log(`  mode   tools   instr.chars   tools.chars   total.chars   tokens`);
-console.log(`  full   ${pad(full.toolCount, 5)}   ${pad(full.instructionsChars, 11)}   ${pad(full.toolsChars, 11)}   ${pad(full.totalChars, 11)}   ${pad(ft.tokens, 6)}`);
-console.log(`  lean   ${pad(lean.toolCount, 5)}   ${pad(lean.instructionsChars, 11)}   ${pad(lean.toolsChars, 11)}   ${pad(lean.totalChars, 11)}   ${pad(lt.tokens, 6)}`);
+console.log(`  mode    tools   instr.chars   tools.chars   total.chars   tokens   vs full`);
+for (const r of rows) {
+  console.log(
+    `  ${r.strategy.padEnd(6)}  ${pad(r.toolCount, 5)}   ${pad(r.instructionsChars, 11)}   ${pad(r.toolsChars, 11)}   ${pad(r.totalChars, 11)}   ${pad(r.tokens, 6)}   ${r.strategy === "full" ? "-" : `-${pct(full.tokens, r.tokens)}%`}`,
+  );
+}
 console.log("");
-console.log(`  seed saving: ${ft.tokens - lt.tokens} tokens (${pct(ft.tokens, lt.tokens)}% smaller)`);
-console.log(`  note: lean moves cost to on-demand catalog/describe calls; add those round-trips for a full-session total.`);
+console.log(`  note: lean/micro move cost to on-demand describe/call round-trips; add those for a full-session total.`);
 console.log("");
