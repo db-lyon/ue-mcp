@@ -39,6 +39,17 @@ public:
 	static void WritePortLockfile(int32 PortValue);
 	static void DeletePortLockfile();
 
+	// Deterministic per-worktree base port. Derived from a hash of the project
+	// root path so every checkout gets a stable, launch-order-independent port
+	// that the Node client computes identically (see src/port.ts). Keep the two
+	// implementations in lockstep.
+	static int32 DeriveProjectPort(const FString& ProjectRootDir);
+
+	// Resolve the base port to bind: -MCPPort= command line > UE_MCP_PORT env >
+	// deterministic derived port. The probe loop in Run() walks upward from
+	// here on collision, and the actual bound port is published to the lockfile.
+	static int32 ResolveConfiguredPort();
+
 	// Get handler registry
 	FMCPHandlerRegistry& GetHandlerRegistry() { return HandlerRegistry; }
 

@@ -59,8 +59,11 @@ async function main() {
 
       // #492: pass the .uproject path to the bridge so it can read the
       // per-project port lockfile when connecting (lets multiple editors
-      // coexist on adjacent ports).
-      bridge.projectPathForLockfile = project.projectPath;
+      // coexist on adjacent ports). setProjectContext also derives this
+      // project's stable per-worktree port from its root path unless the port
+      // was explicitly pinned (UE_MCP_PORT env or ue-mcp.yml bridge.port).
+      bridge.setConfigPort(project.config.bridge?.port);
+      bridge.setProjectContext(project.projectPath);
 
       // Non-destructive attach — never overwrites local bridge source.
       // Source deployment is reserved for `ue-mcp init` / `ue-mcp deploy`.

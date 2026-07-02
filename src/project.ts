@@ -28,6 +28,11 @@ export interface UeMcpConfig {
     enabled?: boolean;
     exclude?: string[];
   };
+  /** Editor bridge WebSocket. `port` pins the bridge port instead of deriving
+   *  it from the project root path (see port.ts). Unset = derived per-worktree port. */
+  bridge?: {
+    port?: number;
+  };
   /** Optional HTTP surface for flow.run (#144). Disabled by default. */
   http?: {
     enabled?: boolean;

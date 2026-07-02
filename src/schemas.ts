@@ -41,6 +41,15 @@ export const UeMcpConfigSchema = z
         exclude: z.array(z.string()).optional(),
       })
       .optional(),
+    // Editor bridge WebSocket. `port` pins the port instead of deriving it
+    // from the project root path (see port.ts). Pin it only when you need a
+    // fixed, well-known port; leaving it unset gives each worktree a stable,
+    // collision-resistant derived port.
+    bridge: z
+      .object({
+        port: z.number().int().min(1).max(65535).optional(),
+      })
+      .optional(),
     http: z
       .object({
         enabled: z.boolean().optional(),
