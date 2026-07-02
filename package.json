@@ -16,7 +16,8 @@
     "ue-mcp": "dist/index.js",
     "ue-mcp-init": "dist/init.js",
     "ue-mcp-update": "dist/update.js",
-    "ue-mcp-deploy": "dist/deploy-cli.js"
+    "ue-mcp-deploy": "dist/deploy-cli.js",
+    "ue-mcp-proxy": "dist/proxy-cli.js"
   },
   "files": [
     "dist",

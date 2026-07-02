@@ -7,6 +7,7 @@ import { ProjectContext } from "./project.js";
 import { attach, attachSummary } from "./deployer.js";
 import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN } from "./instructions.js";
 import { resolveContextStrategy, applyLeanContext } from "./lean-context.js";
+import { ensureProxy } from "./proxy-client.js";
 import { isDirectiveResponse, type ToolDef, type ToolContext, type PluginInfo, type ElicitFn } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { info, warn } from "./log.js";
@@ -65,6 +66,29 @@ async function main() {
       console.error(`[ue-mcp] ${attachSummary(result)}`);
     } catch (e) {
       console.error(`[ue-mcp] Failed to initialize project: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  // ── Relay daemon (on by default, opt-out) ────────────────────────
+  // Point the bridge at a shared, long-lived daemon that holds one warm editor
+  // connection so it survives MCP-client restarts and multiplexes concurrent
+  // sessions. ensureProxy() spawns the daemon on demand and degrades to a
+  // direct editor connection (returns null) on any failure, so this is never
+  // worse than connecting straight to the editor. Must run before Epic
+  // enrichment below, which issues the first bridge call.
+  if (project.isLoaded) {
+    try {
+      const proxy = await ensureProxy(project);
+      if (proxy) {
+        bridge.host = proxy.host;
+        bridge.port = proxy.port;
+        // In proxy mode the daemon owns editor-lockfile resolution; the client
+        // must target the fixed daemon port, not the editor's.
+        bridge.projectPathForLockfile = null;
+        console.error(`[ue-mcp] Using relay daemon at ${proxy.host}:${proxy.port} (set proxy.enabled=false to bypass)`);
+      }
+    } catch (e) {
+      console.error(`[ue-mcp] Relay daemon setup failed, using direct connection: ${e instanceof Error ? e.message : e}`);
     }
   }
 
