@@ -14,6 +14,7 @@ import { installClaudeHooks, uninstallClaudeHooks } from "./hook-installer.js";
 import { runFeedbackAuthStep } from "./auth-cli.js";
 import { getInstalledHooks } from "./user-state.js";
 import { detectMcpClients, isProjectScopedClient, writeMcpConfig } from "./mcp-client-config.js";
+import { deriveProjectPort } from "./port.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */
@@ -214,6 +215,12 @@ async function init() {
   ok(
     `Found UE ${project.engineAssociation ?? "?"} project "${project.projectName}"`,
   );
+  // Report this worktree's stable bridge port so multiple checkouts on one
+  // machine are visibly distinct. Derived from the project root path unless
+  // pinned via UE_MCP_PORT or ue-mcp.yml `ue-mcp.bridge.port`. The C++ bridge
+  // derives the same value; no config coordination needed.
+  const derivedPort = deriveProjectPort(path.dirname(project.projectPath!));
+  info(`Bridge port for this worktree: ${DIM}${derivedPort}${RESET} (derived from the project path; pin with ue-mcp.bridge.port if needed)`);
   console.log("");
 
   // On re-init, respect prior opt-outs in ue-mcp.yml so the user doesn't

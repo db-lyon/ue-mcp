@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { McpError, ErrorCode } from "./errors.js";
 import { debug, warn } from "./log.js";
+import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
 
 // #492: per-project port lockfile published by the bridge plugin. When the
 // default port (9877) is taken by another editor, the plugin walks up and
@@ -56,15 +57,48 @@ export class EditorBridge implements IBridge {
   private connectInFlight: Promise<void> | null = null;
   private idCounter = 0;
 
-  constructor(
+  // How this.port was decided. Precedence for the *preferred* port (the one
+  // used when no editor lockfile is present) is explicit > env > config >
+  // derived > default; the lockfile always overrides at connect time because
+  // it is the port the editor actually bound. Deriving only kicks in while the
+  // source is still "default", so an explicit/env/config pin is never
+  // clobbered by the path hash.
+  private portSource: "explicit" | "env" | "config" | "derived" | "default" = "default";
+
+  constructor(host?: string, port?: number) {
     // #497: default to 127.0.0.1 so the client picks the loopback IPv4 the
     // plugin actually binds to. "localhost" can resolve to ::1 on systems
     // where the IPv6 stack wins DNS, leaving the client stuck connecting to
     // an empty IPv6 socket while the plugin owns 127.0.0.1:9877.
     // UE_MCP_HOST overrides the default for non-standard topologies.
-    public host = process.env.UE_MCP_HOST ?? "127.0.0.1",
-    public port = Number.parseInt(process.env.UE_MCP_PORT ?? "", 10) || 9877,
-  ) {}
+    this.host = host ?? process.env.UE_MCP_HOST ?? "127.0.0.1";
+
+    const envPort = Number.parseInt(process.env.UE_MCP_PORT ?? "", 10);
+    if (typeof port === "number" && port > 0) {
+      this.port = port;
+      this.portSource = "explicit";
+    } else if (Number.isFinite(envPort) && envPort > 0) {
+      this.port = envPort;
+      this.portSource = "env";
+    } else {
+      this.port = DEFAULT_BRIDGE_PORT;
+      this.portSource = "default";
+    }
+  }
+
+  public host: string;
+  public port: number;
+
+  /**
+   * Apply an explicit `bridge.port` from ue-mcp.yml. Ignored when an
+   * explicit constructor arg or UE_MCP_PORT already pinned the port.
+   */
+  setConfigPort(port?: number): void {
+    if (typeof port === "number" && port > 0 && this.portSource !== "explicit" && this.portSource !== "env") {
+      this.port = port;
+      this.portSource = "config";
+    }
+  }
 
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
@@ -84,11 +118,26 @@ export class EditorBridge implements IBridge {
 
   /**
    * #492: project context for resolving the per-project port lockfile. Set
-   * by index.ts after the user's .uproject is loaded. Leaving this null
-   * keeps the default-port-only behaviour for callers that don't have a
-   * project context (CLI tools, tests).
+   * by index.ts (via setProjectContext) after the user's .uproject is loaded.
+   * Leaving this null keeps the default-port-only behaviour for callers that
+   * don't have a project context (CLI tools, tests).
    */
   public projectPathForLockfile: string | null = null;
+
+  /**
+   * Record the loaded .uproject and, when no port was explicitly pinned,
+   * derive this project's stable per-worktree bridge port from its root path.
+   * The C++ bridge derives the same value; the lockfile reconciles the actual
+   * bound port at connect time either way.
+   */
+  setProjectContext(uprojectPath: string | null): void {
+    this.projectPathForLockfile = uprojectPath;
+    if (uprojectPath && this.portSource === "default") {
+      this.port = deriveProjectPort(path.dirname(uprojectPath));
+      this.portSource = "derived";
+      debug("bridge", `derived per-project bridge port ${this.port} from ${path.dirname(uprojectPath)}`);
+    }
+  }
 
   async connect(timeoutMs = 3000): Promise<void> {
     if (this.isConnected) return;

@@ -5,11 +5,15 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "HAL/PlatformProcess.h"
+#include "HAL/PlatformMisc.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Misc/DateTime.h"
 #include "Misc/Timespan.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Misc/SecureHash.h"
 #include "Async/Async.h"
 #include "Handlers/EditorHandlers.h"
 #include "Handlers/AssetHandlers.h"
@@ -354,6 +358,63 @@ void FMCPBridgeServer::DeletePortLockfile()
 	{
 		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Port lockfile removed: %s"), *FilePath);
 	}
+}
+
+// Deterministic per-worktree base port. MUST match src/port.ts byte-for-byte:
+// normalize the project root (forward slashes, no trailing slash, lowercased),
+// SHA-1 the UTF-8 bytes, fold the first 4 bytes into the 49152-65535 ephemeral
+// range. SHA-1 (not SHA-256) because FSHA1 is available on every platform with
+// no extra dependency; the hash only spreads ports, it is not security.
+int32 FMCPBridgeServer::DeriveProjectPort(const FString& ProjectRootDir)
+{
+	FString Norm = ProjectRootDir;
+	Norm.ReplaceInline(TEXT("\\"), TEXT("/"));
+	while (Norm.EndsWith(TEXT("/")))
+	{
+		Norm = Norm.LeftChop(1);
+	}
+	Norm.ToLowerInline();
+
+	FTCHARToUTF8 Utf8(*Norm);
+	uint8 Hash[20];
+	FSHA1 Sha;
+	Sha.Update(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
+	Sha.Final();
+	Sha.GetHash(Hash);
+
+	const uint32 V = ((uint32)Hash[0] << 24) | ((uint32)Hash[1] << 16) | ((uint32)Hash[2] << 8) | (uint32)Hash[3];
+	constexpr uint32 EphemeralBase = 49152;
+	constexpr uint32 EphemeralSpan = 65535u - EphemeralBase + 1u; // 16384
+	return (int32)(EphemeralBase + (V % EphemeralSpan));
+}
+
+int32 FMCPBridgeServer::ResolveConfiguredPort()
+{
+	// 1. Explicit command-line override: -MCPPort=NNNN
+	int32 CmdPort = 0;
+	if (FParse::Value(FCommandLine::Get(), TEXT("MCPPort="), CmdPort) && CmdPort > 0 && CmdPort < 65536)
+	{
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Using port %d from -MCPPort command line"), CmdPort);
+		return CmdPort;
+	}
+
+	// 2. Environment override: UE_MCP_PORT (matches the Node client's env var).
+	const FString EnvPort = FPlatformMisc::GetEnvironmentVariable(TEXT("UE_MCP_PORT"));
+	if (!EnvPort.IsEmpty())
+	{
+		const int32 P = FCString::Atoi(*EnvPort);
+		if (P > 0 && P < 65536)
+		{
+			UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Using port %d from UE_MCP_PORT env"), P);
+			return P;
+		}
+	}
+
+	// 3. Deterministic per-worktree port derived from the project root path.
+	const FString ProjectRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	const int32 Derived = DeriveProjectPort(ProjectRoot);
+	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Derived per-project port %d from %s"), Derived, *ProjectRoot);
+	return Derived;
 }
 
 TSharedPtr<FJsonObject> FMCPBridgeServer::ParseJsonRpcRequest(const FString& Message)

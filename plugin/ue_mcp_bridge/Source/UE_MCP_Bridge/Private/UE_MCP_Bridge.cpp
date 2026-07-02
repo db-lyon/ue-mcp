@@ -15,8 +15,13 @@ static TSharedPtr<FMCPBridgeServer> G_BridgeServer;
 
 void FUE_MCP_BridgeModule::StartupModule()
 {
-	// Create and start bridge server
-	G_BridgeServer = MakeShared<FMCPBridgeServer>(9877);
+	// Create and start bridge server. The base port is derived per-worktree
+	// from the project root path (or an explicit -MCPPort / UE_MCP_PORT
+	// override) so multiple checkouts can run side-by-side without colliding;
+	// the probe loop in Run() resolves the rare clash and publishes the actual
+	// bound port to the per-project lockfile.
+	const int32 BasePort = FMCPBridgeServer::ResolveConfiguredPort();
+	G_BridgeServer = MakeShared<FMCPBridgeServer>(BasePort);
 	FDialogHandlers::InstallDialogHook();
 	// Safety net: auto-decline overwrite dialogs to prevent game thread blocking.
 	// Handlers should check for existing assets before creating, but if a dialog
@@ -37,7 +42,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 	if (G_BridgeServer->Start())
 	{
-		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Bridge server started on port 9877"));
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Bridge server starting on base port %d"), BasePort);
 	}
 	else
 	{
