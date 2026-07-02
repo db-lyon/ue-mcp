@@ -21,7 +21,7 @@ function fixtureTools(): ToolDef[] {
   ];
 }
 
-// Minimal context — the discovery handlers ignore it.
+// Minimal context; the discovery handlers ignore it.
 const ctx = {} as ToolContext;
 
 async function runAction(tool: ToolDef, action: string, params: Record<string, unknown> = {}) {

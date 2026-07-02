@@ -2,7 +2,7 @@ import { z } from "zod";
 import { categoryTool, type ActionSpec, type ToolDef } from "./types.js";
 
 /**
- * Lean context strategy (Claireon-inspired).
+ * Lean context strategy.
  *
  * Full mode advertises every action inline: each category tool's description
  * carries an "Actions:\n- ..." catalog and SERVER_INSTRUCTIONS lists all 600+
@@ -19,7 +19,7 @@ import { categoryTool, type ActionSpec, type ToolDef } from "./types.js";
  *     so an agent can find any action across every category by keyword.
  *
  * The typed enum is deliberately retained (unlike a free-form string surface)
- * so unknown actions are still rejected up front — silent param drift is the
+ * so unknown actions are still rejected up front. Silent param drift is the
  * failure mode this repo works hardest to avoid.
  */
 
@@ -28,7 +28,7 @@ export type ContextStrategy = "full" | "lean";
 /**
  * Resolve the active strategy. Env var wins over config so a user can flip it
  * per-session without editing ue-mcp.yml. Anything other than "lean" (case
- * insensitive) resolves to "full" — the safe, unchanged default.
+ * insensitive) resolves to "full", the safe, unchanged default.
  */
 export function resolveContextStrategy(configStrategy?: string): ContextStrategy {
   const raw = (process.env.UE_MCP_CONTEXT_STRATEGY ?? configStrategy ?? "full").trim().toLowerCase();
@@ -105,7 +105,7 @@ function buildIndex(tools: ToolDef[]): CatalogEntry[] {
 }
 
 /**
- * Lightweight keyword ranking — no embedding model, no native deps. Scores each
+ * Lightweight keyword ranking with no embedding model and no native deps. Scores each
  * action against the query tokens: an exact category/action token match weighs
  * more than a substring hit in the description. Deterministic and cheap.
  */
@@ -185,7 +185,7 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
 
 /**
  * Apply the lean strategy to a set of category tools. Returns a new array
- * (catalog tool first) — the input tools are not mutated. When two categories
+ * (catalog tool first); the input tools are not mutated. When two categories
  * already contain a `catalog` tool (they never do today) the caller-supplied
  * one wins; we skip prepending a duplicate.
  */

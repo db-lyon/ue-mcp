@@ -209,9 +209,9 @@ Every tool takes an "action" parameter that selects the operation. Start with pr
 
 ═══ DISCOVER ACTIONS ═══
 Tool descriptions are trimmed in lean mode. Find the action you need with:
-- catalog(action="search", query="spawn actor") — rank matching actions across every category
-- catalog(action="list_categories") — the 22 categories with one-line summaries
-- <category>(action="describe") — every action in one category (e.g. blueprint(action="describe"))
+- catalog(action="search", query="spawn actor") - rank matching actions across every category
+- catalog(action="list_categories") - the 22 categories with one-line summaries
+- <category>(action="describe") - every action in one category (e.g. blueprint(action="describe"))
 
 Each category's "action" parameter is still a validated enum, so unknown actions are rejected up front. Call describe/search first when you are unsure of the exact action name.
 

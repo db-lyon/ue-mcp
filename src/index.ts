@@ -163,7 +163,7 @@ async function main() {
   const contextStrategy = resolveContextStrategy(project.config.context?.strategy);
   const seededTools = contextStrategy === "lean" ? applyLeanContext(activeTools) : activeTools;
   if (contextStrategy === "lean") {
-    console.error(`[ue-mcp] Context strategy: lean — ${activeTools.length} categories, action catalog served on demand (catalog/describe)`);
+    console.error(`[ue-mcp] Context strategy: lean - ${activeTools.length} categories, action catalog served on demand (catalog/describe)`);
   }
 
   // Lazy flow accessor — reads ue-mcp.yml fresh each call so agents see

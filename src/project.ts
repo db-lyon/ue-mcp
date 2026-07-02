@@ -44,7 +44,7 @@ export interface UeMcpConfig {
     enabled?: boolean;
     /** Default 9876. Bound to 127.0.0.1 only. */
     port?: number;
-    /** Override bind host. Defaults to 127.0.0.1 — do not expose externally. */
+    /** Override bind host. Defaults to 127.0.0.1 - do not expose externally. */
     host?: string;
   };
 }
