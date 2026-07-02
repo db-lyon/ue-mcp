@@ -59,6 +59,10 @@ ue-mcp:
       - animation
   http:
     enabled: false
+  context:
+    strategy: full   # full (default) | lean
+  proxy:
+    enabled: true    # on by default; set false to connect directly
 
 tasks: {}
 flows: {}
@@ -83,6 +87,8 @@ plugins: []
 | `disable` | `string[]` | `[]` | Tool categories to disable. Disabled categories are not registered with the MCP server, reducing context noise for the AI. Use `"feedback"` here to opt out of the feedback tool entirely. |
 | `nativeTools` | `object` | `{ enabled: true }` | Native (Epic 5.8 ToolsetRegistry) tool surfacing. `enabled` (bool, default `true`) turns the whole feature on/off; when off, only the `epic` discovery gateway remains. `exclude` (`string[]`) names ue-mcp categories that should not be enriched with Epic tools (they stay reachable via `epic(call_tool)`). See [Native Epic tools](#native-epic-5-8-tools) below. |
 | `http` | `object` | `undefined` (HTTP server off) | Optional REST surface for the flow engine. Object with `enabled` (bool), `port` (default `7723`), `host` (default `127.0.0.1`). When `enabled: true`, the MCP server also serves `GET /flows`, `GET /flows/<name>/plan`, `POST /flows/<name>/run`, and the Server-Sent Events stream at `GET /flows/events` (live per-step lifecycle events; see [Live Observation](flows.md#live-observation-sse)) over HTTP so external tools can drive and observe flows without an MCP client. |
+| `context` | `object` | `{ strategy: full }` | Context-seeding strategy. `strategy: full` (default) advertises every action inline; `strategy: lean` trims the init payload for token-constrained clients and serves the action catalog on demand. See [Context strategy](#context-strategy-full-vs-lean) below. |
+| `proxy` | `object` | `{ enabled: true }` | Relay daemon. `enabled` (bool, default `true`) keeps a warm editor connection alive in a shared background process; `port` and `host` override the loopback endpoint (each project derives its own port by default). See [Relay daemon](#relay-daemon) below. |
 
 ### Native Epic 5.8 tools
 
@@ -136,9 +142,52 @@ A plugin can declare `uePluginDependency: <PluginName>` in its `ue-mcp.plugin.ym
 
 For example, a plugin that declares `uePluginDependency: SomePlugin` will report `uePluginPresent: false` until `SomePlugin` is added to `<Project>.uproject`'s `Plugins` array and the C++ modules are built.
 
+## Context strategy (full vs lean)
+
+Every category tool advertises its actions to the AI at startup. In the default **`full`** strategy each tool description carries its complete action catalog and the server seeds a full instruction block, so an agent sees everything up front. That is great for discoverability but costs tokens on the MCP `initialize` handshake.
+
+The **`lean`** strategy keeps the exact same 22 typed category tools and their validated `action` enums, but serves the action catalog on demand instead of inline:
+
+- each tool description collapses to a one-line summary plus a discovery pointer,
+- the server instructions switch to a compact variant,
+- every category gains a `describe` action that lists its own actions,
+- a new `catalog` tool finds actions across every category: `catalog(action="search", query="spawn actor")`, `catalog(action="describe", category="blueprint")`, `catalog(action="list_categories")`.
+
+Because the typed enum is retained, an unknown action is still rejected up front rather than failing silently. Nothing is removed - the agent pulls the details it needs when it needs them.
+
+```yaml
+ue-mcp:
+  context:
+    strategy: lean
+```
+
+Or per session, without editing the file: `UE_MCP_CONTEXT_STRATEGY=lean` (the env var wins over the config value). Anything other than `lean` resolves to `full`.
+
+## Relay daemon
+
+The stdio MCP server already survives editor restarts (it reconnects every 15s). The relay daemon, **on by default**, adds three production-grade properties on top of that:
+
+1. **Warm connection across MCP-client restarts.** The daemon is a long-lived background process holding one live editor WebSocket. When your MCP client (Claude Code, Cursor, Desktop) restarts and respawns the stdio server, it attaches to the already-connected daemon instead of cold-reconnecting.
+2. **A single multiplexed editor connection.** Any number of concurrent sessions share the daemon's one socket to the editor, with per-client request isolation, instead of each opening its own.
+3. **Blip tolerance.** A request that lands while the editor is momentarily down (hot reload, quick restart) is held briefly and replayed on reconnect, instead of failing immediately with `CONNECTION_LOST`. When the editor has never connected (cold start, editor not running), calls fail fast exactly as before.
+
+Each project gets a deterministic per-project loopback port, so multiple projects never collide. The daemon is spawned automatically on demand, publishes a lockfile at `<project>/Saved/UE_MCP_Bridge/proxy.json`, and shuts itself down after an idle period with no connected clients. You can also run it by hand: `npx ue-mcp-proxy /path/to/MyGame.uproject`.
+
+Every failure path degrades to a direct editor connection, so enabling the daemon can never leave you worse off than connecting straight to the editor.
+
+To opt out and connect directly:
+
+```yaml
+ue-mcp:
+  proxy:
+    enabled: false
+```
+
+Or per session: `UE_MCP_PROXY=0`. Override the endpoint with `proxy.port` / `proxy.host` (or `UE_MCP_PROXY_PORT` / `UE_MCP_PROXY_HOST`) if the derived port clashes with something on your machine.
+
 ## Bridge Connection
 
-The C++ plugin listens on **`ws://localhost:9877`** (currently hardcoded). The MCP server auto-connects on startup and reconnects every 15 seconds if the connection drops.
+The C++ plugin listens on **`ws://127.0.0.1:9877`** (it walks up to the next free port and publishes the bound port to `<project>/Saved/UE_MCP_Bridge/port.json` when several editors run side by side). By default the MCP server connects through the [relay daemon](#relay-daemon); with `proxy.enabled: false` it connects to the editor directly. Either way it auto-connects on startup and reconnects every 15 seconds if the connection drops.
 
 ### Connection States
 
@@ -188,6 +237,7 @@ The C++ bridge plugin enables these UE plugins (adding them to `.uproject` if mi
 | `npx ue-mcp plugin install <name>` | Install a ue-mcp plugin from npm and register it in `ue-mcp.yml`. See [Configuration → Plugins](#plugins). |
 | `npx ue-mcp plugin uninstall <name>` | Inverse of install. |
 | `npx ue-mcp plugin create <name>` | Scaffold a new plugin package. See [Plugins](plugins.md). |
+| `npx ue-mcp-proxy <project>` | Run the [relay daemon](#relay-daemon) for a project by hand. Normally spawned automatically; use this to keep a warm editor connection alive across client restarts. |
 
 ## Editor Lifecycle
 
