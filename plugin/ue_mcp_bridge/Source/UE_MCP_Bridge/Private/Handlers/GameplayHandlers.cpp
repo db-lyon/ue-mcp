@@ -130,6 +130,13 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// New handlers
 	Registry.RegisterHandler(TEXT("get_behavior_tree_info"), &GetBehaviorTreeInfo);
 	Registry.RegisterHandler(TEXT("read_behavior_tree_graph"), &ReadBehaviorTreeGraph);
+	// BT node authoring (GameplayHandlers_BTAuthor.cpp)
+	Registry.RegisterHandler(TEXT("set_bt_root"), &SetBTRoot);
+	Registry.RegisterHandler(TEXT("add_bt_child"), &AddBTChild);
+	Registry.RegisterHandler(TEXT("add_bt_decorator"), &AddBTDecorator);
+	Registry.RegisterHandler(TEXT("add_bt_service"), &AddBTService);
+	Registry.RegisterHandler(TEXT("remove_bt_node"), &RemoveBTNode);
+	Registry.RegisterHandler(TEXT("set_bt_node_property"), &SetBTNodeProperty);
 	Registry.RegisterHandler(TEXT("add_perception_component"), &AddPerceptionComponent);
 	Registry.RegisterHandler(TEXT("configure_ai_perception_sense"), &ConfigureAiPerceptionSense);
 	Registry.RegisterHandler(TEXT("add_state_tree_component"), &AddStateTreeComponent);

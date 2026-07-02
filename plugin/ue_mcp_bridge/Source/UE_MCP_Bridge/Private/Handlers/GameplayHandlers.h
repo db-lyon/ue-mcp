@@ -77,6 +77,16 @@ private:
 	// v0.7.11 — BT graph traversal (#124)
 	static TSharedPtr<FJsonValue> ReadBehaviorTreeGraph(const TSharedPtr<FJsonObject>& Params);
 
+	// Behavior Tree node authoring — builds the runtime tree (RootNode +
+	// composite children + decorators + services) directly, reusing the AIModule
+	// classes the read path already walks. Defined in GameplayHandlers_BTAuthor.cpp.
+	static TSharedPtr<FJsonValue> SetBTRoot(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddBTChild(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddBTDecorator(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddBTService(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveBTNode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetBTNodeProperty(const TSharedPtr<FJsonObject>& Params);
+
 	// #163 — detailed navmesh configuration
 	static TSharedPtr<FJsonValue> GetNavmeshDetails(const TSharedPtr<FJsonObject>& Params);
 
