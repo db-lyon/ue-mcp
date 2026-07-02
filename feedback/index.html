@@ -1,0 +1,1481 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for UE-MCP — Unreal Engine Model Context Protocol Server">
+      
+      
+      
+        <link rel="canonical" href="https://db-lyon.github.io/ue-mcp/feedback/">
+      
+      
+        <link rel="prev" href="../neon-shrine-demo/">
+      
+      
+        <link rel="next" href="../troubleshooting/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Feedback - UE-MCP Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#feedback" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="UE-MCP Documentation" class="md-header__button md-logo" aria-label="UE-MCP Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            UE-MCP Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Feedback
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/db-lyon/ue-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    db-lyon/ue-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="UE-MCP Documentation" class="md-nav__button md-logo" aria-label="UE-MCP Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    UE-MCP Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/db-lyon/ue-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    db-lyon/ue-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tool-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../native-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../handler-conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Handler Conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../flows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Plugins
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pie-record-replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PIE Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../neon-shrine-demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Neon Shrine Demo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedback
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#feedback-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feedback modes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Feedback modes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reviewing-deferred-submissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reviewing deferred submissions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#threat-model-note" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Threat-model note
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-approval-prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The approval prompt
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authorship" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authorship
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Authorship">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#authorizing-as-your-github-user" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authorizing as your GitHub user
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-gets-scrubbed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What gets scrubbed
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What gets scrubbed">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#credential-scrub" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Credential scrub
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#privacy-scrub" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Privacy scrub
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submit-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Submit parameters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#claude-code-prompt-hook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude Code prompt hook
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#for-maintainers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For maintainers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resolving-feedback-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resolving feedback issues
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#feedback-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feedback modes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Feedback modes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reviewing-deferred-submissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reviewing deferred submissions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#threat-model-note" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Threat-model note
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-approval-prompt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The approval prompt
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authorship" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authorship
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Authorship">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#authorizing-as-your-github-user" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authorizing as your GitHub user
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-gets-scrubbed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What gets scrubbed
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What gets scrubbed">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#credential-scrub" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Credential scrub
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#privacy-scrub" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Privacy scrub
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submit-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Submit parameters
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#claude-code-prompt-hook" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude Code prompt hook
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#for-maintainers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For maintainers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resolving-feedback-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resolving feedback issues
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="feedback">Feedback<a class="headerlink" href="#feedback" title="Permanent link">&para;</a></h1>
+<p><code>feedback(submit)</code> files a GitHub issue against the ue-mcp tracker describing a tool gap, so maintainers can close it with a native handler. The flow is gated on explicit user approval (no agent-mediated consent), and the body is server-side scrubbed for credentials and personal/project identifiers before anything leaves your machine.</p>
+<h2 id="how-it-works">How it works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+    Agent[AI Agent] --&gt;|notices gap| Submit[feedback action=submit]
+    Submit --&gt;|validate + scrub| Prompt[Approval prompt&lt;br/&gt;in your MCP client]
+    Prompt --&gt;|Accept| Post[POST to GitHub Issues]
+    Prompt --&gt;|Decline| Discard[Nothing posted]
+    Prompt --&gt;|Revise| Loop[Agent rewrites, re-prompts]
+    Loop --&gt; Prompt</code></pre>
+<ol>
+<li>Agent calls <code>feedback(action="submit")</code> with <code>title</code>, <code>summary</code>, and either <code>pythonWorkaround</code> or <code>idealTool</code>.</li>
+<li>Server validates the submission (rejects placeholder titles, meta-apology phrases, too-short summaries, etc.).</li>
+<li>Server assembles the body, applies a credential scrub pass and a privacy redaction pass (<a href="#what-gets-scrubbed">jump to section</a>).</li>
+<li>Server requests an <strong>MCP elicitation</strong> — your client surfaces an approval prompt with the full body, an optional revisions text field, and an Accept / Decline action.</li>
+<li>Based on your choice the server submits the POST, returns a revision directive to the agent, or discards.</li>
+</ol>
+<h2 id="feedback-modes">Feedback modes<a class="headerlink" href="#feedback-modes" title="Permanent link">&para;</a></h2>
+<p>The default is <strong>interactive</strong> — every <code>feedback(submit)</code> blocks on the MCP elicitation approval prompt. Two other modes exist for autonomous / long-running agent sessions where waiting for human input on every submission isn't acceptable.</p>
+<p>The mode is a <strong>per-user, per-device</strong> preference, not a project policy — it's stored in <code>~/.ue-mcp/state.json</code>, not in the tracked <code>ue-mcp.yml</code>. The agent has no surface to change it.</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>What happens on <code>feedback(submit)</code></th>
+<th>When to use it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>interactive</code> (default)</td>
+<td>Server scrubs + opens the elicitation prompt; you Accept / Decline / request revisions. Nothing posts without explicit human approval.</td>
+<td>Default. Use whenever a human is at the keyboard.</td>
+</tr>
+<tr>
+<td><code>auto-approve</code></td>
+<td>Server scrubs + posts directly to GitHub. No prompt.</td>
+<td>Long-running unattended agent sessions where you trust the agent's title/summary judgment. <strong>Still applies the credential and privacy scrubs.</strong></td>
+</tr>
+<tr>
+<td><code>defer</code></td>
+<td>Server scrubs + writes the payload to <code>~/.ue-mcp/pending-feedback/&lt;id&gt;.json</code> instead of posting. No prompt, no network call.</td>
+<td>Long-running unattended agent sessions where you want to review what would have been filed before any of it leaves the machine. Use <code>npx ue-mcp feedback list/show/approve/discard</code> to act on the queue afterward.</td>
+</tr>
+</tbody>
+</table>
+<p>Set or inspect the mode with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>feedback<span class="w"> </span>mode<span class="w">                 </span><span class="c1"># show the effective mode and where it came from</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>feedback<span class="w"> </span>mode<span class="w"> </span>defer<span class="w">           </span><span class="c1"># persist the mode in ~/.ue-mcp/state.json</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>feedback<span class="w"> </span>mode<span class="w"> </span>auto-approve
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>feedback<span class="w"> </span>mode<span class="w"> </span>interactive
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>feedback<span class="w"> </span>mode<span class="w"> </span>default<span class="w">         </span><span class="c1"># clear the preference (back to &quot;interactive&quot;)</span>
+</code></pre></div>
+<p>For a one-off agent run, set the env var instead — it overrides the persisted preference and is not written to disk:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">UE_MCP_FEEDBACK_MODE</span><span class="o">=</span>defer<span class="w"> </span>npx<span class="w"> </span>ue-mcp<span class="w"> </span>./MyGame.uproject
+</code></pre></div>
+<p>Precedence: <code>UE_MCP_FEEDBACK_MODE</code> env &gt; <code>~/.ue-mcp/state.json</code> preference &gt; default <code>interactive</code>.</p>
+<h3 id="reviewing-deferred-submissions">Reviewing deferred submissions<a class="headerlink" href="#reviewing-deferred-submissions" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>feedback<span class="w"> </span>review<span class="w">           </span><span class="c1"># walk every pending entry, one at a time</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>feedback<span class="w"> </span>list<span class="w">             </span><span class="c1"># show pending entries</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>feedback<span class="w"> </span>show<span class="w"> </span>&lt;id&gt;<span class="w">        </span><span class="c1"># full title + body + labels</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>feedback<span class="w"> </span>approve<span class="w"> </span>&lt;id&gt;<span class="w">     </span><span class="c1"># POST to GitHub, then remove</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>feedback<span class="w"> </span>discard<span class="w"> </span>&lt;id&gt;<span class="w">     </span><span class="c1"># delete without posting</span>
+</code></pre></div>
+<p><code>review</code> is <strong>experimental</strong> in this release. It is the path of least friction once you have more than one entry queued: it prints each item in turn and asks <code>[a]pprove  [d]iscard  [s]kip  [q]uit</code>. Approved items POST to GitHub and are removed from disk; discarded items are deleted without posting; skipped items stay on disk for the next pass; quit stops the loop and leaves the rest untouched. If a POST hits an auth prompt or a network failure, the loop stops with the entry left on disk so you can resume after fixing the cause. The per-id <code>approve</code>/<code>discard</code> commands are still there for scripting and one-offs.</p>
+<p>Deferred entries are stored at <code>~/.ue-mcp/pending-feedback/&lt;id&gt;.json</code> (override with <code>UE_MCP_PENDING_DIR</code>). The recorded <code>author</code> choice from the original <code>feedback(submit)</code> is honored on approve.</p>
+<h3 id="threat-model-note">Threat-model note<a class="headerlink" href="#threat-model-note" title="Permanent link">&para;</a></h3>
+<p>Both <code>auto-approve</code> and <code>defer</code> bypass the elicitation consent gate. The scrubs (credential + privacy) still run server-side regardless of mode — auto-approve doesn't downgrade the redaction story, it just removes the human-in-the-loop confirmation that the scrub caught everything you care about. Use defer instead if you want unattended operation <strong>with</strong> human review before anything ships.</p>
+<h2 id="the-approval-prompt">The approval prompt<a class="headerlink" href="#the-approval-prompt" title="Permanent link">&para;</a></h2>
+<p>The prompt the elicitation request opens has:</p>
+<ul>
+<li>The exact body that would post to GitHub (already redacted)</li>
+<li>A line declaring who the issue will author as (<code>@your-github-user</code> or <code>ue-mcp-feedback bot</code>)</li>
+<li>A <code>Submit with revisions (optional)</code> text field</li>
+<li>Your MCP client's built-in <strong>Accept</strong> / <strong>Decline</strong> action buttons</li>
+</ul>
+<p>Outcomes:</p>
+<table>
+<thead>
+<tr>
+<th>Click</th>
+<th>Revisions field</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Accept</td>
+<td>empty</td>
+<td>The body is POSTed to the public tracker</td>
+</tr>
+<tr>
+<td>Accept</td>
+<td>filled in</td>
+<td>Server returns your notes to the agent; the agent rewrites and triggers a fresh approval prompt for the revised body. Nothing posts until you re-approve.</td>
+</tr>
+<tr>
+<td>Decline</td>
+<td>(any)</td>
+<td>Discarded. The agent receives a declined directive and stops.</td>
+</tr>
+</tbody>
+</table>
+<p>The agent has no way to bypass this prompt or forge a response — the consent signal comes from your client's UI, not from a tool result.</p>
+<div class="admonition info">
+<p class="admonition-title">Requires elicitation support</p>
+<p><code>feedback(submit)</code> requires the connected MCP client to advertise the <code>elicitation</code> capability. Claude Code 2.1.76+ supports it. If your client does not, the call returns a <code>feedback.blocked</code> directive with <code>code: "elicitation_unsupported"</code> instead of posting.</p>
+</div>
+<h2 id="authorship">Authorship<a class="headerlink" href="#authorship" title="Permanent link">&para;</a></h2>
+<p>The <code>author</code> parameter is an enum with two values:</p>
+<ul>
+<li><code>author: "user"</code> (default) — issue is authored by your real GitHub account via a cached OAuth token</li>
+<li><code>author: "bot"</code> — issue is authored anonymously by the <code>ue-mcp-feedback[bot]</code></li>
+</ul>
+<p>If <code>author="user"</code> and no OAuth token is cached, the call returns an <code>auth_required</code> directive. Run <code>npx ue-mcp auth</code> to authorize, or call with <code>author="bot"</code> to post anonymously.</p>
+<h3 id="authorizing-as-your-github-user">Authorizing as your GitHub user<a class="headerlink" href="#authorizing-as-your-github-user" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>auth
+</code></pre></div>
+<p>Runs the GitHub device flow: prompts you to open a URL, enter a code, and authorize the <code>ue-mcp-feedback</code> GitHub App. On success the token is cached at <code>~/.ue-mcp/auth.json</code> (mode 600) and every subsequent <code>feedback(submit)</code> defaults to authoring as your user.</p>
+<p>This same step is offered inside <code>npx ue-mcp init</code> when you opt into the feedback prompt hook. Run <code>auth</code> standalone if you skipped that and want to authorize later.</p>
+<h2 id="what-gets-scrubbed">What gets scrubbed<a class="headerlink" href="#what-gets-scrubbed" title="Permanent link">&para;</a></h2>
+<p>Two passes run server-side on the assembled title and body, before either reaches the approval prompt or the GitHub POST. The agent cannot bypass them or see the pre-scrubbed bytes.</p>
+<h3 id="credential-scrub">Credential scrub<a class="headerlink" href="#credential-scrub" title="Permanent link">&para;</a></h3>
+<p>Common credential shapes are replaced with <code>[REDACTED]</code>:</p>
+<ul>
+<li>GitHub PATs and App tokens (<code>ghp_</code>, <code>gho_</code>, <code>ghu_</code>, <code>ghs_</code>, <code>ghr_</code>, <code>github_pat_…</code>)</li>
+<li>AWS access key IDs (<code>AKIA…</code>, <code>ASIA…</code>)</li>
+<li>Slack tokens (<code>xoxb-</code>, <code>xoxp-</code>, etc.)</li>
+<li>Stripe live/test secret keys (<code>sk_live_</code>, <code>sk_test_</code>)</li>
+<li>Anthropic API keys (<code>sk-ant-…</code>)</li>
+<li>OpenAI keys (<code>sk-…</code>)</li>
+<li>JSON Web Tokens (<code>eyJ…eyJ…</code>)</li>
+<li>PEM blocks (<code>-----BEGIN … PRIVATE KEY-----</code>)</li>
+<li>Env-style assignments where the key name names a secret (<code>PASSWORD=</code>, <code>TOKEN=</code>, <code>API_KEY=</code>, etc.)</li>
+</ul>
+<p>Novel shapes can pass through. Read the body on the approval prompt before clicking Accept.</p>
+<h3 id="privacy-scrub">Privacy scrub<a class="headerlink" href="#privacy-scrub" title="Permanent link">&para;</a></h3>
+<p>Personal and project identifiers are replaced with stable placeholders:</p>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Replacement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Absolute project root path</td>
+<td><code>REDACTED_PROJECT_ROOT</code></td>
+</tr>
+<tr>
+<td>OS home directory path</td>
+<td><code>REDACTED_HOME</code></td>
+</tr>
+<tr>
+<td>Project name (whole word, case-insensitive)</td>
+<td><code>REDACTED_PROJECT</code></td>
+</tr>
+<tr>
+<td>OS username (whole word, case-insensitive)</td>
+<td><code>REDACTED_USER</code></td>
+</tr>
+</tbody>
+</table>
+<p>Path matching covers both slash and backslash separator conventions so the same path is caught whether it came from <code>execute_python</code> output, a JSON config, or a console trace. Word-boundary matching avoids substring false positives (<code>Davidson</code> keeps the <code>d</code>, <code>Valedictory</code> keeps the <code>V</code>).</p>
+<p>Class, component, and actor names are <strong>not</strong> redacted automatically — the agent often needs to reference them to describe the gap. Use the <strong>Submit with revisions</strong> field on the approval prompt to request additional case-by-case redactions; the agent will rewrite and bring you a fresh prompt.</p>
+<h2 id="submit-parameters">Submit parameters<a class="headerlink" href="#submit-parameters" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>title</code></td>
+<td>Yes</td>
+<td>Short title describing the tool gap. At least 10 characters, no placeholder phrases.</td>
+</tr>
+<tr>
+<td><code>summary</code></td>
+<td>Yes</td>
+<td>What was attempted and why the native tool fell short. At least 40 characters.</td>
+</tr>
+<tr>
+<td><code>pythonWorkaround</code></td>
+<td>Conditional</td>
+<td>The <code>execute_python</code> code used as a workaround. Either this or <code>idealTool</code> is required; if omitted, the server checks for tracked session workarounds.</td>
+</tr>
+<tr>
+<td><code>idealTool</code></td>
+<td>Conditional</td>
+<td>What tool/action should handle this natively (e.g. <code>blueprint(action='set_variable_default')</code>). Either this or <code>pythonWorkaround</code> is required.</td>
+</tr>
+<tr>
+<td><code>author</code></td>
+<td>No</td>
+<td><code>"user"</code> (default) or <code>"bot"</code>. See <a href="#authorship">Authorship</a>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>feedback(action=&quot;submit&quot;,
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>  title=&quot;Cannot set default values for Blueprint variables&quot;,
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>  summary=&quot;Tried to set a default value on a Blueprint variable. add_variable creates the variable but there&#39;s no action to set its default. Had to use execute_python to access the variable&#39;s DefaultValue property directly.&quot;,
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>  pythonWorkaround=&quot;import unreal; bp = unreal.load_asset(&#39;/Game/BP_Player&#39;); ...&quot;,
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>  idealTool=&quot;blueprint(action=&#39;set_variable_default&#39;, assetPath, name, defaultValue)&quot;
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>)
+</code></pre></div>
+<p>The agent makes the call; you see the approval prompt; you click Accept (with or without revisions) or Decline.</p>
+<h2 id="claude-code-prompt-hook">Claude Code prompt hook<a class="headerlink" href="#claude-code-prompt-hook" title="Permanent link">&para;</a></h2>
+<p><code>npx ue-mcp init</code> offers (opt-in, default off) to install a Claude Code PostToolUse hook that fires after every <code>execute_python</code> call. The hook injects a system message asking the agent to surface the workaround to you and offer <code>feedback(submit)</code>. Without the hook, the agent will only file feedback if you ask for it directly.</p>
+<p>The hook lives in <code>&lt;project&gt;/.claude/settings.json</code>. Its path is also recorded in <code>~/.ue-mcp/state.json</code> under this project's entry so re-running init can find and remove it cleanly. (User-machine state lives outside the project tree because the paths are absolute and machine-specific.) Remove all installed hooks manually with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>uninstall-hooks
+</code></pre></div>
+<p>The hook handler self-gates: if <code>feedback</code> is in <code>ue-mcp.yml</code>'s <code>ue-mcp.disable[]</code>, or no <code>ue-mcp.yml</code> is reachable from the cwd, the hook silently no-ops even if the matcher is still in <code>settings.json</code>.</p>
+<h2 id="security-model">Security model<a class="headerlink" href="#security-model" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>The agent is the adversary for the consent step.</strong> The MCP elicitation prompt is rendered by your client, and the response comes back to the server over the protocol — the agent has no IPC to forge an approval.</li>
+<li><strong>The redaction passes are non-bypassable.</strong> They run before the body reaches the elicitation prompt or <code>submitFeedback</code>, and the agent never sees the pre-scrubbed bytes.</li>
+<li><strong><code>author="bot"</code> uses an embedded GitHub App key.</strong> The published npm package contains the <code>ue-mcp-feedback</code> App's installation credential as an XOR-encoded asset (not a literal source string), so a casual <code>grep</code> over the source tree finds nothing of interest. This is not a security boundary — the cycle constant lives next to the blob — but it removes the affordance that lets an agent stumble on the key during routine source inspection. The App's permissions are scoped to <code>issues: write</code> on <code>db-lyon/ue-mcp</code>; the realistic blast radius of a leak is bot impersonation on this one repo (<code>ue-mcp-feedback[bot]</code> posting noise), not RCE or exfil. Server-side bot signing is the long-term fix, tracked in <a href="https://github.com/db-lyon/ue-mcp/issues/461">#461</a>.</li>
+<li><strong>Disable the category if you don't want it available.</strong> Add <code>"feedback"</code> to <code>ue-mcp.yml</code>'s <code>ue-mcp.disable[]</code> and the tool is not registered with the MCP server. The category checkbox lives in the <strong>Agent behavior</strong> section of <code>npx ue-mcp init</code> (default unchecked on fresh installs).</li>
+</ul>
+<h2 id="for-maintainers">For maintainers<a class="headerlink" href="#for-maintainers" title="Permanent link">&para;</a></h2>
+<p>Submitted issues carry the <code>agent-feedback</code> label and include:</p>
+<ul>
+<li><strong>Summary</strong> — what the user was trying to do (post-scrub)</li>
+<li><strong>Ideal Tool/Action</strong> — suggested native tool signature, if supplied</li>
+<li><strong>Python Workaround Used</strong> — the workaround code (post-scrub), if supplied</li>
+<li><strong>Session Workaround Log</strong> — every <code>execute_python</code> call recorded during the session (post-scrub)</li>
+</ul>
+<p>These form a prioritized backlog of tool gaps to close.</p>
+<h2 id="resolving-feedback-issues">Resolving feedback issues<a class="headerlink" href="#resolving-feedback-issues" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>npx<span class="w"> </span>ue-mcp<span class="w"> </span>resolve<span class="w"> </span>&lt;issue-number&gt;
+</code></pre></div>
+<p>Fetches the issue, creates a branch, launches Claude Code to implement the fix, and opens a PR. See <a href="../getting-started/#resolving-issues">Getting Started</a> for details.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.indexes", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

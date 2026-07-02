@@ -1,0 +1,2208 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for UE-MCP — Unreal Engine Model Context Protocol Server">
+      
+      
+      
+        <link rel="canonical" href="https://db-lyon.github.io/ue-mcp/plugins/">
+      
+      
+        <link rel="prev" href="../flows/">
+      
+      
+        <link rel="next" href="../pie-record-replay/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Plugins - UE-MCP Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#plugins" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="UE-MCP Documentation" class="md-header__button md-logo" aria-label="UE-MCP Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            UE-MCP Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Plugins
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/db-lyon/ue-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    db-lyon/ue-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="UE-MCP Documentation" class="md-nav__button md-logo" aria-label="UE-MCP Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    UE-MCP Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/db-lyon/ue-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    db-lyon/ue-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tool-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../native-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../handler-conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Handler Conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../flows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Plugins
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-plugins-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How plugins work
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How plugins work">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#three-shapes-a-plugin-can-take" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Three shapes a plugin can take
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-plugins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using plugins
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Using plugins">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#installing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-plugins-array" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The plugins: array
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#introspection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Introspection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#host-ue-plugin-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Host UE plugin dependencies
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ordering-and-collisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ordering and collisions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removing-a-plugin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removing a plugin
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#official-plugins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Official plugins
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authoring-a-plugin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authoring a plugin
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Authoring a plugin">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#quick-scaffolder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick scaffolder
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#package-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Package layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#packagejson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        package.json
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ue-mcppluginyml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ue-mcp.plugin.yml
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#providing-new-categories-provides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Providing new categories (provides:)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shipping-native-c-nativemodule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shipping native C++ (nativeModule:)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Shipping native C++ (nativeModule:)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-handlers-become-mcp-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How handlers become MCP actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layout-inside-the-npm-tarball" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout inside the npm tarball
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-native-module" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The native module
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bridge-abi-versioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bridge ABI versioning
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#writing-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#knowledge-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Knowledge files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#publishing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Publishing
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validation-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pluginsactionlist-returns-plugincount-0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        plugins(action="list") returns pluginCount: 0
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#uepluginpresent-false" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        uePluginPresent: false
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#class_path-path-could-not-be-resolved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        class_path '&lt;path&gt;' could not be resolved
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#requires-server-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        requires server &gt;= &lt;version&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#injected-action-appears-in-pluginsdescribe-but-not-in-the-host-category-tools-action-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Injected action appears in plugins.describe but not in the host category tool's action list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#nativemodule-requires-bridge-abi-n" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nativeModule requires bridge ABI &gt;= N
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#provided-category-does-not-show-up-as-its-own-mcp-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provided category does not show up as its own MCP tool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#native-module-deployed-but-handlers-come-back-unknown-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Native module deployed but handlers come back Unknown method
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pie-record-replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PIE Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../neon-shrine-demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Neon Shrine Demo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../feedback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-plugins-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How plugins work
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How plugins work">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#three-shapes-a-plugin-can-take" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Three shapes a plugin can take
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-plugins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using plugins
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Using plugins">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#installing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-plugins-array" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The plugins: array
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#introspection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Introspection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#host-ue-plugin-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Host UE plugin dependencies
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ordering-and-collisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ordering and collisions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removing-a-plugin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removing a plugin
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#official-plugins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Official plugins
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authoring-a-plugin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authoring a plugin
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Authoring a plugin">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#quick-scaffolder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick scaffolder
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#package-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Package layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#packagejson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        package.json
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ue-mcppluginyml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ue-mcp.plugin.yml
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#providing-new-categories-provides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Providing new categories (provides:)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shipping-native-c-nativemodule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shipping native C++ (nativeModule:)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Shipping native C++ (nativeModule:)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-handlers-become-mcp-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How handlers become MCP actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#layout-inside-the-npm-tarball" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout inside the npm tarball
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-native-module" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The native module
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bridge-abi-versioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bridge ABI versioning
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#writing-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing tasks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#knowledge-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Knowledge files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#publishing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Publishing
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validation-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pluginsactionlist-returns-plugincount-0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        plugins(action="list") returns pluginCount: 0
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#uepluginpresent-false" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        uePluginPresent: false
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#class_path-path-could-not-be-resolved" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        class_path '&lt;path&gt;' could not be resolved
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#requires-server-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        requires server &gt;= &lt;version&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#injected-action-appears-in-pluginsdescribe-but-not-in-the-host-category-tools-action-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Injected action appears in plugins.describe but not in the host category tool's action list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#nativemodule-requires-bridge-abi-n" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        nativeModule requires bridge ABI &gt;= N
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#provided-category-does-not-show-up-as-its-own-mcp-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provided category does not show up as its own MCP tool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#native-module-deployed-but-handlers-come-back-unknown-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Native module deployed but handlers come back Unknown method
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="plugins">Plugins<a class="headerlink" href="#plugins" title="Permanent link">&para;</a></h1>
+<p>ue-mcp's plugin system lets npm packages extend the server in three ways:</p>
+<ul>
+<li><strong>Inject</strong> new actions into ue-mcp's built-in categories so agents discover them where they're already working.</li>
+<li><strong>Provide</strong> entirely new top-level categories that the plugin owns end-to-end.</li>
+<li><strong>Ship native C++</strong> that registers handlers directly with the editor bridge, opening up engine APIs that have no built-in coverage.</li>
+</ul>
+<p>Most plugins use only the first shape; the other two are available when injection is the wrong fit. This page covers both sides: installing and managing plugins (consumer), and writing and publishing one (author). The author section starts at <a href="#authoring-a-plugin">Authoring a plugin</a> - if you're just trying to use a plugin somebody else wrote, you can stop after <a href="#using-plugins">Using plugins</a>.</p>
+<div class="admonition info">
+<p class="admonition-title">Live reference</p>
+<p><a href="https://github.com/db-lyon/pie-studio"><code>pie-studio</code></a> (<a href="https://www.npmjs.com/package/pie-studio">npm</a>) is the canonical native-module reference. It ships C++ handlers for PIE recording, replay, observation, and input injection, surfaced as a <code>pie</code> category it provisions via <code>nativeModule.category</code>. See <a href="#shipping-native-c">Shipping native C++</a>.</p>
+</div>
+<h2 id="quick-start">Quick start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
+<p>In your Unreal project directory:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ue-mcp<span class="w"> </span>plugin<span class="w"> </span>install<span class="w"> </span>pie-studio
+</code></pre></div>
+<p>That runs <code>npm install --save</code>, validates the plugin's manifest, deploys the native C++ module, and adds an entry to your <code>ue-mcp.yml</code>. Rebuild the UE project so the native module compiles in, then restart your MCP client (in Claude Code, <code>/mcp</code> reconnects).</p>
+<p>Verify with the introspection tool:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>plugins(action=&quot;list&quot;)
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">&quot;pluginCount&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">&quot;active&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">&quot;plugins&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;pie-studio&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">      </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0.0.2&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">      </span><span class="nt">&quot;actionPrefix&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">      </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;active&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">      </span><span class="nt">&quot;categories&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;gameplay&quot;</span><span class="p">],</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">      </span><span class="nt">&quot;injectedActions&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">33</span><span class="p">,</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">      </span><span class="nt">&quot;flows&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">      </span><span class="nt">&quot;nativeModule&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PIE_Studio&quot;</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">  </span><span class="p">]</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="p">}</span>
+</code></pre></div>
+<p>Once <code>status: "active"</code>, the injected actions (e.g. <code>gameplay(action="pie_record_arm", ...)</code>) are callable end-to-end.</p>
+<h2 id="how-plugins-work">How plugins work<a class="headerlink" href="#how-plugins-work" title="Permanent link">&para;</a></h2>
+<p>A plugin is a normal npm package that ships:</p>
+<ul>
+<li>A <code>ue-mcp.plugin.yml</code> manifest declaring an <code>actionPrefix</code>, the actions it injects into which host categories, and the task classes that back them.</li>
+<li>Compiled task classes (one per injected action) under <code>dist/</code>, each extending <code>UeMcpTask</code> from <a href="#writing-tasks"><code>ue-mcp/task</code></a>.</li>
+<li>Optional <code>knowledge/&lt;category&gt;.md</code> markdown that the server attaches to the host category's AI-facing docs at boot.</li>
+<li>Optional <code>flows:</code> entries that compose injected actions with built-ins.</li>
+</ul>
+<p>At server start, ue-mcp:</p>
+<ol>
+<li>Reads <code>plugins:</code> from your project's <code>ue-mcp.yml</code>.</li>
+<li>Resolves each entry against <code>&lt;project&gt;/node_modules/</code>.</li>
+<li>Loads and validates each plugin's <code>ue-mcp.plugin.yml</code>.</li>
+<li>Imports its task classes and registers them with the flow runtime.</li>
+<li>Merges the injected actions into the host category tools - the action shows up as <code>&lt;category&gt;(action="&lt;prefix&gt;_&lt;bare&gt;", ...)</code>.</li>
+<li>Concatenates the plugin's knowledge files into the host categories' AI-facing docs.</li>
+</ol>
+<p>The injection happens before any tool is registered with the MCP client, so by the time the agent sees the <code>gameplay</code> tool's action list, the plugin's actions are already there alongside the built-ins.</p>
+<h3 id="three-shapes-a-plugin-can-take">Three shapes a plugin can take<a class="headerlink" href="#three-shapes-a-plugin-can-take" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Manifest blocks</th>
+<th>When to reach for it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A. Inject only</strong></td>
+<td><code>inject:</code></td>
+<td>The action belongs inside an existing category. Default choice.</td>
+</tr>
+<tr>
+<td><strong>B. Provide a new category</strong></td>
+<td><code>provides:</code> (with or without <code>inject:</code>)</td>
+<td>The plugin opens a whole new domain - audio middleware, build pipelines, networking layers - that doesn't fit inside any built-in category.</td>
+</tr>
+<tr>
+<td><strong>C. Ship native C++</strong></td>
+<td><code>nativeModule:</code> (with <code>category:</code> to surface its handlers)</td>
+<td>The plugin needs engine APIs ue-mcp's built-in handlers don't expose. The plugin ships a UE C++ module that registers handlers on the editor bridge; <code>nativeModule.category</code> surfaces them as actions with no TypeScript.</td>
+</tr>
+</tbody>
+</table>
+<p>Shape A is overwhelmingly the right answer. An action that belongs inside an existing category is best discovered where agents are already working.</p>
+<p>Shape B is for genuinely new domains. If your plugin's actions don't fit anywhere in the built-in category list, owning a new top-level category is cleaner than forcing a misfit injection.</p>
+<p>Shape C is for capability that can't be expressed through orchestration of existing actions. The plugin ships C++ source that compiles into the user's project alongside the bridge, and registers handlers via <code>UEMCP::RegisterExternalHandler</code> from its <code>StartupModule</code>. Native handlers participate in the same dispatch path as built-in ones. <code>pie-studio</code> is a Shape C plugin.</p>
+<h2 id="using-plugins">Using plugins<a class="headerlink" href="#using-plugins" title="Permanent link">&para;</a></h2>
+<h3 id="installing">Installing<a class="headerlink" href="#installing" title="Permanent link">&para;</a></h3>
+<p>The supported install path is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>ue-mcp<span class="w"> </span>plugin<span class="w"> </span>install<span class="w"> </span>&lt;package-name&gt;
+</code></pre></div>
+<p>It's a thin wrapper that:</p>
+<ol>
+<li>Runs <code>npm install --save &lt;package-name&gt;</code> so the package lands in <code>node_modules/</code> and is recorded in your <code>package.json</code>.</li>
+<li>Validates the plugin's <code>ue-mcp.plugin.yml</code> - checks that <code>actionPrefix</code> is a legal identifier, every <code>inject:</code> target is a real registered category, every <code>class_path</code> resolves, and <code>minServerVersion</code> is satisfied.</li>
+<li>Appends a <code>- name: &lt;package-name&gt;</code> entry to your <code>ue-mcp.yml</code>'s <code>plugins:</code> array (creating the array if needed).</li>
+<li>Prints the restart instruction.</li>
+</ol>
+<p>You can also install manually - <code>npm install --save &lt;package-name&gt;</code> and edit <code>ue-mcp.yml</code> yourself. The end state is identical.</p>
+<h3 id="the-plugins-array">The <code>plugins:</code> array<a class="headerlink" href="#the-plugins-array" title="Permanent link">&para;</a></h3>
+<p>The consumer surface is a single block in <code>ue-mcp.yml</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">plugins</span><span class="p">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pie-studio</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">some-other-plugin</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;^0.2.0&quot;</span><span class="w">     </span><span class="c1"># optional; npm semver range against package.json</span>
+</code></pre></div>
+<p>Each entry resolves against the project's <code>node_modules/</code>. If <code>version</code> is omitted, whatever is currently installed loads. Order matters - see <a href="#ordering-and-collisions">Ordering and collisions</a>.</p>
+<h3 id="introspection">Introspection<a class="headerlink" href="#introspection" title="Permanent link">&para;</a></h3>
+<p>Two read-only actions on the <code>plugins</code> category:</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>What it returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>plugins(action="list")</code></td>
+<td>Every plugin: name, version, prefix, status, count of injected actions and flows, host UE plugin dependency check.</td>
+</tr>
+<tr>
+<td><code>plugins(action="describe", name="&lt;package&gt;")</code></td>
+<td>Full detail for one plugin: the same fields as <code>list</code>, plus the actual injected action names, knowledge file paths, flows, and the resolved package + manifest paths on disk.</td>
+</tr>
+</tbody>
+</table>
+<p>Both reflect the live state of the server, so they're the right tool when something looks wrong - see <a href="#troubleshooting">Troubleshooting</a>.</p>
+<h3 id="host-ue-plugin-dependencies">Host UE plugin dependencies<a class="headerlink" href="#host-ue-plugin-dependencies" title="Permanent link">&para;</a></h3>
+<p>A plugin can declare a single Unreal-side dependency in its manifest:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">uePluginDependency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SomePlugin</span>
+</code></pre></div>
+<p>This is the <strong><code>.uplugin</code> filename</strong> - the same string that appears as <code>Plugins[].Name</code> in your <code>.uproject</code>. ue-mcp checks for it at server start and reports the result as <code>uePluginPresent</code> in <code>plugins(action="list")</code>.</p>
+<p>The check is informational, not gating: the npm-side plugin loads regardless, and its injected actions appear in the host category tools. But until the UE plugin is enabled in <code>.uproject</code> and its C++ modules are built, the actions will fail at execute time with a clear error.</p>
+<p>To enable a host UE plugin:</p>
+<ol>
+<li>Add <code>{ "Name": "&lt;DepName&gt;", "Enabled": true }</code> to your <code>.uproject</code>'s <code>Plugins</code> array.</li>
+<li>Build the project (e.g. <code>npm run build</code> or <code>editor(action="build_all")</code>).</li>
+<li>Restart the editor.</li>
+<li>Run <code>plugins(action="list")</code> to confirm <code>uePluginPresent: true</code>.</li>
+</ol>
+<p>For source-distributed UE plugins, drop the source under <code>Plugins/&lt;DepName&gt;/</code> - either as a git submodule (recommended for size) or as a vendored copy. The <code>.uplugin</code> file inside that directory is what UE's plugin discovery walks.</p>
+<h3 id="ordering-and-collisions">Ordering and collisions<a class="headerlink" href="#ordering-and-collisions" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Plugin vs built-in:</strong> A plugin action can never override a built-in. Collisions are hard-skipped at load time with a warning in the server log; the built-in stays.</li>
+<li><strong>Plugin vs plugin:</strong> First entry in <code>plugins:</code> wins. If two plugins both inject <code>gameplay.foo_bar</code>, only the earlier-listed one's version is registered. The order is intentionally stable - your <code>ue-mcp.yml</code> is the source of truth for resolution.</li>
+<li><strong>Failed plugins are skipped, not partially loaded.</strong> If a plugin fails validation (bad manifest, missing class_path, server-version mismatch, etc.), it is dropped entirely with a loud warning. Other plugins keep loading. The host tools are never partially mutated.</li>
+</ul>
+<h3 id="removing-a-plugin">Removing a plugin<a class="headerlink" href="#removing-a-plugin" title="Permanent link">&para;</a></h3>
+<p>There is no separate uninstall command - <code>npm uninstall &lt;package-name&gt;</code> and delete the entry from <code>ue-mcp.yml</code>. On next restart, the actions are gone.</p>
+<h2 id="official-plugins">Official plugins<a class="headerlink" href="#official-plugins" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Plugin</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/db-lyon/pie-studio"><code>pie-studio</code></a></td>
+<td>PIE recording, replay, observation, and input injection. 33 native C++ handlers injected into <code>gameplay</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="authoring-a-plugin">Authoring a plugin<a class="headerlink" href="#authoring-a-plugin" title="Permanent link">&para;</a></h2>
+<h3 id="quick-scaffolder">Quick scaffolder<a class="headerlink" href="#quick-scaffolder" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ue-mcp<span class="w"> </span>plugin<span class="w"> </span>create<span class="w"> </span>my-thing
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nb">cd</span><span class="w"> </span>my-thing
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>npm<span class="w"> </span>install
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>npm<span class="w"> </span>run<span class="w"> </span>build
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>npm<span class="w"> </span>run<span class="w"> </span>check<span class="w">     </span><span class="c1"># validate the manifest + task wiring</span>
+</code></pre></div>
+<p>The scaffold is a <strong>superset</strong>: it ships every way a plugin can extend ue-mcp, wired and working, so you never have to discover a capability before using it. Keep the shapes you want and delete the rest.</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>What it scaffolds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>inject</code></td>
+<td>An action added onto a built-in category, e.g. <code>project(action="&lt;prefix&gt;_hello")</code>.</td>
+</tr>
+<tr>
+<td><code>provides</code></td>
+<td>A brand-new top-level category the plugin owns (actions unprefixed), e.g. <code>&lt;prefix&gt;(action="greet")</code>.</td>
+</tr>
+<tr>
+<td><code>flows</code></td>
+<td>A chained, one-call orchestration (<code>&lt;prefix&gt;_demo</code>).</td>
+</tr>
+<tr>
+<td><code>nativeModule</code></td>
+<td>A compile-ready C++ handler skeleton under <code>ue/Plugins/&lt;UePlugin&gt;/</code>, <strong>dormant</strong> by default.</td>
+</tr>
+</tbody>
+</table>
+<p>The native C++ module is the one shape that is scaffolded but not active: declaring <code>nativeModule:</code> makes <code>ue-mcp plugin install</code> deploy the module and force a UE rebuild, so the manifest block ships commented out. The C++ source still lands on disk - uncomment the block in <code>ue-mcp.plugin.yml</code> and reinstall to activate it. No separate flag, no compile cost until you opt in.</p>
+<p>The scaffold also stamps <code>package.json</code>, <code>tsconfig.json</code>, a <code>src/index.ts</code> entry, <code>knowledge/</code>, a <code>scripts/check.mjs</code> validator, <code>LICENSE</code>, and <code>.gitignore</code>.</p>
+<h3 id="package-layout">Package layout<a class="headerlink" href="#package-layout" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>my-plugin/
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>  package.json
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>  tsconfig.json
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>  ue-mcp.plugin.yml          # author declaration: actionPrefix, inject, provides, tasks, flows, nativeModule
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>  src/                       # author writes TypeScript here
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    index.ts                 # package entry (tasks load by class_path, but `main` points here)
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    tasks/
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>      MyAction.ts            # one UeMcpTask subclass per file, default export
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    shared/                  # optional cross-task helpers (never referenced from the declaration)
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>  dist/                      # tsc output - what actually ships and loads
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    tasks/
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>      MyAction.js
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>  ue/                        # dormant native C++ module (only deployed when nativeModule: is uncommented)
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>    Plugins/
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>      MyPlugin/
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>  scripts/
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>    check.mjs                # pre-publish validator: manifest parses, task refs resolve
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>  knowledge/
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>    gameplay.md              # one markdown file per target category
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>  LICENSE
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>  README.md
+</code></pre></div>
+<p>Conventions:</p>
+<ul>
+<li>One task class per file, default export, extending <code>UeMcpTask</code> from <code>ue-mcp/task</code>.</li>
+<li><code>class_path</code> in the declaration is resolved against the plugin's <code>dist/</code> (the loader tries <code>dist/&lt;path&gt;.js</code> then <code>dist/tasks/&lt;path&gt;.js</code>).</li>
+<li><code>src/shared/</code> holds helpers; never reference it from the declaration.</li>
+<li>Compile to <code>dist/</code> with <code>tsc</code> so users need no TypeScript toolchain.</li>
+</ul>
+<h3 id="packagejson"><code>package.json</code><a class="headerlink" href="#packagejson" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my-plugin&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;My custom actions for ue-mcp&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;module&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span><span class="nt">&quot;main&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;dist/index.js&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">  </span><span class="nt">&quot;files&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;dist&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ue-mcp.plugin.yml&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;knowledge&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;README.md&quot;</span><span class="p">],</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="nt">&quot;keywords&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;unreal-engine&quot;</span><span class="p">],</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">  </span><span class="nt">&quot;peerDependencies&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">    </span><span class="nt">&quot;ue-mcp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&gt;=1.0.65&quot;</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="w">  </span><span class="nt">&quot;devDependencies&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="w">    </span><span class="nt">&quot;ue-mcp&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;^1.0.65&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="w">    </span><span class="nt">&quot;typescript&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;^5.7.0&quot;</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="w">  </span><span class="nt">&quot;scripts&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a><span class="w">    </span><span class="nt">&quot;build&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tsc&quot;</span>
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a><span class="p">}</span>
+</code></pre></div>
+<p><code>UeMcpTask</code> (and the types you import alongside it) come from <code>ue-mcp/task</code> - a thin, server-free entry point that the consumer's installed <code>ue-mcp</code> already provides. That's why <code>ue-mcp</code> is a <strong>peer</strong> dependency: the running server supplies the copy at load time, so your task extends the same base class the server uses. The matching <strong>dev</strong> dependency is only there to type-check your build. You never depend on the underlying flow runtime directly - it stays an implementation detail behind <code>ue-mcp/task</code>.</p>
+<h3 id="ue-mcppluginyml"><code>ue-mcp.plugin.yml</code><a class="headerlink" href="#ue-mcppluginyml" title="Permanent link">&para;</a></h3>
+<p>This is the only file ue-mcp reads from your package. Authored once; never edited by users.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nt">actionPrefix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mypfx</span><span class="w">             </span><span class="c1"># mandatory, lowercase, must match /^[a-z][a-z0-9_]*$/</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nt">minServerVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0.15</span><span class="w">        </span><span class="c1"># optional - the server enforces this at install and load</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nt">uePluginDependency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">SomePlugin</span><span class="w">  </span><span class="c1"># optional - .uplugin filename to check in .uproject</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="nt">inject</span><span class="p">:</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span><span class="nt">gameplay</span><span class="p">:</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">    </span><span class="nt">inspect_something</span><span class="p">:</span><span class="w">           </span><span class="c1"># -&gt; gameplay(action=&quot;mypfx_inspect_something&quot;)</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">      </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mypfx.inspect_something</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Inspect</span><span class="nv"> </span><span class="s">some</span><span class="nv"> </span><span class="s">game</span><span class="nv"> </span><span class="s">state</span><span class="nv"> </span><span class="s">during</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">PIE</span><span class="nv"> </span><span class="s">session.&quot;</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="w">      </span><span class="nt">schema</span><span class="p">:</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="w">        </span><span class="nt">actorLabel</span><span class="p">:</span><span class="w">            </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">string</span><span class="p p-Indicator">,</span><span class="nt"> required</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="w">        </span><span class="nt">includeComponents</span><span class="p">:</span><span class="w">     </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">boolean</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="nt">tasks</span><span class="p">:</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="w">  </span><span class="nt">mypfx.inspect_something</span><span class="p">:</span>
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="w">    </span><span class="nt">class_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tasks/InspectSomething</span>
+<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Inspect</span><span class="nv"> </span><span class="s">game</span><span class="nv"> </span><span class="s">state</span><span class="nv"> </span><span class="s">for</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">given</span><span class="nv"> </span><span class="s">actor&quot;</span>
+</code></pre></div>
+<p>The key under each category is the <strong>bare</strong> action name. The loader prepends your <code>actionPrefix</code> to compute the injected name: <code>mypfx</code> + <code>inspect_something</code> -&gt; <code>mypfx_inspect_something</code>. The user always sees the prefixed form.</p>
+<p><code>knowledge:</code> and <code>flows:</code> are optional - omit them when you have nothing to attach. A plugin can ship a single action and nothing else.</p>
+<p>Param schemas under <code>schema:</code> accept these types: <code>string</code>, <code>number</code>, <code>boolean</code>, <code>object</code>, <code>array</code>. Non-required params become optional at the top level of the host category tool's schema.</p>
+<h3 id="providing-new-categories-provides">Providing new categories (<code>provides:</code>)<a class="headerlink" href="#providing-new-categories-provides" title="Permanent link">&para;</a></h3>
+<p>When the plugin's actions don't belong inside any built-in category, declare a <code>provides:</code> block. Each entry registers a brand-new top-level MCP category that the plugin owns. Action names are NOT prefixed inside provided categories - the category itself is the namespace.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nt">actionPrefix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terrain</span><span class="w">            </span><span class="c1"># still required (used for any inject: entries)</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="nt">provides</span><span class="p">:</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">  </span><span class="nt">terrain_sculpt</span><span class="p">:</span><span class="w">                </span><span class="c1"># -&gt; terrain_sculpt(action=&quot;sample_density&quot;, ...)</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Terrain</span><span class="nv"> </span><span class="s">sculpting</span><span class="nv"> </span><span class="s">operations&quot;</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">    </span><span class="nt">actions</span><span class="p">:</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">      </span><span class="nt">sample_density</span><span class="p">:</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">terrain_sculpt.sample_density</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">        </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Sample</span><span class="nv"> </span><span class="s">density</span><span class="nv"> </span><span class="s">values</span><span class="nv"> </span><span class="s">along</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">curve</span><span class="nv"> </span><span class="s">through</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">terrain&quot;</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">        </span><span class="nt">schema</span><span class="p">:</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">          </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">array</span><span class="p p-Indicator">,</span><span class="nt"> required</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="w">          </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">array</span><span class="p p-Indicator">,</span><span class="nt"> required</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="w">          </span><span class="nt">steps</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">number</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>
+<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a><span class="nt">tasks</span><span class="p">:</span>
+<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a><span class="w">  </span><span class="nt">terrain_sculpt.sample_density</span><span class="p">:</span>
+<a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a><span class="w">    </span><span class="nt">class_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tasks/SampleDensity</span>
+</code></pre></div>
+<p>Rules:</p>
+<ul>
+<li>Provided category names must match <code>/^[a-z][a-z0-9_]*$/</code>.</li>
+<li>A provided name may not collide with a built-in category. The CLI fails install with the offending name; the runtime loader skips the plugin with a clear status reason.</li>
+<li>Inter-plugin collisions resolve first-writer-wins. If two installed plugins both <code>provides: terrain_sculpt</code>, the one earlier in your <code>plugins:</code> array claims the name; the other is skipped with a warning visible in <code>plugins(list)</code>.</li>
+<li>Knowledge files keyed by a provided category name (<code>knowledge/terrain_sculpt.md</code>) attach to that category's AI-facing docs the same way they do for injected categories.</li>
+</ul>
+<p>A plugin can mix <code>inject:</code> and <code>provides:</code> freely - whatever fits each action best.</p>
+<h3 id="shipping-native-c-nativemodule">Shipping native C++ (<code>nativeModule:</code>)<a class="headerlink" href="#shipping-native-c-nativemodule" title="Permanent link">&para;</a></h3>
+<p>When the plugin needs engine APIs ue-mcp's bridge doesn't already expose, ship a UE C++ module alongside the npm package. The module compiles into the user's project at install time and registers handlers on the bridge via <code>UEMCP::RegisterExternalHandler</code>.</p>
+<p><code>pie-studio</code> is a real-world example of this shape. Its manifest:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nt">actionPrefix</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pie</span><span class="w">                    </span><span class="c1"># used only when injecting into a built-in</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="nt">nativeModule</span><span class="p">:</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="nt">uePluginName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">PIE_Studio</span><span class="w">           </span><span class="c1"># name of the .uplugin that gets deployed</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span><span class="nt">minBridgeApi</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">                    </span><span class="c1"># gate against UEMCP_BRIDGE_API_VERSION</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ue/Plugins/PIE_Studio</span><span class="w">      </span><span class="c1"># path inside your npm tarball</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">  </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pie</span><span class="w">                      </span><span class="c1"># surface handlers under a pie(...) tool</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">  </span><span class="nt">categoryDescription</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;PIE</span><span class="nv"> </span><span class="s">record,</span><span class="nv"> </span><span class="s">replay,</span><span class="nv"> </span><span class="s">observe,</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">input</span><span class="nv"> </span><span class="s">injection&quot;</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">  </span><span class="nt">handlers</span><span class="p">:</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">    </span><span class="nt">record_arm</span><span class="p">:</span><span class="w">   </span><span class="p p-Indicator">{</span><span class="nt"> description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Arm</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">PIE</span><span class="nv"> </span><span class="s">input</span><span class="nv"> </span><span class="s">recorder&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">    </span><span class="nt">replay_arm</span><span class="p">:</span><span class="w">   </span><span class="p p-Indicator">{</span><span class="nt"> description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Arm</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">PIE</span><span class="nv"> </span><span class="s">input</span><span class="nv"> </span><span class="s">replayer&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="w">    </span><span class="nt">inject_input</span><span class="p">:</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">      </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Single-frame</span><span class="nv"> </span><span class="s">Enhanced</span><span class="nv"> </span><span class="s">Input</span><span class="nv"> </span><span class="s">inject&quot;</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="w">      </span><span class="nt">timeoutSeconds</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="w">      </span><span class="nt">schema</span><span class="p">:</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="w">        </span><span class="nt">action_path</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">string</span><span class="p p-Indicator">,</span><span class="nt"> description</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;InputAction</span><span class="nv"> </span><span class="s">asset</span><span class="nv"> </span><span class="s">path</span><span class="nv"> </span><span class="s">(required)&quot;</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a><span class="w">        </span><span class="nt">value_x</span><span class="p">:</span><span class="w">     </span><span class="p p-Indicator">{</span><span class="nt"> type</span><span class="p">:</span><span class="w"> </span><span class="nv">number</span><span class="w"> </span><span class="p p-Indicator">}</span>
+<a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="w">    </span><span class="c1"># ... more handlers</span>
+</code></pre></div>
+<h4 id="how-handlers-become-mcp-actions">How handlers become MCP actions<a class="headerlink" href="#how-handlers-become-mcp-actions" title="Permanent link">&para;</a></h4>
+<p>Set <code>category</code> and ue-mcp surfaces every handler as an MCP action that dispatches to the bare bridge method your C++ registered (<code>record_arm</code> above). No TypeScript task class is involved - the C++ handler <em>is</em> the implementation. The category value picks one of two shapes:</p>
+<ul>
+<li><strong>A new (non-built-in) category</strong> - as in the <code>pie</code> example above - is <strong>provisioned as its own top-level tool</strong> the plugin owns. Actions are <strong>not</strong> prefixed (the category is the namespace): <code>pie(action="record_arm")</code>. Set <code>categoryDescription</code> for the tool's summary. This is the right choice when the handlers form their own domain. Cross-plugin name collisions resolve first-wins, like <code>provides:</code>.</li>
+<li><strong>A built-in category</strong> (e.g. <code>gameplay</code>) <strong>injects</strong> the handlers into that existing tool, prefixed with <code>actionPrefix</code>: handler <code>record_arm</code> becomes <code>gameplay(action="pie_record_arm")</code>. Choose this when the handlers belong inside a category that already exists.</li>
+</ul>
+<p>Two rules that bite if missed:</p>
+<ul>
+<li><strong>Declare params under each handler's <code>schema:</code>.</strong> The MCP SDK strips any param not in the action's schema before it reaches the bridge, so an undeclared param silently never arrives. Same field types as <code>inject:</code> schemas. Params-free handlers (status polls, list calls) need no schema. Leave params <strong>optional</strong> (ue-mcp forces them optional regardless): one flat schema backs every action in a category, so a required param would be forced onto unrelated actions - let your C++ handler validate and return a clear error, and note "(required)" in the param description.</li>
+<li><strong><code>timeoutSeconds</code></strong> sets the bridge-call timeout for that action (default 30s). Raise it for long-running handlers.</li>
+</ul>
+<p>Omit <code>category</code> entirely and handlers are still registered on the bridge but exposed as no MCP action - useful only if another task calls them internally. For an agent-facing plugin you almost always want <code>category</code>.</p>
+<h4 id="layout-inside-the-npm-tarball">Layout inside the npm tarball<a class="headerlink" href="#layout-inside-the-npm-tarball" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>pie-studio/
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>  ue-mcp.plugin.yml
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>  dist/                              # tsc output (TypeScript tasks, if any)
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>  ue/                                # native source ships here
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    Plugins/
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>      PIE_Studio/
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>        PIE_Studio.uplugin
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>        Source/
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>          PIE_Studio/
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>            PIE_Studio.Build.cs
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>            Private/
+<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>              Handlers/              # handler .cpp files
+<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a>              PIE/                   # engine subsystem wrappers
+<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a>              UI/                    # editor UI panels
+</code></pre></div>
+<p>Update <code>package.json</code> <code>files:</code> so the <code>ue/</code> directory ships with the published tarball:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nt">&quot;files&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;dist&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ue&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;ue-mcp.plugin.yml&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;knowledge&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;README.md&quot;</span><span class="p">]</span>
+</code></pre></div>
+<h4 id="the-native-module">The native module<a class="headerlink" href="#the-native-module" title="Permanent link">&para;</a></h4>
+<p>Add <code>UE_MCP_Bridge</code> to <code>PrivateDependencyModuleNames</code> in your <code>.Build.cs</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">public</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">PIE_Studio</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">ModuleRules</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="p">{</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="k">public</span><span class="w"> </span><span class="nf">PIE_Studio</span><span class="p">(</span><span class="n">ReadOnlyTargetRules</span><span class="w"> </span><span class="n">Target</span><span class="p">)</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="k">base</span><span class="p">(</span><span class="n">Target</span><span class="p">)</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="p">{</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">        </span><span class="n">PublicDependencyModuleNames</span><span class="p">.</span><span class="n">AddRange</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;Core&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;CoreUObject&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Engine&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Json&quot;</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">        </span><span class="n">PrivateDependencyModuleNames</span><span class="p">.</span><span class="n">AddRange</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;UE_MCP_Bridge&quot;</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="p">}</span>
+</code></pre></div>
+<p>Register handlers from <code>StartupModule</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;MCPHandlerRegistration.h&quot;</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="kt">void</span><span class="w"> </span><span class="nf">FPIE_StudioModule::StartupModule</span><span class="p">()</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="p">{</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="n">UEMCP</span><span class="o">::</span><span class="n">RegisterExternalHandler</span><span class="p">(</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">        </span><span class="n">TEXT</span><span class="p">(</span><span class="s">&quot;inject_input&quot;</span><span class="p">),</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">        </span><span class="p">[](</span><span class="k">const</span><span class="w"> </span><span class="n">TSharedPtr</span><span class="o">&lt;</span><span class="n">FJsonObject</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">Params</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">TSharedPtr</span><span class="o">&lt;</span><span class="n">FJsonValue</span><span class="o">&gt;</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">            </span><span class="c1">// ... do the work, return a JSON value</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">            </span><span class="n">TSharedPtr</span><span class="o">&lt;</span><span class="n">FJsonObject</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MakeShared</span><span class="o">&lt;</span><span class="n">FJsonObject</span><span class="o">&gt;</span><span class="p">();</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">            </span><span class="n">Result</span><span class="o">-&gt;</span><span class="n">SetBoolField</span><span class="p">(</span><span class="n">TEXT</span><span class="p">(</span><span class="s">&quot;success&quot;</span><span class="p">),</span><span class="w"> </span><span class="nb">true</span><span class="p">);</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">MakeShared</span><span class="o">&lt;</span><span class="n">FJsonValueObject</span><span class="o">&gt;</span><span class="p">(</span><span class="n">Result</span><span class="p">);</span>
+<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="w">        </span><span class="p">});</span>
+<a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="p">}</span>
+<a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>
+<a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a><span class="kt">void</span><span class="w"> </span><span class="nf">FPIE_StudioModule::ShutdownModule</span><span class="p">()</span>
+<a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a><span class="p">{</span>
+<a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a><span class="w">    </span><span class="n">UEMCP</span><span class="o">::</span><span class="n">UnregisterExternalHandler</span><span class="p">(</span><span class="n">TEXT</span><span class="p">(</span><span class="s">&quot;inject_input&quot;</span><span class="p">));</span>
+<a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a><span class="p">}</span>
+</code></pre></div>
+<p>The handler's method name (<code>inject_input</code>) is the bare bridge method. It's what an auto-surfaced action (<code>gameplay(action="pie_inject_input")</code>, via <code>nativeModule.category</code>) dispatches to, what a TypeScript task can address through <code>this.call(...)</code>, and what the bridge looks up on any dispatch. Register it bare - ue-mcp adds the <code>actionPrefix</code> when it surfaces the action.</p>
+<h4 id="install-flow">Install flow<a class="headerlink" href="#install-flow" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>ue-mcp<span class="w"> </span>plugin<span class="w"> </span>install<span class="w"> </span>pie-studio
+</code></pre></div>
+<p>The CLI now also:</p>
+<ol>
+<li>Reads <code>MCPHandlerRegistration.h</code> from the deployed bridge and checks that <code>UEMCP_BRIDGE_API_VERSION &gt;= manifest.nativeModule.minBridgeApi</code>. Install fails fast if the bridge is too old, with a pointer to <code>ue-mcp deploy</code>.</li>
+<li>Copies <code>&lt;pkgDir&gt;/&lt;source&gt;</code> to <code>&lt;projectDir&gt;/Plugins/&lt;uePluginName&gt;/</code>.</li>
+<li>Records every copied file in <code>&lt;projectDir&gt;/.ue-mcp/native-modules.json</code> so <code>ue-mcp plugin uninstall</code> can clean up without nuking user edits.</li>
+<li>Prints <code>REBUILD REQUIRED</code> - the user must build the UE project before launching the editor so the new module compiles in.</li>
+</ol>
+<h4 id="bridge-abi-versioning">Bridge ABI versioning<a class="headerlink" href="#bridge-abi-versioning" title="Permanent link">&para;</a></h4>
+<p><code>UEMCP_BRIDGE_API_VERSION</code> is the C++ ABI contract every native plugin compiles against. Bumps are reserved for breaking changes to the <code>FExternalHandlerFn</code> signature or the registration contract. A plugin declaring <code>minBridgeApi: N</code> refuses to load against a bridge whose version is below N. Inspect the deployed bridge's version with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>project(action=&quot;get_status&quot;)
+</code></pre></div>
+<p>The response includes <code>bridgeApiVersion</code> when a bridge is deployed.</p>
+<h3 id="writing-tasks">Writing tasks<a class="headerlink" href="#writing-tasks" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1">// src/tasks/InspectSomething.ts</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">UeMcpTask</span><span class="p">,</span><span class="w"> </span><span class="kr">type</span><span class="w"> </span><span class="nx">TaskResult</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">&quot;ue-mcp/task&quot;</span><span class="p">;</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="kd">interface</span><span class="w"> </span><span class="nx">Options</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">  </span><span class="nx">actorLabel</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="w">  </span><span class="nx">includeComponents?</span><span class="o">:</span><span class="w"> </span><span class="kt">boolean</span><span class="p">;</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="p">}</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="kd">class</span><span class="w"> </span><span class="nx">InspectSomething</span><span class="w"> </span><span class="k">extends</span><span class="w"> </span><span class="nx">UeMcpTask</span><span class="o">&lt;</span><span class="nx">Options</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a><span class="w">  </span><span class="nx">get</span><span class="w"> </span><span class="nx">taskName</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="s2">&quot;mypfx.inspect_something&quot;</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a>
+<a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a><span class="w">  </span><span class="k">async</span><span class="w"> </span><span class="nx">execute</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="nb">Promise</span><span class="o">&lt;</span><span class="nx">TaskResult</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">actorLabel</span><span class="p">,</span><span class="w"> </span><span class="nx">includeComponents</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">options</span><span class="p">;</span>
+<a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a>
+<a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">details</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="s2">&quot;level.get_actor_details&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-16" name="__codelineno-18-16" href="#__codelineno-18-16"></a><span class="w">      </span><span class="nx">actorLabel</span><span class="p">,</span>
+<a id="__codelineno-18-17" name="__codelineno-18-17" href="#__codelineno-18-17"></a><span class="w">      </span><span class="nx">includeComponents</span><span class="p">,</span>
+<a id="__codelineno-18-18" name="__codelineno-18-18" href="#__codelineno-18-18"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-18-19" name="__codelineno-18-19" href="#__codelineno-18-19"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">details</span><span class="p">.</span><span class="nx">success</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nx">details</span><span class="p">;</span>
+<a id="__codelineno-18-20" name="__codelineno-18-20" href="#__codelineno-18-20"></a>
+<a id="__codelineno-18-21" name="__codelineno-18-21" href="#__codelineno-18-21"></a><span class="w">    </span><span class="c1">// ... process the result ...</span>
+<a id="__codelineno-18-22" name="__codelineno-18-22" href="#__codelineno-18-22"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">success</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span><span class="w"> </span><span class="nx">data</span><span class="o">:</span><span class="w"> </span><span class="kt">details.data</span><span class="w"> </span><span class="p">};</span>
+<a id="__codelineno-18-23" name="__codelineno-18-23" href="#__codelineno-18-23"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-18-24" name="__codelineno-18-24" href="#__codelineno-18-24"></a><span class="p">}</span>
+</code></pre></div>
+<p>Notes:</p>
+<ul>
+<li>Compose existing actions through <code>this.call('&lt;category&gt;.&lt;action&gt;', params)</code>. Don't reach into the bridge directly unless you have to - composition gives you free observability and rollback hooks. When you do need a raw bridge method that no task wraps, <code>UeMcpTask</code> gives you a typed <code>this.bridge.call(method, params)</code> and a typed <code>this.ctx</code> (<code>bridge</code>, <code>project</code>) with no casting.</li>
+<li>Use the <strong>real</strong> parameter names of the host task you're calling. Param name drift between TS and C++ is how silent failures start.</li>
+<li>If your task makes multi-step mutations, return a <code>rollback</code> record so users can opt into <code>rollback_on_failure: true</code> on the wrapping flow.</li>
+<li>Throw, don't return success-with-error-data. The runtime catches throws and turns them into structured failures.</li>
+</ul>
+<h3 id="knowledge-files">Knowledge files<a class="headerlink" href="#knowledge-files" title="Permanent link">&para;</a></h3>
+<p>For each category your plugin injects into, ship a short markdown file under <code>knowledge/</code>. The server attaches it to that category's AI-facing docs at boot, so the agent sees plugin-specific guidance the moment it looks at that category.</p>
+<p>Keep it terse - one screenful per category. Concrete examples beat prose. The agent already knows how the category works; the knowledge file is just the delta the plugin introduces.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="gh"># PIE Studio - gameplay actions</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>33 actions for PIE input recording, replay, observation, and injection.
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>Quick start:
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="k">1.</span> <span class="sb">`gameplay(action=&quot;pie_record_arm&quot;, sample_hz=60)`</span> - arm the recorder
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="k">2.</span> Press Play, do your thing, stop PIE
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a><span class="k">3.</span> <span class="sb">`gameplay(action=&quot;pie_replay_arm&quot;, recording_id=&quot;&lt;id&gt;&quot;, eject=true, time_scale=0.1)`</span> - replay at 10%
+</code></pre></div>
+<h3 id="publishing">Publishing<a class="headerlink" href="#publishing" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>npm<span class="w"> </span>run<span class="w"> </span>build<span class="w">      </span><span class="c1"># tsc -&gt; dist/</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>npm<span class="w"> </span>publish<span class="w">        </span><span class="c1"># public registry</span>
+</code></pre></div>
+<p>Users install with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>ue-mcp<span class="w"> </span>plugin<span class="w"> </span>install<span class="w"> </span>&lt;your-package-name&gt;
+</code></pre></div>
+<h2 id="validation-rules">Validation rules<a class="headerlink" href="#validation-rules" title="Permanent link">&para;</a></h2>
+<p>These are enforced both at install (<code>ue-mcp plugin install</code>) and at server load:</p>
+<ul>
+<li><code>actionPrefix</code> is mandatory and must match <code>/^[a-z][a-z0-9_]*$/</code>.</li>
+<li>Every <code>inject:</code> target must be a real registered category. A nonexistent target fails install with the list of valid categories.</li>
+<li>A plugin action may never overwrite a built-in. Collisions are hard-skipped with a warning.</li>
+<li>Every <code>provides:</code> category name must match <code>/^[a-z][a-z0-9_]*$/</code> and must not collide with a built-in category.</li>
+<li>Inter-plugin collisions resolve by <code>plugins:</code> order - first wins. Applies to both injected actions and provided category names.</li>
+<li>Every <code>inject:</code> and <code>provides:</code> entry must point to a task declared under <code>tasks:</code>, and every task's <code>class_path</code> must resolve under <code>dist/</code>.</li>
+<li><code>minServerVersion</code> is checked at install and re-checked at load.</li>
+<li><code>nativeModule.minBridgeApi</code> is checked at install (against the deployed bridge's <code>UEMCP_BRIDGE_API_VERSION</code>) and re-checked at load.</li>
+<li>A plugin that fails any of these is skipped entirely (never partially injected) with a loud warning. Other plugins keep loading.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="pluginsactionlist-returns-plugincount-0"><code>plugins(action="list")</code> returns <code>pluginCount: 0</code><a class="headerlink" href="#pluginsactionlist-returns-plugincount-0" title="Permanent link">&para;</a></h3>
+<p>The server didn't find any <code>plugins:</code> entries, or every entry failed validation. Check:</p>
+<ol>
+<li><code>ue-mcp.yml</code> exists in your project root next to the <code>.uproject</code> and has a top-level <code>plugins:</code> array.</li>
+<li>Each <code>name:</code> is installed under <code>node_modules/</code>. Run <code>npm install</code> if the lockfile says it should be there.</li>
+<li>The server's stderr log - every validation failure prints a <code>[ue-mcp] warn plugin: &lt;package&gt;: &lt;reason&gt;</code> line at boot.</li>
+</ol>
+<h3 id="uepluginpresent-false"><code>uePluginPresent: false</code><a class="headerlink" href="#uepluginpresent-false" title="Permanent link">&para;</a></h3>
+<p>The npm-side plugin loaded fine, but the host Unreal plugin it declares as a dependency is missing from your <code>.uproject</code>. See <a href="#host-ue-plugin-dependencies">Host UE plugin dependencies</a> for the enable steps. The injected actions are still visible in the host category tools - they just won't run end-to-end until the UE plugin is enabled and built.</p>
+<h3 id="class_path-path-could-not-be-resolved"><code>class_path '&lt;path&gt;' could not be resolved</code><a class="headerlink" href="#class_path-path-could-not-be-resolved" title="Permanent link">&para;</a></h3>
+<p>The plugin's <code>ue-mcp.plugin.yml</code> declared a task whose compiled JS file is missing from <code>dist/</code>. If you're authoring: run <code>npm run build</code> and confirm <code>dist/&lt;path&gt;.js</code> exists. If you're consuming: the package was published without its <code>dist/</code> directory - open an issue on the plugin's repo.</p>
+<h3 id="requires-server-version"><code>requires server &gt;= &lt;version&gt;</code><a class="headerlink" href="#requires-server-version" title="Permanent link">&para;</a></h3>
+<p>The plugin's <code>minServerVersion</code> is newer than the ue-mcp you're running. Update:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>npm<span class="w"> </span>install<span class="w"> </span>ue-mcp@latest
+</code></pre></div>
+<p>Then restart your MCP client.</p>
+<h3 id="injected-action-appears-in-pluginsdescribe-but-not-in-the-host-category-tools-action-list">Injected action appears in <code>plugins.describe</code> but not in the host category tool's action list<a class="headerlink" href="#injected-action-appears-in-pluginsdescribe-but-not-in-the-host-category-tools-action-list" title="Permanent link">&para;</a></h3>
+<p>You restarted the editor but not the MCP server. They're separate processes - the editor restart doesn't respawn the npx-launched ue-mcp server. Reconnect MCP in your client (in Claude Code, <code>/mcp</code>).</p>
+<h3 id="nativemodule-requires-bridge-abi-n"><code>nativeModule requires bridge ABI &gt;= N</code><a class="headerlink" href="#nativemodule-requires-bridge-abi-n" title="Permanent link">&para;</a></h3>
+<p>The plugin needs a newer bridge than the one deployed in this project. Run <code>ue-mcp deploy</code> to refresh the bridge source, then <code>ue-mcp build</code> (or rebuild from the editor) before retrying. The deployed ABI is also visible in <code>project(action="get_status")</code> as <code>bridgeApiVersion</code>.</p>
+<h3 id="provided-category-does-not-show-up-as-its-own-mcp-tool">Provided category does not show up as its own MCP tool<a class="headerlink" href="#provided-category-does-not-show-up-as-its-own-mcp-tool" title="Permanent link">&para;</a></h3>
+<p>The plugin loaded but a name collision skipped its <code>provides:</code> entry. Run <code>plugins(action="describe", name="&lt;package&gt;")</code> and check the <code>provided</code> field. If it's empty, look at the server boot log for a <code>provides target '&lt;category&gt;' already claimed by '&lt;other plugin&gt;'</code> warning - earlier-listed plugins win, so reorder your <code>plugins:</code> array or drop one of the conflicting packages.</p>
+<h3 id="native-module-deployed-but-handlers-come-back-unknown-method">Native module deployed but handlers come back <code>Unknown method</code><a class="headerlink" href="#native-module-deployed-but-handlers-come-back-unknown-method" title="Permanent link">&para;</a></h3>
+<p>The C++ side didn't compile in. Two common causes:</p>
+<ol>
+<li>The user never rebuilt after install. Run <code>npm run build</code> from the project (or rebuild from the editor IDE) and confirm the new <code>.dll</code> lands under <code>Binaries/Win64/</code>.</li>
+<li>The build failed silently because the deployed bridge is older than the plugin expects. Run <code>ue-mcp deploy</code> to refresh <code>MCPHandlerRegistration.h</code>, then <code>ue-mcp build</code>.</li>
+</ol>
+<p>If the rebuild succeeds but <code>Unknown method</code> persists, you've hit a stale Live Coding patch: delete <code>&lt;projectDir&gt;/Binaries/Win64/*.patch_*</code> and rebuild clean. UBT's incremental build can otherwise shadow a freshly built DLL with a leftover patch.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.indexes", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

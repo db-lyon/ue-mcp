@@ -1,0 +1,2068 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for UE-MCP — Unreal Engine Model Context Protocol Server">
+      
+      
+      
+        <link rel="canonical" href="https://db-lyon.github.io/ue-mcp/pie-record-replay/">
+      
+      
+        <link rel="prev" href="../plugins/">
+      
+      
+        <link rel="next" href="../configuration/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>PIE Studio - UE-MCP Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pie-studio" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="UE-MCP Documentation" class="md-header__button md-logo" aria-label="UE-MCP Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            UE-MCP Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PIE Studio
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/db-lyon/ue-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    db-lyon/ue-mcp
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="UE-MCP Documentation" class="md-nav__button md-logo" aria-label="UE-MCP Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    UE-MCP Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/db-lyon/ue-mcp" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    db-lyon/ue-mcp
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tool-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../native-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../handler-conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Handler Conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../flows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Plugins
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PIE Studio
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PIE Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#editor-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editor UI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Editor UI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pie-toolbar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PIE toolbar
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pie-studio-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PIE Studio panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recording" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recording
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recording">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-it-captures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it captures
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pie_record_arm-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pie_record_arm parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#replay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Replay
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Replay">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#actions_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#source-one-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Source (one required)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pie_replay_arm-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pie_replay_arm parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#observation-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Observation profiles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Observation profiles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why profiles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#creating-a-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating a profile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attaching-to-a-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attaching to a session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#profile-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Profile actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#observer-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Observer actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#drift-and-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drift and comparison
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Drift and comparison">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#replay-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Replay drift
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#offline-diff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Offline diff
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#one-shot-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-shot snapshot
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#input-injection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input injection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-types-in-sequencejson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step types in sequence.json
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-frame-video-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-frame video capture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-client-pie" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-client PIE
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#take-recorder-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Take Recorder integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#determinism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Determinism
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#composition-with-flows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composition with flows
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../neon-shrine-demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Neon Shrine Demo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../feedback/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Feedback
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#editor-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editor UI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Editor UI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pie-toolbar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PIE toolbar
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pie-studio-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PIE Studio panel
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recording" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recording
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Recording">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-it-captures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it captures
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Artifacts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pie_record_arm-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pie_record_arm parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#replay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Replay
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Replay">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#actions_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#source-one-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Source (one required)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pie_replay_arm-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pie_replay_arm parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#observation-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Observation profiles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Observation profiles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why profiles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#creating-a-profile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating a profile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attaching-to-a-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attaching to a session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#profile-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Profile actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#observer-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Observer actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#drift-and-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Drift and comparison
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Drift and comparison">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#replay-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Replay drift
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#offline-diff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Offline diff
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#one-shot-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-shot snapshot
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#input-injection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input injection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#step-types-in-sequencejson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Step types in sequence.json
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-frame-video-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-frame video capture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-client-pie" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-client PIE
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#take-recorder-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Take Recorder integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#determinism" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Determinism
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#composition-with-flows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composition with flows
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="pie-studio">PIE Studio<a class="headerlink" href="#pie-studio" title="Permanent link">&para;</a></h1>
+<div class="admonition note">
+<p class="admonition-title">Plugin required</p>
+<p>These actions are provided by the <a href="https://github.com/db-lyon/pie-studio"><code>pie-studio</code></a> plugin. Install with <code>ue-mcp plugin install pie-studio</code>, rebuild, and restart.</p>
+</div>
+<p>Three independent systems for PIE sessions, each with its own domain:</p>
+<ol>
+<li><strong>Record</strong> - capture inputs and pawn state. Writes a replayable sequence.</li>
+<li><strong>Replay</strong> - play back a recorded sequence through the real Enhanced Input pipeline. Optionally eject to a spectator camera and slow time to 1%.</li>
+<li><strong>Observe</strong> - attach a reusable observation profile to any PIE session (recording, replay, or manual play) to sample tracked values and actors. Change what you watch without re-recording.</li>
+</ol>
+<p>All three can run simultaneously in the same PIE session.</p>
+<h2 id="editor-ui">Editor UI<a class="headerlink" href="#editor-ui" title="Permanent link">&para;</a></h2>
+<h3 id="pie-toolbar">PIE toolbar<a class="headerlink" href="#pie-toolbar" title="Permanent link">&para;</a></h3>
+<p>A <strong>Record</strong> button sits next to Play/Stop in the editor transport bar. Click it to arm the recorder and start PIE in one action.</p>
+<h3 id="pie-studio-panel">PIE Studio panel<a class="headerlink" href="#pie-studio-panel" title="Permanent link">&para;</a></h3>
+<p>Open <strong>Window &gt; Tools &gt; PIE Studio</strong> for a dockable panel with:</p>
+<ul>
+<li><strong>Recorder</strong> - Record + Play, Arm, Disarm, Stop</li>
+<li><strong>Replayer</strong> - Disarm, Stop</li>
+<li><strong>Observer</strong> - Disarm, Stop</li>
+<li><strong>Time Scale</strong> - slider (1% to 400%) and preset buttons (1%, 10%, 25%, 50%, 100%, 200%). Works during recording, replay, or manual play.</li>
+<li><strong>Recordings</strong> - recordings list with one-click Replay</li>
+<li><strong>Observation Profiles</strong> - profile list with one-click Observe</li>
+</ul>
+<p>State labels turn green when active. Lists auto-refresh every 5 seconds.</p>
+<h2 id="quick-start">Quick start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a># Record
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>gameplay(action=&quot;pie_record_arm&quot;, sample_hz=60)
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a># Press Play, do your thing, stop PIE
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a># Replay at 10% speed with spectator camera
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>gameplay(action=&quot;pie_replay_arm&quot;,
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>         recording_id=&quot;air-walk-bug&quot;,
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>         eject=true,
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>         time_scale=0.1)
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a># Press Play - watch from a free camera while inputs replay in slow motion
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a># Observe with a debug profile (works with any of the above)
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>gameplay(action=&quot;pie_observe_arm&quot;,
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>         profile=&quot;/Game/Observation/CombatDebug&quot;)
+</code></pre></div>
+<h2 id="recording">Recording<a class="headerlink" href="#recording" title="Permanent link">&para;</a></h2>
+<p>Records Enhanced Input actions and pawn state at a configurable sample rate. Discovers actions from both event bindings and active IMC mappings, including actions added after the initial pawn attach.</p>
+<h3 id="what-it-captures">What it captures<a class="headerlink" href="#what-it-captures" title="Permanent link">&para;</a></h3>
+<p>Per frame, into <code>&lt;ProjectSavedDir&gt;/MCPRecordings/&lt;id&gt;/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pos_x/y/z</code>, <code>rot_yaw/pitch/roll</code>, <code>vel_x/y/z</code>, <code>speed2d</code></td>
+<td>Player pawn. Velocity uses <code>UCharacterMovementComponent</code> when available, then <code>GetVelocity()</code>, physics linear velocity, and position-delta-over-dt as fallbacks. Works with any <code>APawn</code> subclass.</td>
+</tr>
+<tr>
+<td><code>montage</code> (<code>Name:Section</code>)</td>
+<td><code>AnimInstance::GetCurrentActiveMontage</code> (ACharacter only)</td>
+</tr>
+<tr>
+<td>Per-<code>UInputAction</code> value</td>
+<td>All actions in active IMCs, whether bound via <code>BindAction</code> or polled via <code>GetActionValue</code></td>
+</tr>
+<tr>
+<td><code>&lt;action&gt;_pressed</code> / <code>_released</code></td>
+<td>Edge events computed against <code>axis_threshold</code></td>
+</tr>
+<tr>
+<td>Labelled markers</td>
+<td><code>pie_mark(label=...)</code> during recording</td>
+</tr>
+</tbody>
+</table>
+<h3 id="artifacts">Artifacts<a class="headerlink" href="#artifacts" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>manifest.json</code> - metadata, action list, markers, file pointers</li>
+<li><code>sequence.json</code> - replay-ready step list</li>
+<li><code>recording.csv</code> - one row per frame</li>
+</ul>
+<h3 id="actions">Actions<a class="headerlink" href="#actions" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pie_record_arm</code></td>
+<td>Arm for the next PIE session (or current)</td>
+</tr>
+<tr>
+<td><code>pie_record_disarm</code></td>
+<td>Cancel armed state</td>
+</tr>
+<tr>
+<td><code>pie_record_stop</code></td>
+<td>Finalize immediately</td>
+</tr>
+<tr>
+<td><code>pie_record_status</code></td>
+<td>State, id, frame count, elapsed time</td>
+</tr>
+<tr>
+<td><code>pie_record_list</code></td>
+<td>List recordings (newest first)</td>
+</tr>
+<tr>
+<td><code>pie_record_read</code></td>
+<td>Read an artifact (manifest, sequence, csv)</td>
+</tr>
+<tr>
+<td><code>pie_record_delete</code></td>
+<td>Delete a recording (requires <code>confirm=true</code>)</td>
+</tr>
+<tr>
+<td><code>pie_mark</code></td>
+<td>Insert a labelled marker into the active recording or replay</td>
+</tr>
+</tbody>
+</table>
+<h3 id="pie_record_arm-parameters"><code>pie_record_arm</code> parameters<a class="headerlink" href="#pie_record_arm-parameters" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>actions</code></td>
+<td><code>[]</code> (all)</td>
+<td>Whitelist of <code>UInputAction</code> asset paths. Empty records all discovered actions.</td>
+</tr>
+<tr>
+<td><code>axis_threshold</code></td>
+<td><code>0.15</code></td>
+<td>Dead zone for edge detection</td>
+</tr>
+<tr>
+<td><code>sample_hz</code></td>
+<td><code>60</code></td>
+<td>Sample rate. Also the default <code>pin_fps</code>.</td>
+</tr>
+<tr>
+<td><code>pin_fps</code></td>
+<td><code>= sample_hz</code></td>
+<td><code>t.MaxFPS</code> pin. <code>0</code> to skip.</td>
+</tr>
+<tr>
+<td><code>capture_pawn_state</code></td>
+<td><code>true</code></td>
+<td>Per-row location/rotation/velocity/Speed2D</td>
+</tr>
+<tr>
+<td><code>capture_montage</code></td>
+<td><code>true</code></td>
+<td>Per-row <code>Montage:Section</code></td>
+</tr>
+<tr>
+<td><code>client_id</code></td>
+<td><code>0</code></td>
+<td>Which local player to sample. See <a href="#multi-client-pie">Multi-client PIE</a>.</td>
+</tr>
+<tr>
+<td><code>take_record</code></td>
+<td><code>false</code></td>
+<td>Drive Take Recorder in lockstep. See <a href="#take-recorder-integration">Take Recorder</a>.</td>
+</tr>
+<tr>
+<td><code>rng_seed</code></td>
+<td>auto</td>
+<td>Applied via <code>FMath::RandInit</code> after pawn attach</td>
+</tr>
+<tr>
+<td><code>run_gap_frames</code></td>
+<td><code>6</code></td>
+<td>Gap tolerance for axis run extraction</td>
+</tr>
+<tr>
+<td><code>recording_dir</code></td>
+<td><code>Saved/MCPRecordings/</code></td>
+<td>Override recordings root</td>
+</tr>
+<tr>
+<td><code>id</code></td>
+<td>auto</td>
+<td>Override the auto-generated recording id</td>
+</tr>
+</tbody>
+</table>
+<h2 id="replay">Replay<a class="headerlink" href="#replay" title="Permanent link">&para;</a></h2>
+<p>Drives a recorded sequence through <code>UEnhancedInputLocalPlayerSubsystem::InjectInputForAction</code>. Teleports the pawn to its frame-0 position before starting. Re-arming during the same PIE session auto-stops the previous replay, re-teleports, and restarts.</p>
+<h3 id="actions_1">Actions<a class="headerlink" href="#actions_1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pie_replay_arm</code></td>
+<td>Arm for the next PIE session (or current)</td>
+</tr>
+<tr>
+<td><code>pie_replay_disarm</code></td>
+<td>Cancel armed state</td>
+</tr>
+<tr>
+<td><code>pie_replay_stop</code></td>
+<td>Stop replay; finalize drift report if applicable</td>
+</tr>
+<tr>
+<td><code>pie_replay_status</code></td>
+<td>State, step progress, elapsed time, drift maxima</td>
+</tr>
+</tbody>
+</table>
+<h3 id="source-one-required">Source (one required)<a class="headerlink" href="#source-one-required" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>recording_id</code> - loads sequence + CSV for drift comparison</li>
+<li><code>sequence_path</code> - explicit path to a sequence.json</li>
+<li><code>steps</code> - inline step array</li>
+</ul>
+<h3 id="pie_replay_arm-parameters"><code>pie_replay_arm</code> parameters<a class="headerlink" href="#pie_replay_arm-parameters" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Param</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>eject</code></td>
+<td><code>false</code></td>
+<td>Eject to a spectator pawn. Fly around freely while inputs drive the original pawn. Re-possesses on stop.</td>
+</tr>
+<tr>
+<td><code>time_scale</code></td>
+<td><code>1.0</code></td>
+<td>Global time dilation. <code>0.01</code> for 1% speed, <code>0.1</code> for 10%. Caps auto-raised. Also controllable live from the panel slider.</td>
+</tr>
+<tr>
+<td><code>settle_ms</code></td>
+<td>sequence (500)</td>
+<td>Delay after pawn attach before first step</td>
+</tr>
+<tr>
+<td><code>pin_fps</code></td>
+<td>sequence <code>sample_hz</code></td>
+<td><code>t.MaxFPS</code> pin. <code>0</code> to skip.</td>
+</tr>
+<tr>
+<td><code>apply_rng_seed</code></td>
+<td><code>true</code></td>
+<td>Reapply <code>FMath::RandInit</code> from the sequence</td>
+</tr>
+<tr>
+<td><code>record_drift</code></td>
+<td><code>true</code></td>
+<td>Emit <code>drift.json</code> when replaying a known recording</td>
+</tr>
+<tr>
+<td><code>auto_stop_pie</code></td>
+<td><code>false</code></td>
+<td>Stop PIE when sequence completes</td>
+</tr>
+<tr>
+<td><code>mode</code></td>
+<td><code>"replay"</code></td>
+<td><code>"monitor"</code> skips input injection, keeps drift sampling. Play manually against a reference.</td>
+</tr>
+<tr>
+<td><code>capture_frame_every</code></td>
+<td><code>0</code></td>
+<td>Write a viewport PNG every Nth frame. See <a href="#per-frame-video-capture">Video capture</a>.</td>
+</tr>
+<tr>
+<td><code>client_id</code></td>
+<td><code>0</code></td>
+<td>Which local player to drive</td>
+</tr>
+<tr>
+<td><code>drift_thresholds</code></td>
+<td><code>{ position_cm: 5, rotation_deg: 2, velocity_cms: 25 }</code></td>
+<td>Cutoffs for <code>frames_over_threshold</code>. Also accepts <code>tracked_default</code> and per-path <code>tracked</code> map.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="observation-profiles">Observation profiles<a class="headerlink" href="#observation-profiles" title="Permanent link">&para;</a></h2>
+<p>Observation is decoupled from recording and replay. Define what to watch in a <code>UMCPObservationProfile</code> data asset, then attach it to any PIE session. The observer runs independently, owns its own frame sampler, and writes its own output.</p>
+<h3 id="why-profiles">Why profiles<a class="headerlink" href="#why-profiles" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Replay the same recording with different profiles to investigate different systems</li>
+<li>Change what you track without re-recording</li>
+<li>Edit in the content browser Details panel</li>
+<li>Share across team members via version control</li>
+</ul>
+<h3 id="creating-a-profile">Creating a profile<a class="headerlink" href="#creating-a-profile" title="Permanent link">&para;</a></h3>
+<p><strong>In the editor:</strong> Right-click in Content Browser &gt; Miscellaneous &gt; Data Asset &gt; <code>MCPObservationProfile</code>. Configure tracked values, actors, and thresholds in the Details panel.</p>
+<p><strong>Through MCP:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>gameplay(action=&quot;pie_profile_create&quot;,
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>         name=&quot;CombatDebug&quot;,
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>         package_path=&quot;/Game/Observation&quot;,
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>         tracked_values=[
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>           {&quot;path&quot;: &quot;Hero.AbilitySystem.Health&quot;, &quot;drift_threshold&quot;: 5.0},
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>           &quot;Hero.AbilitySystem.Stamina&quot;
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>         ],
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>         tracked_actors=[&quot;BP_Hero_C&quot;, &quot;BP_Boss_C&quot;])
+</code></pre></div>
+<h3 id="attaching-to-a-session">Attaching to a session<a class="headerlink" href="#attaching-to-a-session" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>gameplay(action=&quot;pie_observe_arm&quot;,
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>         profile=&quot;/Game/Observation/CombatDebug&quot;)
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a># Press Play - observer samples alongside any recording or replay
+</code></pre></div>
+<p>Output goes to <code>Saved/MCPObservations/&lt;run_id&gt;/</code>:</p>
+<ul>
+<li><code>manifest.json</code> - profile path, timing, tracked paths/actors</li>
+<li><code>observation.csv</code> - per-frame samples</li>
+<li><code>tracked.jsonl</code> - per-frame actor state (when tracked actors configured)</li>
+</ul>
+<h3 id="profile-actions">Profile actions<a class="headerlink" href="#profile-actions" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pie_profile_create</code></td>
+<td>Create a profile data asset</td>
+</tr>
+<tr>
+<td><code>pie_profile_read</code></td>
+<td>Read profile config</td>
+</tr>
+<tr>
+<td><code>pie_profile_update</code></td>
+<td>Update an existing profile</td>
+</tr>
+<tr>
+<td><code>pie_profile_delete</code></td>
+<td>Delete (requires <code>confirm=true</code>)</td>
+</tr>
+<tr>
+<td><code>pie_profile_list</code></td>
+<td>List profiles</td>
+</tr>
+</tbody>
+</table>
+<h3 id="observer-actions">Observer actions<a class="headerlink" href="#observer-actions" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pie_observe_arm</code></td>
+<td>Attach a profile to the next PIE session</td>
+</tr>
+<tr>
+<td><code>pie_observe_disarm</code></td>
+<td>Cancel armed state</td>
+</tr>
+<tr>
+<td><code>pie_observe_stop</code></td>
+<td>Stop and write output</td>
+</tr>
+<tr>
+<td><code>pie_observe_status</code></td>
+<td>State, run id, frames sampled</td>
+</tr>
+<tr>
+<td><code>pie_observe_list</code></td>
+<td>List observation runs</td>
+</tr>
+<tr>
+<td><code>pie_observe_read</code></td>
+<td>Read an observation artifact (manifest, csv, tracked)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="drift-and-comparison">Drift and comparison<a class="headerlink" href="#drift-and-comparison" title="Permanent link">&para;</a></h2>
+<h3 id="replay-drift">Replay drift<a class="headerlink" href="#replay-drift" title="Permanent link">&para;</a></h3>
+<p>When replaying a known <code>recording_id</code>, the replayer samples pawn state each frame and compares it to the source recording. The result is <code>drift.json</code> with per-frame deltas, max-drift stats, and a list of frames exceeding your thresholds.</p>
+<h3 id="offline-diff">Offline diff<a class="headerlink" href="#offline-diff" title="Permanent link">&para;</a></h3>
+<p><code>pie_record_diff</code> compares two recordings without running PIE. Walks both CSVs in lockstep and emits position/rotation/velocity deltas plus <code>tracked_value_max_deltas</code> for reflection paths present in both.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>gameplay(action=&quot;pie_record_diff&quot;, a_id=&quot;run-1&quot;, b_id=&quot;run-2&quot;,
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>         position_cm=5, rotation_deg=2)
+</code></pre></div>
+<h3 id="one-shot-snapshot">One-shot snapshot<a class="headerlink" href="#one-shot-snapshot" title="Permanent link">&para;</a></h3>
+<p><code>pie_snapshot</code> dumps a live PIE actor's full UProperty state to JSON. Complements per-frame tracking with a deep one-time capture including components.</p>
+<h2 id="input-injection">Input injection<a class="headerlink" href="#input-injection" title="Permanent link">&para;</a></h2>
+<p>The replay system uses these internally. They are also useful on their own for scripting PIE inputs.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>inject_input</code></td>
+<td>Single-frame injection</td>
+</tr>
+<tr>
+<td><code>inject_input_start</code></td>
+<td>Begin a continuous hold, returns <code>injection_id</code></td>
+</tr>
+<tr>
+<td><code>inject_input_update</code></td>
+<td>Change the value of a running hold</td>
+</tr>
+<tr>
+<td><code>inject_input_stop</code></td>
+<td>Release a hold or stop a tape</td>
+</tr>
+<tr>
+<td><code>inject_input_tape</code></td>
+<td>Play a per-frame value array at a given Hz</td>
+</tr>
+</tbody>
+</table>
+<h2 id="step-types-in-sequencejson">Step types in <code>sequence.json</code><a class="headerlink" href="#step-types-in-sequencejson" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;input&quot;</span><span class="p">,</span><span class="w">      </span><span class="nt">&quot;delay_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">    </span><span class="nt">&quot;action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/Game/Input/IA_Jump&quot;</span><span class="p">,</span><span class="w">   </span><span class="nt">&quot;value_x&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;hold&quot;</span><span class="p">,</span><span class="w">       </span><span class="nt">&quot;delay_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">200</span><span class="p">,</span><span class="w">  </span><span class="nt">&quot;action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/Game/Input/IA_Attack&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;value_x&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">1.0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;duration_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;input_tape&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;delay_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w">    </span><span class="nt">&quot;action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/Game/Input/IA_Move&quot;</span><span class="p">,</span><span class="w">   </span><span class="nt">&quot;values&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[[</span><span class="mf">0.5</span><span class="p">,</span><span class="w"> </span><span class="mf">0.3</span><span class="p">],</span><span class="w"> </span><span class="p">[</span><span class="mf">0.6</span><span class="p">,</span><span class="w"> </span><span class="mf">0.3</span><span class="p">]]</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;mark&quot;</span><span class="p">,</span><span class="w">       </span><span class="nt">&quot;delay_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1500</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;enemy spawned&quot;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;console&quot;</span><span class="p">,</span><span class="w">    </span><span class="nt">&quot;delay_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">6000</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;command&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;stat fps&quot;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;capture&quot;</span><span class="p">,</span><span class="w">    </span><span class="nt">&quot;delay_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5000</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;boss_intro&quot;</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<p><code>delay_ms</code> is cumulative from sequence start. The replayer schedules each step against elapsed time since pawn attach (after <code>settle_ms</code>).</p>
+<p><code>input_tape</code> values: <code>0.5</code> (Axis1D), <code>[0.5, 0.3]</code> (Axis2D), <code>[0.1, 0.2, 0.3]</code> (Axis3D). The parser accepts any arity.</p>
+<h2 id="per-frame-video-capture">Per-frame video capture<a class="headerlink" href="#per-frame-video-capture" title="Permanent link">&para;</a></h2>
+<p>Pass <code>capture_frame_every: N</code> to <code>pie_replay_arm</code>. Captures use direct <code>FViewport::ReadPixels()</code> with async PNG encoding on a background thread. Output goes to <code>&lt;recording_dir&gt;/frames/frame_&lt;NNNNN&gt;.png</code>.</p>
+<p>Assemble with ffmpeg:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>ffmpeg<span class="w"> </span>-framerate<span class="w"> </span><span class="m">30</span><span class="w"> </span>-i<span class="w"> </span>&lt;capture_dir&gt;/frame_%05d.png<span class="w"> </span>-vf<span class="w"> </span><span class="s1">&#39;fps=30,scale=720:-1:flags=lanczos&#39;</span><span class="w"> </span>replay.gif
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>ffmpeg<span class="w"> </span>-framerate<span class="w"> </span><span class="m">60</span><span class="w"> </span>-i<span class="w"> </span>&lt;capture_dir&gt;/frame_%05d.png<span class="w"> </span>-c:v<span class="w"> </span>libx264<span class="w"> </span>-pix_fmt<span class="w"> </span>yuv420p<span class="w"> </span>replay.mp4
+</code></pre></div>
+<h2 id="multi-client-pie">Multi-client PIE<a class="headerlink" href="#multi-client-pie" title="Permanent link">&para;</a></h2>
+<p><code>pie_record_arm</code>, <code>pie_replay_arm</code>, and <code>inject_input*</code> accept <code>client_id</code> (0 = first local player, 1+ = subsequent). Record multiple clients in one session by calling <code>pie_record_arm</code> once per <code>client_id</code> with different <code>id</code> values.</p>
+<h2 id="take-recorder-integration">Take Recorder integration<a class="headerlink" href="#take-recorder-integration" title="Permanent link">&para;</a></h2>
+<p>Pass <code>take_record: true</code> to <code>pie_record_arm</code> to drive Take Recorder in lockstep with PIE. Uses UFunction reflection so no link-time dependency on the Take Recorder plugin. If Take Recorder is unavailable, recording continues without it.</p>
+<h2 id="determinism">Determinism<a class="headerlink" href="#determinism" title="Permanent link">&para;</a></h2>
+<p><strong>Guaranteed:</strong> same Enhanced Input values at the same frame numbers, same <code>t.MaxFPS</code> pin, same <code>FMath::RandInit(seed)</code>, CPU throttle suppressed for the session duration.</p>
+<p><strong>Not guaranteed:</strong> particles, Niagara, AI behavior trees, physics, anything using its own <code>FRandomStream</code> or real wall-clock time.</p>
+<p><strong>What you get instead:</strong> <code>drift.json</code> turns "did the bug reproduce" from a guess into a number.</p>
+<h2 id="composition-with-flows">Composition with flows<a class="headerlink" href="#composition-with-flows" title="Permanent link">&para;</a></h2>
+<p>Every action is available as a flow task. See <a href="../flows/">Flows</a>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">flows</span><span class="p">:</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">record</span><span class="p">:</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Record at 60Hz and start PIE</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">      </span><span class="nt">1</span><span class="p">:</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gameplay.pie_record_arm</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">          </span><span class="nt">sample_hz</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">      </span><span class="nt">2</span><span class="p">:</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">editor.play_in_editor</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">          </span><span class="nt">pieAction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">  </span><span class="nt">slow_replay</span><span class="p">:</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Replay at 1% speed with spectator camera</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">    </span><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">      </span><span class="nt">1</span><span class="p">:</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gameplay.pie_replay_arm</span>
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a><span class="w">          </span><span class="nt">recording_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">air-walk-bug</span>
+<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="w">          </span><span class="nt">eject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="w">          </span><span class="nt">time_scale</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.01</span>
+<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="w">          </span><span class="nt">auto_stop_pie</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="w">      </span><span class="nt">2</span><span class="p">:</span>
+<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a><span class="w">        </span><span class="nt">task</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">editor.play_in_editor</span>
+<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a><span class="w">        </span><span class="nt">options</span><span class="p">:</span>
+<a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a><span class="w">          </span><span class="nt">pieAction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">start</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.indexes", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
