@@ -2,7 +2,7 @@
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal 5.8 tools that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->22<!-- /count --> category tools** covering **<!-- count:actions -->612+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering **<!-- count:actions -->620+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -138,6 +138,8 @@ UE-MCP exposes **<!-- count:tools -->22<!-- /count --> category tools** covering
 | `create_folder` | Create empty content browser folder(s). Params: `path OR paths[] (e.g. /Game/Foo, /Game/Bar/Baz)` |
 | `delete_folder` | Delete content browser folder(s) - counterpart to delete_asset, which leaves the parent directory entry behind as an orphan. Empty folders only by default; pass force=true to also delete any assets still inside (Content Browser 'Delete folder' equivalent). Per-path status (deleted/absent/failed) with reason (invalid_path/protected_path/not_empty/delete_failed) and a sample of contained assets on not_empty entries. Params: `path OR paths[], force?` |
 | `set_mesh_nav` | Set StaticMesh nav contribution. Params: `assetPath, bHasNavigationData?, clearNavCollision? (#167)` |
+| `list_enum_values` | List a UEnum's enumerators (index, authored short name, display name, value). Works on native and UserDefinedEnum assets. Params: `assetPath (#686)` |
+| `edit_user_defined_enum` | Author a UserDefinedEnum content asset. `op=add_value` appends an enumerator (authored name is auto-assigned; pass `displayName` or `name` to set the editable display text). `op=rename_value` sets a new `displayName` on the enumerator resolved by `index` or `name` (matches short or display name). `op=remove_value` deletes it. Recompiles dependents automatically; native UEnums are not editable. Params: `assetPath, op (add_value\|rename_value\|remove_value), displayName?, name?, index? (#686)` |
 
 ---
 
@@ -381,7 +383,8 @@ UE-MCP exposes **<!-- count:tools -->22<!-- /count --> category tools** covering
 | `read_bone_track` | Read bone transform samples from AnimSequence. Params: `assetPath, boneName, frames?: [int]` |
 | `create_pose_search_database` | Create a PoseSearchDatabase asset (motion matching). Params: `name, packagePath?, schemaPath?` |
 | `set_pose_search_schema` | Set the Schema on an existing PoseSearchDatabase. Params: `assetPath, schemaPath` |
-| `add_pose_search_sequence` | Append an AnimSequence/AnimComposite/AnimMontage/BlendSpace to a PoseSearchDatabase. Params: `assetPath, sequencePath` |
+| `add_pose_search_sequence` | Append an AnimSequence/AnimComposite/AnimMontage/BlendSpace to a PoseSearchDatabase, with optional per-clip flags. Params: `assetPath, sequencePath, mirror? ('original'\|'mirrored'\|'both'), disableReselection?, sampleStart?, sampleEnd?, enabled? (#684)` |
+| `set_pose_search_clips` | Author the whole clip list in one call (the "duplicate a stock PSD, swap its clips" pipeline step). Replaces the list by default; each clip carries per-entry flags. Params: `assetPath, clips ([{sequencePath, mirror?, disableReselection?, sampleStart?, sampleEnd?, enabled?}] - a bare path string also works), clearExisting? (default true) (#684)` |
 | `build_pose_search_index` | Build (or rebuild) the search index. Params: `assetPath, wait? (default true)` |
 | `read_pose_search_database` | Inspect a PoseSearchDatabase: schema, animation entries, cost biases, tags. Params: `assetPath` |
 | `set_sequence_properties` | Batch-set properties on AnimSequence assets. If a path is a Montage and resolveFromMontages is true (default), resolves to its first AnimSequence. Params: `assetPaths[], properties{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?}, resolveFromMontages?` |
@@ -795,6 +798,20 @@ UE-MCP exposes **<!-- count:tools -->22<!-- /count --> category tools** covering
 | `set_root_parameters` | Define root parameters (property bag). Params: `assetPath, parameters[] ({name, type}) where type is float\|int32\|bool\|string\|name\|double` |
 | `compile` | Compile a StateTree asset. Returns success, errors[], warnings[]. Params: `assetPath` |
 | `validate` | Validate a StateTree asset without compiling. Params: `assetPath` |
+
+---
+
+## chooser
+
+*Author ChooserTable assets (the data-driven selection layer behind Motion Matching): introspect columns, list/add/edit/delete rows mapping input-column conditions to an output object.*
+
+| Action | Description |
+|--------|-------------|
+| `describe` | Introspect a ChooserTable: row count, each input column (index, name, columnType, cellType) and the fallback result. Read this first to learn the cell text format each column expects. Params: `table (#685)` |
+| `list_rows` | List every row: index, disabled flag, output object (resultType + referenced asset path), and each column's cell value as round-trippable text. Params: `table (#685)` |
+| `add_row` | Append a row. Set the output via `output` (asset path) + `outputType` ('asset' hard ref default \| 'soft_asset' \| 'evaluate' for a nested ChooserTable). Set input-column conditions via `cells` (array aligned to column order) and/or `inputs` (object keyed by column index or name). Cell values are struct text like `(Value=2)` (partial fields allowed) or a scalar for simple columns. Params: `table, output?, outputType?, cells?, inputs? (#685)` |
+| `set_row` | Edit an existing row by index: replace the output, toggle disabled, and/or update column cells (same format as add_row). Params: `table, index, output?, outputType?, disabled?, cells?, inputs? (#685)` |
+| `delete_row` | Delete a row by index (removes its output plus the per-row cell from every column). Params: `table, index (#685)` |
 
 ---
 
