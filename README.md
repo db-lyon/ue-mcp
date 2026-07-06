@@ -53,7 +53,7 @@ If you prefer to configure manually, add to your MCP client config:
 
 ## Documentation
 
-**[db-lyon.github.io/ue-mcp](https://db-lyon.github.io/ue-mcp/)**
+**[https://ue-mcp.com/docs](https://ue-mcp.com/docs)**
 
 - [Getting Started](https://db-lyon.github.io/ue-mcp/getting-started/) — Installation, configuration, first run
 - [Architecture](https://db-lyon.github.io/ue-mcp/architecture/) — How the pieces fit together
