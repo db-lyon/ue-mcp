@@ -13,6 +13,7 @@
 #include "HandlerUtils.h"
 #include "Engine/UserDefinedEnum.h"
 #include "Kismet2/EnumEditorUtils.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -68,6 +69,66 @@ static int32 ResolveEnumeratorIndex(const TSharedPtr<FJsonObject>& Params, const
 		}
 	}
 	return INDEX_NONE;
+}
+
+TSharedPtr<FJsonValue> FAssetHandlers::CreateUserDefinedEnum(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("UserDefinedEnum")))
+	{
+		return Existing;
+	}
+
+	UPackage* Package = CreatePackage(*(PackagePath + TEXT("/") + Name));
+	if (!Package) return MCPError(FString::Printf(TEXT("Failed to create package for %s"), *Name));
+
+	UEnum* Enum = FEnumEditorUtils::CreateUserDefinedEnum(Package, FName(*Name), RF_Public | RF_Standalone);
+	UUserDefinedEnum* UDE = Cast<UUserDefinedEnum>(Enum);
+	if (!UDE) return MCPError(TEXT("Failed to create UserDefinedEnum"));
+
+	// CreateUserDefinedEnum starts empty (only the trailing _MAX). Populate it.
+	TArray<FString> DisplayNames;
+	const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+	if (Params->TryGetArrayField(TEXT("values"), Values) && Values)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *Values)
+		{
+			FString S;
+			if (V->TryGetString(S) && !S.IsEmpty()) DisplayNames.Add(S);
+		}
+	}
+	if (DisplayNames.Num() == 0) DisplayNames.Add(TEXT("NewEnumerator0"));
+
+	for (const FString& Display : DisplayNames)
+	{
+		FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(UDE);
+		const int32 NewIndex = UDE->NumEnums() - 2; // before trailing _MAX
+		if (NewIndex >= 0)
+		{
+			FEnumEditorUtils::SetEnumeratorDisplayName(UDE, NewIndex, FText::FromString(Display));
+		}
+	}
+
+	FAssetRegistryModule::AssetCreated(UDE);
+	UEditorAssetLibrary::SaveLoadedAsset(UDE);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("path"), UDE->GetPathName());
+	Res->SetStringField(TEXT("name"), Name);
+	Res->SetNumberField(TEXT("count"), CountRealEnumerators(UDE));
+	TArray<TSharedPtr<FJsonValue>> ValueList;
+	for (int32 i = 0; i < UDE->NumEnums(); ++i)
+	{
+		if (!IsEnumMaxSentinel(UDE, i)) ValueList.Add(MakeShared<FJsonValueObject>(EnumeratorToJson(UDE, i)));
+	}
+	Res->SetArrayField(TEXT("values"), ValueList);
+	MCPSetDeleteAssetRollback(Res, UDE->GetPathName());
+	return MCPResult(Res);
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ListEnumValues(const TSharedPtr<FJsonObject>& Params)
