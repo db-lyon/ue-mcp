@@ -2,7 +2,7 @@
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal 5.8 tools that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering **<!-- count:actions -->630+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering **<!-- count:actions -->632+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -395,6 +395,8 @@ UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering
 | `create_mirror_data_table` | Create a MirrorDataTable for a skeleton (mirrored poses). Auto-derives bone-pair rows from find/replace expressions (defaults to mannequin _l<->_r suffix). Params: `name, skeletonPath, packagePath?, expressions? ([{find, replace, method?}]), mirrorAxis?` |
 | `read_mirror_data_table` | Inspect a MirrorDataTable: skeleton and bone-pair rows. Params: `assetPath` |
 | `create_pose_search_normalization_set` | Create a PoseSearchNormalizationSet grouping databases so they normalize together. Assign via `set_pose_search_database_settings(normalizationSetPath)`. Params: `name, packagePath?, databases? ([PoseSearchDatabase paths])` |
+| `add_motion_matching_node` | Add a Motion Matching node to an AnimBP AnimGraph pointing at a PoseSearchDatabase; connects to the Output Pose by default. Params: `assetPath (AnimBP), databasePath, graphName? (default AnimGraph), connectToOutput? (default true), blendTime?` |
+| `add_pose_history_node` | Add a Pose History (PoseSearchHistoryCollector) node the Motion Matching node needs; self-generates trajectory by default and splices into the pose chain feeding Output Pose. Params: `assetPath (AnimBP), graphName?, poseCount?, samplingInterval?, generateTrajectory? (default true), trajectoryHistoryCount?, trajectoryPredictionCount?, insertBeforeOutput? (default true)` |
 | `read_pose_search_database` | Inspect a PoseSearchDatabase: schema, animation entries, cost biases, tags. Params: `assetPath` |
 | `set_sequence_properties` | Batch-set properties on AnimSequence assets. If a path is a Montage and resolveFromMontages is true (default), resolves to its first AnimSequence. Params: `assetPaths[], properties{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?}, resolveFromMontages?` |
 | `bake_root_motion_from_bone` | Bake delta translation from a source bone (e.g. pelvis) onto the root bone across the whole sequence; compensates the source bone so world-space position is unchanged. Params: `assetPath, sourceBone, rootBone? (default 'root'), axes? (default ['x','y']), interpolation? ('linear'\|'per_frame', default 'linear')` |
