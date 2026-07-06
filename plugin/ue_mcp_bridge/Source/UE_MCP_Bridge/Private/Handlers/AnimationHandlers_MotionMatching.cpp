@@ -29,6 +29,11 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphPin.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "K2Node_CallFunction.h"
+#include "K2Node_Self.h"
+#include "ChooserFunctionLibrary.h"
+#include "Chooser.h"
 #include "UObject/UnrealType.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "Dom/JsonObject.h"
@@ -136,6 +141,15 @@ static UAnimGraphNode_Root* FindOutputPoseNode(UEdGraph* Graph)
 	for (UEdGraphNode* N : Graph->Nodes)
 	{
 		if (UAnimGraphNode_Root* Root = Cast<UAnimGraphNode_Root>(N)) return Root;
+	}
+	return nullptr;
+}
+
+static UAnimGraphNode_MotionMatching* FindMotionMatchingNode(UEdGraph* Graph)
+{
+	for (UEdGraphNode* N : Graph->Nodes)
+	{
+		if (UAnimGraphNode_MotionMatching* MM = Cast<UAnimGraphNode_MotionMatching>(N)) return MM;
 	}
 	return nullptr;
 }
@@ -644,5 +658,98 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseHistoryNode(const TSharedPtr<F
 	Res->SetStringField(TEXT("graphName"), GraphName);
 	Res->SetStringField(TEXT("nodeGuid"), HistNode->NodeGuid.ToString());
 	Res->SetBoolField(TEXT("insertedBeforeOutput"), bInserted);
+	return MCPResult(Res);
+}
+
+// Drive a Motion Matching node's Database from a ChooserTable, so the database is
+// selected at runtime by the character's state (the whole point of a pose-search
+// chooser). EvaluateChooser is a BlueprintPure + thread-safe library call whose
+// return type follows its ObjectClass input (DeterminesOutputType), so it can feed
+// the MM node's Database input pin directly - no anim-node-function graph needed.
+// The chooser's columns are read from the ContextObject; default is the anim
+// instance itself (Self), matching choosers that branch on AnimBP variables.
+TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	FString ChooserPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("chooserPath"), TEXT("table"), ChooserPath)) return Err;
+	UChooserTable* Chooser = LoadAssetByPath<UChooserTable>(ChooserPath);
+	if (!Chooser) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *ChooserPath));
+
+	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
+	UEdGraph* Graph = nullptr;
+	TArray<UEdGraph*> All;
+	AnimBP->GetAllGraphs(All);
+	for (UEdGraph* G : All) { if (G && G->GetName() == GraphName) { Graph = G; break; } }
+	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	UAnimGraphNode_MotionMatching* MMNode = FindMotionMatchingNode(Graph);
+	if (!MMNode) return MCPError(TEXT("No Motion Matching node in the graph - call add_motion_matching_node first"));
+	UEdGraphPin* DatabasePin = MMNode->FindPin(TEXT("Database"), EGPD_Input);
+	if (!DatabasePin) return MCPError(TEXT("Motion Matching node has no Database input pin"));
+
+	UFunction* EvalFunc = UChooserFunctionLibrary::StaticClass()->FindFunctionByName(TEXT("EvaluateChooser"));
+	if (!EvalFunc) return MCPError(TEXT("UChooserFunctionLibrary::EvaluateChooser not found"));
+
+	Graph->Modify();
+
+	// EvaluateChooser(ContextObject, ChooserTable, ObjectClass) -> UObject (typed to ObjectClass).
+	UK2Node_CallFunction* EvalNode = NewObject<UK2Node_CallFunction>(Graph);
+	EvalNode->SetFromFunction(EvalFunc);
+	Graph->AddNode(EvalNode, false, false);
+	EvalNode->CreateNewGuid();
+	EvalNode->PostPlacedNewNode();
+	EvalNode->AllocateDefaultPins();
+	EvalNode->NodePosX = MMNode->NodePosX - 350;
+	EvalNode->NodePosY = MMNode->NodePosY + 150;
+
+	// Chooser literal + result type = PoseSearchDatabase (retypes the return pin).
+	if (UEdGraphPin* ChooserPin = EvalNode->FindPin(TEXT("ChooserTable"), EGPD_Input)) ChooserPin->DefaultObject = Chooser;
+	if (UEdGraphPin* ClassPin = EvalNode->FindPin(TEXT("ObjectClass"), EGPD_Input)) ClassPin->DefaultObject = UPoseSearchDatabase::StaticClass();
+	EvalNode->ReconstructNode();
+
+	// Context object: the anim instance (Self) by default.
+	UEdGraphPin* ContextPin = EvalNode->FindPin(TEXT("ContextObject"), EGPD_Input);
+	bool bContextWired = false;
+	if (ContextPin)
+	{
+		UK2Node_Self* SelfNode = NewObject<UK2Node_Self>(Graph);
+		Graph->AddNode(SelfNode, false, false);
+		SelfNode->CreateNewGuid();
+		SelfNode->PostPlacedNewNode();
+		SelfNode->AllocateDefaultPins();
+		SelfNode->NodePosX = EvalNode->NodePosX - 200;
+		SelfNode->NodePosY = EvalNode->NodePosY;
+		for (UEdGraphPin* Pin : SelfNode->Pins)
+		{
+			if (Pin && Pin->Direction == EGPD_Output) { Pin->MakeLinkTo(ContextPin); bContextWired = true; break; }
+		}
+	}
+
+	// Wire the evaluated database into the MM node's Database pin.
+	UEdGraphPin* ReturnPin = EvalNode->GetReturnValuePin();
+	if (!ReturnPin) return MCPError(TEXT("EvaluateChooser node produced no return pin"));
+	DatabasePin->BreakAllPinLinks();
+	ReturnPin->MakeLinkTo(DatabasePin);
+
+	Graph->NotifyGraphChanged();
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
+	FKismetEditorUtilities::CompileBlueprint(AnimBP);
+	SaveAssetPackage(AnimBP);
+
+	const bool bConnected = DatabasePin->LinkedTo.Contains(ReturnPin);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("assetPath"), AssetPath);
+	Res->SetStringField(TEXT("graphName"), GraphName);
+	Res->SetStringField(TEXT("chooserPath"), Chooser->GetPathName());
+	Res->SetStringField(TEXT("motionMatchingNodeGuid"), MMNode->NodeGuid.ToString());
+	Res->SetBoolField(TEXT("databasePinDriven"), bConnected);
+	Res->SetBoolField(TEXT("contextWiredToSelf"), bContextWired);
 	return MCPResult(Res);
 }

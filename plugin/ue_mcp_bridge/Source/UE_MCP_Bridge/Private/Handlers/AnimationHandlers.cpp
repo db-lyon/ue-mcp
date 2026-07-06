@@ -158,6 +158,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_pose_search_database_settings"), &SetPoseSearchDatabaseSettings);
 	Registry.RegisterHandler(TEXT("add_motion_matching_node"), &AddMotionMatchingNode);
 	Registry.RegisterHandler(TEXT("add_pose_history_node"), &AddPoseHistoryNode);
+	Registry.RegisterHandler(TEXT("set_motion_matching_chooser"), &SetMotionMatchingChooser);
 
 	// #419/#420 — live-actor skeletal reads + rebind + preview (moved from Level)
 	Registry.RegisterHandler(TEXT("get_bone_transform"), &GetBoneTransform);
