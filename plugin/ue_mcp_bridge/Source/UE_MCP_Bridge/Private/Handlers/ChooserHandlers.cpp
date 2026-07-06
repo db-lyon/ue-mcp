@@ -1,6 +1,7 @@
 #include "ChooserHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerAssetCreate.h"
 #include "Chooser.h"
 #include "IChooserColumn.h"
 #include "IChooserParameterBase.h"
@@ -10,6 +11,7 @@
 #include "StructUtils/InstancedStruct.h"
 #include "EditorAssetLibrary.h"
 #include "UObject/UnrealType.h"
+#include "Misc/StringOutputDevice.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -84,15 +86,22 @@ static bool GetColumnCellText(FInstancedStruct& ColStruct, int32 RowIndex, FStri
 
 // Import text into a column's cell at RowIndex. Partial struct text (e.g.
 // "(Value=2)") sets only the named fields and leaves the rest at their defaults.
-static bool SetColumnCellText(FInstancedStruct& ColStruct, int32 RowIndex, const FString& InText, FString& OutError)
+// A capture output device is passed to ImportText_Direct: passing nullptr there
+// crashes the editor when the importer logs a parse warning (it dereferences the
+// device), so malformed input must fail cleanly instead of taking the process down.
+static bool SetColumnCellText(FInstancedStruct& ColStruct, int32 RowIndex, const FString& InText, UObject* Owner, FString& OutError)
 {
 	FArrayProperty* ArrProp = nullptr; void* ColData = nullptr;
 	if (!GetColumnRowValuesArray(ColStruct, ArrProp, ColData, OutError)) return false;
 	FScriptArrayHelper Helper(ArrProp, ArrProp->ContainerPtrToValuePtr<void>(ColData));
 	if (!Helper.IsValidIndex(RowIndex)) { OutError = TEXT("row index out of range for column"); return false; }
-	if (!ArrProp->Inner->ImportText_Direct(*InText, Helper.GetRawPtr(RowIndex), nullptr, PPF_None, nullptr))
+	FStringOutputDevice ImportErrors;
+	const TCHAR* Parsed = ArrProp->Inner->ImportText_Direct(*InText, Helper.GetRawPtr(RowIndex), Owner, PPF_None, &ImportErrors);
+	if (Parsed == nullptr || !ImportErrors.IsEmpty())
 	{
-		OutError = FString::Printf(TEXT("could not parse cell value '%s'"), *InText);
+		OutError = ImportErrors.IsEmpty()
+			? FString::Printf(TEXT("could not parse cell value '%s' for this column's cell type"), *InText)
+			: FString::Printf(TEXT("cell value '%s': %s"), *InText, *ImportErrors);
 		return false;
 	}
 	return true;
@@ -203,6 +212,77 @@ static TMap<int32, FString> CollectCellAssignments(const TSharedPtr<FJsonObject>
 	return Assignments;
 }
 
+// Resolve a Chooser struct (column or parameter) by short name ("EnumColumn"),
+// F-prefixed name ("FEnumColumn"), or full path ("/Script/Chooser.EnumColumn").
+static UScriptStruct* ResolveChooserStruct(const FString& TypeName)
+{
+	if (TypeName.StartsWith(TEXT("/Script/")))
+	{
+		return FindObject<UScriptStruct>(nullptr, *TypeName);
+	}
+	FString Short = TypeName;
+	Short.RemoveFromStart(TEXT("F"));
+	if (UScriptStruct* SS = FindObject<UScriptStruct>(nullptr, *FString::Printf(TEXT("/Script/Chooser.%s"), *Short)))
+	{
+		return SS;
+	}
+	return FindFirstObject<UScriptStruct>(*Short, EFindFirstObjectOptions::None);
+}
+
+// Best-effort: point a column's input parameter at a bound property (and, for
+// enum columns, an enum) via reflection so the resulting column filters something.
+static void ConfigureColumnInput(FChooserColumnBase* Col, const FString& InputStruct, const FString& BoundProperty, const FString& EnumPath)
+{
+#if WITH_EDITOR
+	FInstancedStruct* InputPtr = Col->GetInputValuePtr();
+	if (!InputPtr) return;
+
+	if (!InputStruct.IsEmpty())
+	{
+		if (UScriptStruct* InSS = ResolveChooserStruct(InputStruct))
+		{
+			Col->SetInputType(InSS);
+		}
+	}
+	if (!InputPtr->IsValid()) return;
+
+	const UScriptStruct* PSS = InputPtr->GetScriptStruct();
+	void* PData = InputPtr->GetMutableMemory();
+	FStructProperty* BindingProp = CastField<FStructProperty>(PSS->FindPropertyByName(TEXT("Binding")));
+	if (!BindingProp) return;
+	void* BindingData = BindingProp->ContainerPtrToValuePtr<void>(PData);
+	const UStruct* BSS = BindingProp->Struct;
+
+	if (!BoundProperty.IsEmpty())
+	{
+		if (FArrayProperty* ChainProp = CastField<FArrayProperty>(BSS->FindPropertyByName(TEXT("PropertyBindingChain"))))
+		{
+			FScriptArrayHelper Helper(ChainProp, ChainProp->ContainerPtrToValuePtr<void>(BindingData));
+			Helper.EmptyValues();
+			Helper.AddValue();
+			if (FNameProperty* NameInner = CastField<FNameProperty>(ChainProp->Inner))
+			{
+				NameInner->SetPropertyValue(Helper.GetRawPtr(0), FName(*BoundProperty));
+			}
+		}
+		if (FBoolProperty* RootProp = CastField<FBoolProperty>(BSS->FindPropertyByName(TEXT("IsBoundToRoot"))))
+		{
+			RootProp->SetPropertyValue(RootProp->ContainerPtrToValuePtr<void>(BindingData), true);
+		}
+	}
+	if (!EnumPath.IsEmpty())
+	{
+		if (UEnum* Enum = LoadObject<UEnum>(nullptr, *EnumPath))
+		{
+			if (FObjectPropertyBase* EnumProp = CastField<FObjectPropertyBase>(BSS->FindPropertyByName(TEXT("Enum"))))
+			{
+				EnumProp->SetObjectPropertyValue(EnumProp->ContainerPtrToValuePtr<void>(BindingData), Enum);
+			}
+		}
+	}
+#endif
+}
+
 // Persist a chooser after structural edits: recompile cooked data, notify, save.
 static void FinalizeChooser(UChooserTable* Table)
 {
@@ -212,6 +292,27 @@ static void FinalizeChooser(UChooserTable* Table)
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────
+
+TSharedPtr<FJsonValue> FChooserHandlers::Create(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
+
+	auto Created = MCPCreateAssetIdempotentNewObject<UChooserTable>(Name, PackagePath, OptionalString(Params, TEXT("onConflict"), TEXT("skip")), TEXT("ChooserTable"));
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+	UChooserTable* Table = Created.Asset;
+
+	Table->Compile(true);
+	UEditorAssetLibrary::SaveLoadedAsset(Table);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("path"), Table->GetPathName());
+	Res->SetStringField(TEXT("name"), Name);
+	MCPSetDeleteAssetRollback(Res, Table->GetPathName());
+	return MCPResult(Res);
+}
 
 TSharedPtr<FJsonValue> FChooserHandlers::Describe(const TSharedPtr<FJsonObject>& Params)
 {
@@ -260,6 +361,68 @@ TSharedPtr<FJsonValue> FChooserHandlers::Describe(const TSharedPtr<FJsonObject>&
 	}
 #endif
 	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FChooserHandlers::AddColumn(const TSharedPtr<FJsonObject>& Params)
+{
+#if WITH_EDITOR
+	FString TablePath;
+	if (auto Err = RequireStringAlt(Params, TEXT("table"), TEXT("assetPath"), TablePath)) return Err;
+	UChooserTable* Table = LoadChooserTable(TablePath);
+	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
+
+	FString ColumnType;
+	if (auto Err = RequireString(Params, TEXT("columnType"), ColumnType)) return Err;
+
+	UScriptStruct* ColStruct = ResolveChooserStruct(ColumnType);
+	if (!ColStruct)
+	{
+		return MCPError(FString::Printf(TEXT("Column struct not found: %s (try e.g. EnumColumn, BoolColumn, FloatRangeColumn, GameplayTagColumn, OutputObjectColumn)"), *ColumnType));
+	}
+	if (!ColStruct->IsChildOf(FChooserColumnBase::StaticStruct()))
+	{
+		return MCPError(FString::Printf(TEXT("%s is not a ChooserColumn"), *ColStruct->GetName()));
+	}
+
+	Table->Modify();
+	FInstancedStruct NewColumn;
+	NewColumn.InitializeAs(ColStruct);
+	if (FChooserColumnBase* Col = NewColumn.GetMutablePtr<FChooserColumnBase>())
+	{
+		ConfigureColumnInput(Col,
+			OptionalString(Params, TEXT("inputStruct")),
+			OptionalString(Params, TEXT("boundProperty")),
+			OptionalString(Params, TEXT("enumPath")));
+		// Size the new column's per-row cell array to the existing row count.
+		Col->SetNumRows(GetChooserRowCount(Table));
+	}
+	const int32 NewIndex = Table->ColumnsStructs.Num();
+	Table->ColumnsStructs.Add(MoveTemp(NewColumn));
+
+	FinalizeChooser(Table);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("path"), Table->GetPathName());
+	Res->SetNumberField(TEXT("columnIndex"), NewIndex);
+	Res->SetStringField(TEXT("columnType"), ColStruct->GetName());
+	Res->SetStringField(TEXT("name"), GetColumnName(Table->ColumnsStructs[NewIndex], NewIndex));
+	FArrayProperty* ArrProp = nullptr; void* ColData = nullptr; FString Ignored;
+	if (GetColumnRowValuesArray(Table->ColumnsStructs[NewIndex], ArrProp, ColData, Ignored))
+	{
+		if (FStructProperty* ElemStruct = CastField<FStructProperty>(ArrProp->Inner))
+		{
+			Res->SetStringField(TEXT("cellType"), ElemStruct->Struct ? ElemStruct->Struct->GetName() : FString());
+		}
+		else if (ArrProp->Inner)
+		{
+			Res->SetStringField(TEXT("cellType"), ArrProp->Inner->GetCPPType());
+		}
+	}
+	return MCPResult(Res);
+#else
+	return MCPError(TEXT("chooser column authoring requires an editor build"));
+#endif
 }
 
 TSharedPtr<FJsonValue> FChooserHandlers::ListRows(const TSharedPtr<FJsonObject>& Params)
@@ -346,7 +509,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& P
 	for (const auto& Pair : Assignments)
 	{
 		FString CellErr;
-		if (!SetColumnCellText(Table->ColumnsStructs[Pair.Key], NewRow, Pair.Value, CellErr))
+		if (!SetColumnCellText(Table->ColumnsStructs[Pair.Key], NewRow, Pair.Value, Table, CellErr))
 		{
 			CellWarnings.Add(FString::Printf(TEXT("column %d: %s"), Pair.Key, *CellErr));
 		}
@@ -423,7 +586,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 	for (const auto& Pair : Assignments)
 	{
 		FString CellErr;
-		if (!SetColumnCellText(Table->ColumnsStructs[Pair.Key], RowIndex, Pair.Value, CellErr))
+		if (!SetColumnCellText(Table->ColumnsStructs[Pair.Key], RowIndex, Pair.Value, Table, CellErr))
 		{
 			CellWarnings.Add(FString::Printf(TEXT("column %d: %s"), Pair.Key, *CellErr));
 		}
@@ -496,7 +659,9 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 
 void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	Registry.RegisterHandler(TEXT("chooser_create"), &Create);
 	Registry.RegisterHandler(TEXT("chooser_describe"), &Describe);
+	Registry.RegisterHandler(TEXT("chooser_add_column"), &AddColumn);
 	Registry.RegisterHandler(TEXT("chooser_list_rows"), &ListRows);
 	Registry.RegisterHandler(TEXT("chooser_add_row"), &AddRow);
 	Registry.RegisterHandler(TEXT("chooser_set_row"), &SetRow);

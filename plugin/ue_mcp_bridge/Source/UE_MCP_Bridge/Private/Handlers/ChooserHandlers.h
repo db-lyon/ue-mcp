@@ -16,7 +16,9 @@ public:
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 
 private:
+	static TSharedPtr<FJsonValue> Create(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> Describe(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddColumn(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListRows(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddRow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetRow(const TSharedPtr<FJsonObject>& Params);
