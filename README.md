@@ -55,15 +55,7 @@ If you prefer to configure manually, add to your MCP client config:
 
 **[https://ue-mcp.com/docs](https://ue-mcp.com/docs)**
 
-- [Getting Started](https://db-lyon.github.io/ue-mcp/getting-started/) — Installation, configuration, first run
-- [Architecture](https://db-lyon.github.io/ue-mcp/architecture/) — How the pieces fit together
-- [Tool Reference](https://db-lyon.github.io/ue-mcp/tool-reference/) - All <!-- count:tools -->23<!-- /count --> tools with <!-- count:actions -->636+<!-- /count --> actions
-- [Flows](https://db-lyon.github.io/ue-mcp/flows/) - YAML flow engine, custom tasks, rollback, hooks
-- [Configuration](https://db-lyon.github.io/ue-mcp/configuration/) — `.ue-mcp.json` and MCP client config
-- [Neon Shrine Demo](https://db-lyon.github.io/ue-mcp/neon-shrine-demo/) — Interactive guided demo
-- [Feedback](https://db-lyon.github.io/ue-mcp/feedback/) — Agent feedback system
-- [Troubleshooting](https://db-lyon.github.io/ue-mcp/troubleshooting/) — Common issues and fixes
-- [Development](https://db-lyon.github.io/ue-mcp/development/) — Building, testing, contributing
+- [Getting Started](https://ue-mcp.com/docs/getting-started/) — Installation, configuration, first run
 
 ## What Can It Do?
 
