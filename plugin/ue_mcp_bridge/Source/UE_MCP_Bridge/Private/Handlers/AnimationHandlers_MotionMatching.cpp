@@ -21,6 +21,7 @@
 #include "Animation/MirrorDataTable.h"
 #include "Animation/Skeleton.h"
 #include "Animation/AnimBlueprint.h"
+#include "Animation/AnimInstance.h"
 #include "BoneContainer.h"
 #include "EditorAssetLibrary.h"
 #include "AnimGraphNode_MotionMatching.h"
@@ -712,21 +713,54 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 	if (UEdGraphPin* ClassPin = EvalNode->FindPin(TEXT("ObjectClass"), EGPD_Input)) ClassPin->DefaultObject = UPoseSearchDatabase::StaticClass();
 	EvalNode->ReconstructNode();
 
-	// Context object: the anim instance (Self) by default.
+	// Context object the chooser reads its column values from. "self" (default) =
+	// the anim instance (choosers that branch on AnimBP variables). "pawn" = the
+	// owning pawn via TryGetPawnOwner (choosers that branch on character/pawn state).
+	const FString ContextSource = OptionalString(Params, TEXT("contextSource"), TEXT("self")).ToLower();
 	UEdGraphPin* ContextPin = EvalNode->FindPin(TEXT("ContextObject"), EGPD_Input);
 	bool bContextWired = false;
+	FString ContextWiredTo;
 	if (ContextPin)
 	{
-		UK2Node_Self* SelfNode = NewObject<UK2Node_Self>(Graph);
-		Graph->AddNode(SelfNode, false, false);
-		SelfNode->CreateNewGuid();
-		SelfNode->PostPlacedNewNode();
-		SelfNode->AllocateDefaultPins();
-		SelfNode->NodePosX = EvalNode->NodePosX - 200;
-		SelfNode->NodePosY = EvalNode->NodePosY;
-		for (UEdGraphPin* Pin : SelfNode->Pins)
+		UEdGraphPin* ContextSourcePin = nullptr;
+
+		if (ContextSource == TEXT("pawn") || ContextSource == TEXT("owner") || ContextSource == TEXT("character"))
 		{
-			if (Pin && Pin->Direction == EGPD_Output) { Pin->MakeLinkTo(ContextPin); bContextWired = true; break; }
+			if (UFunction* PawnFunc = UAnimInstance::StaticClass()->FindFunctionByName(TEXT("TryGetPawnOwner")))
+			{
+				UK2Node_CallFunction* PawnNode = NewObject<UK2Node_CallFunction>(Graph);
+				PawnNode->SetFromFunction(PawnFunc);
+				Graph->AddNode(PawnNode, false, false);
+				PawnNode->CreateNewGuid();
+				PawnNode->PostPlacedNewNode();
+				PawnNode->AllocateDefaultPins();
+				PawnNode->NodePosX = EvalNode->NodePosX - 250;
+				PawnNode->NodePosY = EvalNode->NodePosY;
+				ContextSourcePin = PawnNode->GetReturnValuePin();
+				if (ContextSourcePin) ContextWiredTo = TEXT("pawn");
+			}
+		}
+
+		if (!ContextSourcePin) // "self" (default) or pawn-getter unavailable
+		{
+			UK2Node_Self* SelfNode = NewObject<UK2Node_Self>(Graph);
+			Graph->AddNode(SelfNode, false, false);
+			SelfNode->CreateNewGuid();
+			SelfNode->PostPlacedNewNode();
+			SelfNode->AllocateDefaultPins();
+			SelfNode->NodePosX = EvalNode->NodePosX - 200;
+			SelfNode->NodePosY = EvalNode->NodePosY;
+			for (UEdGraphPin* Pin : SelfNode->Pins)
+			{
+				if (Pin && Pin->Direction == EGPD_Output) { ContextSourcePin = Pin; break; }
+			}
+			if (ContextSourcePin) ContextWiredTo = TEXT("self");
+		}
+
+		if (ContextSourcePin)
+		{
+			ContextSourcePin->MakeLinkTo(ContextPin);
+			bContextWired = true;
 		}
 	}
 
@@ -735,6 +769,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 	if (!ReturnPin) return MCPError(TEXT("EvaluateChooser node produced no return pin"));
 	DatabasePin->BreakAllPinLinks();
 	ReturnPin->MakeLinkTo(DatabasePin);
+
+	// TryGetPawnOwner is not thread-safe; a multithreaded anim update would flag a
+	// race warning. Fetching the pawn on the game thread keeps the graph clean.
+	bool bDisabledThreadedUpdate = false;
+	if (ContextWiredTo == TEXT("pawn") && AnimBP->bUseMultiThreadedAnimationUpdate)
+	{
+		AnimBP->bUseMultiThreadedAnimationUpdate = false;
+		bDisabledThreadedUpdate = true;
+	}
 
 	Graph->NotifyGraphChanged();
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
@@ -750,6 +793,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 	Res->SetStringField(TEXT("chooserPath"), Chooser->GetPathName());
 	Res->SetStringField(TEXT("motionMatchingNodeGuid"), MMNode->NodeGuid.ToString());
 	Res->SetBoolField(TEXT("databasePinDriven"), bConnected);
-	Res->SetBoolField(TEXT("contextWiredToSelf"), bContextWired);
+	Res->SetBoolField(TEXT("contextWired"), bContextWired);
+	Res->SetStringField(TEXT("contextSource"), ContextWiredTo);
+	Res->SetBoolField(TEXT("disabledThreadedUpdate"), bDisabledThreadedUpdate);
 	return MCPResult(Res);
 }
