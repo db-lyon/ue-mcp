@@ -265,6 +265,10 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("move_folder"), &MoveFolder);
 	Registry.RegisterHandler(TEXT("create_folder"), &CreateFolder);
 	Registry.RegisterHandler(TEXT("delete_folder"), &DeleteFolder);
+
+	// #686 — UserDefinedEnum authoring
+	Registry.RegisterHandler(TEXT("list_enum_values"), &ListEnumValues);
+	Registry.RegisterHandler(TEXT("edit_user_defined_enum"), &EditUserDefinedEnum);
 }
 
 // ---------------------------------------------------------------------------
