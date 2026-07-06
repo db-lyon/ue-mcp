@@ -1,4 +1,4 @@
-export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) - 22 category tools covering 612+ actions, plus 830 official Unreal 5.8 tools wrapped in-process (UE 5.8+; see the epic category).
+export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) - 23 category tools covering 620+ actions, plus 830 official Unreal 5.8 tools wrapped in-process (UE 5.8+; see the epic category).
 
 Every tool takes an "action" parameter that selects the operation. Call project(action="get_status") first.
 
@@ -17,7 +17,7 @@ Every category tool lists its own actions (and each action's parameters) in
 its description - read the description of the category you need. Categories:
 project, asset, blueprint, level, material, animation, landscape, pcg, foliage,
 niagara, audio, widget, editor, reflection, gameplay, gas, networking, demo,
-feedback, statetree, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+).
+feedback, statetree, chooser, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+).
 
 ═══ TIPS ═══
 • Start with level(action="get_outliner") or asset(action="list") to discover what's in the project.
@@ -83,7 +83,7 @@ This creates a GitHub issue so the maintainers can add proper support.
 // catalog is intentionally omitted: agents pull it on demand via the `catalog`
 // tool or a category's `describe` action. This keeps the initialize handshake
 // small for token-constrained clients while preserving full capability.
-export const SERVER_INSTRUCTIONS_LEAN = `UE-MCP (lean mode): Unreal Engine editor bridge (C++ plugin). 22 category tools; the per-action catalog is loaded on demand to keep context small.
+export const SERVER_INSTRUCTIONS_LEAN = `UE-MCP (lean mode): Unreal Engine editor bridge (C++ plugin). 23 category tools; the per-action catalog is loaded on demand to keep context small.
 
 Every tool takes an "action" parameter that selects the operation. Start with project(action="get_status").
 
@@ -98,7 +98,7 @@ Each category's "action" parameter is still a validated enum, so unknown actions
 ═══ CATEGORIES ═══
 project, asset, blueprint, level, material, animation, landscape, pcg, foliage,
 niagara, audio, widget, editor, reflection, gameplay, gas, networking, demo,
-feedback, statetree, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+).
+feedback, statetree, chooser, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+).
 
 ═══ FLOWS ═══
 Before chaining 3+ tool calls, check the \`flows\` field from project(action="get_status")
@@ -128,7 +128,7 @@ Start with: tools(action="call", category="project", method="get_status").
 ═══ CATEGORIES ═══
 project, asset, blueprint, level, material, animation, landscape, pcg, foliage,
 niagara, audio, widget, editor, reflection, gameplay, gas, networking, demo,
-feedback, statetree, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+).
+feedback, statetree, chooser, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+).
 
 ═══ FLOWS ═══
 flow(action="run", flowName="<name>") runs a named sequence; see the \`flows\` field

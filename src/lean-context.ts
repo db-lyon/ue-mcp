@@ -10,7 +10,7 @@ import { McpError, ErrorCode } from "./errors.js";
  * actions. That is great for discoverability but expensive on the MCP
  * initialize handshake for token-constrained clients.
  *
- * Lean mode keeps the exact same 22 typed category tools and their validated
+ * Lean mode keeps the exact same 23 typed category tools and their validated
  * `action` enums, but:
  *   - trims each tool description to its one-line summary + a discovery pointer,
  *   - trims the server instructions (see SERVER_INSTRUCTIONS_LEAN),

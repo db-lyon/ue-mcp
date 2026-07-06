@@ -34,6 +34,7 @@
 #include "Handlers/PhysicsHandlers.h"
 #include "Handlers/DemoHandlers.h"
 #include "Handlers/StateTreeHandlers.h"
+#include "Handlers/ChooserHandlers.h"
 #include "Handlers/EpicHandlers.h"
 
 // Platform-specific socket includes
@@ -91,6 +92,7 @@ FMCPBridgeServer::FMCPBridgeServer(int32 Port)
 	FDemoHandlers::RegisterHandlers(HandlerRegistry);
 	FProjectHandlers::RegisterHandlers(HandlerRegistry);
 	FStateTreeHandlers::RegisterHandlers(HandlerRegistry);
+	FChooserHandlers::RegisterHandlers(HandlerRegistry);
 	FEpicHandlers::RegisterHandlers(HandlerRegistry);
 }
 

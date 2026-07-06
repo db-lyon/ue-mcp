@@ -64,6 +64,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "Chooser",
+			"Enabled": true
+		},
+		{
 			"Name": "PropertyBindingUtils",
 			"Enabled": true
 		},
