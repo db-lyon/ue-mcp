@@ -386,6 +386,16 @@ export const projectTool: ToolDef = categoryTool(
       "live_coding_status",
       () => ({}),
     ),
+    bridge_status: bp(
+      "Report editor-side UE-MCP bridge health, including running state, bound port, and port lockfile path.",
+      "bridge_status",
+      () => ({}),
+    ),
+    bridge_restart: bp(
+      "Schedule an editor-side UE-MCP bridge socket restart without restarting Unreal Editor. Use when the editor is responsive but the bridge connection is degraded.",
+      "bridge_restart",
+      () => ({}),
+    ),
 
     write_cpp_file: {
       description:

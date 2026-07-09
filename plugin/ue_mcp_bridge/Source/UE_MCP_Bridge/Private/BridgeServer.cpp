@@ -115,11 +115,6 @@ bool FMCPBridgeServer::Start()
 
 void FMCPBridgeServer::Shutdown()
 {
-	if (!bIsRunning)
-	{
-		return;
-	}
-
 	bShouldStop = true;
 
 	if (ServerThread)

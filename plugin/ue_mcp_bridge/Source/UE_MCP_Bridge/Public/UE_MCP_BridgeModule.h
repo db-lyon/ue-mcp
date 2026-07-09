@@ -11,4 +11,8 @@ public:
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+
+	static bool IsBridgeServerRunning();
+	static int32 GetBridgeServerPort();
+	static bool RestartBridgeServer(FString& OutMessage);
 };

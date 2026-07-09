@@ -24,4 +24,6 @@ private:
 	static TSharedPtr<FJsonValue> ListProjectModules(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LiveCodingCompile(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LiveCodingStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BridgeStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BridgeRestart(const TSharedPtr<FJsonObject>& Params);
 };

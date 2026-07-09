@@ -1,9 +1,12 @@
 #include "ProjectHandlers.h"
+#include "BridgeServer.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "UE_MCP_BridgeModule.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Misc/DateTime.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "UObject/Class.h"
@@ -98,6 +101,8 @@ void FProjectHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// live_coding_compile(wait=true) can also exceed 30s on a full rebuild.
 	Registry.RegisterHandlerWithTimeout(TEXT("live_coding_compile"), &LiveCodingCompile, 300.0f);
 	Registry.RegisterHandler(TEXT("live_coding_status"), &LiveCodingStatus);
+	Registry.RegisterHandler(TEXT("bridge_status"), &BridgeStatus);
+	Registry.RegisterHandlerWithTimeout(TEXT("bridge_restart"), &BridgeRestart, 10.0f);
 }
 
 // ─── create_cpp_class ────────────────────────────────────────────────
@@ -365,6 +370,34 @@ TSharedPtr<FJsonValue> FProjectHandlers::LiveCodingCompile(const TSharedPtr<FJso
 #else
 	return MCPError(TEXT("Live Coding is only available on Windows. Use build_project on other platforms."));
 #endif
+}
+
+TSharedPtr<FJsonValue> FProjectHandlers::BridgeStatus(const TSharedPtr<FJsonObject>& /*Params*/)
+{
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("running"), FUE_MCP_BridgeModule::IsBridgeServerRunning());
+	Result->SetNumberField(TEXT("port"), FUE_MCP_BridgeModule::GetBridgeServerPort());
+	Result->SetStringField(TEXT("portLockfile"), FMCPBridgeServer::GetPortLockfilePath());
+	Result->SetStringField(TEXT("checkedAt"), FDateTime::UtcNow().ToIso8601());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FProjectHandlers::BridgeRestart(const TSharedPtr<FJsonObject>& /*Params*/)
+{
+	FString Message;
+	const bool bRestarted = FUE_MCP_BridgeModule::RestartBridgeServer(Message);
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("restarted"), bRestarted);
+	Result->SetBoolField(TEXT("running"), FUE_MCP_BridgeModule::IsBridgeServerRunning());
+	Result->SetNumberField(TEXT("port"), FUE_MCP_BridgeModule::GetBridgeServerPort());
+	Result->SetStringField(TEXT("message"), Message);
+	Result->SetStringField(TEXT("portLockfile"), FMCPBridgeServer::GetPortLockfilePath());
+	if (!bRestarted)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+	}
+	return MCPResult(Result);
 }
 
 // ─── live_coding_status ──────────────────────────────────────────────
