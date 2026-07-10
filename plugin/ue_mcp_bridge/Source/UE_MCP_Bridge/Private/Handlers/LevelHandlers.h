@@ -107,4 +107,6 @@ private:
 	// #679/#677: spawn a SkeletalMeshActor with a mesh + optional materials and
 	// single-node animation preview for visual/deform verification.
 	static TSharedPtr<FJsonValue> SpawnSkeletalMeshActor(const TSharedPtr<FJsonObject>& Params);
+	// #666: add a material blendable to a PostProcessVolume's WeightedBlendables.
+	static TSharedPtr<FJsonValue> AddPostProcessBlendable(const TSharedPtr<FJsonObject>& Params);
 };

@@ -135,6 +135,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #679/#677: spawn a SkeletalMeshActor for visual/deform verification.
 	Registry.RegisterHandler(TEXT("spawn_skeletal_mesh_actor"), &SpawnSkeletalMeshActor);
 	Registry.RegisterHandler(TEXT("place_skeletal_actor"), &SpawnSkeletalMeshActor);
+	// #666: add a material blendable to a PostProcessVolume.
+	Registry.RegisterHandler(TEXT("add_post_process_blendable"), &AddPostProcessBlendable);
 	Registry.RegisterHandler(TEXT("snap_actor_to_floor"), &SnapActorToFloor);
 	Registry.RegisterHandler(TEXT("delete_actors"), &DeleteActors);
 	Registry.RegisterHandler(TEXT("add_actor_tag"), &AddActorTag);

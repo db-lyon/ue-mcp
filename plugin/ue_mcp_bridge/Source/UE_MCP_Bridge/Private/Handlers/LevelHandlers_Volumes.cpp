@@ -18,6 +18,7 @@
 #include "Engine/BlockingVolume.h"
 #include "Engine/TriggerVolume.h"
 #include "Engine/PostProcessVolume.h"
+#include "Materials/MaterialInterface.h"
 #include "Sound/AudioVolume.h"
 #include "Lightmass/LightmassImportanceVolume.h"
 #include "NavMesh/NavMeshBoundsVolume.h"
@@ -349,5 +350,41 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 		MCPSetRollback(Result, TEXT("set_volume_properties"), Payload);
 	}
 
+	return MCPResult(Result);
+}
+
+// #666: add a material blendable to a PostProcessVolume's WeightedBlendables.
+// PostProcess materials (and MIDs) implement IBlendableInterface, so this is
+// the native path for post-process material stacks (e.g. a toon/outline pass).
+TSharedPtr<FJsonValue> FLevelHandlers::AddPostProcessBlendable(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+	FString MaterialPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("material"), MaterialPath)) return Err;
+
+	APostProcessVolume* Volume = nullptr;
+	for (TActorIterator<APostProcessVolume> It(World); It; ++It)
+	{
+		if (It->GetActorLabel() == ActorLabel) { Volume = *It; break; }
+	}
+	if (!Volume) return MCPError(FString::Printf(TEXT("PostProcessVolume not found: %s"), *ActorLabel));
+
+	UMaterialInterface* Material = LoadAssetByPath<UMaterialInterface>(MaterialPath);
+	if (!Material) return MCPError(FString::Printf(TEXT("Material not found: %s"), *MaterialPath));
+
+	const float Weight = (float)OptionalNumber(Params, TEXT("weight"), 1.0);
+	Volume->Modify();
+	Volume->AddOrUpdateBlendable(Material, Weight);
+	Volume->PostEditChange();
+	Volume->MarkPackageDirty();
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("material"), Material->GetPathName());
+	Result->SetNumberField(TEXT("weight"), Weight);
+	Result->SetNumberField(TEXT("blendableCount"), Volume->Settings.WeightedBlendables.Array.Num());
 	return MCPResult(Result);
 }
