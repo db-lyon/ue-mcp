@@ -174,6 +174,9 @@ private:
 	// #384: configure ULevelEditorPlaySettings (multi-client PIE, net mode, etc.)
 	static TSharedPtr<FJsonValue> ConfigurePie(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetPieConfig(const TSharedPtr<FJsonObject>& Params);
+	// #671: PIE player view + input staging.
+	static TSharedPtr<FJsonValue> PieSetPlayerView(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> StageGameInput(const TSharedPtr<FJsonObject>& Params);
 	// #455: discover BlueprintFunctionLibrary classes (GeometryScript,
 	// Kismet*, AnimationLibrary, user-defined) so invoke_function callers
 	// can find the libraries that expose the ops they want.

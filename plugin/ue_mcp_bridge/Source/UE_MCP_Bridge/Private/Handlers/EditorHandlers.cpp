@@ -198,6 +198,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("invoke_static_function"), &InvokeStaticFunction);
 	Registry.RegisterHandler(TEXT("configure_pie"), &ConfigurePie);
 	Registry.RegisterHandler(TEXT("get_pie_config"), &GetPieConfig);
+	Registry.RegisterHandler(TEXT("pie_set_player_view"), &PieSetPlayerView);
+	Registry.RegisterHandler(TEXT("stage_game_input"), &StageGameInput);
 	// #455: discover UBlueprintFunctionLibrary classes (GeometryScript,
 	// Kismet, anything user-defined). Pair with editor.invoke_function to
 	// drive GeometryScript ops from MCP without hand-writing each handler.
@@ -381,7 +383,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	FPropertyChangedEvent ChangeEvent(Property);
 	(LeafOwner ? LeafOwner : Asset)->PostEditChangeProperty(ChangeEvent);
 	Asset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveLoadedAsset(Asset, /*bOnlyIfIsDirty=*/true);
+	// #674: opt out of the immediate disk save. Default true preserves the
+	// prior behavior; pass save=false to leave the package dirty in-memory
+	// (batch many writes, then save_dirty / save_asset once).
+	const bool bSave = OptionalBool(Params, TEXT("save"), true);
+	if (bSave)
+	{
+		UEditorAssetLibrary::SaveLoadedAsset(Asset, /*bOnlyIfIsDirty=*/true);
+	}
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
@@ -389,6 +398,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("resolvedKind"), ResolvedKind);
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("type"), Property->GetCPPType());
+	Result->SetBoolField(TEXT("saved"), bSave);
 	return MCPResult(Result);
 }
 
