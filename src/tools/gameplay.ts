@@ -44,6 +44,7 @@ export const gameplayTool: ToolDef = categoryTool(
     list_eqs_queries:       bp("List EQS queries. Params: directory?", "list_eqs_queries"),
     add_perception:         bp("Add AIPerceptionComponent. Params: blueprintPath, senses?", "add_perception_component"),
     configure_sense:        bp("Add + configure an AI perception sense config on the blueprint's AIPerceptionComponent. Params: blueprintPath, senseType (Sight|Hearing|Damage|Touch|Team|Prediction|Blueprint), settings? ({SightRadius: ...}), componentName?", "configure_ai_perception_sense"),
+    get_state_tree_runtime: bp("Read a running StateTreeComponent's active state names in PIE (the 'brain' state). Params: actorLabel, world? (default pie), componentName? (#654)", "get_state_tree_runtime", (p) => ({ actorLabel: p.actorLabel, world: p.world, componentName: p.componentName })),
     create_state_tree:      bp("Create a StateTree with a proper UStateTreeEditorData (schema + root state), so states/tasks are authorable via statetree(*) and persist across save/load (#653). Params: name, packagePath?, schema? (default /Script/GameplayStateTreeModule.StateTreeComponentSchema)", "create_state_tree", (p) => ({ name: p.name, packagePath: p.packagePath, schema: p.schema, onConflict: p.onConflict })),
     list_state_trees:       bp("List StateTrees. Params: directory?", "list_state_trees"),
     add_state_tree_component: bp("Add StateTreeComponent. Params: blueprintPath", "add_state_tree_component"),

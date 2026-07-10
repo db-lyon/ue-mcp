@@ -6,6 +6,9 @@
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "Modules/ModuleManager.h"
 #include "StateTree.h"
+#include "StateTreeReference.h"
+#include "StateTreeInstanceData.h"
+#include "StateTreeExecutionContext.h"
 #include "StateTreeEditorData.h"
 #include "StateTreeSchema.h"
 #include "StateTreeEditingSubsystem.h"
@@ -114,6 +117,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_behavior_tree"), &CreateBehaviorTree);
 	Registry.RegisterHandler(TEXT("create_eqs_query"), &CreateEqsQuery);
 	Registry.RegisterHandler(TEXT("create_state_tree"), &CreateStateTree);
+	Registry.RegisterHandler(TEXT("get_state_tree_runtime"), &GetStateTreeRuntime);
 	Registry.RegisterHandler(TEXT("create_game_mode"), &CreateGameMode);
 	Registry.RegisterHandler(TEXT("create_game_state"), &CreateGameState);
 	Registry.RegisterHandler(TEXT("create_player_controller"), &CreatePlayerController);
@@ -848,6 +852,71 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 	}
 	MCPSetDeleteAssetRollback(Result, StateTree->GetPathName());
 
+	return MCPResult(Result);
+}
+
+// #654: read the active state names of a running StateTreeComponent in PIE.
+// The component (UStateTreeComponent / UStateTreeAIComponent) keeps its runtime
+// data in an FStateTreeInstanceData 'InstanceData' member and its asset in a
+// 'StateTreeRef' FStateTreeReference. Access both via reflection (no hard
+// GameplayStateTreeModule dependency) and build an execution context to read
+// the active states.
+TSharedPtr<FJsonValue> FGameplayHandlers::GetStateTreeRuntime(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("pie"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
+
+	AActor* Actor = FindActorByLabelNameOrPath(World, ActorLabel);
+	if (!Actor) return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+
+	// Find a component that carries StateTree runtime data (by having an
+	// InstanceData property of type FStateTreeInstanceData + a StateTreeRef).
+	UActorComponent* STComp = nullptr;
+	FStructProperty* InstanceProp = nullptr;
+	FStructProperty* RefProp = nullptr;
+	const FString CompName = OptionalString(Params, TEXT("componentName"));
+	for (UActorComponent* Comp : Actor->GetComponents())
+	{
+		if (!Comp) continue;
+		if (!CompName.IsEmpty() && Comp->GetName() != CompName) continue;
+		FStructProperty* IP = CastField<FStructProperty>(Comp->GetClass()->FindPropertyByName(TEXT("InstanceData")));
+		FStructProperty* RP = CastField<FStructProperty>(Comp->GetClass()->FindPropertyByName(TEXT("StateTreeRef")));
+		if (IP && IP->Struct == FStateTreeInstanceData::StaticStruct() &&
+			RP && RP->Struct == FStateTreeReference::StaticStruct())
+		{
+			STComp = Comp; InstanceProp = IP; RefProp = RP; break;
+		}
+	}
+	if (!STComp) return MCPError(FString::Printf(TEXT("No StateTree component found on '%s'"), *ActorLabel));
+
+	FStateTreeReference* Ref = RefProp->ContainerPtrToValuePtr<FStateTreeReference>(STComp);
+	const UStateTree* StateTree = Ref ? Ref->GetStateTree() : nullptr;
+	FStateTreeInstanceData* InstanceData = InstanceProp->ContainerPtrToValuePtr<FStateTreeInstanceData>(STComp);
+	if (!StateTree || !InstanceData) return MCPError(TEXT("StateTree asset or instance data unavailable"));
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetStringField(TEXT("component"), STComp->GetName());
+	Result->SetStringField(TEXT("stateTree"), StateTree->GetPathName());
+
+	if (InstanceData->Num() == 0)
+	{
+		Result->SetBoolField(TEXT("running"), false);
+		Result->SetStringField(TEXT("note"), TEXT("StateTree instance data not initialized (component not running yet). Start PIE / the component's logic first."));
+		return MCPResult(Result);
+	}
+
+	FStateTreeExecutionContext Context(*STComp, *StateTree, *InstanceData);
+	const TArray<FName> ActiveNames = Context.GetActiveStateNames();
+	TArray<TSharedPtr<FJsonValue>> Names;
+	for (const FName& N : ActiveNames) Names.Add(MakeShared<FJsonValueString>(N.ToString()));
+
+	Result->SetBoolField(TEXT("running"), true);
+	Result->SetStringField(TEXT("activeState"), Context.GetActiveStateName());
+	Result->SetArrayField(TEXT("activeStates"), Names);
 	return MCPResult(Result);
 }
 
