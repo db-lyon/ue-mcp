@@ -50,6 +50,9 @@ private:
 	static TSharedPtr<FJsonValue> SetBoneKeyframes(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BakeKeyframesBatch(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetBoneTransforms(const TSharedPtr<FJsonObject>& Params);
+	// #656: compare an animation/pose asset's curve names against a skeletal
+	// mesh's morph target names and report matches/mismatches.
+	static TSharedPtr<FJsonValue> CompareCurvesToMorphTargets(const TSharedPtr<FJsonObject>& Params);
 
 	// Montage editing
 	static TSharedPtr<FJsonValue> SetMontageSequence(const TSharedPtr<FJsonObject>& Params);

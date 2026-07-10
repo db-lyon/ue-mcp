@@ -93,6 +93,8 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_bone_keyframes"), &SetBoneKeyframes);
 	Registry.RegisterHandler(TEXT("bake_keyframes_batch"), &BakeKeyframesBatch);
 	Registry.RegisterHandler(TEXT("get_bone_transforms"), &GetBoneTransforms);
+	// #656: curve vs morph-target comparison.
+	Registry.RegisterHandler(TEXT("compare_curves_to_morph_targets"), &CompareCurvesToMorphTargets);
 	Registry.RegisterHandler(TEXT("set_montage_sequence"), &SetMontageSequence);
 	Registry.RegisterHandler(TEXT("set_montage_properties"), &SetMontageProperties);
 

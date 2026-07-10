@@ -11,6 +11,9 @@
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/AnimComposite.h"
 #include "Animation/AnimData/IAnimationDataModel.h"
+#include "Animation/AnimCurveTypes.h"
+#include "Animation/MorphTarget.h"
+#include "Animation/PoseAsset.h"
 #include "Animation/Skeleton.h"
 #include "AnimationBlueprintLibrary.h"
 #include "Engine/SkeletalMesh.h"
@@ -1157,5 +1160,76 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeRootMotionFromBone(const TSharedP
 	Delta->SetNumberField(TEXT("z"), TotalDelta.Z);
 	Result->SetObjectField(TEXT("totalDelta"), Delta);
 	Result->SetStringField(TEXT("interpolation"), bPerFrame ? TEXT("per_frame") : TEXT("linear"));
+	return MCPResult(Result);
+}
+
+// #656: compare the curve names on an AnimSequence or PoseAsset against the
+// morph target names on a SkeletalMesh, so a caller can verify (without
+// Python) that authored curves actually drive morphs and spot the mismatches.
+TSharedPtr<FJsonValue> FAnimationHandlers::CompareCurvesToMorphTargets(const TSharedPtr<FJsonObject>& Params)
+{
+	FString CurveAssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("animPath"), TEXT("assetPath"), CurveAssetPath)) return Err;
+	FString MeshPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("skeletalMeshPath"), TEXT("meshPath"), MeshPath)) return Err;
+
+	UObject* CurveAsset = UEditorAssetLibrary::LoadAsset(CurveAssetPath);
+	if (!CurveAsset) return MCPError(FString::Printf(TEXT("Asset not found: %s"), *CurveAssetPath));
+	USkeletalMesh* Mesh = LoadAssetByPath<USkeletalMesh>(MeshPath);
+	if (!Mesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
+
+	// Collect curve names from an AnimSequence(Base) or a PoseAsset.
+	TSet<FString> CurveNames;
+	FString CurveKind;
+	if (UPoseAsset* Pose = Cast<UPoseAsset>(CurveAsset))
+	{
+		CurveKind = TEXT("PoseAsset");
+		for (const FName& N : Pose->GetCurveFNames()) CurveNames.Add(N.ToString());
+	}
+	else if (UAnimSequenceBase* Anim = Cast<UAnimSequenceBase>(CurveAsset))
+	{
+		CurveKind = TEXT("AnimSequence");
+		for (const FFloatCurve& C : Anim->GetCurveData().FloatCurves)
+		{
+			CurveNames.Add(C.GetName().ToString());
+		}
+	}
+	else
+	{
+		return MCPError(TEXT("Asset is not an AnimSequence or PoseAsset"));
+	}
+
+	// Collect morph target names from the skeletal mesh.
+	TSet<FString> MorphNames;
+	for (UMorphTarget* MT : Mesh->GetMorphTargets())
+	{
+		if (MT) MorphNames.Add(MT->GetName());
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Matched, CurvesNoMorph, MorphsNoCurve, CurveList, MorphList;
+	for (const FString& C : CurveNames)
+	{
+		CurveList.Add(MakeShared<FJsonValueString>(C));
+		if (MorphNames.Contains(C)) Matched.Add(MakeShared<FJsonValueString>(C));
+		else CurvesNoMorph.Add(MakeShared<FJsonValueString>(C));
+	}
+	for (const FString& M : MorphNames)
+	{
+		MorphList.Add(MakeShared<FJsonValueString>(M));
+		if (!CurveNames.Contains(M)) MorphsNoCurve.Add(MakeShared<FJsonValueString>(M));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("curveAsset"), CurveAssetPath);
+	Result->SetStringField(TEXT("curveKind"), CurveKind);
+	Result->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
+	Result->SetNumberField(TEXT("curveCount"), CurveNames.Num());
+	Result->SetNumberField(TEXT("morphTargetCount"), MorphNames.Num());
+	Result->SetNumberField(TEXT("matchedCount"), Matched.Num());
+	Result->SetArrayField(TEXT("curves"), CurveList);
+	Result->SetArrayField(TEXT("morphTargets"), MorphList);
+	Result->SetArrayField(TEXT("matched"), Matched);
+	Result->SetArrayField(TEXT("curvesWithoutMorph"), CurvesNoMorph);
+	Result->SetArrayField(TEXT("morphsWithoutCurve"), MorphsNoCurve);
 	return MCPResult(Result);
 }

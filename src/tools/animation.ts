@@ -29,6 +29,7 @@ export const animationTool: ToolDef = categoryTool(
     set_bone_keyframes:   bp("Set bone transform keyframes. Params: assetPath, boneName, keyframes", "set_bone_keyframes"),
     bake_keyframes_batch: bp("Bake per-bone keyframe arrays for many bones into an AnimSequence in one call. Auto-creates each bone track first (set_bone_keyframes silently leaves a T-pose if the track is missing), wraps the batch in one transaction, and raises if any bone fails instead of reporting hollow success (#540). Params: assetPath, tracks ([{bone, keyframes:[{location,rotation{x,y,z,w},scale?}]}]), save? (default true)", "bake_keyframes_batch", (p) => ({ assetPath: p.assetPath, tracks: p.tracks, save: p.save })),
     get_bone_transforms:  bp("Read reference pose transforms. Params: skeletonPath, boneNames?, space? ('local' default, or 'component' for composed parent-chain transforms - retarget-chain / anatomical-scale work) (#245)", "get_bone_transforms"),
+    compare_curves_to_morph_targets: bp("Compare an AnimSequence/PoseAsset's curve names against a SkeletalMesh's morph target names. Returns curves[], morphTargets[], matched[], curvesWithoutMorph[], morphsWithoutCurve[] - verify authored curves drive morphs without Python. Params: animPath (AnimSequence or PoseAsset), skeletalMeshPath (#656)", "compare_curves_to_morph_targets", (p) => ({ animPath: p.animPath, skeletalMeshPath: p.skeletalMeshPath })),
     set_montage_sequence: bp("Replace the animation sequence in a montage slot. With segmentIndex, replaces only that one segment; without it, replaces every segment in the slot. Params: assetPath, animSequencePath, slotIndex? (default 0), segmentIndex? (#626)", "set_montage_sequence", (p) => ({ assetPath: p.assetPath, animSequencePath: p.animSequencePath, slotIndex: p.slotIndex, segmentIndex: p.segmentIndex })),
     set_montage_properties: bp("Set montage properties. Params: assetPath, sequenceLength?, rateScale?, blendIn?, blendOut?", "set_montage_properties"),
     create_state_machine: bp("Create state machine in AnimBP. Params: assetPath, name?, graphName?", "create_state_machine"),
@@ -141,7 +142,8 @@ export const animationTool: ToolDef = categoryTool(
     startTime: z.number().optional().describe("Start time for montage section"),
     linkedSection: z.string().optional().describe("Next section name to link to"),
     // IK Rig params (#93)
-    skeletalMeshPath: z.string().optional().describe("Path to skeletal mesh for create_ik_rig"),
+    skeletalMeshPath: z.string().optional().describe("Path to skeletal mesh for create_ik_rig / compare_curves_to_morph_targets (#656)"),
+    animPath: z.string().optional().describe("compare_curves_to_morph_targets: AnimSequence or PoseAsset path (#656)"),
     enableRootMotion: z.boolean().optional(),
     forceRootLock: z.boolean().optional(),
     useNormalizedRootMotionScale: z.boolean().optional(),
