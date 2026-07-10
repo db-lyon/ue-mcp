@@ -514,6 +514,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddTransition(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("stateMachineName"), SMName);
 	Result->SetStringField(TEXT("fromState"), FromState);
 	Result->SetStringField(TEXT("toState"), ToState);
+	// #630: expose the transition node's stable GUID so callers can address it
+	// by handle (from/to state names are ambiguous when multiple transitions
+	// share endpoints).
+	Result->SetStringField(TEXT("transitionGuid"), TransNode->NodeGuid.ToString());
 	// No rollback: no paired remove_transition handler.
 
 	return MCPResult(Result);
@@ -767,6 +771,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadStateMachine(const TSharedPtr<FJs
 			UAnimStateNode* Next = Cast<UAnimStateNode>(T->GetNextState());
 			if (Prev) TransObj->SetStringField(TEXT("fromState"), Prev->GetStateName());
 			if (Next) TransObj->SetStringField(TEXT("toState"), Next->GetStateName());
+			// #630: stable GUID handle for addressing this transition.
+			TransObj->SetStringField(TEXT("transitionGuid"), T->NodeGuid.ToString());
 
 			TransObj->SetNumberField(TEXT("blendDuration"), T->CrossfadeDuration);
 			TransObj->SetStringField(TEXT("logicType"),
