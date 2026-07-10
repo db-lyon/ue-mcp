@@ -11,7 +11,10 @@
 #include "UObject/SavePackage.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "Sound/SoundCue.h"
+#include "Sound/SoundWave.h"
 #include "Factories/SoundCueFactoryNew.h"
+#include "AssetImportTask.h"
+#include "Misc/Paths.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Kismet/GameplayStatics.h"
@@ -22,10 +25,91 @@
 void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("list_sound_assets"), &ListSoundAssets);
+	Registry.RegisterHandler(TEXT("import_audio"), &ImportAudio);
 	Registry.RegisterHandler(TEXT("create_sound_cue"), &CreateSoundCue);
 	Registry.RegisterHandler(TEXT("create_metasound_source"), &CreateMetaSoundSource);
 	Registry.RegisterHandler(TEXT("play_sound_at_location"), &PlaySoundAtLocation);
 	Registry.RegisterHandler(TEXT("spawn_ambient_sound"), &SpawnAmbientSound);
+}
+
+// #664: import a WAV/OGG/FLAC file as a USoundWave. Passing a null factory lets
+// AssetTools auto-select the sound-import factory from the file extension.
+TSharedPtr<FJsonValue> FAudioHandlers::ImportAudio(const TSharedPtr<FJsonObject>& Params)
+{
+	FString FileName;
+	if (auto Err = RequireStringAlt(Params, TEXT("filename"), TEXT("filePath"), FileName)) return Err;
+	if (!FPaths::FileExists(FileName))
+	{
+		return MCPError(FString::Printf(TEXT("File not found: %s"), *FileName));
+	}
+
+	FString DestinationPath = OptionalString(Params, TEXT("destinationPath"), TEXT("/Game/Audio"));
+	{
+		const FString PkgPath = OptionalString(Params, TEXT("packagePath"));
+		if (!PkgPath.IsEmpty()) DestinationPath = PkgPath;
+	}
+
+	UAssetImportTask* Task = NewObject<UAssetImportTask>();
+	FGCRootScope TaskRoot(Task);
+	Task->bAutomated = true;
+	Task->bReplaceExisting = OptionalBool(Params, TEXT("replaceExisting"), true);
+	Task->bSave = false;
+	Task->Filename = FileName;
+	Task->DestinationPath = DestinationPath;
+	// Factory left null: AssetTools resolves USoundFactory for wav/ogg/flac.
+
+	FString AssetName;
+	if (!Params->TryGetStringField(TEXT("assetName"), AssetName))
+	{
+		Params->TryGetStringField(TEXT("name"), AssetName);
+	}
+	if (!AssetName.IsEmpty()) Task->DestinationName = AssetName;
+
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	TArray<UAssetImportTask*> Tasks;
+	Tasks.Add(Task);
+	AssetToolsModule.Get().ImportAssetTasks(Tasks);
+
+	TArray<TSharedPtr<FJsonValue>> ImportedPaths;
+	USoundWave* ImportedWave = nullptr;
+	for (UObject* Obj : Task->GetObjects())
+	{
+		if (!Obj) continue;
+		ImportedPaths.Add(MakeShared<FJsonValueString>(Obj->GetPathName()));
+		if (!ImportedWave) ImportedWave = Cast<USoundWave>(Obj);
+	}
+
+	// Optional looping toggle on the resulting SoundWave.
+	if (ImportedWave && Params->HasField(TEXT("looping")))
+	{
+		ImportedWave->bLooping = OptionalBool(Params, TEXT("looping"), false);
+		SaveAssetPackage(ImportedWave);
+	}
+
+	auto Result = MCPSuccess();
+	if (ImportedPaths.Num() > 0) MCPSetCreated(Result);
+	Result->SetStringField(TEXT("filename"), FileName);
+	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
+	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
+	Result->SetNumberField(TEXT("importedCount"), ImportedPaths.Num());
+	Result->SetBoolField(TEXT("success"), ImportedPaths.Num() > 0);
+	if (ImportedWave)
+	{
+		Result->SetNumberField(TEXT("durationSeconds"), ImportedWave->GetDuration());
+		Result->SetNumberField(TEXT("numChannels"), ImportedWave->NumChannels);
+		Result->SetBoolField(TEXT("looping"), ImportedWave->bLooping);
+	}
+	if (ImportedPaths.Num() == 0)
+	{
+		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no SoundWave was produced (unsupported format?)"));
+	}
+	else if (ImportedPaths.Num() == 1)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
+		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
+	}
+	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::ListSoundAssets(const TSharedPtr<FJsonObject>& Params)

@@ -14,7 +14,9 @@
 #include "Factories/FbxFactory.h"
 #include "Factories/FbxImportUI.h"
 #include "Factories/FbxStaticMeshImportData.h"
+#include "Factories/FbxSkeletalMeshImportData.h"
 #include "Factories/FbxAnimSequenceImportData.h"
+#include "Animation/MorphTarget.h"
 #include "Factories/TextureFactory.h"
 #include "Factories/ReimportTextureFactory.h"
 #include "Factories/CSVImportFactory.h"
@@ -214,6 +216,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 		{
 			ImportUI->StaticMeshImportData->bGenerateLightmapUVs = bGenerateLightmapUVs;
 		}
+		// #687: metre-authored FBX unit conversion. Default 1.0 leaves cm FBX
+		// untouched; pass 100 for metre FBX.
+		if (Params->HasField(TEXT("importUniformScale")) && ImportUI->StaticMeshImportData)
+		{
+			ImportUI->StaticMeshImportData->ImportUniformScale = (float)OptionalNumber(Params, TEXT("importUniformScale"), 1.0);
+		}
 
 		FbxFactory->ImportUI = ImportUI;
 	}
@@ -338,12 +346,27 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 		}
 	}
 
+	// #678: morph targets + physics asset creation controls.
+	const bool bImportMorphTargets = OptionalBool(Params, TEXT("importMorphTargets"), true);
+	const bool bCreatePhysicsAsset = OptionalBool(Params, TEXT("createPhysicsAsset"), false);
+	ImportUI->bCreatePhysicsAsset = bCreatePhysicsAsset;
+	if (ImportUI->SkeletalMeshImportData)
+	{
+		ImportUI->SkeletalMeshImportData->bImportMorphTargets = bImportMorphTargets;
+		// #687: metre-authored FBX (Blender FBX_SCALE_ALL) lands 100x too small
+		// on a cm skeleton. Expose the uniform-scale knob; default 1.0 leaves
+		// cm-authored FBX untouched. Pass 100 for metre FBX.
+		const double UniformScale = OptionalNumber(Params, TEXT("importUniformScale"), 1.0);
+		ImportUI->SkeletalMeshImportData->ImportUniformScale = (float)UniformScale;
+	}
+
 	FbxFactory->ImportUI = ImportUI;
 
 	UAssetImportTask* Task = NewObject<UAssetImportTask>();
 	FGCRootScope TaskRoot(Task);
 	Task->bAutomated = true;
-	Task->bReplaceExisting = true;
+	// #678: replace_existing now a param (default true preserves prior behavior).
+	Task->bReplaceExisting = OptionalBool(Params, TEXT("replaceExisting"), true);
 	Task->bSave = false;
 	Task->Filename = FileName;
 	Task->DestinationPath = DestinationPath;
@@ -385,6 +408,32 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
 	Result->SetNumberField(TEXT("importedCount"), ImportedPaths.Num());
 	Result->SetBoolField(TEXT("success"), ImportedPaths.Num() > 0);
+	Result->SetNumberField(TEXT("importUniformScale"), OptionalNumber(Params, TEXT("importUniformScale"), 1.0));
+
+	// #678: post-import readback so a caller can confirm scale (box extent),
+	// morph-target names, and LOD count without a second round-trip.
+	for (UObject* Obj : Task->GetObjects())
+	{
+		if (USkeletalMesh* SkelMesh = Cast<USkeletalMesh>(Obj))
+		{
+			const FBoxSphereBounds Bounds = SkelMesh->GetBounds();
+			Result->SetObjectField(TEXT("boxExtent"), MCPVec3ToJsonObject(Bounds.BoxExtent));
+			Result->SetNumberField(TEXT("boundsRadius"), Bounds.SphereRadius);
+			TArray<TSharedPtr<FJsonValue>> MorphNames;
+			for (UMorphTarget* MT : SkelMesh->GetMorphTargets())
+			{
+				if (MT) MorphNames.Add(MakeShared<FJsonValueString>(MT->GetName()));
+			}
+			Result->SetArrayField(TEXT("morphTargets"), MorphNames);
+			Result->SetNumberField(TEXT("morphTargetCount"), MorphNames.Num());
+			Result->SetNumberField(TEXT("numLODs"), SkelMesh->GetLODNum());
+			if (USkeleton* Sk = SkelMesh->GetSkeleton())
+			{
+				Result->SetStringField(TEXT("skeleton"), Sk->GetPathName());
+			}
+			break;
+		}
+	}
 	if (ImportedPaths.Num() == 0)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no assets were produced"));
@@ -949,6 +998,35 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 	if (ImportedPaths.Num() == 0)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no assets were produced"));
+	}
+
+	// #661: honor sRGB / compressionSettings / lodGroup at import time. The
+	// UTextureFactory does not take these, so apply them to the imported
+	// texture in the same call (folding in the set_texture_settings path) so
+	// callers no longer need a second round-trip.
+	if (ImportedPaths.Num() == 1 &&
+		(Params->HasField(TEXT("sRGB")) || Params->HasField(TEXT("compressionSettings")) ||
+		 Params->HasField(TEXT("lodGroup")) || Params->HasField(TEXT("neverStream"))))
+	{
+		TSharedPtr<FJsonObject> SettingsParams = MakeShared<FJsonObject>();
+		SettingsParams->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
+		if (Params->HasField(TEXT("sRGB"))) SettingsParams->SetBoolField(TEXT("sRGB"), OptionalBool(Params, TEXT("sRGB"), true));
+		if (Params->HasField(TEXT("compressionSettings"))) SettingsParams->SetStringField(TEXT("compressionSettings"), OptionalString(Params, TEXT("compressionSettings")));
+		if (Params->HasField(TEXT("lodGroup"))) SettingsParams->SetStringField(TEXT("lodGroup"), OptionalString(Params, TEXT("lodGroup")));
+		if (Params->HasField(TEXT("neverStream"))) SettingsParams->SetBoolField(TEXT("neverStream"), OptionalBool(Params, TEXT("neverStream"), false));
+		TSharedPtr<FJsonValue> SettingsResult = SetTextureProperties(SettingsParams);
+		if (SettingsResult.IsValid() && SettingsResult->AsObject().IsValid())
+		{
+			const TSharedPtr<FJsonObject> SO = SettingsResult->AsObject();
+			bool bSettingsOk = false;
+			SO->TryGetBoolField(TEXT("success"), bSettingsOk);
+			Result->SetBoolField(TEXT("settingsApplied"), bSettingsOk);
+			const TArray<TSharedPtr<FJsonValue>>* Mod = nullptr;
+			if (SO->TryGetArrayField(TEXT("modifiedProperties"), Mod) && Mod)
+			{
+				Result->SetArrayField(TEXT("appliedSettings"), *Mod);
+			}
+		}
 	}
 
 	if (ImportedPaths.Num() == 1)
