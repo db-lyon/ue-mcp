@@ -72,6 +72,7 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_widget_property"), &SetWidgetProperty);
 	Registry.RegisterHandler(TEXT("set_widget_style"), &SetWidgetStyle);
 	Registry.RegisterHandler(TEXT("bulk_set_widget_properties"), &BulkSetWidgetProperties);
+	Registry.RegisterHandler(TEXT("reorder_child"), &ReorderChild);
 	Registry.RegisterHandler(TEXT("read_widget_animations"), &ReadWidgetAnimations);
 	Registry.RegisterHandler(TEXT("run_editor_utility_widget"), &RunEditorUtilityWidget);
 	Registry.RegisterHandler(TEXT("run_editor_utility_blueprint"), &RunEditorUtilityBlueprint);

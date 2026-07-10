@@ -24,6 +24,8 @@ private:
 	// FSlateFontInfo, ...) on a widget from JSON, and a bulk multi-widget variant.
 	static TSharedPtr<FJsonValue> SetWidgetStyle(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BulkSetWidgetProperties(const TSharedPtr<FJsonObject>& Params);
+	// #635/#21: reorder a widget among its parent panel's children by index.
+	static TSharedPtr<FJsonValue> ReorderChild(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadWidgetAnimations(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RunEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RunEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params);

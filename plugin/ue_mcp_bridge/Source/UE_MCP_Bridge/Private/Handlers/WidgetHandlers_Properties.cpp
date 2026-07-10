@@ -1273,3 +1273,42 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 	Result->SetArrayField(TEXT("results"), Results);
 	return MCPResult(Result);
 }
+
+// #635/#21: reorder a widget among its parent panel's children (move to a
+// specific sibling index). move_widget only reparents; this shifts order,
+// e.g. inserting a new row BETWEEN two existing children.
+TSharedPtr<FJsonValue> FWidgetHandlers::ReorderChild(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	FString WidgetName;
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
+	if (!Params->HasField(TEXT("index"))) return MCPError(TEXT("Missing 'index'"));
+	const int32 NewIndex = (int32)Params->GetNumberField(TEXT("index"));
+
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!WidgetBP || !WidgetBP->WidgetTree) return MCPError(FString::Printf(TEXT("WidgetBlueprint not found: %s"), *AssetPath));
+	UWidget* Widget = FindWidgetByName(WidgetBP, WidgetName);
+	if (!Widget) return MCPError(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+
+	UPanelWidget* Parent = Widget->GetParent();
+	if (!Parent) return MCPError(FString::Printf(TEXT("Widget '%s' has no parent panel (is it the root?)"), *WidgetName));
+
+	const int32 Count = Parent->GetChildrenCount();
+	const int32 ClampedIndex = FMath::Clamp(NewIndex, 0, Count - 1);
+	const int32 OldIndex = Parent->GetChildIndex(Widget);
+
+	Parent->Modify();
+	Parent->ShiftChild(ClampedIndex, Widget);
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+	SaveAssetPackage(WidgetBP);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("widgetName"), WidgetName);
+	Result->SetStringField(TEXT("parent"), Parent->GetName());
+	Result->SetNumberField(TEXT("oldIndex"), OldIndex);
+	Result->SetNumberField(TEXT("newIndex"), ClampedIndex);
+	return MCPResult(Result);
+}
