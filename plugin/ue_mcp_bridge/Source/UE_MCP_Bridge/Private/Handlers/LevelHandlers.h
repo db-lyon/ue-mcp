@@ -109,4 +109,6 @@ private:
 	static TSharedPtr<FJsonValue> SpawnSkeletalMeshActor(const TSharedPtr<FJsonObject>& Params);
 	// #666: add a material blendable to a PostProcessVolume's WeightedBlendables.
 	static TSharedPtr<FJsonValue> AddPostProcessBlendable(const TSharedPtr<FJsonObject>& Params);
+	// #637: export a selected actor's mesh to FBX plus a metadata sidecar JSON.
+	static TSharedPtr<FJsonValue> ExportActorFbx(const TSharedPtr<FJsonObject>& Params);
 };

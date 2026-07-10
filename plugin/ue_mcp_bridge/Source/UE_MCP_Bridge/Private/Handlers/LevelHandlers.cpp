@@ -17,6 +17,13 @@
 #include "Engine/SkeletalMesh.h"
 #include "Animation/SkeletalMeshActor.h"
 #include "Animation/AnimSequence.h"
+#include "Components/StaticMeshComponent.h"
+#include "Exporters/Exporter.h"
+#include "Exporters/FbxExportOption.h"
+#include "AssetExportTask.h"
+#include "Misc/FileHelper.h"
+#include "Serialization/JsonWriter.h"
+#include "Serialization/JsonSerializer.h"
 #include "ReferenceSkeleton.h"
 #include "CollisionQueryParams.h"
 #include "Engine/HitResult.h"
@@ -137,6 +144,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("place_skeletal_actor"), &SpawnSkeletalMeshActor);
 	// #666: add a material blendable to a PostProcessVolume.
 	Registry.RegisterHandler(TEXT("add_post_process_blendable"), &AddPostProcessBlendable);
+	// #637: export a selected actor's mesh to FBX + metadata sidecar.
+	Registry.RegisterHandler(TEXT("export_actor_fbx"), &ExportActorFbx);
 	Registry.RegisterHandler(TEXT("snap_actor_to_floor"), &SnapActorToFloor);
 	Registry.RegisterHandler(TEXT("delete_actors"), &DeleteActors);
 	Registry.RegisterHandler(TEXT("add_actor_tag"), &AddActorTag);
@@ -2734,6 +2743,102 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetNaniteInfo(const TSharedPtr<FJsonObjec
 	Result->SetBoolField(TEXT("naniteEnabled"), Settings.bEnabled != 0);
 	Result->SetNumberField(TEXT("positionPrecision"), Settings.PositionPrecision);
 	Result->SetNumberField(TEXT("numLODs"), Mesh->GetNumLODs());
+	return MCPResult(Result);
+}
+
+// #637: export a selected actor's skeletal/static mesh to FBX and write a
+// metadata sidecar JSON (actor transform, mesh, materials, skeleton) that a
+// downstream bridge (e.g. MetaTailor) can consume alongside the FBX.
+TSharedPtr<FJsonValue> FLevelHandlers::ExportActorFbx(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+	FString OutputPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("outputPath"), TEXT("filePath"), OutputPath)) return Err;
+
+	AActor* Actor = FindActorByLabelNameOrPath(World, ActorLabel);
+	if (!Actor) return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+
+	// Resolve the mesh asset from the actor (skeletal first, then static).
+	UObject* MeshAsset = nullptr;
+	FString MeshKind;
+	TArray<FString> MaterialPaths;
+	FString SkeletonPath;
+	if (USkeletalMeshComponent* SKC = Actor->FindComponentByClass<USkeletalMeshComponent>())
+	{
+		if (USkeletalMesh* SM = Cast<USkeletalMesh>(SKC->GetSkinnedAsset()))
+		{
+			MeshAsset = SM; MeshKind = TEXT("SkeletalMesh");
+			if (USkeleton* Sk = SM->GetSkeleton()) SkeletonPath = Sk->GetPathName();
+			for (int32 i = 0; i < SKC->GetNumMaterials(); ++i)
+			{
+				if (UMaterialInterface* M = SKC->GetMaterial(i)) MaterialPaths.Add(M->GetPathName());
+			}
+		}
+	}
+	if (!MeshAsset)
+	{
+		if (UStaticMeshComponent* SMC = Actor->FindComponentByClass<UStaticMeshComponent>())
+		{
+			if (UStaticMesh* SM = SMC->GetStaticMesh())
+			{
+				MeshAsset = SM; MeshKind = TEXT("StaticMesh");
+				for (int32 i = 0; i < SMC->GetNumMaterials(); ++i)
+				{
+					if (UMaterialInterface* M = SMC->GetMaterial(i)) MaterialPaths.Add(M->GetPathName());
+				}
+			}
+		}
+	}
+	if (!MeshAsset) return MCPError(FString::Printf(TEXT("Actor '%s' has no skeletal/static mesh to export"), *ActorLabel));
+
+	FString AbsPath = OutputPath;
+	if (FPaths::IsRelative(AbsPath)) AbsPath = FPaths::Combine(FPaths::ProjectDir(), AbsPath);
+	if (!AbsPath.EndsWith(TEXT(".fbx"))) AbsPath += TEXT(".fbx");
+	IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsPath), /*Tree*/ true);
+
+	UAssetExportTask* Task = NewObject<UAssetExportTask>();
+	FGCRootScope TaskRoot(Task);
+	Task->Object = MeshAsset;
+	Task->Filename = AbsPath;
+	Task->bAutomated = true;
+	Task->bPrompt = false;
+	Task->bReplaceIdentical = true;
+	UFbxExportOption* Options = NewObject<UFbxExportOption>();
+	Task->Options = Options;
+	const bool bExported = UExporter::RunAssetExportTask(Task);
+	if (!bExported) return MCPError(FString::Printf(TEXT("FBX export failed for %s"), *MeshAsset->GetPathName()));
+
+	// Metadata sidecar next to the FBX.
+	const FTransform Xf = Actor->GetActorTransform();
+	TSharedPtr<FJsonObject> Meta = MakeShared<FJsonObject>();
+	Meta->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Meta->SetStringField(TEXT("meshKind"), MeshKind);
+	Meta->SetStringField(TEXT("mesh"), MeshAsset->GetPathName());
+	if (!SkeletonPath.IsEmpty()) Meta->SetStringField(TEXT("skeleton"), SkeletonPath);
+	Meta->SetStringField(TEXT("fbx"), AbsPath);
+	Meta->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Xf.GetLocation()));
+	Meta->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Xf.Rotator()));
+	Meta->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Xf.GetScale3D()));
+	TArray<TSharedPtr<FJsonValue>> MatArr;
+	for (const FString& MP : MaterialPaths) MatArr.Add(MakeShared<FJsonValueString>(MP));
+	Meta->SetArrayField(TEXT("materials"), MatArr);
+
+	FString MetaStr;
+	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&MetaStr);
+	FJsonSerializer::Serialize(Meta.ToSharedRef(), Writer);
+	const FString MetaPath = FPaths::ChangeExtension(AbsPath, TEXT("json"));
+	FFileHelper::SaveStringToFile(MetaStr, *MetaPath);
+
+	const int64 FbxSize = IFileManager::Get().FileSize(*AbsPath);
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetStringField(TEXT("fbx"), AbsPath);
+	Result->SetStringField(TEXT("metadata"), MetaPath);
+	Result->SetStringField(TEXT("meshKind"), MeshKind);
+	Result->SetNumberField(TEXT("fbxSizeBytes"), (double)FbxSize);
 	return MCPResult(Result);
 }
 
