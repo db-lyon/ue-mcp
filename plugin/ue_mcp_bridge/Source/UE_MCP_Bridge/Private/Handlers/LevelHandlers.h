@@ -94,4 +94,17 @@ private:
 	// #434: bulk-add transforms to an actor's HISMC/ISMC for foliage / debris
 	// authoring. Python's add_instance crashes in 5.7; the C++ path is fine.
 	static TSharedPtr<FJsonValue> AddHismcInstances(const TSharedPtr<FJsonObject>& Params);
+	// #697: read back every instance transform on an actor's ISMC/HISMC so a
+	// caller can inspect / re-scatter an existing instanced component.
+	static TSharedPtr<FJsonValue> GetInstanceTransforms(const TSharedPtr<FJsonObject>& Params);
+	// #697: update or remove a single instance on an ISMC/HISMC by index.
+	static TSharedPtr<FJsonValue> UpdateInstanceTransform(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveInstance(const TSharedPtr<FJsonObject>& Params);
+	// #696: enable + force-build Nanite on a UStaticMesh asset, or read its
+	// current Nanite state.
+	static TSharedPtr<FJsonValue> SetNaniteSettings(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetNaniteInfo(const TSharedPtr<FJsonObject>& Params);
+	// #679/#677: spawn a SkeletalMeshActor with a mesh + optional materials and
+	// single-node animation preview for visual/deform verification.
+	static TSharedPtr<FJsonValue> SpawnSkeletalMeshActor(const TSharedPtr<FJsonObject>& Params);
 };

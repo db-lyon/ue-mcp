@@ -178,14 +178,17 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	}
 
 	ULightComponent* LightComponent = Actor->FindComponentByClass<ULightComponent>();
-	if (!LightComponent)
+	// #608: USkyLightComponent is not a ULightComponent, so it was previously
+	// rejected here. Handle its intensity/color/volumetric-scattering directly.
+	USkyLightComponent* SkyForProps = Actor->FindComponentByClass<USkyLightComponent>();
+	if (!LightComponent && !SkyForProps)
 	{
-		return MCPError(FString::Printf(TEXT("Actor '%s' does not have a light component"), *ActorLabel));
+		return MCPError(FString::Printf(TEXT("Actor '%s' does not have a light or sky-light component"), *ActorLabel));
 	}
 
 	// Capture previous values before mutation for self-inverse rollback.
-	const double PreviousIntensity = LightComponent->Intensity;
-	const FLinearColor PreviousColor = LightComponent->GetLightColor();
+	const double PreviousIntensity = LightComponent ? (double)LightComponent->Intensity : (SkyForProps ? (double)SkyForProps->Intensity : 0.0);
+	const FLinearColor PreviousColor = LightComponent ? LightComponent->GetLightColor() : FLinearColor::White;
 	const FRotator PreviousRotation = Actor->GetActorRotation();
 
 	bool bAnyChange = false;
@@ -193,7 +196,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	double Intensity = 0.0;
 	if (Params->TryGetNumberField(TEXT("intensity"), Intensity))
 	{
-		LightComponent->SetIntensity(Intensity);
+		if (LightComponent) { LightComponent->SetIntensity(Intensity); }
+		else if (SkyForProps) { SkyForProps->Intensity = (float)Intensity; SkyForProps->MarkRenderStateDirty(); }
 		bAnyChange = true;
 	}
 
@@ -204,8 +208,44 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 		(*ColorObj)->TryGetNumberField(TEXT("r"), R);
 		(*ColorObj)->TryGetNumberField(TEXT("g"), G);
 		(*ColorObj)->TryGetNumberField(TEXT("b"), B);
-		LightComponent->SetLightColor(FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f));
+		if (LightComponent) { LightComponent->SetLightColor(FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f)); }
+		else if (SkyForProps) { SkyForProps->LightColor = FColor((uint8)R, (uint8)G, (uint8)B); SkyForProps->MarkRenderStateDirty(); }
 		bAnyChange = true;
+	}
+
+	// #608: volumetric scattering, source radius, and spot cone angles.
+	if (LightComponent)
+	{
+		double VolScatter = 0.0;
+		if (Params->TryGetNumberField(TEXT("volumetricScatteringIntensity"), VolScatter))
+		{
+			LightComponent->SetVolumetricScatteringIntensity((float)VolScatter);
+			bAnyChange = true;
+		}
+		double SourceRadius = 0.0;
+		if (Params->TryGetNumberField(TEXT("sourceRadius"), SourceRadius))
+		{
+			if (UPointLightComponent* PLC = Cast<UPointLightComponent>(LightComponent))
+			{
+				PLC->SetSourceRadius((float)SourceRadius);
+				bAnyChange = true;
+			}
+		}
+		if (USpotLightComponent* SLC = Cast<USpotLightComponent>(LightComponent))
+		{
+			double Inner = 0.0, Outer = 0.0;
+			if (Params->TryGetNumberField(TEXT("innerConeAngle"), Inner)) { SLC->SetInnerConeAngle((float)Inner); bAnyChange = true; }
+			if (Params->TryGetNumberField(TEXT("outerConeAngle"), Outer)) { SLC->SetOuterConeAngle((float)Outer); bAnyChange = true; }
+		}
+	}
+	else if (SkyForProps)
+	{
+		double VolScatter = 0.0;
+		if (Params->TryGetNumberField(TEXT("volumetricScatteringIntensity"), VolScatter))
+		{
+			SkyForProps->SetVolumetricScatteringIntensity((float)VolScatter);
+			bAnyChange = true;
+		}
 	}
 
 	// #94: DirectionalLight rotation support (sun angle for time-of-day)
@@ -254,9 +294,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
-	Result->SetNumberField(TEXT("intensity"), LightComponent->Intensity);
+	Result->SetNumberField(TEXT("intensity"), LightComponent ? (double)LightComponent->Intensity : (SkyForProps ? (double)SkyForProps->Intensity : 0.0));
+	Result->SetBoolField(TEXT("isSkyLight"), LightComponent == nullptr && SkyForProps != nullptr);
 
-	FLinearColor CurrentColor = LightComponent->GetLightColor();
+	FLinearColor CurrentColor = LightComponent ? LightComponent->GetLightColor()
+		: (SkyForProps ? FLinearColor(SkyForProps->LightColor) : FLinearColor::White);
 	TSharedPtr<FJsonObject> ColorResult = MakeShared<FJsonObject>();
 	ColorResult->SetNumberField(TEXT("r"), CurrentColor.R * 255.0f);
 	ColorResult->SetNumberField(TEXT("g"), CurrentColor.G * 255.0f);
@@ -327,6 +369,36 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFogProperties(const TSharedPtr<FJsonOb
 		(*ColorObj)->TryGetNumberField(TEXT("g"), G);
 		(*ColorObj)->TryGetNumberField(TEXT("b"), B);
 		FC->FogInscatteringLuminance = FLinearColor(R / 255.0f, G / 255.0f, B / 255.0f);
+	}
+
+	// #608: volumetric fog controls.
+	if (Params->HasField(TEXT("enableVolumetricFog")))
+	{
+		FC->SetVolumetricFog(OptionalBool(Params, TEXT("enableVolumetricFog"), true));
+	}
+	double VolScatterDist = 0.0;
+	if (Params->TryGetNumberField(TEXT("volumetricFogScatteringDistribution"), VolScatterDist))
+	{
+		FC->SetVolumetricFogScatteringDistribution((float)VolScatterDist);
+	}
+	double VolExtinction = 0.0;
+	if (Params->TryGetNumberField(TEXT("volumetricFogExtinctionScale"), VolExtinction))
+	{
+		FC->SetVolumetricFogExtinctionScale((float)VolExtinction);
+	}
+	double VolDistance = 0.0;
+	if (Params->TryGetNumberField(TEXT("volumetricFogDistance"), VolDistance))
+	{
+		FC->SetVolumetricFogDistance((float)VolDistance);
+	}
+	const TSharedPtr<FJsonObject>* AlbedoObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("volumetricFogAlbedo"), AlbedoObj) && AlbedoObj)
+	{
+		double R = 255, G = 255, B = 255;
+		(*AlbedoObj)->TryGetNumberField(TEXT("r"), R);
+		(*AlbedoObj)->TryGetNumberField(TEXT("g"), G);
+		(*AlbedoObj)->TryGetNumberField(TEXT("b"), B);
+		FC->SetVolumetricFogAlbedo(FColor((uint8)R, (uint8)G, (uint8)B));
 	}
 
 	FC->MarkRenderStateDirty();
