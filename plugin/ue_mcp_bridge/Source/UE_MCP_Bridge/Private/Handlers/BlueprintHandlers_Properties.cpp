@@ -213,6 +213,59 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 			*ComponentName, *FString::Join(Available, TEXT(", "))));
 	}
 
+	// #680: writing SkeletalMeshAsset via raw reflection leaves the base
+	// USkinnedMeshComponent::SkinnedAsset pointer untouched, so the template
+	// renders nothing at runtime. Route mesh assignment through the native
+	// setter (SetSkeletalMeshAsset) which updates SkinnedAsset + the animation
+	// instance. Only the single-segment property name is special-cased.
+	if (!PropertyName.Contains(TEXT(".")))
+	{
+		const bool bIsMeshProp =
+			PropertyName.Equals(TEXT("SkeletalMesh"), ESearchCase::IgnoreCase) ||
+			PropertyName.Equals(TEXT("SkeletalMeshAsset"), ESearchCase::IgnoreCase) ||
+			PropertyName.Equals(TEXT("SkinnedAsset"), ESearchCase::IgnoreCase);
+		if (bIsMeshProp)
+		{
+			if (USkeletalMeshComponent* SkelComp = Cast<USkeletalMeshComponent>(Template))
+			{
+				FString MeshPath;
+				if (!ValueField->TryGetString(MeshPath))
+				{
+					const TSharedPtr<FJsonObject>* VObj = nullptr;
+					if (ValueField->TryGetObject(VObj) && VObj)
+					{
+						(*VObj)->TryGetStringField(TEXT("path"), MeshPath);
+						if (MeshPath.IsEmpty()) (*VObj)->TryGetStringField(TEXT("assetPath"), MeshPath);
+					}
+				}
+				USkeletalMesh* NewMesh = nullptr;
+				if (!MeshPath.IsEmpty() && MeshPath != TEXT("None"))
+				{
+					NewMesh = LoadAssetByPath<USkeletalMesh>(MeshPath);
+					if (!NewMesh)
+					{
+						return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
+					}
+				}
+				SkelComp->Modify();
+				SkelComp->SetSkeletalMeshAsset(NewMesh);
+				SkelComp->PostEditChange();
+				FKismetEditorUtilities::CompileBlueprint(Blueprint);
+				SaveAssetPackage(Blueprint);
+
+				auto Result = MCPSuccess();
+				MCPSetUpdated(Result);
+				Result->SetStringField(TEXT("path"), AssetPath);
+				Result->SetStringField(TEXT("componentName"), ComponentName);
+				Result->SetStringField(TEXT("propertyName"), PropertyName);
+				Result->SetStringField(TEXT("value"), NewMesh ? NewMesh->GetPathName() : TEXT("None"));
+				Result->SetStringField(TEXT("skinnedAsset"), SkelComp->GetSkinnedAsset() ? SkelComp->GetSkinnedAsset()->GetPathName() : TEXT("None"));
+				Result->SetStringField(TEXT("note"), TEXT("Routed through SetSkeletalMeshAsset so SkinnedAsset is updated (#680)"));
+				return MCPResult(Result);
+			}
+		}
+	}
+
 	// Walk dotted path to the final property. The helper from HandlerJsonProperty.h
 	// does the assignment (handles FVector objects, object refs, arrays, etc.);
 	// here we duplicate the walk once so we can also capture PrevValue for rollback.
