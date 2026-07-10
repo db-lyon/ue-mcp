@@ -369,13 +369,26 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 			const TSharedPtr<FJsonObject>* ModObj = nullptr;
 			if (!ModVal->TryGetObject(ModObj) || !ModObj) continue;
 
+			// #649: accept either {type:"<ShortName>", <props>} or
+			// {class:"/Script/Module.Class", properties:{...}}.
+			FString ClassPath;
+			(*ModObj)->TryGetStringField(TEXT("class"), ClassPath);
+			UClass* ModClass = nullptr;
+			if (!ClassPath.IsEmpty())
+			{
+				ModClass = LoadClass<UInputModifier>(nullptr, *ClassPath);
+				if (!ModClass) ModClass = LoadObject<UClass>(nullptr, *ClassPath);
+				if (!ModClass) ModClass = FindClassByShortName(ClassPath);
+				if (ModClass && !ModClass->IsChildOf(UInputModifier::StaticClass())) ModClass = nullptr;
+			}
+
 			FString TypeName;
 			(*ModObj)->TryGetStringField(TEXT("type"), TypeName);
-			if (TypeName.IsEmpty()) continue;
+			if (ClassPath.IsEmpty() && TypeName.IsEmpty()) continue;
 
 			// Resolve class: try multiple patterns (#169 fix)
 			// "DeadZone" → UInputModifierDeadZone, "Negate" → UInputModifierNegate, etc.
-			UClass* ModClass = nullptr;
+			if (!ModClass && !TypeName.IsEmpty())
 			{
 				TArray<FString> Candidates;
 				if (TypeName.StartsWith(TEXT("UInputModifier")) || TypeName.StartsWith(TEXT("InputModifier")))
@@ -403,10 +416,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 			// Create with IMC as outer — this is the key fix for #75
 			UInputModifier* Modifier = NewObject<UInputModifier>(IMC, ModClass);
 
+			// #649: property source is a nested `properties` object when
+			// provided, else the modifier object's own sibling keys.
+			const TSharedPtr<FJsonObject>* PropsObj = nullptr;
+			const bool bUseNestedProps = (*ModObj)->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj && (*PropsObj).IsValid();
+			const auto& PropSource = bUseNestedProps ? (*PropsObj)->Values : (*ModObj)->Values;
+
 			// Set properties via reflection
-			for (const auto& Pair : (*ModObj)->Values)
+			for (const auto& Pair : PropSource)
 			{
-				if (Pair.Key == TEXT("type")) continue;
+				if (Pair.Key == TEXT("type") || Pair.Key == TEXT("class") || Pair.Key == TEXT("properties")) continue;
 
 				FProperty* Prop = ModClass->FindPropertyByName(FName(*Pair.Key));
 				if (!Prop) continue;
