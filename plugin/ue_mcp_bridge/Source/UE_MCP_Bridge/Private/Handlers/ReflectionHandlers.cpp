@@ -23,6 +23,7 @@
 #include "HAL/PlatformFileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
 
 void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -34,6 +35,101 @@ void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_gameplay_tag"), &CreateGameplayTag);
 	Registry.RegisterHandler(TEXT("create_enum"), &CreateEnum);
 	Registry.RegisterHandler(TEXT("set_enum_entries"), &SetEnumEntries);
+	// #689: load-state probes.
+	Registry.RegisterHandler(TEXT("is_class_loaded"), &IsClassLoaded);
+	Registry.RegisterHandler(TEXT("is_module_loaded"), &IsModuleLoaded);
+	Registry.RegisterHandler(TEXT("list_loaded_modules"), &ListLoadedModules);
+}
+
+// #689: report whether a UClass is currently loaded, and (separately) whether
+// it merely exists (is loadable). Also reports the owning module and its load
+// state so a caller can tell "not loaded yet" from "doesn't exist".
+TSharedPtr<FJsonValue> FReflectionHandlers::IsClassLoaded(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ClassName;
+	if (auto Err = RequireStringAlt(Params, TEXT("className"), TEXT("class"), ClassName)) return Err;
+
+	// FindClass does NOT load — a hit means the class is already in memory.
+	UClass* Found = FindClass(ClassName);
+	bool bLoaded = Found != nullptr;
+	bool bExists = bLoaded;
+
+	// If not loaded, see whether it could be loaded (exists on disk / in a
+	// not-yet-loaded module) without leaving it loaded is not possible for
+	// natives; for a path-form we can attempt a load to answer "exists".
+	UClass* Resolved = Found;
+	if (!bLoaded && ClassName.Contains(TEXT(".")))
+	{
+		Resolved = LoadObject<UClass>(nullptr, *ClassName);
+		if (!Resolved) Resolved = LoadClass<UObject>(nullptr, *ClassName);
+		if (Resolved) { bExists = true; /* loaded as a side effect */ }
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("className"), ClassName);
+	Result->SetBoolField(TEXT("loaded"), bLoaded);
+	Result->SetBoolField(TEXT("exists"), bExists);
+	if (Resolved)
+	{
+		Result->SetStringField(TEXT("resolvedPath"), Resolved->GetPathName());
+		if (UPackage* Pkg = Resolved->GetOutermost())
+		{
+			FString PkgName = Pkg->GetName(); // e.g. /Script/Engine
+			Result->SetStringField(TEXT("package"), PkgName);
+			if (PkgName.StartsWith(TEXT("/Script/")))
+			{
+				const FString ModuleName = PkgName.RightChop(8);
+				Result->SetStringField(TEXT("module"), ModuleName);
+				Result->SetBoolField(TEXT("moduleLoaded"), FModuleManager::Get().IsModuleLoaded(FName(*ModuleName)));
+			}
+		}
+	}
+	return MCPResult(Result);
+}
+
+// #689: report whether a named module is currently loaded.
+TSharedPtr<FJsonValue> FReflectionHandlers::IsModuleLoaded(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ModuleName;
+	if (auto Err = RequireStringAlt(Params, TEXT("moduleName"), TEXT("module"), ModuleName)) return Err;
+	const bool bLoaded = FModuleManager::Get().IsModuleLoaded(FName(*ModuleName));
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("moduleName"), ModuleName);
+	Result->SetBoolField(TEXT("loaded"), bLoaded);
+	return MCPResult(Result);
+}
+
+// #689: enumerate modules with their runtime load state. Optional 'filter'
+// substring (case-insensitive) narrows the list.
+TSharedPtr<FJsonValue> FReflectionHandlers::ListLoadedModules(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString Filter = OptionalString(Params, TEXT("filter"));
+	const bool bLoadedOnly = OptionalBool(Params, TEXT("loadedOnly"), false);
+
+	TArray<FModuleStatus> Statuses;
+	FModuleManager::Get().QueryModules(Statuses);
+
+	TArray<TSharedPtr<FJsonValue>> Out;
+	int32 LoadedCount = 0;
+	for (const FModuleStatus& S : Statuses)
+	{
+		if (S.bIsLoaded) ++LoadedCount;
+		if (bLoadedOnly && !S.bIsLoaded) continue;
+		if (!Filter.IsEmpty() && !S.Name.Contains(Filter, ESearchCase::IgnoreCase)) continue;
+		TSharedPtr<FJsonObject> E = MakeShared<FJsonObject>();
+		E->SetStringField(TEXT("name"), S.Name);
+		E->SetBoolField(TEXT("loaded"), S.bIsLoaded);
+		E->SetBoolField(TEXT("gameModule"), S.bIsGameModule);
+		Out.Add(MakeShared<FJsonValueObject>(E));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("modules"), Out);
+	Result->SetNumberField(TEXT("count"), Out.Num());
+	Result->SetNumberField(TEXT("totalLoaded"), LoadedCount);
+	Result->SetNumberField(TEXT("totalModules"), Statuses.Num());
+	return MCPResult(Result);
 }
 
 namespace

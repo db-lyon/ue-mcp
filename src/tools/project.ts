@@ -349,6 +349,37 @@ export const projectTool: ToolDef = categoryTool(
         return { query: p.query, tree, subdirectory: subdir ?? "(root)", engineRoot, resultCount: results.length, results };
       },
     },
+    list_files: {
+      description: "List files on disk under a directory, optionally filtered by extension(s). Runs in the MCP server process (no editor round-trip). Params: directory (absolute, or relative to the project dir), extensions? (e.g. ['png','exr'] or 'png'), recursive? (default false), maxResults? (default 1000) (#608)",
+      handler: async (ctx, p) => {
+        ctx.project.ensureLoaded();
+        const dirArg = p.directory as string;
+        if (!dirArg) throw new Error("Missing 'directory'");
+        const base = path.isAbsolute(dirArg) ? dirArg : path.join(ctx.project.projectDir!, dirArg);
+        if (!fs.existsSync(base)) throw new Error(`Directory not found: ${base}`);
+        const extsRaw = p.extensions;
+        const exts = (Array.isArray(extsRaw) ? extsRaw : extsRaw ? [extsRaw] : [])
+          .map((e) => String(e).replace(/^\./, "").toLowerCase());
+        const recursive = (p.recursive as boolean) ?? false;
+        const maxResults = (p.maxResults as number) ?? 1000;
+        const results: Array<{ path: string; name: string; sizeBytes: number; ext: string }> = [];
+        const walk = (dir: string): void => {
+          if (results.length >= maxResults) return;
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (results.length >= maxResults) return;
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) { if (recursive) walk(full); continue; }
+            const ext = path.extname(entry.name).replace(/^\./, "").toLowerCase();
+            if (exts.length > 0 && !exts.includes(ext)) continue;
+            let sizeBytes = 0;
+            try { sizeBytes = fs.statSync(full).size; } catch { /* race */ }
+            results.push({ path: full, name: entry.name, sizeBytes, ext });
+          }
+        };
+        walk(base);
+        return { directory: base, extensions: exts, recursive, count: results.length, files: results };
+      },
+    },
     set_config: bp("Write to INI. Params: configName, section, key, value", "set_config"),
     build: bp("Build C++ project. Params: configuration?, platform?, clean?", "build_project"),
     generate_project_files: bp("Generate IDE project files (Visual Studio, Xcode, etc.)", "generate_project_files"),
@@ -374,6 +405,16 @@ export const projectTool: ToolDef = categoryTool(
       "List native modules in the current project (name, host type, source path). Feed moduleName from here into create_cpp_class.",
       "list_project_modules",
       () => ({}),
+    ),
+    list_loaded_modules: bp(
+      "Enumerate ALL engine+project modules with runtime load state (loaded/gameModule), not just uproject-declared ones. Params: filter? (case-insensitive substring), loadedOnly? (default false) (#689)",
+      "list_loaded_modules",
+      (p) => ({ filter: p.filter, loadedOnly: p.loadedOnly }),
+    ),
+    is_module_loaded: bp(
+      "Report whether a named module is currently loaded in the editor. Params: moduleName (#689)",
+      "is_module_loaded",
+      (p) => ({ moduleName: p.moduleName }),
     ),
     live_coding_compile: {
       description: "Trigger a Live Coding compile (Windows only). Hot-patches method bodies of existing UCLASSes without editor restart — the fast inner loop for UFUNCTION implementations. Does NOT reliably register brand-new UCLASSes; use build_project + editor restart for those. Params: wait? (default false — fire and return 'in_progress').",
@@ -644,7 +685,11 @@ export const projectTool: ToolDef = categoryTool(
     configName: z.string().optional().describe("For read_config/set_config: config file name"),
     query: z.string().optional().describe("For search_config/search_cpp: search text"),
     headerPath: z.string().optional().describe("For read_cpp_header: path to .h file"),
-    moduleName: z.string().optional().describe("For read_module: module name"),
+    moduleName: z.string().optional().describe("For read_module / is_module_loaded: module name"),
+    filter: z.string().optional().describe("For list_loaded_modules: case-insensitive name substring (#689)"),
+    loadedOnly: z.boolean().optional().describe("For list_loaded_modules: only loaded modules (#689)"),
+    extensions: z.union([z.string(), z.array(z.string())]).optional().describe("For list_files: extension filter (#608)"),
+    recursive: z.boolean().optional().describe("For list_files: recurse into subdirectories (#608)"),
     directory: z.string().optional().describe("For search_cpp: subdirectory"),
     section: z.string().optional().describe("For set_config: INI section"),
     key: z.string().optional().describe("For set_config: INI key"),
