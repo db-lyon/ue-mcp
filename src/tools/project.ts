@@ -349,6 +349,40 @@ export const projectTool: ToolDef = categoryTool(
         return { query: p.query, tree, subdirectory: subdir ?? "(root)", engineRoot, resultCount: results.length, results };
       },
     },
+    search_tools: {
+      description: "Search every ue-mcp tool + action by keyword and return the best matches (tool, action, description, score) - the first step to find a dedicated action before falling back to editor(execute_python). 30 of recent feature requests asked for actions that already existed; search here first. Params: query (space-separated keywords), limit? (default 20) (#704)",
+      handler: async (ctx, p) => {
+        const query = ((p.query as string) ?? "").toLowerCase().trim();
+        if (!query) throw new Error("Missing 'query'");
+        const terms = query.split(/\s+/).filter(Boolean);
+        const limit = (p.limit as number) ?? 20;
+        // Dynamic import avoids a load-time circular dependency (tools.ts imports
+        // this project tool). ALL_TOOLS is the full category-tool registry.
+        const { ALL_TOOLS } = await import("../tools.js");
+        const matches: Array<{ tool: string; action: string; description: string; score: number }> = [];
+        for (const tool of ALL_TOOLS as Array<{ name: string; description?: string; actions?: Record<string, { description?: string }> }>) {
+          for (const [actionName, spec] of Object.entries(tool.actions ?? {})) {
+            const desc = spec?.description ?? "";
+            const hay = `${tool.name} ${actionName} ${desc}`.toLowerCase();
+            let score = 0;
+            for (const t of terms) {
+              if (actionName.toLowerCase().includes(t)) score += 3;   // name hit weighs most
+              else if (hay.includes(t)) score += 1;
+            }
+            // Whole-query phrase bonus.
+            if (hay.includes(query)) score += 2;
+            if (score > 0) matches.push({ tool: tool.name, action: actionName, description: desc, score });
+          }
+        }
+        matches.sort((a, b) => b.score - a.score);
+        return {
+          query,
+          resultCount: matches.length,
+          results: matches.slice(0, limit),
+          hint: matches.length === 0 ? "No dedicated action matched. Only then consider editor(execute_python)." : undefined,
+        };
+      },
+    },
     list_files: {
       description: "List files on disk under a directory, optionally filtered by extension(s). Runs in the MCP server process (no editor round-trip). Params: directory (absolute, or relative to the project dir), extensions? (e.g. ['png','exr'] or 'png'), recursive? (default false), maxResults? (default 1000) (#608)",
       handler: async (ctx, p) => {
@@ -688,6 +722,7 @@ export const projectTool: ToolDef = categoryTool(
     moduleName: z.string().optional().describe("For read_module / is_module_loaded: module name"),
     filter: z.string().optional().describe("For list_loaded_modules: case-insensitive name substring (#689)"),
     loadedOnly: z.boolean().optional().describe("For list_loaded_modules: only loaded modules (#689)"),
+    limit: z.number().optional().describe("For search_tools: max results (default 20) (#704)"),
     extensions: z.union([z.string(), z.array(z.string())]).optional().describe("For list_files: extension filter (#608)"),
     recursive: z.boolean().optional().describe("For list_files: recurse into subdirectories (#608)"),
     directory: z.string().optional().describe("For search_cpp: subdirectory"),

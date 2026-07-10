@@ -43,7 +43,7 @@ export const editorTool: ToolDef = categoryTool(
     },
     execute_command: bp("Run console command. Params: command", "execute_command"),
     execute_python: {
-      description: "Run Python in editor. Params: code",
+      description: "LAST RESORT ONLY - run arbitrary Python in the editor when NO dedicated action exists. It bypasses the bridge's validation/permissions/logging and is slower and less reproducible. Before using it, call project(search_tools, query=...) to find a dedicated action - most tasks (asset import, level/actor edits, blueprint/material/widget authoring, reflection, PIE control) already have one. Params: code",
       handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
         const code = (params.code as string) ?? "";
         const result = await ctx.bridge.call("execute_python", { code });
