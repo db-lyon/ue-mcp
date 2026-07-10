@@ -519,6 +519,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddTransition(const TSharedPtr<FJsonO
 	// by handle (from/to state names are ambiguous when multiple transitions
 	// share endpoints).
 	Result->SetStringField(TEXT("transitionGuid"), TransNode->NodeGuid.ToString());
+	// #630: expose the transition's rule graph name. The condition ("can enter
+	// transition") is authored in this bound graph - address it by name with the
+	// standard blueprint graph tools (add_node / connect_pins into the
+	// TransitionResult node's bCanEnterTransition pin) to set any condition.
+	if (TransNode->BoundGraph)
+	{
+		Result->SetStringField(TEXT("boundGraph"), TransNode->BoundGraph->GetName());
+	}
 	// No rollback: no paired remove_transition handler.
 
 	return MCPResult(Result);
@@ -772,8 +780,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadStateMachine(const TSharedPtr<FJs
 			UAnimStateNode* Next = Cast<UAnimStateNode>(T->GetNextState());
 			if (Prev) TransObj->SetStringField(TEXT("fromState"), Prev->GetStateName());
 			if (Next) TransObj->SetStringField(TEXT("toState"), Next->GetStateName());
-			// #630: stable GUID handle for addressing this transition.
+			// #630: stable GUID handle + rule graph name. Author the condition in
+			// boundGraph via the standard graph tools (into the TransitionResult
+			// node's bCanEnterTransition pin).
 			TransObj->SetStringField(TEXT("transitionGuid"), T->NodeGuid.ToString());
+			if (T->BoundGraph) TransObj->SetStringField(TEXT("boundGraph"), T->BoundGraph->GetName());
 
 			TransObj->SetNumberField(TEXT("blendDuration"), T->CrossfadeDuration);
 			TransObj->SetStringField(TEXT("logicType"),
