@@ -24,6 +24,8 @@
 #include "Misc/FileHelper.h"
 #include "LevelEditorViewport.h"
 #include "UnrealClient.h"
+#include "ContentStreaming.h"
+#include "RenderingThread.h"
 #include "Slate/SceneViewport.h"
 #include "HAL/PlatformMemory.h"
 #include "Misc/App.h"
@@ -1828,7 +1830,20 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	if (!RT) return MCPError(TEXT("Failed to create RenderTarget2D"));
 	Comp->TextureTarget = RT;
 
+	// #662: force-stream all textures to full resolution and flush the render
+	// thread so the capture is a complete, resident frame rather than the
+	// unloaded-texture checker or a stale cached image. Double-capture ensures
+	// streamed mips that arrive after the first pass are present in the second.
+	const bool bFullyLoadTextures = OptionalBool(Params, TEXT("fullyLoadTextures"), true);
+	if (bFullyLoadTextures)
+	{
+		IStreamingManager::Get().StreamAllResources(0.0f);
+		FlushRenderingCommands();
+		Comp->CaptureScene();
+		FlushRenderingCommands();
+	}
 	Comp->CaptureScene();
+	FlushRenderingCommands();
 
 	// Split outputPath into directory + filename for ExportRenderTarget.
 	FString AbsPath = OutputPath;
