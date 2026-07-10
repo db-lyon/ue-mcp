@@ -1149,3 +1149,127 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReadWidgetAnimations(const TSharedPtr<FJ
 
 	return MCPResult(Result);
 }
+
+// #563: set a full or nested style struct on a widget from JSON. Uses the
+// generic JSON->property setter so FButtonStyle / FEditableTextBoxStyle /
+// FSlateFontInfo / FSlateColor and their nested brushes are all expressible,
+// which the scalar set_widget_property path cannot do.
+static UWidget* FindWidgetByName(UWidgetBlueprint* WidgetBP, const FString& Name)
+{
+	UWidget* Found = nullptr;
+	if (WidgetBP && WidgetBP->WidgetTree)
+	{
+		WidgetBP->WidgetTree->ForEachWidget([&](UWidget* W)
+		{
+			if (W && W->GetName() == Name && !Found) Found = W;
+		});
+	}
+	return Found;
+}
+
+TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetStyle(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	FString WidgetName;
+	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
+	FString PropertyName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
+	TSharedPtr<FJsonValue> ValueField = Params->TryGetField(TEXT("value"));
+	if (!ValueField.IsValid()) return MCPError(TEXT("Missing 'value' (a JSON object/scalar for the style)"));
+
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!WidgetBP || !WidgetBP->WidgetTree) return MCPError(FString::Printf(TEXT("WidgetBlueprint not found: %s"), *AssetPath));
+
+	UWidget* Widget = FindWidgetByName(WidgetBP, WidgetName);
+	if (!Widget) return MCPError(FString::Printf(TEXT("Widget not found: %s"), *WidgetName));
+
+	FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*PropertyName));
+	if (!Prop) return MCPError(FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName, *Widget->GetClass()->GetName()));
+
+	Widget->Modify();
+	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Widget);
+	FString SetErr;
+	if (!MCPJsonProperty::SetJsonOnProperty(Prop, ValuePtr, ValueField, SetErr))
+	{
+		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
+	}
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+	SaveAssetPackage(WidgetBP);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("widgetName"), WidgetName);
+	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	return MCPResult(Result);
+}
+
+// #563: apply many {widgetName, propertyName, value} style/property writes to a
+// WidgetBlueprint in one call (single compile + save).
+TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	const TArray<TSharedPtr<FJsonValue>>* Entries = nullptr;
+	if (!Params->TryGetArrayField(TEXT("properties"), Entries) || !Entries)
+	{
+		return MCPError(TEXT("Missing 'properties' array ([{widgetName, propertyName, value}])"));
+	}
+
+	UWidgetBlueprint* WidgetBP = Cast<UWidgetBlueprint>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!WidgetBP || !WidgetBP->WidgetTree) return MCPError(FString::Printf(TEXT("WidgetBlueprint not found: %s"), *AssetPath));
+
+	TArray<TSharedPtr<FJsonValue>> Results;
+	int32 Applied = 0, Failed = 0;
+	for (const TSharedPtr<FJsonValue>& EV : *Entries)
+	{
+		const TSharedPtr<FJsonObject>* EObj = nullptr;
+		if (!EV->TryGetObject(EObj) || !EObj) { ++Failed; continue; }
+		FString WName, PName;
+		(*EObj)->TryGetStringField(TEXT("widgetName"), WName);
+		(*EObj)->TryGetStringField(TEXT("propertyName"), PName);
+		TSharedPtr<FJsonValue> Val = (*EObj)->TryGetField(TEXT("value"));
+		TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
+		R->SetStringField(TEXT("widgetName"), WName);
+		R->SetStringField(TEXT("propertyName"), PName);
+
+		UWidget* Widget = FindWidgetByName(WidgetBP, WName);
+		if (!Widget || WName.IsEmpty() || PName.IsEmpty() || !Val.IsValid())
+		{
+			R->SetBoolField(TEXT("ok"), false);
+			R->SetStringField(TEXT("error"), TEXT("widget/property/value missing"));
+			Results.Add(MakeShared<FJsonValueObject>(R)); ++Failed; continue;
+		}
+		FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*PName));
+		if (!Prop)
+		{
+			R->SetBoolField(TEXT("ok"), false);
+			R->SetStringField(TEXT("error"), TEXT("property not found"));
+			Results.Add(MakeShared<FJsonValueObject>(R)); ++Failed; continue;
+		}
+		Widget->Modify();
+		FString SetErr;
+		if (MCPJsonProperty::SetJsonOnProperty(Prop, Prop->ContainerPtrToValuePtr<void>(Widget), Val, SetErr))
+		{
+			R->SetBoolField(TEXT("ok"), true); ++Applied;
+		}
+		else
+		{
+			R->SetBoolField(TEXT("ok"), false);
+			R->SetStringField(TEXT("error"), SetErr);
+			++Failed;
+		}
+		Results.Add(MakeShared<FJsonValueObject>(R));
+	}
+
+	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+	SaveAssetPackage(WidgetBP);
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("applied"), Applied);
+	Result->SetNumberField(TEXT("failed"), Failed);
+	Result->SetArrayField(TEXT("results"), Results);
+	return MCPResult(Result);
+}

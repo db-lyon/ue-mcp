@@ -20,6 +20,10 @@ private:
 	static TSharedPtr<FJsonValue> ListWidgetBindings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ClearWidgetBinding(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetWidgetProperty(const TSharedPtr<FJsonObject>& Params);
+	// #563: set a full/nested style struct (FButtonStyle, FEditableTextBoxStyle,
+	// FSlateFontInfo, ...) on a widget from JSON, and a bulk multi-widget variant.
+	static TSharedPtr<FJsonValue> SetWidgetStyle(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BulkSetWidgetProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadWidgetAnimations(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RunEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RunEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params);
