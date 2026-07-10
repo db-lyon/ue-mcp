@@ -95,6 +95,12 @@ private:
 	// v0.7.11 — issue fixes
 	static TSharedPtr<FJsonValue> CreateIKRetargeter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadIKRetargeter(const TSharedPtr<FJsonObject>& Params);
+	// #701/#703: IK rig/retargeter authoring tail + batch retarget bake.
+	static TSharedPtr<FJsonValue> SetIKRigMesh(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetIKRetargeterRig(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AutoAlignRetargetPose(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ResetRetargetPose(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BatchRetargetAnimations(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetAnimBlueprintSkeleton(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadBoneTrack(const TSharedPtr<FJsonObject>& Params);
 

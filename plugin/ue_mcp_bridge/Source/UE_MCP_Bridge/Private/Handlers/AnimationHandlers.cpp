@@ -119,6 +119,12 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// IK Rig (#93)
 	Registry.RegisterHandler(TEXT("create_ik_rig"), &CreateIKRig);
 	Registry.RegisterHandler(TEXT("read_ik_rig"), &ReadIKRig);
+	// #701/#703: IK authoring tail + batch retarget.
+	Registry.RegisterHandler(TEXT("set_ik_rig_mesh"), &SetIKRigMesh);
+	Registry.RegisterHandler(TEXT("set_ik_retargeter_rig"), &SetIKRetargeterRig);
+	Registry.RegisterHandler(TEXT("auto_align_retarget_pose"), &AutoAlignRetargetPose);
+	Registry.RegisterHandler(TEXT("reset_retarget_pose"), &ResetRetargetPose);
+	Registry.RegisterHandlerWithTimeout(TEXT("batch_retarget_animations"), &BatchRetargetAnimations, 300.0f);
 
 	// Control Rig (#11)
 	Registry.RegisterHandler(TEXT("list_control_rig_variables"), &ListControlRigVariables);

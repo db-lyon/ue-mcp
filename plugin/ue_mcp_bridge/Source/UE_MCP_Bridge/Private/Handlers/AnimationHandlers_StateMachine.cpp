@@ -25,6 +25,7 @@
 #include "AnimStateNode.h"
 #include "AnimStateTransitionNode.h"
 #include "RetargetEditor/IKRetargeterController.h"
+#include "RetargetEditor/IKRetargetBatchOperation.h"
 #include "Retargeter/IKRetargeter.h"
 #include "AnimGraphNode_SequencePlayer.h"
 #include "AnimGraphNode_BlendSpacePlayer.h"
@@ -1567,4 +1568,176 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadPoseSearchDatabase(const TSharedP
 	}
 
 	return MCPResult(Res);
+}
+
+// ─── #701 set_ik_rig_mesh ───────────────────────────────────────────
+// Set the preview/source skeletal mesh on an EXISTING IK Rig.
+TSharedPtr<FJsonValue> FAnimationHandlers::SetIKRigMesh(const TSharedPtr<FJsonObject>& Params)
+{
+	FString RigPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("rigPath"), TEXT("assetPath"), RigPath)) return Err;
+	FString MeshPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("meshPath"), TEXT("skeletalMesh"), MeshPath)) return Err;
+
+	UIKRigDefinition* IKRig = LoadObject<UIKRigDefinition>(nullptr, *RigPath);
+	if (!IKRig) return MCPError(FString::Printf(TEXT("IKRig not found: %s"), *RigPath));
+	USkeletalMesh* Mesh = LoadObject<USkeletalMesh>(nullptr, *MeshPath);
+	if (!Mesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
+
+	UIKRigController* Controller = UIKRigController::GetController(IKRig);
+	if (!Controller) return MCPError(TEXT("IKRigController unavailable"));
+	const bool bOk = Controller->SetSkeletalMesh(Mesh);
+	SaveAssetPackage(IKRig);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("rigPath"), IKRig->GetPathName());
+	Result->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
+	Result->SetBoolField(TEXT("applied"), bOk);
+	return MCPResult(Result);
+}
+
+namespace
+{
+	ERetargetSourceOrTarget ParseSourceOrTarget(const FString& S)
+	{
+		return S.Equals(TEXT("source"), ESearchCase::IgnoreCase)
+			? ERetargetSourceOrTarget::Source
+			: ERetargetSourceOrTarget::Target;
+	}
+}
+
+// ─── #703 set_ik_retargeter_rig ─────────────────────────────────────
+TSharedPtr<FJsonValue> FAnimationHandlers::SetIKRetargeterRig(const TSharedPtr<FJsonObject>& Params)
+{
+	FString RetargeterPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("retargeterPath"), TEXT("assetPath"), RetargeterPath)) return Err;
+	FString RigPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("rigPath"), TEXT("ikRig"), RigPath)) return Err;
+	const FString Side = OptionalString(Params, TEXT("side"), TEXT("target"));
+
+	UIKRetargeter* Retargeter = LoadObject<UIKRetargeter>(nullptr, *RetargeterPath);
+	if (!Retargeter) return MCPError(FString::Printf(TEXT("IKRetargeter not found: %s"), *RetargeterPath));
+	UIKRigDefinition* IKRig = LoadObject<UIKRigDefinition>(nullptr, *RigPath);
+	if (!IKRig) return MCPError(FString::Printf(TEXT("IKRig not found: %s"), *RigPath));
+
+	UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter);
+	if (!Controller) return MCPError(TEXT("IKRetargeterController unavailable"));
+	Controller->SetIKRig(ParseSourceOrTarget(Side), IKRig);
+	SaveAssetPackage(Retargeter);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("retargeterPath"), Retargeter->GetPathName());
+	Result->SetStringField(TEXT("side"), Side.ToLower());
+	Result->SetStringField(TEXT("ikRig"), IKRig->GetPathName());
+	return MCPResult(Result);
+}
+
+// ─── #701 auto_align_retarget_pose ──────────────────────────────────
+TSharedPtr<FJsonValue> FAnimationHandlers::AutoAlignRetargetPose(const TSharedPtr<FJsonObject>& Params)
+{
+	FString RetargeterPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("retargeterPath"), TEXT("assetPath"), RetargeterPath)) return Err;
+	const FString Side = OptionalString(Params, TEXT("side"), TEXT("target"));
+
+	UIKRetargeter* Retargeter = LoadObject<UIKRetargeter>(nullptr, *RetargeterPath);
+	if (!Retargeter) return MCPError(FString::Printf(TEXT("IKRetargeter not found: %s"), *RetargeterPath));
+	UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter);
+	if (!Controller) return MCPError(TEXT("IKRetargeterController unavailable"));
+
+	Controller->AutoAlignAllBones(ParseSourceOrTarget(Side));
+	SaveAssetPackage(Retargeter);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("retargeterPath"), Retargeter->GetPathName());
+	Result->SetStringField(TEXT("side"), Side.ToLower());
+	Result->SetStringField(TEXT("method"), TEXT("ChainToChain"));
+	return MCPResult(Result);
+}
+
+// ─── #701 reset_retarget_pose ───────────────────────────────────────
+TSharedPtr<FJsonValue> FAnimationHandlers::ResetRetargetPose(const TSharedPtr<FJsonObject>& Params)
+{
+	FString RetargeterPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("retargeterPath"), TEXT("assetPath"), RetargeterPath)) return Err;
+	const FString Side = OptionalString(Params, TEXT("side"), TEXT("target"));
+
+	UIKRetargeter* Retargeter = LoadObject<UIKRetargeter>(nullptr, *RetargeterPath);
+	if (!Retargeter) return MCPError(FString::Printf(TEXT("IKRetargeter not found: %s"), *RetargeterPath));
+	UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter);
+	if (!Controller) return MCPError(TEXT("IKRetargeterController unavailable"));
+
+	const ERetargetSourceOrTarget SoT = ParseSourceOrTarget(Side);
+	const FName CurrentPose = Controller->GetCurrentRetargetPoseName(SoT);
+	Controller->ResetRetargetPose(CurrentPose, TArray<FName>(), SoT);
+	SaveAssetPackage(Retargeter);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("retargeterPath"), Retargeter->GetPathName());
+	Result->SetStringField(TEXT("side"), Side.ToLower());
+	Result->SetStringField(TEXT("pose"), CurrentPose.ToString());
+	return MCPResult(Result);
+}
+
+// ─── #701 batch_retarget_animations ─────────────────────────────────
+TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TSharedPtr<FJsonObject>& Params)
+{
+	FString RetargeterPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("retargeterPath"), TEXT("assetPath"), RetargeterPath)) return Err;
+	FString SourceMeshPath, TargetMeshPath;
+	if (auto Err = RequireString(Params, TEXT("sourceMesh"), SourceMeshPath)) return Err;
+	if (auto Err = RequireString(Params, TEXT("targetMesh"), TargetMeshPath)) return Err;
+
+	UIKRetargeter* Retargeter = LoadObject<UIKRetargeter>(nullptr, *RetargeterPath);
+	if (!Retargeter) return MCPError(FString::Printf(TEXT("IKRetargeter not found: %s"), *RetargeterPath));
+	USkeletalMesh* SourceMesh = LoadObject<USkeletalMesh>(nullptr, *SourceMeshPath);
+	if (!SourceMesh) return MCPError(FString::Printf(TEXT("Source mesh not found: %s"), *SourceMeshPath));
+	USkeletalMesh* TargetMesh = LoadObject<USkeletalMesh>(nullptr, *TargetMeshPath);
+	if (!TargetMesh) return MCPError(FString::Printf(TEXT("Target mesh not found: %s"), *TargetMeshPath));
+
+	const TArray<TSharedPtr<FJsonValue>>* AnimArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("animPaths"), AnimArr) || !AnimArr || AnimArr->Num() == 0)
+	{
+		return MCPError(TEXT("Missing 'animPaths' (array of AnimSequence paths to retarget)"));
+	}
+
+	FIKRetargetBatchOperationInputs Inputs;
+	Inputs.SourceMesh = SourceMesh;
+	Inputs.TargetMesh = TargetMesh;
+	Inputs.IKRetargetAsset = Retargeter;
+	Inputs.bOverwriteExistingFiles = OptionalBool(Params, TEXT("overwrite"), false);
+	Inputs.Prefix = OptionalString(Params, TEXT("prefix"));
+	Inputs.Suffix = OptionalString(Params, TEXT("suffix"), TEXT("_Retargeted"));
+	const FString TargetPath = OptionalString(Params, TEXT("outputPath"));
+	if (TargetPath.IsEmpty()) { Inputs.bUseSourcePath = true; }
+	else { Inputs.TargetPath = TargetPath; }
+
+	int32 Loaded = 0;
+	for (const TSharedPtr<FJsonValue>& V : *AnimArr)
+	{
+		FString P;
+		if (!V->TryGetString(P) || P.IsEmpty()) continue;
+		if (UAnimSequence* Anim = LoadObject<UAnimSequence>(nullptr, *P))
+		{
+			Inputs.AssetsToRetarget.Add(FAssetData(Anim));
+			++Loaded;
+		}
+	}
+	if (Loaded == 0) return MCPError(TEXT("No valid AnimSequences resolved from animPaths"));
+
+	const TArray<FAssetData> Created = UIKRetargetBatchOperation::RunBatchRetarget(Inputs);
+
+	TArray<TSharedPtr<FJsonValue>> OutPaths;
+	for (const FAssetData& AD : Created) OutPaths.Add(MakeShared<FJsonValueString>(AD.GetObjectPathString()));
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("retargeterPath"), Retargeter->GetPathName());
+	Result->SetNumberField(TEXT("requested"), Loaded);
+	Result->SetNumberField(TEXT("createdCount"), OutPaths.Num());
+	Result->SetArrayField(TEXT("createdAssets"), OutPaths);
+	return MCPResult(Result);
 }
