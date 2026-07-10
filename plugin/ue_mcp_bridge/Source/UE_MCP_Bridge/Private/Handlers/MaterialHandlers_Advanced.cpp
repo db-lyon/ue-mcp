@@ -42,6 +42,11 @@
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "ImageUtils.h"
+#include "ThumbnailRendering/ThumbnailManager.h"
+#include "ThumbnailRendering/ThumbnailRenderer.h"
+#include "CanvasTypes.h"
+#include "RenderingThread.h"
+#include "TextureResource.h"
 
 
 // ===========================================================================
@@ -425,25 +430,45 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RenderMaterialPreview(const TSharedPtr
 		return MCPError(TEXT("Failed to initialize render target"));
 	}
 
-	// Fall back to a simple stats-only response if we can't render here;
-	// full preview requires a scene + view which is non-trivial on the game thread.
-	// For the v0.7.9 implementation we emit a placeholder PNG derived from base color
-	// so agents get a deterministic file out while full thumbnail rendering is wired.
+	// #668: render a REAL lit preview using the engine's own material thumbnail
+	// renderer (a lit sphere with the material, the same image the Content
+	// Browser shows) - which correctly lit-renders any shading model including
+	// Substrate, instead of the flat base-color swatch.
 	TArray<FColor> Pixels;
-	Pixels.Init(FColor(128, 128, 128, 255), Width * Height);
+	FString Mode = TEXT("base_color_approximation");
+	bool bLitRendered = false;
 
-	// Crude sampling of base color expression for a solid-color preview.
-	FExpressionInput* BaseIn = Material->GetExpressionInputForProperty(MP_BaseColor);
-	if (BaseIn && BaseIn->Expression)
+	FThumbnailRenderingInfo* RenderInfo = UThumbnailManager::Get().GetRenderingInfo(Material);
+	if (RenderInfo && RenderInfo->Renderer)
 	{
-		if (UMaterialExpressionConstant3Vector* C3 = Cast<UMaterialExpressionConstant3Vector>(BaseIn->Expression))
+		FCanvas Canvas(RTResource, nullptr, FGameTime::GetTimeSinceAppStart(), GMaxRHIFeatureLevel);
+		RenderInfo->Renderer->Draw(Material, 0, 0, Width, Height, RTResource, &Canvas, false);
+		Canvas.Flush_GameThread();
+		FlushRenderingCommands();
+		FReadSurfaceDataFlags ReadFlags(RCM_UNorm, CubeFace_MAX);
+		if (RTResource->ReadPixels(Pixels, ReadFlags) && Pixels.Num() == Width * Height)
 		{
-			FColor Col(
-				FMath::Clamp(FMath::RoundToInt(C3->Constant.R * 255.f), 0, 255),
-				FMath::Clamp(FMath::RoundToInt(C3->Constant.G * 255.f), 0, 255),
-				FMath::Clamp(FMath::RoundToInt(C3->Constant.B * 255.f), 0, 255),
-				255);
-			for (FColor& P : Pixels) P = Col;
+			bLitRendered = true;
+			Mode = TEXT("lit_thumbnail");
+		}
+	}
+
+	if (!bLitRendered)
+	{
+		// Fallback: flat base-color swatch if the thumbnail renderer is unavailable.
+		Pixels.Init(FColor(128, 128, 128, 255), Width * Height);
+		FExpressionInput* BaseIn = Material->GetExpressionInputForProperty(MP_BaseColor);
+		if (BaseIn && BaseIn->Expression)
+		{
+			if (UMaterialExpressionConstant3Vector* C3 = Cast<UMaterialExpressionConstant3Vector>(BaseIn->Expression))
+			{
+				FColor Col(
+					FMath::Clamp(FMath::RoundToInt(C3->Constant.R * 255.f), 0, 255),
+					FMath::Clamp(FMath::RoundToInt(C3->Constant.G * 255.f), 0, 255),
+					FMath::Clamp(FMath::RoundToInt(C3->Constant.B * 255.f), 0, 255),
+					255);
+				for (FColor& P : Pixels) P = Col;
+			}
 		}
 	}
 
@@ -459,7 +484,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RenderMaterialPreview(const TSharedPtr
 	Result->SetStringField(TEXT("outputPath"), OutputPath);
 	Result->SetNumberField(TEXT("width"), Width);
 	Result->SetNumberField(TEXT("height"), Height);
-	Result->SetStringField(TEXT("mode"), TEXT("base_color_approximation"));
+	Result->SetBoolField(TEXT("litRendered"), bLitRendered);
+	Result->SetStringField(TEXT("mode"), Mode);
 	// No rollback: destructive/external (writes a file to disk).
 	return MCPResult(Result);
 }
