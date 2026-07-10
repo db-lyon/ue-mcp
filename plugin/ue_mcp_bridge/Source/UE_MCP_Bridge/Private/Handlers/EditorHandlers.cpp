@@ -1753,7 +1753,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::CheckForCrashes(const TSharedPtr<FJsonOb
 }
 TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonObject>& Params)
 {
-	REQUIRE_EDITOR_WORLD(World);
+	// #599: allow capturing the PIE world (not just the editor world) so a
+	// framed shot reflects the running game.
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
 
 	FString OutputPath;
 	if (auto Err = RequireString(Params, TEXT("outputPath"), OutputPath)) return Err;
@@ -1766,8 +1770,27 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 
 	const double Fov = OptionalNumber(Params, TEXT("fov"), 90.0);
 
-	const FVector Location = OptionalVec3(Params, TEXT("location"));
-	const FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
+	FVector Location = OptionalVec3(Params, TEXT("location"));
+	FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
+
+	// #599: focusActorLabel frames the capture on a specific actor by computing
+	// a camera position from the actor's bounds and looking at its center.
+	const FString FocusLabel = OptionalString(Params, TEXT("focusActorLabel"));
+	if (!FocusLabel.IsEmpty())
+	{
+		AActor* Focus = FindActorByLabelNameOrPath(World, FocusLabel);
+		if (!Focus) return MCPError(FString::Printf(TEXT("focusActorLabel not found: %s"), *FocusLabel));
+		FVector Origin, Extent;
+		Focus->GetActorBounds(false, Origin, Extent);
+		const double Radius = FMath::Max(Extent.Size(), 50.0);
+		// Distance so the bounds fill the frame at the given FOV, with margin.
+		const double Distance = (Radius / FMath::Tan(FMath::DegreesToRadians(Fov * 0.5))) * OptionalNumber(Params, TEXT("focusMargin"), 1.5);
+		// Default framing direction (front-ish, slightly above); overridable.
+		FVector Dir = OptionalVec3(Params, TEXT("focusDirection"), FVector(-1.0, -1.0, 0.6));
+		if (!Dir.Normalize()) Dir = FVector(-1, -1, 0.6).GetSafeNormal();
+		Location = Origin + Dir * Distance;
+		Rotation = (Origin - Location).Rotation();
+	}
 
 	// Find or spawn the reusable capture actor.
 	static const FString CaptureLabel = TEXT("__ClaudeSceneCapture");
