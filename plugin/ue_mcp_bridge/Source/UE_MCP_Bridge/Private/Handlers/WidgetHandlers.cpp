@@ -83,6 +83,8 @@ void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_runtime_widget"), &GetRuntimeWidget);
 	// #161: Runtime delegate inspection
 	Registry.RegisterHandler(TEXT("get_runtime_delegates"), &GetRuntimeDelegates);
+	Registry.RegisterHandler(TEXT("add_to_viewport"), &AddWidgetToViewport);
+	Registry.RegisterHandler(TEXT("invoke_runtime_function"), &InvokeRuntimeWidgetFunction);
 }
 
 UWidget* FWidgetHandlers::FindWidgetByNameRecursive(UWidget* Root, const FString& WidgetName)
@@ -1246,6 +1248,150 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonO
 		Result->SetStringField(TEXT("tree"), TEXT("empty"));
 	}
 
+	return MCPResult(Result);
+}
+
+// ─────────────────────────────────────────────────────────────
+// #602  Instantiate a WidgetBlueprint into the live PIE viewport.
+// ─────────────────────────────────────────────────────────────
+TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetToViewport(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace WidgetRuntime_Internal;
+	UWorld* World = ResolveRuntimeWorld();
+	if (!World)
+	{
+		return MCPError(TEXT("No PIE world available. Start Play-In-Editor first (editor pie_control action=play)."));
+	}
+
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("widgetBlueprintPath"), AssetPath)) return Err;
+
+	// Resolve the WidgetBlueprint's generated UUserWidget class.
+	UClass* WidgetClass = LoadClass<UUserWidget>(nullptr, *AssetPath);
+	if (!WidgetClass)
+	{
+		if (UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath))
+		{
+			WidgetClass = WBP->GeneratedClass;
+		}
+		else if (!AssetPath.EndsWith(TEXT("_C")))
+		{
+			WidgetClass = LoadClass<UUserWidget>(nullptr, *(AssetPath + TEXT("_C")));
+		}
+	}
+	if (!WidgetClass || !WidgetClass->IsChildOf(UUserWidget::StaticClass()))
+	{
+		return MCPError(FString::Printf(TEXT("Could not resolve a UserWidget class from '%s'"), *AssetPath));
+	}
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	UUserWidget* Widget = PC
+		? CreateWidget<UUserWidget>(PC, WidgetClass)
+		: CreateWidget<UUserWidget>(World, WidgetClass);
+	if (!Widget)
+	{
+		return MCPError(TEXT("CreateWidget returned null"));
+	}
+	const int32 ZOrder = OptionalInt(Params, TEXT("zOrder"), 0);
+	Widget->AddToViewport(ZOrder);
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("instanceName"), Widget->GetName());
+	Result->SetStringField(TEXT("class"), WidgetClass->GetName());
+	Result->SetBoolField(TEXT("inViewport"), Widget->IsInViewport());
+	Result->SetNumberField(TEXT("zOrder"), ZOrder);
+	return MCPResult(Result);
+}
+
+// ─────────────────────────────────────────────────────────────
+// #559  Fire a UFUNCTION or button click on a live PIE UUserWidget.
+//   Params: widgetName|className (locate the UserWidget), functionName
+//   (a parameterless UFUNCTION on the widget), OR childName + "OnClicked"
+//   to simulate a button click on a child UButton.
+// ─────────────────────────────────────────────────────────────
+TSharedPtr<FJsonValue> FWidgetHandlers::InvokeRuntimeWidgetFunction(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace WidgetRuntime_Internal;
+	UWorld* World = ResolveRuntimeWorld();
+	if (!World)
+	{
+		return MCPError(TEXT("No PIE world available. Is Play-In-Editor running?"));
+	}
+
+	FString WidgetName = OptionalString(Params, TEXT("widgetName"));
+	FString ClassFilter = OptionalString(Params, TEXT("className"));
+	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
+	{
+		return MCPError(TEXT("Provide widgetName (exact instance name) or className (first match)."));
+	}
+
+	UUserWidget* Found = nullptr;
+	for (TObjectIterator<UUserWidget> It; It; ++It)
+	{
+		UUserWidget* Widget = *It;
+		if (!IsValid(Widget) || Widget->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject)) continue;
+		if (Widget->GetWorld() != World) continue;
+		if (!WidgetName.IsEmpty() && Widget->GetName() != WidgetName) continue;
+		if (!ClassFilter.IsEmpty() && !Widget->GetClass()->GetName().Contains(ClassFilter)) continue;
+		Found = Widget;
+		break;
+	}
+	if (!Found)
+	{
+		return MCPError(TEXT("Runtime widget not found. Try list_runtime_widgets."));
+	}
+
+	const FString ChildName = OptionalString(Params, TEXT("childName"));
+	const FString FunctionName = OptionalString(Params, TEXT("functionName"));
+
+	// Button-click path: childName names a UButton, broadcast OnClicked.
+	if (!ChildName.IsEmpty() && (FunctionName.IsEmpty() || FunctionName.Equals(TEXT("OnClicked"), ESearchCase::IgnoreCase)))
+	{
+		UWidget* Target = nullptr;
+		if (Found->WidgetTree)
+		{
+			Found->WidgetTree->ForEachWidget([&](UWidget* W)
+			{
+				if (W && W->GetName() == ChildName && !Target) Target = W;
+			});
+		}
+		if (!Target)
+		{
+			return MCPError(FString::Printf(TEXT("Child widget '%s' not found inside '%s'"), *ChildName, *Found->GetName()));
+		}
+		if (UButton* Button = Cast<UButton>(Target))
+		{
+			Button->OnClicked.Broadcast();
+			auto Result = MCPSuccess();
+			Result->SetStringField(TEXT("widget"), Found->GetName());
+			Result->SetStringField(TEXT("child"), ChildName);
+			Result->SetStringField(TEXT("invoked"), TEXT("OnClicked"));
+			return MCPResult(Result);
+		}
+		return MCPError(FString::Printf(TEXT("Child '%s' is a %s, not a UButton (only OnClicked is supported for click simulation)"), *ChildName, *Target->GetClass()->GetName()));
+	}
+
+	// UFUNCTION path: call a parameterless function on the UserWidget.
+	if (FunctionName.IsEmpty())
+	{
+		return MCPError(TEXT("Provide functionName (parameterless UFUNCTION) or childName (button click)."));
+	}
+	UFunction* Func = Found->FindFunction(FName(*FunctionName));
+	if (!Func)
+	{
+		return MCPError(FString::Printf(TEXT("Function '%s' not found on widget '%s'"), *FunctionName, *Found->GetClass()->GetName()));
+	}
+	if (Func->NumParms != 0)
+	{
+		return MCPError(FString::Printf(TEXT("Function '%s' takes %d parameter(s); only parameterless functions are supported here"), *FunctionName, Func->NumParms));
+	}
+	Found->ProcessEvent(Func, nullptr);
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("widget"), Found->GetName());
+	Result->SetStringField(TEXT("invoked"), FunctionName);
 	return MCPResult(Result);
 }
 

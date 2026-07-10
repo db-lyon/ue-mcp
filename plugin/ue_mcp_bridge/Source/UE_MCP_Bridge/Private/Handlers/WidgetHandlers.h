@@ -37,6 +37,10 @@ private:
 	static TSharedPtr<FJsonValue> GetRuntimeWidget(const TSharedPtr<FJsonObject>& Params);
 	// #161: Runtime delegate inspection
 	static TSharedPtr<FJsonValue> GetRuntimeDelegates(const TSharedPtr<FJsonObject>& Params);
+	// #602: instantiate a WidgetBlueprint into the live PIE viewport.
+	static TSharedPtr<FJsonValue> AddWidgetToViewport(const TSharedPtr<FJsonObject>& Params);
+	// #559: fire a UFUNCTION / button click on a live PIE UUserWidget.
+	static TSharedPtr<FJsonValue> InvokeRuntimeWidgetFunction(const TSharedPtr<FJsonObject>& Params);
 
 	// Helper: recursively search for a widget by name in the tree
 	static class UWidget* FindWidgetByNameRecursive(class UWidget* Root, const FString& WidgetName);
