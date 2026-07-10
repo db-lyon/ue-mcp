@@ -48,7 +48,7 @@ function resolveSourceModuleDir(projectDir: string, projectName: string | null, 
 
 export const projectTool: ToolDef = categoryTool(
   "project",
-  "Project status, config INI files, and C++ source inspection.",
+  "Project status and editor connection: get_status (is the editor connected?), set_project (switch/redirect the bridge to another .uproject), get_info. Also config INI files, module load state, and C++ source inspection. Call project(get_status) first in any session.",
   {
     get_status: {
       description: "Check server mode and editor connection",

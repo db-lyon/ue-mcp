@@ -3,7 +3,7 @@ import { categoryTool, bp, type ToolDef } from "../types.js";
 
 export const blueprintTool: ToolDef = categoryTool(
   "blueprint",
-  "Blueprint reading, authoring, and compilation. Covers variables, functions, graphs, nodes, components, interfaces, and event dispatchers.",
+  "Blueprint reading, authoring, and compilation, including AnimGraph/EventGraph node scripting: add_node, connect_pins, search_node_types, plus variables, functions, graphs, components, interfaces, and event dispatchers.",
   {
     read:              bp("Read BP structure incl. SCS components AND inherited native components from the CDO (CharacterMesh0, CharMoveComp, etc.). Params: assetPath, includeComponentProperties? (dump UPROPERTY name/type/value per component template; off by default) (#353/#370)", "read_blueprint", (p) => ({ path: p.assetPath, includeComponentProperties: p.includeComponentProperties })),
     list_variables:    bp("List variables. Params: assetPath", "list_blueprint_variables", (p) => ({ path: p.assetPath })),
