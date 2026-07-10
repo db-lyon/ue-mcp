@@ -58,6 +58,40 @@ export const blueprintTool: ToolDef = categoryTool(
     get_cdo_properties: bp("Read UPROPERTY values from any C++ class CDO. Params: className, propertyNames? (#183)", "get_cdo_properties"),
     run_construction_script: bp("Spawn temp actor, run construction script, return generated components and transforms. Params: assetPath, location? (#195)", "run_construction_script", (p) => ({ path: p.assetPath, location: p.location })),
     compile_all: bp("Batch compile + save Blueprints. Params: assetPaths[], save? (default true). Returns per-path status (compiled/failed/not_found) (#284)", "compile_blueprints", (p) => ({ assetPaths: p.assetPaths, save: p.save })),
+    author: {
+      description: "Author a whole Blueprint in one call: optionally create it (parentClass), then add components, variables and function stubs, then compile - one agent-facing action instead of a dozen add_* round-trips. Params: assetPath, parentClass? (create/ensure the BP if given), components? [{componentClass, componentName?, parentComponent?, childActorClass?}], variables? [{name, varType}], functions? [{functionName}], compile? (default true). Returns per-step results + created flag. (#607)",
+      handler: async (ctx, p) => {
+        const assetPath = p.assetPath as string;
+        if (!assetPath) throw new Error("Missing 'assetPath'");
+        const steps: Array<{ step: string; target: string; ok: boolean; result?: unknown; error?: string }> = [];
+        const run = async (step: string, target: string, method: string, params: Record<string, unknown>) => {
+          try { const result = await ctx.bridge.call(method, params); steps.push({ step, target, ok: true, result }); }
+          catch (e) { steps.push({ step, target, ok: false, error: e instanceof Error ? e.message : String(e) }); }
+        };
+        let created = false;
+        if (p.parentClass) {
+          try {
+            const r = await ctx.bridge.call("create_blueprint", { path: assetPath, parentClass: p.parentClass }) as Record<string, unknown>;
+            created = r?.created !== false;
+            steps.push({ step: "create", target: assetPath, ok: true, result: r });
+          } catch (e) { steps.push({ step: "create", target: assetPath, ok: false, error: e instanceof Error ? e.message : String(e) }); }
+        }
+        for (const c of (p.components as Array<Record<string, unknown>> ?? [])) {
+          await run("add_component", String(c.componentClass ?? ""), "add_component", { path: assetPath, componentClass: c.componentClass, componentName: c.componentName ?? c.componentClass, parentComponent: c.parentComponent, childActorClass: c.childActorClass });
+        }
+        for (const v of (p.variables as Array<Record<string, unknown>> ?? [])) {
+          await run("add_variable", String(v.name ?? ""), "add_variable", { path: assetPath, name: v.name, type: v.varType ?? v.type });
+        }
+        for (const f of (p.functions as Array<Record<string, unknown>> ?? [])) {
+          await run("create_function", String(f.functionName ?? ""), "create_function", { path: assetPath, functionName: f.functionName });
+        }
+        if ((p.compile ?? true) !== false) {
+          await run("compile", assetPath, "compile_blueprint", { path: assetPath });
+        }
+        const failed = steps.filter(s => !s.ok);
+        return { assetPath, created, stepCount: steps.length, failedCount: failed.length, ok: failed.length === 0, steps };
+      },
+    },
     cleanup_graph: bp("Remove orphan/corrupted nodes (no class, blank title+no pins, missing target UFunction). Params: assetPath, graphName? (default: every graph) (#285)", "cleanup_graph", (p) => ({ assetPath: p.assetPath, graphName: p.graphName })),
     connect_pins_batch: bp("Apply many pin connections in one call (single compile + save). Params: assetPath, graphName?, connections[]: [{sourceNode, sourcePin, targetNode, targetPin}] (#267)", "connect_pins_batch", (p) => ({ assetPath: p.assetPath, graphName: p.graphName, connections: p.connections })),
     set_node_position: bp("Move a graph node to (posX, posY). Params: assetPath, graphName?, nodeId, posX, posY (#277)", "set_node_position", (p) => ({ assetPath: p.assetPath, graphName: p.graphName, nodeId: p.nodeId, posX: p.posX, posY: p.posY })),
@@ -69,6 +103,10 @@ export const blueprintTool: ToolDef = categoryTool(
     graphName: z.string().optional(), functionName: z.string().optional(),
     name: z.string().optional(), varType: z.string().optional().describe("Variable type"),
     parentClass: z.string().optional(),
+    components: z.array(z.record(z.unknown())).optional().describe("author: [{componentClass, componentName?, parentComponent?, childActorClass?}] (#607)"),
+    variables: z.array(z.record(z.unknown())).optional().describe("author: [{name, varType}] (#607)"),
+    functions: z.array(z.record(z.unknown())).optional().describe("author: [{functionName}] (#607)"),
+    compile: z.boolean().optional().describe("author: compile after authoring (default true) (#607)"),
     instanceEditable: z.boolean().optional(), blueprintReadOnly: z.boolean().optional(),
     category: z.string().optional(), tooltip: z.string().optional(),
     replicationType: z.string().optional(),
