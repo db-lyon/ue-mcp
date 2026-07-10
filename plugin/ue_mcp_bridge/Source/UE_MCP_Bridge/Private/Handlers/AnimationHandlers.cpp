@@ -1358,18 +1358,33 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 
 	FSlotAnimationTrack& SlotTrack = Montage->SlotAnimTracks[TrackIdx];
 
-	// Replace the animation in all segments of this track
-	int32 SegmentsUpdated = 0;
-	for (FAnimSegment& Segment : SlotTrack.AnimTrack.AnimSegments)
+	// #626: when segmentIndex is given, replace only that one segment's
+	// sequence; otherwise replace every segment in the slot (prior behavior).
+	const bool bHasSegmentIndex = Params->HasField(TEXT("segmentIndex"));
+	const int32 SegmentIndex = OptionalInt(Params, TEXT("segmentIndex"), -1);
+	if (bHasSegmentIndex)
 	{
+		if (SegmentIndex < 0 || SegmentIndex >= SlotTrack.AnimTrack.AnimSegments.Num())
+		{
+			return MCPError(FString::Printf(TEXT("segmentIndex %d out of range (slot has %d segments)"),
+				SegmentIndex, SlotTrack.AnimTrack.AnimSegments.Num()));
+		}
+	}
+
+	// Replace the animation in the target segment(s) of this track
+	int32 SegmentsUpdated = 0;
+	for (int32 SegIdx = 0; SegIdx < SlotTrack.AnimTrack.AnimSegments.Num(); ++SegIdx)
+	{
+		if (bHasSegmentIndex && SegIdx != SegmentIndex) continue;
+		FAnimSegment& Segment = SlotTrack.AnimTrack.AnimSegments[SegIdx];
 		Segment.SetAnimReference(NewSequence);
 		Segment.AnimStartTime = 0.0f;
 		Segment.AnimEndTime = NewSequence->GetPlayLength();
 		SegmentsUpdated++;
 	}
 
-	// If no segments exist, add one
-	if (SegmentsUpdated == 0)
+	// If no segments exist, add one (only in whole-slot mode).
+	if (SegmentsUpdated == 0 && !bHasSegmentIndex)
 	{
 		FAnimSegment NewSegment;
 		NewSegment.SetAnimReference(NewSequence);
@@ -1404,6 +1419,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 	Result->SetStringField(TEXT("animSequencePath"), AnimSequencePath);
 	Result->SetStringField(TEXT("slotName"), SlotTrack.SlotName.ToString());
 	Result->SetNumberField(TEXT("segmentsUpdated"), SegmentsUpdated);
+	if (bHasSegmentIndex) Result->SetNumberField(TEXT("segmentIndex"), SegmentIndex);
 	Result->SetNumberField(TEXT("sequenceLength"), NewSequence->GetPlayLength());
 	Result->SetNumberField(TEXT("montageLength"), NewTotalLength);
 

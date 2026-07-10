@@ -136,7 +136,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ScanAnimationTracks(const TSharedPtr<
 	const int32 TargetTrackCount = OptionalInt(Params, TEXT("targetTrackCount"), 0);
 	const bool bIncludeTrackNames = OptionalBool(Params, TEXT("includeTrackNames"), false);
 	const bool bRecursive = OptionalBool(Params, TEXT("recursive"), true);
-	const FString Directory = OptionalString(Params, TEXT("directory"), TEXT("/Game"));
+	// #672: default to ALL content roots (empty prefix) so AnimSequences under
+	// a mounted non-/Game plugin root are discovered. Pass an explicit
+	// directory (e.g. "/Game" or "/MyPlugin") to narrow the scan.
+	const FString Directory = OptionalString(Params, TEXT("directory"), TEXT(""));
 	const FString SkeletonFilter = OptionalString(Params, TEXT("skeletonPath"));
 
 	TArray<FString> AssetPaths;
