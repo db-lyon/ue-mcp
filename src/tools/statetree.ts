@@ -23,6 +23,7 @@ export const statetreeTool: ToolDef = categoryTool(
     add_binding:            bp("Add a property binding. Params: assetPath, sourceStructId, sourcePath, targetStructId, targetPath", "add_state_tree_binding"),
     remove_binding:         bp("Remove a property binding. Params: assetPath, targetStructId, targetPath", "remove_state_tree_binding"),
     list_bindings:          bp("List all property bindings. Params: assetPath, structId? (filter)", "list_state_tree_bindings"),
+    list_bindable_sources:  bp("Enumerate the context/bindable sources in a StateTree (context objects, parameters, evaluators, global tasks, per-state nodes) with their structId + struct type - what a property can bind FROM. Params: assetPath (#681)", "list_state_tree_bindable_sources", (p) => ({ assetPath: p.assetPath })),
     add_evaluator:          bp("Add an evaluator to the StateTree (tree-level). Params: assetPath, structType (must derive from FStateTreeEvaluatorBase), instanceProperties?", "add_state_tree_evaluator"),
     remove_evaluator:       bp("Remove an evaluator by node ID. Params: assetPath, nodeId", "remove_state_tree_evaluator"),
     set_evaluator_instance_property: bp("Set a property on an evaluator's instance data. Params: assetPath, nodeId, propertyName, value", "set_state_tree_evaluator_instance_property"),

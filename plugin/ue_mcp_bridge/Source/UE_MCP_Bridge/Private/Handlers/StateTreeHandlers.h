@@ -50,6 +50,8 @@ private:
 	static TSharedPtr<FJsonValue> AddBinding(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveBinding(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListBindings(const TSharedPtr<FJsonObject>& Params);
+	// #681: enumerate the context/bindable sources a property can bind FROM.
+	static TSharedPtr<FJsonValue> ListBindableSources(const TSharedPtr<FJsonObject>& Params);
 
 	// Evaluator Manipulation
 	static TSharedPtr<FJsonValue> AddEvaluator(const TSharedPtr<FJsonObject>& Params);

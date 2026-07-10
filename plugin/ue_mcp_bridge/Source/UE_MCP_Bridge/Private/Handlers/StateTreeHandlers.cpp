@@ -72,6 +72,7 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_state_tree_binding"), &AddBinding);
 	Registry.RegisterHandler(TEXT("remove_state_tree_binding"), &RemoveBinding);
 	Registry.RegisterHandler(TEXT("list_state_tree_bindings"), &ListBindings);
+	Registry.RegisterHandler(TEXT("list_state_tree_bindable_sources"), &ListBindableSources);
 	Registry.RegisterHandler(TEXT("add_state_tree_evaluator"), &AddEvaluator);
 	Registry.RegisterHandler(TEXT("remove_state_tree_evaluator"), &RemoveEvaluator);
 	Registry.RegisterHandler(TEXT("set_state_tree_evaluator_instance_property"), &SetEvaluatorInstanceProperty);
@@ -523,6 +524,25 @@ static void SetInstancePropertiesFromJson(FInstancedStruct& Instance, const TSha
 	}
 }
 
+// #681: set properties on a UObject-backed node instance (BP task/condition/
+// evaluator wrapper's InstanceObject), mirroring SetInstancePropertiesFromJson.
+static void SetObjectPropertiesFromJson(UObject* Object, const TSharedPtr<FJsonObject>& Properties)
+{
+	if (!Object || !Properties.IsValid()) return;
+	for (const auto& Pair : Properties->Values)
+	{
+		FProperty* Prop = Object->GetClass()->FindPropertyByName(*Pair.Key);
+		if (!Prop) continue;
+		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Object);
+		FString ValueStr;
+		if (Pair.Value->Type == EJson::String) ValueStr = Pair.Value->AsString();
+		else if (Pair.Value->Type == EJson::Number) ValueStr = FString::SanitizeFloat(Pair.Value->AsNumber());
+		else if (Pair.Value->Type == EJson::Boolean) ValueStr = Pair.Value->AsBool() ? TEXT("true") : TEXT("false");
+		else continue;
+		Prop->ImportText_Direct(*ValueStr, ValuePtr, nullptr, PPF_None);
+	}
+}
+
 static UScriptStruct* ResolveStructType(const FString& StructTypeName)
 {
 	UScriptStruct* Result = FindObject<UScriptStruct>(nullptr, *StructTypeName);
@@ -532,7 +552,7 @@ static UScriptStruct* ResolveStructType(const FString& StructTypeName)
 	return Result;
 }
 
-static bool AddEditorNodeToArray(TArray<FStateTreeEditorNode>& Arr, const FString& StructTypeName, const TSharedPtr<FJsonObject>& InstanceProperties, FStateTreeEditorNode*& OutNode, FString& OutError)
+static bool AddEditorNodeToArray(TArray<FStateTreeEditorNode>& Arr, const FString& StructTypeName, const TSharedPtr<FJsonObject>& InstanceProperties, UObject* Outer, FStateTreeEditorNode*& OutNode, FString& OutError)
 {
 	UScriptStruct* NodeStruct = ResolveStructType(StructTypeName);
 	if (!NodeStruct)
@@ -543,25 +563,36 @@ static bool AddEditorNodeToArray(TArray<FStateTreeEditorNode>& Arr, const FStrin
 
 	FStateTreeEditorNode& EditorNode = Arr.AddDefaulted_GetRef();
 	EditorNode.ID = FGuid::NewGuid();
-	EditorNode.Node.InitializeAs(NodeStruct);
 
-	const FStateTreeNodeBase& Node = EditorNode.Node.Get<FStateTreeNodeBase>();
-
-	if (const UScriptStruct* InstanceType = Cast<const UScriptStruct>(Node.GetInstanceDataType()))
+	// #681: FStateTreeEditorNode::InitializeAs(Outer, NodeStruct) sets the node
+	// struct AND allocates its instance data - including an InstanceObject when
+	// the node's instance data type is a UClass (UObject-backed nodes such as
+	// the Blueprint task/condition/evaluator wrappers), which the previous
+	// struct-only path left null, so BP tasks could not be wired.
+	if (Outer)
 	{
-		EditorNode.Instance.InitializeAs(InstanceType);
+		EditorNode.InitializeAs(Outer, NodeStruct);
+	}
+	else
+	{
+		EditorNode.Node.InitializeAs(NodeStruct);
+		const FStateTreeNodeBase& Node = EditorNode.Node.Get<FStateTreeNodeBase>();
+		if (const UScriptStruct* InstanceType = Cast<const UScriptStruct>(Node.GetInstanceDataType()))
+		{
+			EditorNode.Instance.InitializeAs(InstanceType);
+		}
 	}
 
-#if UE_MCP_HAS_STATETREE_EXECUTION_RUNTIME_DATA
-	if (const UScriptStruct* ExecType = Cast<const UScriptStruct>(Node.GetExecutionRuntimeDataType()))
+	if (InstanceProperties.IsValid())
 	{
-		EditorNode.ExecutionRuntimeData.InitializeAs(ExecType);
-	}
-#endif
-
-	if (InstanceProperties.IsValid() && EditorNode.Instance.IsValid())
-	{
-		SetInstancePropertiesFromJson(EditorNode.Instance, InstanceProperties);
+		if (EditorNode.InstanceObject)
+		{
+			SetObjectPropertiesFromJson(EditorNode.InstanceObject, InstanceProperties);
+		}
+		else if (EditorNode.Instance.IsValid())
+		{
+			SetInstancePropertiesFromJson(EditorNode.Instance, InstanceProperties);
+		}
 	}
 
 	OutNode = &EditorNode;
@@ -1066,7 +1097,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTask(const TSharedPtr<FJsonObject>
 
 	FStateTreeEditorNode* NewNode = nullptr;
 	FString Error;
-	if (!AddEditorNodeToArray(State->Tasks, StructType, InstanceProps, NewNode, Error))
+	if (!AddEditorNodeToArray(State->Tasks, StructType, InstanceProps, EditorData, NewNode, Error))
 	{
 		return MCPError(Error);
 	}
@@ -1104,7 +1135,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEnterCondition(const TSharedPtr<FJ
 
 	FStateTreeEditorNode* NewNode = nullptr;
 	FString Error;
-	if (!AddEditorNodeToArray(State->EnterConditions, StructType, InstanceProps, NewNode, Error))
+	if (!AddEditorNodeToArray(State->EnterConditions, StructType, InstanceProps, EditorData, NewNode, Error))
 	{
 		return MCPError(Error);
 	}
@@ -1321,7 +1352,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEvaluator(const TSharedPtr<FJsonOb
 
 	FStateTreeEditorNode* NewNode = nullptr;
 	FString Error;
-	if (!AddEditorNodeToArray(EditorData->Evaluators, StructType, InstanceProps, NewNode, Error))
+	if (!AddEditorNodeToArray(EditorData->Evaluators, StructType, InstanceProps, EditorData, NewNode, Error))
 	{
 		return MCPError(Error);
 	}
@@ -1507,7 +1538,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddGlobalTask(const TSharedPtr<FJsonO
 
 	FStateTreeEditorNode* NewNode = nullptr;
 	FString Error;
-	if (!AddEditorNodeToArray(EditorData->GlobalTasks, StructType, InstanceProps, NewNode, Error))
+	if (!AddEditorNodeToArray(EditorData->GlobalTasks, StructType, InstanceProps, EditorData, NewNode, Error))
 	{
 		return MCPError(Error);
 	}
@@ -1771,7 +1802,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransitionCondition(const TSharedP
 
 	FStateTreeEditorNode* NewNode = nullptr;
 	FString Error;
-	if (!AddEditorNodeToArray(State->Transitions[TransIndex].Conditions, StructType, InstanceProps, NewNode, Error))
+	if (!AddEditorNodeToArray(State->Transitions[TransIndex].Conditions, StructType, InstanceProps, EditorData, NewNode, Error))
 	{
 		return MCPError(Error);
 	}
@@ -1851,8 +1882,80 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObje
 	EditorData->Modify();
 	EditorData->AddPropertyBinding(SourcePath, TargetPath);
 
+	// #681: notify the target node its binding changed so nodes that adapt their
+	// instance data to the source (e.g. FStateTreeCompareEnumCondition's
+	// FStateTreeAnyEnum Left, which takes on the bound enum type) relink instead
+	// of staying an unresolved wildcard.
+	bool bNotified = false;
+	{
+		FStateTreeBindingLookup Lookup(EditorData);
+		const FGuid TargetID = ParseGuid(TargetStructIdStr);
+		auto TryNotify = [&](TArray<FStateTreeEditorNode>& Arr) -> bool
+		{
+			for (FStateTreeEditorNode& EN : Arr)
+			{
+				if (EN.GetInstanceDataID() != TargetID) continue;
+				if (FStateTreeNodeBase* NodeBase = EN.Node.GetMutablePtr<FStateTreeNodeBase>())
+				{
+					NodeBase->OnBindingChanged(EN.ID, EN.GetInstance(), SourcePath, TargetPath, Lookup);
+					return true;
+				}
+			}
+			return false;
+		};
+		if (!bNotified) bNotified = TryNotify(EditorData->Evaluators);
+		if (!bNotified) bNotified = TryNotify(EditorData->GlobalTasks);
+		if (!bNotified)
+		{
+			TArray<UStateTreeState*> Stack;
+			for (UStateTreeState* Root : EditorData->SubTrees) if (Root) Stack.Add(Root);
+			while (Stack.Num() > 0 && !bNotified)
+			{
+				UStateTreeState* S = Stack.Pop();
+				if (!S) continue;
+				if (TryNotify(S->Tasks) || TryNotify(S->EnterConditions)) { bNotified = true; break; }
+				for (FStateTreeTransition& Tr : S->Transitions) { if (TryNotify(Tr.Conditions)) { bNotified = true; break; } }
+				for (UStateTreeState* Child : S->Children) if (Child) Stack.Add(Child);
+			}
+		}
+	}
+
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	Result->SetBoolField(TEXT("bindingChangedNotified"), bNotified);
+	return MCPResult(Result);
+}
+
+// #681: enumerate the context/bindable sources in a StateTree so a caller knows
+// what a property can bind FROM (context objects from the schema, parameters,
+// evaluators, global tasks, and per-state nodes) with their struct IDs.
+TSharedPtr<FJsonValue> FStateTreeHandlers::ListBindableSources(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	UStateTree* ST = LoadStateTree(AssetPath);
+	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
+	UStateTreeEditorData* EditorData = GetEditorData(ST);
+	if (!EditorData) return MCPError(TEXT("EditorData not found"));
+
+	TMap<FGuid, const FStateTreeDataView> AllValues;
+	EditorData->GetAllStructValues(AllValues);
+
+	TArray<TSharedPtr<FJsonValue>> Sources;
+	for (const TPair<FGuid, const FStateTreeDataView>& Pair : AllValues)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("structId"), Pair.Key.ToString());
+		const UStruct* S = Pair.Value.GetStruct();
+		Obj->SetStringField(TEXT("structType"), S ? S->GetName() : TEXT("(none)"));
+		Obj->SetStringField(TEXT("structPath"), S ? S->GetPathName() : TEXT(""));
+		Sources.Add(MakeShared<FJsonValueObject>(Obj));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetNumberField(TEXT("count"), Sources.Num());
+	Result->SetArrayField(TEXT("sources"), Sources);
 	return MCPResult(Result);
 }
 
