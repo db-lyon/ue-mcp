@@ -1741,3 +1741,91 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 	Result->SetArrayField(TEXT("createdAssets"), OutPaths);
 	return MCPResult(Result);
 }
+
+// ─── #657 inspect_anim_nodes ────────────────────────────────────────
+// Deep-dump the FAnimNode_* struct on anim graph nodes. read_anim_graph skips
+// properties starting with "Node", which is exactly where the anim node data
+// lives - so a PoseDriver's PoseTargets/PoseAsset/RBFParams/source bones were
+// invisible. Optional nodeClass substring filters (e.g. "PoseDriver").
+TSharedPtr<FJsonValue> FAnimationHandlers::InspectAnimNodes(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
+	const FString ClassFilter = OptionalString(Params, TEXT("nodeClass"));
+
+	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+	UEdGraph* TargetGraph = FindGraphByName(AnimBP, GraphName);
+	if (!TargetGraph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	// Recursively export a struct's editable sub-properties as name/type/value.
+	TFunction<TSharedPtr<FJsonObject>(const UStruct*, const void*, int32)> DumpStruct;
+	DumpStruct = [&DumpStruct](const UStruct* Struct, const void* Container, int32 Depth) -> TSharedPtr<FJsonObject>
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		if (!Struct || !Container) return Obj;
+		for (TFieldIterator<FProperty> It(Struct, EFieldIteratorFlags::IncludeSuper); It; ++It)
+		{
+			FProperty* Prop = *It;
+			if (!Prop) continue;
+			const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Container);
+			const FString PName = Prop->GetName();
+
+			// Recurse one level into nested structs (RBFParams, etc.) for readability.
+			if (Depth < 2)
+			{
+				if (const FStructProperty* SubStruct = CastField<FStructProperty>(Prop))
+				{
+					Obj->SetObjectField(PName, DumpStruct(SubStruct->Struct, ValuePtr, Depth + 1));
+					continue;
+				}
+			}
+			FString ValueStr;
+			Prop->ExportTextItem_Direct(ValueStr, ValuePtr, nullptr, nullptr, PPF_None);
+			Obj->SetStringField(PName, ValueStr);
+		}
+		return Obj;
+	};
+
+	TArray<TSharedPtr<FJsonValue>> NodesArray;
+	for (UEdGraphNode* Node : TargetGraph->Nodes)
+	{
+		if (!Node) continue;
+		const FString NodeClassName = Node->GetClass()->GetName();
+		if (!ClassFilter.IsEmpty() && !NodeClassName.Contains(ClassFilter)) continue;
+
+		// Find the FAnimNode_* struct member (its type derives from FAnimNode_Base).
+		FStructProperty* AnimNodeProp = nullptr;
+		for (TFieldIterator<FProperty> It(Node->GetClass(), EFieldIteratorFlags::IncludeSuper); It; ++It)
+		{
+			if (FStructProperty* SP = CastField<FStructProperty>(*It))
+			{
+				if (SP->Struct && SP->Struct->GetName().StartsWith(TEXT("AnimNode_")))
+				{
+					AnimNodeProp = SP;
+					break;
+				}
+			}
+		}
+		if (ClassFilter.IsEmpty() && !AnimNodeProp) continue; // only anim nodes when unfiltered
+
+		TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+		NodeObj->SetStringField(TEXT("id"), Node->NodeGuid.ToString());
+		NodeObj->SetStringField(TEXT("class"), NodeClassName);
+		NodeObj->SetStringField(TEXT("title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+		if (AnimNodeProp)
+		{
+			NodeObj->SetStringField(TEXT("animNodeStruct"), AnimNodeProp->Struct->GetName());
+			NodeObj->SetObjectField(TEXT("node"), DumpStruct(AnimNodeProp->Struct, AnimNodeProp->ContainerPtrToValuePtr<void>(Node), 0));
+		}
+		NodesArray.Add(MakeShared<FJsonValueObject>(NodeObj));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("graphName"), GraphName);
+	Result->SetNumberField(TEXT("count"), NodesArray.Num());
+	Result->SetArrayField(TEXT("nodes"), NodesArray);
+	return MCPResult(Result);
+}

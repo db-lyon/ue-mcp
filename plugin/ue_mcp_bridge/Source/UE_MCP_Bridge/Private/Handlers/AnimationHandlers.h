@@ -68,6 +68,9 @@ private:
 
 	// AnimGraph inspection (#23 / #91)
 	static TSharedPtr<FJsonValue> ReadAnimGraph(const TSharedPtr<FJsonObject>& Params);
+	// #657: deep-dump the FAnimNode_* struct of anim graph nodes (PoseDriver
+	// PoseTargets/PoseAsset/RBF params, etc.) that read_anim_graph omits.
+	static TSharedPtr<FJsonValue> InspectAnimNodes(const TSharedPtr<FJsonObject>& Params);
 
 	// Float curve authoring (#79 / #24)
 	static TSharedPtr<FJsonValue> AddCurve(const TSharedPtr<FJsonObject>& Params);

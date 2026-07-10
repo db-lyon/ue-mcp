@@ -108,6 +108,8 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// AnimGraph inspection (#23 / #91)
 	Registry.RegisterHandler(TEXT("read_anim_graph"), &ReadAnimGraph);
+	// #657: deep anim-node struct inspection (PoseDriver, RBF, etc.).
+	Registry.RegisterHandler(TEXT("inspect_anim_nodes"), &InspectAnimNodes);
 
 	// Float curve authoring (#79 / #24)
 	Registry.RegisterHandler(TEXT("add_curve"), &AddCurve);
