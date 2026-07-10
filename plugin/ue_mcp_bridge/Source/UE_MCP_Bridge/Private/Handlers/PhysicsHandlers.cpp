@@ -22,6 +22,9 @@ void FPhysicsHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_collision"), &SetCollision);
 	Registry.RegisterHandler(TEXT("set_simulate_physics"), &SetPhysicsEnabled);
 	Registry.RegisterHandler(TEXT("set_physics_properties"), &SetBodyProperties);
+	// #676: perturb a physics body (impulse or force) for over-time observation.
+	Registry.RegisterHandler(TEXT("add_impulse"), &AddImpulse);
+	Registry.RegisterHandler(TEXT("add_force"), &AddImpulse);
 }
 
 namespace
@@ -592,5 +595,78 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 		Result->SetBoolField(TEXT("updated"), false);
 	}
 
+	return MCPResult(Result);
+}
+
+// #676: apply an impulse or force to an actor's physics body so its motion can
+// be observed over time (loop read_actor_motion to sample the response).
+// Registered for both add_impulse and add_force; the mode param (or the
+// registered name intent) selects. Defaults to impulse.
+TSharedPtr<FJsonValue> FPhysicsHandlers::AddImpulse(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorLabel;
+	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
+
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
+	UWorld* World = ResolveWorldScope(WorldScope);
+	if (!World) return MCPError(TEXT("World not available"));
+
+	AActor* Actor = FindActorByLabelNameOrPath(World, ActorLabel);
+	if (!Actor) return MCPError(FString::Printf(TEXT("Actor not found: %s"), *ActorLabel));
+
+	// Resolve the primitive component: named, or the root.
+	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
+	UPrimitiveComponent* Prim = nullptr;
+	if (!ComponentName.IsEmpty())
+	{
+		for (UActorComponent* C : Actor->GetComponents())
+		{
+			if (C->GetName() == ComponentName) { Prim = Cast<UPrimitiveComponent>(C); break; }
+		}
+	}
+	else
+	{
+		Prim = Cast<UPrimitiveComponent>(Actor->GetRootComponent());
+		if (!Prim) Prim = Actor->FindComponentByClass<UPrimitiveComponent>();
+	}
+	if (!Prim) return MCPError(FString::Printf(TEXT("No PrimitiveComponent found on '%s'"), *ActorLabel));
+	if (!Prim->IsSimulatingPhysics())
+	{
+		return MCPError(FString::Printf(TEXT("Component '%s' is not simulating physics; call set_simulate_physics first"), *Prim->GetName()));
+	}
+
+	FVector Vec = FVector::ZeroVector;
+	if (auto Err = RequireVec3(Params, TEXT("impulse"), Vec))
+	{
+		// Accept 'force' or 'vector' as aliases.
+		Vec = OptionalVec3(Params, TEXT("force"), OptionalVec3(Params, TEXT("vector")));
+		if (Vec.IsNearlyZero()) return Err;
+	}
+
+	const FString Mode = OptionalString(Params, TEXT("mode"), TEXT("impulse")).ToLower();
+	const FString BoneName = OptionalString(Params, TEXT("boneName"));
+	const FName Bone = BoneName.IsEmpty() ? NAME_None : FName(*BoneName);
+
+	const TSharedPtr<FJsonObject>* AtLoc = nullptr;
+	if (Params->TryGetObjectField(TEXT("location"), AtLoc) && AtLoc)
+	{
+		FVector Loc = FVector::ZeroVector; ReadVec3Fields(*AtLoc, Loc);
+		Prim->AddImpulseAtLocation(Vec, Loc, Bone);
+	}
+	else if (Mode == TEXT("force"))
+	{
+		Prim->AddForce(Vec, Bone, OptionalBool(Params, TEXT("accelChange"), false));
+	}
+	else
+	{
+		Prim->AddImpulse(Vec, Bone, OptionalBool(Params, TEXT("velChange"), false));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetStringField(TEXT("component"), Prim->GetName());
+	Result->SetStringField(TEXT("mode"), Mode);
+	Result->SetObjectField(TEXT("vector"), MCPVec3ToJsonObject(Vec));
+	Result->SetObjectField(TEXT("linearVelocity"), MCPVec3ToJsonObject(Prim->GetPhysicsLinearVelocity()));
 	return MCPResult(Result);
 }
