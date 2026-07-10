@@ -1186,6 +1186,25 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 	FString LevelPath;
 	if (auto Err = RequireString(Params, TEXT("levelPath"), LevelPath)) return Err;
 
+	if (!GEditor) return MCPError(TEXT("GEditor not available"));
+
+	// #590/#589: loading a map right after a PIE session (or a level-script
+	// recompile / duplicate) fatally asserts "World Memory Leaks: N leaks
+	// objects and packages" - the previous world's objects are still
+	// referenced when the engine tears it down. End any in-flight play session
+	// and force a full GC first so those references are released before the map
+	// swap. Mirrors what the editor does between map loads.
+	bool bEndedPIE = false;
+	if (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor)
+	{
+		GEditor->EndPlayMap();
+		bEndedPIE = true;
+	}
+	// Trim transient/PIE packages then collect twice - the first pass unroots
+	// the world, the second reaps objects the first pass' cluster dissolve freed.
+	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
+	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS, /*bPerformFullPurge*/ true);
+
 	// Use the LevelEditorSubsystem to load the level
 	ULevelEditorSubsystem* LevelEditorSubsystem = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
 	if (!LevelEditorSubsystem)
@@ -1209,6 +1228,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 	}
 
 	Result->SetStringField(TEXT("levelPath"), LevelPath);
+	Result->SetBoolField(TEXT("endedPlaySession"), bEndedPIE);
 
 	return MCPResult(Result);
 }

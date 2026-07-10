@@ -9,6 +9,10 @@
 #include "Engine/AssetManager.h"
 #include "Engine/AssetManagerTypes.h"
 #include "Engine/Blueprint.h"
+#include "Engine/World.h"
+#include "Engine/Level.h"
+#include "Engine/LevelScriptBlueprint.h"
+#include "Kismet2/KismetEditorUtilities.h"
 #include "Subsystems/AssetEditorSubsystem.h"
 #include "Editor.h"
 #include "FileHelpers.h"
@@ -829,6 +833,28 @@ TSharedPtr<FJsonValue> FAssetHandlers::DuplicateAsset(const TSharedPtr<FJsonObje
 	Result->SetStringField(TEXT("sourcePath"), SourcePath);
 	Result->SetStringField(TEXT("destinationPath"), DestPath);
 	Result->SetBoolField(TEXT("success"), Dup != nullptr);
+
+	// #589: duplicating a .umap that has a Level Blueprint leaves the copy's
+	// persistent level pointing its level-script class reference at the SOURCE
+	// world's generated class (a dangling cross-world ref), which crashes the
+	// editor when the copy is later loaded. Recompile the duplicated world's
+	// level-script blueprint so its class regenerates against the new package,
+	// then resave, breaking the dangling reference.
+	if (UWorld* DupWorld = Cast<UWorld>(Dup))
+	{
+		bool bRecompiledScript = false;
+		if (ULevel* PersistentLevel = DupWorld->PersistentLevel)
+		{
+			if (UBlueprint* LSB = PersistentLevel->GetLevelScriptBlueprint(/*bDontCreate*/ true))
+			{
+				FKismetEditorUtilities::CompileBlueprint(LSB);
+				bRecompiledScript = true;
+			}
+		}
+		SaveAssetPackage(DupWorld);
+		Result->SetBoolField(TEXT("isWorld"), true);
+		Result->SetBoolField(TEXT("recompiledLevelScript"), bRecompiledScript);
+	}
 
 	if (Dup)
 	{
