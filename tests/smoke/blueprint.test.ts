@@ -76,6 +76,50 @@ describe("blueprint — full lifecycle", () => {
     expect(r.ok, r.error).toBe(true);
   });
 
+  it("connect_pins replaces links without losing them on failure", async () => {
+    const addNode = async (nodeClass: string, nodeParams?: Record<string, unknown>) => {
+      const response = await callBridge(bridge, "add_node", {
+        path: bpPath, graphName: "EventGraph", nodeClass, nodeParams,
+      });
+      expect(response.ok, response.error).toBe(true);
+      return (response.result as { nodeId: string }).nodeId;
+    };
+
+    const sourceA = await addNode("CustomEvent", { eventName: "MCPReplaceSourceA" });
+    const sourceB = await addNode("CustomEvent", { eventName: "MCPReplaceSourceB" });
+    const branch = await addNode("Branch");
+    const connect = (sourceNode: string, sourcePin: string, extra: Record<string, unknown> = {}) =>
+      callBridge(bridge, "connect_pins", {
+        path: bpPath,
+        graphName: "EventGraph",
+        sourceNode,
+        sourcePin,
+        targetNode: branch,
+        targetPin: "execute",
+        ...extra,
+      });
+
+    const initial = await connect(sourceA, "then");
+    expect(initial.ok, initial.error).toBe(true);
+
+    const replaced = await connect(sourceB, "then", { breakExistingTarget: true });
+    expect(replaced.ok, replaced.error).toBe(true);
+    expect((replaced.result as { brokenTargetLinks: number }).brokenTargetLinks).toBe(1);
+
+    const idempotent = await connect(sourceB, "then", { breakExistingTarget: true });
+    expect(idempotent.ok, idempotent.error).toBe(true);
+    expect((idempotent.result as { existed: boolean }).existed).toBe(true);
+    expect((idempotent.result as { brokenTargetLinks: number }).brokenTargetLinks).toBe(0);
+
+    const rejected = await connect(branch, "Condition", { breakExistingTarget: true });
+    expect(rejected.ok, rejected.error).toBe(true);
+    expect((rejected.result as { success: boolean }).success).toBe(false);
+
+    const restored = await connect(sourceB, "then");
+    expect(restored.ok, restored.error).toBe(true);
+    expect((restored.result as { existed: boolean }).existed).toBe(true);
+  });
+
   it("read_blueprint_graph", async () => {
     const r = await callBridge(bridge, "read_blueprint_graph", { path: bpPath, graphName: "EventGraph" });
     expect(r.ok, r.error).toBe(true);
