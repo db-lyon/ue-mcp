@@ -2,7 +2,7 @@
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal 5.8 tools that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering **<!-- count:actions -->677+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering **<!-- count:actions -->678+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -386,6 +386,7 @@ UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering
 | `add_transition` | Add directed transition between states. Params: `assetPath, stateMachineName, fromState, toState` |
 | `set_state_animation` | Assign anim asset to state. Params: `assetPath, stateMachineName, stateName, animAssetPath` |
 | `set_transition_blend` | Set blend type/duration on transition. Params: `assetPath, stateMachineName, fromState, toState, blendDuration?, blendLogic?` |
+| `set_transition_condition` | Set a transition's 'can enter transition' condition from a bool variable, keyed by transition (not graph name - every rule graph is named 'Transition' so blueprint graph tools can only reach the first). Wires VariableGet(bool) -> bCanEnterTransition, replacing any prior condition. Identify the transition by transitionGuid (from add_transition/read_state_machine) OR fromState+toState. Params: `assetPath, stateMachineName, variableName (existing bool var), transitionGuid? OR fromState?+toState?, negate? (default false) (#707)` |
 | `read_state_machine` | Read state machine topology. Params: `assetPath, stateMachineName` |
 | `read_anim_graph` | Read AnimBP AnimGraph nodes with properties & pins. Params: `assetPath, graphName?` |
 | `add_curve` | Add float curve to AnimSequence. Params: `assetPath, curveName, curveType?` |

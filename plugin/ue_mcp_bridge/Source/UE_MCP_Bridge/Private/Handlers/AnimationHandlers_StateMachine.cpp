@@ -24,6 +24,11 @@
 #include "AnimationTransitionGraph.h"
 #include "AnimStateNode.h"
 #include "AnimStateTransitionNode.h"
+#include "AnimGraphNode_TransitionResult.h"
+#include "K2Node_VariableGet.h"
+#include "K2Node_CallFunction.h"
+#include "EdGraphSchema_K2.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "RetargetEditor/IKRetargeterController.h"
 #include "RetargetEditor/IKRetargetBatchOperation.h"
 #include "Retargeter/IKRetargeter.h"
@@ -707,6 +712,216 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetTransitionBlend(const TSharedPtr<F
 	Result->SetStringField(TEXT("toState"), ToState);
 	Result->SetNumberField(TEXT("blendDuration"), BlendDuration);
 
+	return MCPResult(Result);
+}
+
+
+// Locate a transition node in a state machine graph by transitionGuid (preferred,
+// unambiguous) or by fromState+toState endpoints. Returns nullptr if none match.
+static UAnimStateTransitionNode* FindTransitionNode(
+	UAnimationStateMachineGraph* SMGraph,
+	const FString& TransitionGuid,
+	const FString& FromState,
+	const FString& ToState)
+{
+	for (UEdGraphNode* Node : SMGraph->Nodes)
+	{
+		UAnimStateTransitionNode* T = Cast<UAnimStateTransitionNode>(Node);
+		if (!T) continue;
+
+		if (!TransitionGuid.IsEmpty())
+		{
+			if (T->NodeGuid.ToString() == TransitionGuid) return T;
+			continue;
+		}
+
+		UAnimStateNode* Prev = Cast<UAnimStateNode>(T->GetPreviousState());
+		UAnimStateNode* Next = Cast<UAnimStateNode>(T->GetNextState());
+		if (Prev && Next && Prev->GetStateName() == FromState && Next->GetStateName() == ToState)
+		{
+			return T;
+		}
+	}
+	return nullptr;
+}
+
+// #707: author a transition's "can enter transition" condition from a bool
+// variable. Every transition's rule graph is named "Transition", so the generic
+// blueprint(read_graph/add_node/connect_pins) tools (which address by graphName)
+// can only ever reach the first one. This native setter addresses the transition
+// by transitionGuid or fromState+toState, then wires a bool VariableGet (optionally
+// negated) into the TransitionResult node's bCanEnterTransition pin.
+TSharedPtr<FJsonValue> FAnimationHandlers::SetTransitionCondition(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	FString SMName;
+	if (auto Err = RequireString(Params, TEXT("stateMachineName"), SMName)) return Err;
+
+	FString VariableName;
+	if (auto Err = RequireString(Params, TEXT("variableName"), VariableName)) return Err;
+
+	// Selector: transitionGuid is unambiguous; fromState+toState is the fallback.
+	const FString TransitionGuid = OptionalString(Params, TEXT("transitionGuid"), TEXT(""));
+	const FString FromState = OptionalString(Params, TEXT("fromState"), TEXT(""));
+	const FString ToState = OptionalString(Params, TEXT("toState"), TEXT(""));
+	if (TransitionGuid.IsEmpty() && (FromState.IsEmpty() || ToState.IsEmpty()))
+	{
+		return MCPError(TEXT("Provide transitionGuid, or both fromState and toState, to identify the transition."));
+	}
+
+	const bool bNegate = OptionalBool(Params, TEXT("negate"), false);
+
+	UAnimBlueprint* AnimBP = LoadAnimBP(AssetPath);
+	if (!AnimBP)
+	{
+		return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+	}
+
+	UAnimGraphNode_StateMachine* SMNode = FindStateMachineNode(AnimBP, SMName);
+	if (!SMNode)
+	{
+		return MCPError(FString::Printf(TEXT("State machine '%s' not found"), *SMName));
+	}
+
+	UAnimationStateMachineGraph* SMGraph = Cast<UAnimationStateMachineGraph>(SMNode->EditorStateMachineGraph);
+	if (!SMGraph)
+	{
+		return MCPError(TEXT("State machine has no editor graph"));
+	}
+
+	UAnimStateTransitionNode* TransNode = FindTransitionNode(SMGraph, TransitionGuid, FromState, ToState);
+	if (!TransNode)
+	{
+		if (!TransitionGuid.IsEmpty())
+			return MCPError(FString::Printf(TEXT("No transition with transitionGuid '%s'"), *TransitionGuid));
+		return MCPError(FString::Printf(TEXT("No transition from '%s' to '%s'"), *FromState, *ToState));
+	}
+
+	// Validate the variable exists on the AnimBP and is a bool.
+	UClass* VarOwnerClass = AnimBP->SkeletonGeneratedClass ? AnimBP->SkeletonGeneratedClass : AnimBP->GeneratedClass;
+	if (VarOwnerClass && !CastField<FBoolProperty>(VarOwnerClass->FindPropertyByName(FName(*VariableName))))
+	{
+		return MCPError(FString::Printf(
+			TEXT("Variable '%s' not found on the AnimBlueprint or is not a bool. Create a bool variable first (blueprint(add_variable))."),
+			*VariableName));
+	}
+
+	UAnimationTransitionGraph* TransGraph = Cast<UAnimationTransitionGraph>(TransNode->BoundGraph);
+	if (!TransGraph)
+	{
+		return MCPError(TEXT("Transition has no rule graph (BoundGraph)."));
+	}
+	UAnimGraphNode_TransitionResult* ResultNode = TransGraph->GetResultNode();
+	if (!ResultNode)
+	{
+		return MCPError(TEXT("Transition rule graph has no result node."));
+	}
+
+	// The result node exposes the bool condition as an input data pin
+	// ("bCanEnterTransition"). Fall back to the first bool input pin.
+	UEdGraphPin* ResultPin = nullptr;
+	for (UEdGraphPin* Pin : ResultNode->Pins)
+	{
+		if (!Pin || Pin->Direction != EGPD_Input) continue;
+		if (Pin->PinName == TEXT("bCanEnterTransition")) { ResultPin = Pin; break; }
+		if (!ResultPin && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Boolean) ResultPin = Pin;
+	}
+	if (!ResultPin)
+	{
+		return MCPError(TEXT("Could not find the bCanEnterTransition pin on the transition result node."));
+	}
+
+	// Idempotency: wipe any previously authored condition nodes so re-running
+	// replaces the condition instead of stacking orphan nodes. The default rule
+	// graph contains only the result node; anything else was authored by us.
+	{
+		TArray<UEdGraphNode*> ToRemove;
+		for (UEdGraphNode* Node : TransGraph->Nodes)
+		{
+			if (Node && Node != ResultNode) ToRemove.Add(Node);
+		}
+		for (UEdGraphNode* Node : ToRemove)
+		{
+			TransGraph->RemoveNode(Node);
+		}
+	}
+	ResultPin->BreakAllPinLinks();
+
+	// Author: VariableGet(bool) -> [optional NOT] -> bCanEnterTransition.
+	UK2Node_VariableGet* GetNode = NewObject<UK2Node_VariableGet>(TransGraph);
+	TransGraph->AddNode(GetNode, false, false);
+	GetNode->VariableReference.SetSelfMember(FName(*VariableName));
+	GetNode->CreateNewGuid();
+	GetNode->PostPlacedNewNode();
+	GetNode->AllocateDefaultPins();
+	GetNode->NodePosX = ResultNode->NodePosX - 400;
+	GetNode->NodePosY = ResultNode->NodePosY;
+
+	UEdGraphPin* VarOutPin = nullptr;
+	for (UEdGraphPin* Pin : GetNode->Pins)
+	{
+		if (Pin && Pin->Direction == EGPD_Output && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Boolean)
+		{
+			VarOutPin = Pin;
+			break;
+		}
+	}
+	if (!VarOutPin)
+	{
+		TransGraph->RemoveNode(GetNode);
+		return MCPError(FString::Printf(
+			TEXT("VariableGet for '%s' produced no bool output pin - is the variable a bool?"), *VariableName));
+	}
+
+	UEdGraphPin* SourcePin = VarOutPin;
+	if (bNegate)
+	{
+		UFunction* NotFunc = UKismetMathLibrary::StaticClass()->FindFunctionByName(FName(TEXT("Not_PreBool")));
+		if (NotFunc)
+		{
+			UK2Node_CallFunction* NotNode = NewObject<UK2Node_CallFunction>(TransGraph);
+			TransGraph->AddNode(NotNode, false, false);
+			NotNode->SetFromFunction(NotFunc);
+			NotNode->CreateNewGuid();
+			NotNode->PostPlacedNewNode();
+			NotNode->AllocateDefaultPins();
+			NotNode->NodePosX = ResultNode->NodePosX - 200;
+			NotNode->NodePosY = ResultNode->NodePosY;
+
+			UEdGraphPin* NotIn = nullptr;
+			UEdGraphPin* NotOut = nullptr;
+			for (UEdGraphPin* Pin : NotNode->Pins)
+			{
+				if (!Pin || Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Boolean) continue;
+				if (Pin->Direction == EGPD_Input) NotIn = Pin;
+				else if (Pin->Direction == EGPD_Output) NotOut = Pin;
+			}
+			if (NotIn && NotOut)
+			{
+				VarOutPin->MakeLinkTo(NotIn);
+				SourcePin = NotOut;
+			}
+		}
+	}
+
+	SourcePin->MakeLinkTo(ResultPin);
+	TransGraph->NotifyGraphChanged();
+
+	CompileAndSave(AnimBP);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("stateMachineName"), SMName);
+	Result->SetStringField(TEXT("transitionGuid"), TransNode->NodeGuid.ToString());
+	if (UAnimStateNode* Prev = Cast<UAnimStateNode>(TransNode->GetPreviousState()))
+		Result->SetStringField(TEXT("fromState"), Prev->GetStateName());
+	if (UAnimStateNode* Next = Cast<UAnimStateNode>(TransNode->GetNextState()))
+		Result->SetStringField(TEXT("toState"), Next->GetStateName());
+	Result->SetStringField(TEXT("variableName"), VariableName);
+	Result->SetBoolField(TEXT("negate"), bNegate);
 	return MCPResult(Result);
 }
 

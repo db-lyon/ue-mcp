@@ -38,6 +38,7 @@ export const animationTool: ToolDef = categoryTool(
     add_transition:       bp("Add directed transition between states. Params: assetPath, stateMachineName, fromState, toState", "add_transition"),
     set_state_animation:  bp("Assign anim asset to state. Params: assetPath, stateMachineName, stateName, animAssetPath", "set_state_animation"),
     set_transition_blend: bp("Set blend type/duration on transition. Params: assetPath, stateMachineName, fromState, toState, blendDuration?, blendLogic?", "set_transition_blend"),
+    set_transition_condition: bp("Set a transition's 'can enter transition' condition from a bool variable, keyed by transition (not graph name - every rule graph is named 'Transition' so blueprint graph tools can only reach the first). Wires VariableGet(bool) -> bCanEnterTransition, replacing any prior condition. Identify the transition by transitionGuid (from add_transition/read_state_machine) OR fromState+toState. Params: assetPath, stateMachineName, variableName (existing bool var), transitionGuid? OR fromState?+toState?, negate? (default false) (#707)", "set_transition_condition", (p) => ({ assetPath: p.assetPath, stateMachineName: p.stateMachineName, variableName: p.variableName, transitionGuid: p.transitionGuid, fromState: p.fromState, toState: p.toState, negate: p.negate })),
     read_state_machine:   bp("Read state machine topology. Params: assetPath, stateMachineName", "read_state_machine"),
     read_anim_graph:      bp("Read AnimBP AnimGraph nodes with properties & pins. Params: assetPath, graphName?", "read_anim_graph"),
     add_curve:            bp("Add float curve to AnimSequence. Params: assetPath, curveName, curveType?", "add_curve"),
@@ -137,6 +138,9 @@ export const animationTool: ToolDef = categoryTool(
     animAssetPath: z.string().optional().describe("Path to animation sequence or blendspace"),
     blendDuration: z.number().optional(),
     blendLogic: z.string().optional().describe("Standard or Inertialization"),
+    variableName: z.string().optional().describe("Bool variable name for set_transition_condition (#707)"),
+    transitionGuid: z.string().optional().describe("Transition GUID selector for set_transition_condition (#707)"),
+    negate: z.boolean().optional().describe("Negate the bool condition in set_transition_condition (#707)"),
     graphName: z.string().optional().describe("Target graph name (default: AnimGraph)"),
     // Curve params (#79 / #24)
     curveName: z.string().optional().describe("Curve name for add_curve"),

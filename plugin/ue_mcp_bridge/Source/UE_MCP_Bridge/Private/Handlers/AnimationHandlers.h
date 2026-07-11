@@ -64,6 +64,7 @@ private:
 	static TSharedPtr<FJsonValue> AddTransition(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetStateAnimation(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetTransitionBlend(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetTransitionCondition(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadStateMachine(const TSharedPtr<FJsonObject>& Params);
 
 	// AnimGraph inspection (#23 / #91)
