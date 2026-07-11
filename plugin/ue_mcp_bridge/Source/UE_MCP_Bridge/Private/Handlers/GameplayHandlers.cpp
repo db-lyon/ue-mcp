@@ -2060,13 +2060,13 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetNavmeshDetails(const TSharedPtr<FJs
 		if (RecastNav) break;
 	}
 
-	// Fallback: iterate world actors
+	// Fallback: grab the first ARecastNavMesh in the world
 	if (!RecastNav)
 	{
-		for (TActorIterator<ARecastNavMesh> It(World); It; ++It)
+		TActorIterator<ARecastNavMesh> It(World);
+		if (It)
 		{
 			RecastNav = *It;
-			break;
 		}
 	}
 
