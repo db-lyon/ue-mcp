@@ -970,6 +970,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	FString TargetPinName;
 	if (auto Err = RequireStringAlt(Params, TEXT("targetPinName"), TEXT("targetPin"), TargetPinName)) return Err;
 
+	bool bBreakExistingSource = false;
+	bool bBreakExistingTarget = false;
+	Params->TryGetBoolField(TEXT("breakExistingSource"), bBreakExistingSource);
+	Params->TryGetBoolField(TEXT("breakExistingTarget"), bBreakExistingTarget);
+
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
@@ -1026,8 +1031,42 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		return MCPError(FString::Printf(TEXT("Target pin not found: '%s' on node '%s'"), *TargetPinName, *TargetNodeId));
 	}
 
-	// Idempotency: if already linked between these two pins, short-circuit
-	if (SourcePin->LinkedTo.Contains(TargetPin))
+	// Compiling a Blueprint can reinstate pins while leaving links that identify the
+	// same logical pin through a different pointer. Compare stable pin/node identity
+	// as well as pointer identity so an idempotent replay does not break/recreate it.
+	auto IsLogicallyLinkedTo = [](const UEdGraphPin* FromPin, const UEdGraphPin* ToPin)
+	{
+		if (!FromPin || !ToPin)
+		{
+			return false;
+		}
+
+		for (const UEdGraphPin* LinkedPin : FromPin->LinkedTo)
+		{
+			if (!LinkedPin)
+			{
+				continue;
+			}
+			if (LinkedPin == ToPin ||
+				(LinkedPin->PinId.IsValid() && ToPin->PinId.IsValid() && LinkedPin->PinId == ToPin->PinId))
+			{
+				return true;
+			}
+
+			const UEdGraphNode* LinkedNode = LinkedPin->GetOwningNode();
+			const UEdGraphNode* ToNode = ToPin->GetOwningNode();
+			if (LinkedNode && ToNode && LinkedNode->NodeGuid == ToNode->NodeGuid &&
+				LinkedPin->PinName == ToPin->PinName && LinkedPin->Direction == ToPin->Direction)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	};
+
+	// Idempotency: if already linked between these two pins, short-circuit.
+	if (IsLogicallyLinkedTo(SourcePin, TargetPin) || IsLogicallyLinkedTo(TargetPin, SourcePin))
 	{
 		auto Existed = MCPSuccess();
 		MCPSetExisted(Existed);
@@ -1037,6 +1076,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		Existed->SetStringField(TEXT("sourcePinName"), SourcePinName);
 		Existed->SetStringField(TEXT("targetNodeId"), TargetNodeId);
 		Existed->SetStringField(TEXT("targetPinName"), TargetPinName);
+		Existed->SetNumberField(TEXT("brokenSourceLinks"), 0);
+		Existed->SetNumberField(TEXT("brokenTargetLinks"), 0);
 		return MCPResult(Existed);
 	}
 
@@ -1047,10 +1088,49 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		return MCPError(TEXT("Graph has no schema"));
 	}
 
+	TArray<UEdGraphPin*> PreviousSourceLinks;
+	TArray<UEdGraphPin*> PreviousTargetLinks;
+	if (bBreakExistingSource)
+	{
+		PreviousSourceLinks = SourcePin->LinkedTo;
+	}
+	if (bBreakExistingTarget)
+	{
+		PreviousTargetLinks = TargetPin->LinkedTo;
+	}
+	const int32 BrokenSourceLinks = PreviousSourceLinks.Num();
+	const int32 BrokenTargetLinks = PreviousTargetLinks.Num();
+	UPackage* Package = Blueprint->GetOutermost();
+	const bool bWasPackageDirty = Package && Package->IsDirty();
+
+	if (bBreakExistingSource)
+	{
+		SourcePin->BreakAllPinLinks();
+	}
+	if (bBreakExistingTarget)
+	{
+		TargetPin->BreakAllPinLinks();
+	}
+
 	bool bConnected = Schema->TryCreateConnection(SourcePin, TargetPin);
 
 	if (bConnected)
 	{
+		for (UEdGraphPin* PreviousPin : PreviousSourceLinks)
+		{
+			if (PreviousPin && PreviousPin != TargetPin && PreviousPin->GetOwningNode())
+			{
+				PreviousPin->GetOwningNode()->PinConnectionListChanged(PreviousPin);
+			}
+		}
+		for (UEdGraphPin* PreviousPin : PreviousTargetLinks)
+		{
+			if (PreviousPin && PreviousPin != SourcePin && PreviousPin->GetOwningNode())
+			{
+				PreviousPin->GetOwningNode()->PinConnectionListChanged(PreviousPin);
+			}
+		}
+
 		// Compile and save
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
 		SaveAssetPackage(Blueprint);
@@ -1063,17 +1143,38 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		Result->SetStringField(TEXT("sourcePinName"), SourcePinName);
 		Result->SetStringField(TEXT("targetNodeId"), TargetNodeId);
 		Result->SetStringField(TEXT("targetPinName"), TargetPinName);
-		// No rollback: no paired disconnect_pins handler.
+		Result->SetNumberField(TEXT("brokenSourceLinks"), BrokenSourceLinks);
+		Result->SetNumberField(TEXT("brokenTargetLinks"), BrokenTargetLinks);
+		// No rollback: broken links are intentionally opt-in via breakExistingSource/Target.
 		return MCPResult(Result);
 	}
 	else
 	{
-		// Get more info about why it failed
+		// Capture the failure before restoring the exact previous graph state.
 		FString ErrorMsg = TEXT("TryCreateConnection failed. Pins may be incompatible.");
 		FPinConnectionResponse Response = Schema->CanCreateConnection(SourcePin, TargetPin);
 		if (!Response.Message.IsEmpty())
 		{
 			ErrorMsg = FString::Printf(TEXT("Connection failed: %s"), *Response.Message.ToString());
+		}
+
+		for (UEdGraphPin* PreviousPin : PreviousSourceLinks)
+		{
+			if (PreviousPin && !SourcePin->LinkedTo.Contains(PreviousPin))
+			{
+				SourcePin->MakeLinkTo(PreviousPin);
+			}
+		}
+		for (UEdGraphPin* PreviousPin : PreviousTargetLinks)
+		{
+			if (PreviousPin && !TargetPin->LinkedTo.Contains(PreviousPin))
+			{
+				TargetPin->MakeLinkTo(PreviousPin);
+			}
+		}
+		if (Package && !bWasPackageDirty)
+		{
+			Package->SetDirtyFlag(false);
 		}
 		return MCPError(ErrorMsg);
 	}
