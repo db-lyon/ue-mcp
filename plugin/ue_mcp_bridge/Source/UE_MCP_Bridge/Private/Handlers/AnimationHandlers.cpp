@@ -114,6 +114,8 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// Float curve authoring (#79 / #24)
 	Registry.RegisterHandler(TEXT("add_curve"), &AddCurve);
+	Registry.RegisterHandler(TEXT("set_anim_curve_keys"), &SetAnimCurveKeys);
+	Registry.RegisterHandler(TEXT("apply_animation_modifier"), &ApplyAnimationModifier);
 
 	// Montage slot & section editing (#78, #27)
 	Registry.RegisterHandler(TEXT("set_montage_slot"), &SetMontageSlot);
@@ -170,6 +172,10 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_motion_matching_node"), &AddMotionMatchingNode);
 	Registry.RegisterHandler(TEXT("add_pose_history_node"), &AddPoseHistoryNode);
 	Registry.RegisterHandler(TEXT("set_motion_matching_chooser"), &SetMotionMatchingChooser);
+
+	// #713 — distance-matching graph authoring
+	Registry.RegisterHandler(TEXT("add_sequence_evaluator"), &AddSequenceEvaluator);
+	Registry.RegisterHandler(TEXT("bind_anim_node_function"), &BindAnimNodeFunction);
 
 	// #419/#420 — live-actor skeletal reads + rebind + preview (moved from Level)
 	Registry.RegisterHandler(TEXT("get_bone_transform"), &GetBoneTransform);

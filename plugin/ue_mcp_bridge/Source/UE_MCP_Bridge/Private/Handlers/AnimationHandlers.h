@@ -75,6 +75,11 @@ private:
 
 	// Float curve authoring (#79 / #24)
 	static TSharedPtr<FJsonValue> AddCurve(const TSharedPtr<FJsonObject>& Params);
+	// #712: set float-curve key VALUES directly (add_curve only names an empty curve).
+	static TSharedPtr<FJsonValue> SetAnimCurveKeys(const TSharedPtr<FJsonObject>& Params);
+	// #712: instantiate + run a UAnimationModifier subclass on an AnimSequence
+	// (e.g. DistanceCurveModifier to bake a Distance curve from root motion).
+	static TSharedPtr<FJsonValue> ApplyAnimationModifier(const TSharedPtr<FJsonObject>& Params);
 
 	// Montage slot & section editing (#78, #27)
 	static TSharedPtr<FJsonValue> SetMontageSlot(const TSharedPtr<FJsonObject>& Params);
@@ -136,6 +141,13 @@ private:
 	static TSharedPtr<FJsonValue> AddPoseHistoryNode(const TSharedPtr<FJsonObject>& Params);
 	// Drive the MM node's Database from a ChooserTable (runtime database selection).
 	static TSharedPtr<FJsonValue> SetMotionMatchingChooser(const TSharedPtr<FJsonObject>& Params);
+
+	// #713 — distance-matching graph authoring
+	// Add a Sequence Evaluator node (explicit-time player distance matching drives).
+	static TSharedPtr<FJsonValue> AddSequenceEvaluator(const TSharedPtr<FJsonObject>& Params);
+	// Bind a thread-safe anim-node function to a node's OnUpdate/OnBecomeRelevant/
+	// OnInitialUpdate (the mechanism distance matching uses to advance the evaluator).
+	static TSharedPtr<FJsonValue> BindAnimNodeFunction(const TSharedPtr<FJsonObject>& Params);
 
 	// #419/#420 — live-actor skeletal reads + rebind + preview (moved from Level)
 	static TSharedPtr<FJsonValue> GetBoneTransform(const TSharedPtr<FJsonObject>& Params);

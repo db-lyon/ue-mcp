@@ -27,6 +27,11 @@
 #include "AnimGraphNode_MotionMatching.h"
 #include "AnimGraphNode_PoseSearchHistoryCollector.h"
 #include "AnimGraphNode_Root.h"
+#include "AnimGraphNode_SequenceEvaluator.h"
+#include "AnimGraphNode_StateResult.h"
+#include "AnimGraphNode_Base.h"
+#include "Animation/AnimSequenceBase.h"
+#include "Engine/MemberReference.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphPin.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -796,5 +801,183 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 	Res->SetBoolField(TEXT("contextWired"), bContextWired);
 	Res->SetStringField(TEXT("contextSource"), ContextWiredTo);
 	Res->SetBoolField(TEXT("disabledThreadedUpdate"), bDisabledThreadedUpdate);
+	return MCPResult(Res);
+}
+
+// ═══ #713 — distance-matching graph authoring ═════════════════════════════
+// Distance matching drives a Sequence Evaluator's explicit time each frame from
+// a thread-safe anim-node function. blueprint(search_node_types) can't surface
+// the evaluator node, and there was no way to bind the update function. These two
+// handlers close both gaps: add_sequence_evaluator drops the node, and
+// bind_anim_node_function binds a UFUNCTION to a node's update slot.
+
+// Resolve an AnimGraph (AnimGraph itself or a named state's inner graph) on an
+// AnimBP by name.
+static UEdGraph* FindAnimGraphByName(UAnimBlueprint* AnimBP, const FString& GraphName)
+{
+	TArray<UEdGraph*> All;
+	AnimBP->GetAllGraphs(All);
+	for (UEdGraph* G : All) { if (G && G->GetName() == GraphName) return G; }
+	return nullptr;
+}
+
+// The output pose node of a graph. In the top-level AnimGraph this is a
+// UAnimGraphNode_Root; inside a state's inner graph it is a
+// UAnimGraphNode_StateResult (both derive from UAnimGraphNode_Base and expose a
+// single pose input pin).
+static UAnimGraphNode_Base* FindGraphResultNode(UEdGraph* Graph)
+{
+	for (UEdGraphNode* N : Graph->Nodes)
+	{
+		if (UAnimGraphNode_Root* Root = Cast<UAnimGraphNode_Root>(N)) return Root;
+	}
+	for (UEdGraphNode* N : Graph->Nodes)
+	{
+		if (UAnimGraphNode_StateResult* Res = Cast<UAnimGraphNode_StateResult>(N)) return Res;
+	}
+	return nullptr;
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::AddSequenceEvaluator(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	// Distance matching usually lives inside a state's graph; pass that state name
+	// as graphName. Defaults to the top-level AnimGraph.
+	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
+	UEdGraph* Graph = FindAnimGraphByName(AnimBP, GraphName);
+	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	UAnimSequenceBase* Sequence = nullptr;
+	const FString SequencePath = OptionalString(Params, TEXT("sequencePath"));
+	if (!SequencePath.IsEmpty())
+	{
+		Sequence = LoadAssetByPath<UAnimSequenceBase>(SequencePath);
+		if (!Sequence) return MCPError(FString::Printf(TEXT("AnimSequence not found: %s"), *SequencePath));
+	}
+
+	UAnimGraphNode_SequenceEvaluator* EvalNode = NewObject<UAnimGraphNode_SequenceEvaluator>(Graph);
+	PlaceAnimNode(Graph, EvalNode, 0, 0);
+
+	UScriptStruct* NodeStruct = nullptr;
+	void* NodeData = GetAnimNodeMemory(EvalNode, NodeStruct);
+	if (NodeStruct && NodeData)
+	{
+		if (Sequence) SetNodeObject(NodeStruct, NodeData, TEXT("Sequence"), Sequence);
+		double Num = 0.0;
+		if (Params->TryGetNumberField(TEXT("explicitTime"), Num)) SetNodeFloat(NodeStruct, NodeData, TEXT("ExplicitTime"), (float)Num);
+		bool bFlag = false;
+		if (Params->TryGetBoolField(TEXT("shouldLoop"), bFlag)) SetNodeBool(NodeStruct, NodeData, TEXT("bShouldLoop"), bFlag);
+		// Distance matching wants time to advance (root motion extraction), so the
+		// default here flips the engine default of bTeleportToExplicitTime=true.
+		SetNodeBool(NodeStruct, NodeData, TEXT("bTeleportToExplicitTime"),
+			OptionalBool(Params, TEXT("teleportToExplicitTime"), false));
+	}
+
+	bool bConnected = false;
+	if (OptionalBool(Params, TEXT("connectToOutput"), true))
+	{
+		if (UAnimGraphNode_Base* Result = FindGraphResultNode(Graph))
+		{
+			UEdGraphPin* ResultIn = GetPosePin(Result, EGPD_Input);
+			UEdGraphPin* NodeOut = GetPosePin(EvalNode, EGPD_Output);
+			if (ResultIn && NodeOut) { ResultIn->BreakAllPinLinks(); NodeOut->MakeLinkTo(ResultIn); bConnected = true; }
+		}
+	}
+
+	FKismetEditorUtilities::CompileBlueprint(AnimBP);
+	SaveAssetPackage(AnimBP);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("assetPath"), AssetPath);
+	Res->SetStringField(TEXT("graphName"), GraphName);
+	Res->SetStringField(TEXT("nodeGuid"), EvalNode->NodeGuid.ToString());
+	Res->SetStringField(TEXT("sequencePath"), Sequence ? Sequence->GetPathName() : FString());
+	Res->SetBoolField(TEXT("connectedToOutput"), bConnected);
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::BindAnimNodeFunction(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
+	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
+
+	FString FunctionName;
+	if (auto Err = RequireStringAlt(Params, TEXT("functionName"), TEXT("function"), FunctionName)) return Err;
+
+	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("AnimGraph"));
+	UEdGraph* Graph = FindAnimGraphByName(AnimBP, GraphName);
+	if (!Graph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	// Locate the target node by GUID (from add_sequence_evaluator / add_*_node).
+	FString NodeGuidStr;
+	if (auto Err = RequireStringAlt(Params, TEXT("nodeGuid"), TEXT("nodeId"), NodeGuidStr)) return Err;
+	FGuid NodeGuid;
+	if (!FGuid::Parse(NodeGuidStr, NodeGuid)) return MCPError(FString::Printf(TEXT("Invalid nodeGuid: %s"), *NodeGuidStr));
+
+	UAnimGraphNode_Base* Node = nullptr;
+	for (UEdGraphNode* N : Graph->Nodes)
+	{
+		if (N && N->NodeGuid == NodeGuid) { Node = Cast<UAnimGraphNode_Base>(N); break; }
+	}
+	if (!Node) return MCPError(FString::Printf(TEXT("Anim graph node with guid %s not found in graph '%s'"), *NodeGuidStr, *GraphName));
+
+	// Which bindable slot: OnUpdate (default), OnBecomeRelevant, OnInitialUpdate.
+	const FString Slot = OptionalString(Params, TEXT("binding"), TEXT("update")).ToLower();
+	FMemberReference* Target = nullptr;
+	FString SlotResolved;
+	if (Slot == TEXT("update") || Slot == TEXT("onupdate"))                       { Target = &Node->UpdateFunction;        SlotResolved = TEXT("update"); }
+	else if (Slot == TEXT("becomerelevant") || Slot == TEXT("onbecomerelevant")) { Target = &Node->BecomeRelevantFunction; SlotResolved = TEXT("becomeRelevant"); }
+	else if (Slot == TEXT("initialupdate") || Slot == TEXT("oninitialupdate"))   { Target = &Node->InitialUpdateFunction; SlotResolved = TEXT("initialUpdate"); }
+	else return MCPError(FString::Printf(TEXT("Unknown binding slot '%s' (use 'update', 'becomeRelevant' or 'initialUpdate')"), *Slot));
+
+	// Verify the function exists on the AnimBP class so the binding resolves at
+	// compile time instead of being silently dropped. Skeleton class carries the
+	// stubs even before a full compile.
+	const FName FuncFName(*FunctionName);
+	UFunction* Found = nullptr;
+	if (UClass* SkelClass = AnimBP->SkeletonGeneratedClass) Found = SkelClass->FindFunctionByName(FuncFName);
+	if (!Found) { if (UClass* GenClass = AnimBP->GeneratedClass) Found = GenClass->FindFunctionByName(FuncFName); }
+	if (!Found)
+	{
+		return MCPError(FString::Printf(TEXT("Function '%s' not found on AnimBlueprint '%s' - create it first (a thread-safe anim-node function)"), *FunctionName, *AnimBP->GetName()));
+	}
+	// Capture metadata now: CompileBlueprint below regenerates the class and frees
+	// this UFunction*, so it must not be dereferenced afterwards.
+	const bool bThreadSafe = Found->HasMetaData(TEXT("BlueprintThreadSafe"));
+
+	Node->Modify();
+	Target->SetSelfMember(FuncFName);
+	// Mirror to the runtime node so the setting is consistent pre-compile.
+	Node->PostEditChange();
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(AnimBP);
+	FKismetEditorUtilities::CompileBlueprint(AnimBP);
+	SaveAssetPackage(AnimBP);
+
+	// A bound anim-node function only runs if it is BlueprintThreadSafe with a
+	// compatible signature; the compiler rejects it otherwise. Surface that rather
+	// than reporting hollow success.
+	const bool bCompiled = (AnimBP->Status != EBlueprintStatus::BS_Error);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("assetPath"), AssetPath);
+	Res->SetStringField(TEXT("graphName"), GraphName);
+	Res->SetStringField(TEXT("nodeGuid"), NodeGuidStr);
+	Res->SetStringField(TEXT("binding"), SlotResolved);
+	Res->SetStringField(TEXT("functionName"), FunctionName);
+	Res->SetBoolField(TEXT("threadSafe"), bThreadSafe);
+	Res->SetBoolField(TEXT("compiled"), bCompiled);
+	if (!bThreadSafe || !bCompiled)
+	{
+		Res->SetStringField(TEXT("warning"), TEXT("bound, but the function must be marked BlueprintThreadSafe with a compatible (FAnimUpdateContext, FAnim...Reference) signature for the binding to run - the compiler rejected it otherwise"));
+	}
 	return MCPResult(Res);
 }

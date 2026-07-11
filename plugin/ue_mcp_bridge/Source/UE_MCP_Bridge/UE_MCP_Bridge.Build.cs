@@ -24,6 +24,7 @@ public class UE_MCP_Bridge : ModuleRules
 				"AIModule",
 				"AnimGraph",
 				"AnimationEditor",
+				"AnimationModifiers",
 				"AssetRegistry",
 				"AssetTools",
 				"AudioEditor",

@@ -7,6 +7,10 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
+#include "HandlerJsonProperty.h"
+#include "Curves/RichCurve.h"
+#include "AnimationModifier.h"
+#include "AnimationModifiersAssetUserData.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/AnimComposite.h"
@@ -765,6 +769,233 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddCurve(const TSharedPtr<FJsonObject
 	return MCPResult(Result);
 }
 
+// ─── #712 set_anim_curve_keys ───────────────────────────────────────
+// add_curve only creates an empty named curve; it cannot set key VALUES.
+// This adds the curve if missing, then replaces its keys with the provided
+// [{time,value,interp?}] list. Enables authoring distance / speed / any float
+// curve directly, without dropping to an AnimationModifier or Python.
+static ERichCurveInterpMode ParseRichCurveInterp(const FString& S, ERichCurveInterpMode Default)
+{
+	const FString L = S.ToLower();
+	if (L == TEXT("constant") || L == TEXT("step"))   return RCIM_Constant;
+	if (L == TEXT("linear"))                          return RCIM_Linear;
+	if (L == TEXT("cubic") || L == TEXT("auto"))      return RCIM_Cubic;
+	return Default;
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::SetAnimCurveKeys(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	FString CurveName;
+	if (auto Err = RequireString(Params, TEXT("curveName"), CurveName)) return Err;
+
+	const TArray<TSharedPtr<FJsonValue>>* KeysArr = nullptr;
+	if (!Params->TryGetArrayField(TEXT("keys"), KeysArr) || !KeysArr)
+	{
+		return MCPError(TEXT("Missing 'keys' array parameter (each entry: {time, value, interp?})"));
+	}
+
+	UAnimSequence* Seq = Cast<UAnimSequence>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!Seq) return MCPError(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
+	if (!Seq->GetSkeleton()) return MCPError(TEXT("AnimSequence has no Skeleton"));
+
+	const ERichCurveInterpMode DefaultInterp = ParseRichCurveInterp(
+		OptionalString(Params, TEXT("interpolation"), TEXT("linear")), RCIM_Linear);
+
+	TArray<FRichCurveKey> Keys;
+	Keys.Reserve(KeysArr->Num());
+	for (const TSharedPtr<FJsonValue>& V : *KeysArr)
+	{
+		const TSharedPtr<FJsonObject>* KObj = nullptr;
+		if (!V.IsValid() || !V->TryGetObject(KObj) || !KObj || !(*KObj).IsValid()) continue;
+		double Time = 0.0, Val = 0.0;
+		if (!(*KObj)->TryGetNumberField(TEXT("time"), Time)) continue;
+		if (!(*KObj)->TryGetNumberField(TEXT("value"), Val)) continue;
+		FRichCurveKey Key((float)Time, (float)Val);
+		FString KInterp;
+		Key.InterpMode = (*KObj)->TryGetStringField(TEXT("interp"), KInterp)
+			? ParseRichCurveInterp(KInterp, DefaultInterp) : DefaultInterp;
+		Keys.Add(Key);
+	}
+	if (Keys.Num() == 0)
+	{
+		return MCPError(TEXT("No valid keys parsed from 'keys' (each entry needs numeric time+value)"));
+	}
+	// Keep keys time-ordered so the curve evaluates predictably.
+	Keys.Sort([](const FRichCurveKey& A, const FRichCurveKey& B) { return A.Time < B.Time; });
+
+	const FAnimationCurveIdentifier CurveId(FName(*CurveName), ERawCurveTrackTypes::RCT_Float);
+
+	IAnimationDataController& Controller = Seq->GetController();
+	Controller.OpenBracket(NSLOCTEXT("MCP", "SetAnimCurveKeys", "MCP Set Anim Curve Keys"));
+
+	const bool bAdded = Controller.AddCurve(CurveId, AACF_DefaultCurve);
+	const bool bSet = Controller.SetCurveKeys(CurveId, Keys);
+
+	Controller.CloseBracket();
+
+	if (!bSet)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to set keys on curve '%s'"), *CurveName));
+	}
+
+	Seq->MarkPackageDirty();
+	UEditorAssetLibrary::SaveLoadedAsset(Seq, /*bOnlyIfIsDirty=*/false);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("curveName"), CurveName);
+	Result->SetBoolField(TEXT("curveCreated"), bAdded);
+	Result->SetNumberField(TEXT("keyCount"), Keys.Num());
+	return MCPResult(Result);
+}
+
+// ─── #712 apply_animation_modifier ──────────────────────────────────
+// Instantiate a UAnimationModifier subclass and run it on an AnimSequence.
+// The headline case is DistanceCurveModifier (bakes a Distance curve from root
+// motion for distance matching), but any modifier class works. The concrete
+// modifier class is resolved by name at runtime so the plugin providing it does
+// not have to be a link-time dependency; if it can't be found we tell the caller
+// which plugin to enable rather than failing opaquely.
+static UClass* ResolveAnimationModifierClass(const FString& NameOrPath, UClass* BaseClass, FString& OutHint)
+{
+	// Explicit object/class path.
+	if (NameOrPath.Contains(TEXT("/")) || NameOrPath.Contains(TEXT(".")))
+	{
+		if (UClass* C = LoadClass<UObject>(nullptr, *NameOrPath)) return C;
+		const FString WithSuffix = NameOrPath.EndsWith(TEXT("_C")) ? NameOrPath : NameOrPath + TEXT("_C");
+		if (UClass* C = LoadClass<UObject>(nullptr, *WithSuffix)) return C;
+	}
+
+	// Bare class name (tolerate a leading 'U').
+	FString Short = NameOrPath;
+	Short.RemoveFromStart(TEXT("U"));
+
+	// Script packages that ship stock modifiers. DistanceCurveModifier lives in the
+	// AnimationLocomotionLibrary plugin (module AnimationLocomotionLibraryEditor),
+	// which is NOT enabled by default.
+	static const TCHAR* ScriptPackages[] = {
+		TEXT("/Script/AnimationLocomotionLibraryEditor."),
+		TEXT("/Script/AnimationModifierLibrary."),
+		TEXT("/Script/AnimationModifiers."),
+	};
+	for (const TCHAR* Pkg : ScriptPackages)
+	{
+		if (UClass* C = FindObject<UClass>(nullptr, *(FString(Pkg) + Short))) return C;
+	}
+
+	// Global fallback: any loaded UClass with this name.
+	if (UClass* C = FindFirstObject<UClass>(*Short, EFindFirstObjectOptions::NativeFirst)) return C;
+
+	if (Short.Equals(TEXT("DistanceCurveModifier"), ESearchCase::IgnoreCase))
+	{
+		OutHint = TEXT(" - enable the 'Animation Locomotion Library' plugin (it is off by default) and restart the editor");
+	}
+	return nullptr;
+}
+
+TSharedPtr<FJsonValue> FAnimationHandlers::ApplyAnimationModifier(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	FString ModifierClassName;
+	if (auto Err = RequireStringAlt(Params, TEXT("modifierClass"), TEXT("modifier"), ModifierClassName)) return Err;
+
+	UAnimSequence* Seq = Cast<UAnimSequence>(UEditorAssetLibrary::LoadAsset(AssetPath));
+	if (!Seq) return MCPError(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
+
+	FString Hint;
+	UClass* ModClass = ResolveAnimationModifierClass(ModifierClassName, UAnimationModifier::StaticClass(), Hint);
+	if (!ModClass)
+	{
+		return MCPError(FString::Printf(TEXT("Animation modifier class not found: '%s'%s"), *ModifierClassName, *Hint));
+	}
+	if (!ModClass->IsChildOf(UAnimationModifier::StaticClass()))
+	{
+		return MCPError(FString::Printf(TEXT("'%s' is not a UAnimationModifier subclass"), *ModClass->GetName()));
+	}
+	if (ModClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		return MCPError(FString::Printf(TEXT("'%s' is abstract and cannot be applied"), *ModClass->GetName()));
+	}
+
+	// Register the modifier on the sequence (creating the asset-user-data + instance
+	// if needed) so it shows up in list_anim_modifiers and re-applies on reimport.
+	// Reuse an existing instance of the same class for idempotent replay.
+	UAnimationModifiersAssetUserData* UserData = Seq->GetAssetUserData<UAnimationModifiersAssetUserData>();
+	UAnimationModifier* Instance = nullptr;
+	if (UserData)
+	{
+		for (UAnimationModifier* M : UserData->GetAnimationModifierInstances())
+		{
+			if (M && M->GetClass() == ModClass) { Instance = M; break; }
+		}
+	}
+	bool bRegistered = false;
+	if (!Instance)
+	{
+		UAnimationModifiersAssetUserData::AddAnimationModifierOfClass(Seq, ModClass);
+		bRegistered = true;
+		UserData = Seq->GetAssetUserData<UAnimationModifiersAssetUserData>();
+		if (UserData)
+		{
+			for (UAnimationModifier* M : UserData->GetAnimationModifierInstances())
+			{
+				if (M && M->GetClass() == ModClass) { Instance = M; }
+			}
+		}
+	}
+	if (!Instance)
+	{
+		// Fall back to a transient instance so the bake still happens even if the
+		// user-data registration path is unavailable.
+		Instance = NewObject<UAnimationModifier>(Seq, ModClass);
+	}
+
+	// Apply caller-provided settings (CurveName, Axis, SampleRate, ...).
+	TArray<FString> AppliedProps;
+	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
+	if (Params->TryGetObjectField(TEXT("props"), PropsObj) && PropsObj && (*PropsObj).IsValid())
+	{
+		Instance->Modify();
+		for (const auto& Pair : (*PropsObj)->Values)
+		{
+			const FString PropName(*Pair.Key);
+			FProperty* Prop = ModClass->FindPropertyByName(FName(*PropName));
+			if (!Prop)
+			{
+				return MCPError(FString::Printf(TEXT("Modifier '%s' has no property '%s'"), *ModClass->GetName(), *PropName));
+			}
+			void* Addr = Prop->ContainerPtrToValuePtr<void>(Instance);
+			FString E;
+			if (!MCPJsonProperty::SetJsonOnProperty(Prop, Addr, Pair.Value, E))
+			{
+				return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropName, *E));
+			}
+			AppliedProps.Add(PropName);
+		}
+		Instance->PostEditChange();
+	}
+
+	// Bake. ApplyToAnimationSequence reverts any prior application then runs OnApply.
+	Instance->ApplyToAnimationSequence(Seq);
+
+	Seq->MarkPackageDirty();
+	UEditorAssetLibrary::SaveLoadedAsset(Seq, /*bOnlyIfIsDirty=*/false);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("modifierClass"), ModClass->GetName());
+	Result->SetBoolField(TEXT("registered"), bRegistered);
+	TArray<TSharedPtr<FJsonValue>> PropArr;
+	for (const FString& P : AppliedProps) PropArr.Add(MakeShared<FJsonValueString>(P));
+	Result->SetArrayField(TEXT("appliedProps"), PropArr);
+	return MCPResult(Result);
+}
+
 // ─── #78  set_montage_slot ──────────────────────────────────────────
 
 
@@ -802,9 +1033,29 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimModifiers(const TSharedPtr<FJ
 	if (!Seq) return MCPError(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
 
 	TArray<TSharedPtr<FJsonValue>> Arr;
+	TSet<UObject*> Seen;
+	auto AddModifier = [&Arr, &Seen](UObject* Modifier)
+	{
+		if (!Modifier || Seen.Contains(Modifier)) return;
+		Seen.Add(Modifier);
+		TSharedPtr<FJsonObject> M = MakeShared<FJsonObject>();
+		M->SetStringField(TEXT("class"), Modifier->GetClass()->GetName());
+		M->SetStringField(TEXT("classPath"), Modifier->GetClass()->GetPathName());
+		M->SetStringField(TEXT("name"), Modifier->GetName());
+		Arr.Add(MakeShared<FJsonValueObject>(M));
+	};
+
+	// The modern store is UAnimationModifiersAssetUserData::AnimationModifierInstances -
+	// what the Animation Data Modifiers window shows and what apply_animation_modifier
+	// registers into (#712).
+	if (UAnimationModifiersAssetUserData* UserData = Seq->GetAssetUserData<UAnimationModifiersAssetUserData>())
+	{
+		for (UAnimationModifier* M : UserData->GetAnimationModifierInstances()) AddModifier(M);
+	}
+
 	// AppliedAnimationModifiers is an editor-only TArray<UAnimationModifier*> on the
-	// AnimSequence. Enumerate it via reflection (portable across module linkage):
-	// each element is an instanced UAnimationModifier subobject.
+	// AnimSequence (legacy store). Enumerate it via reflection (portable across module
+	// linkage): each element is an instanced UAnimationModifier subobject.
 	FArrayProperty* ModifiersProp = CastField<FArrayProperty>(
 		Seq->GetClass()->FindPropertyByName(TEXT("AppliedAnimationModifiers")));
 	if (ModifiersProp)
@@ -814,12 +1065,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListAnimModifiers(const TSharedPtr<FJ
 		for (int32 i = 0; i < Helper.Num(); ++i)
 		{
 			UObject* Modifier = ElemProp ? ElemProp->GetObjectPropertyValue(Helper.GetRawPtr(i)) : nullptr;
-			if (!Modifier) continue;
-			TSharedPtr<FJsonObject> M = MakeShared<FJsonObject>();
-			M->SetStringField(TEXT("class"), Modifier->GetClass()->GetName());
-			M->SetStringField(TEXT("classPath"), Modifier->GetClass()->GetPathName());
-			M->SetStringField(TEXT("name"), Modifier->GetName());
-			Arr.Add(MakeShared<FJsonValueObject>(M));
+			AddModifier(Modifier);
 		}
 	}
 
