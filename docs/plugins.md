@@ -475,6 +475,47 @@ Notes:
 - If your task makes multi-step mutations, return a `rollback` record so users can opt into `rollback_on_failure: true` on the wrapping flow.
 - Throw, don't return success-with-error-data. The runtime catches throws and turns them into structured failures.
 
+### Guards
+
+A plugin can gate **every** bridge call - not just its own actions - with a guard. Guards run in an ordered pipeline around `IBridge.call`, in the shape of NestJS guards/interceptors: a `before` hook may veto a call (deny) or act on it (e.g. check a file out of source control), and an `after` hook may observe or replace the result (audit, transform). The pipeline is agnostic; source control, access policy, audit, and rate limiting are all just guards.
+
+You register a guard by declaring a task whose name matches `guard.<name>.<phase>`. No new manifest section is needed - the loader already registers every `tasks:` entry by name, and the server discovers `guard.*` tasks at boot.
+
+| Phase | Runs |
+|-------|------|
+| `before` | before every call; return `success: false` (or throw) to **deny** it |
+| `beforeWrite` | before a call only when it resolves to existing on-disk files it will modify (reads pay nothing) |
+| `after` | after every successful call (side effects like audit) |
+| `afterWrite` | after a write-classified call |
+
+The guard task is invoked with `{ method, params, paths }` (`paths` = the existing on-disk files the call will touch, empty for non-writes) plus `result` for `after` phases.
+
+```yaml
+# ue-mcp.plugin.yml - a policy guard that blocks writes outside a sandbox
+tasks:
+  guard.policy.beforeWrite:
+    class_path: tasks/PolicyGuard
+    description: "Deny writes outside /Game/Sandbox"
+```
+
+```ts
+// tasks/PolicyGuard.ts
+import { UeMcpTask, type TaskResult } from "ue-mcp/task";
+
+export default class PolicyGuard extends UeMcpTask<{ paths?: string[]; method?: string }> {
+  get taskName() { return "guard.policy.beforeWrite"; }
+  async execute(): Promise<TaskResult> {
+    const outside = (this.options.paths ?? []).filter((p) => !p.includes("/Content/Sandbox/"));
+    if (outside.length) {
+      return { success: false, error: new Error(`writes outside the sandbox are not allowed: ${outside.join(", ")}`) };
+    }
+    return { success: true };
+  }
+}
+```
+
+Multiple guards compose: `before` hooks run in order, `after` in reverse. Prefer `beforeWrite` for anything write-oriented so reads are never gated. A denial surfaces to the agent as a `WRITE_BLOCKED` error and the underlying call never runs.
+
 ### Knowledge files
 
 For each category your plugin injects into, ship a short markdown file under `knowledge/`. The server attaches it to that category's AI-facing docs at boot, so the agent sees plugin-specific guidance the moment it looks at that category.
