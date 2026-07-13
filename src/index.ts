@@ -12,6 +12,13 @@ import { McpError, ErrorCode } from "./errors.js";
 import { info, warn } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
+import { GuardedBridge } from "./flow/guarded-bridge.js";
+import {
+  GUARD_TASK_NAME,
+  guardTaskRegistered,
+  makeResolveExistingFile,
+  makeSourceControlGuard,
+} from "./flow/source-control-guard.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
@@ -202,7 +209,12 @@ async function main() {
     };
   };
 
-  const ctx: ToolContext = { bridge, project, getFlows, getPlugins };
+  // Wrap the raw bridge so every mutating action can be gated by a source-
+  // control guard. The raw `bridge` stays in scope for connection lifecycle
+  // (connect / reconnect / lockfile); the guarded wrapper is what tools and
+  // tasks see. With no guard installed it is a pass-through.
+  const guardedBridge = new GuardedBridge(bridge, makeResolveExistingFile(project));
+  const ctx: ToolContext = { bridge: guardedBridge, project, getFlows, getPlugins };
 
   // ── Flow engine: task registry ──────────────────────────────────
   const registry = buildFlowRegistry(registryTools);
@@ -213,6 +225,14 @@ async function main() {
     registry.registerClassPath(classPath, ctor);
   }
   const taskCount = registry.listRegistered().length;
+
+  // Install the write guard iff a plugin registered the hook task. The guard
+  // task runs with the RAW bridge in its context so it cannot recurse through
+  // the gate. See flow/source-control-guard.ts.
+  if (guardTaskRegistered(registry)) {
+    guardedBridge.setGuard(makeSourceControlGuard(registry, bridge, ctx));
+    info("guard", `source-control write guard active (${GUARD_TASK_NAME})`);
+  }
 
   // ── Plugin knowledge → server instructions ──────────────────────
   // Attach per-category markdown to the AI-facing docs. Sized to the same
@@ -250,7 +270,7 @@ async function main() {
       const action = params.action as string;
       const taskName = `${tool.name}.${action}`;
       const { action: _, ...taskParams } = params;
-      const flowCtx: FlowContext = { bridge, project, getFlows, getPlugins, elicit: ctx.elicit };
+      const flowCtx: FlowContext = { bridge: guardedBridge, project, getFlows, getPlugins, elicit: ctx.elicit };
 
       try {
         const task = await registry.create(taskName, flowCtx, taskParams);

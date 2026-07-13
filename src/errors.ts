@@ -12,6 +12,9 @@ export enum ErrorCode {
   PROJECT_NOT_LOADED = "PROJECT_NOT_LOADED",
   NOT_FOUND = "NOT_FOUND",
   INVALID_PARAMS = "INVALID_PARAMS",
+  /** A source-control guard refused a mutating bridge call before it ran
+   *  (e.g. the target is checked out by another user, or checkout failed). */
+  WRITE_BLOCKED = "WRITE_BLOCKED",
 }
 
 export class McpError extends Error {
