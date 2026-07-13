@@ -12,13 +12,9 @@ import { McpError, ErrorCode } from "./errors.js";
 import { info, warn } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
+import { GuardRegistry } from "./flow/guard.js";
 import { GuardedBridge } from "./flow/guarded-bridge.js";
-import {
-  GUARD_TASK_NAME,
-  guardTaskRegistered,
-  makeResolveExistingFile,
-  makeSourceControlGuard,
-} from "./flow/source-control-guard.js";
+import { makeResolveExistingFile, discoverTaskGuards } from "./flow/task-guards.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
@@ -209,11 +205,12 @@ async function main() {
     };
   };
 
-  // Wrap the raw bridge so every mutating action can be gated by a source-
-  // control guard. The raw `bridge` stays in scope for connection lifecycle
-  // (connect / reconnect / lockfile); the guarded wrapper is what tools and
-  // tasks see. With no guard installed it is a pass-through.
-  const guardedBridge = new GuardedBridge(bridge, makeResolveExistingFile(project));
+  // Wrap the raw bridge in the guard pipeline. The raw `bridge` stays in scope
+  // for connection lifecycle (connect / reconnect / lockfile); the guarded
+  // wrapper is what tools and tasks see. The registry starts empty (pass-through)
+  // and is populated once the task registry exists, below.
+  const guardRegistry = new GuardRegistry();
+  const guardedBridge = new GuardedBridge(bridge, guardRegistry, makeResolveExistingFile(project));
   const ctx: ToolContext = { bridge: guardedBridge, project, getFlows, getPlugins };
 
   // ── Flow engine: task registry ──────────────────────────────────
@@ -226,12 +223,14 @@ async function main() {
   }
   const taskCount = registry.listRegistered().length;
 
-  // Install the write guard iff a plugin registered the hook task. The guard
-  // task runs with the RAW bridge in its context so it cannot recurse through
-  // the gate. See flow/source-control-guard.ts.
-  if (guardTaskRegistered(registry)) {
-    guardedBridge.setGuard(makeSourceControlGuard(registry, bridge, ctx));
-    info("guard", `source-control write guard active (${GUARD_TASK_NAME})`);
+  // Populate the guard pipeline: any plugin-supplied `guard.<name>.<phase>` task
+  // becomes a BridgeGuard. Each guard task runs with the RAW bridge in its
+  // context so a guard cannot recurse through the pipeline. See flow/task-guards.ts.
+  for (const g of discoverTaskGuards(registry, ctx, bridge)) {
+    guardRegistry.register(g);
+  }
+  if (guardRegistry.size > 0) {
+    info("guard", `${guardRegistry.size} bridge guard(s) active: ${guardRegistry.list().map((g) => g.name).join(", ")}`);
   }
 
   // ── Plugin knowledge → server instructions ──────────────────────
