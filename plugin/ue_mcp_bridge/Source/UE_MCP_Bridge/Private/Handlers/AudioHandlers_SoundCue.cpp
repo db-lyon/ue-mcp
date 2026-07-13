@@ -68,7 +68,7 @@ namespace
 			for (const auto& Pair : (*PropsObj)->Values)
 			{
 				FString E;
-				MCPJsonProperty::SetDottedPropertyFromJson(Node, Pair.Key, Pair.Value, E);
+				MCPJsonProperty::SetDottedPropertyFromJson(Node, FString(*Pair.Key), Pair.Value, E);
 			}
 		}
 	}
