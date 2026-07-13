@@ -30,6 +30,39 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_metasound_source"), &CreateMetaSoundSource);
 	Registry.RegisterHandler(TEXT("play_sound_at_location"), &PlaySoundAtLocation);
 	Registry.RegisterHandler(TEXT("spawn_ambient_sound"), &SpawnAmbientSound);
+
+	// MetaSound graph authoring (AudioHandlers_MetaSound.cpp)
+	Registry.RegisterHandler(TEXT("metasound_list_node_classes"), &MetaSoundListNodeClasses);
+	Registry.RegisterHandler(TEXT("metasound_get_graph"), &MetaSoundGetGraph);
+	Registry.RegisterHandler(TEXT("metasound_add_node"), &MetaSoundAddNode);
+	Registry.RegisterHandler(TEXT("metasound_add_graph_input"), &MetaSoundAddGraphInput);
+	Registry.RegisterHandler(TEXT("metasound_add_graph_output"), &MetaSoundAddGraphOutput);
+	Registry.RegisterHandler(TEXT("metasound_connect"), &MetaSoundConnect);
+	Registry.RegisterHandler(TEXT("metasound_connect_graph_input"), &MetaSoundConnectGraphInput);
+	Registry.RegisterHandler(TEXT("metasound_connect_graph_output"), &MetaSoundConnectGraphOutput);
+	Registry.RegisterHandler(TEXT("metasound_connect_audio_out"), &MetaSoundConnectAudioOut);
+	Registry.RegisterHandler(TEXT("metasound_set_input_default"), &MetaSoundSetInputDefault);
+	Registry.RegisterHandler(TEXT("metasound_build"), &MetaSoundBuild);
+
+	// SoundCue graph authoring (AudioHandlers_SoundCue.cpp)
+	Registry.RegisterHandler(TEXT("soundcue_add_node"), &SoundCueAddNode);
+	Registry.RegisterHandler(TEXT("soundcue_connect"), &SoundCueConnect);
+	Registry.RegisterHandler(TEXT("soundcue_get_graph"), &SoundCueGetGraph);
+
+	// Mixing + routing + spatialization (AudioHandlers_Mixing.cpp)
+	Registry.RegisterHandler(TEXT("create_submix"), &CreateSubmix);
+	Registry.RegisterHandler(TEXT("set_submix_parent"), &SetSubmixParent);
+	Registry.RegisterHandler(TEXT("add_submix_effect"), &AddSubmixEffect);
+	Registry.RegisterHandler(TEXT("create_sound_class"), &CreateSoundClass);
+	Registry.RegisterHandler(TEXT("create_sound_mix"), &CreateSoundMix);
+	Registry.RegisterHandler(TEXT("create_concurrency"), &CreateConcurrency);
+	Registry.RegisterHandler(TEXT("create_attenuation"), &CreateAttenuation);
+	Registry.RegisterHandler(TEXT("set_sound_submix"), &SetSoundSubmix);
+	Registry.RegisterHandler(TEXT("add_sound_submix_send"), &AddSoundSubmixSend);
+	Registry.RegisterHandler(TEXT("set_sound_class"), &SetSoundClass);
+	Registry.RegisterHandler(TEXT("set_sound_attenuation"), &SetSoundAttenuation);
+	Registry.RegisterHandler(TEXT("set_sound_concurrency"), &SetSoundConcurrency);
+	Registry.RegisterHandler(TEXT("set_audio_property"), &SetAudioProperty);
 }
 
 // #664: import a WAV/OGG/FLAC file as a USoundWave. Passing a null factory lets
@@ -159,34 +192,6 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundCue(const TSharedPtr<FJsonObje
 
 	USoundCueFactoryNew* SoundCueFactory = NewObject<USoundCueFactoryNew>();
 	auto Created = MCPCreateAssetIdempotent<USoundCue>(Name, PackagePath, OnConflict, TEXT("SoundCue"), SoundCueFactory);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
-	return MCPResult(Result);
-}
-
-TSharedPtr<FJsonValue> FAudioHandlers::CreateMetaSoundSource(const TSharedPtr<FJsonObject>& Params)
-{
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/MetaSounds"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	UClass* MetaSoundSourceClass = FindObject<UClass>(nullptr, TEXT("/Script/MetasoundEngine.MetaSoundSource"));
-	if (!MetaSoundSourceClass)
-	{
-		return MCPError(TEXT("MetaSoundSource class not found. Enable MetaSound plugin."));
-	}
-
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("MetaSoundSource"), MetaSoundSourceClass, nullptr);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 
 	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
