@@ -104,76 +104,268 @@ namespace
 	}
 
 	bool Ok(EMetaSoundBuilderResult R) { return R == EMetaSoundBuilderResult::Succeeded; }
+
+	/**
+	 * Create (idempotently) the MetaSoundSource asset shell and open a source
+	 * builder session for it. On success returns the stored session and sets
+	 * OutAssetPath. On failure returns nullptr and sets OutEarly (error / existed).
+	 * Shared by create_metasound and the one-shot metasound_author.
+	 */
+	FMSSession* OpenBuilderSession(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, TSharedPtr<FJsonValue>& OutEarly)
+	{
+		FString Name;
+		if (auto Err = RequireString(Params, TEXT("name"), Name)) { OutEarly = Err; return nullptr; }
+
+		const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/MetaSounds"));
+		const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+		const FString Format = OptionalString(Params, TEXT("format"), TEXT("mono")).ToLower();
+		const bool bOneShot = OptionalBool(Params, TEXT("oneShot"), true);
+
+		UClass* Cls = FindObject<UClass>(nullptr, TEXT("/Script/MetasoundEngine.MetaSoundSource"));
+		if (!Cls) { OutEarly = MCPError(TEXT("MetaSoundSource class not found. Enable the MetaSound plugin.")); return nullptr; }
+
+		auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("MetaSoundSource"), Cls, nullptr);
+		if (Created.EarlyReturn) { OutEarly = Created.EarlyReturn; return nullptr; }
+		OutAssetPath = Created.Asset->GetPathName();
+
+		UMetaSoundBuilderSubsystem* Sub = BuilderSubsystem();
+		if (!Sub) { OutEarly = MCPError(TEXT("MetaSound Builder subsystem unavailable.")); return nullptr; }
+
+		FMSSession Session;
+		Session.bOneShot = bOneShot;
+		EMetaSoundBuilderResult R = EMetaSoundBuilderResult::Failed;
+		const EMetaSoundOutputAudioFormat Fmt =
+			(Format == TEXT("stereo")) ? EMetaSoundOutputAudioFormat::Stereo : EMetaSoundOutputAudioFormat::Mono;
+
+		UMetaSoundSourceBuilder* Builder = Sub->CreateSourceBuilder(
+			FName(*OutAssetPath), Session.OnPlay, Session.OnFinished, Session.AudioOuts, R, Fmt, bOneShot);
+		if (!Builder || !Ok(R)) { OutEarly = MCPError(TEXT("Failed to create MetaSound source builder.")); return nullptr; }
+		Session.Builder = Builder;
+
+		return &GMetaSoundSessions.Add(OutAssetPath, Session);
+	}
+
+	/** Split "prefixOrNodeId:vertex" on the first ':'. */
+	bool SplitEndpoint(const FString& Endpoint, FString& OutHead, FString& OutTail)
+	{
+		int32 Idx;
+		if (!Endpoint.FindChar(TEXT(':'), Idx)) { OutHead = Endpoint; OutTail.Empty(); return false; }
+		OutHead = Endpoint.Left(Idx);
+		OutTail = Endpoint.Mid(Idx + 1);
+		return true;
+	}
 }
 
 TSharedPtr<FJsonValue> FAudioHandlers::CreateMetaSoundSource(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+	FString AssetPath;
+	TSharedPtr<FJsonValue> Early;
+	FMSSession* S = OpenBuilderSession(Params, AssetPath, Early);
+	if (!S) return Early;
 
-	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Audio/MetaSounds"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-	const FString Format = OptionalString(Params, TEXT("format"), TEXT("mono")).ToLower();
-	const bool bOneShot = OptionalBool(Params, TEXT("oneShot"), true);
-
-	UClass* MetaSoundSourceClass = FindObject<UClass>(nullptr, TEXT("/Script/MetasoundEngine.MetaSoundSource"));
-	if (!MetaSoundSourceClass)
-	{
-		return MCPError(TEXT("MetaSoundSource class not found. Enable the MetaSound plugin."));
-	}
-
-	// Persistent asset shell (idempotent). The builder overwrites it on build.
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("MetaSoundSource"), MetaSoundSourceClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	const FString AssetPath = Created.Asset->GetPathName();
-
-	UMetaSoundBuilderSubsystem* Sub = BuilderSubsystem();
-	if (!Sub)
-	{
-		return MCPError(TEXT("MetaSound Builder subsystem unavailable."));
-	}
-
-	FMSSession Session;
-	Session.bOneShot = bOneShot;
-	EMetaSoundBuilderResult Result = EMetaSoundBuilderResult::Failed;
-	const EMetaSoundOutputAudioFormat OutFormat =
-		(Format == TEXT("stereo")) ? EMetaSoundOutputAudioFormat::Stereo : EMetaSoundOutputAudioFormat::Mono;
-
-	UMetaSoundSourceBuilder* Builder = Sub->CreateSourceBuilder(
-		FName(*AssetPath),
-		Session.OnPlay,
-		Session.OnFinished,
-		Session.AudioOuts,
-		Result,
-		OutFormat,
-		bOneShot);
-
-	if (!Builder || !Ok(Result))
-	{
-		return MCPError(TEXT("Failed to create MetaSound source builder."));
-	}
-	Session.Builder = Builder;
-
-	// Write the (currently empty but interface-valid) document into the asset so it
-	// is a loadable, silent MetaSound until authored further.
-	if (UMetaSoundSource* Source = Cast<UMetaSoundSource>(Created.Asset))
+	// Write the (empty but interface-valid) document into the asset so it is a
+	// loadable, silent MetaSound until authored further.
+	if (UMetaSoundSource* Source = Cast<UMetaSoundSource>(UEditorAssetLibrary::LoadAsset(AssetPath)))
 	{
 		TScriptInterface<IMetaSoundDocumentInterface> DocIface(Source);
-		Builder->BuildAndOverwriteMetaSound(DocIface, /*bForceUniqueClassName*/ false);
+		S->Builder->BuildAndOverwriteMetaSound(DocIface, /*bForceUniqueClassName*/ false);
 		UEditorAssetLibrary::SaveAsset(AssetPath);
 	}
-
-	GMetaSoundSessions.Add(AssetPath, Session);
 
 	auto Res = MCPSuccess();
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("path"), AssetPath);
-	Res->SetStringField(TEXT("name"), Name);
-	Res->SetStringField(TEXT("format"), Format);
-	Res->SetBoolField(TEXT("oneShot"), bOneShot);
-	Res->SetNumberField(TEXT("audioOutputs"), Session.AudioOuts.Num());
-	Res->SetStringField(TEXT("note"), TEXT("Builder session active. Author with metasound_* actions, then metasound_build to persist."));
+	Res->SetBoolField(TEXT("oneShot"), S->bOneShot);
+	Res->SetNumberField(TEXT("audioOutputs"), S->AudioOuts.Num());
+	Res->SetStringField(TEXT("note"), TEXT("Builder session active. Author with metasound_* actions (or use metasound_author to stamp a whole graph), then metasound_build."));
+	MCPSetDeleteAssetRollback(Res, AssetPath);
+	return MCPResult(Res);
+}
+
+// One-shot declarative authoring: stamp an entire MetaSound graph from a single
+// JSON spec, so an agent describes the whole system in one call instead of
+// dozens of add_node/connect round-trips.
+//
+//   name, packagePath?, format?, oneShot?, onConflict?
+//   inputs:      [ { name, dataType, default? } ]
+//   outputs:     [ { name, dataType } ]
+//   nodes:       [ { id, class, namespace?, variant?, majorVersion?, inputs?: {vertex: value} } ]
+//   connections: [ { from, to } ]   endpoints are "nodeId:vertex", or the special
+//                                    heads  input:<name>, output:<name>, audioOut:<channel>
+//
+// Every element reports its own success so a partial spec surfaces exactly what
+// failed rather than an opaque error. The document is built and saved at the end.
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAuthor(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	TSharedPtr<FJsonValue> Early;
+	FMSSession* S = OpenBuilderSession(Params, AssetPath, Early);
+	if (!S) return Early;
+
+	UMetaSoundSourceBuilder* B = S->Builder.Get();
+	EMetaSoundBuilderResult R;
+	int32 Errors = 0;
+	TArray<TSharedPtr<FJsonValue>> Diag;
+	auto Note = [&Diag](const FString& Kind, const FString& Ref, bool bOkFlag, const FString& Msg)
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("kind"), Kind);
+		O->SetStringField(TEXT("ref"), Ref);
+		O->SetBoolField(TEXT("ok"), bOkFlag);
+		if (!Msg.IsEmpty()) O->SetStringField(TEXT("error"), Msg);
+		Diag.Add(MakeShared<FJsonValueObject>(O));
+	};
+
+	// 1. Graph inputs.
+	const TArray<TSharedPtr<FJsonValue>>* Inputs = nullptr;
+	if (Params->TryGetArrayField(TEXT("inputs"), Inputs) && Inputs)
+	{
+		for (const TSharedPtr<FJsonValue>& E : *Inputs)
+		{
+			const TSharedPtr<FJsonObject> O = E->AsObject();
+			if (!O.IsValid()) continue;
+			const FString IName = O->GetStringField(TEXT("name"));
+			const FString DType = O->GetStringField(TEXT("dataType"));
+			FMetasoundFrontendLiteral Def = MakeLiteral(O->TryGetField(TEXT("default")), DType);
+			B->AddGraphInputNode(FName(*IName), FName(*DType), Def, R, false);
+			if (!Ok(R)) Errors++;
+			Note(TEXT("input"), IName, Ok(R), Ok(R) ? TEXT("") : TEXT("add failed"));
+		}
+	}
+
+	// 2. Graph outputs.
+	const TArray<TSharedPtr<FJsonValue>>* Outputs = nullptr;
+	if (Params->TryGetArrayField(TEXT("outputs"), Outputs) && Outputs)
+	{
+		for (const TSharedPtr<FJsonValue>& E : *Outputs)
+		{
+			const TSharedPtr<FJsonObject> O = E->AsObject();
+			if (!O.IsValid()) continue;
+			const FString OName = O->GetStringField(TEXT("name"));
+			const FString DType = O->GetStringField(TEXT("dataType"));
+			FMetasoundFrontendLiteral Empty;
+			B->AddGraphOutputNode(FName(*OName), FName(*DType), Empty, R, false);
+			if (!Ok(R)) Errors++;
+			Note(TEXT("output"), OName, Ok(R), Ok(R) ? TEXT("") : TEXT("add failed"));
+		}
+	}
+
+	// 3. Nodes (build a localId -> handle map), plus per-node input defaults.
+	TMap<FString, FMetaSoundNodeHandle> NodeMap;
+	const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
+	if (Params->TryGetArrayField(TEXT("nodes"), Nodes) && Nodes)
+	{
+		for (const TSharedPtr<FJsonValue>& E : *Nodes)
+		{
+			const TSharedPtr<FJsonObject> O = E->AsObject();
+			if (!O.IsValid()) continue;
+			const FString Id = O->GetStringField(TEXT("id"));
+			const FString ClassName = O->GetStringField(TEXT("class"));
+			const FString Ns = O->HasField(TEXT("namespace")) ? O->GetStringField(TEXT("namespace")) : TEXT("UE");
+			const FString Variant = O->HasField(TEXT("variant")) ? O->GetStringField(TEXT("variant")) : FString();
+			double MajD; const int32 Major = O->TryGetNumberField(TEXT("majorVersion"), MajD) ? (int32)MajD : 1;
+
+			FMetasoundFrontendClassName FC = Variant.IsEmpty()
+				? FMetasoundFrontendClassName(FName(*Ns), FName(*ClassName))
+				: FMetasoundFrontendClassName(FName(*Ns), FName(*ClassName), FName(*Variant));
+			FMetaSoundNodeHandle Node = B->AddNodeByClassName(FC, R, Major);
+			if (!Ok(R) || !Node.IsSet())
+			{
+				Errors++;
+				Note(TEXT("node"), Id, false, FString::Printf(TEXT("add failed for %s.%s"), *Ns, *ClassName));
+				continue;
+			}
+			NodeMap.Add(Id, Node);
+			Note(TEXT("node"), Id, true, TEXT(""));
+
+			// Per-node input defaults.
+			const TSharedPtr<FJsonObject>* NInputs = nullptr;
+			if (O->TryGetObjectField(TEXT("inputs"), NInputs) && NInputs)
+			{
+				for (const auto& Pair : (*NInputs)->Values)
+				{
+					FMetaSoundBuilderNodeInputHandle In = B->FindNodeInputByName(Node, FName(*Pair.Key), R);
+					if (!Ok(R)) { Errors++; Note(TEXT("default"), Id + TEXT(":") + Pair.Key, false, TEXT("no such input")); continue; }
+					FMetasoundFrontendLiteral Lit = MakeLiteral(Pair.Value, FString());
+					B->SetNodeInputDefault(In, Lit, R);
+					Note(TEXT("default"), Id + TEXT(":") + Pair.Key, Ok(R), Ok(R) ? TEXT("") : TEXT("set failed"));
+				}
+			}
+		}
+	}
+
+	// Endpoint resolvers. Source ("from") -> output handle; dest ("to") -> input handle.
+	auto ResolveOut = [&](const FString& Ep, FMetaSoundBuilderNodeOutputHandle& Out) -> bool
+	{
+		FString Head, Tail; SplitEndpoint(Ep, Head, Tail);
+		if (Head == TEXT("input"))
+		{
+			FName DT; FMetaSoundNodeHandle N = B->FindGraphInputNode(FName(*Tail), DT, Out, R);
+			return Ok(R);
+		}
+		FMetaSoundNodeHandle* N = NodeMap.Find(Head);
+		if (!N) return false;
+		Out = B->FindNodeOutputByName(*N, FName(*Tail), R);
+		return Ok(R);
+	};
+	auto ResolveIn = [&](const FString& Ep, FMetaSoundBuilderNodeInputHandle& In) -> bool
+	{
+		FString Head, Tail; SplitEndpoint(Ep, Head, Tail);
+		if (Head == TEXT("output"))
+		{
+			FName DT; FMetaSoundNodeHandle N = B->FindGraphOutputNode(FName(*Tail), DT, In, R);
+			return Ok(R);
+		}
+		if (Head == TEXT("audioOut"))
+		{
+			const int32 Ch = FCString::Atoi(*Tail);
+			if (!S->AudioOuts.IsValidIndex(Ch)) return false;
+			In = S->AudioOuts[Ch];
+			return true;
+		}
+		FMetaSoundNodeHandle* N = NodeMap.Find(Head);
+		if (!N) return false;
+		In = B->FindNodeInputByName(*N, FName(*Tail), R);
+		return Ok(R);
+	};
+
+	// 4. Connections.
+	const TArray<TSharedPtr<FJsonValue>>* Conns = nullptr;
+	if (Params->TryGetArrayField(TEXT("connections"), Conns) && Conns)
+	{
+		for (const TSharedPtr<FJsonValue>& E : *Conns)
+		{
+			const TSharedPtr<FJsonObject> O = E->AsObject();
+			if (!O.IsValid()) continue;
+			const FString From = O->GetStringField(TEXT("from"));
+			const FString To = O->GetStringField(TEXT("to"));
+			const FString Ref = From + TEXT(" -> ") + To;
+
+			FMetaSoundBuilderNodeOutputHandle Out;
+			FMetaSoundBuilderNodeInputHandle In;
+			if (!ResolveOut(From, Out)) { Errors++; Note(TEXT("connection"), Ref, false, TEXT("bad source endpoint")); continue; }
+			if (!ResolveIn(To, In))     { Errors++; Note(TEXT("connection"), Ref, false, TEXT("bad dest endpoint")); continue; }
+			B->ConnectNodes(Out, In, R);
+			if (!Ok(R)) Errors++;
+			Note(TEXT("connection"), Ref, Ok(R), Ok(R) ? TEXT("") : TEXT("connect failed (type mismatch?)"));
+		}
+	}
+
+	// 5. Build + save.
+	if (UMetaSoundSource* Source = Cast<UMetaSoundSource>(UEditorAssetLibrary::LoadAsset(AssetPath)))
+	{
+		TScriptInterface<IMetaSoundDocumentInterface> DocIface(Source);
+		B->BuildAndOverwriteMetaSound(DocIface, false);
+		UEditorAssetLibrary::SaveAsset(AssetPath);
+	}
+
+	auto Res = MCPSuccess();
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("path"), AssetPath);
+	Res->SetNumberField(TEXT("nodes"), NodeMap.Num());
+	Res->SetNumberField(TEXT("errors"), Errors);
+	Res->SetArrayField(TEXT("elements"), Diag);
+	Res->SetBoolField(TEXT("built"), true);
 	MCPSetDeleteAssetRollback(Res, AssetPath);
 	return MCPResult(Res);
 }

@@ -32,6 +32,7 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("spawn_ambient_sound"), &SpawnAmbientSound);
 
 	// MetaSound graph authoring (AudioHandlers_MetaSound.cpp)
+	Registry.RegisterHandler(TEXT("metasound_author"), &MetaSoundAuthor);
 	Registry.RegisterHandler(TEXT("metasound_list_node_classes"), &MetaSoundListNodeClasses);
 	Registry.RegisterHandler(TEXT("metasound_get_graph"), &MetaSoundGetGraph);
 	Registry.RegisterHandler(TEXT("metasound_add_node"), &MetaSoundAddNode);
@@ -45,6 +46,7 @@ void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("metasound_build"), &MetaSoundBuild);
 
 	// SoundCue graph authoring (AudioHandlers_SoundCue.cpp)
+	Registry.RegisterHandler(TEXT("soundcue_author"), &SoundCueAuthor);
 	Registry.RegisterHandler(TEXT("soundcue_add_node"), &SoundCueAddNode);
 	Registry.RegisterHandler(TEXT("soundcue_connect"), &SoundCueConnect);
 	Registry.RegisterHandler(TEXT("soundcue_get_graph"), &SoundCueGetGraph);

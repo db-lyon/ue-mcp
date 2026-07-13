@@ -20,6 +20,8 @@ private:
 	static TSharedPtr<FJsonValue> SpawnAmbientSound(const TSharedPtr<FJsonObject>& Params);
 
 	// ── MetaSound graph authoring (AudioHandlers_MetaSound.cpp) ─────────
+	// One-shot: stamp a whole graph (nodes/connections/inputs/outputs) in one call.
+	static TSharedPtr<FJsonValue> MetaSoundAuthor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> MetaSoundListNodeClasses(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> MetaSoundGetGraph(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> MetaSoundAddNode(const TSharedPtr<FJsonObject>& Params);
@@ -33,6 +35,8 @@ private:
 	static TSharedPtr<FJsonValue> MetaSoundBuild(const TSharedPtr<FJsonObject>& Params);
 
 	// ── SoundCue graph authoring (AudioHandlers_SoundCue.cpp) ───────────
+	// One-shot: stamp a whole cue tree (nodes + connections + root) in one call.
+	static TSharedPtr<FJsonValue> SoundCueAuthor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SoundCueAddNode(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SoundCueConnect(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SoundCueGetGraph(const TSharedPtr<FJsonObject>& Params);

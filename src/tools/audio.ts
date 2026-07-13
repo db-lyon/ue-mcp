@@ -28,7 +28,8 @@ export const audioTool: ToolDef = categoryTool(
     spawn_ambient:     bp("Place an AmbientSound actor. Params: soundPath, location, label?", "spawn_ambient_sound"),
 
     // ── MetaSound ──────────────────────────────────────────────────────
-    create_metasound:  bp("Create a MetaSoundSource and open a builder session for authoring. Params: name, packagePath? (default /Game/Audio/MetaSounds), format? ('mono'|'stereo', default mono), oneShot? (default true). Returns assetPath. Author with metasound_* then metasound_build.", "create_metasound_source", (p) => ({ name: p.name, packagePath: p.packagePath, format: p.format, oneShot: p.oneShot, onConflict: p.onConflict })),
+    metasound_author:  bp("PREFERRED: stamp a whole MetaSound graph in ONE call from a declarative spec (avoids dozens of add_node/connect round-trips). Params: name, packagePath?, format? ('mono'|'stereo'), oneShot?, onConflict?, inputs? [{name,dataType,default?}], outputs? [{name,dataType}], nodes? [{id,class,namespace?,variant?,majorVersion?,inputs?:{vertex:value}}], connections? [{from,to}]. Endpoints are 'nodeId:vertex', or special heads 'input:<name>', 'output:<name>', 'audioOut:<channel>'. Each element reports its own ok/error; builds + saves at the end.", "metasound_author", (p) => ({ name: p.name, packagePath: p.packagePath, format: p.format, oneShot: p.oneShot, onConflict: p.onConflict, inputs: p.inputs, outputs: p.outputs, nodes: p.nodes, connections: p.connections })),
+    create_metasound:  bp("Create an empty MetaSoundSource and open a builder session for INCREMENTAL authoring (add_node/connect/...). For a whole graph at once prefer metasound_author. Params: name, packagePath? (default /Game/Audio/MetaSounds), format? ('mono'|'stereo'), oneShot?. Returns assetPath.", "create_metasound_source", (p) => ({ name: p.name, packagePath: p.packagePath, format: p.format, oneShot: p.oneShot, onConflict: p.onConflict })),
     metasound_list_node_classes: bp("List common MetaSound node classes to add (name, namespace, variant, notes). Params: filter? (substring).", "metasound_list_node_classes", (p) => ({ filter: p.filter })),
     metasound_get_graph:         bp("Report a MetaSound's builder-session state (active builder, audio outputs, oneShot). Params: assetPath.", "metasound_get_graph", (p) => ({ assetPath: p.assetPath ?? p.metasoundPath })),
     metasound_add_node:          bp("Add a node to a MetaSound graph by registered class name. Returns nodeId (+ input/output counts). Params: assetPath, nodeClassName (e.g. 'Sine'), nodeNamespace? (default 'UE'), nodeVariant? (e.g. 'Audio'), majorVersion? (default 1).", "metasound_add_node", (p) => ({ assetPath: p.assetPath ?? p.metasoundPath, nodeClassName: p.nodeClassName, nodeNamespace: p.nodeNamespace, nodeVariant: p.nodeVariant, majorVersion: p.majorVersion })),
@@ -42,7 +43,8 @@ export const audioTool: ToolDef = categoryTool(
     metasound_build:             bp("Write the builder document to the MetaSound asset and save. Call after authoring. Params: assetPath.", "metasound_build", (p) => ({ assetPath: p.assetPath ?? p.metasoundPath })),
 
     // ── SoundCue graph ─────────────────────────────────────────────────
-    create_cue:        bp("Create a SoundCue, optionally seeded from a wave. Params: name, packagePath?, soundWavePath?.", "create_sound_cue"),
+    cue_author:        bp("PREFERRED: create a SoundCue and stamp its whole node tree in ONE call. Params: name, packagePath?, onConflict?, nodes [{id,type,soundWavePath?,properties?}], connections [{parent,child,index?}] (omit parent => root), root? (nodeId). Each element reports ok/error; links + saves at the end.", "soundcue_author", (p) => ({ name: p.name, packagePath: p.packagePath, onConflict: p.onConflict, nodes: p.nodes, connections: p.connections, root: p.root })),
+    create_cue:        bp("Create a SoundCue, optionally seeded from a wave. For a whole graph prefer cue_author. Params: name, packagePath?, soundWavePath?.", "create_sound_cue"),
     cue_add_node:      bp("Add a node to a SoundCue graph. Returns nodeId. Params: cuePath, nodeType ('wave_player'|'mixer'|'random'|'modulator'|'attenuation'|'looping'|'concatenator'|'delay'|'switch'), soundWavePath? (wave_player), properties? (node-specific fields).", "soundcue_add_node", (p) => ({ cuePath: p.cuePath ?? p.assetPath, nodeType: p.nodeType, soundWavePath: p.soundWavePath, properties: p.properties })),
     cue_connect:       bp("Connect a SoundCue node as a child of another (or as the cue root). Params: cuePath, parentNodeId (omit for root), childNodeId, childIndex? (default append).", "soundcue_connect", (p) => ({ cuePath: p.cuePath ?? p.assetPath, parentNodeId: p.parentNodeId, childNodeId: p.childNodeId, childIndex: p.childIndex })),
     cue_get_graph:     bp("Read a SoundCue node graph: nodes (id, type, children) and root. Params: cuePath.", "soundcue_get_graph", (p) => ({ cuePath: p.cuePath ?? p.assetPath })),
@@ -108,6 +110,13 @@ export const audioTool: ToolDef = categoryTool(
     channel: z.number().optional(),
     nodeId: z.string().optional(),
     inputName: z.string().optional(),
+
+    // one-shot declarative graph authoring (metasound_author / cue_author)
+    inputs: z.array(z.any()).optional().describe("metasound_author: [{name,dataType,default?}]"),
+    outputs: z.array(z.any()).optional().describe("metasound_author: [{name,dataType}]"),
+    nodes: z.array(z.any()).optional().describe("author: node specs"),
+    connections: z.array(z.any()).optional().describe("author: connection specs"),
+    root: z.string().optional().describe("cue_author: explicit root nodeId"),
 
     // soundcue graph
     cuePath: z.string().optional(),
