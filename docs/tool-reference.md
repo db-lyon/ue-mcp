@@ -956,3 +956,22 @@ audio(action="set_sound_submix", soundPath="/Game/Audio/MetaSounds/Hum.Hum", sub
 | `list_toolsets` | List registered toolsets: name, version, description, tool names + count. Strips the verbose per-tool input/output schemas to stay small - use describe_toolset for those (or includeSchemas). Params: `nameFilter? (case-sensitive substring on the qualified name), includeSchemas? (return full tool objects with input/output schemas)` |
 | `describe_toolset` | Full schema for one toolset: every tool with its input/output JSON schema. Params: `toolset (qualified name from list_toolsets, e.g. 'GASToolsets.AttributeSetToolset')` |
 | `call_tool` | Execute a registered Epic tool exactly as its MCP server would. Params: `toolset (qualified), tool (qualified name from describe_toolset, e.g. 'GASToolsets.AttributeSetToolset.ListAttributeSets'), input? (object) or inputJson? (raw JSON string)` |
+
+---
+
+## fab
+
+*Import Fab (Epic marketplace) content: check plugin/login status, trigger login/logout, sync your owned library into the Content Browser, inspect/clear the download cache, and import owned or local source files into the project.*
+
+Fab's window in the editor is a web frontend: catalog browsing, your library, purchases, and signed-URL resolution all live on Epic's servers behind the browser (there is no official consumer REST API). This category drives the native download+import layer beneath it, so store browsing stays in the Fab window. The workflow: log in (in the Fab window or via `login`), add items to your library, `sync_library`, then `import_file` owned/cached assets into any content path.
+
+| Action | Description |
+|--------|-------------|
+| `status` | Report Fab plugin state: whether the module is loaded, whether the native import/cache API is linked in this build, whether the Fab window has been opened this session, and the download cache location/size. Call this first. |
+| `login` | Trigger the Fab login flow (EOS account portal). Asynchronous - returns once the flow is opened, not once authenticated. |
+| `logout` | Clear the persistent Fab authentication for this device. |
+| `sync_library` | Load the user's owned Fab library ("My Folder") into the Content Browser via TEDS. Requires an active login; items appear asynchronously. Params: `batchSize?` |
+| `list_cached` | List the entries currently in the local Fab download cache (already-downloaded owned assets). |
+| `cache_info` | Report the Fab download cache location, total size, and entry count. |
+| `clear_cache` | Delete the local Fab download cache to reclaim disk. Does not affect assets already imported into the project. |
+| `import_file` | Import a source file into the project through the Fab Interchange import pipeline. Use for owned assets downloaded/cached locally, or any local source file (fbx, textures). Single files import synchronously and report the created asset paths; pack/quixel workflows may run asynchronously. Params: `source (absolute path on disk), destination (content path like /Game/Fab/Imported)` |
