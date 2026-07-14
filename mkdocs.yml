@@ -67,6 +67,7 @@ nav:
     - Troubleshooting: plugins-troubleshooting.md
     - PIE Studio: pie-record-replay.md
   - Configuration: configuration.md
+  - ue-mcp.yml Reference: config-file.md
   - Neon Shrine Demo: neon-shrine-demo.md
   - Feedback: feedback.md
   - Troubleshooting: troubleshooting.md
