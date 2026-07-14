@@ -1,11 +1,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
+import { deepMerge } from "@db-lyon/flowkit";
 import { dumpYaml } from "./yaml-dump.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { info, warn } from "./log.js";
 import { UProjectSchema, UeMcpConfigSchema } from "./schemas.js";
 import { findEngineInstall } from "./deployer.js";
+import { readGlobalUeMcpBlock } from "./global-config.js";
 import { setInstalledHooks, setFeedbackMode, type FeedbackMode } from "./user-state.js";
 
 export interface PluginInfo {
@@ -237,21 +239,50 @@ export class ProjectContext {
     migrateLegacyLocalYaml(this.projectDir);
     migrateLegacyFeedbackModeInYaml(this.projectDir);
 
-    const block = readUeMcpBlock(path.join(this.projectDir, "ue-mcp.yml"));
+    const block = loadLayeredUeMcpBlock(this.projectDir);
     const parsed = UeMcpConfigSchema.safeParse(block);
     if (!parsed.success) {
       warn(
         "project",
-        `ue-mcp.yml ue-mcp: block did not match expected shape - using defaults`,
+        `merged ue-mcp: config did not match expected shape - using defaults`,
         parsed.error,
       );
       return;
     }
     this.config = parsed.data;
     if (Object.keys(block).length > 0) {
-      info("project", `loaded config from ue-mcp.yml`);
+      info("project", `loaded config from ue-mcp.yml (merged with any global / env / local layers)`);
     }
   }
+}
+
+/**
+ * Load the `ue-mcp:` block with the full CumulusCI-style layer cascade, each
+ * layer deep-merged over the one before (low -> high precedence):
+ *
+ *     ~/.ue-mcp/config.yml   (user-global, untracked)
+ *     <project>/ue-mcp.yml   (project, tracked)
+ *     ue-mcp.{env}.yml       (env overlay, when UE_MCP_ENV is set)
+ *     ue-mcp.local.yml       (per-machine, untracked)
+ *
+ * Env vars (UE_MCP_CONTEXT_STRATEGY, ...) still win over the merged result;
+ * they are applied where each setting is consumed, not here. Machine *state*
+ * (installedHooks, feedback mode) is not config and never merged - it lives in
+ * ~/.ue-mcp/state.json.
+ */
+function loadLayeredUeMcpBlock(projectDir: string): Record<string, unknown> {
+  const layers: Record<string, unknown>[] = [
+    readGlobalUeMcpBlock(),
+    readUeMcpBlock(path.join(projectDir, "ue-mcp.yml")),
+  ];
+  const env = process.env.UE_MCP_ENV;
+  if (env) layers.push(readUeMcpBlock(path.join(projectDir, `ue-mcp.${env}.yml`)));
+  layers.push(readUeMcpBlock(path.join(projectDir, "ue-mcp.local.yml")));
+
+  return layers.reduce(
+    (acc, layer) => deepMerge(acc, layer) as Record<string, unknown>,
+    {} as Record<string, unknown>,
+  );
 }
 
 /**
@@ -366,8 +397,14 @@ function migrateLegacyFeedbackModeInYaml(projectDir: string): void {
 }
 
 /**
- * Migrate a ue-mcp.local.yml (only created by the brief 1.0.29 release)
- * into ~/.ue-mcp/state.json. Idempotent: no-op when absent.
+ * Extract the one machine-state key the brief 1.0.29 release wrote into
+ * ue-mcp.local.yml (`installedHooks`) and move it to ~/.ue-mcp/state.json.
+ *
+ * ue-mcp.local.yml is NOT a dead file: it is now a supported per-machine
+ * override layer (see loadLayeredUeMcpBlock). So this only strips the legacy
+ * `installedHooks` key and PRESERVES any real override content the user has
+ * put there. The file is deleted only when stripping leaves it empty (a
+ * genuine 1.0.29 artifact). Idempotent: no-op when there is nothing to move.
  */
 function migrateLegacyLocalYaml(projectDir: string): void {
   const localPath = path.join(projectDir, "ue-mcp.local.yml");
@@ -380,18 +417,30 @@ function migrateLegacyLocalYaml(projectDir: string): void {
     warn("project", `ue-mcp.local.yml failed to parse during migration - leaving in place`, e);
     return;
   }
-  const block = (doc["ue-mcp"] as Record<string, unknown> | undefined) ?? {};
-  const installedHooks = block.installedHooks;
+  const block = doc["ue-mcp"] as Record<string, unknown> | undefined;
+  // No legacy machine-state key present: this is a live override file, leave it.
+  if (!block || !Array.isArray(block.installedHooks) || block.installedHooks.length === 0) return;
 
-  if (Array.isArray(installedHooks) && installedHooks.length > 0) {
-    setInstalledHooks(projectDir, installedHooks as string[]);
+  setInstalledHooks(projectDir, block.installedHooks as string[]);
+  delete block.installedHooks;
+  if (Object.keys(block).length === 0) delete doc["ue-mcp"];
+
+  // Only a genuine 1.0.29 artifact (nothing but installedHooks) is now empty;
+  // delete it. Anything else is a real override layer - rewrite it in place.
+  if (Object.keys(doc).length === 0) {
+    try {
+      fs.unlinkSync(localPath);
+      info("project", `migrated ue-mcp.local.yml installedHooks → ~/.ue-mcp/state.json and removed the empty legacy file`);
+    } catch (e) {
+      warn("project", `migrated installedHooks but couldn't delete the now-empty ue-mcp.local.yml - remove it manually`, e);
+    }
+    return;
   }
-
   try {
-    fs.unlinkSync(localPath);
-    info("project", `migrated ue-mcp.local.yml → ~/.ue-mcp/state.json`);
+    fs.writeFileSync(localPath, dumpYaml(doc), "utf-8");
+    info("project", `moved ue-mcp.local.yml installedHooks → ~/.ue-mcp/state.json (kept your other overrides in place)`);
   } catch (e) {
-    warn("project", `couldn't delete ue-mcp.local.yml after migration - remove it manually`, e);
+    warn("project", `couldn't rewrite ue-mcp.local.yml after stripping installedHooks`, e);
   }
 }
 

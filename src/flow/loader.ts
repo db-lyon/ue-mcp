@@ -1,7 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadConfig, type LoadedConfig } from "@db-lyon/flowkit";
+import { loadConfig, deepMerge, type LoadedConfig } from "@db-lyon/flowkit";
 import { FlowConfigSchema, type FlowConfig } from "./schema.js";
+import { readGlobalConfigDoc } from "../global-config.js";
 import type { ToolDef } from "../types.js";
 
 /**
@@ -405,13 +406,21 @@ export function loadFlowConfig(
 ): LoadedConfig<FlowConfig> {
   const dir = configDir ?? process.cwd();
   const configPath = path.join(dir, "ue-mcp.yml");
-  const defaults = buildDefaults(tools);
+  let defaults = buildDefaults(tools);
 
   if (pluginContribution) {
     const baseTasks = (defaults.tasks ?? {}) as Record<string, unknown>;
     const baseFlows = (defaults.flows ?? {}) as Record<string, unknown>;
     defaults.tasks = { ...baseTasks, ...(pluginContribution.tasks ?? {}) };
     defaults.flows = { ...baseFlows, ...(pluginContribution.flows ?? {}) };
+  }
+
+  // User-global layer (~/.ue-mcp/config.yml): sits above built-in defaults and
+  // below the project file. Folding it into `defaults` gives flowkit's loader
+  // the right precedence for free - global < project < {env} < local.
+  const globalDoc = readGlobalConfigDoc();
+  if (Object.keys(globalDoc).length > 0) {
+    defaults = deepMerge(defaults, globalDoc) as Record<string, unknown>;
   }
 
   if (!fs.existsSync(configPath)) {

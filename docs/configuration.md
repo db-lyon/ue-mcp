@@ -42,7 +42,7 @@ You can start the server without a `.uproject` argument. It will run in a limite
 
 ## Project Configuration (`ue-mcp.yml`)
 
-Project-level config lives under the `ue-mcp:` block at the top of `ue-mcp.yml`, next to your `.uproject`. The file is meant to be tracked in git so every collaborator sees the same project surface. `npx ue-mcp init` creates and maintains it for you, but hand-editing is fine — there's nothing in it the server treats as opaque machine state.
+Project-level config lives under the `ue-mcp:` block at the top of `ue-mcp.yml`, next to your `.uproject`. The file is meant to be tracked in git so every collaborator sees the same project surface. `npx ue-mcp init` creates and maintains it for you, but hand-editing is fine — there's nothing in it the server treats as opaque machine state. It is the middle of a deep-merged layer stack (user-global → project → env → local → env vars); see [Config layering](#config-layering) below.
 
 ```yaml
 ue-mcp:
@@ -67,14 +67,34 @@ flows: {}
 plugins: []
 ```
 
-!!! info "User-machine state"
-    Anything that varies per machine (e.g. the list of absolute paths to Claude Code settings files where the feedback hook was installed) lives in `~/.ue-mcp/state.json`, **not** in the project tree. The user-state file is maintained automatically by `npx ue-mcp init` / `npx ue-mcp uninstall-hooks`; you shouldn't need to touch it.
+### Config layering
+
+`ue-mcp.yml`, its overlays, and your user-global config are **deep-merged** into one effective config. Layers, lowest precedence first:
+
+| Layer | File | Tracked? | For |
+|-------|------|----------|-----|
+| Built-in defaults | (shipped in the package) | — | The baseline every project starts from. |
+| **User-global** | `~/.ue-mcp/config.yml` | No (per-user) | Your personal defaults for **every** project on this machine — e.g. `context.strategy`. Mirrors the project file's shape (a `ue-mcp:` block plus optional `tasks:` / `flows:`). Hand-edited. |
+| **Project** | `<project>/ue-mcp.yml` | **Yes** | The shared project surface every collaborator gets. |
+| Env overlay | `<project>/ue-mcp.{env}.yml` | Optional | Loaded only when `UE_MCP_ENV` is set — e.g. `ue-mcp.ci.yml` with `UE_MCP_ENV=ci`. |
+| **Local** | `<project>/ue-mcp.local.yml` | No (git-ignore it) | Per-developer overrides for this one project that shouldn't be committed. |
+| Env vars | `UE_MCP_CONTEXT_STRATEGY`, … | — | Highest precedence; win over every file, per session. |
+
+**Deep merge semantics.** Nested objects merge key-by-key, so a later layer setting `context.strategy` does not wipe sibling keys. Arrays replace by default; put `__merge: append` on an override array to concatenate onto the base instead. A `null` in a later layer explicitly clears a value.
+
+This is the same layering model as CumulusCI's `cumulusci.yml` — flowkit, the engine behind `tasks:` / `flows:`, is built on it, and now the `ue-mcp:` block rides the same cascade.
+
+Keep these files to **config** — things that describe the project surface or your preferences. Machine **state** the tool writes for itself is *not* config and lives in `~/.ue-mcp/state.json` instead (next callout). Per-user preferences like `context.strategy` belong in `~/.ue-mcp/config.yml` (global) or `ue-mcp.local.yml` (per-project), never forced into the tracked `ue-mcp.yml`.
+
+!!! info "Config vs. machine state — two homes under `~/.ue-mcp/`"
+    - `~/.ue-mcp/config.yml` — your per-user **config** layer (see [Config layering](#config-layering)). Hand-edited. Personal defaults applied across every project.
+    - `~/.ue-mcp/state.json` — machine **state** the tool writes and you never hand-edit: absolute paths to the Claude Code settings files where the feedback hook was installed, plus your feedback-mode preference. Maintained by `npx ue-mcp init` / `npx ue-mcp uninstall-hooks` / `npx ue-mcp feedback mode`.
 
 !!! tip "Migrating from older versions"
-    - Pre-1.0.29 used `.ue-mcp.json` for the project config.
-    - 1.0.29 briefly introduced `ue-mcp.local.yml` for user-machine state, then moved that state to `~/.ue-mcp/state.json` in 1.0.30.
+    - Pre-1.0.29 used `.ue-mcp.json` for the project config. On first load it is migrated into `ue-mcp.yml` (project fields) + `~/.ue-mcp/state.json` (machine state), then removed.
+    - 1.0.29 briefly wrote machine state (`installedHooks`) into `ue-mcp.local.yml`. On first load that one key is moved to `~/.ue-mcp/state.json` and stripped from the file — **the rest of `ue-mcp.local.yml` is left in place**, because it is now a supported per-machine override layer (see [Config layering](#config-layering)). A file that held nothing but `installedHooks` is deleted once emptied.
 
-    On first load after upgrade, the server detects either legacy file and migrates the contents (project fields → `ue-mcp.yml`, machine state → `~/.ue-mcp/state.json`) automatically, then deletes the legacy file. You don't need to do anything.
+    You don't need to do anything; migrations are idempotent.
 
 ### `ue-mcp:` block options
 

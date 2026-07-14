@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -50,6 +50,21 @@ describe("ProjectContext.resolveContentPath", () => {
 });
 
 describe("ProjectContext config loading", () => {
+  let globalCfg: string;
+  beforeEach(() => {
+    // Isolate the user-global config layer (~/.ue-mcp/config.yml) so tests
+    // never read the developer's real machine config. Points at a temp path
+    // that tests can write to when they want to exercise the global layer.
+    globalCfg = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-global-")),
+      "config.yml",
+    );
+    process.env.UE_MCP_GLOBAL_CONFIG = globalCfg;
+  });
+  afterEach(() => {
+    delete process.env.UE_MCP_GLOBAL_CONFIG;
+  });
+
   it("ignores a malformed ue-mcp.yml without throwing", () => {
     const uproject = makeTempProject();
     const projectDir = path.dirname(uproject);
@@ -180,5 +195,92 @@ describe("ProjectContext config loading", () => {
     } finally {
       delete process.env.UE_MCP_USER_STATE;
     }
+  });
+
+  it("layers ue-mcp.local.yml over ue-mcp.yml and preserves the file", () => {
+    const uproject = makeTempProject();
+    const projectDir = path.dirname(uproject);
+    fs.writeFileSync(
+      path.join(projectDir, "ue-mcp.yml"),
+      yaml.dump({ "ue-mcp": { version: 1, disable: ["gas"], context: { strategy: "full" } } }),
+    );
+    fs.writeFileSync(
+      path.join(projectDir, "ue-mcp.local.yml"),
+      yaml.dump({ "ue-mcp": { context: { strategy: "micro" } } }),
+    );
+
+    const ctx = new ProjectContext();
+    ctx.setProject(uproject);
+
+    // Local layer wins for the key it sets; a project key it doesn't touch survives.
+    expect(ctx.config.context?.strategy).toBe("micro");
+    expect(ctx.config.disable).toEqual(["gas"]);
+    // The override file is a live layer, not a legacy artifact - never deleted.
+    expect(fs.existsSync(path.join(projectDir, "ue-mcp.local.yml"))).toBe(true);
+  });
+
+  it("strips installedHooks from ue-mcp.local.yml but keeps real overrides", () => {
+    const uproject = makeTempProject();
+    const projectDir = path.dirname(uproject);
+    const userState = path.join(projectDir, "user-state.json");
+    process.env.UE_MCP_USER_STATE = userState;
+    try {
+      fs.writeFileSync(
+        path.join(projectDir, "ue-mcp.yml"),
+        yaml.dump({ "ue-mcp": { version: 1, disable: ["gas"] } }),
+      );
+      fs.writeFileSync(
+        path.join(projectDir, "ue-mcp.local.yml"),
+        yaml.dump({
+          "ue-mcp": {
+            installedHooks: ["C:/Users/test/.claude/settings.json"],
+            context: { strategy: "lean" },
+          },
+        }),
+      );
+
+      const ctx = new ProjectContext();
+      ctx.setProject(uproject);
+
+      // Machine-state key moved out to user state...
+      const state = JSON.parse(fs.readFileSync(userState, "utf-8")) as {
+        projects: Record<string, { installedHooks: string[] }>;
+      };
+      expect(Object.values(state.projects)[0].installedHooks).toEqual([
+        "C:/Users/test/.claude/settings.json",
+      ]);
+      // ...but the file survives because it still holds a real override...
+      expect(fs.existsSync(path.join(projectDir, "ue-mcp.local.yml"))).toBe(true);
+      const local = yaml.load(
+        fs.readFileSync(path.join(projectDir, "ue-mcp.local.yml"), "utf-8"),
+      ) as { "ue-mcp": Record<string, unknown> };
+      expect((local["ue-mcp"] as { installedHooks?: unknown }).installedHooks).toBeUndefined();
+      // ...and that override still applies to the merged config.
+      expect(ctx.config.context?.strategy).toBe("lean");
+    } finally {
+      delete process.env.UE_MCP_USER_STATE;
+    }
+  });
+
+  it("applies ~/.ue-mcp/config.yml as a user-global layer under the project file", () => {
+    const uproject = makeTempProject();
+    const projectDir = path.dirname(uproject);
+    // Global config sets a personal default and a key the project omits.
+    fs.writeFileSync(
+      globalCfg,
+      yaml.dump({ "ue-mcp": { context: { strategy: "micro" }, nativeTools: { enabled: false } } }),
+    );
+    fs.writeFileSync(
+      path.join(projectDir, "ue-mcp.yml"),
+      yaml.dump({ "ue-mcp": { version: 1, context: { strategy: "full" } } }),
+    );
+
+    const ctx = new ProjectContext();
+    ctx.setProject(uproject);
+
+    // Project overrides the global default...
+    expect(ctx.config.context?.strategy).toBe("full");
+    // ...but a key only the global layer sets still shows through.
+    expect(ctx.config.nativeTools?.enabled).toBe(false);
   });
 });
