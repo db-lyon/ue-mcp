@@ -44,11 +44,11 @@ plugins: []        # npm packages that inject new actions
 
 **Deep merge semantics.** Nested objects merge key-by-key, so a later layer setting `context.strategy` does not wipe sibling keys. Arrays replace by default; put `__merge: append` on an override array to concatenate onto the base instead. A `null` in a later layer explicitly clears a value.
 
-This is the same layering model as CumulusCI's `cumulusci.yml` — flowkit, the engine behind `tasks:` / `flows:`, is built on it, and the `ue-mcp:` block rides the same cascade.
+flowkit, the engine behind `tasks:` / `flows:`, uses this same layered model, and the `ue-mcp:` block rides the same cascade.
 
 ## Where each setting belongs
 
-Every key is valid in **every** layer — the schema is identical at each level, exactly like CumulusCI's `cumulusci.yml`. So "where does this go?" is a choice of *layer*, not a restriction the schema enforces. The layer you pick decides whether a value is shared with the team, personal to you, or scoped to one machine.
+Every key is valid in **every** layer — the schema is identical at each level. So "where does this go?" is a choice of *layer*, not a restriction the schema enforces. The layer you pick decides whether a value is shared with the team, personal to you, or scoped to one machine.
 
 The rule of thumb:
 

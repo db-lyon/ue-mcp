@@ -257,7 +257,7 @@ export class ProjectContext {
 }
 
 /**
- * Load the `ue-mcp:` block with the full CumulusCI-style layer cascade, each
+ * Load the `ue-mcp:` block with the full layered cascade, each
  * layer deep-merged over the one before (low -> high precedence):
  *
  *     ~/.ue-mcp/config.yml   (user-global, untracked)

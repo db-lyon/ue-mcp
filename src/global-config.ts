@@ -5,8 +5,8 @@ import yaml from "js-yaml";
 import { warn } from "./log.js";
 
 /**
- * User-global config layer: `~/.ue-mcp/config.yml` (CumulusCI-style, after
- * cumulusci's `~/.cumulusci/cumulusci.yml`).
+ * User-global config layer: `~/.ue-mcp/config.yml`. A per-user config file
+ * layered under the project's ue-mcp.yml on the same deep-merge cascade.
  *
  * This is untracked, per-user *config* - a place to set your personal defaults
  * once for every project on this machine (context strategy, native-tool
