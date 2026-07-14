@@ -55,20 +55,27 @@ describe("validateSubmission", () => {
     expect(r?.code).toBe("summary_duplicates_title");
   });
 
-  it("rejects when neither pythonWorkaround nor idealTool is provided", () => {
-    const r = validateSubmission(realTitle, realSummary, undefined, undefined, 3);
-    expect(r?.code).toBe("no_concrete_payload");
+  it("accepts a substantive report with no python workaround and no idealTool", () => {
+    // A python workaround is not required. A specific title + summary is enough
+    // to file (e.g. a crash report, where there is nothing to work around).
+    expect(validateSubmission(realTitle, realSummary, undefined, undefined, 0)).toBeNull();
   });
 
-  it("rejects when there is no workaround evidence at all", () => {
-    const r = validateSubmission(realTitle, realSummary, undefined, "blueprint(set_class_default)", 0);
-    // idealTool is set, so no_concrete_payload passes, but no python evidence
-    expect(r?.code).toBe("no_workaround_evidence");
-  });
-
-  it("accepts when idealTool is set and session has tracked workarounds", () => {
+  it("accepts when idealTool is set but no python ran this session", () => {
     expect(
-      validateSubmission(realTitle, realSummary, undefined, "blueprint(set_class_default)", 3),
+      validateSubmission(realTitle, realSummary, undefined, "blueprint(set_class_default)", 0),
+    ).toBeNull();
+  });
+
+  it("accepts a crash report with neither workaround nor session evidence", () => {
+    expect(
+      validateSubmission(
+        "create_niagara_system_from_spec crashes the editor",
+        "Adding a GraphSource-less emitter to a system via the spec handler hard-crashes the editor with an access violation. No workaround exists.",
+        undefined,
+        undefined,
+        0,
+      ),
     ).toBeNull();
   });
 });

@@ -41,17 +41,24 @@ interface RejectionReason {
   message: string;
 }
 
+// Gate feedback on spam/placeholder shape ONLY. A python workaround is the
+// common trigger but is NOT required: crashes, missing actions, and dead-end
+// gaps are all legitimate reports with nothing to "work around". Requiring an
+// executed python workaround (or a session-tracked execute_python call) before
+// a report can be filed was suppressing exactly the reports that matter most
+// (e.g. "this action crashed the editor"). pythonWorkaround and idealTool are
+// optional enrichment; a substantive title + summary is enough to file.
+//
+// The trailing params are kept for signature/back-compat; they no longer gate.
 export function validateSubmission(
   title: string,
   summary: string,
-  pythonWorkaround: string | undefined,
-  idealTool: string | undefined,
-  sessionWorkaroundCount: number,
+  _pythonWorkaround?: string | undefined,
+  _idealTool?: string | undefined,
+  _sessionWorkaroundCount?: number,
 ): RejectionReason | null {
   const t = (title ?? "").trim();
   const s = (summary ?? "").trim();
-  const py = (pythonWorkaround ?? "").trim();
-  const ideal = (idealTool ?? "").trim();
 
   if (t.length < 10) {
     return { code: "title_too_short", message: `Title must be at least 10 characters describing the specific tool gap (got ${t.length}).` };
@@ -67,12 +74,6 @@ export function validateSubmission(
   }
   if (s.toLowerCase() === t.toLowerCase()) {
     return { code: "summary_duplicates_title", message: `Summary must add information beyond the title.` };
-  }
-  if (!py && !ideal) {
-    return { code: "no_concrete_payload", message: `Provide either pythonWorkaround (the code that was used) or idealTool (what native action should have handled it). Without one of these there is no actionable gap to file.` };
-  }
-  if (!py && sessionWorkaroundCount === 0) {
-    return { code: "no_workaround_evidence", message: `No execute_python calls were tracked this session and no pythonWorkaround was provided. There is no workaround to document.` };
   }
   return null;
 }
@@ -271,11 +272,11 @@ function buildApprovalMessage(
 
 export const feedbackTool: ToolDef = categoryTool(
   "feedback",
-  "Submit feedback to improve ue-mcp when native tools fall short and execute_python was used as a workaround.",
+  "Submit feedback to improve ue-mcp when a native tool falls short: a missing action, a wrong result, a crash, or a gap you had to work around with execute_python. A python workaround is a common trigger but is not required.",
   {
     submit: {
       description:
-        "Submit feedback about a tool gap. Blocks on an MCP elicitation prompt that asks the USER (not the agent) to approve or decline the exact payload before anything is posted to GitHub.",
+        "Submit feedback about a tool gap (missing action, wrong behavior, crash, or a case you had to work around). Provide a specific title and a summary; pythonWorkaround and idealTool are optional enrichment, not prerequisites. Blocks on an MCP elicitation prompt that asks the USER (not the agent) to approve or decline the exact payload before anything is posted to GitHub.",
       handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
         const title = (params.title as string | undefined) ?? "";
         const summary = (params.summary as string | undefined) ?? "";
@@ -299,9 +300,11 @@ export const feedbackTool: ToolDef = categoryTool(
               `[FEEDBACK REJECTED - DO NOT RETRY]`,
               `Reason (${rejection.code}): ${rejection.message}`,
               ``,
-              `Your feedback obligation from the execute_python directive is now DISCHARGED.`,
-              `Do NOT call feedback(submit) again with a modified title, a placeholder,`,
-              `or a meta-apology issue. Move on with the user's actual task.`,
+              `This was rejected only for being placeholder/spam-shaped, not for lacking`,
+              `a python workaround (none is required). Do NOT call feedback(submit) again`,
+              `with a modified title, a placeholder, or a meta-apology issue. If you have a`,
+              `genuine, specific gap to report, file it once with a real title and summary;`,
+              `otherwise move on with the user's actual task.`,
             ].join("\n"),
             { submitted: false, code: rejection.code, message: rejection.message },
             {
