@@ -30,7 +30,24 @@ function flag(name, fallback) {
 }
 
 const HOST = flag("host", "127.0.0.1");
-const PORT = flag("port", "9877");
+
+// The bridge derives a per-worktree port (see src/port.ts) and publishes the
+// actual bound port to a lockfile. Prefer that over the legacy fixed default so
+// a derived-port editor is reachable without passing --port by hand. Precedence:
+// explicit --port > lockfile > legacy 9877.
+function lockfilePort() {
+  const lock = path.resolve(
+    __dirname, "..", "tests", "ue_mcp", "Saved", "UE_MCP_Bridge", "port.json",
+  );
+  try {
+    const { port } = JSON.parse(fs.readFileSync(lock, "utf8"));
+    return Number.isInteger(port) ? String(port) : null;
+  } catch {
+    return null;
+  }
+}
+
+const PORT = flag("port", lockfilePort() ?? "9877");
 const TIMEOUT_MS = Number(flag("timeout", "5000"));
 const WS_URL = `ws://${HOST}:${PORT}`;
 
