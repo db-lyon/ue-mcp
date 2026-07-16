@@ -5,7 +5,7 @@ UE-MCP has two main components: a **TypeScript MCP server** that handles the AI 
 ```mermaid
 flowchart LR
     AI[AI Assistant] -->|stdio / MCP protocol| MCP[MCP Server<br/>TypeScript / Node.js]
-    MCP -->|WebSocket<br/>JSON-RPC 2.0<br/>port 9877| Plugin[C++ Bridge Plugin<br/>UE_MCP_Bridge]
+    MCP -->|WebSocket<br/>JSON-RPC 2.0<br/>per-project port| Plugin[C++ Bridge Plugin<br/>UE_MCP_Bridge]
     Plugin -->|UE C++ API| Engine[Editor Subsystems<br/>Asset Registry<br/>Blueprint Compiler<br/>etc.]
     MCP -->|direct filesystem| FS[Config INI<br/>C++ Headers<br/>Asset Directories]
 ```
@@ -58,7 +58,7 @@ export const levelTool: ToolDef = categoryTool(
 
 ### Bridge Communication
 
-The `EditorBridge` maintains a WebSocket connection to `ws://localhost:9877`.
+The `EditorBridge` maintains a WebSocket connection to the bridge's per-project port (derived from the project root path, published to `<project>/Saved/UE_MCP_Bridge/port.json`; see [Configuration](configuration.md#bridge-connection)). The legacy fixed `9877` is the fallback when no project root is known.
 
 **Protocol:** JSON-RPC 2.0
 
@@ -101,7 +101,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 
 ### Handler Categories
 
-24 C++ handler groups are registered in `BridgeServer.cpp`. Together they expose <!-- count:actions -->678+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
+28 C++ handler groups are registered in `BridgeServer.cpp`. Together they expose <!-- count:actions -->678+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
 
 | Handler group | Coverage |
 |---------|----------|
@@ -126,6 +126,11 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 | SplineHandlers | Spline actor authoring |
 | DialogHandlers | Modal dialog auto-response policies |
 | StateTreeHandlers | StateTree asset authoring (states, transitions, tasks, root parameters) |
+| ChooserHandlers | Chooser table authoring |
+| EpicHandlers | Epic 5.8 native toolset surfacing |
+| FabHandlers | Fab owned-library import |
+| LockHandlers | Per-asset exclusive locks for concurrent agents (acquire/release/list, TTL-leased) |
+| DiffHandlers | Semantic Blueprint and asset diffing |
 | ProjectHandlers | Project info, world subsystem queries |
 | DemoHandlers | Neon Shrine demo builder |
 

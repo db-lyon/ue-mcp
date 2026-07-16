@@ -146,7 +146,7 @@ Or per session, without editing the file: `UE_MCP_CONTEXT_STRATEGY=micro` (the e
 
 ## Bridge Connection
 
-The C++ plugin listens on **`ws://127.0.0.1:9877`** (it walks up to the next free port and publishes the bound port to `<project>/Saved/UE_MCP_Bridge/port.json` when several editors run side by side). The MCP server auto-connects on startup and reconnects every 15 seconds if the connection drops.
+The C++ plugin listens on a **per-project WebSocket port** derived from a hash of the project root path (in the IANA ephemeral range `49152-65535`). Deriving the port from the path means two checkouts of the same project - or several unrelated projects - on one machine each get a stable, launch-order-independent port, so their MCP clients never collide on a single fixed number. The Node client and the C++ bridge compute the identical value independently, and the bridge also publishes the actual bound port to `<project>/Saved/UE_MCP_Bridge/port.json` as the authoritative source (if the port is already taken, the bridge probes upward and the lockfile records where it really landed). The legacy fixed port `9877` remains the fallback when no project root is known. Pin an explicit port with `UE_MCP_PORT` or `bridge.port` in `ue-mcp.yml`. The MCP server auto-connects on startup and reconnects every 15 seconds if the connection drops.
 
 ### Connection States
 

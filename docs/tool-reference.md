@@ -150,6 +150,9 @@ UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering
 | `create_user_defined_enum` | Create a UserDefinedEnum content asset, optionally pre-populated with values. Params: `name, packagePath? (default /Game), values? ([display-name strings]), onConflict? (#686)` |
 | `list_enum_values` | List a UEnum's enumerators (index, authored short name, display name, value). Works on native and UserDefinedEnum assets. Params: `assetPath (#686)` |
 | `edit_user_defined_enum` | Author a UserDefinedEnum content asset. op=add_value appends an enumerator (authored name is auto-assigned; pass displayName - or name - to set the editable display text). op=rename_value sets a new displayName on the enumerator resolved by index or name (matches short or display name). op=remove_value deletes it. Recompiles dependents automatically. Native UEnums are not editable. Params: `assetPath, op (add_value\|rename_value\|remove_value), displayName?, name?, index? (#686)` |
+| `lock` | Acquire an exclusive lock on an asset for this session, so concurrent agents don't mutate the same asset at once. The lock registry lives in the shared editor bridge, keyed by asset path with a TTL lease so a crashed session never wedges an asset. Returns acquired=true, or acquired=false with holder{sessionId, ttlSecondsRemaining} when another session holds it. Params: `assetPath, ttlSeconds? (default 300), sessionId?` |
+| `unlock` | Release an asset lock held by this session (or force=true to break any holder's lock). Params: `assetPath, force?, sessionId?` |
+| `list_locks` | List all currently-held asset locks with holder session id, acquiredAt, and ttlSecondsRemaining. |
 
 ---
 
@@ -217,6 +220,7 @@ UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering
 | `connect_pins_batch` | Apply many pin connections in one call (single compile + save). Params: `assetPath, graphName?, connections[]: [{sourceNode, sourcePin, targetNode, targetPin}] (#267)` |
 | `set_node_position` | Move a graph node to (posX, posY). Params: `assetPath, graphName?, nodeId, posX, posY (#277)` |
 | `auto_layout` | Topological layered layout for a graph. Eliminates the (0,0) stack from programmatic add_node. Params: `assetPath, graphName?, columnGap? (default 360), rowGap? (default 200) (#277)` |
+| `diff` | Semantic structural diff between two Blueprints (binary uassets are unreviewable in git). Compares parent class, variables (type/default), functions/macros, components, and per-graph node + connection deltas keyed on stable node GUIDs so edits are matched rather than shown as remove+add. Returns a structured delta plus a human summary and changeCount. Params: `assetPath (base/A), otherPath (compare/B)`. Revision-based diffing via source control is a staged follow-up. |
 
 ---
 
