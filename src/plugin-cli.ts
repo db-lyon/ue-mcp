@@ -153,13 +153,43 @@ function writePluginsList(configPath: string, plugins: PluginEntry[]): void {
   fs.writeFileSync(configPath, original + sep + rendered);
 }
 
+/**
+ * Resolve a registry slug to the package to install. Queries the UE-MCP
+ * registry (UE_MCP_REGISTRY, default https://plugins.ue-mcp.com) so a clean
+ * name like `meshy` installs the real package (`ue-mcp-meshy`). Returns null on
+ * any miss/error/timeout, so the caller installs the given name directly - the
+ * registry is a convenience layer, never a hard dependency. Runs the fetch in a
+ * short-lived child so this stays synchronous like the rest of the CLI.
+ */
+function resolveFromRegistry(name: string): string | null {
+  // A scoped or path-qualified spec is already a real npm name, not a slug.
+  if (name.startsWith("@") || name.includes("/")) return null;
+  const base = (process.env.UE_MCP_REGISTRY ?? "https://plugins.ue-mcp.com").replace(/\/+$/, "");
+  const url = `${base}/api/resolve?name=${encodeURIComponent(name)}`;
+  const script =
+    `fetch(${JSON.stringify(url)}).then(async r=>{if(!r.ok)process.exit(3);` +
+    `const j=await r.json();process.stdout.write(String(j.package||""));})` +
+    `.catch(()=>process.exit(4));`;
+  const res = spawnSync(process.execPath, ["-e", script], { encoding: "utf8", timeout: 8000 });
+  const pkg = (res.stdout || "").trim();
+  return res.status === 0 && pkg ? pkg : null;
+}
+
 function cmdInstall(): void {
-  const name = args.shift();
-  if (!name) fail("usage: ue-mcp plugin install <name> [--version x.y.z]");
+  const requested = args.shift();
+  if (!requested) fail("usage: ue-mcp plugin install <name> [--version x.y.z]");
 
   let version: string | undefined;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--version") version = args[i + 1];
+  }
+
+  // Clean registry slug (e.g. `meshy`) -> real package (`ue-mcp-meshy`). Unknown
+  // names install verbatim, so plain npm packages keep working.
+  const resolved = resolveFromRegistry(requested);
+  const name = resolved ?? requested;
+  if (resolved && resolved !== requested) {
+    note(`resolved '${requested}' -> '${name}' via the registry`);
   }
 
   const proj = findProjectDir(process.cwd());
