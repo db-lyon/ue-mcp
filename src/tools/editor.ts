@@ -158,7 +158,7 @@ export const editorTool: ToolDef = categoryTool(
     undo: bp("Undo last transaction", "undo"),
     redo: bp("Redo last transaction", "redo"),
     get_perf_stats: bp("Editor performance stats", "get_editor_performance_stats"),
-    run_stat: bp("Run stat command. Params: command", "run_stat_command"),
+    run_stat: bp("Run a stat overlay. Params: name (bare stat name, e.g. 'unit','fps','game','gpu') OR command (full console command). A bare name is prefixed with 'stat ' (#722).", "run_stat_command", (p) => ({ command: p.command, name: p.name })),
     set_scalability: bp("Set rendering quality via the Scalability system (actually applies + persists, not just sg.* cvars). Params: level (Low|Medium|High|Epic|Cinematic). Returns appliedLevels (#591)", "set_scalability"),
     set_cvars: bp("Bulk-set console variables. Params: cvars ({name: value} object OR [{name, value}] array). Returns per-cvar old/new values and any notFound names (#591)", "set_cvars", (p) => ({ cvars: p.cvars })),
     capture_screenshot: bp("Screenshot. Params: filename?, resolution?, target? (auto|pie|editor; auto routes to PIE viewport when PIE is running) (#226)", "capture_screenshot"),

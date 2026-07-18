@@ -1509,7 +1509,25 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 
 TSharedPtr<FJsonValue> FEditorHandlers::RunStatCommand(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Command = OptionalString(Params, TEXT("command"), TEXT("stat fps"));
+	// #722: callers naturally pass the stat name (e.g. name="unit"); the old
+	// handler only read "command" and silently defaulted to "stat fps" when the
+	// stat was passed as "name", so "unit" ran the FPS counter. Accept either:
+	// an explicit full "command", or a bare stat "name" that we prefix.
+	FString Command = OptionalString(Params, TEXT("command"));
+	if (Command.IsEmpty())
+	{
+		const FString StatName = OptionalString(Params, TEXT("name"));
+		if (!StatName.IsEmpty())
+		{
+			Command = StatName.StartsWith(TEXT("stat "), ESearchCase::IgnoreCase)
+				? StatName
+				: FString::Printf(TEXT("stat %s"), *StatName);
+		}
+		else
+		{
+			Command = TEXT("stat fps");
+		}
+	}
 
 	REQUIRE_EDITOR_WORLD(World);
 
