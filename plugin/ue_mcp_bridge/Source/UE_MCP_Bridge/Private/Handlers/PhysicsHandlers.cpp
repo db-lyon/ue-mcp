@@ -137,10 +137,15 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetPhysicsEnabled(const TSharedPtr<FJso
 	FString ActorLabel;
 	if (auto Err = RequireString(Params, TEXT("actorLabel"), ActorLabel)) return Err;
 
+	// #721: the published TS schema names this parameter "simulate" while the
+	// handler historically read only "enabled", so a schema-conformant call
+	// silently no-opped. Accept either spelling (simulate | enabled) and error
+	// explicitly when neither is present rather than succeeding silently.
 	bool bEnabled = true;
-	if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+	if (!Params->TryGetBoolField(TEXT("simulate"), bEnabled) &&
+		!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
 	{
-		return MCPError(TEXT("Missing 'enabled' parameter (true/false)"));
+		return MCPError(TEXT("Missing 'simulate' (aka 'enabled') parameter (true/false)"));
 	}
 
 	REQUIRE_EDITOR_WORLD(World);
