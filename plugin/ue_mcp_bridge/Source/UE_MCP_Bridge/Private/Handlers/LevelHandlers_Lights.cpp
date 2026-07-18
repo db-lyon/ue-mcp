@@ -131,6 +131,21 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 		{
 			LightComponent->SetLightColor(LightColor);
 		}
+		// #723: attenuationRadius was accepted by the schema but never applied.
+		// It lives on the local-light components (point/spot/rect); directional
+		// and sky lights have no attenuation radius, so they ignore it.
+		double AttenuationRadius = 0.0;
+		if (Params->TryGetNumberField(TEXT("attenuationRadius"), AttenuationRadius) && AttenuationRadius > 0.0)
+		{
+			if (UPointLightComponent* PointComp = Cast<UPointLightComponent>(LightComponent))
+			{
+				PointComp->SetAttenuationRadius(static_cast<float>(AttenuationRadius));
+			}
+			else if (URectLightComponent* RectComp = Cast<URectLightComponent>(LightComponent))
+			{
+				RectComp->SetAttenuationRadius(static_cast<float>(AttenuationRadius));
+			}
+		}
 		LightComponent->SetVisibility(true);
 		LightComponent->MarkRenderStateDirty();
 	}
