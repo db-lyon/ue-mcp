@@ -490,21 +490,40 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 	}
 
 	// ── Triggers ──
+	// #725: triggers previously accepted only {type:"Hold"}; the more obvious
+	// {class:"/Script/EnhancedInput.InputTriggerHold"} was rejected. Worse, an
+	// unresolvable shape could leave a NULL entry in Mapping.Triggers, which
+	// trips AssetCheck on save. Build into a temp array, accept class OR type
+	// (mirroring modifiers, #649), apply nested "properties", and never append
+	// a null; report any failed specs instead of silently corrupting the asset.
+	TArray<TSharedPtr<FJsonValue>> FailedTriggers;
 	const TArray<TSharedPtr<FJsonValue>>* TriggersArr = nullptr;
 	if (Params->TryGetArrayField(TEXT("triggers"), TriggersArr) && TriggersArr)
 	{
-		Mapping.Triggers.Empty();
+		TArray<TObjectPtr<UInputTrigger>> NewTriggers;
 		for (const auto& TrigVal : *TriggersArr)
 		{
 			const TSharedPtr<FJsonObject>* TrigObj = nullptr;
-			if (!TrigVal->TryGetObject(TrigObj) || !TrigObj) continue;
+			if (!TrigVal->TryGetObject(TrigObj) || !TrigObj)
+			{
+				FailedTriggers.Add(MakeShared<FJsonValueString>(TEXT("(non-object trigger entry)")));
+				continue;
+			}
+
+			FString ClassPath;
+			(*TrigObj)->TryGetStringField(TEXT("class"), ClassPath);
+			UClass* TrigClass = nullptr;
+			if (!ClassPath.IsEmpty())
+			{
+				TrigClass = LoadClass<UInputTrigger>(nullptr, *ClassPath);
+				if (!TrigClass) TrigClass = LoadObject<UClass>(nullptr, *ClassPath);
+				if (!TrigClass) TrigClass = FindClassByShortName(ClassPath);
+				if (TrigClass && !TrigClass->IsChildOf(UInputTrigger::StaticClass())) TrigClass = nullptr;
+			}
 
 			FString TypeName;
 			(*TrigObj)->TryGetStringField(TEXT("type"), TypeName);
-			if (TypeName.IsEmpty()) continue;
-
-			// Resolve trigger class: try multiple patterns (#169 fix)
-			UClass* TrigClass = nullptr;
+			if (!TrigClass && !TypeName.IsEmpty())
 			{
 				TArray<FString> Candidates;
 				if (TypeName.StartsWith(TEXT("UInputTrigger")) || TypeName.StartsWith(TEXT("InputTrigger")))
@@ -524,45 +543,63 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 					TrigClass = nullptr;
 				}
 			}
+
 			if (!TrigClass)
 			{
+				FailedTriggers.Add(MakeShared<FJsonValueString>(ClassPath.IsEmpty() ? TypeName : ClassPath));
 				continue;
 			}
 
 			UInputTrigger* Trigger = NewObject<UInputTrigger>(IMC, TrigClass);
-
-			// Set properties via reflection (same pattern as modifiers)
-			for (const auto& Pair : (*TrigObj)->Values)
+			if (!Trigger)
 			{
-				if (Pair.Key == TEXT("type")) continue;
-
-				FProperty* Prop = TrigClass->FindPropertyByName(FName(*Pair.Key));
-				if (!Prop) continue;
-
-				void* PropAddr = Prop->ContainerPtrToValuePtr<void>(Trigger);
-
-				if (FFloatProperty* FloatProp = CastField<FFloatProperty>(Prop))
-				{
-					double Val = 0;
-					Pair.Value->TryGetNumber(Val);
-					FloatProp->SetPropertyValue(PropAddr, (float)Val);
-				}
-				else if (FDoubleProperty* DoubleProp = CastField<FDoubleProperty>(Prop))
-				{
-					double Val = 0;
-					Pair.Value->TryGetNumber(Val);
-					DoubleProp->SetPropertyValue(PropAddr, Val);
-				}
-				else if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
-				{
-					bool Val = false;
-					Pair.Value->TryGetBool(Val);
-					BoolProp->SetPropertyValue(PropAddr, Val);
-				}
+				FailedTriggers.Add(MakeShared<FJsonValueString>(ClassPath.IsEmpty() ? TypeName : ClassPath));
+				continue;
 			}
 
-			Mapping.Triggers.Add(Trigger);
+			// Set properties via reflection. Accept both top-level fields and a
+			// nested "properties" object (same as modifiers).
+			auto ApplyTriggerProps = [&](const TSharedPtr<FJsonObject>& Obj)
+			{
+				for (const auto& Pair : Obj->Values)
+				{
+					if (Pair.Key == TEXT("type") || Pair.Key == TEXT("class") || Pair.Key == TEXT("properties")) continue;
+					FProperty* Prop = TrigClass->FindPropertyByName(FName(*Pair.Key));
+					if (!Prop) continue;
+					void* PropAddr = Prop->ContainerPtrToValuePtr<void>(Trigger);
+					if (FFloatProperty* FloatProp = CastField<FFloatProperty>(Prop))
+					{
+						double Val = 0; Pair.Value->TryGetNumber(Val);
+						FloatProp->SetPropertyValue(PropAddr, (float)Val);
+					}
+					else if (FDoubleProperty* DoubleProp = CastField<FDoubleProperty>(Prop))
+					{
+						double Val = 0; Pair.Value->TryGetNumber(Val);
+						DoubleProp->SetPropertyValue(PropAddr, Val);
+					}
+					else if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
+					{
+						bool Val = false; Pair.Value->TryGetBool(Val);
+						BoolProp->SetPropertyValue(PropAddr, Val);
+					}
+					else if (FIntProperty* IntProp = CastField<FIntProperty>(Prop))
+					{
+						double Val = 0; Pair.Value->TryGetNumber(Val);
+						IntProp->SetPropertyValue(PropAddr, (int32)Val);
+					}
+				}
+			};
+			ApplyTriggerProps(*TrigObj);
+			const TSharedPtr<FJsonObject>* PropsObj = nullptr;
+			if ((*TrigObj)->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj && (*PropsObj).IsValid())
+			{
+				ApplyTriggerProps(*PropsObj);
+			}
+
+			NewTriggers.Add(Trigger);
 		}
+
+		Mapping.Triggers = NewTriggers;
 	}
 
 	// Mark dirty — caller can use asset(save) to persist (#197 fix)
@@ -577,6 +614,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 	Result->SetNumberField(TEXT("mappingIndex"), MappingIndex);
 	Result->SetNumberField(TEXT("modifierCount"), Mapping.Modifiers.Num());
 	Result->SetNumberField(TEXT("triggerCount"), Mapping.Triggers.Num());
+	if (FailedTriggers.Num() > 0)
+	{
+		// #725: tell the caller which trigger specs did not resolve rather than
+		// silently dropping them (or, worse, leaving a null entry behind).
+		Result->SetArrayField(TEXT("failedTriggers"), FailedTriggers);
+	}
 	return MCPResult(Result);
 }
 
