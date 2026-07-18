@@ -7,6 +7,19 @@ description: Use when authoring or modifying Unreal Blueprint assets through ue-
 
 The `blueprint` tool covers reading, authoring, and compiling Blueprints. The default workflow is **read → mutate → compile**, never fire-and-forget.
 
+## Authoring a graph body: prefer the Epic DSL (#711)
+
+When you are authoring the **contents of a graph** (event graph, function body, macro) - a set of nodes plus their wiring - do **not** default to node-by-node `add_node`/`connect_pins`. Reach for Epic's graph DSL first:
+
+1. `blueprint(action="epic_get_graph_dsl_docs")` - read the S-expression grammar once.
+2. `blueprint(action="epic_write_graph_dsl", ...)` - author + compile the whole graph body in one call.
+
+The DSL authors and compiles an entire graph in a single round-trip, which is materially faster and more reliable than stitching individual K2Nodes together (one correct pass vs several failed iterations). Use it for graph bodies whenever it is available.
+
+**Availability / fallback.** The `epic_*` actions come from Epic's ToolsetRegistry and require **UE 5.8+ with the Epic toolset plugins enabled**. Check with `epic(action="status")`. When they are unavailable (pre-5.8, or the registry is off), fall back to the native node path below.
+
+**Keep using the native actions for** read/discovery, SCS components, CDO/class defaults, interfaces + event dispatchers, structured `compile`/`validate`, and anything with no Epic equivalent - the native path adds idempotency and rollback the raw tools lack. See the `ue-mcp-epic-routing` skill for the full epic-vs-native decision.
+
 ## Discovery before authoring
 
 For any existing Blueprint:
