@@ -571,8 +571,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 		}
 	}
 
-	// UE 5.4 exposed this map; UE 5.5 removed it from UWidgetBlueprint.
-#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 4
+	// #728: the WidgetBlueprintCompiler ensures every added widget has an entry in
+	// WidgetVariableNameToGuidMap (UMGEditor WidgetBlueprintCompiler.cpp: "Widget
+	// [X] was added but did not get a GUID"). The map was present in 5.4, absent
+	// in the 5.5-5.7 window, and present again in 5.8, so register the GUID on
+	// 5.4 and on 5.8+ (skipping the versions where the member does not exist).
+#if (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 4) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8) || ENGINE_MAJOR_VERSION > 5
 	if (!WidgetBP->WidgetVariableNameToGuidMap.Contains(NewWidget->GetFName()))
 	{
 		WidgetBP->WidgetVariableNameToGuidMap.Add(NewWidget->GetFName(), FGuid::NewGuid());
@@ -905,6 +909,15 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 
 	WidgetBP->WidgetTree->RootWidget = Wrapper;
 	Wrapper->AddChild(OldRoot);
+
+	// #728: register the new wrapper's GUID so the WidgetBlueprintCompiler ensure
+	// does not fire (see add_widget). Same version window as there.
+#if (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION == 4) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8) || ENGINE_MAJOR_VERSION > 5
+	if (!WidgetBP->WidgetVariableNameToGuidMap.Contains(Wrapper->GetFName()))
+	{
+		WidgetBP->WidgetVariableNameToGuidMap.Add(Wrapper->GetFName(), FGuid::NewGuid());
+	}
+#endif
 
 	WidgetBP->MarkPackageDirty();
 	FKismetEditorUtilities::CompileBlueprint(WidgetBP);
