@@ -13,6 +13,8 @@ public:
 private:
 	// Handler implementations
 	static TSharedPtr<FJsonValue> GetOutliner(const TSharedPtr<FJsonObject>& Params);
+	// #717: bulk set editor-only visibility (temporarily hidden in editor)
+	static TSharedPtr<FJsonValue> SetEditorVisibility(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PlaceActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DeleteActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetActorDetails(const TSharedPtr<FJsonObject>& Params);

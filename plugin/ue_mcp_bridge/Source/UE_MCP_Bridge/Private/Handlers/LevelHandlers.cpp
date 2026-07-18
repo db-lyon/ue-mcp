@@ -89,6 +89,8 @@
 void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
 	Registry.RegisterHandler(TEXT("get_world_outliner"), &GetOutliner);
+	// #717: query/set per-actor editor-only visibility (temporarily hidden).
+	Registry.RegisterHandler(TEXT("set_editor_visibility"), &SetEditorVisibility);
 	Registry.RegisterHandler(TEXT("place_actor"), &PlaceActor);
 	Registry.RegisterHandler(TEXT("delete_actor"), &DeleteActor);
 	Registry.RegisterHandler(TEXT("get_actor_details"), &GetActorDetails);
@@ -180,6 +182,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 	int32 Limit = OptionalInt(Params, TEXT("limit"), 50);
 	bool bIncludeStreaming = OptionalBool(Params, TEXT("includeStreaming"), false);
 
+	// #717: optional tri-state filter on editor-only visibility. When present,
+	// only actors whose IsTemporarilyHiddenInEditor() matches are returned. The
+	// per-actor editorHidden flag is always reported so callers can find lights
+	// that are hidden in the viewport but still render in game.
+	bool bEditorHiddenFilterValue = false;
+	const bool bHasEditorHiddenFilter = Params->TryGetBoolField(TEXT("editorHidden"), bEditorHiddenFilterValue);
+
 	TArray<TSharedPtr<FJsonValue>> ActorsArray;
 	int32 TotalCount = 0;
 	int32 StreamingSkipped = 0;
@@ -213,6 +222,16 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 		{
 			continue;
 		}
+
+#if WITH_EDITOR
+		const bool bEditorHidden = Actor->IsTemporarilyHiddenInEditor();
+#else
+		const bool bEditorHidden = false;
+#endif
+		if (bHasEditorHiddenFilter && bEditorHidden != bEditorHiddenFilterValue)
+		{
+			continue;
+		}
 		if (ActorsArray.Num() >= Limit) break;
 
 		TSharedPtr<FJsonObject> ActorObj = MakeShared<FJsonObject>();
@@ -220,6 +239,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 		ActorObj->SetStringField(TEXT("label"), ActorLabel);
 		ActorObj->SetStringField(TEXT("class"), ActorClass);
 		ActorObj->SetStringField(TEXT("path"), Actor->GetPathName());
+		ActorObj->SetBoolField(TEXT("editorHidden"), bEditorHidden);
 
 		FVector Location = Actor->GetActorLocation();
 		TSharedPtr<FJsonObject> LocationObj = MakeShared<FJsonObject>();
@@ -259,6 +279,65 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 	Result->SetNumberField(TEXT("streamingSkipped"), StreamingSkipped);
 	Result->SetArrayField(TEXT("actors"), ActorsArray);
 
+	return MCPResult(Result);
+}
+
+// #717: bulk set editor-only visibility (temporarily hidden in editor). Targets
+// either an explicit actorLabels list or every actor (all=true). Editor-hidden
+// actors still render in game, so unhiding them is a common cleanup step.
+TSharedPtr<FJsonValue> FLevelHandlers::SetEditorVisibility(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	bool bHidden = false;
+	if (!Params->TryGetBoolField(TEXT("hidden"), bHidden))
+	{
+		return MCPError(TEXT("Missing 'hidden' parameter (true = hide in editor, false = show)"));
+	}
+
+	const bool bAll = OptionalBool(Params, TEXT("all"), false);
+
+	TSet<FString> TargetLabels;
+	const TArray<TSharedPtr<FJsonValue>>* LabelsArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("actorLabels"), LabelsArr) && LabelsArr)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *LabelsArr)
+		{
+			FString S;
+			if (V.IsValid() && V->TryGetString(S)) TargetLabels.Add(S);
+		}
+	}
+
+	if (!bAll && TargetLabels.Num() == 0)
+	{
+		return MCPError(TEXT("Provide 'actorLabels' (array) or 'all'=true"));
+	}
+
+	int32 Changed = 0;
+	int32 Matched = 0;
+	TArray<TSharedPtr<FJsonValue>> Affected;
+	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
+	{
+		AActor* Actor = *ActorIt;
+		if (!Actor) continue;
+		const FString Label = Actor->GetActorLabel();
+		if (!bAll && !TargetLabels.Contains(Label)) continue;
+		Matched++;
+#if WITH_EDITOR
+		if (Actor->IsTemporarilyHiddenInEditor() != bHidden)
+		{
+			Actor->SetIsTemporarilyHiddenInEditor(bHidden);
+			Changed++;
+			Affected.Add(MakeShared<FJsonValueString>(Label));
+		}
+#endif
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("hidden"), bHidden);
+	Result->SetNumberField(TEXT("matched"), Matched);
+	Result->SetNumberField(TEXT("changed"), Changed);
+	Result->SetArrayField(TEXT("affected"), Affected);
 	return MCPResult(Result);
 }
 
