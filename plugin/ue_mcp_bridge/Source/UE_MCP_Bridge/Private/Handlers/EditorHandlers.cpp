@@ -245,9 +245,35 @@ TSharedPtr<FJsonValue> FEditorHandlers::ExecutePython(const TSharedPtr<FJsonObje
 
 	bool bSuccess = PythonPlugin->ExecPythonCommandEx(PythonCommand);
 
+	// #732: a first-class result channel. In ExecuteFile mode CommandResult is
+	// normally empty and a top-level `return` is illegal, so scripts were forced
+	// to use print() as transport - mixing application data with diagnostics and
+	// duplicating it across log_output/output. When the caller names a
+	// resultVariable, evaluate it in the Public (__main__) scope the script just
+	// ran in and surface it as `result`, leaving print()/log as diagnostics only.
+	FString ResultText = PythonCommand.CommandResult;
+	const FString ResultVariable = OptionalString(Params, TEXT("resultVariable"));
+	bool bResultVariableResolved = false;
+	if (bSuccess && !ResultVariable.IsEmpty())
+	{
+		FPythonCommandEx EvalCommand;
+		EvalCommand.Command = ResultVariable;
+		EvalCommand.ExecutionMode = EPythonCommandExecutionMode::EvaluateStatement;
+		EvalCommand.FileExecutionScope = EPythonFileExecutionScope::Public;
+		if (PythonPlugin->ExecPythonCommandEx(EvalCommand))
+		{
+			ResultText = EvalCommand.CommandResult;
+			bResultVariableResolved = true;
+		}
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), bSuccess);
-	Result->SetStringField(TEXT("result"), PythonCommand.CommandResult);
+	Result->SetStringField(TEXT("result"), ResultText);
+	if (!ResultVariable.IsEmpty())
+	{
+		Result->SetBoolField(TEXT("resultVariableResolved"), bResultVariableResolved);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> LogArray;
 	for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
@@ -313,10 +339,32 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 
 	bool bSuccess = PythonPlugin->ExecPythonCommandEx(PythonCommand);
 
+	// #732: same first-class result channel as execute_python. The file runs in
+	// the Public (__main__) scope, so a named resultVariable can be read back.
+	FString ResultText = PythonCommand.CommandResult;
+	const FString ResultVariable = OptionalString(Params, TEXT("resultVariable"));
+	bool bResultVariableResolved = false;
+	if (bSuccess && !ResultVariable.IsEmpty())
+	{
+		FPythonCommandEx EvalCommand;
+		EvalCommand.Command = ResultVariable;
+		EvalCommand.ExecutionMode = EPythonCommandExecutionMode::EvaluateStatement;
+		EvalCommand.FileExecutionScope = EPythonFileExecutionScope::Public;
+		if (PythonPlugin->ExecPythonCommandEx(EvalCommand))
+		{
+			ResultText = EvalCommand.CommandResult;
+			bResultVariableResolved = true;
+		}
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), bSuccess);
 	Result->SetStringField(TEXT("path"), FilePath);
-	Result->SetStringField(TEXT("result"), PythonCommand.CommandResult);
+	Result->SetStringField(TEXT("result"), ResultText);
+	if (!ResultVariable.IsEmpty())
+	{
+		Result->SetBoolField(TEXT("resultVariableResolved"), bResultVariableResolved);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> LogArray;
 	FString CombinedOutput;

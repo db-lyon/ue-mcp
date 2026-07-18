@@ -44,7 +44,7 @@ export const editorTool: ToolDef = categoryTool(
     },
     execute_command: bp("Run console command. Params: command", "execute_command"),
     execute_python: {
-      description: "GATED LAST RESORT. execute_python is unreachable until a semantic tool search over your taskSummary has been run AND every candidate it returns is EXPLICITLY ruled out with a stated reason. Flow: (1) call with taskSummary (+code) - it returns the candidate actions; (2) re-call with the same taskSummary/code PLUS ruledOut=[{action, reason}] giving a specific reason each candidate does not fit. Python runs only once every candidate is ruled out. Params: code, taskSummary (required), ruledOut? (#704)",
+      description: "GATED LAST RESORT. execute_python is unreachable until a semantic tool search over your taskSummary has been run AND every candidate it returns is EXPLICITLY ruled out with a stated reason. Flow: (1) call with taskSummary (+code) - it returns the candidate actions; (2) re-call with the same taskSummary/code PLUS ruledOut=[{action, reason}] giving a specific reason each candidate does not fit. Python runs only once every candidate is ruled out. Params: code, taskSummary (required), ruledOut?, resultVariable? (name of a top-level variable to return as `result`, separate from print()/log; #732) (#704)",
       handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
         const code = (params.code as string) ?? "";
         const taskSummary = ((params.taskSummary as string) ?? "").trim();
@@ -85,7 +85,9 @@ export const editorTool: ToolDef = categoryTool(
         }
 
         // Gate passed (no candidates, or every candidate ruled out) - run Python.
-        const result = await ctx.bridge.call("execute_python", { code });
+        // #732: forward an optional resultVariable so scripts can return a value
+        // through a first-class `result` channel instead of print()/log.
+        const result = await ctx.bridge.call("execute_python", { code, resultVariable: params.resultVariable });
 
         // Track this workaround in memory, and side-channel to a tmp log so
         // the record survives even if the agent ignores the directive.
@@ -143,7 +145,7 @@ export const editorTool: ToolDef = categoryTool(
         );
       },
     },
-    run_python_file: bp("Run a Python file from disk with __file__/__name__ populated (#142). Params: filePath, args?", "run_python_file", (p) => ({ filePath: p.filePath, args: p.args })),
+    run_python_file: bp("Run a Python file from disk with __file__/__name__ populated (#142). Params: filePath, args?, resultVariable? (name of a top-level variable to return as `result`, separate from logs; #732)", "run_python_file", (p) => ({ filePath: p.filePath, args: p.args, resultVariable: p.resultVariable })),
     set_property: bp("Set UObject property. Saves the package to disk by default; pass save=false to leave it dirty in-memory (batch many writes, then editor(save_dirty)/asset(save)) (#674). Params: objectPath, propertyName, value, save? (default true)", "set_property"),
     get_property: bp("Read UObject property. Params: objectPath, propertyName", "get_property"),
     describe_object: bp("Describe a UObject and optionally list/read properties. Params: objectPath, includeProperties?, includeValues?, propertyNames?", "describe_object"),
@@ -208,6 +210,7 @@ export const editorTool: ToolDef = categoryTool(
   {
     command: z.string().optional(),
     code: z.string().optional(),
+    resultVariable: z.string().optional().describe("execute_python/run_python_file: name of a top-level Python variable to return as `result`, separate from print()/log output (#732)"),
     taskSummary: z.string().optional().describe("execute_python: plain-words intent, searched against the tool registry to gate the call (#704)"),
     ruledOut: z.array(z.object({ action: z.string(), reason: z.string() })).optional().describe("execute_python: reason each searched candidate action does not fit; every candidate must be ruled out before Python runs (#704)"),
     filePath: z.string().optional().describe("Absolute path to a .py file for run_python_file"),
