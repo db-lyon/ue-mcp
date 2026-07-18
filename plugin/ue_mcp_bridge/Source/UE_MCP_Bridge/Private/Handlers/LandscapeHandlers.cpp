@@ -9,6 +9,7 @@
 #include "Landscape.h"
 #include "LandscapeEditTypes.h"
 #include "LandscapeProxy.h"
+#include "LandscapeStreamingProxy.h"
 #include "LandscapeInfo.h"
 #include "LandscapeComponent.h"
 #include "LandscapeSplineActor.h"
@@ -38,6 +39,9 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_landscape"), &CreateLandscape);
 	Registry.RegisterHandler(TEXT("create_landscape_layer_info"), &CreateLandscapeLayerInfo);
 	Registry.RegisterHandler(TEXT("get_landscape_material_usage_summary"), &GetMaterialUsageSummary);
+	// #733: World Partition landscape streaming-proxy enumeration + spatial lookup.
+	Registry.RegisterHandler(TEXT("list_landscape_proxies"), &ListLandscapeProxies);
+	Registry.RegisterHandler(TEXT("find_landscape_proxy_at"), &FindLandscapeProxyAt);
 }
 
 TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeInfo(const TSharedPtr<FJsonObject>& Params)
@@ -743,5 +747,101 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::GetMaterialUsageSummary(const TShared
 	Result->SetNumberField(TEXT("totalLandscapeComponents"), TotalComponents);
 	Result->SetNumberField(TEXT("totalGrassComponents"), TotalGrass);
 	Result->SetNumberField(TEXT("totalNaniteComponents"), TotalNanite);
+	return MCPResult(Result);
+}
+
+// #733: enumerate LandscapeStreamingProxy actors currently loaded in the world,
+// with per-proxy world bounds and the parent Landscape count. On a World
+// Partition map, an unloaded proxy silently reads layer weights as 0, so a
+// measurement is only trustworthy once the covering proxy is confirmed loaded.
+// Unloaded proxies are not spawned as actors, so the actor iterator only yields
+// loaded ones - hence loaded is always true for enumerated entries; callers use
+// the count + bounds to reason about coverage.
+TSharedPtr<FJsonValue> FLandscapeHandlers::ListLandscapeProxies(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	int32 ParentLandscapes = 0;
+	TArray<TSharedPtr<FJsonValue>> Proxies;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Actor = *It;
+		if (!Actor) continue;
+		if (Actor->IsA<ALandscape>())
+		{
+			ParentLandscapes++;
+			continue;
+		}
+		ALandscapeStreamingProxy* Proxy = Cast<ALandscapeStreamingProxy>(Actor);
+		if (!Proxy) continue;
+
+		FVector Origin, Extent;
+		Proxy->GetActorBounds(false, Origin, Extent);
+
+		TSharedPtr<FJsonObject> ProxyObj = MakeShared<FJsonObject>();
+		ProxyObj->SetStringField(TEXT("label"), Proxy->GetActorLabel());
+		ProxyObj->SetBoolField(TEXT("loaded"), true);
+
+		TSharedPtr<FJsonObject> Bounds = MakeShared<FJsonObject>();
+		TSharedPtr<FJsonObject> OriginObj = MakeShared<FJsonObject>();
+		OriginObj->SetNumberField(TEXT("x"), Origin.X);
+		OriginObj->SetNumberField(TEXT("y"), Origin.Y);
+		OriginObj->SetNumberField(TEXT("z"), Origin.Z);
+		TSharedPtr<FJsonObject> ExtentObj = MakeShared<FJsonObject>();
+		ExtentObj->SetNumberField(TEXT("x"), Extent.X);
+		ExtentObj->SetNumberField(TEXT("y"), Extent.Y);
+		ExtentObj->SetNumberField(TEXT("z"), Extent.Z);
+		Bounds->SetObjectField(TEXT("origin"), OriginObj);
+		Bounds->SetObjectField(TEXT("extent"), ExtentObj);
+		ProxyObj->SetObjectField(TEXT("worldBounds"), Bounds);
+
+		Proxies.Add(MakeShared<FJsonValueObject>(ProxyObj));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetNumberField(TEXT("loadedProxies"), Proxies.Num());
+	Result->SetNumberField(TEXT("parentLandscapes"), ParentLandscapes);
+	Result->SetArrayField(TEXT("proxies"), Proxies);
+	Result->SetStringField(TEXT("note"), TEXT("World Partition unloaded proxies are not spawned as actors, so only loaded proxies are listed."));
+	return MCPResult(Result);
+}
+
+// #733: resolve which loaded LandscapeStreamingProxy's world bounds contain a
+// world X/Y. Returns the covering proxy (loaded:true) or loaded:false when no
+// loaded proxy covers the position - which usually means the covering proxy is
+// streamed out, making any 0-weight readback there ambiguous rather than real.
+TSharedPtr<FJsonValue> FLandscapeHandlers::FindLandscapeProxyAt(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+
+	if (!Params->HasField(TEXT("worldX")) || !Params->HasField(TEXT("worldY")))
+	{
+		return MCPError(TEXT("Missing 'worldX'/'worldY' world position"));
+	}
+	const double TargetX = OptionalNumber(Params, TEXT("worldX"), 0.0);
+	const double TargetY = OptionalNumber(Params, TEXT("worldY"), 0.0);
+
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		ALandscapeStreamingProxy* Proxy = Cast<ALandscapeStreamingProxy>(*It);
+		if (!Proxy) continue;
+
+		FVector Origin, Extent;
+		Proxy->GetActorBounds(false, Origin, Extent);
+		if (TargetX >= Origin.X - Extent.X && TargetX <= Origin.X + Extent.X &&
+			TargetY >= Origin.Y - Extent.Y && TargetY <= Origin.Y + Extent.Y)
+		{
+			auto Result = MCPSuccess();
+			Result->SetBoolField(TEXT("found"), true);
+			Result->SetBoolField(TEXT("loaded"), true);
+			Result->SetStringField(TEXT("label"), Proxy->GetActorLabel());
+			return MCPResult(Result);
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("found"), false);
+	Result->SetBoolField(TEXT("loaded"), false);
+	Result->SetStringField(TEXT("note"), TEXT("No loaded proxy covers this position; the covering proxy is likely streamed out, so weight/height readbacks here are ambiguous."));
 	return MCPResult(Result);
 }

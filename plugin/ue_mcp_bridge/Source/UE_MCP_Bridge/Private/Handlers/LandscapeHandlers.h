@@ -26,4 +26,8 @@ private:
 	static TSharedPtr<FJsonValue> CreateLandscapeLayerInfo(const TSharedPtr<FJsonObject>& Params);
 	// v0.7.19 issue #150 — concise material + component count summary per proxy
 	static TSharedPtr<FJsonValue> GetMaterialUsageSummary(const TSharedPtr<FJsonObject>& Params);
+	// #733: enumerate loaded World Partition landscape streaming proxies with
+	// per-proxy world bounds, and resolve which proxy covers a world position.
+	static TSharedPtr<FJsonValue> ListLandscapeProxies(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> FindLandscapeProxyAt(const TSharedPtr<FJsonObject>& Params);
 };
