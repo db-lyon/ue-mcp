@@ -883,9 +883,14 @@ TArray<uint8> FMCPBridgeServer::CreateWebSocketFrame(const FString& Message)
 	else
 	{
 		Frame.Add(127);
+		// #731: MessageLen is int32; shifting it by 32-56 bits is undefined and
+		// produced a corrupt 8-byte extended payload length, so the client saw a
+		// bogus frame size and closed the socket for any response >= 64 KiB.
+		// Widen to uint64 before writing the extended length.
+		const uint64 Length = static_cast<uint64>(MessageLen);
 		for (int32 i = 7; i >= 0; --i)
 		{
-			Frame.Add((MessageLen >> (i * 8)) & 0xFF);
+			Frame.Add(static_cast<uint8>((Length >> (i * 8)) & 0xFF));
 		}
 	}
 
