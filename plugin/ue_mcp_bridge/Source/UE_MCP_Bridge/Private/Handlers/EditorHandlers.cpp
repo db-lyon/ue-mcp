@@ -40,6 +40,10 @@
 #include "Misc/App.h"
 #include "Logging/MessageLog.h"
 #include "HighResScreenshot.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/SWindow.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
 #include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -1239,6 +1243,84 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 	// HighResShot in the active PIE world so we capture the player viewport
 	// instead of whatever the editor camera was last looking at.
 	const FString Target = OptionalString(Params, TEXT("target"), TEXT("auto")).ToLower();
+
+	// target=window: synchronous FSlateApplication::TakeScreenshot of the whole
+	// active (or last visible) Slate window. Unlike the FScreenshotRequest paths
+	// this is pixel-true for ALL Slate content (painted UMG/Slate widgets that
+	// showUI compositing can miss), returns only after the PNG is on disk, and
+	// works even when the window is off-screen or unfocused - which makes it the
+	// reliable way for an agent to visually QA game UI.
+	if (Target == TEXT("window"))
+	{
+		if (!FSlateApplication::IsInitialized())
+		{
+			return MCPError(TEXT("Slate is not initialized"));
+		}
+		TSharedPtr<SWindow> CaptureWindow = FSlateApplication::Get().GetActiveTopLevelWindow();
+		if (!CaptureWindow.IsValid())
+		{
+			TArray<TSharedRef<SWindow>> VisibleWindows;
+			FSlateApplication::Get().GetAllVisibleWindowsOrdered(VisibleWindows);
+			if (VisibleWindows.Num() > 0)
+			{
+				CaptureWindow = VisibleWindows.Last();
+			}
+		}
+		if (!CaptureWindow.IsValid())
+		{
+			return MCPError(TEXT("No visible Slate window to capture"));
+		}
+
+		TArray<FColor> Pixels;
+		FIntVector CaptureSize = FIntVector::ZeroValue;
+		if (!FSlateApplication::Get().TakeScreenshot(CaptureWindow.ToSharedRef(), Pixels, CaptureSize)
+			|| Pixels.Num() == 0)
+		{
+			return MCPError(TEXT("Slate window screenshot failed"));
+		}
+		// Slate hands back per-widget alpha; force opaque so the PNG is viewable.
+		for (FColor& Pixel : Pixels)
+		{
+			Pixel.A = 255;
+		}
+
+		FString WindowFullPath = Filename;
+		if (FPaths::IsRelative(WindowFullPath))
+		{
+			WindowFullPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), Filename);
+		}
+
+		IImageWrapperModule& ImageWrapperModule =
+			FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+		TSharedPtr<IImageWrapper> PngWrapper =
+			ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+		if (!PngWrapper.IsValid()
+			|| !PngWrapper->SetRaw(
+				Pixels.GetData(),
+				Pixels.Num() * sizeof(FColor),
+				CaptureSize.X,
+				CaptureSize.Y,
+				ERGBFormat::BGRA,
+				8))
+		{
+			return MCPError(TEXT("PNG encode failed"));
+		}
+		const TArray64<uint8> PngData = PngWrapper->GetCompressed(100);
+		if (!FFileHelper::SaveArrayToFile(PngData, *WindowFullPath))
+		{
+			return MCPError(FString::Printf(TEXT("Could not write %s"), *WindowFullPath));
+		}
+
+		auto Result = MCPSuccess();
+		Result->SetStringField(TEXT("filename"), WindowFullPath);
+		Result->SetStringField(TEXT("target"), TEXT("window"));
+		Result->SetStringField(TEXT("window"), CaptureWindow->GetTitle().ToString());
+		Result->SetNumberField(TEXT("width"), CaptureSize.X);
+		Result->SetNumberField(TEXT("height"), CaptureSize.Y);
+		Result->SetStringField(TEXT("note"), TEXT("Synchronous Slate window capture including all UI."));
+		return MCPResult(Result);
+	}
+
 	UWorld* PieWorld = nullptr;
 	if (FWorldContext* PieCtx = GEditor->GetPIEWorldContext())
 	{

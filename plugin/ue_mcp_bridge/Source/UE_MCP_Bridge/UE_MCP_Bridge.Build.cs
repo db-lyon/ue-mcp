@@ -56,6 +56,7 @@ public class UE_MCP_Bridge : ModuleRules
 				"IKRig",
 				"IKRigDeveloper",
 				"IKRigEditor",
+				"ImageWrapper",
 				"InputCore",
 				"Kismet",
 				"KismetCompiler",
