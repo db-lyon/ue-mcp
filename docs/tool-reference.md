@@ -72,6 +72,7 @@ UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering
 | `delete` | Delete asset. On failure returns reason (open_in_editor / has_referencers / in_memory_referenced / package_read_only / package_dirty / unknown) plus referencers, inMemoryReferencers, packageReadOnly, packageDirty diagnostics (#601). Pass force=true to auto-close any open asset editors before deleting (#278). Params: `assetPath, force?` |
 | `delete_batch` | Batch-delete assets. Per-path status (deleted/absent/failed) plus reason+referencers on failed entries (#278). Params: `assetPaths[], force?` |
 | `create_data_asset` | Create UDataAsset instance of custom class. Params: `name, className (/Script/Module.ClassName or loaded name), packagePath?, properties? (key/value map)` |
+| `create_asset_by_class` | Create an asset of ANY concrete UObject class (not just UDataAsset) - physical-material subclasses, curves, settings objects. Params: `name, className, packagePath?, properties?, onConflict?`. Actors/components and specialized assets (Blueprint/Material) have dedicated actions (#726) |
 | `save` | Save asset(s). Params: `assetPath?` |
 | `save_all_dirty` | Flush every dirty package to disk in one call. End-of-workflow shortcut after bulk import/edit. Params: `saveMapPackages? (default true), saveContentPackages? (default true)` |
 | `set_mesh_material` | Assign material to static mesh slot. Params: `assetPath, materialPath, slotIndex?` |
@@ -230,7 +231,8 @@ UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering
 
 | Action | Description |
 |--------|-------------|
-| `get_outliner` | List actors. Params: `classFilter?, nameFilter?, world? (editor\|pie\|auto), limit?` |
+| `get_outliner` | List actors (each row includes `editorHidden` - hidden in the viewport but still rendering in game). Params: `classFilter?, nameFilter?, editorHidden? (filter to only hidden/only visible), world? (editor\|pie\|auto), limit?, includeStreaming? (#717)` |
+| `set_editor_visibility` | Bulk set editor-only visibility (temporarily-hidden-in-editor). Target actorLabels[] or all=true. Params: `hidden (required; true=hide, false=show), actorLabels?, all? (#717)` |
 | `place_actor` | Spawn actor. Pass world:pie to spawn into the running PIE world (#585). Params: `actorClass, label?, location?, rotation?, scale?, staticMesh?, material?, world? (editor\|pie)` |
 | `delete_actor` | Remove actor. Params: `actorLabel` |
 | `get_actor_details` | Inspect actor. Params: `actorLabel OR actorPath, includeProperties?, propertyName?, world? (editor\|pie)` |
@@ -251,7 +253,7 @@ UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering
 | `spawn_volume` | Place volume. Params: `volumeType, location?, extent?, label?` |
 | `list_volumes` | List volumes. Params: `volumeType?` |
 | `set_volume_properties` | Edit volume. Params: `actorLabel, properties` |
-| `spawn_light` | Place light. Params: `lightType (point\|spot\|directional\|rect\|sky), location?, rotation?, intensity?, color? ({r,g,b} 0-255), mobility? (static\|stationary\|movable; default movable so the light renders without a build), label? (#331/#310)` |
+| `spawn_light` | Place light. Params: `lightType (point\|spot\|directional\|rect\|sky), location?, rotation?, intensity?, color? ({r,g,b} 0-255), attenuationRadius? (point/spot/rect only; #723), mobility? (static\|stationary\|movable; default movable so the light renders without a build), label? (#331/#310)` |
 | `set_light_properties` | Edit a light OR SkyLight (intensity/color now work on SkyLight too, #608). Params: `actorLabel, intensity?, color?, rotation? (DirectionalLight sun angle), mobility? (static\|stationary\|movable), recaptureSky?, volumetricScatteringIntensity?, sourceRadius? (point/spot), innerConeAngle?/outerConeAngle? (spot)` |
 | `set_fog_properties` | Edit ExponentialHeightFog incl. volumetric fog (#608). Params: `actorLabel?, fogDensity?, fogHeightFalloff?, startDistance?, fogInscatteringColor?, enableVolumetricFog?, volumetricFogScatteringDistribution?, volumetricFogExtinctionScale?, volumetricFogDistance?, volumetricFogAlbedo?` |
 | `get_actors_by_class` | List actors by class. Matches Blueprint subclasses of a native base via IsChildOf when className resolves to a UClass (short name, /Script path, or BP class path), else falls back to name-substring. Each actor includes location/rotation/scale. Params: `className, world? (editor\|pie), matchSubclasses? (default true), includeTransforms? (default true) (#675)` |
@@ -460,6 +462,8 @@ UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering
 | `create_layer_info` | Standalone LayerInfo asset creation - no landscape required. Params: `layerName, name? (default LI_<layerName>), packagePath? (default /Game/Landscape/LayerInfos), physMaterial? (asset path), hardness? (#251)` |
 | `create` | Spawn a new ALandscape with a flat heightmap. Defaults match the Editor's Landscape Mode 'create new' (8x8 components, 63 quads/subsection, 2 subsections/component = 1016x1016 quads). Params: `location? (Vec3), scale? (Vec3, default 100,100,100), componentCountX? (default 8), componentCountY? (default 8), subsectionSizeQuads? (one of 7\|15\|31\|63\|127\|255, default 63), numSubsections? (1\|2, default 2), heightOffset? (uint16, default 32768 = mid-elevation), label? (#303)` |
 | `get_material_usage_summary` | Per-proxy summary: landscape/hole material paths + component/grass/nanite counts (#150) |
+| `list_proxies` | Enumerate loaded World Partition LandscapeStreamingProxy actors with per-proxy worldBounds (origin/extent), plus loadedProxies + parentLandscapes counts. Only loaded proxies appear (unloaded are not spawned) - confirm a proxy is streamed in before trusting a layer/height readback (#733) |
+| `find_proxy_at` | Resolve which loaded LandscapeStreamingProxy covers a world X/Y. Returns found/loaded + label, or loaded:false when the covering proxy is streamed out. Params: `worldX, worldY (#733)` |
 
 ---
 
@@ -550,7 +554,8 @@ UE-MCP exposes **<!-- count:tools -->23<!-- /count --> category tools** covering
 
 | Action | Description |
 |--------|-------------|
-| `list` | List sound assets (SoundWave, SoundCue, MetaSoundSource). Params: `directory?, recursive?` |
+| `list` | List sound assets (SoundWave, SoundCue, MetaSoundSource) under a directory, paginated. Params: `directory? (default /Game), recursive? (default true), maxResults? (default 1000), offset? (default 0)`. Returns `assets, count, total, offset, hasMore, nextOffset`. |
+| `extract_pcm` | Decode a USoundWave's imported audio to in-memory PCM (no intermediate file) for semantic sound search / analysis. Returns sampleRate, numChannels, numFrames, durationSeconds, and 16-bit PCM base64 (interleaved). Params: `soundPath, maxSeconds? (cap the decoded window), downmixMono? (default false)` |
 | `import_audio` | Import a WAV/OGG/FLAC file as a USoundWave. Returns durationSeconds, numChannels, looping. Params: `filePath, name?, packagePath? (default /Game/Audio), looping?, replaceExisting? (default true)` |
 | `play_at_location` | Play a sound in the editor world. Params: `soundPath, location, volumeMultiplier?, pitchMultiplier?` |
 | `spawn_ambient` | Place an AmbientSound actor. Params: `soundPath, location, label?` |
@@ -662,8 +667,9 @@ audio(action="set_sound_submix", soundPath="/Game/Audio/MetaSounds/Hum.Hum", sub
 | `restart_editor` | Stop then start the editor |
 | `build_project` | Build the project's C++ code using Unreal Build Tool. Editor should be stopped first |
 | `execute_command` | Run console command. Params: `command` |
-| `execute_python` | GATED LAST RESORT. execute_python is unreachable until a semantic tool search over your taskSummary has been run AND every candidate it returns is EXPLICITLY ruled out with a stated reason. Flow: (1) call with taskSummary (+code) - it returns the candidate actions; (2) re-call with the same taskSummary/code PLUS ruledOut=[{action, reason}] giving a specific reason each candidate does not fit. Python runs only once every candidate is ruled out. Params: `code, taskSummary (required), ruledOut? (#704)` |
-| `run_python_file` | Run a Python file from disk with __file__/__name__ populated (#142). Params: `filePath, args?` |
+| `execute_python` | GATED LAST RESORT. execute_python is unreachable until a semantic tool search over your taskSummary has been run AND every candidate it returns is EXPLICITLY ruled out with a stated reason. Flow: (1) call with taskSummary (+code) - it returns the candidate actions; (2) re-call with the same taskSummary/code PLUS ruledOut=[{action, reason}] giving a specific reason each candidate does not fit. Python runs only once every candidate is ruled out. Params: `code, taskSummary (required), ruledOut?, resultVariable? (name of a top-level variable to return as result, separate from print()/log; #732) (#704)` |
+| `run_python_file` | Run a Python file from disk with __file__/__name__ populated (#142). Params: `filePath, args?, resultVariable? (return a named top-level variable as result, separate from logs; #732)` |
+| `purge_python_modules` | Purge cached embedded-Python modules whose name starts with a prefix, so the editor drops stale code after you edit a Python tool on disk. Returns the purged names + count. Params: `prefix (required, non-empty) (#719)` |
 | `set_property` | Set UObject property. Saves the package to disk by default; pass save=false to leave it dirty in-memory (batch many writes, then editor(save_dirty)/asset(save)) (#674). Params: `objectPath, propertyName, value, save? (default true)` |
 | `get_property` | Read UObject property. Params: `objectPath, propertyName` |
 | `describe_object` | Describe a UObject and optionally list/read properties. Params: `objectPath, includeProperties?, includeValues?, propertyNames?` |
@@ -678,10 +684,10 @@ audio(action="set_sound_submix", soundPath="/Game/Audio/MetaSounds/Hum.Hum", sub
 | `undo` | Undo last transaction |
 | `redo` | Redo last transaction |
 | `get_perf_stats` | Editor performance stats |
-| `run_stat` | Run stat command. Params: `command` |
+| `run_stat` | Run a stat overlay. A bare `name` (e.g. 'unit','fps','game','gpu') is prefixed with 'stat '; or pass a full `command`. Params: `name? OR command? (#722)` |
 | `set_scalability` | Set rendering quality via the Scalability system (actually applies + persists, not just sg.* cvars). Params: `level (Low\|Medium\|High\|Epic\|Cinematic)` |
 | `set_cvars` | Bulk-set console variables. Params: `cvars ({name: value} object OR [{name, value}] array)` |
-| `capture_screenshot` | Screenshot. Params: `filename?, resolution?, target? (auto\|pie\|editor; auto routes to PIE viewport when PIE is running) (#226)` |
+| `capture_screenshot` | Screenshot. target=pie captures the actual PIE game viewport with UI + on-screen debug canvas (what the player sees), even in Play-in-New-Window; target=editor captures the level viewport. Returns includesDebugCanvas. Params: `filename?, resolution?, target? (auto\|pie\|editor; auto routes to PIE when running) (#226/#724)` |
 | `capture_scene_png` | Headless PNG screenshot via SceneCapture2D (works unfocused, guaranteed RGBA8 LDR). focusActorLabel auto-frames the camera on an actor's bounds; world:pie captures the running game world (#599). Params: `outputPath, location?, rotation?, focusActorLabel?, focusDirection?, focusMargin?, world? (editor\|pie), width? (default 1280), height? (default 720), fov? (default 90) (#148/#599)` |
 | `set_realtime` | Toggle realtime update on the level editor viewports so the editor-world sim (Niagara, anims) ticks - otherwise capture_scene_png renders an unticked, empty sim. Params: `enabled (default true) (#537)` |
 | `get_viewport` | Get viewport camera |
@@ -690,6 +696,9 @@ audio(action="set_sound_submix", soundPath="/Game/Audio/MetaSounds/Hum.Hum", sub
 | `set_viewport` | Set viewport camera. Params: `location?, rotation?` |
 | `focus_on_actor` | Focus on actor. Params: `actorLabel` |
 | `create_sequence` | Create Level Sequence. Params: `name, packagePath?` |
+| `close_sequence` | Close the currently open Level Sequence editor (Sequencer) before bulk-deleting actors a sequence may possess. Returns wasOpen + closedSequence (#718) |
+| `open_tab` | Open a registered editor tab by ID so its UI can be screenshotted (e.g. 'ProjectSettings', 'OutputLog'). Params: `tabId (#727)` |
+| `open_settings` | Open (and navigate) a settings viewer for visual settings evidence. Params: `container? (Project\|Editor; default Project), category? (e.g. Engine), section? (e.g. Physics, or a combined Engine.Physics) (#727)` |
 | `get_sequence_info` | Read sequence: bindings (possessable/spawnable) with their Sequencer tags (#556), tracks, and optional section detail. Params: `assetPath, includeSectionDetails? (attach sockets, first transform key values per track)` |
 | `add_sequence_track` | Add an empty track. Params: `assetPath, trackType, actorLabel?` |
 | `add_sequence_section` | Add a section to a track (creating the track if needed), set its start/end in seconds, and for a CameraCut track bind it to a camera. Returns the section index + channel names to key. Params: `sequencePath, trackType (Transform\|Float\|Fade\|CameraCut\|Audio\|Event\|SkeletalAnimation), actorLabel? (binding scope), startSeconds?, endSeconds?, cameraActorLabel? (#548)` |
@@ -753,7 +762,7 @@ audio(action="set_sound_submix", soundPath="/Game/Audio/MetaSounds/Hum.Hum", sub
 | Action | Description |
 |--------|-------------|
 | `set_collision_profile` | Set collision preset. Params: `actorLabel, profileName` |
-| `set_simulate_physics` | Toggle physics. Params: `actorLabel, simulate` |
+| `set_simulate_physics` | Toggle physics. Accepts `simulate` (or legacy `enabled`); errors explicitly when neither is given. Params: `actorLabel, simulate (#721)` |
 | `add_impulse` | Apply an impulse (or force with mode='force') to a (PIE) actor's simulating physics body so its motion can be observed over time - loop level(read_actor_motion) to sample the response. Params: `actorLabel, impulse {x,y,z} (or force/vector), mode? (impulse\|force), componentName?, boneName?, location? (apply at world point), velChange?/accelChange?, world? (editor\|pie\|auto) (#676)` |
 | `set_collision_enabled` | Set collision mode. Params: `actorLabel, collisionEnabled` |
 | `set_collision` | Unified collision authoring for a placed actor (actorLabel) or a Blueprint component template (assetPath+componentName). Apply any of: collisionProfile, collisionEnabled (NoCollision\|QueryOnly\|PhysicsOnly\|QueryAndPhysics), objectType (channel name), responseToAllChannels (Block\|Overlap\|Ignore), responses ({channel: Block\|Overlap\|Ignore}). Profile is applied first, then overrides. componentName optional for actors (defaults to all primitive components), required for Blueprint templates (#545) |
@@ -771,7 +780,7 @@ audio(action="set_sound_submix", soundPath="/Game/Audio/MetaSounds/Hum.Hum", sub
 | `get_applied_imcs` | Read a live PIE player's currently-applied Input Mapping Contexts (with priority + registrationCount). Requires PIE running. Params: `playerIndex? (default 0) (#604)` |
 | `list_input_mappings` | Alias for read_imc. List key→action bindings with triggers/modifiers. Params: `imcPath` |
 | `add_imc_mapping` | Add key mapping to IMC. Params: `imcPath, inputActionPath, key` |
-| `set_mapping_modifiers` | Set modifiers/triggers on an IMC mapping. Each modifier is either {type:'<ShortName>', <prop>:<val>} or {class:'/Script/Module.Class', properties:{...}} - the class form resolves any custom UInputModifier subclass (#649). Params: `imcPath, mappingIndex?, modifiers?, triggers?` |
+| `set_mapping_modifiers` | Set modifiers/triggers on an IMC mapping. Each modifier OR trigger is either {type:'<ShortName>', <prop>:<val>} or {class:'/Script/Module.Class', properties:{...}} - the class form resolves any custom UInputModifier/UInputTrigger subclass (e.g. type:'Hold' with HoldTimeThreshold). Unresolvable trigger specs are reported in failedTriggers and never leave a null entry (#649/#725). Params: `imcPath, mappingIndex?, modifiers?, triggers?` |
 | `remove_imc_mapping` | Remove an IMC mapping. Params: `imcPath, mappingIndex? \| (inputActionPath? + key?) (#158)` |
 | `set_imc_mapping_key` | Rebind an IMC mapping to a new key. Params: `imcPath, newKey, mappingIndex? \| key? \| inputActionPath? (#158)` |
 | `set_imc_mapping_action` | Retarget an IMC mapping to a different InputAction. Params: `imcPath, newInputActionPath, mappingIndex? \| key? \| inputActionPath? (#158)` |
