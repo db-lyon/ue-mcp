@@ -33,6 +33,7 @@ import {
   writeNativeModulesState,
 } from "./plugin/native-deploy.js";
 import { ALL_TOOLS } from "./tools.js";
+import { resolvePublishToken } from "./registry-auth.js";
 
 const args = process.argv.slice(2);
 const sub = args.shift();
@@ -1055,12 +1056,13 @@ async function cmdPublish(): Promise<void> {
   if (!readme) note(`WARNING: no README.md in ${dir}; publishing with an empty README.`);
 
   const base = (process.env.UE_MCP_REGISTRY ?? "https://plugins.ue-mcp.com").replace(/\/+$/, "");
-  const token = tokenFlag ?? process.env.UE_MCP_PUBLISH_TOKEN ?? process.env.REGISTRY_PUBLISH_TOKEN;
+  // Precedence: --token, then env (CI), then the token cached by `ue-mcp login`.
+  const token = await resolvePublishToken(tokenFlag);
   if (!token && !dryRun) {
     fail(
-      "no publish token. Set UE_MCP_PUBLISH_TOKEN (or pass --token). " +
-      "Mint your own at https://plugins.ue-mcp.com/account - sign in with GitHub, " +
-      "create a token, and publish your plugins yourself.",
+      "not logged in. Run `ue-mcp login` - it authorizes this machine with GitHub " +
+      "and mints your own publish token, no site secret needed. " +
+      "For CI, set UE_MCP_PUBLISH_TOKEN (mint one at " + base + "/account).",
     );
   }
 

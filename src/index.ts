@@ -501,6 +501,18 @@ if (subcmd === "init") {
     console.error(`[ue-mcp] auth failed: ${e instanceof Error ? e.message : e}`);
     process.exit(1);
   });
+} else if (subcmd === "login") {
+  process.argv.splice(2, 1);
+  import("./login-cli.js").then((m) => m.runLogin()).catch((e) => {
+    console.error(`[ue-mcp] login failed: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  });
+} else if (subcmd === "logout") {
+  process.argv.splice(2, 1);
+  import("./login-cli.js").then((m) => m.runLogout()).catch((e) => {
+    console.error(`[ue-mcp] logout failed: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  });
 } else if (subcmd === "feedback") {
   process.argv.splice(2, 1);
   import("./feedback-cli.js");
