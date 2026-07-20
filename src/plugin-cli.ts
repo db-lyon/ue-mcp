@@ -1021,12 +1021,14 @@ async function fetchCatalog(base: string): Promise<RegistryRow[]> {
 async function cmdPublish(): Promise<void> {
   let dir = process.cwd();
   let slugFlag: string | undefined;
+  let repoFlag: string | undefined;
   let tokenFlag: string | undefined;
   let privacy: boolean | undefined;
   let dryRun = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--slug") slugFlag = args[++i];
+    else if (a === "--repo") repoFlag = args[++i];
     else if (a === "--token") tokenFlag = args[++i];
     else if (a === "--private") privacy = true;
     else if (a === "--public") privacy = false;
@@ -1083,7 +1085,10 @@ async function cmdPublish(): Promise<void> {
   manifest.readme = readme;
   if (!manifest.name) manifest.name = pkg.name;
   if (!manifest.author && authorName) manifest.author = authorName;
-  if (!manifest.repoUrl) manifest.repoUrl = repoUrlFromPkg(pkg);
+  // The package owns where its source lives, so package.json's `repository`
+  // wins over whatever the registry row happens to hold (which can be stale or
+  // simply wrong). --repo overrides both.
+  manifest.repoUrl = repoFlag ?? repoUrlFromPkg(pkg) ?? manifest.repoUrl;
   if (privacy !== undefined) manifest.repoPrivate = privacy;
 
   if (!existing) {
