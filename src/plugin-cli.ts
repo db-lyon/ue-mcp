@@ -1059,7 +1059,8 @@ async function cmdPublish(): Promise<void> {
   if (!token && !dryRun) {
     fail(
       "no publish token. Set UE_MCP_PUBLISH_TOKEN (or pass --token). " +
-      "Get it from the registry owner / Render dashboard (REGISTRY_PUBLISH_TOKEN).",
+      "Mint your own at https://plugins.ue-mcp.com/account - sign in with GitHub, " +
+      "create a token, and publish your plugins yourself.",
     );
   }
 
