@@ -25,6 +25,14 @@ import yaml from "js-yaml";
 import { loadManifest } from "./plugin/manifest.js";
 import { satisfiesMinimum } from "./plugin/version.js";
 import { findInstalledPackage } from "./plugin/resolver.js";
+import { pluginSlug, deriveGroups, isGroupEnabled } from "./plugin/plugin-groups.js";
+import {
+  targetFile,
+  readEffectiveGroups,
+  writeLayerGroups,
+  type ConfigTarget,
+} from "./plugin/plugin-config-store.js";
+import { checkboxSelect, singleSelect } from "./ui/select.js";
 import { readDeployedBridgeApiVersion } from "./plugin/bridge-api.js";
 import {
   deployNativeModule,
@@ -1125,6 +1133,142 @@ async function cmdPublish(): Promise<void> {
   note(`published '${slug}' to ${base} (README ${readme.length} chars${privacy !== undefined ? `, repoPrivate=${privacy}` : ""}).`);
 }
 
+/* ------------------------------------------------------------------ */
+/* config - toggle a plugin's flow groups per user, per layer          */
+/* ------------------------------------------------------------------ */
+
+const CONFIG_RESTART_NOTE =
+  "Plugin flows load at server start. Restart your MCP client (or `ue-mcp restart`) for group changes to take effect.";
+
+interface ResolvedInstalled {
+  slug: string;
+  pkgName: string;
+  pkgDir: string;
+}
+
+/**
+ * Resolve a `config <name>` argument to an installed plugin. Accepts the slug
+ * (`recipes`), the full package name (`ue-mcp-recipes`), or a bare name that
+ * takes the conventional prefix. Prefers a match in the declared plugins: list.
+ */
+function resolveInstalledPlugin(proj: ProjectInfo, nameArg: string): ResolvedInstalled {
+  const list = readPluginsList(proj.configPath);
+  const declared = list.find((p) => p.name === nameArg || pluginSlug(p.name) === nameArg);
+  const candidates = declared
+    ? [declared.name]
+    : [nameArg, `ue-mcp-${nameArg}`];
+  for (const pkgName of candidates) {
+    const pkgDir = findInstalledPackage(pkgName, proj.projectDir);
+    if (pkgDir) return { slug: pluginSlug(pkgName), pkgName, pkgDir };
+  }
+  fail(
+    `plugin '${nameArg}' is not installed in ${proj.projectDir}. ` +
+    `Install it with \`ue-mcp plugin install ${nameArg}\` first, or run \`ue-mcp plugin list\`.`,
+  );
+}
+
+async function cmdConfig(): Promise<void> {
+  const nameArg = args.shift();
+  if (!nameArg) {
+    fail(
+      "usage: ue-mcp plugin config <name> [--enable a,b] [--disable c,d] [--list-groups] [--local|--project]\n" +
+      "  no --enable/--disable => interactive menu. Default write target is ~/.ue-mcp/config.yml (you, all projects).",
+    );
+  }
+
+  const enable = new Set<string>();
+  const disable = new Set<string>();
+  let listGroups = false;
+  let target: ConfigTarget = "global";
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--enable") (args[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean).forEach((g) => enable.add(g));
+    else if (a === "--disable") (args[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean).forEach((g) => disable.add(g));
+    else if (a === "--list-groups" || a === "--list") listGroups = true;
+    else if (a === "--local") target = "local";
+    else if (a === "--project" || a === "--tracked") target = "project";
+    else if (a === "--global") target = "global";
+  }
+
+  const proj = findProjectDir(process.cwd());
+  const resolved = resolveInstalledPlugin(proj, nameArg);
+  const manifest = loadManifest(resolved.pkgDir).manifest;
+  const groups = deriveGroups(manifest.flows);
+  if (groups.length === 0) {
+    fail(`${resolved.slug} declares no flows, so there are no groups to configure.`);
+  }
+
+  const effective = readEffectiveGroups(proj.projectDir, resolved.slug);
+
+  if (listGroups) {
+    note(`groups for ${resolved.slug} (${Object.keys(manifest.flows).length} flow(s)):`);
+    for (const g of groups) {
+      const on = isGroupEnabled({ groups: effective.state }, g);
+      const src = effective.source[g] ? ` [set in ${effective.source[g]}]` : " [default]";
+      console.log(`  ${on ? "on " : "off"}  ${g}${on ? "" : src}`);
+    }
+    return;
+  }
+
+  // Validate any group names the user named against what the plugin declares.
+  for (const g of [...enable, ...disable]) {
+    if (!groups.includes(g)) {
+      fail(`'${g}' is not a group of ${resolved.slug}. Groups: ${groups.join(", ")}.`);
+    }
+  }
+
+  // Scriptable path: apply deltas to the chosen layer only.
+  if (enable.size > 0 || disable.size > 0) {
+    writeLayerGroups(targetFile(proj.projectDir, target), resolved.slug, (existing) => {
+      const next = { ...existing };
+      for (const g of enable) next[g] = true;
+      for (const g of disable) next[g] = false;
+      return next;
+    });
+    reportConfigWrite(resolved.slug, target, proj);
+    return;
+  }
+
+  // Interactive path: choose group states, then the write target.
+  await cmdConfigInteractive(resolved.slug, groups, effective.state, proj);
+}
+
+async function cmdConfigInteractive(
+  slug: string,
+  groups: string[],
+  effectiveState: Record<string, boolean>,
+  proj: ProjectInfo,
+): Promise<void> {
+  const items = groups.map((g) => ({
+    label: g,
+    checked: isGroupEnabled({ groups: effectiveState }, g),
+  }));
+  const states = await checkboxSelect(`${slug}: enable flow groups`, items);
+  const chosen: Record<string, boolean> = {};
+  groups.forEach((g, i) => (chosen[g] = states[i]));
+
+  const targetLabels: Array<{ label: string; target: ConfigTarget }> = [
+    { label: "you, all projects  (~/.ue-mcp/config.yml)", target: "global" },
+    { label: "you, this project  (ue-mcp.local.yml, untracked)", target: "local" },
+    { label: "the team, tracked  (ue-mcp.yml)", target: "project" },
+  ];
+  const idx = await singleSelect("Save preference to", targetLabels.map((t) => t.label));
+  const target = targetLabels[idx].target;
+
+  writeLayerGroups(targetFile(proj.projectDir, target), slug, () => chosen);
+  reportConfigWrite(slug, target, proj);
+}
+
+function reportConfigWrite(slug: string, target: ConfigTarget, proj: ProjectInfo): void {
+  const file = targetFile(proj.projectDir, target);
+  const shown = target === "global" ? file : path.relative(proj.projectDir, file);
+  note(`updated ${slug} group config in ${shown}`);
+  if (target === "project") {
+    note("NOTE: ue-mcp.yml is source-tracked - this sets a team-wide default and was re-dumped (YAML comments not preserved).");
+  }
+  note(CONFIG_RESTART_NOTE);
+}
+
 switch (sub) {
   case "install": cmdInstall(); break;
   case "uninstall":
@@ -1137,6 +1281,7 @@ switch (sub) {
   case "new":
   case "init": cmdCreate(); break;
   case "publish": cmdPublish().catch((e) => fail(e instanceof Error ? e.message : String(e))); break;
+  case "config": cmdConfig().catch((e) => fail(e instanceof Error ? e.message : String(e))); break;
   default:
     console.error(
       "Usage:\n" +
@@ -1144,6 +1289,7 @@ switch (sub) {
       "  ue-mcp plugin uninstall <name>\n" +
       "  ue-mcp plugin list\n" +
       "  ue-mcp plugin update [name]\n" +
+      "  ue-mcp plugin config <name> [--enable a,b] [--disable c,d] [--list-groups] [--local|--project]\n" +
       "  ue-mcp plugin create <name> [--dir path]\n" +
       "  ue-mcp plugin publish [dir] [--slug s] [--private|--public] [--dry-run]",
     );
