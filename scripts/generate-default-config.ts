@@ -105,11 +105,13 @@ function generate(): string {
           if (typeof optVal === "object" && optVal !== null) {
             // Inline YAML object (e.g. { x: 0, y: 0, z: 0 })
             const inner = Object.entries(optVal)
-              .map(([k, v]) => `${k}: ${v}`)
+              .map(([k, v]) => `${k}: ${typeof v === "string" ? yamlString(v) : v}`)
               .join(", ");
             lines.push(`          ${optKey}: { ${inner} }`);
           } else {
-            lines.push(`          ${optKey}: ${optVal}`);
+            // Scalar option values must be quoted when they contain YAML
+            // metacharacters (a description with ": " otherwise breaks the map).
+            lines.push(`          ${optKey}: ${typeof optVal === "string" ? yamlString(optVal) : optVal}`);
           }
         }
       }
