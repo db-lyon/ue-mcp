@@ -15,6 +15,7 @@ export const niagaraTool: ToolDef = categoryTool(
     create:         bp("Create system. Params: name, packagePath?", "create_niagara_system"),
     create_emitter: bp("Create Niagara emitter. Params: name, packagePath?, templatePath?", "create_niagara_emitter"),
     add_emitter:    bp("Add emitter to system. Params: systemPath, emitterPath", "add_emitter_to_system"),
+    remove_emitter: bp("Remove an emitter from a system (CRUD delete). Params: systemPath, emitterName? or emitterIndex?", "remove_emitter_from_system", (p) => ({ systemPath: p.systemPath, emitterName: p.emitterName, emitterIndex: p.emitterIndex })),
     list_emitters:  bp("List emitters in system. Params: systemPath", "list_emitters_in_system"),
     set_emitter_property: bp("Set emitter property. Params: systemPath, emitterName?, propertyName, value", "set_emitter_property"),
     list_modules:   bp("List Niagara modules. Params: directory?", "list_niagara_modules"),

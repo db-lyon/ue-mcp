@@ -27,6 +27,10 @@
 #include "NiagaraNodeCustomHlsl.h"
 #include "NiagaraNodeOutput.h"
 #include "ViewModels/Stack/NiagaraStackGraphUtilities.h"
+#include "NiagaraStackFunctionInputBinder.h"
+#include "NiagaraParameterMapHistory.h"
+#include "NiagaraTypes.h"
+#include "EdGraphSchema_Niagara.h"
 #include "NiagaraEmitterHandle.h"
 #include "NiagaraEditorUtilities.h"
 #include "NiagaraEmitterFactoryNew.h"
@@ -82,6 +86,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_niagara_module_inputs"), &ListModuleInputs);
 	Registry.RegisterHandler(TEXT("set_niagara_module_input"), &SetModuleInput);
 	Registry.RegisterHandler(TEXT("add_niagara_module"), &AddModule);
+	Registry.RegisterHandler(TEXT("remove_emitter_from_system"), &RemoveEmitterFromSystem);
 	Registry.RegisterHandler(TEXT("list_niagara_static_switches"), &ListStaticSwitches);
 	Registry.RegisterHandler(TEXT("set_niagara_static_switch"), &SetStaticSwitch);
 	Registry.RegisterHandler(TEXT("create_niagara_module_from_hlsl"), &CreateModuleFromHlsl);
@@ -1253,6 +1258,62 @@ namespace
 		O->SetBoolField(TEXT("linked"), Pin->LinkedTo.Num() > 0);
 		return O;
 	}
+
+	ENiagaraScriptUsage UsageOfContext(const FString& Ctx)
+	{
+		if (Ctx.Equals(TEXT("ParticleUpdate"), ESearchCase::IgnoreCase)) return ENiagaraScriptUsage::ParticleUpdateScript;
+		if (Ctx.Equals(TEXT("EmitterSpawn"), ESearchCase::IgnoreCase))   return ENiagaraScriptUsage::EmitterSpawnScript;
+		if (Ctx.Equals(TEXT("EmitterUpdate"), ESearchCase::IgnoreCase))  return ENiagaraScriptUsage::EmitterUpdateScript;
+		return ENiagaraScriptUsage::ParticleSpawnScript;
+	}
+
+	// Parse a string into the raw byte layout of a Niagara input type. Covers the
+	// scalar/vector/color types module inputs almost always use. Returns false
+	// with a reason for unsupported types.
+	bool FillNiagaraValueBytes(const FNiagaraTypeDefinition& T, const FString& Value, TArray<uint8>& Out, FString& OutErr)
+	{
+		auto ParseFloats = [](const FString& S, int32 N, TArray<float>& F)
+		{
+			TArray<FString> Parts;
+			S.ParseIntoArray(Parts, TEXT(","), true);
+			if (Parts.Num() == 1) S.ParseIntoArray(Parts, TEXT(" "), true);
+			for (const FString& P : Parts) F.Add(FCString::Atof(*P.TrimStartAndEnd()));
+			return F.Num() >= N;
+		};
+
+		if (T == FNiagaraTypeDefinition::GetFloatDef())
+		{
+			float V = FCString::Atof(*Value);
+			Out.SetNumUninitialized(sizeof(float)); FMemory::Memcpy(Out.GetData(), &V, sizeof(float)); return true;
+		}
+		if (T == FNiagaraTypeDefinition::GetIntDef())
+		{
+			int32 V = FCString::Atoi(*Value);
+			Out.SetNumUninitialized(sizeof(int32)); FMemory::Memcpy(Out.GetData(), &V, sizeof(int32)); return true;
+		}
+		if (T == FNiagaraTypeDefinition::GetBoolDef())
+		{
+			FNiagaraBool B; B.SetValue(Value.ToBool() || Value == TEXT("1"));
+			Out.SetNumUninitialized(sizeof(FNiagaraBool)); FMemory::Memcpy(Out.GetData(), &B, sizeof(FNiagaraBool)); return true;
+		}
+		if (T == FNiagaraTypeDefinition::GetVec2Def())
+		{
+			TArray<float> F; if (!ParseFloats(Value, 2, F)) { OutErr = TEXT("expected 2 comma-separated floats"); return false; }
+			FVector2f V(F[0], F[1]); Out.SetNumUninitialized(sizeof(V)); FMemory::Memcpy(Out.GetData(), &V, sizeof(V)); return true;
+		}
+		if (T == FNiagaraTypeDefinition::GetVec3Def())
+		{
+			TArray<float> F; if (!ParseFloats(Value, 3, F)) { OutErr = TEXT("expected 3 comma-separated floats"); return false; }
+			FVector3f V(F[0], F[1], F[2]); Out.SetNumUninitialized(sizeof(V)); FMemory::Memcpy(Out.GetData(), &V, sizeof(V)); return true;
+		}
+		if (T == FNiagaraTypeDefinition::GetVec4Def() || T == FNiagaraTypeDefinition::GetColorDef())
+		{
+			TArray<float> F; if (!ParseFloats(Value, 4, F)) { OutErr = TEXT("expected 4 comma-separated floats"); return false; }
+			FVector4f V(F[0], F[1], F[2], F[3]); Out.SetNumUninitialized(sizeof(V)); FMemory::Memcpy(Out.GetData(), &V, sizeof(V)); return true;
+		}
+		OutErr = FString::Printf(TEXT("unsupported input type '%s' for override-map set"), *T.GetName());
+		return false;
+	}
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::ListModuleInputs(const TSharedPtr<FJsonObject>& Params)
@@ -1353,6 +1414,62 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 			if (!FC) continue;
 			SeenModules.AddUnique(FC->GetFunctionName());
 			if (!FC->GetFunctionName().Equals(ModuleName, ESearchCase::IgnoreCase)) continue;
+
+			// Primary path: the real settable module inputs (SpawnRate, Lifetime,
+			// sprite size, colour, ...) come from the module SCRIPT, not the
+			// function-call node's pins, and their values live in the override /
+			// rapid-iteration map. Enumerate the module's inputs, match by name,
+			// then set the value through the stack input binder. Falls through to
+			// the pin-default path only when this can't bind.
+			{
+				FCompileConstantResolver Resolver(FVersionedNiagaraEmitter(Emitter, Version), UsageOfContext(Slot.Context));
+				TArray<FNiagaraVariable> InputVars;
+				FNiagaraStackGraphUtilities::GetStackFunctionInputs(
+					*FC, InputVars, Resolver,
+					FNiagaraStackGraphUtilities::ENiagaraGetStackFunctionInputPinsOptions::ModuleInputsOnly, false);
+
+				auto LeafOf = [](const FString& N)
+				{
+					FString Head, Leaf;
+					return N.Split(TEXT("."), &Head, &Leaf, ESearchCase::IgnoreCase, ESearchDir::FromEnd) ? Leaf : N;
+				};
+				const FNiagaraVariable* Found = InputVars.FindByPredicate([&](const FNiagaraVariable& V)
+				{
+					const FString N = V.GetName().ToString();
+					return N.Equals(InputName, ESearchCase::IgnoreCase) || LeafOf(N).Equals(InputName, ESearchCase::IgnoreCase);
+				});
+
+				if (Found)
+				{
+					const FString Leaf = LeafOf(Found->GetName().ToString());
+					FNiagaraStackFunctionInputBinder Binder;
+					TArray<UNiagaraScript*> Dependents;
+					for (const FScriptSlot& Dep : Scripts)
+					{
+						if (Dep.Script) Dependents.Add(Dep.Script);
+					}
+					FText BindErr;
+					if (Binder.TryBind(Slot.Script, Dependents, Resolver, Emitter->GetUniqueEmitterName(), FC,
+							FName(*Leaf), TOptional<FNiagaraTypeDefinition>(Found->GetType()), true, BindErr))
+					{
+						TArray<uint8> Bytes;
+						FString VErr;
+						if (FillNiagaraValueBytes(Found->GetType(), Value, Bytes, VErr))
+						{
+							FC->Modify();
+							Graph->Modify();
+							Binder.SetData(Bytes.GetData(), Bytes.Num());
+							if (SetCount == 0) PrevValue = TEXT("(override)");
+							MatchedContext = Slot.Context;
+							++SetCount;
+							FC->MarkNodeRequiresSynchronization(TEXT("MCP_SetModuleInput"), true);
+							Graph->NotifyGraphChanged();
+							continue;
+						}
+					}
+				}
+			}
+
 			for (UEdGraphPin* Pin : FC->Pins)
 			{
 				if (!Pin || Pin->Direction != EGPD_Input) continue;
@@ -1379,6 +1496,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 	}
 
 	Emitter->PostEditChange();
+	System->RequestCompile(false);
 	UEditorAssetLibrary::SaveLoadedAsset(System);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
@@ -1501,6 +1619,51 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddModule(const TSharedPtr<FJsonObject>
 	Res->SetStringField(TEXT("moduleName"), NewModule->GetFunctionName());
 	Res->SetNumberField(TEXT("targetIndex"), TargetIndex);
 	Res->SetStringField(TEXT("note"), TEXT("Module node added and wired into the parameter map. Set its inputs with set_niagara_module_input."));
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterFromSystem(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
+	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), -1);
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
+	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+
+	const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
+	int32 TargetIdx = -1;
+	if (!EmitterName.IsEmpty())
+	{
+		for (int32 i = 0; i < Handles.Num(); ++i)
+		{
+			if (Handles[i].GetName().ToString().Equals(EmitterName, ESearchCase::IgnoreCase)) { TargetIdx = i; break; }
+		}
+	}
+	else if (EmitterIndex >= 0 && EmitterIndex < Handles.Num())
+	{
+		TargetIdx = EmitterIndex;
+	}
+	if (TargetIdx < 0)
+	{
+		return MCPError(FString::Printf(TEXT("Emitter not found (name='%s', index=%d) in %s"), *EmitterName, EmitterIndex, *SystemPath));
+	}
+
+	const FString RemovedName = Handles[TargetIdx].GetName().ToString();
+	const FGuid RemovedId = Handles[TargetIdx].GetId();
+
+	System->Modify();
+	System->RemoveEmitterHandlesById({ RemovedId });
+	System->RequestCompile(false);
+	System->PostEditChange();
+	UEditorAssetLibrary::SaveLoadedAsset(System);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetUpdated(Res);
+	Res->SetStringField(TEXT("systemPath"), SystemPath);
+	Res->SetStringField(TEXT("removedEmitter"), RemovedName);
+	Res->SetNumberField(TEXT("remainingEmitters"), System->GetEmitterHandles().Num());
 	return MCPResult(Res);
 }
 

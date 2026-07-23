@@ -39,6 +39,8 @@ private:
 	static TSharedPtr<FJsonValue> SetModuleInput(const TSharedPtr<FJsonObject>& Params);
 	// Add a stock /Niagara/Modules script to an emitter's stack context.
 	static TSharedPtr<FJsonValue> AddModule(const TSharedPtr<FJsonObject>& Params);
+	// Remove an emitter handle from a system (CRUD delete).
+	static TSharedPtr<FJsonValue> RemoveEmitterFromSystem(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListStaticSwitches(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetStaticSwitch(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateModuleFromHlsl(const TSharedPtr<FJsonObject>& Params);
