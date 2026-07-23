@@ -18,6 +18,11 @@ import { satisfiesMinimum } from "./version.js";
 import { mergeInjectionsIntoTool, type InjectionPlan } from "./injection.js";
 import { buildProvidedTool, type ProvisionPlan } from "./provision.js";
 import { readDeployedBridgeApiVersion } from "./bridge-api.js";
+import {
+  partitionFlowsByGroup,
+  runtimeConfigFor,
+  type PluginConfigMap,
+} from "./plugin-groups.js";
 
 /** Per-plugin record surfaced to the `plugins` introspection category. */
 export interface PluginRecord {
@@ -84,6 +89,7 @@ export async function loadPlugins(
   entries: PluginEntry[],
   projectDir: string | undefined,
   serverVersion: string,
+  pluginConfig?: PluginConfigMap,
 ): Promise<PluginLoadResult> {
   if (!entries || entries.length === 0) {
     return { ...EMPTY_RESULT, tools };
@@ -135,9 +141,18 @@ export async function loadPlugins(
       };
     }
 
-    // Merge plugin-supplied flows. Plan §"Correctness constraints" says
-    // multi-step plugin flows should default to rollback_on_failure=true.
-    for (const [flowName, flowDef] of Object.entries(manifest.flows)) {
+    // Merge plugin-supplied flows, filtered by the user's group toggles. A flow
+    // whose group is disabled in `ue-mcp.pluginConfig.<slug>.groups` is dropped
+    // before it reaches the registry, so the surface shrinks to what the user
+    // opted into. Plan §"Correctness constraints" says multi-step plugin flows
+    // should default to rollback_on_failure=true.
+    const runtimeCfg = runtimeConfigFor(pluginConfig, pkg.name);
+    const { enabled: enabledFlows, disabled: disabledFlows } = partitionFlowsByGroup(
+      manifest.flows,
+      runtimeCfg,
+    );
+    for (const flowName of enabledFlows) {
+      const flowDef = manifest.flows[flowName];
       const stepCount = Object.keys(flowDef.steps).length;
       const normalised: FlowDefinition = {
         description: flowDef.description,
@@ -146,6 +161,15 @@ export async function loadPlugins(
           flowDef.rollback_on_failure ?? (stepCount > 1 ? true : undefined),
       };
       flowDefs[flowName] = normalised;
+    }
+    // Reflect the filtered set on the record so introspection matches what
+    // actually loaded, and note how many were held back by config.
+    record.record.flows = enabledFlows;
+    if (disabledFlows.length > 0) {
+      info(
+        "plugin",
+        `${pkg.name}: ${disabledFlows.length} flow(s) disabled by pluginConfig groups (${disabledFlows.length} of ${enabledFlows.length + disabledFlows.length})`,
+      );
     }
 
     // Per-category: build injection plans + queue knowledge attachment.

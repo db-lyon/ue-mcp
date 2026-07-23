@@ -62,6 +62,10 @@ const FlowStepEntrySchema = z.object({
 const FlowEntrySchema = z.object({
   description: z.string(),
   rollback_on_failure: z.boolean().optional(),
+  // Toggle group this flow belongs to. Absent = derived from the flow name's
+  // prefix before the first underscore (`niagara_fire` -> `niagara`). Users
+  // enable/disable whole groups via `ue-mcp.pluginConfig.<slug>.groups`.
+  group: z.string().optional(),
   steps: z.record(FlowStepEntrySchema),
 });
 

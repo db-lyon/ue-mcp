@@ -77,6 +77,21 @@ export const UeMcpConfigSchema = z
         strategy: z.enum(["full", "lean", "micro"]).optional(),
       })
       .optional(),
+    // Per-plugin runtime config, keyed by plugin slug (`recipes`, i.e. the
+    // package name minus `ue-mcp-`). `groups` toggles whole flow groups on/off
+    // (opt-out: a group is enabled unless set to false). Lives here so it rides
+    // the same global < project < env < local merge as the rest of this block,
+    // letting personal toggles live in an untracked layer without dirtying the
+    // tracked ue-mcp.yml. See plugin-groups.ts.
+    pluginConfig: z
+      .record(
+        z
+          .object({
+            groups: z.record(z.boolean()).optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
   })
   .passthrough();
 export type UeMcpConfigFile = z.infer<typeof UeMcpConfigSchema>;

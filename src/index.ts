@@ -82,7 +82,7 @@ async function main() {
   // registry is built so plugin tasks register cleanly.
   const configDir = project.projectDir ?? undefined;
   const pluginEntries = readPluginsEntries(configDir);
-  const pluginLoad = await loadPlugins(ALL_TOOLS, pluginEntries, configDir, pkg.version);
+  const pluginLoad = await loadPlugins(ALL_TOOLS, pluginEntries, configDir, pkg.version, project.config.pluginConfig);
   const activeTools = pluginLoad.tools;
   const pluginRecords = pluginLoad.records;
 

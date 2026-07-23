@@ -53,6 +53,10 @@ export interface UeMcpConfig {
   context?: {
     strategy?: "full" | "lean" | "micro";
   };
+  /** Per-plugin runtime config, keyed by plugin slug (package name minus
+   *  `ue-mcp-`). `groups` toggles whole flow groups (opt-out). See
+   *  plugin-groups.ts. */
+  pluginConfig?: Record<string, { groups?: Record<string, boolean> } & Record<string, unknown>>;
 }
 
 export class ProjectContext {
