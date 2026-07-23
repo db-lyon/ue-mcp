@@ -25,6 +25,8 @@
 #include "NiagaraGraph.h"
 #include "NiagaraNodeFunctionCall.h"
 #include "NiagaraNodeCustomHlsl.h"
+#include "NiagaraNodeOutput.h"
+#include "ViewModels/Stack/NiagaraStackGraphUtilities.h"
 #include "NiagaraEmitterHandle.h"
 #include "NiagaraEditorUtilities.h"
 #include "NiagaraEmitterFactoryNew.h"
@@ -79,6 +81,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// v0.7.14 — module inputs, static switches, HLSL modules
 	Registry.RegisterHandler(TEXT("list_niagara_module_inputs"), &ListModuleInputs);
 	Registry.RegisterHandler(TEXT("set_niagara_module_input"), &SetModuleInput);
+	Registry.RegisterHandler(TEXT("add_niagara_module"), &AddModule);
 	Registry.RegisterHandler(TEXT("list_niagara_static_switches"), &ListStaticSwitches);
 	Registry.RegisterHandler(TEXT("set_niagara_static_switch"), &SetStaticSwitch);
 	Registry.RegisterHandler(TEXT("create_niagara_module_from_hlsl"), &CreateModuleFromHlsl);
@@ -1398,6 +1401,106 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 	RbPayload->SetNumberField(TEXT("emitterIndex"), EmitterIndex);
 	RbPayload->SetStringField(TEXT("stackContext"), MatchedContext);
 	MCPSetRollback(Res, TEXT("set_niagara_module_input"), RbPayload);
+	return MCPResult(Res);
+}
+
+namespace
+{
+	// Map a stack-context string to its script-usage enum and pull the matching
+	// UNiagaraScript off the emitter data. Returns false for an unknown context.
+	bool ResolveStackTarget(FVersionedNiagaraEmitterData* Data, const FString& Ctx, ENiagaraScriptUsage& OutUsage, UNiagaraScript*& OutScript)
+	{
+		if (!Data) return false;
+		if (Ctx.Equals(TEXT("ParticleSpawn"), ESearchCase::IgnoreCase))  { OutUsage = ENiagaraScriptUsage::ParticleSpawnScript;  OutScript = Data->SpawnScriptProps.Script;         return true; }
+		if (Ctx.Equals(TEXT("ParticleUpdate"), ESearchCase::IgnoreCase)) { OutUsage = ENiagaraScriptUsage::ParticleUpdateScript; OutScript = Data->UpdateScriptProps.Script;        return true; }
+		if (Ctx.Equals(TEXT("EmitterSpawn"), ESearchCase::IgnoreCase))   { OutUsage = ENiagaraScriptUsage::EmitterSpawnScript;   OutScript = Data->EmitterSpawnScriptProps.Script;  return true; }
+		if (Ctx.Equals(TEXT("EmitterUpdate"), ESearchCase::IgnoreCase))  { OutUsage = ENiagaraScriptUsage::EmitterUpdateScript;  OutScript = Data->EmitterUpdateScriptProps.Script; return true; }
+		return false;
+	}
+
+	// Normalise a module-script reference to a full object path. Accepts a bare
+	// package path ("/Niagara/Modules/Emitter/SpawnRate") and appends the
+	// ".AssetName" object suffix Niagara scripts require to load.
+	FString NormaliseModulePath(const FString& In)
+	{
+		if (In.Contains(TEXT("."))) return In;
+		FString Left, AssetName;
+		if (In.Split(TEXT("/"), &Left, &AssetName, ESearchCase::IgnoreCase, ESearchDir::FromEnd) && !AssetName.IsEmpty())
+		{
+			return In + TEXT(".") + AssetName;
+		}
+		return In;
+	}
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::AddModule(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+	FString ModuleScriptRef;
+	if (auto Err = RequireString(Params, TEXT("moduleScript"), ModuleScriptRef)) return Err;
+	FString StackContext;
+	if (auto Err = RequireString(Params, TEXT("stackContext"), StackContext)) return Err;
+	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
+	int32 EmitterIndex = OptionalInt(Params, TEXT("emitterIndex"), 0);
+	// -1 (default) appends to the end of the stack; >=0 inserts at that index.
+	int32 TargetIndex = OptionalInt(Params, TEXT("targetIndex"), -1);
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
+	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+
+	UNiagaraEmitter* Emitter = nullptr;
+	FGuid Version;
+	FVersionedNiagaraEmitterData* Data = ResolveEmitter(System, EmitterName, EmitterIndex, Emitter, Version);
+	if (!Data) return MCPError(TEXT("Emitter not resolved"));
+
+	ENiagaraScriptUsage Usage;
+	UNiagaraScript* Script = nullptr;
+	if (!ResolveStackTarget(Data, StackContext, Usage, Script) || !Script)
+	{
+		return MCPError(FString::Printf(TEXT("Invalid stackContext '%s'. Use ParticleSpawn|ParticleUpdate|EmitterSpawn|EmitterUpdate."), *StackContext));
+	}
+
+	UNiagaraGraph* Graph = GraphOfScript(Script);
+	if (!Graph) return MCPError(TEXT("Emitter script has no source graph"));
+
+	// FindEquivalentOutputNode is the NIAGARAEDITOR_API-exported variant
+	// (plain FindOutputNode is not exported and won't link).
+	UNiagaraNodeOutput* OutputNode = Graph->FindEquivalentOutputNode(Usage);
+	if (!OutputNode) return MCPError(FString::Printf(TEXT("No output node for usage in context '%s'"), *StackContext));
+
+	const FString ModulePath = NormaliseModulePath(ModuleScriptRef);
+	UNiagaraScript* ModuleScript = LoadObject<UNiagaraScript>(nullptr, *ModulePath);
+	if (!ModuleScript)
+	{
+		return MCPError(FString::Printf(TEXT("Module script not found: %s (try a /Niagara/Modules/... path)"), *ModulePath));
+	}
+
+	Graph->Modify();
+	UNiagaraNodeFunctionCall* NewModule =
+		FNiagaraStackGraphUtilities::AddScriptModuleToStack(ModuleScript, *OutputNode, TargetIndex);
+	if (!NewModule)
+	{
+		return MCPError(FString::Printf(TEXT("Failed to add module '%s' to %s stack"), *ModulePath, *StackContext));
+	}
+
+	Graph->NotifyGraphChanged();
+	if (Emitter) Emitter->PostEditChange();
+	System->PostEditChange();
+	// Force a compile so the emitter is immediately usable (e.g. a verify step
+	// that spawns it and reads particle count).
+	System->RequestCompile(false);
+	UEditorAssetLibrary::SaveLoadedAsset(System);
+
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	MCPSetCreated(Res);
+	Res->SetStringField(TEXT("systemPath"), SystemPath);
+	Res->SetStringField(TEXT("emitter"), Emitter ? Emitter->GetName() : TEXT(""));
+	Res->SetStringField(TEXT("stackContext"), StackContext);
+	Res->SetStringField(TEXT("moduleScript"), ModulePath);
+	Res->SetStringField(TEXT("moduleName"), NewModule->GetFunctionName());
+	Res->SetNumberField(TEXT("targetIndex"), TargetIndex);
+	Res->SetStringField(TEXT("note"), TEXT("Module node added and wired into the parameter map. Set its inputs with set_niagara_module_input."));
 	return MCPResult(Res);
 }
 

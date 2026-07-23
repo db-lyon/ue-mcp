@@ -37,6 +37,8 @@ private:
 	// v0.7.14 — module inputs, static switches, HLSL modules
 	static TSharedPtr<FJsonValue> ListModuleInputs(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetModuleInput(const TSharedPtr<FJsonObject>& Params);
+	// Add a stock /Niagara/Modules script to an emitter's stack context.
+	static TSharedPtr<FJsonValue> AddModule(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListStaticSwitches(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetStaticSwitch(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateModuleFromHlsl(const TSharedPtr<FJsonObject>& Params);
