@@ -155,6 +155,28 @@ function ensurePluginsEnabled(
   return enabled;
 }
 
+/**
+ * Ensure `entry` appears as a line in the project's `.gitignore`, creating the
+ * file if absent. Returns true when the file was created or the entry appended,
+ * false when it was already ignored. Matches on a trimmed exact line so a
+ * broader glob the user already added isn't duplicated blindly.
+ */
+function ensureGitignoreEntry(projectDir: string, entry: string): boolean {
+  const gitignorePath = path.join(projectDir, ".gitignore");
+  if (!fs.existsSync(gitignorePath)) {
+    fs.writeFileSync(gitignorePath, `${entry}\n`);
+    return true;
+  }
+  const content = fs.readFileSync(gitignorePath, "utf-8");
+  const present = content
+    .split(/\r?\n/)
+    .some((line) => line.trim() === entry);
+  if (present) return false;
+  const sep = content.endsWith("\n") || content.length === 0 ? "" : "\n";
+  fs.appendFileSync(gitignorePath, `${sep}${entry}\n`);
+  return true;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Ask for project path with readline                                 */
 /* ------------------------------------------------------------------ */
@@ -386,6 +408,14 @@ async function init() {
     wrote.push({ what: "custom tasks & flows", where: flowConfigPath });
   } else {
     ok("ue-mcp.yml already exists");
+  }
+
+  // Keep per-machine, untracked config out of version control. ue-mcp.local.yml
+  // holds a user's personal overrides (e.g. plugin group toggles) and must never
+  // be committed - otherwise teammates' preferences collide.
+  if (ensureGitignoreEntry(project.projectDir!, "ue-mcp.local.yml")) {
+    ok(".gitignore: ue-mcp.local.yml (per-machine config kept untracked)");
+    wrote.push({ what: ".gitignore entry", where: path.join(project.projectDir!, ".gitignore") });
   }
 
   console.log("");
