@@ -40,9 +40,9 @@ namespace
 		return nullptr;
 	}
 
-	const TCHAR* NodeTypeLabel(USoundNode* N)
+	FString NodeTypeLabel(USoundNode* N)
 	{
-		return N ? *N->GetClass()->GetName() : TEXT("");
+    	return N ? N->GetClass()->GetName() : FString();
 	}
 
 	/** Construct a cue node by friendly type name. Returns null for unknown types. */
