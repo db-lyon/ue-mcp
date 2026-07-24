@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn, execSync } from "child_process";
 import * as net from "net";
+import WebSocket from "ws";
 import type { ProjectContext } from "./project.js";
 import { findEngineInstall } from "./deployer.js";
 
@@ -209,54 +210,100 @@ export async function startEditor(project: ProjectContext): Promise<{ success: b
   }
 }
 
-export async function stopEditor(force = false): Promise<{ success: boolean; message: string }> {
-  if (!IS_WINDOWS) return { success: false, message: WINDOWS_ONLY_MSG };
-  const processRunning = isEditorRunning();
-  const bridgeUp = await isBridgeAvailable();
+// Ask the editor to quit ITSELF, on the game thread, via a deferred slate tick
+// so the bridge can reply before the process exits. This is a clean in-process
+// exit, not an OS kill.
+const EDITOR_SELF_QUIT_PY = [
+  "import unreal",
+  "def _ue_mcp_quit(dt):",
+  "    try:",
+  "        unreal.SystemLibrary.quit_editor()",
+  "    except Exception as e:",
+  "        unreal.log_error('ue-mcp quit_editor failed: ' + str(e))",
+  "unreal.register_slate_post_tick_callback(_ue_mcp_quit)",
+].join("\n");
 
-  if (!processRunning && !bridgeUp) {
+/** Read the project's live bridge port from its lockfile, else env, else 9877. */
+function resolveBridgePort(projectDir?: string): number {
+  if (projectDir) {
+    try {
+      const raw = fs.readFileSync(path.join(projectDir, "Saved", "UE_MCP_Bridge", "port.json"), "utf-8");
+      const p = JSON.parse(raw) as { port?: unknown };
+      if (typeof p.port === "number" && p.port > 0) return p.port;
+    } catch { /* fall through to defaults */ }
+  }
+  const env = Number(process.env.UE_MCP_PORT);
+  return Number.isFinite(env) && env > 0 ? env : 9877;
+}
+
+/**
+ * Ask the editor to quit itself via the bridge (`execute_python` -> quit_editor).
+ * Returns true if the request was delivered. Never touches the OS process table.
+ */
+function requestEditorSelfQuit(port: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+    const finish = (v: boolean) => {
+      if (settled) return;
+      settled = true;
+      try { ws.close(); } catch { /* ignore */ }
+      resolve(v);
+    };
+    const timer = setTimeout(() => finish(false), 8000);
+    ws.on("open", () => ws.send(JSON.stringify({ id: "ue-mcp-stop", method: "execute_python", params: { code: EDITOR_SELF_QUIT_PY } })));
+    ws.on("message", () => { clearTimeout(timer); finish(true); });
+    ws.on("error", () => { clearTimeout(timer); finish(false); });
+  });
+}
+
+/**
+ * Stop the editor by asking it to quit ITSELF through the bridge. ue-mcp NEVER
+ * issues an OS kill: `taskkill /IM UnrealEditor.exe` matches by image name and
+ * would also close the user's other editors (e.g. their real project). `force`
+ * is accepted for back-compat but there is deliberately no force-kill path.
+ * Success is confirmed by the project's own bridge port going quiet, so it is
+ * specific to this editor even when others are open.
+ */
+export async function stopEditor(force = false, projectDir?: string): Promise<{ success: boolean; message: string }> {
+  void force;
+  if (!IS_WINDOWS) return { success: false, message: WINDOWS_ONLY_MSG };
+
+  const port = resolveBridgePort(projectDir);
+  const bridgeUp = await isBridgeAvailable("127.0.0.1", port);
+  if (!bridgeUp && !isEditorRunning()) {
     return { success: false, message: "Editor is not running" };
   }
-
-  try {
-    if (force) {
-      execSync('taskkill /F /IM UnrealEditor.exe', { stdio: "pipe" });
-      return { success: true, message: "Editor force-killed" };
-    }
-
-    // Graceful close - sends WM_CLOSE, allows save dialogs
-    execSync('taskkill /IM UnrealEditor.exe', { stdio: "pipe" });
-
-    // Wait up to 10 seconds for editor to close gracefully
-    for (let i = 0; i < 10; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      if (!isEditorRunning()) {
-        return { success: true, message: "Editor closed successfully" };
-      }
-    }
-
-    // Graceful close failed — force kill
-    execSync('taskkill /F /IM UnrealEditor.exe', { stdio: "pipe" });
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    if (!isEditorRunning()) {
-      return { success: true, message: "Editor force-killed after graceful close timed out" };
-    }
-
+  if (!bridgeUp) {
     return {
       success: false,
-      message: "Editor still running after force kill attempt. Close manually.",
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: `Failed to stop editor: ${error instanceof Error ? error.message : String(error)}`,
+      message: "Editor appears to be running but its bridge is unreachable, so it cannot be asked to quit cleanly. Close it manually - ue-mcp never force-kills processes.",
     };
   }
+
+  const quitSent = await requestEditorSelfQuit(port);
+  if (!quitSent) {
+    return {
+      success: false,
+      message: "Could not deliver a quit request to the editor bridge. Close the editor manually - ue-mcp never force-kills processes.",
+    };
+  }
+
+  // Confirm via the project's own bridge port closing - specific to this editor.
+  for (let i = 0; i < 20; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (!(await isBridgeAvailable("127.0.0.1", port))) {
+      return { success: true, message: "Editor quit itself via the bridge" };
+    }
+  }
+  return {
+    success: false,
+    message: "Asked the editor to quit but its bridge is still up after 20s. Close it manually - ue-mcp never force-kills processes.",
+  };
 }
 
 export async function restartEditor(project: ProjectContext, bridge?: { connect: (timeoutMs?: number) => Promise<void> }): Promise<{ success: boolean; message: string }> {
-  const stopResult = await stopEditor();
+  const stopResult = await stopEditor(false, project.projectDir ?? undefined);
   if (!stopResult.success && isEditorRunning()) {
     return { success: false, message: `Failed to stop editor: ${stopResult.message}` };
   }
