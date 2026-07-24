@@ -87,6 +87,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_niagara_module_input"), &SetModuleInput);
 	Registry.RegisterHandler(TEXT("add_niagara_module"), &AddModule);
 	Registry.RegisterHandler(TEXT("remove_emitter_from_system"), &RemoveEmitterFromSystem);
+	Registry.RegisterHandler(TEXT("validate_niagara_system"), &ValidateSystem);
 	Registry.RegisterHandler(TEXT("list_niagara_static_switches"), &ListStaticSwitches);
 	Registry.RegisterHandler(TEXT("set_niagara_static_switch"), &SetStaticSwitch);
 	Registry.RegisterHandler(TEXT("create_niagara_module_from_hlsl"), &CreateModuleFromHlsl);
@@ -1664,6 +1665,78 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterFromSystem(const TSharedPt
 	Res->SetStringField(TEXT("systemPath"), SystemPath);
 	Res->SetStringField(TEXT("removedEmitter"), RemovedName);
 	Res->SetNumberField(TEXT("remainingEmitters"), System->GetEmitterHandles().Num());
+	return MCPResult(Res);
+}
+
+TSharedPtr<FJsonValue> FNiagaraHandlers::ValidateSystem(const TSharedPtr<FJsonObject>& Params)
+{
+	FString SystemPath;
+	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
+
+	UNiagaraSystem* System = Cast<UNiagaraSystem>(UEditorAssetLibrary::LoadAsset(SystemPath));
+	if (!System) return MCPError(FString::Printf(TEXT("System not found: %s"), *SystemPath));
+
+	TArray<TSharedPtr<FJsonValue>> EArr;
+	int32 ValidEmitters = 0;
+	const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
+	for (const FNiagaraEmitterHandle& H : Handles)
+	{
+		const bool Enabled = H.GetIsEnabled();
+		FVersionedNiagaraEmitter VE = H.GetInstance();
+		FVersionedNiagaraEmitterData* Data = VE.GetEmitterData();
+
+		int32 RendererCount = 0;
+		if (Data)
+		{
+			for (UNiagaraRendererProperties* R : Data->GetRenderers())
+			{
+				if (R && R->GetIsEnabled()) ++RendererCount;
+			}
+		}
+
+		// A spawn module (SpawnRate / SpawnBurst / SpawnPerUnit) in EmitterUpdate
+		// is what makes an emitter emit anything at all.
+		bool HasSpawn = false;
+		if (Data)
+		{
+			TArray<FScriptSlot> Scripts;
+			CollectEmitterScripts(Data, TEXT("EmitterUpdate"), Scripts);
+			for (const FScriptSlot& S : Scripts)
+			{
+				UNiagaraGraph* G = GraphOfScript(S.Script);
+				if (!G) continue;
+				for (UEdGraphNode* Nn : G->Nodes)
+				{
+					UNiagaraNodeFunctionCall* FC = Cast<UNiagaraNodeFunctionCall>(Nn);
+					if (FC && FC->GetFunctionName().Contains(TEXT("Spawn"))) { HasSpawn = true; break; }
+				}
+				if (HasSpawn) break;
+			}
+		}
+
+		const bool EValid = Enabled && HasSpawn && RendererCount > 0;
+		if (EValid) ++ValidEmitters;
+
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("name"), H.GetName().ToString());
+		O->SetBoolField(TEXT("enabled"), Enabled);
+		O->SetBoolField(TEXT("hasSpawnModule"), HasSpawn);
+		O->SetNumberField(TEXT("enabledRenderers"), RendererCount);
+		O->SetBoolField(TEXT("valid"), EValid);
+		EArr.Add(MakeShared<FJsonValueObject>(O));
+	}
+
+	const bool Valid = ValidEmitters > 0;
+	TSharedPtr<FJsonObject> Res = MCPSuccess();
+	Res->SetStringField(TEXT("systemPath"), SystemPath);
+	Res->SetBoolField(TEXT("valid"), Valid);
+	Res->SetNumberField(TEXT("emitterCount"), Handles.Num());
+	Res->SetNumberField(TEXT("validEmitters"), ValidEmitters);
+	Res->SetArrayField(TEXT("emitters"), EArr);
+	if (!Valid)
+	{
+		Res->SetStringField(TEXT("reason"), TEXT("No enabled emitter has both a spawn module and an enabled renderer - this system will emit nothing."));
+	}
 	return MCPResult(Res);
 }
 
