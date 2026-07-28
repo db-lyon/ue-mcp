@@ -1,5 +1,7 @@
 # UE-MCP
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fdb-lyon%2Fue-mcp.svg)](https://mcptoplist.com/server/glama%2Fdb-lyon%2Fue-mcp)
+
 **Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->24<!-- /count --> category tools covering <!-- count:actions -->736+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows.
 
 ```mermaid
