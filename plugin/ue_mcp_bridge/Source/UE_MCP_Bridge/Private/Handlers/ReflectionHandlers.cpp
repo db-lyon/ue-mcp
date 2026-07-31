@@ -818,7 +818,7 @@ static TArray<FString> SuggestEnumNames(const FString& EnumName, int32 MaxSugges
 	const FString Needle = EnumName.ToLower();
 	for (TObjectIterator<UEnum> It; It && Suggestions.Num() < MaxSuggestions; ++It)
 	{
-		if (!*It) continue;
+		if (!IsValid(*It)) continue;
 		const FString Name = It->GetName();
 		if (Name.ToLower().Contains(Needle))
 		{
