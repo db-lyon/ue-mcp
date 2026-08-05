@@ -113,12 +113,27 @@ export interface ActionSpec {
   timeoutMs?: number;
 }
 
+export interface CategoryOptions {
+  /**
+   * Fold a category's accepted parameter spellings into its canonical ones
+   * before dispatch, in one place instead of once per action (#798).
+   *
+   * It runs after the action is resolved and before the action's own
+   * `mapParams`, so it also covers actions injected into the category after
+   * construction (Epic toolset wrappers, plugin native modules). Throwing
+   * from here is how a category rejects a malformed or contradictory
+   * parameter combination with a specific message.
+   */
+  normalizeParams?: (params: Record<string, unknown>) => Record<string, unknown>;
+}
+
 export function categoryTool(
   name: string,
   summary: string,
   actions: Record<string, ActionSpec>,
   actionDocs?: string,
   extraSchema?: Record<string, z.ZodType>,
+  options?: CategoryOptions,
 ): ToolDef {
   const actionNames = Object.keys(actions) as [string, ...string[]];
 
@@ -147,11 +162,12 @@ export function categoryTool(
         // hunting for an action the tool actually has.
         throw new McpError(ErrorCode.UNKNOWN_ACTION, `Unknown action '${action}'. Available: ${Object.keys(actions).join(", ")}`);
       }
+      const normalized = options?.normalizeParams ? options.normalizeParams(params) : params;
       if (spec.handler) {
-        return spec.handler(ctx, params);
+        return spec.handler(ctx, normalized);
       }
       if (spec.bridge) {
-        const mapped = spec.mapParams ? spec.mapParams(params) : stripAction(params);
+        const mapped = spec.mapParams ? spec.mapParams(normalized) : stripAction(normalized);
         return ctx.bridge.call(spec.bridge, mapped, spec.timeoutMs);
       }
       throw new McpError(ErrorCode.NO_HANDLER, `Action '${action}' has no handler or bridge method`);

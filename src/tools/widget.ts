@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { normalizeWidgetParams } from "./widget-params.js";
 
 export const widgetTool: ToolDef = categoryTool(
   "widget",
-  "UMG Widget Blueprints, Editor Utility Widgets, and Editor Utility Blueprints.",
+  "UMG Widget Blueprints, Editor Utility Widgets, and Editor Utility Blueprints. One parameter contract across every action (#798): the asset is always `assetPath`, an Unreal package path such as `/Game/UI/WBP_Example`; a widget inside the tree is always `widgetName`; its parent panel is always `parentWidgetName`; arguments for the `epic_*` actions always go in `input`, and a top-level `assetPath` is folded into the asset reference of the wrapped tool for you. A `.uasset` suffix, an object suffix (`.WBP_Example`), backslashes, and the legacy `path` / `widgetBlueprintPath` / `widgetBlueprint` spellings are accepted and normalized. Create actions take `assetPath` too; `name` plus `packagePath` remains valid and is composed into it. See [Widget parameter contract](widget-parameters.md).",
   {
     read_tree:         bp("Read widget hierarchy. Params: assetPath", "read_widget_tree"),
     get_details:       bp("Inspect widget (curated subset). Params: assetPath, widgetName", "get_widget_details"),
@@ -16,16 +17,16 @@ export const widgetTool: ToolDef = categoryTool(
     bulk_set_properties: bp("Apply many {widgetName, propertyName, value} style/property writes to a WidgetBlueprint in one call (single compile+save) - font/color/style stylesheet across many widgets. Params: assetPath, properties[] (#563)", "bulk_set_widget_properties", (p) => ({ assetPath: p.assetPath, properties: p.properties })),
     list:              bp("List Widget BPs. Params: directory?, recursive?", "list_widget_blueprints"),
     read_animations:   bp("Read UMG animations. Params: assetPath", "read_widget_animations"),
-    create:            bp("Create Widget BP. Params: name, packagePath?, parentClass?", "create_widget_blueprint"),
-    create_utility_widget:    bp("Create editor utility widget. Params: name, packagePath?", "create_editor_utility_widget"),
+    create:            bp("Create Widget BP. assetPath is the full destination, e.g. /Game/UI/WBP_Example; name + packagePath is the older spelling of the same thing and is composed into it. Params: assetPath, name?, packagePath?, parentClass?", "create_widget_blueprint"),
+    create_utility_widget:    bp("Create editor utility widget. Params: assetPath, name?, packagePath?", "create_editor_utility_widget"),
     run_utility_widget:       bp("Open editor utility widget. Params: assetPath", "run_editor_utility_widget"),
-    create_utility_blueprint: bp("Create editor utility blueprint. Params: name, packagePath?", "create_editor_utility_blueprint"),
+    create_utility_blueprint: bp("Create editor utility blueprint. Params: assetPath, name?, packagePath?", "create_editor_utility_blueprint"),
     run_utility_blueprint:    bp("Run editor utility blueprint. Params: assetPath", "run_editor_utility_blueprint"),
     add_widget:               bp("Add widget to widget tree. Params: assetPath, widgetClass, widgetName?, parentWidgetName?", "add_widget"),
     remove_widget:            bp("Remove widget from tree. Params: assetPath, widgetName", "remove_widget"),
     move_widget:              bp("Reparent widget. Params: assetPath, widgetName, newParentWidgetName", "move_widget"),
-    set_root:                 bp("Replace WBP root with an existing widget by name (#365). Params: assetPath, widgetName", "set_root_widget", (p) => ({ assetPath: p.assetPath, path: p.path, widgetName: p.widgetName })),
-    wrap_root:                bp("Wrap the current root in a new panel widget (UMG 'Wrap With'). Params: assetPath, wrapperClass (must be a UPanelWidget subclass), wrapperName? (#365)", "wrap_root_widget", (p) => ({ assetPath: p.assetPath, path: p.path, wrapperClass: p.wrapperClass, widgetClass: p.widgetClass, wrapperName: p.wrapperName })),
+    set_root:                 bp("Replace WBP root with an existing widget by name (#365). Params: assetPath, widgetName", "set_root_widget", (p) => ({ assetPath: p.assetPath, widgetName: p.widgetName })),
+    wrap_root:                bp("Wrap the current root in a new panel widget (UMG 'Wrap With'). Params: assetPath, wrapperClass (must be a UPanelWidget subclass), wrapperName? (#365)", "wrap_root_widget", (p) => ({ assetPath: p.assetPath, wrapperClass: p.wrapperClass, widgetClass: p.widgetClass, wrapperName: p.wrapperName })),
     list_classes:             bp("List available widget classes", "list_widget_classes"),
     list_runtime:             bp("(#160) List live UUserWidget instances in the PIE world. Params: classFilter?, namePrefix?, viewportOnly?", "list_runtime_widgets"),
     get_runtime:              bp("(#160) Inspect a live PIE widget tree with text/visibility/brush/percent plus style values: renderOpacity (all), colorAndOpacity (TextBlock/Image), Border brushColor/contentColorAndOpacity (#592). Params: widgetName? | className?, childName?, maxDepth?", "get_runtime_widget"),
@@ -35,11 +36,11 @@ export const widgetTool: ToolDef = categoryTool(
   },
   undefined,
   {
-    assetPath: z.string().optional(),
-    widgetName: z.string().optional(),
+    assetPath: z.string().optional().describe("Canonical Widget Blueprint / Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)"),
+    widgetName: z.string().optional().describe("Canonical name of a widget inside the tree (#798)"),
     includeSubtree: z.boolean().optional().describe("get_properties: also dump descendant widgets (#547)"),
     widgetClass: z.string().optional(),
-    parentWidgetName: z.string().optional(),
+    parentWidgetName: z.string().optional().describe("Canonical name of the parent panel widget (#798)"),
     newParentWidgetName: z.string().optional(),
     propertyName: z.string().optional(),
     filterWidgetName: z.string().optional().describe("list_bindings: only bindings on this widget (#530)"),
@@ -49,8 +50,8 @@ export const widgetTool: ToolDef = categoryTool(
     index: z.number().optional().describe("reorder_child: target sibling index within the parent panel (#635)"),
     directory: z.string().optional(),
     recursive: z.boolean().optional(),
-    name: z.string().optional(),
-    packagePath: z.string().optional(),
+    name: z.string().optional().describe("create actions: bare asset name, used with packagePath. assetPath is the canonical alternative (#798)"),
+    packagePath: z.string().optional().describe("create actions: destination folder, used with name (#798)"),
     parentClass: z.string().optional(),
     classFilter: z.string().optional().describe("Class name substring filter for list_runtime"),
     className: z.string().optional().describe("Widget class name for get_runtime (first match wins)"),
@@ -62,6 +63,13 @@ export const widgetTool: ToolDef = categoryTool(
     maxDepth: z.number().optional().describe("get_runtime: max widget-tree depth to walk (default 6)"),
     wrapperClass: z.string().optional().describe("wrap_root: panel widget class (CanvasPanel, VerticalBox, Overlay, etc.)"),
     wrapperName: z.string().optional().describe("wrap_root: optional name for the new wrapper widget"),
-    path: z.string().optional().describe("Alias for assetPath"),
+    // Accepted spellings of the canonical names above. Declared so the
+    // transport does not strip them before the normalizer can fold them in.
+    path: z.string().optional().describe("Legacy alias for assetPath. Use assetPath (#798)"),
+    widgetBlueprintPath: z.string().optional().describe("Alias for assetPath. Use assetPath (#798)"),
+    widgetBlueprint: z.union([z.string(), z.record(z.unknown())]).optional().describe("Alias for assetPath, also accepted as the engine's {refPath} object reference. Use assetPath (#798)"),
+    widgetDisplayName: z.string().optional().describe("Alias for widgetName. Use widgetName (#798)"),
+    parentWidget: z.string().optional().describe("Alias for parentWidgetName. Use parentWidgetName (#798)"),
   },
+  { normalizeParams: normalizeWidgetParams },
 );
