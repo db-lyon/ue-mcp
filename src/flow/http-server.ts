@@ -91,15 +91,18 @@ export function startFlowHttpServer(
         return send(401, { error: "Missing or invalid token" });
       }
 
+      const activeContext = (): ToolContext =>
+        ctx.sessions ? sessionContext(ctx, ctx.sessions.active) : ctx;
+
       if (method === "GET" && (pathname === "/" || pathname === "/flows")) {
-        const result = await flowTool.handler(ctx, { action: "list" });
+        const result = await flowTool.handler(activeContext(), { action: "list" });
         return send(200, result);
       }
 
       const planMatch = pathname.match(/^\/flows\/([^/]+)\/plan$/);
       if (method === "GET" && planMatch) {
         const flowName = decodeURIComponent(planMatch[1]);
-        const result = await flowTool.handler(ctx, { action: "plan", flowName });
+        const result = await flowTool.handler(activeContext(), { action: "plan", flowName });
         return send(200, result);
       }
 
@@ -111,7 +114,10 @@ export function startFlowHttpServer(
           action: "run",
           flowName,
         };
-        let runCtx = ctx;
+        // Untargeted runs follow the active session, the same as the MCP
+        // surface, rather than staying pinned to whichever session was
+        // active when this server started.
+        let runCtx = activeContext();
         if (body && typeof body === "object") {
           const b = body as Record<string, unknown>;
           if (b.params !== undefined) params.params = b.params;
