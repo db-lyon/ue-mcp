@@ -1,11 +1,36 @@
 import { z } from "zod";
 import { categoryTool, bp, directive, type ToolDef, type ToolContext } from "../types.js";
-import { startEditor, stopEditor, restartEditor, buildProject } from "../editor-control.js";
+import { startEditor, stopEditor, restartEditor, buildProject, type LifecycleTarget } from "../editor-control.js";
 import { readEngineState } from "../engine-observer.js";
 import { progressRenderingNote } from "../client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
 import { searchTools } from "../tool-search.js";
 import { Vec3, Rotator } from "../schemas.js";
+
+/**
+ * Which editor this lifecycle call is aimed at. The port comes from the
+ * addressed session (explicit pin, environment, config, or derived), and
+ * `strict` says more than one editor is registered, so an editor that cannot
+ * be identified is refused rather than assumed.
+ */
+function lifecycleTarget(ctx: ToolContext): LifecycleTarget {
+  return { port: ctx.session?.bridge.port, strict: (ctx.sessions?.size ?? 1) > 1 };
+}
+
+/**
+ * Two sessions resolving to one port cannot be told apart, so a stop or a
+ * restart aimed at one of them could act on the other. Refuse rather than
+ * guess; a read-only call is left alone because it cannot destroy anything.
+ */
+function ambiguousTargetMessage(ctx: ToolContext, verb: string): string | null {
+  const shared = ctx.session?.portSharedWith ?? [];
+  if (shared.length === 0) return null;
+  return (
+    `Refusing to ${verb} '${ctx.session?.name}': it shares bridge port ${ctx.session?.bridge.port} with ` +
+    `${shared.join(", ")}, so the editor answering there cannot be attributed to one project. ` +
+    `Give each project its own 'bridge.port' in its ue-mcp.yml, or unset UE_MCP_PORT, then retry.`
+  );
+}
 
 export const editorTool: ToolDef = categoryTool(
   "editor",
@@ -15,7 +40,7 @@ export const editorTool: ToolDef = categoryTool(
       description: "Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. Params: timeout? (seconds, default 300)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const timeout = typeof p?.timeout === "number" && p.timeout > 0 ? p.timeout : 300;
-        const result = await startEditor(ctx.project, timeout, ctx.onProgress);
+        const result = await startEditor(ctx.project, timeout, ctx.onProgress, lifecycleTarget(ctx));
 
         // The call blocks for as long as the editor takes, so when its progress
         // is not visible the user is left to conclude the tool hung. Say which
@@ -62,15 +87,19 @@ export const editorTool: ToolDef = categoryTool(
       },
     },
     stop_editor: {
-      description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill)",
+      description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill). Acts only on the addressed project's editor: the editor is asked which project it has open and the request is refused if the answer is a different one",
       handler: async (ctx: ToolContext) => {
-        return stopEditor(false, ctx.project.projectDir ?? undefined);
+        const ambiguous = ambiguousTargetMessage(ctx, "stop");
+        if (ambiguous) return { success: false, message: ambiguous };
+        return stopEditor(false, ctx.project.projectDir ?? undefined, lifecycleTarget(ctx));
       },
     },
     restart_editor: {
       description: "Stop then start the editor",
       handler: async (ctx: ToolContext) => {
-        return restartEditor(ctx.project, ctx.bridge);
+        const ambiguous = ambiguousTargetMessage(ctx, "restart");
+        if (ambiguous) return { success: false, message: ambiguous };
+        return restartEditor(ctx.project, ctx.bridge, lifecycleTarget(ctx));
       },
     },
     build_project: {
