@@ -15,6 +15,7 @@
  * guard that ignores writes pays nothing.
  */
 import type { IBridge } from "../bridge.js";
+import type { EditorSession } from "../session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";
 
 /** Resolve a UE content path to an absolute on-disk file, or null if it does not exist. */
@@ -27,6 +28,8 @@ export interface CallContext {
   readonly timeoutMs?: number;
   /** The RAW bridge (never the guarded wrapper) for guards that must query the editor. */
   readonly bridge: IBridge;
+  /** The editor this call is bound to. Absent only for a bridge built outside a session. */
+  readonly session?: EditorSession;
   /** Scratch space shared across guards for the life of one call. */
   readonly meta: Map<string, unknown>;
   /** Lazy: how this call classifies as a write (which content paths it touches). Cached. */
@@ -80,6 +83,7 @@ export function makeCallContext(
   timeoutMs: number | undefined,
   rawBridge: IBridge,
   resolveExistingFile: ResolveExistingFile,
+  session?: EditorSession,
 ): CallContext {
   let writeCache: WriteClassification | undefined;
   let filesCache: string[] | undefined;
@@ -94,5 +98,5 @@ export function makeCallContext(
     return filesCache;
   };
 
-  return { method, params, timeoutMs, bridge: rawBridge, meta: new Map(), write, writeFiles };
+  return { method, params, timeoutMs, bridge: rawBridge, session, meta: new Map(), write, writeFiles };
 }

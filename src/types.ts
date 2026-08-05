@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { IBridge } from "./bridge.js";
 import type { ProjectContext } from "./project.js";
+import type { EditorSession, SessionRegistry } from "./session.js";
 import { McpError, ErrorCode } from "./errors.js";
 
 /**
@@ -34,6 +35,15 @@ export interface ElicitResult {
 export interface ToolContext {
   bridge: IBridge;
   project: ProjectContext;
+  /** The editor this call was routed to. `bridge` and `project` are always
+   *  this session's, so a handler cannot resolve a path in one project while
+   *  calling into another project's editor. Absent only for a context built
+   *  outside the session registry (tests, direct handler invocation). */
+  session?: EditorSession;
+  /** Every editor this server drives. Handlers that address sessions
+   *  (list_editors / use_editor / add_editor / drop_editor) read it from
+   *  here rather than from module state. */
+  sessions?: SessionRegistry;
   /** Lazy accessor for the active flow registry. Returns the merged
    *  built-in + ue-mcp.yml flows. Used by project(get_status) so agents
    *  see which canonical sequences are pre-encoded for this project. */
@@ -102,6 +112,10 @@ export interface ToolDef {
   schema: Record<string, z.ZodType>;
   handler: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
   actions: Record<string, ActionSpec>;
+  /** Set once the per-call editor target has been injected into `schema`.
+   *  Dispatch reads it to know whether an `editor` param is a routing
+   *  instruction (strip it) or one of the tool's own params (forward it). */
+  injectedEditorParam?: boolean;
 }
 
 export interface ActionSpec {
@@ -111,6 +125,60 @@ export interface ActionSpec {
   handler?: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
   /** Override the bridge call timeout in milliseconds. Defaults to 30s. */
   timeoutMs?: number;
+}
+
+/**
+ * The per-call editor target (#817). Injected into every category tool only
+ * while this server drives more than one editor, so a single-editor client
+ * sees the schema it has always seen. Declared once here because the flow
+ * tool, the micro gateway, and plugin-provided categories inject the same
+ * parameter and must describe it identically.
+ */
+export const EDITOR_TARGET_PARAM = "editor";
+
+/**
+ * Add the target parameter to a tool. Refuses when the tool already declares
+ * `editor` of its own: silently shadowing a plugin's parameter would send its
+ * value to the router instead of the handler, so the collision is reported
+ * and that tool stays untargeted rather than quietly changing meaning.
+ */
+export function injectEditorTarget(
+  tool: ToolDef,
+  sessionNames: string[],
+): { injected: boolean; reason?: string } {
+  if (tool.injectedEditorParam) {
+    tool.schema = { ...tool.schema, [EDITOR_TARGET_PARAM]: editorTargetSchema(sessionNames) };
+    return { injected: true };
+  }
+  if (EDITOR_TARGET_PARAM in tool.schema) {
+    return {
+      injected: false,
+      reason: `'${tool.name}' declares its own '${EDITOR_TARGET_PARAM}' parameter, so per-call targeting is unavailable for it. Rename that parameter to make the category targetable.`,
+    };
+  }
+  tool.schema = { ...tool.schema, [EDITOR_TARGET_PARAM]: editorTargetSchema(sessionNames) };
+  tool.injectedEditorParam = true;
+  return { injected: true };
+}
+
+/** Undo injectEditorTarget, restoring the single-editor schema exactly. */
+export function removeEditorTarget(tool: ToolDef): boolean {
+  if (!tool.injectedEditorParam) return false;
+  const { [EDITOR_TARGET_PARAM]: _dropped, ...rest } = tool.schema;
+  tool.schema = rest;
+  tool.injectedEditorParam = false;
+  return true;
+}
+
+export function editorTargetSchema(sessionNames: string[]): z.ZodType {
+  return z
+    .string()
+    .optional()
+    .describe(
+      `Editor session to run this call in: a session name (${sessionNames.join(", ")}), ` +
+        `a project name, or a .uproject path. Defaults to the active session ` +
+        `(project(action="list_editors") reports it).`,
+    );
 }
 
 export function categoryTool(
@@ -130,7 +198,7 @@ export function categoryTool(
     })
     .join("\n");
 
-  return {
+  const def: ToolDef = {
     name,
     description: `${summary}\n\nActions:\n${docs}`,
     schema: {
@@ -138,7 +206,11 @@ export function categoryTool(
       ...extraSchema,
     },
     actions,
-    handler: async (ctx, params) => {
+    handler: async (ctx, rawParams) => {
+      // `editor` is a routing instruction, never a handler parameter, and only
+      // on a tool that had it injected. Strip it here so no path can forward
+      // it into a bridge call.
+      const params = def.injectedEditorParam ? stripEditorTarget(rawParams) : rawParams;
       const action = params.action as string;
       const spec = actions[action];
       if (!spec) {
@@ -157,10 +229,18 @@ export function categoryTool(
       throw new McpError(ErrorCode.NO_HANDLER, `Action '${action}' has no handler or bridge method`);
     },
   };
+  return def;
 }
 
 function stripAction(params: Record<string, unknown>): Record<string, unknown> {
   const { action: _, ...rest } = params;
+  return rest;
+}
+
+/** Drop the routing parameter from a param bag. */
+export function stripEditorTarget(params: Record<string, unknown>): Record<string, unknown> {
+  if (!(EDITOR_TARGET_PARAM in params)) return params;
+  const { [EDITOR_TARGET_PARAM]: _dropped, ...rest } = params;
   return rest;
 }
 

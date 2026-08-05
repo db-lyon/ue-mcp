@@ -64,7 +64,13 @@ export function discoverTaskGuards(
     const isBefore = phase.startsWith("before");
 
     const runTask = async (cc: CallContext, result?: unknown) => {
-      const guardCtx: FlowContext = { ...ctx, bridge: rawBridge };
+      // Bind the guard to the editor whose call it is guarding, not to
+      // whichever bridge happened to be built first. cc.bridge is the RAW
+      // bridge of the session serving this call, so a guard can neither
+      // recurse through the pipeline nor act on another project's editor.
+      const guardCtx: FlowContext = cc.session
+        ? { ...ctx, bridge: cc.bridge, project: cc.session.project, session: cc.session }
+        : { ...ctx, bridge: rawBridge };
       const options: Record<string, unknown> = {
         method: cc.method,
         params: cc.params,

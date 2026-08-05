@@ -9,6 +9,7 @@
  * Only `call` is gated; connection lifecycle delegates straight through.
  */
 import type { IBridge } from "../bridge.js";
+import type { EditorSession } from "../session.js";
 import {
   GuardRegistry,
   makeCallContext,
@@ -23,6 +24,9 @@ export class GuardedBridge implements IBridge {
     private readonly inner: IBridge,
     private readonly registry: GuardRegistry,
     private readonly resolveExistingFile: ResolveExistingFile,
+    /** The session this pipeline belongs to, so guards can see which editor
+     *  they are guarding rather than assuming the process has only one. */
+    private readonly session?: EditorSession,
   ) {}
 
   get isConnected(): boolean {
@@ -42,7 +46,7 @@ export class GuardedBridge implements IBridge {
       return this.inner.call(method, params, timeoutMs);
     }
 
-    const ctx = makeCallContext(method, params ?? {}, timeoutMs, this.inner, this.resolveExistingFile);
+    const ctx = makeCallContext(method, params ?? {}, timeoutMs, this.inner, this.resolveExistingFile, this.session);
 
     // Resolve applicability once so `before`/`after` see a consistent set.
     const applicable: BridgeGuard[] = [];
