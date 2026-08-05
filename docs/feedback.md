@@ -144,6 +144,10 @@ The `author` parameter is an enum with two values:
 
 If `author="user"` and no OAuth token is cached, the call returns an `auth_required` directive. Run `npx ue-mcp auth` to authorize, or call with `author="bot"` to post anonymously.
 
+Anonymous reports are signed by a hosted service rather than by this package, so nothing in the install carries a GitHub credential. The report is POSTed to `https://plugins.ue-mcp.com/api/feedback`, which holds the App key, checks the destination against ue-mcp core and the trackers of published plugins, rate-limits per caller, and opens the issue as `ue-mcp-feedback[bot]`. Point `UE_MCP_FEEDBACK_ENDPOINT` at another origin to use your own.
+
+If that service is unreachable or turned off, nothing is lost: the call returns the approved body as a prefilled "new issue" URL you can open in one click, and `author="user"` keeps working independently.
+
 ### Authorizing as your GitHub user
 
 ```bash
@@ -232,7 +236,7 @@ The hook handler self-gates: if `feedback` is in `ue-mcp.yml`'s `ue-mcp.disable[
 - **The agent is the adversary for the consent step.** The MCP elicitation prompt is rendered by your client, and the response comes back to the server over the protocol — the agent has no IPC to forge an approval.
 - **The redaction passes are non-bypassable.** They run before the body reaches the elicitation prompt or `submitFeedback`, and the agent never sees the pre-scrubbed bytes.
 - **Routing cannot aim a report at an arbitrary repo.** The `repo` parameter is accepted only for ue-mcp core or a repo a registered plugin owns, and the `Tracker` field on the approval prompt only accepts the two values it offered. There is no path from "an agent wrote a string" to "an issue on any GitHub project".
-- **`author="bot"` uses an embedded GitHub App key.** The published npm package contains the `ue-mcp-feedback` App's installation credential as an XOR-encoded asset (not a literal source string), so a casual `grep` over the source tree finds nothing of interest. This is not a security boundary — the cycle constant lives next to the blob — but it removes the affordance that lets an agent stumble on the key during routine source inspection. The App's permissions are scoped to `issues: write` on `db-lyon/ue-mcp`; the realistic blast radius of a leak is bot impersonation on this one repo (`ue-mcp-feedback[bot]` posting noise), not RCE or exfil. Server-side bot signing is the long-term fix, tracked in [#461](https://github.com/db-lyon/ue-mcp/issues/461).
+- **The package ships no credentials.** `author="user"` posts with a token you authorized yourself through GitHub's device flow, stored under `~/.ue-mcp/`. `author="bot"` posts through a hosted signing service (`POST https://plugins.ue-mcp.com/api/feedback`) that holds the `ue-mcp-feedback` App key server-side, applies per-caller rate limits, re-runs the redaction pass, and only opens issues on ue-mcp core or the tracker of a published plugin. There is no key inside the package to extract.
 - **Disable the category if you don't want it available.** Add `"feedback"` to `ue-mcp.yml`'s `ue-mcp.disable[]` and the tool is not registered with the MCP server. The category checkbox lives in the **Agent behavior** section of `npx ue-mcp init` (default unchecked on fresh installs).
 
 ## For maintainers
