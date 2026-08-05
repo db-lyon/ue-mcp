@@ -133,3 +133,21 @@ export function lockfileIsFromThisLaunch(writtenAtMs: number, notBeforeMs?: numb
   if (notBeforeMs === undefined) return true;
   return writtenAtMs >= notBeforeMs - LOCKFILE_FRESHNESS_SLACK_MS;
 }
+
+/**
+ * Is this PID still around? Signal 0 delivers nothing and costs a syscall,
+ * which is what makes it usable on a path that must not pay for a process
+ * table query. EPERM means the process exists and is somebody else's.
+ *
+ * Liveness only: it says nothing about which project the process holds. Use it
+ * to discard a lockfile a dead editor left behind, never to decide that a live
+ * one is the right target.
+ */
+export function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException)?.code === "EPERM";
+  }
+}

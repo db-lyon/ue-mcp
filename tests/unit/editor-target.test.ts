@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   bridgeLockfilePath,
+  isPidAlive,
   lockfileIsFromThisLaunch,
   readBridgeLockfileIn,
   resolveBridgeTarget,
@@ -141,5 +142,16 @@ describe("lockfileIsFromThisLaunch", () => {
   it("tolerates coarse filesystem timestamps around the launch instant", () => {
     const launchedAt = Date.now();
     expect(lockfileIsFromThisLaunch(launchedAt - 1000, launchedAt)).toBe(true);
+  });
+});
+
+describe("isPidAlive", () => {
+  it("sees this process", () => {
+    expect(isPidAlive(process.pid)).toBe(true);
+  });
+
+  it("reports a pid that cannot exist as gone", () => {
+    // Above every platform's pid_max, so it is never allocated.
+    expect(isPidAlive(0x7ffffff0)).toBe(false);
   });
 });

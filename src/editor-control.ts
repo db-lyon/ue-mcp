@@ -15,7 +15,7 @@ import {
   readLogState,
   type EngineState,
 } from "./engine-observer.js";
-import { lockfileIsFromThisLaunch, resolveBridgeTarget } from "./editor-target.js";
+import { isPidAlive, lockfileIsFromThisLaunch, resolveBridgeTarget } from "./editor-target.js";
 import { startProgress } from "./ui/progress.js";
 import type { ProgressFn } from "./types.js";
 
@@ -470,8 +470,13 @@ export async function startEditor(
   // proof its editor is up, costs a millisecond, and needs no process table at
   // all. The process probe (seconds, on Windows) only runs when that fails,
   // which is also the only case where its extra detail is worth anything.
+  // A lockfile whose process is gone was left by a crash, and the port it names
+  // can since have been taken by something else, so an answer on it proves
+  // nothing. Discarding it here costs a syscall and keeps a stale file from
+  // refusing a launch forever.
   const target = resolveBridgeTarget(projectDir);
-  if (target.ok && (await isBridgeAvailable(undefined, target.port))) {
+  const targetIsLive = target.ok && (target.pid === null || isPidAlive(target.pid));
+  if (target.ok && targetIsLive && (await isBridgeAvailable(undefined, target.port))) {
     return {
       success: false,
       message: `Editor is already running for this project (its bridge is answering on port ${target.port}).`,
