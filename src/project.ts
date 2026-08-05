@@ -85,6 +85,9 @@ export class ProjectContext {
 
     this.projectName = path.basename(this.projectPath, ".uproject");
     this.contentDir = path.join(path.dirname(this.projectPath), "Content");
+    // The cache is keyed to nothing but the process, so a switch would keep
+    // resolving /MyPlugin/ paths against the project we just left.
+    this._pluginCache = null;
     this.parseUProject();
     this.loadConfig();
   }
