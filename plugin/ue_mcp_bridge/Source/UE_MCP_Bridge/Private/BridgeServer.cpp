@@ -886,14 +886,47 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD)
 				break;
 			}
 
+			// Control frames are answers the protocol owes the peer, not
+			// requests. Handing a close frame to the JSON-RPC parser (which is
+			// what happened before opcodes were read) replied to "goodbye" with
+			// a parse error and left the client waiting for a close that never
+			// came, holding a connection thread open for the rest of the
+			// session.
 			if (Frame.Opcode == EMCPWebSocketOpcode::Close)
 			{
+				uint16 PeerCode = 1000;
+				FString PeerReason;
+				if (Frame.Payload.Num() >= 2)
+				{
+					PeerCode = (uint16)(((uint16)Frame.Payload[0] << 8) | (uint16)Frame.Payload[1]);
+					if (Frame.Payload.Num() > 2)
+					{
+						FUTF8ToTCHAR ReasonText((const char*)Frame.Payload.GetData() + 2, Frame.Payload.Num() - 2);
+						PeerReason = FString(ReasonText.Length(), ReasonText.Get());
+					}
+				}
+				UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Client closed the WebSocket (code %u%s%s)"),
+					(uint32)PeerCode,
+					PeerReason.IsEmpty() ? TEXT("") : TEXT(": "),
+					*PeerReason);
+				// Echo the code back to finish the handshake, then stop reading.
+				SendCloseFrame(ClientSocketFD, PeerCode, TEXT(""));
 				bDone = true;
 				break;
 			}
-			if (Frame.Opcode == EMCPWebSocketOpcode::Ping || Frame.Opcode == EMCPWebSocketOpcode::Pong)
+			if (Frame.Opcode == EMCPWebSocketOpcode::Ping)
 			{
+				const TArray<uint8> Pong = CreateControlFrame(EMCPWebSocketOpcode::Pong, Frame.Payload);
+				if (!SendAll(ClientSocketFD, Pong.GetData(), Pong.Num()))
+				{
+					bDone = true;
+					break;
+				}
 				continue;
+			}
+			if (Frame.Opcode == EMCPWebSocketOpcode::Pong)
+			{
+				continue; // keepalive answer, nothing owed
 			}
 
 			if (Frame.Opcode == EMCPWebSocketOpcode::Continuation)
