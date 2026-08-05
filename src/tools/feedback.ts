@@ -2,7 +2,7 @@ import { z } from "zod";
 import { categoryTool, directive, type ToolDef, type ToolContext } from "../types.js";
 import { submitFeedback } from "../github-app.js";
 import { readUserAuth } from "../auth.js";
-import { getWorkarounds, clearWorkarounds } from "../workaround-tracker.js";
+import { getWorkarounds, clearWorkarounds, type WorkaroundScopeSource } from "../workaround-tracker.js";
 import { scrubSecrets } from "../secret-scrub.js";
 import { privacyScrub } from "../privacy-scrub.js";
 import { deferSubmission } from "../feedback-deferred.js";
@@ -187,6 +187,29 @@ interface AssembledPayload {
 interface PrivacyInputs {
   projectRoot?: string;
   projectName?: string;
+  /** Roots of the other editors this server drives, scrubbed defensively. */
+  otherProjectRoots?: string[];
+  /** Names of the other editors this server drives, scrubbed defensively. */
+  otherProjectNames?: string[];
+}
+
+/**
+ * Roots and names of every editor this server drives except the submitting
+ * one. Fed to the privacy scrub so a body that somehow carried another
+ * project's identifiers cannot post them to a public tracker (#817).
+ */
+function otherSessionIdentifiers(ctx: ToolContext): {
+  otherProjectRoots: string[];
+  otherProjectNames: string[];
+} {
+  const roots: string[] = [];
+  const names: string[] = [];
+  for (const other of ctx.sessions?.list() ?? []) {
+    if (other === ctx.session) continue;
+    if (other.project.projectDir) roots.push(other.project.projectDir);
+    if (other.project.projectName) names.push(other.project.projectName);
+  }
+  return { otherProjectRoots: roots, otherProjectNames: names };
 }
 
 function assemblePayload(
@@ -196,6 +219,8 @@ function assemblePayload(
   idealTool: string | undefined,
   privacy: PrivacyInputs,
   routing: RoutingDecision | null = null,
+  /** Which editor is submitting. Its workaround log is the only one bundled. */
+  scope?: WorkaroundScopeSource,
 ): AssembledPayload {
   const sections: string[] = ["## Summary", summary];
 
@@ -213,7 +238,7 @@ function assemblePayload(
     );
   }
 
-  const sessionWorkarounds = getWorkarounds();
+  const sessionWorkarounds = getWorkarounds(scope);
   if (sessionWorkarounds.length > 0) {
     sections.push("", "## Session Workaround Log", `${sessionWorkarounds.length} execute_python call(s) this session:`, "");
     for (const w of sessionWorkarounds) {
@@ -244,15 +269,9 @@ function assemblePayload(
   // server-side before the body ever appears on the elicitation prompt or
   // crosses the GitHub API boundary.
   const secretsBody = scrubSecrets(rawBody);
-  const privacyBody = privacyScrub(secretsBody.text, {
-    projectRoot: privacy.projectRoot,
-    projectName: privacy.projectName,
-  });
+  const privacyBody = privacyScrub(secretsBody.text, privacy);
   const secretsTitle = scrubSecrets(title);
-  const privacyTitle = privacyScrub(secretsTitle.text, {
-    projectRoot: privacy.projectRoot,
-    projectName: privacy.projectName,
-  });
+  const privacyTitle = privacyScrub(secretsTitle.text, privacy);
 
   const allHits = [
     ...secretsBody.hits,
@@ -380,7 +399,7 @@ export const feedbackTool: ToolDef = categoryTool(
         // Enum, default "user" per the schema. Missing == "user".
         const author: AuthorIntent = params.author === "bot" ? "bot" : "user";
 
-        const sessionWorkarounds = getWorkarounds();
+        const sessionWorkarounds = getWorkarounds(ctx);
         const rejection = validateSubmission(
           title,
           summary,
@@ -389,7 +408,7 @@ export const feedbackTool: ToolDef = categoryTool(
           sessionWorkarounds.length,
         );
         if (rejection) {
-          clearWorkarounds();
+          clearWorkarounds(ctx);
           return directive(
             [
               `[FEEDBACK REJECTED - DO NOT RETRY]`,
@@ -462,8 +481,10 @@ export const feedbackTool: ToolDef = categoryTool(
           {
             projectRoot: ctx.project?.projectDir ?? undefined,
             projectName: ctx.project?.projectName ?? undefined,
+            ...otherSessionIdentifiers(ctx),
           },
           routing,
+          ctx,
         );
 
         // Two independent checks: (1) capture intent above, (2) validate
@@ -522,7 +543,7 @@ export const feedbackTool: ToolDef = categoryTool(
             ctx.project?.projectName ?? null,
             useBotForSubmit ? "bot" : "user",
           );
-          clearWorkarounds();
+          clearWorkarounds(ctx);
           return {
             message: `Feedback deferred locally for later review (id ${entry.id}), aimed at ${repoSlug(targetRepo)}.`,
             deferred: true,
@@ -607,7 +628,7 @@ export const feedbackTool: ToolDef = categoryTool(
               },
             );
           }
-          clearWorkarounds();
+          clearWorkarounds(ctx);
           return {
             message: `Feedback auto-approved and submitted to ${repoSlug(postedTo)} as ${result.authoredAs === "user" ? `@${result.authoredBy}` : "bot"} (auto-approve mode).`,
             issue_url: result.url,
@@ -951,7 +972,7 @@ export const feedbackTool: ToolDef = categoryTool(
 
         // The body has shipped, drop the session log so a follow-up doesn't
         // re-bundle the same execute_python calls into a second issue.
-        clearWorkarounds();
+        clearWorkarounds(ctx);
 
         return {
           message: `Feedback submitted to ${repoSlug(targetRepo)} as ${result.authoredAs === "user" ? `@${result.authoredBy}` : "bot"}`,

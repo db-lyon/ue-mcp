@@ -589,8 +589,8 @@ export const projectTool: ToolDef = categoryTool(
     },
     execute_python_report: {
       description: "Measurement for #704: reads this session's execute_python calls and, for each, runs its taskSummary back through search_tools to flag calls that OVERLAPPED an existing dedicated action ('you used Python for X, but tool Y does X'). Returns totalCalls, overlapping[] and an overlapRate. Params: none (#704)",
-      handler: async () => {
-        const entries = getWorkarounds();
+      handler: async (ctx) => {
+        const entries = getWorkarounds(ctx);
         const overlapping: Array<{ taskSummary: string; suggestion: ToolSearchHit; codeSnippet: string }> = [];
         for (const e of entries) {
           const q = (e.taskSummary ?? "").trim();

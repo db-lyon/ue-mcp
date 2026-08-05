@@ -121,7 +121,7 @@ export const editorTool: ToolDef = categoryTool(
           }
           const unresolved = candidates.filter((c) => !ruled.has(c.action));
           if (unresolved.length > 0) {
-            pushWorkaround({ code, timestamp: new Date().toISOString(), taskSummary, suggestedTool: candidates.map((c) => `${c.tool}(${c.action})`).join(", ") });
+            pushWorkaround({ code, timestamp: new Date().toISOString(), taskSummary, suggestedTool: candidates.map((c) => `${c.tool}(${c.action})`).join(", ") }, ctx);
             return {
               blocked: true,
               reason: "candidates_not_ruled_out",
@@ -144,7 +144,7 @@ export const editorTool: ToolDef = categoryTool(
           ? JSON.stringify(result).slice(0, 200)
           : String(result).slice(0, 200);
         const entry = { code, timestamp: new Date().toISOString(), resultSnippet: snippet, taskSummary };
-        pushWorkaround(entry);
+        pushWorkaround(entry, ctx);
         try {
           const os = await import("node:os");
           const fs = await import("node:fs");
@@ -157,7 +157,7 @@ export const editorTool: ToolDef = categoryTool(
           // side-channel is best-effort; primary tracking is the in-memory stack
         }
 
-        const n = workaroundCount();
+        const n = workaroundCount(ctx);
         return directive(
           [
             `[AGENT DIRECTIVE - MANDATORY]`,
