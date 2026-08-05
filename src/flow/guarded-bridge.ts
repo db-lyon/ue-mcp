@@ -8,7 +8,7 @@
  *
  * Only `call` is gated; connection lifecycle delegates straight through.
  */
-import type { IBridge } from "../bridge.js";
+import type { BridgeTarget, IBridge } from "../bridge.js";
 import {
   GuardRegistry,
   makeCallContext,
@@ -31,6 +31,14 @@ export class GuardedBridge implements IBridge {
 
   connect(timeoutMs?: number): Promise<void> {
     return this.inner.connect(timeoutMs);
+  }
+
+  retargetProject(uprojectPath: string, configPort?: number): BridgeTarget {
+    return this.inner.retargetProject(uprojectPath, configPort);
+  }
+
+  getTarget(): BridgeTarget {
+    return this.inner.getTarget();
   }
 
   async call(
