@@ -19,6 +19,14 @@ Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plu
 - **No batching "housekeeping" commits** that sweep up everything at once. If you wrote five fixes, write five commits.
 - **Claude owns git.** Stage, commit, push when ready. Don't push the user into running git commands.
 
+#### Squash or merge commit
+
+The merge style follows the commit count, and writing five commits only to squash them back into one throws the work away.
+
+- **One logical change in the PR: squash-merge.** `gh pr merge <n> --squash --delete-branch`. Review fixups and typo passes are noise on main.
+- **Several independently meaningful commits: merge commit.** `gh pr merge <n> --merge`. Each fix keeps its own SHA, which is what issue comments cite when they say which commit closed the issue. Squashing seven fixes leaves seven issues pointing at one SHA whose message describes something else.
+- **Never rewrite a SHA that has already been cited** in an issue, a release note, or a comment. The citation is a promise that the commit exists.
+
 ### Versioning
 
 **Hard rule: patch-level bumps only.** Version bumps in this repo are always `X.Y.Z → X.Y.(Z+1)`. Never increment major or minor without explicit sign-off. This holds even for genuinely large features - the answer is still a patch bump, and if you think otherwise, ask first.
