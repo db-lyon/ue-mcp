@@ -47,10 +47,14 @@ describe("SessionRegistry", () => {
 
     const a = registry.register({ projectPath: uproject });
     const b = registry.register({ projectPath: path.dirname(uproject) });
-    const c = registry.register({ projectPath: uproject.replace(/\//g, "\\") });
+    const c = registry.register({ projectPath: path.dirname(uproject) + path.sep });
 
     expect(b).toBe(a);
     expect(c).toBe(a);
+    if (process.platform === "win32") {
+      // A backslash is a separator only where it is one.
+      expect(registry.register({ projectPath: uproject.replace(/\//g, "\\") })).toBe(a);
+    }
     expect(registry.size).toBe(1);
   });
 
@@ -202,8 +206,13 @@ describe("SessionRegistry", () => {
   });
 
   it("normalizes a project path to the same key from either form", () => {
-    expect(sessionKeyFor("C:/work/Game/Game.uproject")).toBe("c:/work/game");
-    expect(sessionKeyFor("C:\\work\\Game\\")).toBe("c:/work/game");
+    const dir = path.join(root, "Game");
+    const expected = path.resolve(dir).replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+
+    expect(sessionKeyFor(path.join(dir, "Game.uproject"))).toBe(expected);
+    expect(sessionKeyFor(dir)).toBe(expected);
+    expect(sessionKeyFor(dir + path.sep)).toBe(expected);
+    expect(sessionKeyFor(dir.toUpperCase())).toBe(expected);
   });
 });
 
