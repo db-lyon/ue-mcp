@@ -121,9 +121,23 @@ private:
 
 	// WebSocket connection handling
 	void HandleWebSocketConnection(FMCPSocketHandle ClientSocketFD);
-	FString PerformWebSocketHandshake(FMCPSocketHandle ClientSocketFD);
-	void ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD);
-	FString ReadHttpRequest(FMCPSocketHandle SocketFD);
+	void ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD, TArray<uint8>& InitialBytes);
+
+	/**
+	 * Validate the upgrade request and build the 101 response, or return an
+	 * empty string having already told the client why it was refused.
+	 * OutPipelinedBytes receives anything the client sent behind the request.
+	 */
+	FString PerformWebSocketHandshake(FMCPSocketHandle ClientSocketFD, TArray<uint8>& OutPipelinedBytes);
+
+	/** Read the upgrade request through its blank line, not just one recv. */
+	static bool ReadHttpRequest(FMCPSocketHandle SocketFD, FString& OutRequest, TArray<uint8>& OutPipelinedBytes);
+
+	/** Case-insensitive, line-scoped header lookup. */
+	static bool FindHeaderValue(const FString& Request, const FString& HeaderName, FString& OutValue);
+
+	/** Refuse an upgrade with an HTTP status the caller can read. */
+	static void SendHttpError(FMCPSocketHandle SocketFD, int32 StatusCode, const FString& StatusText, const FString& Detail);
 
 	FString CreateWebSocketAcceptKey(const FString& ClientKey);
 	TArray<uint8> CreateWebSocketFrame(const FString& Message);
