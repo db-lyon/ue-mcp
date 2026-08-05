@@ -158,9 +158,32 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 		GModalSafeQueue.Enqueue(RunOnce);
 	}
 
-	// Block calling thread until the ticker fires or timeout
-	uint32 TimeoutMs = static_cast<uint32>(TimeoutSeconds * 1000.0f);
-	bool bCompleted = State->DoneEvent->Wait(TimeoutMs);
+	// Block the calling thread until the ticker fires, the timeout expires, or
+	// the bridge starts shutting down.
+	//
+	// #821: waiting in slices rather than one long wait is what lets shutdown
+	// reclaim this thread. Module teardown runs on the game thread, so once it
+	// has begun the queued ticker will never fire, and a single Wait(30s) here
+	// (or the several minutes some handlers are allowed) would hold the editor
+	// open for the whole of it.
+	const uint32 TimeoutMs = static_cast<uint32>(TimeoutSeconds * 1000.0f);
+	constexpr uint32 SliceMs = 50;
+	uint32 WaitedMs = 0;
+	bool bCompleted = false;
+	while (WaitedMs < TimeoutMs)
+	{
+		const uint32 ThisSliceMs = FMath::Min(SliceMs, TimeoutMs - WaitedMs);
+		if (State->DoneEvent->Wait(ThisSliceMs))
+		{
+			bCompleted = true;
+			break;
+		}
+		WaitedMs += ThisSliceMs;
+		if (bShuttingDown)
+		{
+			break;
+		}
+	}
 
 	if (!bCompleted)
 	{
@@ -180,7 +203,9 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 	if (!bCompleted)
 	{
 		TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
-		ErrorObject->SetStringField(TEXT("error"), TEXT("Handler execution timed out"));
+		ErrorObject->SetStringField(TEXT("error"), bShuttingDown
+			? TEXT("Editor is shutting down; the request was not run.")
+			: TEXT("Handler execution timed out"));
 		return MakeShared<FJsonValueObject>(ErrorObject);
 	}
 

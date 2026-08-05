@@ -16,6 +16,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/SecureHash.h"
+#include "Misc/ScopeLock.h"
 #include "Async/Async.h"
 #include "Handlers/EditorHandlers.h"
 #include "Handlers/AssetHandlers.h"
@@ -84,6 +85,23 @@ namespace
 	// the headers may grow before the bridge stops waiting for a blank line.
 	constexpr double kUpgradeReadTimeoutSeconds = 5.0;
 	constexpr int32 kMaxUpgradeHeaderBytes = 16 * 1024;
+
+	// How long shutdown lets connection threads notice the stop flag and close
+	// politely (their select is one second), and how long it then waits after
+	// half-closing their sockets before giving up and saying so.
+	constexpr double kConnectionCloseGraceSeconds = 2.0;
+	constexpr double kConnectionDrainTimeoutSeconds = 10.0;
+}
+
+FMCPConnectionRelease::FMCPConnectionRelease(FMCPBridgeServer& InServer, FMCPSocketHandle InHandle)
+	: Server(InServer)
+	, Handle(InHandle)
+{
+}
+
+FMCPConnectionRelease::~FMCPConnectionRelease()
+{
+	Server.UnregisterConnection(Handle);
 }
 
 FMCPBridgeServer::FMCPBridgeServer(int32 Port)
@@ -91,7 +109,6 @@ FMCPBridgeServer::FMCPBridgeServer(int32 Port)
 	, ServerThread(nullptr)
 	, bShouldStop(false)
 	, bIsRunning(false)
-	, ServerSocket(nullptr)
 {
 	// Register core handlers
 	FEditorHandlers::RegisterHandlers(HandlerRegistry);
@@ -143,12 +160,16 @@ bool FMCPBridgeServer::Start()
 
 void FMCPBridgeServer::Shutdown()
 {
-	if (!bIsRunning)
-	{
-		return;
-	}
-
+	// No early return on bIsRunning. Exit() clears that flag, and on the
+	// bind-failure path Exit() runs before Shutdown() does, so guarding on it
+	// meant the server thread was never joined in exactly the case where the
+	// thread had already failed and nobody was watching.
 	bShouldStop = true;
+
+	// Let anything waiting on the game thread give up now. Module teardown is
+	// running on the game thread, so a queued handler will never execute and
+	// its caller would otherwise sit here for the full handler timeout.
+	GameThreadExecutor.BeginShutdown();
 
 	if (ServerThread)
 	{
@@ -157,7 +178,72 @@ void FMCPBridgeServer::Shutdown()
 		ServerThread = nullptr;
 	}
 
+	// The accept loop is gone, but each connection thread captured `this` and
+	// the module destroys this object as soon as Shutdown returns. A thread
+	// still inside ProcessMessage at that point is running on freed memory:
+	// that is the stop_editor-with-a-client-attached crash.
+	//
+	// Connection loops see bShouldStop at the end of their current one-second
+	// select and close cleanly. Give them that long before being blunt about it.
+	if (!WaitForConnectionsToFinish(kConnectionCloseGraceSeconds))
+	{
+		WakeAllConnections();
+		if (!WaitForConnectionsToFinish(kConnectionDrainTimeoutSeconds))
+		{
+			UE_LOG(LogMCPBridge, Error,
+				TEXT("[UE-MCP] %d bridge connection(s) still running after %.0fs. Continuing shutdown; a handler is not returning."),
+				ActiveConnectionCount.GetValue(), kConnectionCloseGraceSeconds + kConnectionDrainTimeoutSeconds);
+		}
+	}
+
 	bIsRunning = false;
+}
+
+void FMCPBridgeServer::RegisterConnection(FMCPSocketHandle Handle)
+{
+	ActiveConnectionCount.Increment();
+	FScopeLock Lock(&ConnectionsMutex);
+	LiveConnections.Add(Handle);
+}
+
+void FMCPBridgeServer::UnregisterConnection(FMCPSocketHandle Handle)
+{
+	{
+		// Out of the set before the socket is closed, under the same lock
+		// WakeAllConnections holds. Otherwise shutdown could half-close a
+		// handle number the operating system had already handed to someone else.
+		FScopeLock Lock(&ConnectionsMutex);
+		LiveConnections.Remove(Handle);
+	}
+	// The last thing a connection thread touches on this object.
+	ActiveConnectionCount.Decrement();
+}
+
+void FMCPBridgeServer::WakeAllConnections()
+{
+	FScopeLock Lock(&ConnectionsMutex);
+	for (const FMCPSocketHandle Handle : LiveConnections)
+	{
+#if PLATFORM_WINDOWS
+		shutdown(Handle, SD_BOTH);
+#else
+		shutdown(Handle, SHUT_RDWR);
+#endif
+	}
+}
+
+bool FMCPBridgeServer::WaitForConnectionsToFinish(double TimeoutSeconds)
+{
+	const double Deadline = FPlatformTime::Seconds() + TimeoutSeconds;
+	while (ActiveConnectionCount.GetValue() > 0)
+	{
+		if (FPlatformTime::Seconds() >= Deadline)
+		{
+			return false;
+		}
+		FPlatformProcess::Sleep(0.01f);
+	}
+	return true;
 }
 
 bool FMCPBridgeServer::Init()
@@ -309,7 +395,11 @@ uint32 FMCPBridgeServer::Run()
 			UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Client connected from %s:%d"),
 				ANSI_TO_TCHAR(AddrStr), ntohs(ClientAddr.sin_port));
 				
-				// Handle each WebSocket connection in its own thread
+				// Handle each WebSocket connection in its own thread. Count it
+				// here, before the thread exists, so a shutdown racing this
+				// accept cannot decide that nothing is running and let the
+				// module free the server out from under the new thread.
+				RegisterConnection(ClientSocketFD);
 				Async(EAsyncExecution::Thread, [this, ClientSocketFD]() {
 					HandleWebSocketConnection(ClientSocketFD);
 				});
@@ -656,6 +746,10 @@ void FMCPBridgeServer::HandleWebSocketConnection(FMCPSocketHandle ClientSocketFD
 	// out of this function, whichever path leaves it.
 	FMCPClientSocket Connection(ClientSocketFD);
 
+	// Declared after the socket so it is destroyed before it: the handle must
+	// leave the live set while it is still open.
+	FMCPConnectionRelease Release(*this, ClientSocketFD);
+
 	// Set TCP_NODELAY on client socket for immediate send
 	int32 NoDelay = 1;
 	setsockopt(Connection.Get(), IPPROTO_TCP, TCP_NODELAY, (char*)&NoDelay, sizeof(NoDelay));
@@ -978,6 +1072,12 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 	TArray<uint8> MessagePayload;
 	bool bAssembling = false;
 
+	// True once the connection has ended for a reason of its own: the peer
+	// closed, the stream stopped parsing, or the socket failed. False means the
+	// loop exited only because the bridge is stopping, which the peer deserves
+	// to be told about.
+	bool bConnectionFinished = false;
+
 	while (!bShouldStop)
 	{
 		// Decode before reading. Bytes left over from the previous read may
@@ -1114,6 +1214,7 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 
 		if (bDone)
 		{
+			bConnectionFinished = true;
 			break;
 		}
 
@@ -1128,6 +1229,7 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 		const int32 SelectResult = select(ClientSocketFD + 1, &ReadSet, nullptr, nullptr, &Timeout);
 		if (SelectResult < 0)
 		{
+			bConnectionFinished = true;
 			break;
 		}
 		if (SelectResult == 0 || !FD_ISSET(ClientSocketFD, &ReadSet))
@@ -1138,6 +1240,7 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 		const int32 BytesReceived = recv(ClientSocketFD, (char*)Chunk.GetData(), kRecvChunkBytes, 0);
 		if (BytesReceived <= 0)
 		{
+			bConnectionFinished = true;
 			break;
 		}
 		PendingBytes.Append(Chunk.GetData(), BytesReceived);
@@ -1152,8 +1255,17 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 				(int64)PendingBytes.Num(), kMaxWebSocketMessageBytes);
 			UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] %s"), *Reason);
 			SendCloseFrame(ClientSocketFD, 1009, Reason);
+			bConnectionFinished = true;
 			break;
 		}
+	}
+
+	if (!bConnectionFinished)
+	{
+		// The only way out of the loop that is not the connection's own doing:
+		// the bridge is stopping. Tell the client so, instead of leaving it to
+		// infer a healthy editor from a severed socket.
+		SendCloseFrame(ClientSocketFD, 1001, TEXT("editor is shutting down"));
 	}
 }
 

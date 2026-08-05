@@ -43,8 +43,17 @@ public:
 	// Check if the editor is ready
 	bool IsEditorReady() const { return bEditorReady; }
 
+	// #821: stop blocking callers. The game thread is inside module teardown by
+	// the time the bridge shuts down, so it will never run the queued ticker,
+	// and a socket thread waiting the full handler timeout there is a socket
+	// thread that holds the editor open for exactly that long. Once this is set
+	// an in-flight wait gives up at its next slice.
+	void BeginShutdown() { bShuttingDown = true; }
+	bool IsShuttingDown() const { return bShuttingDown; }
+
 private:
 	FThreadSafeBool bEditorReady{false};
+	FThreadSafeBool bShuttingDown{false};
 	// Pending execution info
 	struct FPendingExecution
 	{

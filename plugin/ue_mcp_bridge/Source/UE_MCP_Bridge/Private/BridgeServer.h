@@ -8,7 +8,10 @@
 #include "HAL/Runnable.h"
 #include "HAL/RunnableThread.h"
 #include "HAL/ThreadSafeBool.h"
+#include "HAL/ThreadSafeCounter.h"
+#include "HAL/CriticalSection.h"
 #include "Containers/Queue.h"
+#include "Containers/Set.h"
 
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
@@ -84,8 +87,36 @@ private:
 	FMCPSocketHandle Handle;
 };
 
+class FMCPBridgeServer;
+
+/**
+ * Releases the connection record the accept loop made before it spawned this
+ * thread.
+ *
+ * The accept loop registers, so a shutdown racing an accept can never conclude
+ * that nothing is running. This object is declared after the socket guard and
+ * therefore destroyed before it, so the handle leaves the live set while it is
+ * still open: half-closing a handle number the operating system has already
+ * handed to someone else is worse than not waking it at all.
+ */
+class FMCPConnectionRelease
+{
+public:
+	FMCPConnectionRelease(FMCPBridgeServer& InServer, FMCPSocketHandle InHandle);
+	~FMCPConnectionRelease();
+
+	FMCPConnectionRelease(const FMCPConnectionRelease&) = delete;
+	FMCPConnectionRelease& operator=(const FMCPConnectionRelease&) = delete;
+
+private:
+	FMCPBridgeServer& Server;
+	FMCPSocketHandle Handle;
+};
+
 class FMCPBridgeServer : public FRunnable
 {
+	friend class FMCPConnectionRelease;
+
 public:
 	FMCPBridgeServer(int32 Port = 9877);
 	~FMCPBridgeServer();
@@ -189,6 +220,20 @@ private:
 	/** Write every byte or report failure. Partial sends are not success. */
 	static bool SendAll(FMCPSocketHandle SocketFD, const uint8* Data, int32 NumBytes);
 
-	// Server socket (will use platform-specific implementation)
-	void* ServerSocket;
+	// #821: connection threads capture `this` and outlive the accept loop, so
+	// shutdown has to be able to find them, wake them, and wait for them. The
+	// module frees this object the moment Shutdown returns.
+	void RegisterConnection(FMCPSocketHandle Handle);
+	void UnregisterConnection(FMCPSocketHandle Handle);
+
+	/** Half-close every live client socket so a blocked recv returns now
+	 *  rather than at the end of its next one-second select. */
+	void WakeAllConnections();
+
+	/** Block until no connection thread is running. False on timeout. */
+	bool WaitForConnectionsToFinish(double TimeoutSeconds);
+
+	FCriticalSection ConnectionsMutex;
+	TSet<FMCPSocketHandle> LiveConnections;
+	FThreadSafeCounter ActiveConnectionCount;
 };
