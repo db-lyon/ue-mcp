@@ -56,6 +56,34 @@ struct FMCPWebSocketFrame
 	TArray<uint8> Payload;
 };
 
+/**
+ * Sole owner of one accepted client socket.
+ *
+ * The accept loop creates the handle and hands it to a connection thread; from
+ * that moment this object is the only thing allowed to close it, and it does so
+ * exactly once. The close call used to be copied down every early return in the
+ * connection path, which is how a new return ends up leaking a socket and a
+ * reconnect ends up closing one twice.
+ */
+class FMCPClientSocket
+{
+public:
+	explicit FMCPClientSocket(FMCPSocketHandle InHandle);
+	~FMCPClientSocket();
+
+	FMCPClientSocket(const FMCPClientSocket&) = delete;
+	FMCPClientSocket& operator=(const FMCPClientSocket&) = delete;
+
+	FMCPSocketHandle Get() const { return Handle; }
+	bool IsValid() const { return Handle != MCP_INVALID_SOCKET; }
+
+	/** Close now. Idempotent, so the destructor is a no-op afterwards. */
+	void Close();
+
+private:
+	FMCPSocketHandle Handle;
+};
+
 class FMCPBridgeServer : public FRunnable
 {
 public:

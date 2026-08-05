@@ -625,71 +625,67 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	}
 }
 
+FMCPClientSocket::FMCPClientSocket(FMCPSocketHandle InHandle)
+	: Handle(InHandle)
+{
+}
+
+FMCPClientSocket::~FMCPClientSocket()
+{
+	Close();
+}
+
+void FMCPClientSocket::Close()
+{
+	if (Handle == MCP_INVALID_SOCKET)
+	{
+		return;
+	}
+#if PLATFORM_WINDOWS
+	closesocket(Handle);
+#else
+	close(Handle);
+#endif
+	Handle = MCP_INVALID_SOCKET;
+}
+
 void FMCPBridgeServer::HandleWebSocketConnection(FMCPSocketHandle ClientSocketFD)
 {
+	// The accept loop created this handle and hands it over here. From this
+	// line on, Connection is its only owner: it closes exactly once, on the way
+	// out of this function, whichever path leaves it.
+	FMCPClientSocket Connection(ClientSocketFD);
+
 	// Set TCP_NODELAY on client socket for immediate send
 	int32 NoDelay = 1;
-	setsockopt(ClientSocketFD, IPPROTO_TCP, TCP_NODELAY, (char*)&NoDelay, sizeof(NoDelay));
-	
+	setsockopt(Connection.Get(), IPPROTO_TCP, TCP_NODELAY, (char*)&NoDelay, sizeof(NoDelay));
+
 	// Anything the client pipelined behind its upgrade request. Those bytes
 	// arrived on the same read as the header and belong to the frame reader.
 	TArray<uint8> PipelinedBytes;
 
 	// Perform WebSocket handshake
-	FString Response = PerformWebSocketHandshake(ClientSocketFD, PipelinedBytes);
+	const FString Response = PerformWebSocketHandshake(Connection.Get(), PipelinedBytes);
 	if (Response.IsEmpty())
 	{
-#if PLATFORM_WINDOWS
-		closesocket(ClientSocketFD);
-#else
-		close(ClientSocketFD);
-#endif
 		return;
 	}
 
-	// Send handshake response
-	// HTTP headers are ASCII, FString uses TCHAR (which is wchar_t on Windows)
-	// Convert to UTF-8 bytes for network transmission
-	FTCHARToUTF8 UTF8Response(*Response);
-	const char* ResponseBytes = (const char*)UTF8Response.Get();
-	int32 TotalBytes = UTF8Response.Length();
-	
-	// Send response - ensure all bytes are sent
-	int32 SentBytes = 0;
-	while (SentBytes < TotalBytes)
+	// HTTP headers are ASCII and FString is TCHAR, so convert to UTF-8 bytes
+	// for the wire. A partial send is a failed handshake, not a success.
+	const FTCHARToUTF8 UTF8Response(*Response);
+	if (!SendAll(Connection.Get(), (const uint8*)UTF8Response.Get(), UTF8Response.Length()))
 	{
-		int32 BytesSent = send(ClientSocketFD, ResponseBytes + SentBytes, TotalBytes - SentBytes, 0);
-		if (BytesSent < 0)
-		{
-			int32 ErrorCode = 0;
-#if PLATFORM_WINDOWS
-			ErrorCode = WSAGetLastError();
-			UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] Failed to send WebSocket handshake response, error: %d"), ErrorCode);
-			closesocket(ClientSocketFD);
-#else
-			UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] Failed to send WebSocket handshake response"));
-			close(ClientSocketFD);
-#endif
-			return;
-		}
-		SentBytes += BytesSent;
+		UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] Failed to send WebSocket handshake response"));
+		return;
 	}
-	
-	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Sent WebSocket handshake response (%d/%d bytes)"), SentBytes, TotalBytes);
-	
-	// Small delay to ensure response is fully sent and received by client
-	FPlatformProcess::Sleep(0.01f); // 10ms
-	
+
+	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Sent WebSocket handshake response (%d bytes)"), UTF8Response.Length());
+
 	// Process WebSocket messages
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Starting WebSocket message processing"));
-	ProcessWebSocketMessages(ClientSocketFD, PipelinedBytes);
+	ProcessWebSocketMessages(Connection.Get(), PipelinedBytes);
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] WebSocket message processing ended"));
-
-#if PLATFORM_WINDOWS
-	closesocket(ClientSocketFD);
-#else
-	close(ClientSocketFD);
-#endif
 }
 
 FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocketFD, TArray<uint8>& OutPipelinedBytes)
