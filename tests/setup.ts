@@ -1,15 +1,46 @@
 import { EditorBridge } from "../src/bridge.js";
+import {
+  bridgePortCandidates,
+  describeMissingBridge,
+} from "../scripts/bridge-target.mjs";
 
 let _bridge: EditorBridge | null = null;
 
-const TEST_BRIDGE_HOST = process.env.UE_MCP_TEST_HOST ?? "localhost";
-const TEST_BRIDGE_PORT = Number(process.env.UE_MCP_TEST_PORT ?? 9877);
+// 127.0.0.1 rather than "localhost": on hosts where the IPv6 stack wins DNS,
+// "localhost" resolves to ::1 and the client waits on an empty socket while the
+// bridge owns the IPv4 loopback.
+const TEST_BRIDGE_HOST = process.env.UE_MCP_TEST_HOST ?? "127.0.0.1";
+const ENV_PORT = Number.parseInt(process.env.UE_MCP_TEST_PORT ?? "", 10);
 
+/**
+ * Connect to the bridge for tests/ue_mcp. The bridge binds a per-project port
+ * and publishes it to that project's Saved/UE_MCP_Bridge/port.json, so the port
+ * is discovered rather than assumed; UE_MCP_TEST_PORT still pins it when set.
+ */
 export async function getBridge(): Promise<EditorBridge> {
   if (_bridge?.isConnected) return _bridge;
-  _bridge = new EditorBridge(TEST_BRIDGE_HOST, TEST_BRIDGE_PORT);
-  await _bridge.connect(5000);
-  return _bridge;
+
+  const { candidates, lockfile } = bridgePortCandidates({
+    explicitPort: Number.isInteger(ENV_PORT) ? ENV_PORT : null,
+  });
+
+  let lastError: string | null = null;
+  for (const candidate of candidates) {
+    const bridge = new EditorBridge(TEST_BRIDGE_HOST, candidate.port);
+    try {
+      await bridge.connect(5000);
+    } catch (e: unknown) {
+      lastError = e instanceof Error ? e.message : String(e);
+      bridge.disconnect();
+      continue;
+    }
+    _bridge = bridge;
+    return bridge;
+  }
+
+  throw new Error(
+    describeMissingBridge({ host: TEST_BRIDGE_HOST, candidates, lockfile, lastError }),
+  );
 }
 
 export function disconnectBridge(): void {

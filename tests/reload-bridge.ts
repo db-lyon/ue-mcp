@@ -1,8 +1,9 @@
-import { EditorBridge } from "../src/bridge.js";
+import { getBridge, disconnectBridge } from "./setup.js";
 
 async function main() {
-  const bridge = new EditorBridge("localhost", 9877);
-  await bridge.connect(5000);
+  // Same discovery and same test-project guard as the rest of the harness: the
+  // bridge port is per-project and published in the project's port lockfile.
+  const bridge = await getBridge();
 
   const reloadCode = `
 import importlib
@@ -54,7 +55,7 @@ print(f"Reloaded modules: {len(reloaded)}")
     console.log("Reload error:", message);
   }
 
-  bridge.disconnect();
+  disconnectBridge();
 }
 
 main().catch(console.error);
