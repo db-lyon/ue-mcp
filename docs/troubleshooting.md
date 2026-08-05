@@ -26,6 +26,62 @@
         lsof -i :9877
         ```
 
+### Handlers time out, or the editor never finishes starting
+
+**Symptoms:** every call returns `Handler execution timed out`, `start_editor` waits out its timeout, or `get_status` says `disconnected` while an editor is plainly open.
+
+All of these mean the game thread is not returning to its tick loop, and the usual cause is something the editor is showing on screen: a modal dialog waiting for an answer, a long slow task (shader compile, asset registry scan, map load), or a startup phase that runs before the bridge plugin loads.
+
+**Ask what the engine is actually doing:**
+
+```
+editor(action="get_engine_state")
+```
+
+This one call is answered without the game thread. It reports:
+
+- **`snapshot.slowTask`** - the name and percentage of the task the editor's own progress bar is showing.
+- **`snapshot.modal`** - the title, message, and buttons of the dialog blocking the game thread. Answer it with `editor(action="respond_to_dialog")`, or stop it happening again with `editor(action="set_dialog_policy")`.
+- **`snapshot.gameThreadStalledSeconds`** - how long the game thread has gone without ticking. Everything else in the snapshot is as old as this number says. It is `null` while `gameThreadTicking` is false, which means the editor is still starting and has no engine loop yet; `modulesLoaded` is the progress signal during that window.
+- **`snapshot.compiling`** - remaining shader jobs and asset compiles.
+- **`log.phase` / `log.tail`** - the startup phase parsed from the editor's own log, which is written from the first millisecond and so covers the window before the plugin exists. This is where "the following modules are missing or built with a different engine version" shows up.
+- **`processes`** - PID, command line, and whether the OS considers the process responsive.
+- **`dialogs`** - native (pre-Slate) message boxes, including the rebuild prompt above.
+
+A timed-out handler carries the same snapshot in its `engineState` field, so a timeout says what the engine was doing while the request waited.
+
+The snapshot is also written to `<Project>/Saved/UE_MCP_Bridge/status.json` four times a second by a thread that keeps running while the game thread is blocked. Read that file directly when the bridge socket itself is unreachable.
+
+**During startup**, the snapshot comes from a second plugin module that loads at `PostConfigInit`, well before the bridge itself (`PostEngineInit`) and before any socket exists. A cold launch publishes its first state after about a second and then tracks what the splash screen shows:
+
+```
++1.6s  config init              | modules=0   | Initializing... 0%
++3.3s  config init              | modules=16  | Initializing Render Hardware Interface... 5%
++13.0s config init              | modules=253 | Loading Default Modules for Plugin: ChaosVD 73%
++17.5s engine loop initialized  | modules=725 | New Map 92%
++20.7s ready                    | modules=733 | Running Python start-up scripts... 95%
+```
+
+That is the window where "the editor is stuck on the splash screen" reports come from, so read `status.json` (or `editor(get_engine_state)`, which merges it with the log) before assuming a launch failed.
+
+`editor(start_editor)` already waits through all of it. It blocks until the snapshot reports `ready`, draws that same trace as a progress bar in the terminal, and returns the phase timeline:
+
+```
+Editor ready in 24.7s
+launching 0s -> loading modules and plugins 0.8s -> config init 1.8s
+  -> bridge starting 21.1s -> engine loop initialized 21.5s -> ready 24.7s
+```
+
+There is no reason to poll after it returns, and no reason to poll while it runs.
+
+### The tool call sits there showing nothing while the editor starts
+
+**Symptom:** `start_editor` displays as a motionless line - `ue-mcp - editor (MCP)(action: "start_editor", timeout: 600)` - for the whole launch, with no progress.
+
+The call is not stuck; it returns as soon as the editor is ready, and the number you see is the `timeout` argument, not elapsed time. The missing progress is a client-side regression: Claude Code collapses MCP tool calls unconditionally from 2.1.116 on, so the `notifications/progress` messages the server emits throughout the wait are received and never drawn ([anthropics/claude-code#51713](https://github.com/anthropics/claude-code/issues/51713); 2.1.101 was the last version that displayed them). An MCP server's stderr does not reach the transcript either - the client writes it to a log file.
+
+Nothing is wrong on the ue-mcp side and there is nothing to fix in your setup: other MCP clients render the same stream normally. When ue-mcp detects an affected Claude Code version, `start_editor` says so in its result rather than leaving the call looking hung, and the phase timeline it returns is exactly what you would have watched live.
+
 ### Connection drops / reconnecting
 
 The MCP server auto-reconnects every 15 seconds. If the editor is restarted, the connection will restore automatically.

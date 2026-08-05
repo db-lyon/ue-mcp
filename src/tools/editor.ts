@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { categoryTool, bp, directive, type ToolDef, type ToolContext } from "../types.js";
 import { startEditor, stopEditor, restartEditor, buildProject } from "../editor-control.js";
+import { readEngineState } from "../engine-observer.js";
+import { progressRenderingNote } from "../client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
 import { searchTools } from "../tool-search.js";
 import { Vec3, Rotator } from "../schemas.js";
@@ -10,14 +12,53 @@ export const editorTool: ToolDef = categoryTool(
   "Editor commands, Python execution, PIE, undo/redo, hot reload, viewport, performance, sequencer, build pipeline, logs, editor control.",
   {
     start_editor: {
-      description: "Launch Unreal Editor with the current project and reconnect bridge. Waits for the bridge on the project's actual published port, not a fixed default. Params: timeout? (seconds, default 120) (#758)",
+      description: "Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. Params: timeout? (seconds, default 300)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
-        const timeout = typeof p?.timeout === "number" && p.timeout > 0 ? p.timeout : 120;
-        const result = await startEditor(ctx.project, timeout);
+        const timeout = typeof p?.timeout === "number" && p.timeout > 0 ? p.timeout : 300;
+        const result = await startEditor(ctx.project, timeout, ctx.onProgress);
+
+        // The call blocks for as long as the editor takes, so when its progress
+        // is not visible the user is left to conclude the tool hung. Say which
+        // of the two possible reasons applied, in the result, once.
+        const note = progressRenderingNote(ctx.client);
+        if (note) return { ...result, progressDisplayNote: note };
+        if (!ctx.onProgress) {
+          // Progress is opt-in per request: no token, no stream. This is the
+          // client declining it, not the server withholding it.
+          return {
+            ...result,
+            progressDisplayNote:
+              `Note: ${ctx.client?.name ?? "this client"}${ctx.client?.version ? ` ${ctx.client.version}` : ""} ` +
+              "did not send a progressToken with this call, so no live progress could be streamed - " +
+              "MCP progress is opt-in per request. The phase timeline above is what the live view would have shown. " +
+              "Clients that request progress (the reference SDK client, MCP Inspector) render it throughout the wait.",
+          };
+        }
         if (result.success) {
           try { await ctx.bridge.connect(5000); } catch { /* reconnect timer handles it */ }
         }
         return result;
+      },
+    },
+    get_engine_state: {
+      description: "What the engine is REALLY doing, read from outside the game thread: startup phase from the editor's own log, process table (PID, command line, responding), the plugin's status snapshot (slow-task name and percent, active modal dialog, game-thread stall), and native dialog windows. Call this ONCE when something is already wrong (handlers timing out, an editor that will not come up). Never call it in a wait loop: start_editor blocks until ready on its own, and polling this during startup burns tokens re-reading state that is already tracked. Params: probeWindows? (default true; scans native windows, costs ~2s)",
+      handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
+        const probeWindows = p?.probeWindows !== false;
+        const state = await readEngineState(ctx.project.projectPath ?? null, { probeWindows });
+
+        // The bridge answers this one on its socket thread without scheduling
+        // any game-thread work, so it stays reachable while every other handler
+        // is timing out. Prefer it over the on-disk snapshot when it replies,
+        // and never let it block the rest of the report.
+        let live: unknown = null;
+        if (ctx.bridge.isConnected) {
+          try {
+            live = await ctx.bridge.call("get_engine_state", {});
+          } catch {
+            live = null;
+          }
+        }
+        return live ? { ...state, snapshot: live, snapshotSource: "bridge" } : { ...state, snapshotSource: "status.json" };
       },
     },
     stop_editor: {
@@ -204,8 +245,8 @@ export const editorTool: ToolDef = categoryTool(
     set_dialog_policy: bp("Auto-respond to dialogs matching a pattern. Params: pattern, response", "set_dialog_policy"),
     clear_dialog_policy: bp("Clear dialog policies. Params: pattern?", "clear_dialog_policy"),
     get_dialog_policy: bp("Get current dialog policies", "get_dialog_policy"),
-    list_dialogs: bp("List active modal dialogs", "list_dialogs"),
-    respond_to_dialog: bp("Click a button on the active modal dialog. Params: buttonIndex?, buttonLabel?", "respond_to_dialog"),
+    list_dialogs: bp("List active modal dialogs, with title, message text and button labels. Runs even while a dialog is blocking the editor, when every other handler times out", "list_dialogs"),
+    respond_to_dialog: bp("Click a button on the active modal dialog, releasing the game thread. Runs even while the dialog is blocking the editor. Pass action='close' to destroy the dialog window when no button label fits. Params: buttonIndex?, buttonLabel?, action? (escape or close)", "respond_to_dialog"),
     open_asset: bp("Open asset in its editor. Params: assetPath", "open_asset"),
     reload_bridge: bp("Hot-reload Python bridge handlers from disk", "reload_handlers"),
     save_dirty: bp("Flush every dirty package and return a per-package saved/failed map. Use after multi-step CDO/component edits when set_class_default leaves the asset dirty without persisting (#378). Params: includeMaps? (default true), includeContent? (default true)", "save_dirty", (p) => ({ includeMaps: p.includeMaps, includeContent: p.includeContent })),
@@ -237,6 +278,7 @@ export const editorTool: ToolDef = categoryTool(
     playerIndex: z.number().optional().describe("get_pie_pawn: 0-based player index (default 0)"),
     functionName: z.string().optional(),
     timeout: z.number().optional().describe("start_editor: seconds to wait for the bridge (default 120) (#758)"),
+    probeWindows: z.boolean().optional().describe("get_engine_state: also enumerate native windows to catch pre-Slate dialogs (default true, costs ~2s)"),
     pieInstance: z.number().optional().describe("Select which PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances (#778)"),
     subsystemClass: z.string().optional().describe("invoke_object_function/get_object_properties: subsystem class name or /Script path (#739)"),
     bones: z.array(z.string()).optional().describe("read_bone_transforms: bone OR socket names; omit for every bone (#756)"),

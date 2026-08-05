@@ -134,6 +134,17 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 | ProjectHandlers | Project info, world subsystem queries |
 | DemoHandlers | Neon Shrine demo builder |
 
+### Plugin Modules
+
+The plugin ships two modules, loading at different phases:
+
+| Module | Loading phase | Role |
+|--------|---------------|------|
+| `UE_MCP_BridgeStatus` | `PostConfigInit` | Publishes what the engine is doing (phase, slow-task name and percent, modal dialog, compile counts, game-thread stall) to `Saved/UE_MCP_Bridge/status.json` from a writer thread. Core-only dependencies, so it can load this early. |
+| `UE_MCP_Bridge` | `PostEngineInit` | The WebSocket server, the handler registry, and the Slate/Engine-backed sensors it injects into the status snapshot. |
+
+The split exists because the interesting failures happen before `PostEngineInit`: RHI init, plugin module loading, map load and Python startup all run while a single-module plugin would not yet exist. The status module covers that window; the bridge module upgrades the same snapshot once Slate, the shader compiler and the asset compiler are available.
+
 ### Plugin Dependencies
 
 The C++ plugin links against a wide range of UE modules:

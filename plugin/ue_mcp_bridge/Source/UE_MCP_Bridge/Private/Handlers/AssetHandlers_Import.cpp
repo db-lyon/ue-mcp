@@ -2455,7 +2455,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTable(const TSharedPtr<FJsonO
 	const int32 BeforeCount = AppendStringTableEntries(StringTable, TEXT(""), BeforeEntries, BeforeKeys, false);
 
 	StringTable->Modify(true);
+#if UE_MCP_HAS_5_8_API
+	const bool bImported = StringTable->GetMutableStringTable()->ImportStringsFromCSVFile(FilePath);
+#else
 	const bool bImported = StringTable->GetMutableStringTable()->ImportStrings(FilePath);
+#endif
 	if (!bImported)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to import StringTable from: %s"), *FilePath));

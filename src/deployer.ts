@@ -203,22 +203,32 @@ function deployCppPlugin(uprojectPath: string): boolean {
   const targetPluginDir = path.join(pluginsDir, "UE_MCP_Bridge");
   let anyDeployed = false;
 
+  // Build outputs live in the deployed tree, not the source tree, so they are
+  // never copied and never pruned.
+  const artifactDirs = new Set(["Binaries", "Intermediate", "Saved"]);
+
+  // Windows and macOS keep the ORIGINAL casing of a file that already exists
+  // when it is rewritten, so `ue_mcp_bridge.uplugin` copied over a deployed
+  // `UE_MCP_Bridge.uplugin` leaves the deployed name unchanged. Comparing
+  // names case-sensitively then reads that file as "no longer in source" and
+  // deletes the plugin descriptor out from under UBT.
+  const caseInsensitiveFs = process.platform === "win32" || process.platform === "darwin";
+  const nameKey = (name: string): string => (caseInsensitiveFs ? name.toLowerCase() : name);
+
   function copyRecursive(src: string, dest: string): void {
     if (!fs.existsSync(dest)) {
       fs.mkdirSync(dest, { recursive: true });
     }
+
+    const sourceNames = new Set<string>();
     for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
       const srcPath = path.join(src, entry.name);
       const destPath = path.join(dest, entry.name);
 
-      // Skip build artifacts
-      if (
-        entry.name === "Binaries" ||
-        entry.name === "Intermediate" ||
-        entry.name === "Saved"
-      ) {
+      if (artifactDirs.has(entry.name)) {
         continue;
       }
+      sourceNames.add(nameKey(entry.name));
 
       if (entry.isDirectory()) {
         copyRecursive(srcPath, destPath);
@@ -235,6 +245,40 @@ function deployCppPlugin(uprojectPath: string): boolean {
         }
       }
     }
+
+    // Mirror, do not merge. A copy-only sync leaves a file that was deleted or
+    // renamed in plugin/ sitting in the deployed tree, where UBT still compiles
+    // it: splitting EngineStatus.cpp into its own module produced a link error
+    // for symbols defined twice, once from the new module and once from the
+    // stale copy. Also drop the intermediate objects for anything pruned, since
+    // UBT links whatever .obj files it finds from an earlier build.
+    for (const entry of fs.readdirSync(dest, { withFileTypes: true })) {
+      if (artifactDirs.has(entry.name) || sourceNames.has(nameKey(entry.name))) {
+        continue;
+      }
+      const stalePath = path.join(dest, entry.name);
+      fs.rmSync(stalePath, { recursive: true, force: true });
+      pruneIntermediates(entry.name);
+      anyDeployed = true;
+    }
+  }
+
+  /** Delete build products left behind by a source file that no longer exists. */
+  function pruneIntermediates(sourceFileName: string): void {
+    const intermediateRoot = path.join(targetPluginDir, "Intermediate");
+    if (!fs.existsSync(intermediateRoot) || !sourceFileName.endsWith(".cpp")) return;
+
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const entryPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(entryPath);
+        } else if (entry.name.startsWith(`${sourceFileName}.`)) {
+          fs.rmSync(entryPath, { force: true });
+        }
+      }
+    };
+    walk(intermediateRoot);
   }
 
   copyRecursive(sourcePluginDir, targetPluginDir);

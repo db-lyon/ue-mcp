@@ -224,95 +224,112 @@ TSharedPtr<FJsonValue> FDialogHandlers::GetDialogPolicy(const TSharedPtr<FJsonOb
 	return MCPResult(Result);
 }
 
+bool FDialogHandlers::DescribeActiveModal(FString& OutTitle, FString& OutMessage, TArray<FString>& OutButtons)
+{
+	OutTitle.Empty();
+	OutMessage.Empty();
+	OutButtons.Empty();
+
+	if (!FSlateApplication::IsInitialized())
+	{
+		return false;
+	}
+
+	TSharedPtr<SWindow> ActiveModal = FSlateApplication::Get().GetActiveModalWindow();
+	if (!ActiveModal.IsValid())
+	{
+		return false;
+	}
+
+	OutTitle = ActiveModal->GetTitle().ToString();
+
+	// Traverse widget tree to find text blocks and buttons
+	TArray<FString> TextContents;
+
+	TFunction<void(const TSharedRef<SWidget>&)> TraverseWidgets = [&](const TSharedRef<SWidget>& Widget)
+	{
+		// Check for text blocks
+		if (Widget->GetType() == TEXT("STextBlock"))
+		{
+			TSharedRef<STextBlock> TextBlock = StaticCastSharedRef<STextBlock>(Widget);
+			FString Text = TextBlock->GetText().ToString();
+			if (!Text.IsEmpty())
+			{
+				TextContents.Add(Text);
+			}
+		}
+
+		// Check for buttons
+		if (Widget->GetType() == TEXT("SButton"))
+		{
+			// Try to find the text label inside the button
+			FChildren* ButtonChildren = Widget->GetChildren();
+			if (ButtonChildren)
+			{
+				for (int32 i = 0; i < ButtonChildren->Num(); ++i)
+				{
+					TSharedRef<SWidget> Child = ButtonChildren->GetChildAt(i);
+					if (Child->GetType() == TEXT("STextBlock"))
+					{
+						TSharedRef<STextBlock> BtnText = StaticCastSharedRef<STextBlock>(Child);
+						FString Label = BtnText->GetText().ToString();
+						if (!Label.IsEmpty())
+						{
+							OutButtons.Add(Label);
+						}
+					}
+				}
+			}
+		}
+
+		// Recurse into children
+		FChildren* Children = Widget->GetChildren();
+		if (Children)
+		{
+			for (int32 i = 0; i < Children->Num(); ++i)
+			{
+				TraverseWidgets(Children->GetChildAt(i));
+			}
+		}
+	};
+
+	TraverseWidgets(ActiveModal.ToSharedRef());
+
+	// Build message from text contents (skip the title if it matches)
+	for (const FString& T : TextContents)
+	{
+		if (T != OutTitle)
+		{
+			if (!OutMessage.IsEmpty()) OutMessage += TEXT("\n");
+			OutMessage += T;
+		}
+	}
+
+	return true;
+}
+
 TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject>& Params)
 {
 	auto Result = MCPSuccess();
 	TArray<TSharedPtr<FJsonValue>> DialogsArray;
 
-	if (FSlateApplication::IsInitialized())
+	FString Title;
+	FString Message;
+	TArray<FString> ButtonLabels;
+	if (DescribeActiveModal(Title, Message, ButtonLabels))
 	{
-		TSharedPtr<SWindow> ActiveModal = FSlateApplication::Get().GetActiveModalWindow();
-		if (ActiveModal.IsValid())
+		TSharedPtr<FJsonObject> DialogObj = MakeShared<FJsonObject>();
+		DialogObj->SetStringField(TEXT("title"), Title);
+		DialogObj->SetStringField(TEXT("message"), Message);
+
+		TArray<TSharedPtr<FJsonValue>> ButtonsJsonArray;
+		for (const FString& Label : ButtonLabels)
 		{
-			TSharedPtr<FJsonObject> DialogObj = MakeShared<FJsonObject>();
-			DialogObj->SetStringField(TEXT("title"), ActiveModal->GetTitle().ToString());
-
-			// Traverse widget tree to find text blocks and buttons
-			TArray<FString> TextContents;
-			TArray<FString> ButtonLabels;
-
-			TFunction<void(const TSharedRef<SWidget>&)> TraverseWidgets = [&](const TSharedRef<SWidget>& Widget)
-			{
-				// Check for text blocks
-				if (Widget->GetType() == TEXT("STextBlock"))
-				{
-					TSharedRef<STextBlock> TextBlock = StaticCastSharedRef<STextBlock>(Widget);
-					FString Text = TextBlock->GetText().ToString();
-					if (!Text.IsEmpty())
-					{
-						TextContents.Add(Text);
-					}
-				}
-
-				// Check for buttons
-				if (Widget->GetType() == TEXT("SButton"))
-				{
-					// Try to find the text label inside the button
-					FChildren* ButtonChildren = Widget->GetChildren();
-					if (ButtonChildren)
-					{
-						for (int32 i = 0; i < ButtonChildren->Num(); ++i)
-						{
-							TSharedRef<SWidget> Child = ButtonChildren->GetChildAt(i);
-							if (Child->GetType() == TEXT("STextBlock"))
-							{
-								TSharedRef<STextBlock> BtnText = StaticCastSharedRef<STextBlock>(Child);
-								FString Label = BtnText->GetText().ToString();
-								if (!Label.IsEmpty())
-								{
-									ButtonLabels.Add(Label);
-								}
-							}
-						}
-					}
-				}
-
-				// Recurse into children
-				FChildren* Children = Widget->GetChildren();
-				if (Children)
-				{
-					for (int32 i = 0; i < Children->Num(); ++i)
-					{
-						TraverseWidgets(Children->GetChildAt(i));
-					}
-				}
-			};
-
-			TraverseWidgets(ActiveModal.ToSharedRef());
-
-			// Build message from text contents (skip the title if it matches)
-			FString TitleStr = ActiveModal->GetTitle().ToString();
-			FString Message;
-			for (const FString& T : TextContents)
-			{
-				if (T != TitleStr)
-				{
-					if (!Message.IsEmpty()) Message += TEXT("\n");
-					Message += T;
-				}
-			}
-
-			DialogObj->SetStringField(TEXT("message"), Message);
-
-			TArray<TSharedPtr<FJsonValue>> ButtonsJsonArray;
-			for (const FString& Label : ButtonLabels)
-			{
-				ButtonsJsonArray.Add(MakeShared<FJsonValueString>(Label));
-			}
-			DialogObj->SetArrayField(TEXT("buttons"), ButtonsJsonArray);
-
-			DialogsArray.Add(MakeShared<FJsonValueObject>(DialogObj));
+			ButtonsJsonArray.Add(MakeShared<FJsonValueString>(Label));
 		}
+		DialogObj->SetArrayField(TEXT("buttons"), ButtonsJsonArray);
+
+		DialogsArray.Add(MakeShared<FJsonValueObject>(DialogObj));
 	}
 
 	Result->SetArrayField(TEXT("dialogs"), DialogsArray);
@@ -401,43 +418,33 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 
 	if (TargetIndex >= 0 && TargetIndex < Buttons.Num())
 	{
-		// Simulate the button click
-		FSlateApplication::Get().SetKeyboardFocus(Buttons[TargetIndex]);
-
-		// Use the reply mechanism to simulate a click
-		FReply Reply = FReply::Handled();
 		TSharedRef<SButton> TargetButton = Buttons[TargetIndex];
+		FSlateApplication::Get().SetKeyboardFocus(TargetButton);
 
-		// Simulate mouse down + up on the button to trigger OnClicked
-		FGeometry ButtonGeometry = TargetButton->GetCachedGeometry();
-		FVector2D LocalCenter = ButtonGeometry.GetLocalSize() * 0.5f;
-		FVector2D AbsoluteCenter = ButtonGeometry.LocalToAbsolute(LocalCenter);
-
-		FPointerEvent MouseDownEvent(
-			0, // PointerIndex
-			AbsoluteCenter,
-			AbsoluteCenter,
-			TSet<FKey>(),
-			EKeys::LeftMouseButton,
-			0,
-			FModifierKeysState()
-		);
-
-		TargetButton->OnMouseButtonDown(ButtonGeometry, MouseDownEvent);
-		TargetButton->OnMouseButtonUp(ButtonGeometry, MouseDownEvent);
+		// SButton::SimulateClick, not synthetic mouse events. Feeding
+		// OnMouseButtonDown/Up straight to the widget bypasses the capture
+		// bookkeeping SButton uses to decide a click happened, so the handler
+		// reported a successful click while the dialog stayed on screen -
+		// the worst possible failure for a call whose entire job is unblocking
+		// the editor.
+		TargetButton->SimulateClick();
 
 		Result->SetStringField(TEXT("clickedButton"), ButtonTexts[TargetIndex]);
 		Result->SetNumberField(TEXT("buttonIndex"), TargetIndex);
 	}
 	else
 	{
-		// Fallback: send Escape key to dismiss
+		// Last resort for a dialog with no button we can name: close the window
+		// itself, which ends the modal loop and releases the game thread. A
+		// synthetic Escape keypress alone does not reach a modal window that
+		// never took keyboard focus, so send both.
 		FString Action = OptionalString(Params, TEXT("action"));
-		if (Action == TEXT("escape"))
+		if (Action == TEXT("escape") || Action == TEXT("close"))
 		{
 			FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
 			FSlateApplication::Get().ProcessKeyUpEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
-			Result->SetStringField(TEXT("action"), TEXT("escape"));
+			ActiveModal->RequestDestroyWindow();
+			Result->SetStringField(TEXT("action"), TEXT("closed window"));
 		}
 		else
 		{

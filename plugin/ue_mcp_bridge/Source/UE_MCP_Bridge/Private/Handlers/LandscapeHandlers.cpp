@@ -684,7 +684,9 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	double Hardness = 0.0;
 	if (Params->TryGetNumberField(TEXT("hardness"), Hardness))
 	{
-		LayerInfo->Hardness = static_cast<float>(Hardness);
+		// Hardness is becoming private; the setter also handles Modify() and the
+		// property-change notification the direct write skipped.
+		LayerInfo->SetHardness(static_cast<float>(Hardness), /*bInModify=*/true, EPropertyChangeType::ValueSet);
 	}
 
 	FAssetRegistryModule::AssetCreated(LayerInfo);

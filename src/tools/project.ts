@@ -9,6 +9,7 @@ import { parseHeader, collectFiles, findSourceRoots, resolveModuleDir } from "..
 import { readDeployedBridgeApiVersion } from "../plugin/bridge-api.js";
 import { searchTools, type ToolSearchHit } from "../tool-search.js";
 import { getWorkarounds } from "../workaround-tracker.js";
+import { readLogState, readEngineSnapshot } from "../engine-observer.js";
 
 /**
  * Resolve a module name to its Source/<Module> directory, searching the project
@@ -64,7 +65,38 @@ export const projectTool: ToolDef = categoryTool(
         // "Unknown method" later is read as a stale build rather than a
         // missing feature.
         const freshness = checkPluginFreshness(ctx.project.projectPath ?? null);
+
+        // "disconnected" on its own has never been actionable: it is the same
+        // word for "no editor", "editor still loading shaders", and "editor
+        // blocked on a dialog nobody can see". The engine's own log and the
+        // plugin's status snapshot are plain file reads, so read them whenever
+        // there is no live bridge to ask. The full probe (process table,
+        // native dialog windows) costs seconds and lives in
+        // editor(get_engine_state).
+        const offlineEngine = ctx.bridge.isConnected ? null : (() => {
+          const logState = readLogState(ctx.project.projectPath ?? null);
+          const snapshot = readEngineSnapshot(ctx.project.projectPath ?? null);
+          if (!logState.logPath && !snapshot) return null;
+          return {
+            phase: snapshot?.phase ?? logState.phase,
+            blocked: logState.blocking || Boolean(snapshot?.modal),
+            modal: snapshot?.modal ?? undefined,
+            slowTask: snapshot?.slowTask ?? undefined,
+            gameThreadStalledSeconds: snapshot?.gameThreadStalledSeconds ?? undefined,
+            // False during startup: there is no engine loop to stall yet, so
+            // the stall figure above is deliberately absent rather than zero.
+            gameThreadTicking: snapshot?.gameThreadTicking,
+            modulesLoaded: snapshot?.modulesLoaded,
+            snapshotAgeSeconds: snapshot?.ageSeconds,
+            secondsSinceLogWrite: logState.secondsSinceWrite ?? undefined,
+            lastLogLine: logState.lastLine ?? undefined,
+            recentErrors: logState.errors.length > 0 ? logState.errors : undefined,
+            hint: "editor(action='get_engine_state') runs the full out-of-process probe (process table, native dialogs).",
+          };
+        })();
+
         return {
+          engine: offlineEngine ?? undefined,
           pluginBuildStale: freshness.checked ? freshness.stale : undefined,
           pluginBuildWarning: freshness.stale ? freshness.message : undefined,
           mode: ctx.bridge.isConnected ? "live" : "disconnected",

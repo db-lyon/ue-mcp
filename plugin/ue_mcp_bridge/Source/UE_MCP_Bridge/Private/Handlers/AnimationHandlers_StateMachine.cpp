@@ -359,7 +359,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 		UObject* GraphOuter = SMGraph->GetOuter();
 		if (GraphOuter)
 		{
+#if UE_MCP_HAS_5_7_API
+			if (UObject* Existing = StaticFindObject(nullptr, GraphOuter, *StateName, EFindObjectFlags::None))
+#else
 			if (UObject* Existing = StaticFindObject(nullptr, GraphOuter, *StateName, /*ExactClass*/ false))
+#endif
 			{
 				return MCPError(FString::Printf(
 					TEXT("Cannot create state '%s' - name collides with existing %s in the state machine graph outer. Pick a unique stateName."),
@@ -383,7 +387,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddState(const TSharedPtr<FJsonObject
 	{
 		UObject* GraphOuter = NewState->BoundGraph->GetOuter();
 		const FString DesiredName = StateName;
+#if UE_MCP_HAS_5_7_API
+		if (UObject* Collision = StaticFindObject(nullptr, GraphOuter, *DesiredName, EFindObjectFlags::None))
+#else
 		if (UObject* Collision = StaticFindObject(nullptr, GraphOuter, *DesiredName, /*ExactClass*/ false))
+#endif
 		{
 			if (Collision != NewState->BoundGraph)
 			{
@@ -1772,7 +1780,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadPoseSearchDatabase(const TSharedP
 	for (int32 i = 0; i < AssetCount; ++i)
 	{
 #if UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API
+		// Non-templated accessor from 5.7 on: the templated overload is
+		// deprecated there and reinterpret_casts to the same base type this
+		// code reads through.
+	#if UE_MCP_HAS_5_7_API
+		const FPoseSearchDatabaseAnimationAssetBase* Entry = Database->GetDatabaseAnimationAsset(i);
+	#else
 		const FPoseSearchDatabaseAnimationAssetBase* Entry = Database->GetDatabaseAnimationAsset<FPoseSearchDatabaseAnimationAssetBase>(i);
+	#endif
 		if (!Entry) continue;
 		UObject* AnimationAsset = Entry->GetAnimationAsset();
 #else

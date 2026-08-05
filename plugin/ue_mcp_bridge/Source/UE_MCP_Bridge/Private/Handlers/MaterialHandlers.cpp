@@ -2498,8 +2498,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialUsage(const TSharedPtr<FJso
 			Unknown.Add(U);
 			continue;
 		}
-		bool bNeedsRecompile = false;
-		Material->SetMaterialUsage(bNeedsRecompile, Usage);
+		// The bNeedsRecompile out param is gone in the virtual implementation;
+		// the shim that kept it always ignored the value anyway.
+		Material->SetMaterialUsage(Usage);
 		Applied.Add(U);
 	}
 
@@ -2597,8 +2598,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialSimple(const TSharedPtr<
 				EMaterialUsage U;
 				if (ParseMaterialUsage(S, U))
 				{
-					bool bNeeds = false;
-					Material->SetMaterialUsage(bNeeds, U);
+					Material->SetMaterialUsage(U);
 				}
 			}
 		}

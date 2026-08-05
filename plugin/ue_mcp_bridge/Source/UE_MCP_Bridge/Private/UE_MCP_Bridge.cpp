@@ -1,6 +1,8 @@
 #include "UE_MCP_BridgeModule.h"
 #include "Modules/ModuleManager.h"
 #include "BridgeServer.h"
+#include "EngineStatusHooks.h"
+#include "MCPEngineStatus.h"
 #include "Handlers/DialogHandlers.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
@@ -22,6 +24,13 @@ void FUE_MCP_BridgeModule::StartupModule()
 	// bound port to the per-project lockfile.
 	const int32 BasePort = FMCPBridgeServer::ResolveConfiguredPort();
 	G_BridgeServer = MakeShared<FMCPBridgeServer>(BasePort);
+
+	// The snapshot has been publishing since PostConfigInit, from the
+	// UE_MCP_BridgeStatus module. Now that Slate, the shader compiler and the
+	// asset compiler exist, hand it the sensors that need them.
+	FMCPEngineStatusHooks::Install();
+	FMCPEngineStatus::Get().SetPhase(TEXT("bridge starting"));
+
 	FDialogHandlers::InstallDialogHook();
 	// Safety net: auto-decline overwrite dialogs to prevent game thread blocking.
 	// Handlers should check for existing assets before creating, but if a dialog
@@ -80,6 +89,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 				G_BridgeServer->GetGameThreadExecutor().SetEditorReady();
 				UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Editor ready — accepting requests"));
 			}
+			FMCPEngineStatus::Get().SetPhase(TEXT("ready"));
 
 			return false; // done
 		})
@@ -89,6 +99,10 @@ void FUE_MCP_BridgeModule::StartupModule()
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
 	FDialogHandlers::RemoveDialogHook();
+	// The snapshot itself outlives this module (its own module owns it and
+	// keeps publishing until PostConfigInit teardown); only the Slate and
+	// Engine sensors go away with us.
+	FMCPEngineStatusHooks::Remove();
 
 	if (G_BridgeServer.IsValid())
 	{

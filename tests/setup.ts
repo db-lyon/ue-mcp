@@ -1,15 +1,56 @@
 import { EditorBridge } from "../src/bridge.js";
+import {
+  assertLoopbackHost,
+  bridgePortCandidates,
+  describeMissingBridge,
+  verifyTestProjectTarget,
+} from "../scripts/bridge-target.mjs";
 
 let _bridge: EditorBridge | null = null;
+let _targetVerified = false;
 
-const TEST_BRIDGE_HOST = process.env.UE_MCP_TEST_HOST ?? "localhost";
-const TEST_BRIDGE_PORT = Number(process.env.UE_MCP_TEST_PORT ?? 9877);
+// 127.0.0.1 rather than "localhost": on hosts where the IPv6 stack wins DNS,
+// "localhost" resolves to ::1 and the client waits on an empty socket while the
+// bridge owns the IPv4 loopback.
+const TEST_BRIDGE_HOST = process.env.UE_MCP_TEST_HOST ?? "127.0.0.1";
+const ENV_PORT = Number.parseInt(process.env.UE_MCP_TEST_PORT ?? "", 10);
 
+/**
+ * Connect to the bridge for tests/ue_mcp. The bridge binds a per-project port
+ * and publishes it to that project's Saved/UE_MCP_Bridge/port.json, so the port
+ * is discovered rather than assumed; UE_MCP_TEST_PORT still pins it when set.
+ * The connected editor is then challenged for its project directory, and any
+ * project other than tests/ue_mcp aborts the run before a single mutation.
+ */
 export async function getBridge(): Promise<EditorBridge> {
   if (_bridge?.isConnected) return _bridge;
-  _bridge = new EditorBridge(TEST_BRIDGE_HOST, TEST_BRIDGE_PORT);
-  await _bridge.connect(5000);
-  return _bridge;
+
+  assertLoopbackHost(TEST_BRIDGE_HOST);
+  const { candidates, lockfile } = bridgePortCandidates({
+    explicitPort: Number.isInteger(ENV_PORT) ? ENV_PORT : null,
+  });
+
+  let lastError: string | null = null;
+  for (const candidate of candidates) {
+    const bridge = new EditorBridge(TEST_BRIDGE_HOST, candidate.port);
+    try {
+      await bridge.connect(5000);
+    } catch (e: unknown) {
+      lastError = e instanceof Error ? e.message : String(e);
+      bridge.disconnect();
+      continue;
+    }
+    _bridge = bridge;
+    if (!_targetVerified) {
+      await verifyTestProjectTarget((method, params) => bridge.call(method, params));
+      _targetVerified = true;
+    }
+    return bridge;
+  }
+
+  throw new Error(
+    describeMissingBridge({ host: TEST_BRIDGE_HOST, candidates, lockfile, lastError }),
+  );
 }
 
 export function disconnectBridge(): void {

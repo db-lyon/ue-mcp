@@ -15,8 +15,19 @@ public:
 	FMCPGameThreadExecutor();
 	~FMCPGameThreadExecutor();
 
-	// Execute handler on game thread with timeout
-	TSharedPtr<FJsonValue> ExecuteOnGameThread(FHandlerFunction Handler, const TSharedPtr<FJsonObject>& Params, float TimeoutSeconds = 30.0f);
+	// Execute handler on game thread with timeout.
+	//
+	// bModalSafe additionally queues the work to run from inside Slate's modal
+	// loop. The core ticker does not tick there, so while a dialog is up every
+	// normal request times out - including respond_to_dialog, the one call that
+	// could clear the dialog. Handlers that only read or answer the active
+	// dialog are safe to run in that loop and get unstuck this way; nothing
+	// else should set it.
+	TSharedPtr<FJsonValue> ExecuteOnGameThread(FHandlerFunction Handler, const TSharedPtr<FJsonObject>& Params, float TimeoutSeconds = 30.0f, bool bModalSafe = false);
+
+	// Run any modal-safe work that was queued while a dialog blocked the
+	// engine loop. Called from the Slate modal loop tick. Game thread only.
+	static void DrainModalSafeQueue();
 
 	// Check if we're on game thread
 	static bool IsGameThread();

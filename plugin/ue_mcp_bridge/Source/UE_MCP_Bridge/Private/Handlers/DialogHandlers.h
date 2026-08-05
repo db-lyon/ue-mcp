@@ -18,6 +18,15 @@ public:
 	// Add a default dialog policy (e.g. auto-accept overwrite dialogs)
 	static void AddDefaultPolicy(const FString& Pattern, EAppReturnType::Type Response);
 
+	/**
+	 * Describe the modal window currently blocking the editor, if any. Game
+	 * thread only (it walks the Slate widget tree). Shared with
+	 * FMCPEngineStatus, which captures the same description into its snapshot
+	 * so an out-of-band caller can see the dialog that is blocking the very
+	 * request it is waiting on.
+	 */
+	static bool DescribeActiveModal(FString& OutTitle, FString& OutMessage, TArray<FString>& OutButtons);
+
 private:
 	// Dialog policy: pattern -> response mapping
 	struct FDialogPolicy

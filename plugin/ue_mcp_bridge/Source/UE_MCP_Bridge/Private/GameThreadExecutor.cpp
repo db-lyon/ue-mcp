@@ -1,6 +1,9 @@
 #include "GameThreadExecutor.h"
 #include "HAL/PlatformProcess.h"
+#include "HAL/ThreadSafeCounter.h"
 #include "Containers/Ticker.h"
+#include "Containers/Queue.h"
+#include "Editor.h"
 
 FMCPGameThreadExecutor::FMCPGameThreadExecutor()
 {
@@ -55,10 +58,31 @@ namespace
 		FEvent* DoneEvent = nullptr;
 		TSharedPtr<FJsonValue> Result;
 		FThreadSafeBool bAbandoned{false};
+		// Modal-safe work is queued twice - once on the core ticker, once on
+		// the modal loop drain - because only one of the two runs depending on
+		// what the game thread is doing. Whichever gets here first claims it.
+		FThreadSafeCounter Claimed;
 	};
+
+	// MPSC: any socket thread can enqueue, only the game thread drains.
+	TQueue<TFunction<void()>, EQueueMode::Mpsc> GModalSafeQueue;
 }
 
-TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunction Handler, const TSharedPtr<FJsonObject>& Params, float TimeoutSeconds)
+void FMCPGameThreadExecutor::DrainModalSafeQueue()
+{
+	if (!IsInGameThread())
+	{
+		return;
+	}
+
+	TFunction<void()> Work;
+	while (GModalSafeQueue.Dequeue(Work))
+	{
+		Work();
+	}
+}
+
+TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunction Handler, const TSharedPtr<FJsonObject>& Params, float TimeoutSeconds, bool bModalSafe)
 {
 	if (!bEditorReady)
 	{
@@ -82,41 +106,57 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 
 	// Capture Handler and Params by value so they outlive the caller's stack
 	// if the caller abandons the wait.
-	FTSTicker::GetCoreTicker().AddTicker(
-		FTickerDelegate::CreateLambda([State, Handler = MoveTemp(Handler), Params](float) -> bool
+	auto RunOnce = [State, Handler, Params]()
+	{
+		// Caller already gave up — skip the work entirely. Python may
+		// still be mid-execution; we cannot safely cancel it, but we
+		// can avoid starting it.
+		if (State->bAbandoned)
 		{
-			// Caller already gave up — skip the work entirely. Python may
-			// still be mid-execution; we cannot safely cancel it, but we
-			// can avoid starting it.
-			if (State->bAbandoned)
-			{
-				return false;
-			}
+			return;
+		}
 
-			// Safety: verify GEditor is available before running handlers
-			if (!GEditor)
-			{
-				TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
-				ErrorObject->SetStringField(TEXT("error"), TEXT("Editor world not ready yet. Retry in a moment."));
-				State->Result = MakeShared<FJsonValueObject>(ErrorObject);
-			}
-			else
-			{
-				FHandlerInFlightScope InFlight; // #603
-				State->Result = Handler(Params);
-			}
+		// Queued on two paths when modal-safe; run on exactly one of them.
+		if (State->Claimed.Set(1) != 0)
+		{
+			return;
+		}
 
-			// Trigger the event only if it is still live (i.e. the caller
-			// has not already returned it to the pool). The mutex serialises
-			// with the caller's Return-to-pool below.
-			FScopeLock Lock(&State->EventMutex);
-			if (State->DoneEvent)
-			{
-				State->DoneEvent->Trigger();
-			}
+		// Safety: verify GEditor is available before running handlers
+		if (!GEditor)
+		{
+			TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
+			ErrorObject->SetStringField(TEXT("error"), TEXT("Editor world not ready yet. Retry in a moment."));
+			State->Result = MakeShared<FJsonValueObject>(ErrorObject);
+		}
+		else
+		{
+			FHandlerInFlightScope InFlight; // #603
+			State->Result = Handler(Params);
+		}
+
+		// Trigger the event only if it is still live (i.e. the caller
+		// has not already returned it to the pool). The mutex serialises
+		// with the caller's Return-to-pool below.
+		FScopeLock Lock(&State->EventMutex);
+		if (State->DoneEvent)
+		{
+			State->DoneEvent->Trigger();
+		}
+	};
+
+	FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateLambda([RunOnce](float) -> bool
+		{
+			RunOnce();
 			return false; // one-shot — do not re-tick
 		})
 	);
+
+	if (bModalSafe)
+	{
+		GModalSafeQueue.Enqueue(RunOnce);
+	}
 
 	// Block calling thread until the ticker fires or timeout
 	uint32 TimeoutMs = static_cast<uint32>(TimeoutSeconds * 1000.0f);

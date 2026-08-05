@@ -19,6 +19,17 @@
 // UPCGEditorGraphNodeBase, UIKRetargeterController::AssignIKRigToAllOps, etc.
 #define UE_MCP_HAS_5_5_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5))
 
+// True on UE 5.7+. Gates EFindObjectFlags (the bool bExactClass overloads are
+// deprecated there) and UPoseSearchDatabase's non-templated
+// GetDatabaseAnimationAsset.
+#define UE_MCP_HAS_5_7_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 7))
+
+// True on UE 5.8+. Gates EGetObjectsFlags and
+// FStringTable::ImportStringsFromCSVFile; the bool / ImportStrings forms they
+// replace are deprecated in 5.8 and warn on every user build, but do not exist
+// before it.
+#define UE_MCP_HAS_5_8_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
+
 // ── Quick result builders ────────────────────────────────────────────────────
 
 /** Return an error response: { success: false, error: "..." } */

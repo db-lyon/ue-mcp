@@ -2,6 +2,8 @@ using UnrealBuildTool;
 
 public class UE_MCP_Bridge : ModuleRules
 {
+	// Touched when Private/EngineStatus.cpp was added: UBT caches the module's
+	// file list and will not pick up a new .cpp until this file changes.
 	public UE_MCP_Bridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -89,9 +91,12 @@ public class UE_MCP_Bridge : ModuleRules
 				"StaticMeshDescription",
 				"ClothingSystemRuntimeCommon",
 				"ClothingSystemRuntimeInterface",
-				"StructUtils",
 				"SubobjectDataInterface",
 				"ToolMenus",
+				// The engine-status snapshot, in its own module so it can load
+				// at PostConfigInit and cover the startup window that exists
+				// before this module does.
+				"UE_MCP_BridgeStatus",
 				"RenderCore",
 				"RHI",
 				"UMG",

@@ -2387,15 +2387,33 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetNavmeshDetails(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("name"), RecastNav->GetName());
 	Result->SetStringField(TEXT("class"), RecastNav->GetClass()->GetName());
 
-	// Cell / voxelization
-	Result->SetNumberField(TEXT("cellSize"), RecastNav->CellSize);
-	Result->SetNumberField(TEXT("cellHeight"), RecastNav->CellHeight);
+	// Cell / voxelization. These are per-resolution since 5.3 - the flat
+	// CellSize/CellHeight/AgentMaxStepHeight properties are deprecated and warn
+	// on every user build. The top-level fields keep reporting the Default
+	// resolution (what the old properties fed), and the full set is reported
+	// alongside so callers can see Low and High too.
+	Result->SetNumberField(TEXT("cellSize"), RecastNav->GetCellSize(ENavigationDataResolution::Default));
+	Result->SetNumberField(TEXT("cellHeight"), RecastNav->GetCellHeight(ENavigationDataResolution::Default));
+
+	TArray<TSharedPtr<FJsonValue>> Resolutions;
+	const TCHAR* ResolutionNames[] = { TEXT("low"), TEXT("default"), TEXT("high") };
+	for (int32 ResIndex = 0; ResIndex < UE_ARRAY_COUNT(ResolutionNames); ++ResIndex)
+	{
+		const ENavigationDataResolution Resolution = static_cast<ENavigationDataResolution>(ResIndex);
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("resolution"), ResolutionNames[ResIndex]);
+		Entry->SetNumberField(TEXT("cellSize"), RecastNav->GetCellSize(Resolution));
+		Entry->SetNumberField(TEXT("cellHeight"), RecastNav->GetCellHeight(Resolution));
+		Entry->SetNumberField(TEXT("agentMaxStepHeight"), RecastNav->GetAgentMaxStepHeight(Resolution));
+		Resolutions.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+	Result->SetArrayField(TEXT("resolutions"), Resolutions);
 
 	// Agent
 	Result->SetNumberField(TEXT("agentRadius"), RecastNav->AgentRadius);
 	Result->SetNumberField(TEXT("agentHeight"), RecastNav->AgentHeight);
 	Result->SetNumberField(TEXT("agentMaxSlope"), RecastNav->AgentMaxSlope);
-	Result->SetNumberField(TEXT("agentMaxStepHeight"), RecastNav->AgentMaxStepHeight);
+	Result->SetNumberField(TEXT("agentMaxStepHeight"), RecastNav->GetAgentMaxStepHeight(ENavigationDataResolution::Default));
 
 	// Tile / region
 	Result->SetNumberField(TEXT("tileSize"), static_cast<double>(RecastNav->TileSizeUU));

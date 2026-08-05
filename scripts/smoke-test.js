@@ -9,13 +9,24 @@
  *
  * Exit code 0 when no FAILURES, 1 otherwise.
  *
- * Usage:  node scripts/smoke-test.js [--host 127.0.0.1] [--port 9877] [--timeout 5000]
+ * The bridge port is discovered, not assumed: see scripts/bridge-target.mjs.
+ *
+ * Usage:  node scripts/smoke-test.js [--host 127.0.0.1] [--port <port>] [--timeout 5000]
  */
 
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
+import {
+  assertLoopbackHost,
+  bridgePortCandidates,
+  describeMissingBridge,
+  assertTestProjectDir,
+  extractReportedProjectDir,
+  PROJECT_IDENTITY_PYTHON,
+  TEST_PROJECT_UPROJECT,
+} from "./bridge-target.mjs";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -30,26 +41,8 @@ function flag(name, fallback) {
 }
 
 const HOST = flag("host", "127.0.0.1");
-
-// The bridge derives a per-worktree port (see src/port.ts) and publishes the
-// actual bound port to a lockfile. Prefer that over the legacy fixed default so
-// a derived-port editor is reachable without passing --port by hand. Precedence:
-// explicit --port > lockfile > legacy 9877.
-function lockfilePort() {
-  const lock = path.resolve(
-    __dirname, "..", "tests", "ue_mcp", "Saved", "UE_MCP_Bridge", "port.json",
-  );
-  try {
-    const { port } = JSON.parse(fs.readFileSync(lock, "utf8"));
-    return Number.isInteger(port) ? String(port) : null;
-  } catch {
-    return null;
-  }
-}
-
-const PORT = flag("port", lockfilePort() ?? "9877");
+const EXPLICIT_PORT = Number.parseInt(flag("port", ""), 10);
 const TIMEOUT_MS = Number(flag("timeout", "5000"));
-const WS_URL = `ws://${HOST}:${PORT}`;
 
 // ---------------------------------------------------------------------------
 // ANSI helpers
@@ -105,13 +98,13 @@ function discoverHandlers() {
 // ---------------------------------------------------------------------------
 // 2. WebSocket helpers
 // ---------------------------------------------------------------------------
-function connect(url) {
+function connect(url, timeoutMs = TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(url);
     const timer = setTimeout(() => {
       ws.terminate();
-      reject(new Error(`Connection to ${url} timed out after ${TIMEOUT_MS}ms`));
-    }, TIMEOUT_MS);
+      reject(new Error(`Connection to ${url} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
 
     ws.on("open", () => {
       clearTimeout(timer);
@@ -191,6 +184,51 @@ function rpcRaw(ws, method, params, id) {
     ws.on("message", onMessage);
     ws.send(payload);
   });
+}
+
+// Endpoint of the bridge that answered, filled in by connectToTestBridge().
+let WS_URL = null;
+
+// Walk the candidate ports for the test project until one answers. Probing is
+// cheap (a refused TCP connect returns immediately) and it means a developer
+// never has to look up which port this worktree's editor bound.
+async function connectToTestBridge() {
+  assertLoopbackHost(HOST);
+  const { candidates, lockfile } = bridgePortCandidates({
+    explicitPort: Number.isInteger(EXPLICIT_PORT) ? EXPLICIT_PORT : null,
+  });
+
+  let lastError = null;
+  for (const c of candidates) {
+    const url = `ws://${HOST}:${c.port}`;
+    try {
+      const ws = await connect(url, Math.min(TIMEOUT_MS, 3000));
+      WS_URL = url;
+      console.log(`${GREEN}Connected to ${url}${RESET} ${DIM}(${c.source})${RESET}`);
+      return ws;
+    } catch (err) {
+      lastError = err.message;
+      console.log(`${DIM}  no bridge on ${url} (${c.source})${RESET}`);
+    }
+  }
+
+  throw new Error(describeMissingBridge({ host: HOST, candidates, lockfile, lastError }));
+}
+
+// The harness is hardcoded to tests/ue_mcp and every call below mutates the
+// connected editor. Confirm the editor really has that project open before
+// sending anything: a stale lockfile or a hand-passed --port must not be able
+// to point a destructive sweep at someone's working project.
+async function assertConnectedToTestProject(ws, idGen) {
+  const msg = await rpcRaw(ws, "execute_python", { code: PROJECT_IDENTITY_PYTHON }, idGen());
+  if (msg.error) {
+    throw new Error(
+      `Aborting: could not confirm which project the connected editor has open (${msg.error.message}).\n` +
+      `The smoke harness only runs against ${TEST_PROJECT_UPROJECT}, so nothing was sent.`,
+    );
+  }
+  const reported = assertTestProjectDir(extractReportedProjectDir(msg.result));
+  console.log(`${DIM}  target confirmed: ${reported}${RESET}`);
 }
 
 const SCRATCH_LEVEL = "/Game/MCP_SmokeScratch";
@@ -282,27 +320,32 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`\n${BOLD}UE MCP Bridge — Smoke Test${RESET}`);
-  console.log(`${DIM}Endpoint : ${WS_URL}${RESET}`);
+  console.log(`\n${BOLD}UE MCP Bridge - Smoke Test${RESET}`);
+  console.log(`${DIM}Project  : ${TEST_PROJECT_UPROJECT}${RESET}`);
   console.log(`${DIM}Handlers : ${handlers.length}${RESET}`);
   console.log(`${DIM}Timeout  : ${TIMEOUT_MS}ms per call${RESET}\n`);
 
   // Connect
   let ws;
   try {
-    ws = await connect(WS_URL);
+    ws = await connectToTestBridge();
   } catch (err) {
-    console.error(
-      `${RED}${BOLD}Could not connect to the UE MCP bridge at ${WS_URL}${RESET}`
-    );
-    console.error(`${RED}${err.message}${RESET}`);
-    console.error(
-      `\n${DIM}Make sure Unreal Editor is running with the UE_MCP_Bridge plugin enabled.${RESET}\n`
-    );
+    console.error(`${RED}${BOLD}${err.message}${RESET}\n`);
     process.exit(1);
   }
 
-  console.log(`${GREEN}Connected to ${WS_URL}${RESET}\n`);
+  let nextId = 1;
+  const idGen = () => nextId++;
+
+  // Guard before any mutation: prove this editor is the test project.
+  try {
+    await assertConnectedToTestProject(ws, idGen);
+  } catch (err) {
+    console.error(`\n${RED}${BOLD}${err.message}${RESET}\n`);
+    ws.close();
+    process.exit(1);
+  }
+  console.log("");
 
   // Run calls sequentially to avoid flooding the bridge.
   //
@@ -312,8 +355,6 @@ async function main() {
   // otherwise one slow handler cascades into 50+ false-FAILUREs as everything
   // queues behind it and also hits the per-call timeout.
   const results = [];
-  let nextId = 1;
-  const idGen = () => nextId++;
 
   // Pre-flight: anchor every spawn into a throwaway scratch level so the
   // anchor (MCP_Home) and any other map the user was on stays untouched.

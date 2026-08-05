@@ -94,7 +94,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigGraph(const TSharedPtr<
 	// moved, so reach the models by walking the blueprint's own subobjects for
 	// URigVMGraph. That is version-tolerant and needs no editor-only host API.
 	TArray<UObject*> Subobjects;
+#if UE_MCP_HAS_5_8_API
+	GetObjectsWithOuter(Blueprint, Subobjects, EGetObjectsFlags::IncludeNestedObjects);
+#else
 	GetObjectsWithOuter(Blueprint, Subobjects, /*bIncludeNestedObjects=*/true);
+#endif
 
 	TArray<URigVMGraph*> Models;
 	for (UObject* Object : Subobjects)

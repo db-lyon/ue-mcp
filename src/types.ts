@@ -49,7 +49,33 @@ export interface ToolContext {
    *  refuse instead of degrading to an agent-mediated channel. Used by
    *  feedback(submit) to gate every GitHub post on real user approval. */
   elicit?: ElicitFn;
+  /**
+   * Live progress for a long call, rendered by the MCP client while the tool
+   * is still running.
+   *
+   * This is the ONLY channel a user actually sees mid-call: an MCP server's
+   * stderr is captured to a client log file, never to the transcript, so a
+   * progress bar printed there is invisible. Present only when the client
+   * passed a progress token with the request.
+   */
+  onProgress?: ProgressFn;
+  /**
+   * Who is on the other end of the transport, from the MCP `initialize`
+   * handshake. Used to explain client-specific rendering limits in a result
+   * rather than leaving the user staring at a call that looks frozen.
+   */
+  client?: { name: string; version?: string };
 }
+
+export interface ProgressUpdate {
+  /** Monotonic units done. With `total`, clients render a bar. */
+  progress: number;
+  total?: number;
+  /** One line describing what is happening right now. */
+  message: string;
+}
+
+export type ProgressFn = (update: ProgressUpdate) => void;
 
 export interface PluginInfo {
   name: string;

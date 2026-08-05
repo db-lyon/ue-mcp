@@ -1,5 +1,6 @@
 #include "BridgeServer.h"
 #include "UE_MCP_BridgeModule.h"
+#include "MCPEngineStatus.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
@@ -515,6 +516,18 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		Params = MakeShared<FJsonObject>();
 	}
 
+	// Served here, on the socket thread, deliberately. Every other method waits
+	// on the game thread, so when the game thread is inside a modal dialog, a
+	// slow task, or a hang, this is the only question the bridge can still
+	// answer - and it is the question worth asking at that moment.
+	if (Method == TEXT("get_engine_state"))
+	{
+		TSharedPtr<FJsonObject> Snapshot = FMCPEngineStatus::Get().Snapshot();
+		Snapshot->SetBoolField(TEXT("success"), true);
+		Snapshot->SetBoolField(TEXT("servedWithoutGameThread"), true);
+		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(Snapshot));
+	}
+
 	// Execute handler on game thread
 	FMCPHandlerRegistry::FHandlerFunction Handler = [this, Method](const TSharedPtr<FJsonObject>& HandlerParams) -> TSharedPtr<FJsonValue>
 	{
@@ -525,9 +538,41 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	// long-running compiles) legitimately need minutes. Honor per-handler
 	// timeouts registered via FMCPHandlerRegistry::RegisterHandlerWithTimeout.
 	const float PerHandlerTimeout = HandlerRegistry.GetHandlerTimeout(Method);
-	TSharedPtr<FJsonValue> Result = (PerHandlerTimeout > 0.0f)
-		? GameThreadExecutor.ExecuteOnGameThread(Handler, Params, PerHandlerTimeout)
-		: GameThreadExecutor.ExecuteOnGameThread(Handler, Params);
+
+	// These read or answer the dialog that is blocking the engine loop, so they
+	// are the handlers that must keep working while one is up. Everything else
+	// waits for the core ticker, which a modal loop suspends.
+	static const TSet<FString> ModalSafeMethods = {
+		TEXT("list_dialogs"),
+		TEXT("respond_to_dialog"),
+		TEXT("get_dialog_policy"),
+		TEXT("set_dialog_policy"),
+		TEXT("clear_dialog_policy"),
+	};
+	const bool bModalSafe = ModalSafeMethods.Contains(Method);
+
+	FMCPEngineStatus::Get().NoteHandlerBegin(Method);
+	TSharedPtr<FJsonValue> Result = GameThreadExecutor.ExecuteOnGameThread(
+		Handler,
+		Params,
+		PerHandlerTimeout > 0.0f ? PerHandlerTimeout : 30.0f,
+		bModalSafe);
+	FMCPEngineStatus::Get().NoteHandlerEnd(Method);
+
+	// A bare "Handler execution timed out" tells the caller nothing they can
+	// act on. Attach what the engine was doing while the request waited: the
+	// dialog blocking the game thread, the slow task and its percentage, or how
+	// long the game thread has gone without ticking at all.
+	if (Result.IsValid() && Result->Type == EJson::Object)
+	{
+		const TSharedPtr<FJsonObject>& ResultObject = Result->AsObject();
+		FString ErrorText;
+		if (ResultObject->TryGetStringField(TEXT("error"), ErrorText)
+			&& (ErrorText.Contains(TEXT("timed out")) || ErrorText.Contains(TEXT("still initializing"))))
+		{
+			ResultObject->SetObjectField(TEXT("engineState"), FMCPEngineStatus::Get().Snapshot());
+		}
+	}
 
 	if (Result.IsValid())
 	{

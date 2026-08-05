@@ -64,14 +64,29 @@ async function main() {
 
   log('Launching Unreal Editor...', 'green');
 
-  // Launch editor with project file
+  // Launch editor with project file.
+  //
+  // stdio is ignored, not inherited: a detached editor that inherits this
+  // terminal holds its stdout open for its whole session, so `npm run up`
+  // never returns when piped, and the editor's own logging would scribble
+  // over the progress bar below. The editor writes Saved/Logs either way.
   const proc = spawn(editorExe, [projectFile], {
-    stdio: 'inherit',
+    stdio: 'ignore',
     detached: true,
   });
 
   proc.unref(); // Allow parent process to exit
-  log('Editor launched!', 'green');
+
+  // Same wait the start_editor tool performs: hold here with a progress bar
+  // until the editor is actually usable, rather than printing "launched!" over
+  // a splash screen that has forty seconds of module loading left.
+  const { waitForEditorReadyExternal } = await import('../dist/editor-control.js');
+  const result = await waitForEditorReadyExternal(projectFile, path.dirname(projectFile), 300);
+  if (result.ready) {
+    log(`Editor ready in ${result.elapsedSeconds.toFixed(1)}s`, 'green');
+  } else {
+    log(`Editor did not become ready: ${result.reason}`, 'yellow');
+  }
 }
 
 main().catch((error) => {
