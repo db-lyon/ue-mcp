@@ -282,10 +282,27 @@ uint32 FMCPBridgeServer::Run()
 		return 1;
 	}
 
-	// Set socket options
+	// Claim the port exclusively.
+	//
+	// #821: Winsock's SO_REUSEADDR is not the POSIX one. It allows a bind to
+	// succeed on a port another socket is actively listening on unless that
+	// socket asked for exclusive use. With it set, the collision walk below
+	// could never fire on Windows: a second editor of the same project bound at
+	// offset 0, both processes believed they owned the port, and which listener
+	// received a given connection was up to the stack. SO_EXCLUSIVEADDRUSE is
+	// what makes the second bind fail, which is what lets the walk walk.
+	//
+	// On POSIX, SO_REUSEADDR only relaxes TIME_WAIT and cannot take a live
+	// listener's port, so it stays there.
+#if PLATFORM_WINDOWS
+	int32 ExclusiveAddrUse = 1;
+	setsockopt(ServerSocketFD, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char*)&ExclusiveAddrUse, sizeof(ExclusiveAddrUse));
+#else
 	int32 ReuseAddr = 1;
 	setsockopt(ServerSocketFD, SOL_SOCKET, SO_REUSEADDR, (char*)&ReuseAddr, sizeof(ReuseAddr));
-	
+#endif
+
+
 	// Set TCP_NODELAY for immediate send (disable Nagle's algorithm)
 	int32 NoDelay = 1;
 	setsockopt(ServerSocketFD, IPPROTO_TCP, TCP_NODELAY, (char*)&NoDelay, sizeof(NoDelay));
