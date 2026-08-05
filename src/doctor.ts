@@ -12,6 +12,7 @@ import * as path from "node:path";
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { isNewer } from "./version-check.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -326,6 +327,18 @@ function row(label: string, value: string): string {
   return `  ${label.padEnd(16)}${value}`;
 }
 
+/**
+ * True when `version` is older than the registry's stable `latest`.
+ *
+ * Every alignment verdict below asks this rather than "differs from latest".
+ * A prerelease install is ahead of the stable line, not behind it, so plain
+ * inequality would flag a beta tester's entire setup as stale and tell them to
+ * update onto an older release.
+ */
+function behindLatest(version: string | null | undefined, latest: string | null): boolean {
+  return !!latest && !!version && isNewer(latest, version);
+}
+
 export function formatDoctor(d: DoctorReport): string {
   const latest = d.registryLatest;
   const lines: string[] = [];
@@ -345,7 +358,7 @@ export function formatDoctor(d: DoctorReport): string {
   }
 
   const effLabel = d.effectiveNpx ?? "unknown";
-  const effMismatch = latest && d.effectiveNpx && d.effectiveNpx !== latest;
+  const effMismatch = behindLatest(d.effectiveNpx, latest);
   lines.push(row("effective (npx):", effMismatch ? `${RED}${effLabel}  (behind latest ${latest})${RESET}` : `${GREEN}${effLabel}${RESET}`));
 
   // Show servers, putting the one serving the target project first and naming
@@ -366,7 +379,7 @@ export function formatDoctor(d: DoctorReport): string {
           ? `${BOLD}this project${RESET} ${DIM}(with ${names.length - 1} more: ${proj})${RESET}`
           : `${BOLD}this project${RESET}`
         : `${DIM}${proj}${RESET}`;
-      const mismatch = latest && s.version && s.version !== latest;
+      const mismatch = behindLatest(s.version, latest);
       const tag = deleted
         ? `${RED}(running pruned files - relaunch)${RESET}`
         : mismatch
@@ -384,13 +397,13 @@ export function formatDoctor(d: DoctorReport): string {
   lines.push("");
 
   const problems: string[] = [];
-  if (d.localShadow && latest && d.localShadow.version !== latest) {
+  if (d.localShadow && behindLatest(d.localShadow.version, latest)) {
     problems.push(
       `A project-local node_modules/ue-mcp@${d.localShadow.version} shadows the global install. ` +
       `npx runs it, so global updates do nothing. Fix: remove the dependency from package.json and delete node_modules/ue-mcp, ` +
       `or pin .mcp.json to \`npx -y ue-mcp@latest\`. Then run \`ue-mcp update --build\`.`,
     );
-  } else if (latest && d.npmGlobal.version && d.npmGlobal.version !== latest) {
+  } else if (behindLatest(d.npmGlobal.version, latest)) {
     // No shadow, but the global package is behind latest: a bare `npx ue-mcp`
     // (or any fresh launch) would run an old version next time. This must keep
     // the verdict from claiming "aligned" even when the running server happens
@@ -413,7 +426,7 @@ export function formatDoctor(d: DoctorReport): string {
     const label = s.servesTarget && d.bridgePlugin ? `for ${path.basename(d.bridgePlugin.project)}` : "(this project)";
     if (s.version === null) {
       problems.push(`Running server (pid ${s.pid}) ${label} is executing pruned/old files - a stale process the file deletion did not kill. Quit your MCP client fully (not --resume) and relaunch so a fresh ${latest ?? "latest"} server spawns.`);
-    } else if (latest && s.version !== latest) {
+    } else if (behindLatest(s.version, latest)) {
       problems.push(`Running server (pid ${s.pid}) ${label} is ${s.version}, not ${latest}. Quit your MCP client and relaunch to swap it.`);
     }
   }

@@ -169,6 +169,20 @@ describe("formatDoctor verdict", () => {
     expect(out).toContain("pid 9");
   });
 
+  it("does not call a prerelease install stale for being ahead of the stable line", () => {
+    // registryLatest is the `latest` dist-tag, which is the stable line. A
+    // tester on a prerelease is ahead of it, not behind it, and must not be
+    // told to update onto an older release.
+    const out = stripAnsi(formatDoctor(baseReport({
+      selfVersion: "1.1.0-beta.2",
+      npmGlobal: { version: "1.1.0-beta.2", dir: "/g/ue-mcp" },
+      effectiveNpx: "1.1.0-beta.2",
+      runningServers: [{ pid: 1, version: "1.1.0-beta.2", script: "x", project: "C:/proj/Vale", servesTarget: true }],
+    })));
+    expect(out).toContain("Everything aligned");
+    expect(out).not.toContain("behind latest");
+  });
+
   it("does not let a server for another project produce a false aligned", () => {
     // Only an unrelated-project server is running; nothing serves the target.
     const out = stripAnsi(formatDoctor(baseReport({
