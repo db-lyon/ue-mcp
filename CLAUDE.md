@@ -43,6 +43,15 @@ Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plu
 - Smoke tests execute real mutations (create blueprints, delete assets, modify levels). A misrouted run against a real project can corrupt an active editor session.
 - 440+ handlers. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
 
+### Golden baseline - the advertised surface
+
+`tests/golden/editor-down.json` is a recording of what a client is handed at startup with one project and no editor running: the `initialize` instructions and every tool in `tools/list` with its full input schema. `tests/unit/golden-editor-down.test.ts` starts the real server over stdio, records the same thing again, and fails if the two differ. It runs as part of `npm run test:unit`, so CI gates on it.
+
+- **A failure is not automatically a bug.** It says the startup contract moved. Read the diff.
+- **Re-record intentionally** with `npm run golden:record`, then review the diff before committing it. Never edit the JSON by hand.
+- The recording is hermetic: a throwaway project in a temp directory, `UE_MCP_PORT=1` so nothing can be listening, every inherited `UE_MCP_*` variable dropped, and the user-scoped config/state/auth files redirected. Absolute paths are rewritten before serialization and asserted absent, so the file verifies on any machine.
+- Only the editor-down half exists. Plan item 1.10 of #817 also wants the editor-connected half, which needs an Unreal install and therefore cannot live in this tier.
+
 ### Clean plugin rebuild recipe
 
 If new handlers return `"Unknown method"` at runtime even though source + build reported success:
@@ -137,6 +146,7 @@ npm run up:build        # Stop editor, build plugin, relaunch
 npm run build           # Build the UE C++ plugin only
 npx tsc --noEmit        # Type-check TS
 npm run test:smoke      # Live smoke tests (tests/ue_mcp only)
+npm run golden:record   # Re-record tests/golden/editor-down.json (review the diff)
 npm test                # Vitest unit tests
 node scripts/deploy.mjs # Sync plugin/ → tests/ue_mcp/Plugins/
 ```
