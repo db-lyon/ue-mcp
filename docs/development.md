@@ -41,18 +41,25 @@ npm run build          # UE C++ plugin build (requires editor closed)
 
 `npx tsc` emits the TypeScript server into `dist/`. `npm run build` is the C++ plugin build that runs Unreal's build tool against the test project and requires the editor to be closed first.
 
-UE-MCP test builds require a dedicated engine root. They do not auto-discover an installed engine and must not use a daily-development or production engine tree. Configure the test lane before building:
+The build script only ever builds the `ue_mcpEditor` target against the bundled `tests/ue_mcp/ue_mcp.uproject`, and it refuses to start if that resolves anywhere else. It also passes `-NoEngineChanges`, so Unreal itself aborts the build and prints the offending file list if the build would overwrite a file that already exists under the engine tree. That is what keeps a test build from invalidating the outputs of a shared source engine you use for other work.
+
+Engine selection order is `UE_MCP_TEST_ENGINE_ROOT`, then `UE_BUILD_TOOL_PATH`, then the default install locations. A pinned root that has no build tool is an error rather than a silent fallback to an engine you did not ask for.
+
+Two optional environment variables tune the guard:
 
 ```powershell
-$null = New-Item -ItemType File 'D:\UE-Test\.ue-mcp-test-engine'
-$env:UE_MCP_TEST_ENGINE_ROOT = 'D:\UE-Test'
+# Roots the build and run scripts must never touch, whatever else is set.
 $env:UE_MCP_PROTECTED_ENGINE_ROOTS = 'D:\UE-Primary;D:\UE-Release'
+
+# Pin the engine used for test builds and editor launches.
+$env:UE_MCP_TEST_ENGINE_ROOT = 'D:\UE-Test'
+
 npm run build
 ```
 
-The `.ue-mcp-test-engine` marker must exist at the selected engine root. Create it only in an engine tree dedicated to UE-MCP testing. `UE_MCP_PROTECTED_ENGINE_ROOTS` uses the platform path-list delimiter (`;` on Windows, `:` on macOS and Linux). The selected test engine cannot be equal to or nested under a protected root, even if it has a marker. The build script derives both Unreal's build tool and editor executable from `UE_MCP_TEST_ENGINE_ROOT`, fixes the target to `ue_mcpEditor`, and adds `-NoEngineChanges` by default. The target rules enforce the same policy when UnrealBuildTool is called directly.
+`UE_MCP_PROTECTED_ENGINE_ROOTS` uses the platform path-list delimiter (`;` on Windows, `:` on macOS and Linux). A selected engine equal to or nested under a protected root is rejected, including when it arrives through `UE_BUILD_TOOL_PATH` or `UE_EDITOR_PATH`.
 
-A new dedicated test engine may need to create its engine-side outputs once. For that isolated bootstrap only, set `UE_MCP_ALLOW_TEST_ENGINE_CHANGES=true`. Protected roots remain forbidden even with this opt-in. Do not add `-NoLiveCoding` or pass alternate build flags directly; use `npm run build` so the guard remains active. Use `npm run up:build` to chain stop-build-start during plugin iteration.
+A fresh engine may need to create its engine-side outputs once. For that bootstrap only, set `UE_MCP_ALLOW_TEST_ENGINE_CHANGES=true` to drop `-NoEngineChanges`. Protected roots stay forbidden even with this opt-in, and the build prints a warning naming the variable so an opt-in left in your environment is visible. Use `npm run up:build` to chain stop-build-start during plugin iteration.
 
 ## Running
 
