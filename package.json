@@ -55,6 +55,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:multi-editor": "vitest run tests/multi-editor",
+    "golden:record": "node scripts/record-golden.mjs",
     "audit:docs": "node scripts/audit-docs.mjs && node scripts/audit-params.mjs",
     "audit:handlers": "node scripts/audit-handlers.mjs",
     "audit": "npm run audit:docs && npm run audit:handlers",
