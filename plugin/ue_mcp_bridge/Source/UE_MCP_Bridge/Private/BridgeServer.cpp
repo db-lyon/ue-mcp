@@ -2147,6 +2147,11 @@ void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD,
 	}
 }
 
+int64 FMCPBridgeServer::MaxMessageBytes()
+{
+	return kMaxWebSocketMessageBytes;
+}
+
 TArray<uint8> FMCPBridgeServer::CreateWebSocketFrame(const FString& Message)
 {
 	// Simple WebSocket frame creation (text frame, no masking)
