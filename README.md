@@ -5,7 +5,7 @@
 [![stars](https://img.shields.io/github/stars/db-lyon/ue-mcp)](https://github.com/db-lyon/ue-mcp/stargazers)
 [![MIT](https://img.shields.io/npm/l/ue-mcp)](LICENSE)
 
-**Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->24<!-- /count --> category tools covering <!-- count:actions -->759+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows and an npm plugin system for extending the surface.
+**Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->24<!-- /count --> category tools covering <!-- count:actions -->760+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows and an npm plugin system for extending the surface.
 
 On UE 5.8+ it also wraps Epic's entire native AI Toolset Registry - 830 official Unreal tools, called in-process and surfaced as `epic_*` actions in the matching category: Sequencer in `animation`, PCG in `pcg`, static meshes in `asset`.
 
@@ -137,7 +137,7 @@ flows:
 flow(action="run", flowName="build_and_check")
 ```
 
-Every one of the <!-- count:actions -->759+<!-- /count --> actions is also a flow task. Flows support step references, retries, rollback, custom tasks in your own `.js`/`.ts`, and shell steps. See [Flows](https://ue-mcp.com/docs/flows/).
+Every one of the <!-- count:actions -->760+<!-- /count --> actions is also a flow task. Flows support step references, retries, rollback, custom tasks in your own `.js`/`.ts`, and shell steps. See [Flows](https://ue-mcp.com/docs/flows/).
 
 ## Plugins
 

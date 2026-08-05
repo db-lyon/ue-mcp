@@ -2,7 +2,7 @@
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal 5.8 tools that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering **<!-- count:actions -->759+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering **<!-- count:actions -->760+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -178,7 +178,7 @@ UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering
 | `get_execution_flow` | Trace exec pins from an entry point. Params: `assetPath, graphName?, entryPoint?` |
 | `get_dependencies` | Forward (classes/functions/assets) or reverse (referencers) deps. Params: `assetPath, reverse?` |
 | `diff` | Semantic structural diff between two Blueprints (binary uassets are unreviewable in git). Compares parent class, variables (type/default), functions/macros, components, and per-graph node + connection deltas keyed on stable node GUIDs so edits are matched rather than shown as remove+add. Returns a structured delta plus a human summary and changeCount. Params: `assetPath (base/A), otherPath (compare/B)` |
-| `create` | Create Blueprint. Params: `assetPath, parentClass?` |
+| `create` | Create Blueprint. assetPath is the full destination, e.g. /Game/Blueprints/BP_Example; a name plus packagePath pair is accepted as the same thing. A .uasset suffix, an object suffix, and backslashes are normalized away rather than reaching the editor as an invalid asset name. Params: `assetPath, name?, packagePath?, parentClass?` |
 | `add_variable` | Add variable. varType accepts bool/int/float/string/name/text/byte/vector/rotator/transform/gameplaytag, object:/Script/Module.Class, struct:/Game/Path/To/Struct, or a full class/struct path. Unrecognized types are rejected rather than silently defaulting. Params: `assetPath, name, varType (alias: type), onConflict? (skip\|error, default skip) (#745)` |
 | `set_variable_properties` | Edit variable properties. Note: replication is set with networking(set_property_replicated), and blueprintReadOnly is not writable here - list_variables reports it. Params: `assetPath, name, editFlag? (EditAnywhere\|EditDefaultsOnly\|EditInstanceOnly\|none - the exact value list_variables reports, and the only form that round-trips every state), instanceEditable? (two-state shorthand; mutually exclusive with editFlag), private?, category?, tooltip?, exposeOnSpawn?` |
 | `create_function` | Create function. Params: `assetPath, functionName` |
@@ -610,7 +610,7 @@ UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering
 
 ## widget
 
-*UMG Widget Blueprints, Editor Utility Widgets, and Editor Utility Blueprints.*
+*UMG Widget Blueprints, Editor Utility Widgets, and Editor Utility Blueprints. One parameter contract across every action (#798): the asset is always `assetPath`, an Unreal package path such as `/Game/UI/WBP_Example`; a widget inside the tree is always `widgetName`; its parent panel is always `parentWidgetName`; arguments for the `epic_*` actions always go in `input`, and a top-level `assetPath` is folded into the asset reference of the wrapped tool for you. A `.uasset` suffix, an object suffix (`.WBP_Example`), backslashes, and the legacy `path` / `widgetBlueprintPath` / `widgetBlueprint` spellings are accepted and normalized. Create actions take `assetPath` too; `name` plus `packagePath` remains valid and is composed into it. See [Widget parameter contract](widget-parameters.md).*
 
 | Action | Description |
 |--------|-------------|
@@ -625,10 +625,10 @@ UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering
 | `bulk_set_properties` | Apply many {widgetName, propertyName, value} style/property writes to a WidgetBlueprint in one call (single compile+save) - font/color/style stylesheet across many widgets. Params: `assetPath, properties[] (#563)` |
 | `list` | List Widget BPs. Params: `directory?, recursive?` |
 | `read_animations` | Read UMG animations. Params: `assetPath` |
-| `create` | Create Widget BP. Params: `name, packagePath?, parentClass?` |
-| `create_utility_widget` | Create editor utility widget. Params: `name, packagePath?` |
+| `create` | Create Widget BP. assetPath is the full destination, e.g. /Game/UI/WBP_Example; name + packagePath is the older spelling of the same thing and is composed into it. Params: `assetPath, name?, packagePath?, parentClass?` |
+| `create_utility_widget` | Create editor utility widget. Params: `assetPath, name?, packagePath?` |
 | `run_utility_widget` | Open editor utility widget. Params: `assetPath` |
-| `create_utility_blueprint` | Create editor utility blueprint. Params: `name, packagePath?` |
+| `create_utility_blueprint` | Create editor utility blueprint. Params: `assetPath, name?, packagePath?` |
 | `run_utility_blueprint` | Run editor utility blueprint. Params: `assetPath` |
 | `add_widget` | Add widget to widget tree. Params: `assetPath, widgetClass, widgetName?, parentWidgetName?` |
 | `remove_widget` | Remove widget from tree. Params: `assetPath, widgetName` |
@@ -651,7 +651,6 @@ UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering
 | Action | Description |
 |--------|-------------|
 | `start_editor` | Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. Params: `timeout? (seconds, default 300)` |
-| `get_engine_state` | What the engine is REALLY doing, read from outside the game thread: startup phase from the editor's own log, process table (PID, command line, responding), the plugin's status snapshot (slow-task name and percent, active modal dialog, game-thread stall), and native dialog windows. Call this ONCE when something is already wrong (handlers timing out, an editor that will not come up). Never call it in a wait loop: start_editor blocks until ready on its own, and polling this during startup burns tokens re-reading state that is already tracked. Params: `probeWindows? (default true; scans native windows, costs ~2s)` |
 | `get_engine_state` | What the engine is REALLY doing, read from outside the game thread: startup phase from the editor's own log, process table (PID, command line, responding), the plugin's status snapshot (slow-task name and percent, active modal dialog, game-thread stall), and native dialog windows. Call this ONCE when something is already wrong (handlers timing out, an editor that will not come up). Never call it in a wait loop: start_editor blocks until ready on its own, and polling this during startup burns tokens re-reading state that is already tracked. Params: `probeWindows? (default true; scans native windows, costs ~2s)` |
 | `stop_editor` | Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill) |
 | `restart_editor` | Stop then start the editor |
