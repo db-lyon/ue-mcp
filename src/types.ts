@@ -46,12 +46,15 @@ export interface ToolContext {
   sessions?: SessionRegistry;
   /** Lazy accessor for the active flow registry. Returns the merged
    *  built-in + ue-mcp.yml flows. Used by project(get_status) so agents
-   *  see which canonical sequences are pre-encoded for this project. */
-  getFlows?: () => Array<{ name: string; description?: string }>;
+   *  see which canonical sequences are pre-encoded for this project.
+   *  Takes the session to read, because flows are declared in each project's
+   *  own ue-mcp.yml; omitted means this context's session. */
+  getFlows?: (forSession?: EditorSession) => Array<{ name: string; description?: string }>;
   /** Lazy accessor for the loaded plugin set. Returns one PluginInfo per
    *  entry in the user's `plugins:` array, active or skipped. Used by the
-   *  `plugins` introspection category. */
-  getPlugins?: () => PluginInfo[];
+   *  `plugins` introspection category. Session-scoped for the same reason
+   *  as getFlows: `plugins:` is per project. */
+  getPlugins?: (forSession?: EditorSession) => PluginInfo[];
   /** MCP elicitation gate. When defined, calling this blocks the active
    *  tool invocation until the user responds in their MCP client UI. When
    *  undefined, the connected client does not declare the elicitation
@@ -116,6 +119,51 @@ export interface ToolDef {
    *  Dispatch reads it to know whether an `editor` param is a routing
    *  instruction (strip it) or one of the tool's own params (forward it). */
   injectedEditorParam?: boolean;
+  /**
+   * Build an independent copy of this tool (#817).
+   *
+   * Epic enrichment and plugin injection mutate `actions`, `schema` and
+   * `description` in place, so two editors sharing one ToolDef share whatever
+   * either of them was enriched with: a project with a toolset the other does
+   * not have would advertise that toolset on both. Each session therefore
+   * gets its own graph, cloned from the pristine one before anything touches
+   * it.
+   *
+   * Set by `categoryTool`, which is the only thing that can rebuild the
+   * dispatch closure so the copy reads its OWN actions rather than the
+   * original's. A tool built by hand carries no rebuilder and is copied
+   * structurally instead.
+   */
+  rebuild?: (actions: Record<string, ActionSpec>) => ToolDef;
+}
+
+/**
+ * An independent copy of one tool. Prefers the rebuilder so the copy's
+ * handler dispatches against the copy's actions; falls back to a structural
+ * copy of the mutated containers for hand-written tools, whose handlers do
+ * not read `actions` at all.
+ */
+export function cloneToolDef(tool: ToolDef): ToolDef {
+  // An action-less tool cannot go back through categoryTool: the action enum
+  // it builds needs at least one name. Nothing enriches such a tool either, so
+  // the structural copy below is sufficient.
+  if (tool.rebuild && Object.keys(tool.actions).length > 0) {
+    const copy = tool.rebuild({ ...tool.actions });
+    copy.description = tool.description;
+    copy.schema = { ...tool.schema };
+    copy.injectedEditorParam = tool.injectedEditorParam;
+    return copy;
+  }
+  return {
+    ...tool,
+    schema: { ...tool.schema },
+    actions: { ...tool.actions },
+  };
+}
+
+/** An independent copy of a whole tool graph. */
+export function cloneToolGraph(tools: ToolDef[]): ToolDef[] {
+  return tools.map(cloneToolDef);
 }
 
 export interface ActionSpec {
@@ -245,6 +293,11 @@ export function categoryTool(
       throw new McpError(ErrorCode.NO_HANDLER, `Action '${action}' has no handler or bridge method`);
     },
   };
+  // Rebuilding through the same constructor is what makes a per-session copy
+  // real: the handler closes over `actions`, so a copy that only replaced the
+  // record would still dispatch against the original's.
+  def.rebuild = (nextActions) =>
+    categoryTool(name, summary, nextActions, actionDocs, extraSchema, options);
   return def;
 }
 
@@ -259,7 +312,18 @@ function stripAction(params: Record<string, unknown>): Record<string, unknown> {
  * another project's editor.
  */
 export function sessionContext(ctx: ToolContext, session: EditorSession): ToolContext {
-  return { ...ctx, bridge: session.guarded, project: session.project, session };
+  const { getFlows, getPlugins } = ctx;
+  return {
+    ...ctx,
+    bridge: session.guarded,
+    project: session.project,
+    session,
+    // Rebound, not copied: these read per-project config, so leaving them
+    // pointed at the context's previous session would report one editor's
+    // flows and plugins under another editor's name.
+    getFlows: getFlows ? () => getFlows(session) : undefined,
+    getPlugins: getPlugins ? () => getPlugins(session) : undefined,
+  };
 }
 
 /** Drop the routing parameter from a param bag. */

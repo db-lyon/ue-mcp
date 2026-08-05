@@ -157,8 +157,8 @@ async function coreSurface(): Promise<CoreSurface> {
   const categories = new Set<string>();
   const actions = new Map<string, string>();
   try {
-    const { ALL_TOOLS } = await import("./tools.js");
-    for (const tool of ALL_TOOLS) {
+    const { getLiveToolGraph } = await import("./tools.js");
+    for (const tool of getLiveToolGraph()) {
       categories.add(tool.name.toLowerCase());
       for (const action of Object.keys(tool.actions)) {
         const a = action.toLowerCase();

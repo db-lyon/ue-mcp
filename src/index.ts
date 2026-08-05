@@ -38,10 +38,17 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
 
-import { ALL_TOOLS } from "./tools.js";
+import { ALL_TOOLS, setLiveToolGraph } from "./tools.js";
 import { enrichToolsWithEpicCatalog, type EpicCatalog } from "./epic-enrich.js";
 import { checkPluginFreshness } from "./plugin-freshness.js";
 import { saveCatalogCache, loadCatalogCache, loadBakedCatalog } from "./epic-cache.js";
+import {
+  baseGraphFor,
+  unionSurface,
+  unionKnowledge,
+  explainMissingAction,
+  type SessionSurface,
+} from "./session-surface.js";
 
 type TextBlock = { type: "text"; text: string };
 
@@ -165,78 +172,34 @@ async function main() {
   // whatever answers 9877" mode, and project(set_project) can bind it later.
   if (sessions.size === 0) sessions.register({});
 
-  // Process-level construction (config, plugins, native tool enrichment,
-  // flows, HTTP) reads the first session's project, which for a single-editor
-  // server is the only one there has ever been.
+  // Process-level construction that has one answer per transport (the context
+  // strategy, the HTTP surface, the flow config source) reads the first
+  // session's project, which for a single-editor server is the only one there
+  // has ever been.
   const primary = sessions.active;
   const project = primary.project;
   const bridge = primary.bridge;
 
-  // ── Plugins ──────────────────────────────────────────────────────
-  // Read the user's `plugins:` entries from ue-mcp.yml (best-effort - a
-  // missing or invalid file means zero plugins, never a fatal error). Then
-  // resolve, validate, and inject into target categories BEFORE the flow
-  // registry is built so plugin tasks register cleanly.
-  const configDir = project.projectDir ?? undefined;
-  const pluginEntries = readPluginsEntries(configDir);
-  const pluginLoad = await loadPlugins(ALL_TOOLS, pluginEntries, configDir, pkg.version, project.config.pluginConfig);
-  const activeTools = pluginLoad.tools;
-  const pluginRecords = pluginLoad.records;
-
-  // ── Epic 5.8 native toolset surfacing (best-effort, startup) ─────
-  // If the editor bridge is reachable now, pull Epic's live toolset catalog and
-  // inject each tool as a first-class action into the matching ue-mcp category
-  // (GAS tools into `gas`, Niagara into `niagara`, etc.). This must run before
-  // the flow registry and MCP tool registration below so the injected actions
-  // are dispatchable and advertised. When the editor is not up yet, the `epic`
-  // gateway still works; a server restart picks up enrichment. (Re-enrichment on
-  // late connect would require tools/list_changed and is a follow-up.)
-  const nativeCfg = project.config.nativeTools ?? {};
-  const nativeEnabled = nativeCfg.enabled !== false; // on by default (opt-out)
-  if (!nativeEnabled) {
-    console.error("[ue-mcp] Native Epic tools disabled via ue-mcp.yml (nativeTools.enabled=false); epic gateway still available");
-  } else {
-    try {
-      // Source priority: live editor (most current, refreshes the cache) ->
-      // project cache (last-seen) -> baked snapshot shipped with the package
-      // (deterministic default so the surface appears on first cold startup and
-      // matches the generated docs). First available wins.
-      let catalog: EpicCatalog | null = null;
-      let source = "";
-      if (!bridge.isConnected) {
-        await bridge.connect(2000).catch(() => {});
-      }
-      if (bridge.isConnected) {
-        catalog = (await bridge.call("epic_list_toolsets", { includeSchemas: true }, 20000)) as EpicCatalog;
-        if (catalog?.toolsets?.length) {
-          saveCatalogCache(configDir, catalog, project.engineAssociation);
-          source = "live editor";
-        }
-      }
-      if (!catalog?.toolsets?.length) {
-        catalog = loadCatalogCache(configDir);
-        if (catalog?.toolsets?.length) source = "project cache";
-      }
-      if (!catalog?.toolsets?.length) {
-        catalog = loadBakedCatalog();
-        if (catalog?.toolsets?.length) source = "baked snapshot";
-      }
-      if (catalog?.toolsets?.length) {
-        const enriched = enrichToolsWithEpicCatalog(activeTools, catalog, {
-          excludeCategories: nativeCfg.exclude,
-        });
-        if (enriched.injected > 0) {
-          const summary = Object.entries(enriched.byCategory).map(([c, n]) => `${c}:${n}`).join(", ");
-          console.error(`[ue-mcp] Epic 5.8 toolsets (${source}): surfaced ${enriched.injected} tools (${summary})`);
-          if (enriched.createdCategories.length) {
-            console.error(`[ue-mcp] Epic-only categories added: ${enriched.createdCategories.join(", ")}`);
-          }
-        }
-      }
-    } catch (e) {
-      console.error(`[ue-mcp] Epic toolset enrichment skipped: ${e instanceof Error ? e.message : e}`);
-    }
+  // ── Per-session surfaces ─────────────────────────────────────────
+  // Plugins and the Epic catalog are project-scoped: the `plugins:` list lives
+  // in each project's ue-mcp.yml and the catalog is whatever that project's
+  // editor reports. Both are built per session against a graph cloned from the
+  // pristine declaration, so a second editor never inherits the first one's
+  // plugins or toolsets (#817). At one editor this is one clone enriched from
+  // one project, which is what the server did before.
+  const surfaces: SessionSurface[] = [];
+  const perSession = new Map<EditorSession, SessionLoad>();
+  for (const session of sessions.list()) {
+    const load = await buildSessionLoad(session, pkg.version, sessions.size > 1);
+    perSession.set(session, load);
+    surfaces.push(load.surface);
   }
+
+  const primaryLoad = perSession.get(primary)!;
+  const pluginLoad = primaryLoad.pluginLoad;
+  const pluginRecords = primaryLoad.surface.pluginRecords;
+  const configDir = project.projectDir ?? undefined;
+  const activeTools = primaryLoad.surface.tools;
 
   // ── Context-seeding strategy (full | lean | micro) ───────────────
   // Applied AFTER plugin + Epic enrichment so lean/micro discovery covers the
@@ -247,25 +210,60 @@ async function main() {
   //           visible, descriptions/params on demand)
   //   micro - one `tools` gateway (list_categories / describe / call) fronts
   //           everything; smallest possible seed
+  //
+  // The strategy is process-level: there is one transport, so one advertised
+  // shape. It comes from the first session, and any other session asking for
+  // a different one is named rather than silently overridden.
   const contextStrategy = resolveContextStrategy(project.config.context?.strategy);
-  const disabled = new Set(project.config.disable ?? []);
-  const enabledActive = activeTools.filter((t) => !disabled.has(t.name));
-
-  let advertisedTools: ToolDef[];
-  let registryTools: ToolDef[];
-  if (contextStrategy === "micro") {
-    const gateway = buildMicroGateway(enabledActive);
-    advertisedTools = [gateway];
-    // Keep every category task in the registry so flows still resolve.
-    registryTools = [gateway, ...activeTools];
-  } else if (contextStrategy === "lean") {
-    const leaned = applyLeanContext(activeTools);
-    advertisedTools = leaned.filter((t) => !disabled.has(t.name));
-    registryTools = leaned;
-  } else {
-    advertisedTools = enabledActive;
-    registryTools = activeTools;
+  const dissenting = surfaces
+    .filter((s) => s.session !== primary)
+    .filter((s) => resolveContextStrategy(s.session.project.config.context?.strategy) !== contextStrategy)
+    .map((s) => s.session.name);
+  if (dissenting.length > 0) {
+    console.error(
+      `[ue-mcp] Context strategy '${contextStrategy}' comes from '${primary.name}' and applies to the whole server; ` +
+        `${dissenting.join(", ")} ask for a different one and it is not applied.`,
+    );
   }
+  const disabled = primaryLoad.surface.disabled;
+
+  // Each session gets the strategy applied to its OWN graph, so its registry
+  // dispatches only what that project actually provides.
+  const loads = [...perSession.values()];
+  for (const load of loads) {
+    const enabled = load.surface.tools.filter((t) => !load.surface.disabled.has(t.name));
+    if (contextStrategy === "micro") {
+      const gateway = buildMicroGateway(enabled);
+      load.advertisedTools = [gateway];
+      // Keep every category task in the registry so flows still resolve.
+      load.registryTools = [gateway, ...load.surface.tools];
+    } else if (contextStrategy === "lean") {
+      const leaned = applyLeanContext(load.surface.tools);
+      load.advertisedTools = leaned.filter((t) => !load.surface.disabled.has(t.name));
+      load.registryTools = leaned;
+    } else {
+      load.advertisedTools = enabled;
+      load.registryTools = load.surface.tools;
+    }
+  }
+
+  // What the client is advertised. At one editor this is that editor's list,
+  // the same objects it always was. Beyond one it is the union, so an action
+  // only one project has is still addressable there, and dispatch to a session
+  // that lacks it is refused by name rather than falling through to a bridge
+  // that cannot serve it. A category a session disabled stays advertised for
+  // the others and is refused at dispatch for that one, naming its config.
+  const advertisedTools: ToolDef[] = sessions.size > 1
+    ? unionSurface(loads.map((l) => ({ ...l.surface, tools: l.advertisedTools }))).tools
+    : primaryLoad.advertisedTools;
+
+  // The union of every session's dispatchable graph. `search_tools`, the
+  // execute_python gate and the feedback router all ask "what does this server
+  // expose", and with a graph per session that answer no longer lives in the
+  // module-level declaration they used to read.
+  const dispatchUnion = unionSurface(loads.map((l) => ({ ...l.surface, tools: l.registryTools })));
+  setLiveToolGraph(dispatchUnion.tools);
+  const registryTools = primaryLoad.registryTools;
   if (contextStrategy !== "full") {
     console.error(`[ue-mcp] Context strategy: ${contextStrategy}`);
   }
@@ -273,11 +271,14 @@ async function main() {
   // Lazy flow accessor - reads ue-mcp.yml fresh each call so agents see
   // edits without a server restart. project(get_status) uses this so the
   // first call agents make in any session reveals the registered flows.
-  const getFlows = (): Array<{ name: string; description?: string }> => {
+  // Reads the addressed session's project, so a flow declared in one project's
+  // ue-mcp.yml is not reported as belonging to another's.
+  const getFlows = (forSession?: EditorSession): Array<{ name: string; description?: string }> => {
+    const load = perSession.get(forSession ?? primary) ?? primaryLoad;
     try {
-      const cfg = loadFlowConfig(activeTools, configDir, {
-        tasks: pluginLoad.taskDefs,
-        flows: pluginLoad.flowDefs,
+      const cfg = loadFlowConfig(load.surface.tools, load.configDir, {
+        tasks: load.pluginLoad.taskDefs,
+        flows: load.pluginLoad.flowDefs,
       }).config;
       return Object.entries(cfg.flows).map(([name, def]) => ({
         name,
@@ -288,7 +289,11 @@ async function main() {
     }
   };
 
-  const getPlugins = (): PluginInfo[] => pluginRecords.map((r) => toPluginInfo(r, project));
+  const getPlugins = (forSession?: EditorSession): PluginInfo[] => {
+    const target = forSession ?? primary;
+    const load = perSession.get(target) ?? primaryLoad;
+    return load.surface.pluginRecords.map((r) => toPluginInfo(r, target.project));
+  };
 
   // Elicitation is only meaningful once the client has advertised support
   // during initialize. We lazily probe at call time so the function is bound
@@ -331,21 +336,41 @@ async function main() {
     console.error(`[ue-mcp] Per-asset locking enabled (TTL ${lockingCfg.ttlSeconds}s)`);
   }
 
-  // ── Flow engine: task registry ──────────────────────────────────
-  const registry = buildFlowRegistry(registryTools);
-  for (const { name, ctor } of pluginLoad.taskRegistrations) {
-    registry.register(name, ctor);
+  // ── Flow engine: one task registry per session ──────────────────
+  // The registry is the dispatch layer, so it has to be built from the graph
+  // the addressed session actually has. Sharing one registry is what made a
+  // second editor dispatch the first editor's plugin tasks (#817).
+  for (const load of loads) {
+    const sessionRegistry = buildFlowRegistry(load.registryTools);
+    for (const { name, ctor } of load.pluginLoad.taskRegistrations) {
+      sessionRegistry.register(name, ctor);
+    }
+    for (const { classPath, ctor } of load.pluginLoad.classPathRegistrations) {
+      sessionRegistry.registerClassPath(classPath, ctor);
+    }
+    load.registry = sessionRegistry;
   }
-  for (const { classPath, ctor } of pluginLoad.classPathRegistrations) {
-    registry.registerClassPath(classPath, ctor);
-  }
+  const registry = primaryLoad.registry!;
   const taskCount = registry.listRegistered().length;
 
   // Populate the guard pipeline: any plugin-supplied `guard.<name>.<phase>` task
   // becomes a BridgeGuard. Each guard task runs with the RAW bridge in its
   // context so a guard cannot recurse through the pipeline. See flow/task-guards.ts.
-  for (const g of discoverTaskGuards(registry, ctx, bridge)) {
-    guardRegistry.register(g);
+  // Guards are discovered per session, from that session's own registry and
+  // against that session's own raw bridge, so a guard declared by one project's
+  // plugins cannot veto another project's calls.
+  for (const load of loads) {
+    const guardCtx: ToolContext = {
+      bridge: load.surface.session.guarded,
+      project: load.surface.session.project,
+      session: load.surface.session,
+      sessions,
+      getFlows: () => getFlows(load.surface.session),
+      getPlugins: () => getPlugins(load.surface.session),
+    };
+    for (const g of discoverTaskGuards(load.registry!, guardCtx, load.surface.session.bridge)) {
+      guardRegistry.register(g);
+    }
   }
   if (guardRegistry.size > 0) {
     info("guard", `${guardRegistry.size} bridge guard(s) active: ${guardRegistry.list().map((g) => g.name).join(", ")}`);
@@ -355,7 +380,10 @@ async function main() {
   // Attach per-category markdown to the AI-facing docs. Sized to the same
   // budget as SERVER_INSTRUCTIONS itself; deeper plugin docs remain
   // readable on demand via the file-reading surface.
-  const knowledgeBlock = buildKnowledgeBlock(pluginLoad.knowledgeByCategory);
+  // The union across sessions: instructions are sent once at initialize and
+  // cannot be renegotiated, so an editor whose plugins document a category
+  // has to have that documented for the whole server or not at all.
+  const knowledgeBlock = buildKnowledgeBlock(unionKnowledge(surfaces));
   const baseInstructions = contextStrategy === "micro"
     ? SERVER_INSTRUCTIONS_MICRO
     : contextStrategy === "lean"
@@ -457,15 +485,35 @@ async function main() {
         project: session.project,
         session,
         sessions,
-        getFlows,
-        getPlugins,
+        getFlows: () => getFlows(session),
+        getPlugins: () => getPlugins(session),
         elicit: ctx.elicit,
         onProgress: makeProgressReporter(extra),
         client: server.server.getClientVersion(),
       };
 
+      // The addressed session's own registry, built from that project's graph.
+      // A call for an action the session does not provide is refused here,
+      // naming the editors that do, rather than reaching a bridge that would
+      // answer "Unknown method" with no way to tell which editor was wrong.
+      const sessionRegistry = perSession.get(session)?.registry ?? registry;
+      const refusal = sessions.size > 1
+        ? explainMissingAction(
+            dispatchUnion,
+            taskName,
+            session.name,
+            sessionRegistry.listRegistered().includes(taskName),
+          )
+        : null;
+      if (refusal) {
+        return {
+          content: withUpgradeNotice([{ type: "text" as const, text: `Error [NOT_FOUND]: ${refusal}` }]),
+          isError: true,
+        };
+      }
+
       try {
-        const task = await registry.create(taskName, flowCtx, taskParams);
+        const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
         // Locks are acquired in the editor the call runs in, so they must be
         // taken on that session's bridge rather than the process default.
         const result = await withAssetLocks(session.bridge, lockingCfg, taskName, taskParams, () => task.run());
@@ -529,13 +577,24 @@ async function main() {
   });
   console.error(`[ue-mcp] ue-mcp.yml loaded - ${Object.keys(initialLoad.config.flows).length} flow(s), ${Object.keys(initialLoad.config.tasks).length} custom task(s)`);
 
-  // Config is reloaded on every flow call - edit ue-mcp.yml without restarting
-  const reloadConfig = (): FlowConfig => loadFlowConfig(activeTools, configDir, {
-    tasks: pluginLoad.taskDefs,
-    flows: pluginLoad.flowDefs,
-  }).config;
-
-  const flowTool = createFlowTool(registry, reloadConfig);
+  // Config is reloaded on every flow call - edit ue-mcp.yml without restarting.
+  // Resolved from the addressed editor: a flow declared in one project's
+  // ue-mcp.yml belongs to that project, and its steps have to dispatch through
+  // that project's registry or a step naming an action only that project has
+  // would fail as unknown.
+  const loadFor = (target: ToolContext | undefined): SessionLoad =>
+    (target?.session ? perSession.get(target.session) : undefined) ?? primaryLoad;
+  const reloadConfigFor = (target?: ToolContext): FlowConfig => {
+    const load = loadFor(target);
+    return loadFlowConfig(load.surface.tools, load.configDir, {
+      tasks: load.pluginLoad.taskDefs,
+      flows: load.pluginLoad.flowDefs,
+    }).config;
+  };
+  const flowTool = createFlowTool(
+    (target) => loadFor(target).registry ?? registry,
+    reloadConfigFor,
+  );
   targetable.push(flowTool);
   const flowShape: Record<string, z.ZodType> = {};
   for (const [key, schema] of Object.entries(flowTool.schema)) {
@@ -611,6 +670,122 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+/**
+ * Everything one editor session needs to serve a call: its own tool graph,
+ * its own plugin load, and (once the context strategy is known) its own
+ * advertised list and task registry.
+ */
+interface SessionLoad {
+  surface: SessionSurface;
+  pluginLoad: Awaited<ReturnType<typeof loadPlugins>>;
+  configDir: string | undefined;
+  advertisedTools: ToolDef[];
+  registryTools: ToolDef[];
+  registry?: ReturnType<typeof buildFlowRegistry>;
+}
+
+/**
+ * Build one session's surface: clone the pristine graph, load that project's
+ * plugins into the clone, then enrich the clone from that project's Epic
+ * catalog. Nothing here touches another session's graph or the declaration
+ * they were all cloned from.
+ */
+async function buildSessionLoad(
+  session: EditorSession,
+  packageVersion: string,
+  multi: boolean,
+): Promise<SessionLoad> {
+  const project = session.project;
+  const configDir = project.projectDir ?? undefined;
+  const label = multi ? `editor '${session.name}': ` : "";
+
+  // ── Plugins ──────────────────────────────────────────────────────
+  // Read the user's `plugins:` entries from ue-mcp.yml (best-effort - a
+  // missing or invalid file means zero plugins, never a fatal error). Then
+  // resolve, validate, and inject into target categories BEFORE the flow
+  // registry is built so plugin tasks register cleanly.
+  const pluginEntries = readPluginsEntries(configDir);
+  const pluginLoad = await loadPlugins(
+    baseGraphFor(ALL_TOOLS),
+    pluginEntries,
+    configDir,
+    packageVersion,
+    project.config.pluginConfig,
+  );
+  const tools = pluginLoad.tools;
+
+  // ── Epic 5.8 native toolset surfacing (best-effort, startup) ─────
+  // If this session's bridge is reachable now, pull Epic's live toolset
+  // catalog and inject each tool as a first-class action into the matching
+  // ue-mcp category (GAS tools into `gas`, Niagara into `niagara`, etc.).
+  // This must run before the flow registry and MCP tool registration so the
+  // injected actions are dispatchable and advertised. When the editor is not
+  // up yet, the `epic` gateway still works; a server restart picks up
+  // enrichment.
+  const nativeCfg = project.config.nativeTools ?? {};
+  if (nativeCfg.enabled === false) {
+    console.error(`[ue-mcp] ${label}Native Epic tools disabled via ue-mcp.yml (nativeTools.enabled=false); epic gateway still available`);
+  } else {
+    try {
+      // Source priority: live editor (most current, refreshes the cache) ->
+      // project cache (last-seen) -> baked snapshot shipped with the package
+      // (deterministic default so the surface appears on first cold startup
+      // and matches the generated docs). First available wins. The cache is
+      // already keyed by project directory, so each session reads and writes
+      // its own.
+      let catalog: EpicCatalog | null = null;
+      let source = "";
+      const bridge = session.bridge;
+      if (!bridge.isConnected) {
+        await bridge.connect(2000).catch(() => {});
+      }
+      if (bridge.isConnected) {
+        catalog = (await bridge.call("epic_list_toolsets", { includeSchemas: true }, 20000)) as EpicCatalog;
+        if (catalog?.toolsets?.length) {
+          saveCatalogCache(configDir, catalog, project.engineAssociation);
+          source = "live editor";
+        }
+      }
+      if (!catalog?.toolsets?.length) {
+        catalog = loadCatalogCache(configDir);
+        if (catalog?.toolsets?.length) source = "project cache";
+      }
+      if (!catalog?.toolsets?.length) {
+        catalog = loadBakedCatalog();
+        if (catalog?.toolsets?.length) source = "baked snapshot";
+      }
+      if (catalog?.toolsets?.length) {
+        const enriched = enrichToolsWithEpicCatalog(tools, catalog, {
+          excludeCategories: nativeCfg.exclude,
+        });
+        if (enriched.injected > 0) {
+          const summary = Object.entries(enriched.byCategory).map(([c, n]) => `${c}:${n}`).join(", ");
+          console.error(`[ue-mcp] ${label}Epic 5.8 toolsets (${source}): surfaced ${enriched.injected} tools (${summary})`);
+          if (enriched.createdCategories.length) {
+            console.error(`[ue-mcp] ${label}Epic-only categories added: ${enriched.createdCategories.join(", ")}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.error(`[ue-mcp] ${label}Epic toolset enrichment skipped: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  return {
+    surface: {
+      session,
+      tools,
+      disabled: new Set(project.config.disable ?? []),
+      pluginRecords: pluginLoad.records,
+      knowledgeByCategory: pluginLoad.knowledgeByCategory,
+    },
+    pluginLoad,
+    configDir,
+    advertisedTools: tools,
+    registryTools: tools,
+  };
 }
 
 /**

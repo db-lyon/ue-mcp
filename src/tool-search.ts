@@ -73,7 +73,7 @@ const DEPRIORITIZE = new Set(["execute_python", "run_python_file", "execute_comm
 
 /**
  * Search every registered tool + action for a keyword/intent query.
- * ALL_TOOLS is imported lazily to avoid a load-time circular dependency
+ * The tool graph is imported lazily to avoid a load-time circular dependency
  * (tools.ts imports the project tool, which imports this).
  */
 export async function searchTools(query: string, limit = 20): Promise<ToolSearchHit[]> {
@@ -83,10 +83,13 @@ export async function searchTools(query: string, limit = 20): Promise<ToolSearch
   if (rawTerms.length === 0) return [];
   const terms = expandTerms(rawTerms);
 
-  const { ALL_TOOLS } = await import("./tools.js");
+  // The live graph, not the pristine declaration: discovery has to see the
+  // Epic and plugin actions the server actually advertises, and with one graph
+  // per editor session those are no longer the same objects (#817).
+  const { getLiveToolGraph } = await import("./tools.js");
   const hitsByHandler = new Map<string, ToolSearchHit>();
 
-  for (const tool of ALL_TOOLS as Array<{ name: string; actions?: Record<string, { description?: string; bridge?: string }> }>) {
+  for (const tool of getLiveToolGraph() as Array<{ name: string; actions?: Record<string, { description?: string; bridge?: string }> }>) {
     for (const [actionName, spec] of Object.entries(tool.actions ?? {})) {
       if (DEPRIORITIZE.has(actionName)) continue;
       const desc = spec?.description ?? "";

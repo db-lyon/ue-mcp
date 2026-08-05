@@ -59,6 +59,31 @@ export const ALL_TOOLS: ToolDef[] = [
   fabTool,
 ];
 
+/**
+ * The graph the running server actually advertises (#817).
+ *
+ * `ALL_TOOLS` is the pristine declaration. Plugin injection and Epic
+ * enrichment used to mutate it in place, which is how `searchTools` and the
+ * feedback router came to observe the enriched surface: same objects, same
+ * module. With one graph per editor session that stops being true, so the
+ * server publishes the union of its sessions' graphs here and the consumers
+ * that want "what does this server actually expose" read it from one place.
+ *
+ * Defaults to `ALL_TOOLS`, so anything running with no server (the CLI,
+ * scripts, tests) sees exactly what it saw before.
+ */
+let liveToolGraph: ToolDef[] = ALL_TOOLS;
+
+/** Publish the graph the server advertises. Called once construction is done. */
+export function setLiveToolGraph(tools: ToolDef[]): void {
+  liveToolGraph = tools;
+}
+
+/** The graph the server advertises, or the pristine declaration off-server. */
+export function getLiveToolGraph(): ToolDef[] {
+  return liveToolGraph;
+}
+
 /** Flatten to (toolName, actionName, bridgeMethod) triples for every action
  *  that dispatches to a C++ bridge method (i.e. has `bridge` set). Local-only
  *  actions (those with a custom `handler`) are excluded. */

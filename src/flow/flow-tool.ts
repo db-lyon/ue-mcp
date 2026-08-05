@@ -37,10 +37,24 @@ function rollbackLabel(e: { taskName: string; payload?: Record<string, unknown> 
   return typeof method === "string" && method.length > 0 ? method : e.taskName;
 }
 
+/**
+ * The task registry and flow config a call resolves to.
+ *
+ * Both are per editor (#817): the registry is built from that project's tool
+ * graph, and the config is that project's ue-mcp.yml. Passing plain values
+ * still works and means "the same one for every call", which is what a
+ * single-editor server and the script runner want.
+ */
+export type FlowRegistrySource = TaskRegistry | ((ctx: ToolContext) => TaskRegistry);
+export type FlowConfigSource = (() => FlowConfig) | ((ctx: ToolContext) => FlowConfig);
+
 export function createFlowTool(
-  registry: TaskRegistry,
-  reloadConfig: () => FlowConfig,
+  registrySource: FlowRegistrySource,
+  reloadConfig: FlowConfigSource,
 ): ToolDef {
+  const registryFor = (ctx: ToolContext): TaskRegistry =>
+    typeof registrySource === "function" ? registrySource(ctx) : registrySource;
+  const configFor = (ctx: ToolContext): FlowConfig => reloadConfig(ctx);
   return {
     name: "flow",
     description:
@@ -69,15 +83,15 @@ export function createFlowTool(
       rollback_on_failure: z.boolean().optional().describe("Invoke inverse tasks in reverse order on failure"),
     },
     actions: {
-      run: { handler: async (ctx, params) => runFlow(registry, reloadConfig(), ctx, params) },
-      plan: { handler: async (ctx, params) => planFlow(registry, reloadConfig(), ctx, params) },
-      list: { handler: async () => listFlows(reloadConfig()) },
+      run: { handler: async (ctx, params) => runFlow(registryFor(ctx), configFor(ctx), ctx, params) },
+      plan: { handler: async (ctx, params) => planFlow(registryFor(ctx), configFor(ctx), ctx, params) },
+      list: { handler: async (ctx) => listFlows(configFor(ctx)) },
     },
     handler: async (ctx, params) => {
       const action = params.action as string;
-      if (action === "list") return listFlows(reloadConfig());
-      if (action === "plan") return planFlow(registry, reloadConfig(), ctx, params);
-      if (action === "run") return runFlow(registry, reloadConfig(), ctx, params);
+      if (action === "list") return listFlows(configFor(ctx));
+      if (action === "plan") return planFlow(registryFor(ctx), configFor(ctx), ctx, params);
+      if (action === "run") return runFlow(registryFor(ctx), configFor(ctx), ctx, params);
       throw new Error(`Unknown flow action: ${action}`);
     },
   };
