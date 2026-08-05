@@ -70,6 +70,7 @@ async function main() {
   // terminal holds its stdout open for its whole session, so `npm run up`
   // never returns when piped, and the editor's own logging would scribble
   // over the progress bar below. The editor writes Saved/Logs either way.
+  const launchedAtMs = Date.now();
   const proc = spawn(editorExe, [projectFile], {
     stdio: 'ignore',
     detached: true,
@@ -81,7 +82,9 @@ async function main() {
   // until the editor is actually usable, rather than printing "launched!" over
   // a splash screen that has forty seconds of module loading left.
   const { waitForEditorReadyExternal } = await import('../dist/editor-control.js');
-  const result = await waitForEditorReadyExternal(projectFile, path.dirname(projectFile), 300);
+  // The launch timestamp makes the wait ignore a port lockfile an earlier
+  // session left behind, so readiness is judged on this editor's bridge.
+  const result = await waitForEditorReadyExternal(projectFile, path.dirname(projectFile), 300, launchedAtMs);
   if (result.ready) {
     log(`Editor ready in ${result.elapsedSeconds.toFixed(1)}s`, 'green');
   } else {
