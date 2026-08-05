@@ -12,6 +12,8 @@
 #include "HAL/CriticalSection.h"
 #include "Containers/Queue.h"
 #include "Containers/Set.h"
+#include "Misc/Guid.h"
+#include "Misc/DateTime.h"
 
 #if PLATFORM_WINDOWS
 #include "Windows/AllowWindowsPlatformTypes.h"
@@ -134,9 +136,17 @@ public:
 	void Shutdown();
 
 	// #492: per-project port lockfile so multiple editors can coexist.
+	// #821: the record names the instance that wrote it, is published by
+	// rename so a reader never sees a half-written file, and is only ever
+	// removed by the instance whose id it carries.
 	static FString GetPortLockfilePath();
-	static void WritePortLockfile(int32 PortValue);
-	static void DeletePortLockfile();
+	static FString GetBridgeErrorFilePath();
+	void WritePortLockfile(int32 PortValue);
+	void DeletePortLockfileIfOwned();
+
+	/** Leave an on-disk trace for "editor alive, bridge dead". Written to its
+	 *  own path so a failed start can never overwrite a live editor's record. */
+	void WriteBindFailureRecord(int32 FirstPort, int32 LastPort, int32 ErrorCode);
 
 	// Deterministic per-worktree base port. Derived from a hash of the project
 	// root path so every checkout gets a stable, launch-order-independent port
@@ -236,4 +246,10 @@ private:
 	FCriticalSection ConnectionsMutex;
 	TSet<FMCPSocketHandle> LiveConnections;
 	FThreadSafeCounter ActiveConnectionCount;
+
+	// #821: identity for this server object, so a record on disk can say which
+	// process wrote it and only that process can take it away. A pid alone is
+	// not enough; pids are recycled.
+	FGuid InstanceId;
+	FDateTime StartedAtUtc;
 };

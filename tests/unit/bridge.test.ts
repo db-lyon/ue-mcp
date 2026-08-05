@@ -1,7 +1,21 @@
 import { once } from "node:events";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { AddressInfo } from "node:net";
 import { WebSocketServer } from "ws";
 import { describe, expect, it } from "vitest";
+
+/** A throwaway project directory with a Saved/UE_MCP_Bridge folder. */
+function makeProjectDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-bridge-"));
+  fs.mkdirSync(path.join(dir, "Saved", "UE_MCP_Bridge"), { recursive: true });
+  return dir;
+}
+
+function writeBridgeRecord(dir: string, name: string, body: unknown): void {
+  fs.writeFileSync(path.join(dir, "Saved", "UE_MCP_Bridge", name), JSON.stringify(body));
+}
 
 async function withBridgeServer(
   onRequest: (request: Record<string, unknown>, socket: import("ws").WebSocket) => void,
@@ -114,5 +128,37 @@ describe("EditorBridge connection handling", () => {
       bridge.disconnect();
       await server.close();
     }
+  });
+});
+
+describe("bridge state records", () => {
+  it("ignores a port lockfile whose editor process is gone", async () => {
+    const dir = makeProjectDir();
+    const { readBridgeLockfileForDir } = await import("../../src/bridge.js");
+
+    writeBridgeRecord(dir, "port.json", { port: 51234, pid: 0x7ffffffe, instanceId: "dead-instance" });
+    expect(readBridgeLockfileForDir(dir)).toBeNull();
+
+    writeBridgeRecord(dir, "port.json", { port: 51234, pid: process.pid, instanceId: "live-instance" });
+    expect(readBridgeLockfileForDir(dir)?.port).toBe(51234);
+    expect(readBridgeLockfileForDir(dir)?.instanceId).toBe("live-instance");
+  });
+
+  it("reports a bridge that failed to bind while its editor is still running", async () => {
+    const dir = makeProjectDir();
+    const uproject = path.join(dir, "Sample.uproject");
+    const { readBridgeErrorRecord } = await import("../../src/bridge.js");
+
+    writeBridgeRecord(dir, "bridge-error.json", {
+      status: "bind-failed",
+      pid: process.pid,
+      firstPortTried: 49200,
+      lastPortTried: 49250,
+      detail: "The editor is running but its MCP bridge could not bind a port in [49200, 49250].",
+    });
+    expect(readBridgeErrorRecord(uproject)?.detail).toContain("could not bind a port");
+
+    writeBridgeRecord(dir, "bridge-error.json", { status: "bind-failed", pid: 0x7ffffffe });
+    expect(readBridgeErrorRecord(uproject)).toBeNull();
   });
 });

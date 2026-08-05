@@ -5,30 +5,93 @@ import { McpError, ErrorCode } from "./errors.js";
 import { debug, warn } from "./log.js";
 import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
 
+/** The record the running bridge publishes for this project. */
+export interface BridgeLockfile {
+  port: number;
+  pid?: number;
+  startedAt?: string;
+  /** Identifies the server object that wrote this, across pid recycling. */
+  instanceId?: string;
+  status?: string;
+  apiVersion?: number;
+  handlerApiVersion?: number;
+}
+
+/** What the bridge leaves behind when the editor started but the bridge did not. */
+export interface BridgeErrorRecord {
+  status?: string;
+  pid?: number;
+  failedAt?: string;
+  firstPortTried?: number;
+  lastPortTried?: number;
+  errorCode?: number;
+  detail?: string;
+}
+
+function readJsonFile<T>(file: string): T | null {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when a process with this id exists. Signal 0 performs the permission
+ * check without delivering anything; EPERM means it exists but belongs to
+ * someone else, which still counts as alive.
+ */
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 // #492: per-project port lockfile published by the bridge plugin. When the
 // default port (9877) is taken by another editor, the plugin walks up and
 // publishes the actual bound port here. The client reads this before
 // falling back to the default port so a second editor finds the right one.
-export function readBridgeLockfile(
-  uprojectPath: string | null,
-): { port: number; pid: number; startedAt?: string; apiVersion?: number } | null {
+export function readBridgeLockfile(uprojectPath: string | null): BridgeLockfile | null {
   if (!uprojectPath) return null;
-  const lockfile = path.join(
-    path.dirname(uprojectPath),
-    "Saved",
-    "UE_MCP_Bridge",
-    "port.json",
-  );
-  try {
-    const raw = fs.readFileSync(lockfile, "utf8");
-    const parsed = JSON.parse(raw);
-    if (typeof parsed?.port === "number" && parsed.port > 0 && parsed.port < 65536) {
-      return parsed;
-    }
-  } catch {
-    // Missing or unreadable - fall back to default.
+  return readBridgeLockfileForDir(path.dirname(uprojectPath));
+}
+
+/** Same record, for callers that hold the project directory rather than the .uproject. */
+export function readBridgeLockfileForDir(projectDir: string | null | undefined): BridgeLockfile | null {
+  if (!projectDir) return null;
+  const parsed = readJsonFile<BridgeLockfile>(path.join(projectDir, "Saved", "UE_MCP_Bridge", "port.json"));
+  if (!parsed || typeof parsed.port !== "number" || parsed.port <= 0 || parsed.port >= 65536) {
+    return null;
   }
-  return null;
+
+  // #821: the pid was written and never read. A record left by an editor that
+  // crashed sent the client at a port nothing is listening on, and the
+  // resulting failure named the wrong problem. A recycled pid can still read
+  // as alive, which the connect attempt then settles.
+  if (typeof parsed.pid === "number" && parsed.pid > 0 && !isProcessAlive(parsed.pid)) {
+    debug("bridge", `ignoring stale bridge lockfile: process ${parsed.pid} is gone`);
+    return null;
+  }
+  return parsed;
+}
+
+/**
+ * #821: read the record the bridge writes when the editor came up but the
+ * bridge could not bind. Without it, "editor alive, bridge dead" was
+ * indistinguishable from "no editor", and the client said the wrong thing.
+ */
+export function readBridgeErrorRecord(uprojectPath: string | null): BridgeErrorRecord | null {
+  if (!uprojectPath) return null;
+  const parsed = readJsonFile<BridgeErrorRecord>(
+    path.join(path.dirname(uprojectPath), "Saved", "UE_MCP_Bridge", "bridge-error.json"),
+  );
+  if (!parsed || parsed.status !== "bind-failed") return null;
+  // A record from an editor that has since exited describes nothing current.
+  if (typeof parsed.pid === "number" && parsed.pid > 0 && !isProcessAlive(parsed.pid)) return null;
+  return parsed;
 }
 
 export interface BridgeResponse {
@@ -155,10 +218,19 @@ export class EditorBridge implements IBridge {
 
     const url = `ws://${this.host}:${this.port}`;
 
+    // #821: an editor whose bridge failed to bind is running and unreachable at
+    // the same time. It leaves a record saying so, and quoting it here is the
+    // difference between "start the editor" and "the editor is up, its bridge
+    // is not".
+    const explainFailure = (base: string): string => {
+      const failed = readBridgeErrorRecord(this.projectPathForLockfile);
+      return failed?.detail ? `${base}. ${failed.detail}` : base;
+    };
+
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         ws.terminate();
-        reject(new McpError(ErrorCode.BRIDGE_TIMEOUT, `Connection to editor bridge timed out (${url})`));
+        reject(new McpError(ErrorCode.BRIDGE_TIMEOUT, explainFailure(`Connection to editor bridge timed out (${url})`)));
       }, timeoutMs);
 
       const ws = new WebSocket(url);
@@ -175,7 +247,7 @@ export class EditorBridge implements IBridge {
         reject(
           new McpError(
             ErrorCode.NOT_CONNECTED,
-            `Failed to connect to editor bridge at ${url}: ${err.message}`,
+            explainFailure(`Failed to connect to editor bridge at ${url}: ${err.message}`),
           ),
         );
       });

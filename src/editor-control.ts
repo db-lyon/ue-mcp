@@ -7,6 +7,7 @@ import type { ProjectContext } from "./project.js";
 import { findEngineInstall } from "./deployer.js";
 import { invalidatePluginFreshness } from "./plugin-freshness.js";
 import { findInteractiveEditors, readEngineState, readEngineSnapshot, readLogState, type EngineState } from "./engine-observer.js";
+import { readBridgeLockfileForDir } from "./bridge.js";
 import { startProgress } from "./ui/progress.js";
 import type { ProgressFn } from "./types.js";
 
@@ -546,15 +547,14 @@ function uprojectInDir(projectDir?: string): string | null {
   }
 }
 
-/** Read the project's live bridge port from its lockfile, else env, else 9877. */
+/**
+ * Read the project's live bridge port from its lockfile, else env, else 9877.
+ * Goes through the shared reader so a record left by a dead editor is skipped
+ * here too, rather than sending a stop or a wait at a port nobody is on.
+ */
 function resolveBridgePort(projectDir?: string): number {
-  if (projectDir) {
-    try {
-      const raw = fs.readFileSync(path.join(projectDir, "Saved", "UE_MCP_Bridge", "port.json"), "utf-8");
-      const p = JSON.parse(raw) as { port?: unknown };
-      if (typeof p.port === "number" && p.port > 0) return p.port;
-    } catch { /* fall through to defaults */ }
-  }
+  const lockfile = readBridgeLockfileForDir(projectDir);
+  if (lockfile) return lockfile.port;
   const env = Number(process.env.UE_MCP_PORT);
   return Number.isFinite(env) && env > 0 ? env : 9877;
 }
