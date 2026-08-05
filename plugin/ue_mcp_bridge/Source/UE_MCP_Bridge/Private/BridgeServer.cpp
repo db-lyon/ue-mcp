@@ -1230,9 +1230,52 @@ FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 			TEXT("[UE-MCP] UE_MCP_PORT is '%s', which is not a port number. Ignoring it."), *EnvPort);
 	}
 
-	// 3. `ue-mcp.bridge.port` from the project's layered config (#819). The
+	// 3. The port the client published for this project in
+	//    Saved/UE_MCP_Bridge/requested.json (#817).
+	//
+	//    The pin the client uses is a four-layer config merge plus environment,
+	//    resolved in TypeScript. An editor launched from Explorer sees none of
+	//    that: it has no UE_MCP_PORT in its environment and no way to apply the
+	//    same precedence, so the two halves ended up on different ports for
+	//    exactly the users who had asked for a specific one. The client writes
+	//    the integer it resolved; the bridge reads it and binds it.
+	//
+	//    Above the bridge's own config read because it is the same answer with
+	//    more inputs. Below the two explicit overrides, because a human typing
+	//    -MCPPort= or UE_MCP_PORT for this launch means this launch.
+	//
+	//    The file exists only while a pin exists (the client removes it when the
+	//    pin goes away), so an unpinned install finds nothing here, logs
+	//    nothing, and resolves byte-identically to how it did before.
+	{
+		FString RequestDetail;
+		const int32 RequestedPort = FMCPBridgeStateFiles::ReadRequestedPort(
+			FMCPBridgeStateFiles::RequestedPortPath(),
+			FMCPBridgeStateFiles::ThisProjectRoot(),
+			RequestDetail);
+
+		if (RequestedPort != INDEX_NONE)
+		{
+			UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Using port %d requested by the ue-mcp client in %s"),
+				RequestedPort, *FMCPBridgeStateFiles::RequestedPortPath());
+			Choice.Port = RequestedPort;
+			Choice.Source = TEXT("requested.json published by the ue-mcp client");
+			Choice.bPinned = true;
+			return Choice;
+		}
+		if (!RequestDetail.IsEmpty())
+		{
+			// A file that is present and unusable is a pin that silently did not
+			// take, which is the failure this whole channel exists to remove.
+			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] %s"), *RequestDetail);
+		}
+	}
+
+	// 4. `ue-mcp.bridge.port` from the project's layered config (#819). The
 	//    client reads the same key, so skipping it here is how a pinned project
-	//    ends up with the two halves on different ports.
+	//    ends up with the two halves on different ports. This stays as the
+	//    answer for a project the client has never been run against, which is
+	//    the case where requested.json does not exist yet.
 	FString ConfigFile;
 	const int32 ConfigPort = ReadConfiguredBridgePort(ConfigFile);
 	if (ConfigPort != INDEX_NONE)
@@ -1244,7 +1287,7 @@ FMCPBridgePortChoice FMCPBridgeServer::ResolveConfiguredPort()
 		return Choice;
 	}
 
-	// 4. Deterministic per-worktree port derived from the project root path.
+	// 5. Deterministic per-worktree port derived from the project root path.
 	const FString ProjectRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 	const int32 Derived = DeriveProjectPort(ProjectRoot);
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Derived per-project port %d from %s"), Derived, *ProjectRoot);

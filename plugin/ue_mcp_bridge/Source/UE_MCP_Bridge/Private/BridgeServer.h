@@ -192,12 +192,19 @@ public:
 	static int32 DeriveProjectPort(const FString& ProjectRootDir);
 
 	// Resolve the base port to bind: -MCPPort= command line > UE_MCP_PORT env >
+	// the port the client published in Saved/UE_MCP_Bridge/requested.json >
 	// `ue-mcp.bridge.port` from the project's config files > deterministic
 	// derived port. That order is the client's (see src/bridge.ts); both sides
 	// have to walk it identically or a pinned project ends up with a client
 	// aimed at one port and an editor listening on another (#819). The probe
 	// loop in Run() walks upward from here on collision, and the actual bound
 	// port is published to the lockfile.
+	//
+	// requested.json (#817) sits above the config read because it is the same
+	// answer computed from more inputs: the client merges four config layers
+	// and the environment, none of which an editor launched from Explorer can
+	// see. It exists only while a pin exists, so an unpinned install resolves
+	// exactly as it did before that channel was added.
 	static FMCPBridgePortChoice ResolveConfiguredPort();
 
 	// Get handler registry
