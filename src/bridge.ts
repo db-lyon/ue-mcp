@@ -331,7 +331,9 @@ export class EditorBridge implements IBridge {
         // #821: ask what we are talking to before anything else does. The
         // answer is cheap, it never touches the game thread, and without it a
         // client running against an older plugin can only report the symptom.
-        this.handshake(ws).then(() => resolve(), () => resolve());
+        // Bounded by the caller's own connect budget: a bridge that will not
+        // answer this is not one worth waiting past that for.
+        this.handshake(ws, timeoutMs).then(() => resolve(), () => resolve());
       });
 
       ws.on("error", (err) => {
@@ -456,7 +458,7 @@ export class EditorBridge implements IBridge {
         if (msg.error || !msg.result) {
           // -32601 from a bridge that has never heard of the handshake. That
           // silence is itself the answer: it predates the protocol version.
-          finish(LEGACY_CAPABILITIES);
+          finish({ ...LEGACY_CAPABILITIES });
           return;
         }
         const result = msg.result as Partial<BridgeCapabilities>;
@@ -467,11 +469,11 @@ export class EditorBridge implements IBridge {
         });
       };
 
-      const timer = setTimeout(() => finish(LEGACY_CAPABILITIES), timeoutMs);
+      const timer = setTimeout(() => finish({ ...LEGACY_CAPABILITIES }), timeoutMs);
 
       ws.on("message", onMessage);
       ws.send(JSON.stringify({ id, method: "get_bridge_capabilities", params: {} }), (err) => {
-        if (err) finish(LEGACY_CAPABILITIES);
+        if (err) finish({ ...LEGACY_CAPABILITIES });
       });
     });
   }
