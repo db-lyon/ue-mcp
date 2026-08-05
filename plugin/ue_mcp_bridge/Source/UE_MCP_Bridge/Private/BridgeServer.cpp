@@ -748,38 +748,26 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocke
 		}
 	}
 
-	// Reject browser-originated upgrades from any origin other than loopback.
-	// Browsers always send an Origin header on WebSocket upgrades, so a present
-	// Origin that isn't loopback is a cross-site websocket hijacking attempt
-	// (a malicious page on the developer's machine reaching the editor bridge).
-	// Native clients (Node ws, curl) omit Origin and are allowed.
+	// Refuse every browser-originated upgrade.
+	//
+	// The bridge exposes execute_python and every editor mutation, and it
+	// authenticates nothing about the caller. Allowing loopback origins meant
+	// any page served by any dev server on the machine could scan the port
+	// range and drive the editor, because the browser supplies
+	// Sec-WebSocket-Key itself and the page never has to see the response to
+	// cause the damage.
+	//
+	// A browser cannot suppress or forge the Origin header on a WebSocket
+	// upgrade, so its presence is a reliable "this came from a page". Native
+	// clients (the npm client, curl, editor tooling) omit it and are unaffected.
 	{
-		int32 OriginStart = Request.Find(TEXT("Origin:"), ESearchCase::IgnoreCase);
-		if (OriginStart != INDEX_NONE)
+		FString Origin;
+		if (FindHeaderValue(Request, TEXT("Origin"), Origin))
 		{
-			int32 ValueStart = OriginStart + 7; // strlen("Origin:")
-			while (ValueStart < Request.Len() && (Request[ValueStart] == TEXT(' ') || Request[ValueStart] == TEXT('\t')))
-			{
-				ValueStart++;
-			}
-			int32 ValueEnd = Request.Find(TEXT("\r\n"), ESearchCase::CaseSensitive, ESearchDir::FromStart, ValueStart);
-			FString Origin = (ValueEnd == INDEX_NONE)
-				? Request.Mid(ValueStart).TrimStartAndEnd()
-				: Request.Mid(ValueStart, ValueEnd - ValueStart).TrimStartAndEnd();
-
-			const bool bIsLoopback =
-				Origin.StartsWith(TEXT("http://localhost"), ESearchCase::IgnoreCase) ||
-				Origin.StartsWith(TEXT("https://localhost"), ESearchCase::IgnoreCase) ||
-				Origin.StartsWith(TEXT("http://127.0.0.1"), ESearchCase::IgnoreCase) ||
-				Origin.StartsWith(TEXT("https://127.0.0.1"), ESearchCase::IgnoreCase) ||
-				Origin.StartsWith(TEXT("http://[::1]"), ESearchCase::IgnoreCase) ||
-				Origin.StartsWith(TEXT("https://[::1]"), ESearchCase::IgnoreCase);
-
-			if (!bIsLoopback)
-			{
-				UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Rejected WebSocket upgrade from Origin: %s"), *Origin);
-				return TEXT("");
-			}
+			UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Rejected browser-originated WebSocket upgrade from Origin: %s"), *Origin);
+			SendHttpError(ClientSocketFD, 403, TEXT("Forbidden"),
+				TEXT("The UE-MCP bridge does not accept upgrades from web pages. Connect from a local process instead."));
+			return TEXT("");
 		}
 	}
 
