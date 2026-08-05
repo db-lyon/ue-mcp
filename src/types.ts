@@ -237,6 +237,15 @@ function stripAction(params: Record<string, unknown>): Record<string, unknown> {
   return rest;
 }
 
+/**
+ * Re-point a context at one editor. Bridge, project and session move together
+ * so a handler can never resolve a path in one project while calling into
+ * another project's editor.
+ */
+export function sessionContext(ctx: ToolContext, session: EditorSession): ToolContext {
+  return { ...ctx, bridge: session.guarded, project: session.project, session };
+}
+
 /** Drop the routing parameter from a param bag. */
 export function stripEditorTarget(params: Record<string, unknown>): Record<string, unknown> {
   if (!(EDITOR_TARGET_PARAM in params)) return params;

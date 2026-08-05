@@ -137,10 +137,12 @@ function makeRunner(
   runId: string,
   flowName: string,
 ): FlowRunner {
-  const flowCtx: FlowContext = {
-    bridge: ctx.bridge,
-    project: ctx.project,
-  };
+  // The whole context, not two fields of it. Rebuilding it field-by-field
+  // dropped `elicit`, `getFlows`, `getPlugins` and now the editor session, so
+  // a step inside a flow saw a different server than the same action called
+  // directly - and, with more than one editor, could not tell which one it
+  // was running in.
+  const flowCtx: FlowContext = { ...ctx };
 
   // Opt-in git snapshot: capture Content/ + Config/ on start; reset on failure.
   // Handler-level rollbacks cover in-memory state (selection, PIE, unsaved

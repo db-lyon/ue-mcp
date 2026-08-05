@@ -2,19 +2,31 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { EditorBridge } from "./bridge.js";
-import { ProjectContext } from "./project.js";
+import { SessionRegistry, type EditorSession } from "./session.js";
+import type { ProjectContext } from "./project.js";
 import { attach, attachSummary } from "./deployer.js";
 import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO } from "./instructions.js";
 import { resolveContextStrategy, applyLeanContext, buildMicroGateway } from "./lean-context.js";
-import { isDirectiveResponse, type ToolDef, type ToolContext, type PluginInfo, type ElicitFn, type ProgressFn, type ProgressUpdate } from "./types.js";
+import {
+  isDirectiveResponse,
+  injectEditorTarget,
+  removeEditorTarget,
+  stripEditorTarget,
+  sessionContext,
+  EDITOR_TARGET_PARAM,
+  type ToolDef,
+  type ToolContext,
+  type PluginInfo,
+  type ElicitFn,
+  type ProgressFn,
+  type ProgressUpdate,
+} from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { info, warn, debug } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
 import { GuardRegistry } from "./flow/guard.js";
-import { GuardedBridge } from "./flow/guarded-bridge.js";
-import { makeResolveExistingFile, discoverTaskGuards } from "./flow/task-guards.js";
+import { discoverTaskGuards } from "./flow/task-guards.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
@@ -84,8 +96,11 @@ function makeProgressReporter(extra: {
 }
 
 async function main() {
-  const bridge = new EditorBridge();
-  const project = new ProjectContext();
+  // The guard pipeline is built first because every session wraps its own
+  // bridge in it. The registry owns the sessions; nothing below keeps a
+  // module-level bridge or project of its own.
+  const guardRegistry = new GuardRegistry();
+  const sessions = new SessionRegistry(guardRegistry);
 
   // Kick off the npm registry check in the background; the next tool response
   // injects the notice if a newer version is published.
@@ -97,38 +112,51 @@ async function main() {
   // ── Project init ─────────────────────────────────────────────────
   // Moved ahead of tool registration so plugin resolution can walk the
   // project's node_modules.
-  const projectArg = process.argv.find((a) => !a.startsWith("-") && a !== process.argv[0] && a !== process.argv[1]);
+  //
+  // #817: every positional argument is a project, and each becomes its own
+  // session with its own bridge, port and lockfile. One argument behaves
+  // exactly as it always has. A positional that fails to load is reported by
+  // name rather than silently reducing the set, so a typo does not look like
+  // a project that quietly refuses to connect.
+  const projectArgs = process.argv.slice(2).filter((a) => !a.startsWith("-"));
 
-  if (projectArg) {
+  for (const arg of projectArgs) {
     try {
-      project.setProject(projectArg);
-      console.error(`[ue-mcp] Project loaded: ${project.projectName} (engine ${project.engineAssociation ?? "unknown"})`);
-
-      // #492: pass the .uproject path to the bridge so it can read the
-      // per-project port lockfile when connecting (lets multiple editors
-      // coexist on adjacent ports). setProjectContext also derives this
-      // project's stable per-worktree port from its root path unless the port
-      // was explicitly pinned (UE_MCP_PORT env or ue-mcp.yml bridge.port).
-      bridge.setConfigPort(project.config.bridge?.port);
-      bridge.setProjectContext(project.projectPath);
+      const session = sessions.register({ projectPath: arg });
+      console.error(
+        `[ue-mcp] Project loaded: ${session.project.projectName} (engine ${session.project.engineAssociation ?? "unknown"})` +
+          (projectArgs.length > 1 ? ` as editor '${session.name}' on port ${session.bridge.port}` : ""),
+      );
 
       // Non-destructive attach — never overwrites local bridge source.
       // Source deployment is reserved for `ue-mcp init` / `ue-mcp deploy`.
-      const result = attach(project);
+      const result = attach(session.project);
       console.error(`[ue-mcp] ${attachSummary(result)}`);
 
       // #785: say loudly, once at startup, when the compiled plugin is older
       // than its source. Otherwise the only signal is an "Unknown method"
       // error later, which reads as "not implemented yet" and sends people
       // hand-authoring around handlers that already work.
-      const freshness = checkPluginFreshness(project.projectPath);
+      const freshness = checkPluginFreshness(session.project.projectPath);
       if (freshness.stale && freshness.message) {
         console.error(`[ue-mcp] WARNING: ${freshness.message}`);
       }
     } catch (e) {
-      console.error(`[ue-mcp] Failed to initialize project: ${e instanceof Error ? e.message : e}`);
+      console.error(`[ue-mcp] Failed to initialize project '${arg}': ${e instanceof Error ? e.message : e}`);
     }
   }
+
+  // No project argument, or every argument failed: keep one project-less
+  // session on the legacy fixed port. That is the documented "attach to
+  // whatever answers 9877" mode, and project(set_project) can bind it later.
+  if (sessions.size === 0) sessions.register({});
+
+  // Process-level construction (config, plugins, native tool enrichment,
+  // flows, HTTP) reads the first session's project, which for a single-editor
+  // server is the only one there has ever been.
+  const primary = sessions.active;
+  const project = primary.project;
+  const bridge = primary.bridge;
 
   // ── Plugins ──────────────────────────────────────────────────────
   // Read the user's `plugins:` entries from ue-mcp.yml (best-effort — a
@@ -267,13 +295,20 @@ async function main() {
     };
   };
 
-  // Wrap the raw bridge in the guard pipeline. The raw `bridge` stays in scope
-  // for connection lifecycle (connect / reconnect / lockfile); the guarded
-  // wrapper is what tools and tasks see. The registry starts empty (pass-through)
-  // and is populated once the task registry exists, below.
-  const guardRegistry = new GuardRegistry();
-  const guardedBridge = new GuardedBridge(bridge, guardRegistry, makeResolveExistingFile(project));
-  const ctx: ToolContext = { bridge: guardedBridge, project, getFlows, getPlugins };
+  // Each session already wraps its own raw bridge in the guard pipeline; the
+  // guarded wrapper is what tools and tasks see, the raw bridge stays in scope
+  // for connection lifecycle (connect / reconnect / lockfile). The guard
+  // registry starts empty (pass-through) and is populated once the task
+  // registry exists, below.
+  const guardedBridge = primary.guarded;
+  const ctx: ToolContext = {
+    bridge: guardedBridge,
+    project,
+    session: primary,
+    sessions,
+    getFlows,
+    getPlugins,
+  };
 
   // Per-asset locking for concurrent agents. Opt-in; when off, withAssetLocks
   // is a passthrough. The registry itself lives in the C++ bridge.
@@ -327,6 +362,54 @@ async function main() {
 
   const tools = advertisedTools;
 
+  // ── Per-call editor targeting (#817) ─────────────────────────────
+  // The `editor` parameter exists only while this server drives more than one
+  // editor: at one editor the advertised schema is byte-for-byte what it was
+  // before sessions existed. Adding or dropping a session at runtime
+  // re-advertises, so a client that honours tools/list_changed can target the
+  // editor it just registered without a restart.
+  const registeredTools = new Map<string, ReturnType<typeof server.tool>>();
+  const targetable: ToolDef[] = [...tools];
+  let targetingSignature = "";
+  const syncEditorTargeting = (): void => {
+    const names = sessions.list().map((s) => s.name);
+    const signature = names.length > 1 ? names.join(" ") : "";
+    if (signature === targetingSignature) return;
+    targetingSignature = signature;
+    for (const tool of targetable) {
+      if (signature) {
+        const outcome = injectEditorTarget(tool, names);
+        if (!outcome.injected && outcome.reason) console.error(`[ue-mcp] ${outcome.reason}`);
+      } else {
+        removeEditorTarget(tool);
+      }
+      const registration = registeredTools.get(tool.name);
+      if (registration) registration.update({ paramsSchema: tool.schema });
+    }
+  };
+
+  /**
+   * Route one call to the editor it addressed. `editor` is only a routing
+   * instruction on a tool that had the parameter injected; on any other tool
+   * it is the tool's own parameter and is left alone.
+   */
+  const routeCall = (
+    tool: ToolDef,
+    params: Record<string, unknown>,
+  ): { session: EditorSession; params: Record<string, unknown> } => {
+    if (!tool.injectedEditorParam) return { session: sessions.active, params };
+    // The micro gateway carries every real parameter inside `args`, so a
+    // target arrives there rather than at the top level. Read both, and strip
+    // both, so the routing instruction cannot reach a bridge call either way.
+    const nested = params.args && typeof params.args === "object"
+      ? (params.args as Record<string, unknown>)
+      : undefined;
+    const target = params[EDITOR_TARGET_PARAM] ?? nested?.[EDITOR_TARGET_PARAM];
+    const stripped = stripEditorTarget(params);
+    if (nested) stripped.args = stripEditorTarget(nested);
+    return { session: sessions.resolve(target), params: stripped };
+  };
+
   // ── Register category tools — dispatched through the task registry ──
   for (const tool of tools) {
     const shape: Record<string, z.ZodType> = {};
@@ -334,13 +417,27 @@ async function main() {
       shape[key] = schema;
     }
 
-    server.tool(tool.name, tool.description, shape, async (params, extra) => {
+    const registration = server.tool(tool.name, tool.description, shape, async (rawParams, extra) => {
+      let routed: { session: EditorSession; params: Record<string, unknown> };
+      try {
+        routed = routeCall(tool, rawParams);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return {
+          content: withUpgradeNotice([{ type: "text" as const, text: `Error [NOT_FOUND]: ${msg}` }]),
+          isError: true,
+        };
+      }
+      const session = routed.session;
+      const params = routed.params;
       const action = params.action as string;
       const taskName = `${tool.name}.${action}`;
       const { action: _, ...taskParams } = params;
       const flowCtx: FlowContext = {
-        bridge: guardedBridge,
-        project,
+        bridge: session.guarded,
+        project: session.project,
+        session,
+        sessions,
         getFlows,
         getPlugins,
         elicit: ctx.elicit,
@@ -350,7 +447,9 @@ async function main() {
 
       try {
         const task = await registry.create(taskName, flowCtx, taskParams);
-        const result = await withAssetLocks(bridge, lockingCfg, taskName, taskParams, () => task.run());
+        // Locks are acquired in the editor the call runs in, so they must be
+        // taken on that session's bridge rather than the process default.
+        const result = await withAssetLocks(session.bridge, lockingCfg, taskName, taskParams, () => task.run());
 
         if (!result.success) {
           const msg = result.error?.message ?? `Task ${taskName} failed`;
@@ -394,6 +493,7 @@ async function main() {
         };
       }
     });
+    registeredTools.set(tool.name, registration);
   }
 
   // ── Load ue-mcp.yml and register flow tool ──────────────────────
@@ -411,13 +511,28 @@ async function main() {
   }).config;
 
   const flowTool = createFlowTool(registry, reloadConfig);
+  targetable.push(flowTool);
   const flowShape: Record<string, z.ZodType> = {};
   for (const [key, schema] of Object.entries(flowTool.schema)) {
     flowShape[key] = schema;
   }
-  server.tool(flowTool.name, flowTool.description, flowShape, async (params) => {
+  const flowRegistration = server.tool(flowTool.name, flowTool.description, flowShape, async (rawParams) => {
     try {
-      const result = await flowTool.handler(ctx, params);
+      // A flow addresses one editor for the whole run. `params` is forwarded
+      // verbatim into every step's options, so a target left in there would
+      // reach bridge.call on every unmapped action: read it as the run's
+      // target and strip it from both places.
+      const nested = rawParams.params && typeof rawParams.params === "object"
+        ? (rawParams.params as Record<string, unknown>)
+        : undefined;
+      const target = flowTool.injectedEditorParam
+        ? rawParams[EDITOR_TARGET_PARAM] ?? nested?.[EDITOR_TARGET_PARAM]
+        : undefined;
+      const session = flowTool.injectedEditorParam ? sessions.resolve(target) : sessions.active;
+      const params = stripEditorTarget(rawParams);
+      if (nested) params.params = stripEditorTarget(nested);
+
+      const result = await flowTool.handler(sessionContext(ctx, session), params);
       const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
       return { content: withUpgradeNotice([{ type: "text" as const, text }]) };
     } catch (e) {
@@ -425,6 +540,12 @@ async function main() {
       return { content: withUpgradeNotice([{ type: "text" as const, text: `Error: ${msg}` }]), isError: true };
     }
   });
+  registeredTools.set(flowTool.name, flowRegistration);
+
+  // Re-advertise whenever the session set changes, and take the first pass now
+  // that every tool is registered.
+  sessions.onCountChanged = () => syncEditorTargeting();
+  syncEditorTargeting();
 
   // ── Optional HTTP surface for flow.run (#144) ───────────────────
   // Off by default; opt-in via ue-mcp.yml `ue-mcp.http: { enabled: true, port: 7723 }`.
@@ -440,14 +561,19 @@ async function main() {
     }
   }
 
-  // ── Bridge connection ────────────────────────────────────────────
-  try {
-    await bridge.connect();
-    info("bridge", "editor bridge connected - live mode active");
-  } catch (e) {
-    info("bridge", "editor not reachable - will retry in background", e);
+  // ── Bridge connections ───────────────────────────────────────────
+  // One socket per session. A session whose editor is down is still
+  // registered and still startable; only addressing it needs a live bridge.
+  for (const session of sessions.list()) {
+    const label = sessions.size > 1 ? `editor '${session.name}'` : "editor bridge";
+    try {
+      await session.bridge.connect();
+      info("bridge", `${label} connected - live mode active`);
+    } catch (e) {
+      info("bridge", `${label} not reachable - will retry in background`, e);
+    }
+    session.bridge.startReconnecting();
   }
-  bridge.startReconnecting();
 
   if (disabled.size > 0) {
     console.error(`[ue-mcp] Disabled categories: ${[...disabled].join(", ")}`);

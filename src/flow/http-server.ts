@@ -1,7 +1,7 @@
 import * as http from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { createFlowTool } from "./flow-tool.js";
-import type { ToolContext } from "../types.js";
+import { sessionContext, type ToolContext } from "../types.js";
 import { info, warn, error as logError } from "../log.js";
 import { subscribeFlowEvents, type FlowEvent } from "./events.js";
 
@@ -111,13 +111,24 @@ export function startFlowHttpServer(
           action: "run",
           flowName,
         };
+        let runCtx = ctx;
         if (body && typeof body === "object") {
           const b = body as Record<string, unknown>;
           if (b.params !== undefined) params.params = b.params;
           if (b.skip !== undefined) params.skip = b.skip;
           if (b.rollback_on_failure !== undefined) params.rollback_on_failure = b.rollback_on_failure;
+          // #817: the HTTP surface addresses an editor the same way the MCP
+          // surface does. Resolving here (rather than forwarding `editor` into
+          // the flow) keeps the routing instruction off every step's options.
+          if (typeof b.editor === "string" && b.editor && ctx.sessions) {
+            try {
+              runCtx = sessionContext(ctx, ctx.sessions.resolve(b.editor));
+            } catch (e) {
+              return send(404, { error: e instanceof Error ? e.message : String(e) });
+            }
+          }
         }
-        const result = await flowTool.handler(ctx, params);
+        const result = await flowTool.handler(runCtx, params);
         return send(200, result);
       }
 

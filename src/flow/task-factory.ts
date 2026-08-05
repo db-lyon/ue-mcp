@@ -1,5 +1,6 @@
 import type { TaskResult, TaskConstructor } from "@db-lyon/flowkit";
 import { UeMcpTask } from "../task.js";
+import { stripEditorTarget } from "../types.js";
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 
@@ -16,9 +17,11 @@ export function bridgeTaskClass(
   class FactoryBridgeTask extends UeMcpTask {
     get taskName() { return name; }
     async execute(): Promise<TaskResult> {
-      const params = mapParams
-        ? mapParams(this.options as Record<string, unknown>)
-        : this.options as Record<string, unknown>;
+      // `editor` addresses a session; it is never a bridge parameter. Strip it
+      // before the mapper too, since a mapper that forwards its input verbatim
+      // would carry it into the call.
+      const options = stripEditorTarget(this.options as Record<string, unknown>);
+      const params = mapParams ? mapParams(options) : options;
       const raw = await this.bridge.call(method, params, timeoutMs);
       if (typeof raw !== "object" || raw === null) {
         return { success: true, data: { result: raw } };

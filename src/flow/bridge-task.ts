@@ -1,6 +1,7 @@
 import type { TaskResult } from "@db-lyon/flowkit";
 import { liftRollback } from "./rollback.js";
 import { UeMcpTask } from "../task.js";
+import { stripEditorTarget } from "../types.js";
 
 /**
  * Generic task for bridge-delegation actions.
@@ -25,7 +26,10 @@ export class BridgeTask extends UeMcpTask {
   }
 
   async execute(): Promise<TaskResult> {
-    const { method, ...params } = this.options as Record<string, unknown>;
+    const { method, ...rest } = this.options as Record<string, unknown>;
+    // `editor` selects the session the step runs in, so it must not travel
+    // on to the editor as a bridge parameter.
+    const params = stripEditorTarget(rest);
     if (!method || typeof method !== "string") {
       throw new Error('BridgeTask requires a "method" option');
     }
