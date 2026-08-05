@@ -83,6 +83,39 @@ The `EditorBridge` maintains a WebSocket connection to the bridge's per-project 
 - **Reconnect:** Automatic every 15 seconds if disconnected
 - **Thread safety:** All responses are correlated by request ID
 
+#### Framing
+
+A TCP read is a byte-stream event, not a message event, so the bridge treats it as one. Both ends accumulate bytes, decode as many whole WebSocket frames as have arrived, and join continuation frames into one message. Several pipelined requests in a single segment all arrive; a payload split across segments is reassembled rather than dropped.
+
+A single message is bounded at 64 MiB, as is the unparsed receive buffer. Exceeding either closes the connection with WebSocket status `1009` and a reason naming both the size and the limit, which the client repeats verbatim rather than reporting a generic lost connection. A frame stream that stops parsing (reserved bits set, an unknown opcode, a fragmented control frame) closes with `1002`.
+
+Control frames are answered as the protocol requires: a close frame gets its status code echoed back, a ping gets a pong carrying the same payload. When the editor shuts down with a client attached, the bridge closes with `1001` going away rather than severing the socket.
+
+The upgrade request is read through to its blank line under one deadline and one size bound, and is validated before a `101` is sent: `GET`, HTTP/1.1, `Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Version: 13`, and a `Sec-WebSocket-Key` that decodes to 16 bytes. A refusal answers with an HTTP status and a sentence. Anything the client pipelined behind the request is handed straight to the frame reader.
+
+#### Capability handshake
+
+On connect the client asks `get_bridge_capabilities`, which the bridge answers on the socket thread without touching the game thread. The reply reports:
+
+| Field | Meaning |
+|-------|---------|
+| `protocolVersion` | Wire protocol the plugin speaks (`UEMCP_BRIDGE_PROTOCOL_VERSION`) |
+| `handlerApiVersion` | Handler ABI for native plugins (`UEMCP_BRIDGE_API_VERSION`) |
+| `builtAt` | Compile timestamp of the loaded binary. The stale-build tell |
+| `engineVersion`, `projectName`, `pid`, `port`, `instanceId`, `startedAt` | Which editor answered |
+| `features` | Named capabilities, for asking about one thing rather than a version floor |
+| `actions`, `actionCount` | The method names the running binary actually registered |
+
+A plugin built before the handshake existed answers `Unknown method`, which the client records as protocol version 1. When the plugin and client versions differ, the client says so once at connect, repeats it on any unknown-method answer (naming both versions and the method), and reports it under `bridgeProtocol` in `project(get_status)`.
+
+`bridgeApiVersion` in `project(get_status)` is read from the header on disk and therefore describes the source; `bridgeProtocol` comes from the running binary. When the two disagree, the deployed plugin has not been rebuilt.
+
+#### Socket and thread ownership
+
+The accept loop creates a client socket and hands it to one connection thread, which owns it from that moment and closes it exactly once. No other code closes a client socket.
+
+Connections are counted by the accept loop before their thread exists and released by the thread on its way out, so shutdown waits for the count to reach zero before the module frees the server object. Connections notice the stop flag at the end of their current one-second select; only if that grace period lapses does shutdown half-close their sockets, and only after a further wait does it give up and log which connections are stuck. The game-thread executor abandons in-flight waits once shutdown begins, since module teardown runs on the game thread and a queued handler will never execute.
+
 ## C++ Bridge Plugin
 
 **Location:** `plugin/ue_mcp_bridge/`
