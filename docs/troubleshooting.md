@@ -167,6 +167,38 @@ UE-MCP expects Unreal-style asset paths:
     - Including file extensions (`.uasset`) — omit the extension
     - Missing the leading slash — `/Game/Foo`, not `Game/Foo`
 
+## Class Names and the A/U/F/E Prefix
+
+Unreal registers a class under its C++ name **minus** the type prefix. `AActor` is the class named `Actor`, `UMyConfig` is `MyConfig`, and its object path is `/Script/MyGame.MyConfig` with no `U` in it.
+
+Every class parameter in the bridge (`className`, `parentClass`, `parentFilter`, `componentClass`, `actorClass`, `nodeClass`, `schema`, and the rest) accepts either spelling. Resolution tries, in order:
+
+1. The literal spelling you passed.
+2. The prefix-stripped spelling (`UMyConfig` to `MyConfig`).
+3. The prefixed spellings (`MyActor` to `AMyActor` / `UMyActor`).
+4. The object path form, including `Module.Class` promoted to `/Script/Module.Class` and the prefix stripped from the object part of a path.
+5. The Blueprint generated class (`BP_Thing` to `BP_Thing_C`).
+6. A case-insensitive sweep of loaded classes, native classes winning ties.
+
+When nothing resolves, the error lists every spelling that was tried and the closest loaded class names:
+
+```
+Class not found for className 'UXianGameConfig'. Tried: UXianGameConfig, XianGameConfig,
+AUXianGameConfig, UUXianGameConfig, UXianGameConfig_C, XianGameConfig_C. UE reflection
+stores class names without the C++ type prefix, so UMyConfig is registered as 'MyConfig'
+and its path is /Script/<Module>.MyConfig. Closest loaded classes: XianGameConfig.
+```
+
+Two error shapes are deliberately distinct, and the JSON carries a `reason` field:
+
+| `reason` | Meaning |
+|---|---|
+| `class_not_found` | No spelling resolved. The response also carries `tried` and `suggestions` arrays. |
+| `abstract` / `deprecated` | The name resolved. The class itself cannot be instantiated; pass a concrete subclass. |
+| `wrong_base` | The name resolved to a class outside the family the action needs (for example a non-`UDataAsset` passed to `create_data_asset`). |
+
+If the suggestion list is empty, the owning module may not be loaded yet. Check with `reflection(action="is_module_loaded", moduleName="MyGame")` and `reflection(action="is_class_loaded", className="MyConfig")`.
+
 ## Updates Don't Take Effect (server stuck on an old version)
 
 If `ue-mcp update` reports "already up to date" but the running server keeps reporting an old version, a project-local `node_modules/ue-mcp` is shadowing the global install:

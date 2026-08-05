@@ -53,6 +53,12 @@ export interface UeMcpConfig {
   context?: {
     strategy?: "full" | "lean" | "micro";
   };
+  /** Play In Editor. `allowIgnoreBlueprintErrors` pre-authorizes
+   *  editor(play_in_editor_ignore_blueprint_errors) so it stops asking for
+   *  per-launch approval. Off by default. */
+  pie?: {
+    allowIgnoreBlueprintErrors?: boolean;
+  };
   /** Per-plugin runtime config, keyed by plugin slug (package name minus
    *  `ue-mcp-`). `groups` toggles whole flow groups (opt-out). See
    *  plugin-groups.ts. */

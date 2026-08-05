@@ -2,6 +2,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
+#include "HandlerJsonProperty.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -78,6 +79,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("scan_animation_tracks"), &ScanAnimationTracks);
 	Registry.RegisterHandler(TEXT("create_anim_blueprint"), &CreateAnimBlueprint);
 	Registry.RegisterHandler(TEXT("create_anim_montage"), &CreateMontage);
+	Registry.RegisterHandler(TEXT("author_montages_batch"), &AuthorMontagesBatch);
 	Registry.RegisterHandler(TEXT("create_blendspace"), &CreateBlendspace);
 	Registry.RegisterHandler(TEXT("create_blendspace_1d"), &CreateBlendspace1D);
 	Registry.RegisterHandler(TEXT("add_blend_sample"), &AddBlendSample);
@@ -486,8 +488,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimMontage(const TSharedPtr<FJso
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UAnimMontage* Montage = Cast<UAnimMontage>(LoadedAsset);
+	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
@@ -625,8 +626,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/Animations"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	UObject* SourceAsset = UEditorAssetLibrary::LoadAsset(AnimSequencePath);
-	UAnimSequence* SourceSequence = Cast<UAnimSequence>(SourceAsset);
+	UAnimSequence* SourceSequence = LoadAssetByPath<UAnimSequence>(AnimSequencePath);
 	if (!SourceSequence)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimSequencePath));
@@ -648,6 +648,267 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMontage(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("class"), Created.Asset->GetClass()->GetName());
 	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
+	return MCPResult(Result);
+}
+
+namespace
+{
+	bool MontageBatchCallSucceeded(const TSharedPtr<FJsonValue>& Response, FString& OutError)
+	{
+		if (!Response.IsValid() || Response->Type != EJson::Object)
+		{
+			OutError = TEXT("Handler returned an invalid response");
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject> Object = Response->AsObject();
+		bool bSuccess = false;
+		if (!Object.IsValid() || !Object->TryGetBoolField(TEXT("success"), bSuccess) || !bSuccess)
+		{
+			if (!Object.IsValid() || !Object->TryGetStringField(TEXT("error"), OutError))
+			{
+				OutError = TEXT("Handler reported failure without an error message");
+			}
+			return false;
+		}
+		return true;
+	}
+
+	void CopyOptionalNumber(
+		const TSharedPtr<FJsonObject>& Source,
+		const TCHAR* Field,
+		const TSharedPtr<FJsonObject>& Destination)
+	{
+		double Value = 0.0;
+		if (Source->TryGetNumberField(Field, Value))
+		{
+			Destination->SetNumberField(Field, Value);
+		}
+	}
+
+	bool SaveMontagePackage(const FString& AssetPath, FString& OutError)
+	{
+		UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
+		if (!Montage)
+		{
+			OutError = FString::Printf(TEXT("Failed to reload authored montage '%s' for saving"), *AssetPath);
+			return false;
+		}
+
+		if (!SaveAssetPackage(Montage))
+		{
+			OutError = FString::Printf(
+				TEXT("Failed to save authored montage package '%s'"),
+				*Montage->GetOutermost()->GetName());
+			return false;
+		}
+		return true;
+	}
+}
+
+// Batch-author montages with deterministic per-item results. Existing montages
+// are configured in place, while newly-created montages are included in a
+// delete_asset_batch rollback descriptor.
+TSharedPtr<FJsonValue> FAnimationHandlers::AuthorMontagesBatch(const TSharedPtr<FJsonObject>& Params)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
+	if (!Params->TryGetArrayField(TEXT("items"), Items) || !Items)
+	{
+		return MCPError(TEXT("Missing 'items' array"));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> ItemResults;
+	TArray<TSharedPtr<FJsonValue>> CreatedPaths;
+	int32 Succeeded = 0;
+	int32 Failed = 0;
+
+	for (int32 ItemIndex = 0; ItemIndex < Items->Num(); ++ItemIndex)
+	{
+		const TSharedPtr<FJsonObject> Item = (*Items)[ItemIndex].IsValid()
+			? (*Items)[ItemIndex]->AsObject()
+			: nullptr;
+		TSharedPtr<FJsonObject> ItemResult = MakeShared<FJsonObject>();
+		ItemResult->SetNumberField(TEXT("index"), ItemIndex);
+
+		FString Name;
+		FString SequencePath;
+		if (!Item.IsValid() ||
+			!Item->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty() ||
+			!Item->TryGetStringField(TEXT("animSequencePath"), SequencePath) || SequencePath.IsEmpty())
+		{
+			ItemResult->SetBoolField(TEXT("success"), false);
+			ItemResult->SetStringField(TEXT("stage"), TEXT("validate"));
+			ItemResult->SetStringField(TEXT("error"), TEXT("Each item requires non-empty 'name' and 'animSequencePath'"));
+			ItemResults.Add(MakeShared<FJsonValueObject>(ItemResult));
+			++Failed;
+			continue;
+		}
+
+		const FString PackagePath = OptionalString(Item, TEXT("packagePath"), TEXT("/Game/Animations"));
+		const FString MontagePath = PackagePath + TEXT("/") + Name;
+		const bool bExistedBefore = UEditorAssetLibrary::DoesAssetExist(MontagePath);
+
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("name"), Name);
+		CreateParams->SetStringField(TEXT("animSequencePath"), SequencePath);
+		CreateParams->SetStringField(TEXT("packagePath"), PackagePath);
+		CreateParams->SetStringField(TEXT("onConflict"), OptionalString(Item, TEXT("onConflict"), TEXT("skip")));
+
+		FString Error;
+		// Which authoring step a failure came from. Every step below writes to
+		// the same montage, so the sub-handler's message alone ("Failed to load
+		// AnimMontage at ...") does not say what the caller got wrong.
+		FString Stage;
+		if (!MontageBatchCallSucceeded(FAnimationHandlers::CreateMontage(CreateParams), Error))
+		{
+			ItemResult->SetBoolField(TEXT("success"), false);
+			ItemResult->SetStringField(TEXT("name"), Name);
+			ItemResult->SetStringField(TEXT("stage"), TEXT("create"));
+			ItemResult->SetStringField(TEXT("error"), Error);
+			ItemResults.Add(MakeShared<FJsonValueObject>(ItemResult));
+			++Failed;
+			continue;
+		}
+
+		bool bItemSuccess = true;
+		const FString SlotName = OptionalString(Item, TEXT("slotName"));
+		if (!SlotName.IsEmpty())
+		{
+			TSharedPtr<FJsonObject> SlotParams = MakeShared<FJsonObject>();
+			SlotParams->SetStringField(TEXT("assetPath"), MontagePath);
+			SlotParams->SetStringField(TEXT("slotName"), SlotName);
+			double TrackIndex = 0.0;
+			if (Item->TryGetNumberField(TEXT("trackIndex"), TrackIndex))
+			{
+				SlotParams->SetNumberField(TEXT("trackIndex"), TrackIndex);
+			}
+			bItemSuccess = MontageBatchCallSucceeded(FAnimationHandlers::SetMontageSlot(SlotParams), Error);
+			if (!bItemSuccess) Stage = TEXT("slot");
+		}
+
+		TSharedPtr<FJsonObject> PropertyParams = MakeShared<FJsonObject>();
+		PropertyParams->SetStringField(TEXT("assetPath"), MontagePath);
+		CopyOptionalNumber(Item, TEXT("rateScale"), PropertyParams);
+		CopyOptionalNumber(Item, TEXT("blendIn"), PropertyParams);
+		CopyOptionalNumber(Item, TEXT("blendOut"), PropertyParams);
+		CopyOptionalNumber(Item, TEXT("sequenceLength"), PropertyParams);
+		if (bItemSuccess && PropertyParams->Values.Num() > 1)
+		{
+			bItemSuccess = MontageBatchCallSucceeded(FAnimationHandlers::SetMontageProperties(PropertyParams), Error);
+			if (!bItemSuccess) Stage = TEXT("properties");
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Sections = nullptr;
+		if (bItemSuccess && Item->TryGetArrayField(TEXT("sections"), Sections) && Sections)
+		{
+			for (const TSharedPtr<FJsonValue>& SectionValue : *Sections)
+			{
+				const TSharedPtr<FJsonObject> Section = SectionValue.IsValid() ? SectionValue->AsObject() : nullptr;
+				FString SectionName;
+				if (!Section.IsValid() || !Section->TryGetStringField(TEXT("sectionName"), SectionName))
+				{
+					bItemSuccess = false;
+					Stage = TEXT("sections");
+					Error = TEXT("Each section requires 'sectionName'");
+					break;
+				}
+				TSharedPtr<FJsonObject> SectionParams = MakeShared<FJsonObject>();
+				SectionParams->SetStringField(TEXT("assetPath"), MontagePath);
+				SectionParams->SetStringField(TEXT("sectionName"), SectionName);
+				CopyOptionalNumber(Section, TEXT("startTime"), SectionParams);
+				FString LinkedSection;
+				if (Section->TryGetStringField(TEXT("linkedSection"), LinkedSection))
+				{
+					SectionParams->SetStringField(TEXT("linkedSection"), LinkedSection);
+				}
+				if (!MontageBatchCallSucceeded(FAnimationHandlers::AddMontageSection(SectionParams), Error))
+				{
+					bItemSuccess = false;
+					Stage = TEXT("sections");
+					break;
+				}
+			}
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Notifies = nullptr;
+		if (bItemSuccess && Item->TryGetArrayField(TEXT("notifies"), Notifies) && Notifies)
+		{
+			for (const TSharedPtr<FJsonValue>& NotifyValue : *Notifies)
+			{
+				const TSharedPtr<FJsonObject> Notify = NotifyValue.IsValid() ? NotifyValue->AsObject() : nullptr;
+				FString NotifyName;
+				double TriggerTime = 0.0;
+				if (!Notify.IsValid() ||
+					!Notify->TryGetStringField(TEXT("notifyName"), NotifyName) ||
+					!Notify->TryGetNumberField(TEXT("triggerTime"), TriggerTime))
+				{
+					bItemSuccess = false;
+					Stage = TEXT("notifies");
+					Error = TEXT("Each notify requires 'notifyName' and numeric 'triggerTime'");
+					break;
+				}
+				TSharedPtr<FJsonObject> NotifyParams = MakeShared<FJsonObject>();
+				NotifyParams->SetStringField(TEXT("assetPath"), MontagePath);
+				NotifyParams->SetStringField(TEXT("notifyName"), NotifyName);
+				NotifyParams->SetNumberField(TEXT("triggerTime"), TriggerTime);
+				FString NotifyClass;
+				if (Notify->TryGetStringField(TEXT("notifyClass"), NotifyClass))
+				{
+					NotifyParams->SetStringField(TEXT("notifyClass"), NotifyClass);
+				}
+				const TSharedPtr<FJsonObject>* NotifyProperties = nullptr;
+				if (Notify->TryGetObjectField(TEXT("properties"), NotifyProperties) && NotifyProperties)
+				{
+					NotifyParams->SetObjectField(TEXT("notifyProperties"), *NotifyProperties);
+				}
+				if (!MontageBatchCallSucceeded(FAnimationHandlers::AddAnimNotify(NotifyParams), Error))
+				{
+					bItemSuccess = false;
+					Stage = TEXT("notifies");
+					break;
+				}
+			}
+		}
+
+		if (bItemSuccess)
+		{
+			bItemSuccess = SaveMontagePackage(MontagePath, Error);
+			if (!bItemSuccess) Stage = TEXT("save");
+		}
+
+		ItemResult->SetBoolField(TEXT("success"), bItemSuccess);
+		ItemResult->SetStringField(TEXT("name"), Name);
+		ItemResult->SetStringField(TEXT("assetPath"), MontagePath);
+		ItemResult->SetBoolField(TEXT("created"), !bExistedBefore);
+		ItemResult->SetBoolField(TEXT("existed"), bExistedBefore);
+		if (!bItemSuccess)
+		{
+			ItemResult->SetStringField(TEXT("stage"), Stage);
+			ItemResult->SetStringField(TEXT("error"), Error);
+			++Failed;
+		}
+		else
+		{
+			++Succeeded;
+		}
+		if (!bExistedBefore)
+		{
+			CreatedPaths.Add(MakeShared<FJsonValueString>(MontagePath));
+		}
+		ItemResults.Add(MakeShared<FJsonValueObject>(ItemResult));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetNumberField(TEXT("requested"), Items->Num());
+	Result->SetNumberField(TEXT("succeeded"), Succeeded);
+	Result->SetNumberField(TEXT("failed"), Failed);
+	Result->SetArrayField(TEXT("items"), ItemResults);
+	if (CreatedPaths.Num() > 0)
+	{
+		TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+		RollbackPayload->SetArrayField(TEXT("assetPaths"), CreatedPaths);
+		MCPSetRollback(Result, TEXT("delete_asset_batch"), RollbackPayload);
+	}
 	return MCPResult(Result);
 }
 
@@ -745,8 +1006,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	FString NotifyClassName = OptionalString(Params, TEXT("notifyClass"));
 
 	// Load the animation asset — could be a montage or a sequence
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UAnimSequenceBase* AnimAsset = Cast<UAnimSequenceBase>(LoadedAsset);
+	UAnimSequenceBase* AnimAsset = LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!AnimAsset)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load AnimSequenceBase at '%s'"), *AssetPath));
@@ -775,7 +1035,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	UAnimNotify* NewNotify = nullptr;
 	if (!NotifyClassName.IsEmpty())
 	{
-		UClass* NotifyClass = FindFirstObject<UClass>(*NotifyClassName);
+		UClass* NotifyClass = LoadObject<UClass>(nullptr, *NotifyClassName);
+		if (!NotifyClass)
+		{
+			NotifyClass = FindFirstObject<UClass>(*NotifyClassName);
+		}
 		if (!NotifyClass)
 		{
 			// Try with full path prefix
@@ -784,6 +1048,49 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 		if (NotifyClass && NotifyClass->IsChildOf(UAnimNotify::StaticClass()))
 		{
 			NewNotify = NewObject<UAnimNotify>(AnimAsset, NotifyClass);
+		}
+	}
+
+	// notifyProperties writes onto the spawned notify OBJECT, so it only has
+	// somewhere to land when notifyClass resolved. Reporting success while
+	// quietly dropping the requested values is the failure mode this guards.
+	const TSharedPtr<FJsonObject>* NotifyProperties = nullptr;
+	if (Params->TryGetObjectField(TEXT("notifyProperties"), NotifyProperties)
+		&& NotifyProperties && (*NotifyProperties).IsValid() && (*NotifyProperties)->Values.Num() > 0)
+	{
+		if (!NewNotify)
+		{
+			if (NotifyClassName.IsEmpty())
+			{
+				return MCPError(TEXT("'notifyProperties' requires 'notifyClass': a bare notify event has no notify object to write properties onto"));
+			}
+			return MCPError(FString::Printf(
+				TEXT("notifyClass '%s' did not resolve to a UAnimNotify subclass, so 'notifyProperties' could not be applied"),
+				*NotifyClassName));
+		}
+
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Entry : (*NotifyProperties)->Values)
+		{
+			FProperty* Property = NewNotify->GetClass()->FindPropertyByName(FName(*Entry.Key));
+			if (!Property)
+			{
+				return MCPError(FString::Printf(
+					TEXT("Notify class '%s' has no property '%s'"),
+					*NewNotify->GetClass()->GetName(),
+					*Entry.Key));
+			}
+			FString PropertyError;
+			if (!MCPJsonProperty::SetJsonOnProperty(
+				Property,
+				Property->ContainerPtrToValuePtr<void>(NewNotify),
+				Entry.Value,
+				PropertyError))
+			{
+				return MCPError(FString::Printf(
+					TEXT("Failed to set notify property '%s': %s"),
+					*Entry.Key,
+					*PropertyError));
+			}
 		}
 	}
 
@@ -860,8 +1167,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveAnimNotify(const TSharedPtr<FJs
 		return MCPError(TEXT("Pass at least one of 'notifyName' or 'notifyClass'"));
 	}
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UAnimSequenceBase* AnimAsset = Cast<UAnimSequenceBase>(LoadedAsset);
+	UAnimSequenceBase* AnimAsset = LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!AnimAsset)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load AnimSequenceBase at '%s'"), *AssetPath));
@@ -1365,16 +1671,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 	double SlotIndex = OptionalNumber(Params, TEXT("slotIndex"), 0.0);
 
 	// Load the montage
-	UObject* MontageAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UAnimMontage* Montage = Cast<UAnimMontage>(MontageAsset);
+	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
 	}
 
 	// Load the new sequence
-	UObject* SeqAsset = UEditorAssetLibrary::LoadAsset(AnimSequencePath);
-	UAnimSequence* NewSequence = Cast<UAnimSequence>(SeqAsset);
+	UAnimSequence* NewSequence = LoadAssetByPath<UAnimSequence>(AnimSequencePath);
 	if (!NewSequence)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load AnimSequence at '%s'"), *AnimSequencePath));
@@ -1466,8 +1770,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* MontageAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UAnimMontage* Montage = Cast<UAnimMontage>(MontageAsset);
+	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
@@ -1596,8 +1899,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSlot(const TSharedPtr<FJson
 
 	int32 TrackIndex = OptionalInt(Params, TEXT("trackIndex"), 0);
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UAnimMontage* Montage = Cast<UAnimMontage>(LoadedAsset);
+	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
@@ -1655,8 +1957,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSection(const TSharedPtr<FJ
 	double StartTime = OptionalNumber(Params, TEXT("startTime"), 0.0);
 	FString LinkedSection = OptionalString(Params, TEXT("linkedSection"));
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
-	UAnimMontage* Montage = Cast<UAnimMontage>(LoadedAsset);
+	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));

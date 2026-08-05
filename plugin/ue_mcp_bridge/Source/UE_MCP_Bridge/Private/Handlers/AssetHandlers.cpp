@@ -30,6 +30,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "UObject/TopLevelAssetPath.h"
+#include "ScopedTransaction.h"
 
 // DataTable
 #include "Engine/DataTable.h"
@@ -171,6 +172,12 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("delete_asset_batch"), &DeleteAssetBatch);
 	Registry.RegisterHandler(TEXT("bulk_rename_assets"), &BulkRename);
 	Registry.RegisterHandler(TEXT("create_data_asset"), &CreateDataAsset);
+	// Bounded batch upsert plus its rollback inverse. A 500-item batch that
+	// preflights every item on a transient copy before touching a package can
+	// legitimately outrun the default game-thread budget, so both carry an
+	// explicit timeout.
+	Registry.RegisterHandlerWithTimeout(TEXT("bulk_upsert_data_assets"), &BulkUpsertDataAssets, 120.0f);
+	Registry.RegisterHandlerWithTimeout(TEXT("bulk_restore_data_assets"), &BulkRestoreDataAssets, 120.0f);
 	// #726: generic create-any-concrete-UObject-class asset (physical materials,
 	// curves, settings objects) - not restricted to UDataAsset subclasses.
 	Registry.RegisterHandler(TEXT("create_asset_by_class"), &CreateAssetByClass);
@@ -186,6 +193,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// Texture handlers
 	Registry.RegisterHandler(TEXT("import_texture"), &ImportTexture);
 	Registry.RegisterHandler(TEXT("import_texture_batch"), &ImportTextureBatch);
+	Registry.RegisterHandler(TEXT("create_render_target_2d"), &CreateRenderTarget2D);
 	// #697: texture export + compare.
 	Registry.RegisterHandler(TEXT("export_texture"), &ExportTexture);
 	Registry.RegisterHandler(TEXT("compare_textures"), &CompareTextures);
@@ -200,6 +208,8 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_socket"), &AddSocket);
 	Registry.RegisterHandler(TEXT("set_socket_transform"), &SetSocketTransform);
 	Registry.RegisterHandler(TEXT("set_asset_property"), &SetAssetProperty);
+	Registry.RegisterHandler(TEXT("append_asset_array_elements"), &AppendAssetArrayElements);
+	Registry.RegisterHandler(TEXT("bulk_set_asset_properties"), &BulkSetAssetProperties);
 	Registry.RegisterHandler(TEXT("set_texture_settings_by_type"), &SetTextureSettingsByType);
 	Registry.RegisterHandler(TEXT("create_interchange_pipeline"), &CreateInterchangePipeline);
 	Registry.RegisterHandler(TEXT("remove_socket"), &RemoveSocket);
@@ -1955,35 +1965,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataAsset(const TSharedPtr<FJsonObj
 	FString ClassName;
 	if (auto Err = RequireStringAlt(Params, TEXT("className"), TEXT("class"), ClassName)) return Err;
 
-	// Resolve the DataAsset subclass by name or path
-	UClass* DataClass = nullptr;
-	if (ClassName.StartsWith(TEXT("/")))
-	{
-		DataClass = LoadClass<UObject>(nullptr, *ClassName);
-		if (!DataClass) DataClass = LoadObject<UClass>(nullptr, *ClassName);
-	}
-	if (!DataClass)
-	{
-		FString Trimmed = ClassName;
-		Trimmed.RemoveFromEnd(TEXT("_C"));
-		// Attempt find in any package (fallback: scan all loaded UClass objects)
-		for (TObjectIterator<UClass> It; It; ++It)
-		{
-			if (It->GetName() == Trimmed || It->GetName() == ClassName)
-			{
-				DataClass = *It;
-				break;
-			}
-		}
-	}
-	if (!DataClass)
-	{
-		return MCPError(FString::Printf(TEXT("Class not found: %s (pass full /Script/Module.ClassName or a loaded class name)"), *ClassName));
-	}
-	if (!DataClass->IsChildOf(UDataAsset::StaticClass()))
-	{
-		return MCPError(FString::Printf(TEXT("Class %s is not a UDataAsset subclass"), *ClassName));
-	}
+	// #823: shared resolution, so the prefixed C++ spelling ("UMyConfig",
+	// "/Script/MyGame.UMyConfig") resolves to the class UE registered as
+	// "MyConfig" instead of reporting the class missing.
+	UClass* DataClass = MCPResolveClass(ClassName);
+	if (auto Err = MCPCheckClassUsable(ClassName, DataClass, UDataAsset::StaticClass())) return Err;
 
 	const FString FullPath = FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *Name, *Name);
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
@@ -2057,39 +2043,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateAssetByClass(const TSharedPtr<FJson
 	FString ClassName;
 	if (auto Err = RequireStringAlt(Params, TEXT("className"), TEXT("class"), ClassName)) return Err;
 
-	// Resolve the class by path or (loaded) name - same resolution as create_data_asset.
-	UClass* AssetClass = nullptr;
-	if (ClassName.StartsWith(TEXT("/")))
-	{
-		AssetClass = LoadClass<UObject>(nullptr, *ClassName);
-		if (!AssetClass) AssetClass = LoadObject<UClass>(nullptr, *ClassName);
-	}
-	if (!AssetClass)
-	{
-		FString Trimmed = ClassName;
-		Trimmed.RemoveFromEnd(TEXT("_C"));
-		for (TObjectIterator<UClass> It; It; ++It)
-		{
-			if (It->GetName() == Trimmed || It->GetName() == ClassName)
-			{
-				AssetClass = *It;
-				break;
-			}
-		}
-	}
-	if (!AssetClass)
-	{
-		return MCPError(FString::Printf(TEXT("Class not found: %s (pass full /Script/Module.ClassName or a loaded class name)"), *ClassName));
-	}
-
+	// #823: shared resolution - same as create_data_asset, prefix tolerant.
+	UClass* AssetClass = MCPResolveClass(ClassName);
 	// Guard classes that cannot be standalone assets or need a specialized flow.
-	if (AssetClass->HasAnyClassFlags(CLASS_Abstract))
-	{
-		return MCPError(FString::Printf(TEXT("Class %s is abstract and cannot be instantiated as an asset"), *ClassName));
-	}
+	if (auto Err = MCPCheckClassUsable(ClassName, AssetClass)) return Err;
 	if (AssetClass->IsChildOf(AActor::StaticClass()) || AssetClass->IsChildOf(UActorComponent::StaticClass()))
 	{
-		return MCPError(FString::Printf(TEXT("Class %s is an actor/component, not an asset - use level(place_actor) / level(add_component_to_actor)"), *ClassName));
+		return MCPClassUnusableError(ClassName, AssetClass, TEXT("not_an_asset"),
+			TEXT("it is an actor or component class, not an asset. Use level(place_actor) or level(add_component_to_actor)."));
 	}
 
 	const FString FullPath = FString::Printf(TEXT("%s/%s.%s"), *PackagePath, *Name, *Name);
@@ -2993,6 +2954,132 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);
 	Payload->SetStringField(TEXT("propertyName"), PropertyName);
 	Payload->SetStringField(TEXT("value"), PrevValue);
+	MCPSetRollback(Result, TEXT("set_asset_property"), Payload);
+	return MCPResult(Result);
+}
+
+// Append reflected TArray values without replacing existing entries. Values
+// are converted in temporary property storage first so a bad later element
+// cannot leave a partial append.
+TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	FString PropertyName;
+	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
+
+	const TArray<TSharedPtr<FJsonValue>>* Elements = nullptr;
+	if (!Params->TryGetArrayField(TEXT("elements"), Elements) || !Elements)
+	{
+		return MCPError(TEXT("Missing 'elements' array parameter"));
+	}
+	if (Elements->IsEmpty())
+	{
+		return MCPError(TEXT("'elements' must contain at least one value"));
+	}
+
+	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	if (!Asset)
+	{
+		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
+	}
+	Asset = MCPResolveAssetToCDO(Asset);
+
+	FProperty* FinalProp = nullptr;
+	void* ValuePtr = nullptr;
+	UObject* LeafOwner = nullptr;
+	FString ResolveErr;
+	if (!MCPJsonProperty::ResolveDottedPath(Asset, PropertyName, FinalProp, ValuePtr, LeafOwner, ResolveErr))
+	{
+		return MCPError(ResolveErr);
+	}
+
+	FArrayProperty* ArrayProp = CastField<FArrayProperty>(FinalProp);
+	if (!ArrayProp)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Property '%s' is '%s', not a TArray"),
+			*PropertyName,
+			FinalProp ? *FinalProp->GetCPPType() : TEXT("unknown")));
+	}
+
+	TArray<void*> StagedElements;
+	StagedElements.Reserve(Elements->Num());
+	auto DestroyStagedElements = [&]()
+	{
+		for (void* StagedValue : StagedElements)
+		{
+			ArrayProp->Inner->DestroyAndFreeValue(StagedValue);
+		}
+		StagedElements.Empty();
+	};
+
+	for (int32 Index = 0; Index < Elements->Num(); ++Index)
+	{
+		void* StagedValue = ArrayProp->Inner->AllocateAndInitializeValue();
+		StagedElements.Add(StagedValue);
+
+		FString ElementError;
+		if (!MCPJsonProperty::SetJsonOnProperty(ArrayProp->Inner, StagedValue, (*Elements)[Index], ElementError))
+		{
+			DestroyStagedElements();
+			return MCPError(FString::Printf(
+				TEXT("Failed to convert elements[%d] for '%s': %s"),
+				Index,
+				*PropertyName,
+				*ElementError));
+		}
+	}
+
+	const TSharedPtr<FJsonValue> PreviousValue = FMCPJsonSerializer::SerializeValue(ValuePtr, ArrayProp);
+	if (!PreviousValue.IsValid())
+	{
+		DestroyStagedElements();
+		return MCPError(FString::Printf(TEXT("Failed to serialize the previous value of '%s'"), *PropertyName));
+	}
+
+	FScriptArrayHelper ArrayHelper(ArrayProp, ValuePtr);
+	const int32 PreviousNum = ArrayHelper.Num();
+	const int32 AppendedCount = StagedElements.Num();
+
+	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "AppendAssetArrayElements", "Append asset array elements"));
+	Asset->Modify();
+	if (LeafOwner && LeafOwner != Asset) LeafOwner->Modify();
+
+	ArrayHelper.AddValues(AppendedCount);
+	for (int32 Index = 0; Index < AppendedCount; ++Index)
+	{
+		ArrayProp->Inner->CopyCompleteValue(ArrayHelper.GetRawPtr(PreviousNum + Index), StagedElements[Index]);
+	}
+	DestroyStagedElements();
+
+	if (LeafOwner && LeafOwner != Asset) LeafOwner->PostEditChange();
+	Asset->PostEditChange();
+	Asset->MarkPackageDirty();
+
+	TArray<TSharedPtr<FJsonValue>> AppendedIndices;
+	AppendedIndices.Reserve(AppendedCount);
+	for (int32 Index = 0; Index < AppendedCount; ++Index)
+	{
+		AppendedIndices.Add(MakeShared<FJsonValueNumber>(PreviousNum + Index));
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetStringField(TEXT("propertyName"), PropertyName);
+	Result->SetStringField(TEXT("elementType"), ArrayProp->Inner->GetCPPType());
+	Result->SetNumberField(TEXT("previousNum"), PreviousNum);
+	Result->SetNumberField(TEXT("appendedCount"), AppendedCount);
+	Result->SetNumberField(TEXT("newNum"), PreviousNum + AppendedCount);
+	Result->SetArrayField(TEXT("appendedIndices"), AppendedIndices);
+	Result->SetField(TEXT("previousValue"), PreviousValue);
+	Result->SetBoolField(TEXT("saved"), false);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("propertyName"), PropertyName);
+	Payload->SetField(TEXT("value"), PreviousValue);
 	MCPSetRollback(Result, TEXT("set_asset_property"), Payload);
 	return MCPResult(Result);
 }

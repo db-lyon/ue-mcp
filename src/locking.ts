@@ -96,6 +96,12 @@ export function classifyAction(taskName: string, params: Record<string, unknown>
       else if (looksLikeAssetPath(rr?.assetPath)) paths.add(rr.assetPath as string);
     }
   }
+  if (Array.isArray(params.items)) {
+    for (const item of params.items) {
+      const descriptor = item as Record<string, unknown>;
+      if (looksLikeAssetPath(descriptor?.assetPath)) paths.add(descriptor.assetPath as string);
+    }
+  }
   return { mutates: true, paths: [...paths] };
 }
 

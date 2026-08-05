@@ -13,6 +13,10 @@ private:
 	static TSharedPtr<FJsonValue> ListWidgetBlueprints(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateWidgetBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadWidgetTree(const TSharedPtr<FJsonObject>& Params);
+	// Extract an authored designer subtree into a new or empty WidgetBlueprint.
+	// The implementation uses UMG's clipboard serializer so editable widget
+	// properties, hierarchy, and internal panel slot data stay intact.
+	static TSharedPtr<FJsonValue> ExtractWidgetSubtree(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateEditorUtilityWidget(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateEditorUtilityBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetWidgetProperties(const TSharedPtr<FJsonObject>& Params);
@@ -41,6 +45,9 @@ private:
 	// Runtime (PIE) widget inspection (#160)
 	static TSharedPtr<FJsonValue> ListRuntimeWidgets(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetRuntimeWidget(const TSharedPtr<FJsonObject>& Params);
+	// Read selected reflected properties from every matching live widget instance.
+	// Unlike GetRuntimeWidget, this never silently selects the first class match.
+	static TSharedPtr<FJsonValue> InspectRuntimeInstances(const TSharedPtr<FJsonObject>& Params);
 	// #161: Runtime delegate inspection
 	static TSharedPtr<FJsonValue> GetRuntimeDelegates(const TSharedPtr<FJsonObject>& Params);
 	// #602: instantiate a WidgetBlueprint into the live PIE viewport.

@@ -11,6 +11,14 @@
 //
 // This file is a translation-unit partition of FLevelHandlers, like
 // LevelHandlers_MultiLevel.cpp - the registrations live in LevelHandlers.cpp.
+//
+// The engine's own FActorDesc snapshot type is deliberately not used here
+// (#805). Its constructors only gained ENGINE_API in UE 5.8, so on 5.7 and
+// earlier every reference to them compiles and then fails to link, taking the
+// whole plugin down rather than just these two actions. FMCPActorDescSnapshot
+// below carries the same fields, is populated the same way the engine populates
+// FActorDesc, and only reads exported accessors on
+// FWorldPartitionActorDescInstance, so it links on every supported engine.
 
 #include "LevelHandlers.h"
 
@@ -22,17 +30,76 @@
 #include "GameFramework/Actor.h"
 #include "UObject/UObjectGlobals.h"
 
-#if WITH_EDITOR
+// FWorldPartitionActorDescInstance and the ...ActorDescInstance traversal
+// helpers arrived with the actor-desc container instance rework in UE 5.5. On
+// 5.4 the whole editor implementation below is compiled out and both actions
+// answer with a clear version error instead of failing the build.
+#define UE_MCP_HAS_ACTOR_DESC_INSTANCE_API (WITH_EDITOR && UE_MCP_HAS_5_5_API)
+
+#if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
 #include "WorldPartition/WorldPartition.h"
 #include "WorldPartition/WorldPartitionActorDescInstance.h"
-#include "WorldPartition/WorldPartitionBlueprintLibrary.h"
 #include "WorldPartition/WorldPartitionHelpers.h"
 #endif
 
 namespace
 {
-#if WITH_EDITOR
+#if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
 	constexpr int32 DefaultActorDescLimit = 500;
+
+	/**
+	 * Field-for-field stand-in for the engine's FActorDesc, populated exactly the
+	 * way the engine populates it. Declared here so the plugin never links
+	 * against FActorDesc's unexported constructors (#805).
+	 */
+	struct FMCPActorDescSnapshot
+	{
+		FGuid Guid;
+		UClass* NativeClass = nullptr;
+		FSoftObjectPath Class;
+		FName Name;
+		FName Label;
+		FBox Bounds = FBox(ForceInit);
+		FName RuntimeGrid;
+		bool bIsSpatiallyLoaded = false;
+		bool bActorIsEditorOnly = false;
+		FName ActorPackage;
+		FName ActorPath;
+		TArray<FSoftObjectPath> DataLayerAssets;
+
+		explicit FMCPActorDescSnapshot(const FWorldPartitionActorDescInstance& Instance)
+		{
+			Guid = Instance.GetGuid();
+			NativeClass = Instance.GetActorNativeClass();
+			// A Blueprint actor reports its base class path; a native actor has
+			// none, so fall back to the native class path. The single-argument
+			// top-level-path constructor is used rather than passing an empty
+			// subpath, whose wide-string overload is deprecated in 5.6+.
+			Class = Instance.GetBaseClass().IsNull()
+				? FSoftObjectPath(Instance.GetActorNativeClass())
+				: FSoftObjectPath(Instance.GetBaseClass());
+			Name = Instance.GetActorName();
+			Label = Instance.GetActorLabel();
+			Bounds = Instance.GetEditorBounds();
+			RuntimeGrid = Instance.GetRuntimeGrid();
+			bIsSpatiallyLoaded = Instance.GetIsSpatiallyLoaded();
+			bActorIsEditorOnly = Instance.GetActorIsEditorOnly();
+			ActorPackage = Instance.GetActorPackage();
+			ActorPath = *Instance.GetActorSoftPath().ToString();
+
+			// GetDataLayers() returns instance names unless the actor is on data
+			// layer assets, and only the asset form is a usable object path.
+			if (Instance.IsUsingDataLayerAsset())
+			{
+				const TArray<FName> DataLayers = Instance.GetDataLayers();
+				DataLayerAssets.Reserve(DataLayers.Num());
+				for (const FName& DataLayerAssetPath : DataLayers)
+				{
+					DataLayerAssets.Add(FSoftObjectPath(DataLayerAssetPath.ToString()));
+				}
+			}
+		}
+	};
 
 	/** GUIDs of actors currently spawned in the editor world. */
 	TSet<FGuid> CollectLoadedActorGuids(UWorld* World)
@@ -50,14 +117,14 @@ namespace
 		return Loaded;
 	}
 
-	FString ActorDescClassName(const FActorDesc& Desc)
+	FString ActorDescClassName(const FMCPActorDescSnapshot& Desc)
 	{
 		if (Desc.NativeClass) return Desc.NativeClass->GetName();
 		return Desc.Class.IsValid() ? Desc.Class.GetAssetName() : FString();
 	}
 
 	/** Case-insensitive match of a needle against every identifying field. */
-	bool ActorDescMatchesFilter(const FActorDesc& Desc, const FString& LowerFilter)
+	bool ActorDescMatchesFilter(const FMCPActorDescSnapshot& Desc, const FString& LowerFilter)
 	{
 		if (LowerFilter.IsEmpty()) return true;
 		const FString Blob = (Desc.Label.ToString() + TEXT("|") + Desc.Name.ToString() + TEXT("|") +
@@ -66,7 +133,7 @@ namespace
 		return Blob.Contains(LowerFilter);
 	}
 
-	TSharedPtr<FJsonObject> ActorDescToJson(const FActorDesc& Desc, bool bLoaded)
+	TSharedPtr<FJsonObject> ActorDescToJson(const FMCPActorDescSnapshot& Desc, bool bLoaded)
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetStringField(TEXT("guid"), Desc.Guid.ToString());
@@ -136,7 +203,7 @@ namespace
 	bool GatherMatchingDescs(
 		const TSharedPtr<FJsonObject>& Params,
 		UWorld* World,
-		TArray<FActorDesc>& OutMatches,
+		TArray<FMCPActorDescSnapshot>& OutMatches,
 		FString& OutError)
 	{
 		UWorldPartition* WorldPartition = World ? World->GetWorldPartition() : nullptr;
@@ -149,7 +216,7 @@ namespace
 		// UWorldPartitionBlueprintLibrary is MinimalAPI, so its statics cannot be
 		// linked from another module. FWorldPartitionHelpers is exported and
 		// gives the same traversal.
-		TArray<FActorDesc> AllDescs;
+		TArray<FMCPActorDescSnapshot> AllDescs;
 		FBox Box(ForceInit);
 		const bool bHasBounds = TryReadBounds(Params, Box);
 		auto Collect = [&AllDescs](const FWorldPartitionActorDescInstance* Instance) -> bool
@@ -188,7 +255,7 @@ namespace
 		const bool bUnloadedOnly = OptionalBool(Params, TEXT("unloadedOnly"), false);
 		const TSet<FGuid> LoadedGuids = CollectLoadedActorGuids(World);
 
-		for (const FActorDesc& Desc : AllDescs)
+		for (const FMCPActorDescSnapshot& Desc : AllDescs)
 		{
 			if (WantedGuids.Num() > 0 && !WantedGuids.Contains(Desc.Guid.ToString().ToLower())) continue;
 			if (!ActorDescMatchesFilter(Desc, LowerFilter)) continue;
@@ -212,17 +279,17 @@ namespace
 		}
 		return true;
 	}
-#endif // WITH_EDITOR
+#endif // UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
 }
 
 TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObject>& Params)
 {
-#if WITH_EDITOR
+#if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
 	REQUIRE_EDITOR_WORLD(World);
 	TSharedPtr<FJsonValue> Err;
 	if (!RequirePartitionedWorld(World, Err)) return Err;
 
-	TArray<FActorDesc> Matches;
+	TArray<FMCPActorDescSnapshot> Matches;
 	FString Error;
 	if (!GatherMatchingDescs(Params, World, Matches, Error))
 	{
@@ -233,7 +300,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 	const TSet<FGuid> LoadedGuids = CollectLoadedActorGuids(World);
 
 	int32 LoadedCount = 0;
-	for (const FActorDesc& Desc : Matches)
+	for (const FMCPActorDescSnapshot& Desc : Matches)
 	{
 		if (LoadedGuids.Contains(Desc.Guid)) ++LoadedCount;
 	}
@@ -259,6 +326,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 			Entries.Num(), Matches.Num()));
 	}
 	return MCPResult(Result);
+#elif WITH_EDITOR
+	return MCPError(TEXT("list_actor_descs needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 use get_outliner or get_actors_by_class, which only see actors that are already streamed in."));
 #else
 	return MCPError(TEXT("World Partition actor descriptors are editor-only"));
 #endif
@@ -266,7 +335,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 
 TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObject>& Params)
 {
-#if WITH_EDITOR
+#if UE_MCP_HAS_ACTOR_DESC_INSTANCE_API
 	REQUIRE_EDITOR_WORLD(World);
 	TSharedPtr<FJsonValue> Err;
 	if (!RequirePartitionedWorld(World, Err)) return Err;
@@ -288,7 +357,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 		return MCPError(TEXT("The current editor world has no World Partition"));
 	}
 
-	TArray<FActorDesc> Matches;
+	TArray<FMCPActorDescSnapshot> Matches;
 	FString Error;
 	if (!GatherMatchingDescs(Params, World, Matches, Error))
 	{
@@ -320,7 +389,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 	TArray<FGuid> Guids;
 	TArray<TSharedPtr<FJsonValue>> Affected;
 	Guids.Reserve(Matches.Num());
-	for (const FActorDesc& Desc : Matches)
+	for (const FMCPActorDescSnapshot& Desc : Matches)
 	{
 		Guids.Add(Desc.Guid);
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
@@ -366,6 +435,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadActorDescs(const TSharedPtr<FJsonObje
 	Result->SetNumberField(TEXT("residentAfter"), ResidentAfter);
 	Result->SetArrayField(TEXT("actors"), Affected);
 	return MCPResult(Result);
+#elif WITH_EDITOR
+	return MCPError(TEXT("load_actor_descs needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 load the cell from the World Partition editor window instead."));
 #else
 	return MCPError(TEXT("World Partition streaming control is editor-only"));
 #endif

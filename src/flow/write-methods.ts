@@ -66,6 +66,27 @@ const EXPLICIT: Record<string, Extractor> = {
   },
   // Batch delete.
   delete_asset_batch: (p) => strArray(p.assetPaths),
+  // Bulk property write: each descriptor owns one asset path.
+  bulk_set_asset_properties: (p) => {
+    const out: string[] = [];
+    for (const item of (Array.isArray(p.items) ? p.items : []) as Record<string, unknown>[]) {
+      const assetPath = str(item.assetPath);
+      if (assetPath) out.push(assetPath);
+    }
+    return out;
+  },
+  // Batch DataAsset upsert: the target package is assembled from each item's
+  // packagePath + name, and never touched at all under dryRun.
+  bulk_upsert_data_assets: (p) => {
+    if (p.dryRun === true) return [];
+    const out: string[] = [];
+    for (const item of (Array.isArray(p.items) ? p.items : []) as Record<string, unknown>[]) {
+      const dir = str(item.packagePath);
+      const name = str(item.name);
+      if (dir && name) out.push(`${dir.replace(/\/+$/, "")}/${name}`);
+    }
+    return out;
+  },
 };
 
 /**

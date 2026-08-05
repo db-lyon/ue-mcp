@@ -47,6 +47,7 @@
 #include "Logging/MessageLog.h"
 #include "HighResScreenshot.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Widgets/SViewport.h"
 #include "Widgets/SWindow.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
@@ -63,6 +64,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "EditorValidatorSubsystem.h"
+#include "Containers/Ticker.h"
 #include "SceneView.h"
 #include "Components/PrimitiveComponent.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
@@ -86,6 +88,50 @@
 
 namespace
 {
+	struct FDirtyEditorPackages
+	{
+		TArray<FString> Content;
+		TArray<FString> Maps;
+	};
+
+	FDirtyEditorPackages CollectDirtyEditorPackages()
+	{
+		FDirtyEditorPackages Dirty;
+		TArray<UPackage*> DirtyPackages;
+		FEditorFileUtils::GetDirtyContentPackages(DirtyPackages);
+		FEditorFileUtils::GetDirtyWorldPackages(DirtyPackages);
+		for (UPackage* Package : DirtyPackages)
+		{
+			if (!Package || !Package->IsDirty())
+			{
+				continue;
+			}
+
+			const FString PackageName = Package->GetName();
+			if (PackageName.StartsWith(TEXT("/Script/")))
+			{
+				continue;
+			}
+
+			(Package->ContainsMap() ? Dirty.Maps : Dirty.Content).AddUnique(PackageName);
+		}
+
+		Dirty.Content.Sort();
+		Dirty.Maps.Sort();
+		return Dirty;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> PackageNamesToJson(const TArray<FString>& PackageNames)
+	{
+		TArray<TSharedPtr<FJsonValue>> Values;
+		Values.Reserve(PackageNames.Num());
+		for (const FString& PackageName : PackageNames)
+		{
+			Values.Add(MakeShared<FJsonValueString>(PackageName));
+		}
+		return Values;
+	}
+
 	bool ResolveEditorObjectFromPath(const FString& ObjectPath, UObject*& OutObject, FString& OutResolvedKind, FString& OutError)
 	{
 		UObject* Object = LoadObject<UObject>(nullptr, *ObjectPath);
@@ -189,12 +235,17 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// order in BridgeServer.cpp, which is not a contract.
 	Registry.RegisterHandler(TEXT("save_dirty"), &SaveDirty);
 	Registry.RegisterHandler(TEXT("list_dirty_packages"), &ListDirtyPackages);
+	Registry.RegisterHandler(TEXT("request_editor_shutdown"), &RequestEditorShutdown);
 	Registry.RegisterHandler(TEXT("list_pie_instances"), &ListPIEInstances);
 	Registry.RegisterHandler(TEXT("invoke_object_function"), &InvokeObjectFunction);
+	Registry.RegisterHandlerWithTimeout(TEXT("invoke_object_functions"), &InvokeObjectFunctions, 300.0f);
 	Registry.RegisterHandler(TEXT("get_object_properties"), &GetObjectProperties);
 	Registry.RegisterHandler(TEXT("read_bone_transforms"), &ReadBoneTransforms);
 	Registry.RegisterHandler(TEXT("teleport_runtime_actor"), &TeleportRuntimeActor);
 	Registry.RegisterHandler(TEXT("set_movement_mode"), &SetMovementMode);
+	// #802: resolve a live instance path, and write to a live instance.
+	Registry.RegisterHandler(TEXT("find_object"), &FindLiveObjects);
+	Registry.RegisterHandler(TEXT("set_object_property"), &SetObjectProperty);
 	Registry.RegisterHandler(TEXT("build_lighting"), &BuildLighting);
 	Registry.RegisterHandler(TEXT("build_all"), &BuildAll);
 	Registry.RegisterHandler(TEXT("validate_assets"), &ValidateAssets);
@@ -1358,55 +1409,102 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 		return MCPError(TEXT("Editor not available"));
 	}
 
-	// #226: target=pie (or auto-detect when PIE is running) routes through
-	// HighResShot in the active PIE world so we capture the player viewport
-	// instead of whatever the editor camera was last looking at.
+	// #226/#724: target=pie (or auto while PIE is running) resolves the
+	// actual client game viewport instead of the first PIE world context.
 	const FString Target = OptionalString(Params, TEXT("target"), TEXT("auto")).ToLower();
 
-	// target=window: synchronous FSlateApplication::TakeScreenshot of the whole
-	// active (or last visible) Slate window. Unlike the FScreenshotRequest paths
-	// this is pixel-true for ALL Slate content (painted UMG/Slate widgets that
-	// showUI compositing can miss), returns only after the PNG is on disk, and
-	// works even when the window is off-screen or unfocused - which makes it the
-	// reliable way for an agent to visually QA game UI.
-	if (Target == TEXT("window"))
+	double RequestedPIEInstanceValue = INDEX_NONE;
+	const bool bHasRequestedPIEInstance =
+		Params->TryGetNumberField(TEXT("pieInstance"), RequestedPIEInstanceValue);
+	const int32 RequestedPIEInstance = bHasRequestedPIEInstance
+		? FMath::RoundToInt(RequestedPIEInstanceValue)
+		: INDEX_NONE;
+	if (bHasRequestedPIEInstance
+		&& !FMath::IsNearlyEqual(RequestedPIEInstanceValue, RequestedPIEInstance))
 	{
-		if (!FSlateApplication::IsInitialized())
+		return MCPError(TEXT("'pieInstance' must be an integer"));
+	}
+
+	FString RequestedWorldPath;
+	const bool bHasRequestedWorldPath =
+		Params->TryGetStringField(TEXT("worldPath"), RequestedWorldPath)
+		&& !RequestedWorldPath.IsEmpty();
+
+	const FWorldContext* SelectedPIEContext = nullptr;
+	const FWorldContext* FirstMatchingPIEContext = nullptr;
+	for (const FWorldContext& Context : GEngine->GetWorldContexts())
+	{
+		UWorld* CandidateWorld = Context.World();
+		if (Context.WorldType != EWorldType::PIE || !CandidateWorld)
 		{
-			return MCPError(TEXT("Slate is not initialized"));
+			continue;
 		}
-		TSharedPtr<SWindow> CaptureWindow = FSlateApplication::Get().GetActiveTopLevelWindow();
-		if (!CaptureWindow.IsValid())
+		if (bHasRequestedPIEInstance && Context.PIEInstance != RequestedPIEInstance)
 		{
-			TArray<TSharedRef<SWindow>> VisibleWindows;
-			FSlateApplication::Get().GetAllVisibleWindowsOrdered(VisibleWindows);
-			if (VisibleWindows.Num() > 0)
-			{
-				CaptureWindow = VisibleWindows.Last();
-			}
+			continue;
 		}
-		if (!CaptureWindow.IsValid())
+		if (bHasRequestedWorldPath
+			&& CandidateWorld->GetPathName() != RequestedWorldPath
+			&& CandidateWorld->GetName() != RequestedWorldPath)
 		{
-			return MCPError(TEXT("No visible Slate window to capture"));
+			continue;
 		}
 
+		if (!FirstMatchingPIEContext)
+		{
+			FirstMatchingPIEContext = &Context;
+		}
+
+		UGameViewportClient* CandidateViewport = CandidateWorld->GetGameViewport();
+		if (CandidateViewport
+			&& CandidateViewport->Viewport
+			&& CandidateViewport->GetGameViewportWidget().IsValid())
+		{
+			SelectedPIEContext = &Context;
+			break;
+		}
+	}
+	if (!SelectedPIEContext)
+	{
+		SelectedPIEContext = FirstMatchingPIEContext;
+	}
+	if ((bHasRequestedPIEInstance || bHasRequestedWorldPath) && !SelectedPIEContext)
+	{
+		return MCPError(FString::Printf(
+			TEXT("No PIE world matched pieInstance=%s worldPath='%s'"),
+			bHasRequestedPIEInstance ? *FString::FromInt(RequestedPIEInstance) : TEXT("<any>"),
+			bHasRequestedWorldPath ? *RequestedWorldPath : TEXT("<any>")));
+	}
+
+	UWorld* PieWorld = SelectedPIEContext ? SelectedPIEContext->World() : nullptr;
+	UGameViewportClient* PieGameViewport = PieWorld ? PieWorld->GetGameViewport() : nullptr;
+	const bool bUsePie = (Target == TEXT("pie")) || (Target == TEXT("auto") && PieWorld);
+
+	// ReportContext is the PIE world the capture actually targeted, or null when
+	// the capture is of something else (the editor window). Reporting an
+	// instance the call did not capture would be worse than reporting none.
+	auto CaptureSlateWidget = [&Filename](
+		const TSharedRef<SWidget>& CaptureWidget,
+		const FString& ResultTarget,
+		const FWorldContext* ReportContext,
+		const FString& CaptureDescription) -> TSharedPtr<FJsonValue>
+	{
 		TArray<FColor> Pixels;
 		FIntVector CaptureSize = FIntVector::ZeroValue;
-		if (!FSlateApplication::Get().TakeScreenshot(CaptureWindow.ToSharedRef(), Pixels, CaptureSize)
+		if (!FSlateApplication::Get().TakeScreenshot(CaptureWidget, Pixels, CaptureSize)
 			|| Pixels.Num() == 0)
 		{
-			return MCPError(TEXT("Slate window screenshot failed"));
+			return MCPError(TEXT("Slate screenshot failed"));
 		}
-		// Slate hands back per-widget alpha; force opaque so the PNG is viewable.
 		for (FColor& Pixel : Pixels)
 		{
 			Pixel.A = 255;
 		}
 
-		FString WindowFullPath = Filename;
-		if (FPaths::IsRelative(WindowFullPath))
+		FString FullPath = Filename;
+		if (FPaths::IsRelative(FullPath))
 		{
-			WindowFullPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), Filename);
+			FullPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), Filename);
 		}
 
 		IImageWrapperModule& ImageWrapperModule =
@@ -1425,76 +1523,125 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 			return MCPError(TEXT("PNG encode failed"));
 		}
 		const TArray64<uint8> PngData = PngWrapper->GetCompressed(100);
-		if (!FFileHelper::SaveArrayToFile(PngData, *WindowFullPath))
+		if (!FFileHelper::SaveArrayToFile(PngData, *FullPath))
 		{
-			return MCPError(FString::Printf(TEXT("Could not write %s"), *WindowFullPath));
+			return MCPError(FString::Printf(TEXT("Could not write %s"), *FullPath));
 		}
 
 		auto Result = MCPSuccess();
-		Result->SetStringField(TEXT("filename"), WindowFullPath);
-		Result->SetStringField(TEXT("target"), TEXT("window"));
-		Result->SetStringField(TEXT("window"), CaptureWindow->GetTitle().ToString());
+		Result->SetStringField(TEXT("filename"), FullPath);
+		Result->SetStringField(TEXT("target"), ResultTarget);
 		Result->SetNumberField(TEXT("width"), CaptureSize.X);
 		Result->SetNumberField(TEXT("height"), CaptureSize.Y);
-		Result->SetStringField(TEXT("note"), TEXT("Synchronous Slate window capture including all UI."));
+		Result->SetStringField(TEXT("note"), CaptureDescription);
+		if (ReportContext && ReportContext->World())
+		{
+			Result->SetNumberField(TEXT("pieInstance"), ReportContext->PIEInstance);
+			Result->SetStringField(TEXT("worldPath"), ReportContext->World()->GetPathName());
+		}
 		return MCPResult(Result);
+	};
+
+	// target=window: synchronous FSlateApplication::TakeScreenshot of a whole
+	// Slate window, pixel-true for ALL Slate content.
+	//
+	// Which window is addressed, not guessed: an explicit pieInstance/worldPath
+	// asks for that PIE client's window, and everything else keeps the original
+	// meaning of "the active window". Preferring the PIE window whenever PIE
+	// happened to be running took away the ability to capture editor UI during a
+	// PIE session, which is how editor utility widgets get QA'd.
+	if (Target == TEXT("window"))
+	{
+		if (!FSlateApplication::IsInitialized())
+		{
+			return MCPError(TEXT("Slate is not initialized"));
+		}
+		const bool bWantsPieWindow = bHasRequestedPIEInstance || bHasRequestedWorldPath;
+		TSharedPtr<SWindow> CaptureWindow;
+		if (bWantsPieWindow)
+		{
+			CaptureWindow = PieGameViewport ? PieGameViewport->GetWindow() : nullptr;
+			if (!CaptureWindow.IsValid())
+			{
+				return MCPError(FString::Printf(
+					TEXT("PIE world '%s' (instance %d) has no Slate window; omit pieInstance/worldPath to capture the active window"),
+					PieWorld ? *PieWorld->GetPathName() : TEXT("<none>"),
+					SelectedPIEContext ? SelectedPIEContext->PIEInstance : INDEX_NONE));
+			}
+		}
+		else
+		{
+			CaptureWindow = FSlateApplication::Get().GetActiveTopLevelWindow();
+			if (!CaptureWindow.IsValid())
+			{
+				TArray<TSharedRef<SWindow>> VisibleWindows;
+				FSlateApplication::Get().GetAllVisibleWindowsOrdered(VisibleWindows);
+				if (VisibleWindows.Num() > 0)
+				{
+					CaptureWindow = VisibleWindows.Last();
+				}
+			}
+		}
+		if (!CaptureWindow.IsValid())
+		{
+			return MCPError(TEXT("No visible Slate window to capture"));
+		}
+
+		TSharedPtr<FJsonValue> CaptureResult = CaptureSlateWidget(
+			CaptureWindow.ToSharedRef(),
+			TEXT("window"),
+			bWantsPieWindow ? SelectedPIEContext : nullptr,
+			bWantsPieWindow
+				? TEXT("Synchronous PIE client window capture including all UI.")
+				: TEXT("Synchronous active window capture including all UI."));
+		if (CaptureResult.IsValid() && CaptureResult->Type == EJson::Object)
+		{
+			CaptureResult->AsObject()->SetStringField(
+				TEXT("window"),
+				CaptureWindow->GetTitle().ToString());
+		}
+		return CaptureResult;
 	}
 
-	UWorld* PieWorld = nullptr;
-	if (FWorldContext* PieCtx = GEditor->GetPIEWorldContext())
+	if (Target == TEXT("pie") && !PieWorld)
 	{
-		PieWorld = PieCtx->World();
+		return MCPError(TEXT("No PIE world is running"));
 	}
-	const bool bUsePie = (Target == TEXT("pie")) || (Target == TEXT("auto") && PieWorld);
 
 	if (bUsePie && PieWorld)
 	{
-		// #724: HighResShot renders the PIE world offscreen and (a) strips the
-		// debug canvas (AddOnScreenDebugMessage overlays) and (b) in
-		// Play-in-New-Window did not reliably resolve to the PIE game window.
-		// Capture the actual PIE game viewport with a normal screenshot request
-		// and bShowUI=true, so we get exactly what the player sees - HUD and the
-		// on-screen debug canvas included. The running game viewport consumes the
-		// pending request on its next Draw, so this targets the PIE window even
-		// in new-window mode. Fall back to HighResShot only if no game viewport.
-		FString FullPath = Filename;
-		if (FPaths::IsRelative(Filename))
+		// Resolve the client viewport explicitly in multi-instance PIE. Capturing
+		// its SViewport is synchronous and includes the painted UMG/Slate layer.
+		if (PieGameViewport && PieGameViewport->GetGameViewportWidget().IsValid())
 		{
-			FullPath = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), Filename);
+			TSharedPtr<FJsonValue> CaptureResult = CaptureSlateWidget(
+				PieGameViewport->GetGameViewportWidget().ToSharedRef(),
+				TEXT("pie"),
+				SelectedPIEContext,
+				TEXT("Synchronous selected PIE game-viewport capture including UMG/Slate UI."));
+			if (CaptureResult.IsValid() && CaptureResult->Type == EJson::Object)
+			{
+				// The capture is the game viewport's composited output, which is
+				// where AddOnScreenDebugMessage draws. That overlay exists only
+				// while the engine is drawing on-screen messages at all, so read
+				// the flags instead of advertising the canvas unconditionally.
+				const bool bDebugCanvas = GEngine->bEnableOnScreenDebugMessages
+					&& GEngine->bEnableOnScreenDebugMessagesDisplay;
+				CaptureResult->AsObject()->SetBoolField(TEXT("includesDebugCanvas"), bDebugCanvas);
+				if (!bDebugCanvas)
+				{
+					CaptureResult->AsObject()->SetStringField(
+						TEXT("debugCanvasNote"),
+						TEXT("On-screen debug messages are disabled on GEngine, so AddOnScreenDebugMessage overlays are not drawn into this capture."));
+				}
+			}
+			return CaptureResult;
 		}
 
-		UGameViewportClient* GameViewport = PieWorld->GetGameViewport();
-		if (GameViewport && GameViewport->Viewport)
-		{
-			FScreenshotRequest::RequestScreenshot(FullPath, /*bShowUI=*/true, /*bAddFilenameSuffix=*/false);
-			GameViewport->Viewport->Invalidate();
-
-			auto Result = MCPSuccess();
-			Result->SetStringField(TEXT("filename"), FullPath);
-			Result->SetStringField(TEXT("target"), TEXT("pie"));
-			Result->SetBoolField(TEXT("includesDebugCanvas"), true);
-			Result->SetStringField(TEXT("note"), TEXT("PIE game-viewport screenshot queued (UI + on-screen debug canvas included); written asynchronously."));
-			return MCPResult(Result);
-		}
-
-		// Fallback: no resolvable game viewport (unusual) - dispatch HighResShot.
-		int32 Width = OptionalInt(Params, TEXT("width"), 1920);
-		int32 Height = OptionalInt(Params, TEXT("height"), 1080);
-		double ResolutionScalar = 0.0;
-		if (Params->TryGetNumberField(TEXT("resolution"), ResolutionScalar) && ResolutionScalar > 0)
-		{
-			Width = (int32)ResolutionScalar;
-			Height = (int32)(ResolutionScalar * 9.0 / 16.0);
-		}
-		const FString ConsoleCmd = FString::Printf(TEXT("HighResShot %dx%d"), Width, Height);
-		GEngine->Exec(PieWorld, *ConsoleCmd);
-		auto Result = MCPSuccess();
-		Result->SetStringField(TEXT("filename"), Filename);
-		Result->SetStringField(TEXT("target"), TEXT("pie"));
-		Result->SetStringField(TEXT("consoleCommand"), ConsoleCmd);
-		Result->SetBoolField(TEXT("includesDebugCanvas"), false);
-		Result->SetStringField(TEXT("note"), TEXT("No game viewport resolved; HighResShot dispatched (debug canvas not captured). Output in Saved/Screenshots/<map>/."));
-		return MCPResult(Result);
+		return MCPError(FString::Printf(
+			TEXT("PIE world '%s' (instance %d) has no capturable game viewport"),
+			*PieWorld->GetPathName(),
+			SelectedPIEContext ? SelectedPIEContext->PIEInstance : INDEX_NONE));
 	}
 
 	FLevelEditorViewportClient* ViewportClient = GCurrentLevelEditingViewportClient;
@@ -1687,27 +1834,22 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveDirty(const TSharedPtr<FJsonObject>&
 // without the Python escape.
 TSharedPtr<FJsonValue> FEditorHandlers::ListDirtyPackages(const TSharedPtr<FJsonObject>& Params)
 {
+	const FDirtyEditorPackages Dirty = CollectDirtyEditorPackages();
 	TArray<TSharedPtr<FJsonValue>> Content;
 	TArray<TSharedPtr<FJsonValue>> Maps;
-	for (TObjectIterator<UPackage> It; It; ++It)
+	Content.Reserve(Dirty.Content.Num());
+	Maps.Reserve(Dirty.Maps.Num());
+	for (const FString& PackageName : Dirty.Content)
 	{
-		UPackage* Pkg = *It;
-		if (!Pkg || !Pkg->IsDirty()) continue;
-		const FString Name = Pkg->GetName();
-		if (Name.StartsWith(TEXT("/Script/"))) continue;
-		if (Name.StartsWith(TEXT("/Temp/"))) continue;
-		if (!FPackageName::IsValidLongPackageName(Name)) continue;
-
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
-		Entry->SetStringField(TEXT("package"), Name);
-		if (Pkg->ContainsMap())
-		{
-			Maps.Add(MakeShared<FJsonValueObject>(Entry));
-		}
-		else
-		{
-			Content.Add(MakeShared<FJsonValueObject>(Entry));
-		}
+		Entry->SetStringField(TEXT("package"), PackageName);
+		Content.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+	for (const FString& PackageName : Dirty.Maps)
+	{
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("package"), PackageName);
+		Maps.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 
 	auto Result = MCPSuccess();
@@ -1715,6 +1857,73 @@ TSharedPtr<FJsonValue> FEditorHandlers::ListDirtyPackages(const TSharedPtr<FJson
 	Result->SetNumberField(TEXT("mapCount"), Maps.Num());
 	Result->SetArrayField(TEXT("content"), Content);
 	Result->SetArrayField(TEXT("maps"), Maps);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor)
+	{
+		return MCPError(TEXT("Editor not available"));
+	}
+
+	const bool bRequireClean = OptionalBool(Params, TEXT("requireClean"), true);
+	const bool bEndPIE = OptionalBool(Params, TEXT("endPIE"), true);
+	const bool bPIEWasActive = GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor;
+	const FDirtyEditorPackages Dirty = CollectDirtyEditorPackages();
+
+	auto Result = MCPSuccess();
+	Result->SetBoolField(TEXT("scheduled"), false);
+	Result->SetBoolField(TEXT("requireClean"), bRequireClean);
+	Result->SetBoolField(TEXT("endPIE"), bEndPIE);
+	Result->SetBoolField(TEXT("pieWasActive"), bPIEWasActive);
+	Result->SetBoolField(TEXT("pieEndRequested"), false);
+	Result->SetNumberField(TEXT("dirtyContentCount"), Dirty.Content.Num());
+	Result->SetNumberField(TEXT("dirtyMapCount"), Dirty.Maps.Num());
+	Result->SetArrayField(TEXT("dirtyContentPackages"), PackageNamesToJson(Dirty.Content));
+	Result->SetArrayField(TEXT("dirtyMapPackages"), PackageNamesToJson(Dirty.Maps));
+
+	if (bPIEWasActive && !bEndPIE)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), TEXT("PIE is active and endPIE is false; editor shutdown was not scheduled"));
+		return MCPResult(Result);
+	}
+
+	if (bRequireClean && (Dirty.Content.Num() > 0 || Dirty.Maps.Num() > 0))
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), TEXT("Editor has dirty content or map packages; save or discard them before requesting shutdown"));
+		return MCPResult(Result);
+	}
+
+	if (bPIEWasActive)
+	{
+		GEditor->RequestEndPlayMap();
+		Result->SetBoolField(TEXT("pieEndRequested"), true);
+	}
+
+	// Use a positive delay because a zero-delay ticker added while the core
+	// ticker is pumping can execute in the same pass. If PIE/SIE was active,
+	// keep polling until the editor has actually finished ending play.
+	FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateLambda([](float) -> bool
+		{
+			if (!GEditor)
+			{
+				return false;
+			}
+			if (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor)
+			{
+				return true;
+			}
+			UKismetSystemLibrary::QuitEditor();
+			return false;
+		}),
+		1.0f);
+
+	Result->SetBoolField(TEXT("scheduled"), true);
+	Result->SetStringField(TEXT("message"), TEXT("Graceful editor shutdown scheduled; active PIE/SIE will end before close"));
 	return MCPResult(Result);
 }
 

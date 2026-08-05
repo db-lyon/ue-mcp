@@ -27,7 +27,7 @@ For any existing Blueprint:
 - `blueprint(action="read", assetPath=...)` — structure (parent, components, graphs)
 - `blueprint(action="read_graph_summary", assetPath=..., graphName=...)` — lightweight node+edge summary (~10KB) — use this before `read_graph` (which can be 100KB+)
 - `blueprint(action="list_graphs", assetPath=...)` — every graph in the BP including event graphs, functions, macros, interface impls
-- `blueprint(action="list_variables" | "list_functions" | "list_local_variables")` — the member surface
+- `blueprint(action="list_variables" | "list_functions" | "list_local_variables")` - the member surface. `list_functions` covers the same graphs as `list_graphs` (own functions, parent overrides, interface impls, event graphs and their entry points, macros, collapsed subgraphs), each tagged with `kind` and `source`; pass `includeInherited: true` to also see overridable functions not implemented yet
 - `blueprint(action="get_execution_flow", assetPath=..., entryPoint=...)` — trace exec pins from an entry point
 - `blueprint(action="get_dependencies", assetPath=..., reverse=false|true)` — classes/functions/assets this BP uses, or callers if `reverse: true`
 

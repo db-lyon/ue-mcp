@@ -27,6 +27,17 @@ describe("classifyAction", () => {
     expect(classifyAction("asset.bulk_rename", { renames: [{ sourcePath: "/Game/A" }, { assetPath: "/Game/C" }] }).paths.sort()).toEqual(["/Game/A", "/Game/C"]);
   });
 
+  it("extracts asset paths from bulk property descriptors", () => {
+    const c = classifyAction("asset.bulk_set_properties", {
+      items: [
+        { assetPath: "/Game/A", properties: { Enabled: true } },
+        { assetPath: "/Game/B", properties: { "Config.Weight": 2 } },
+      ],
+    });
+    expect(c.mutates).toBe(true);
+    expect(c.paths.sort()).toEqual(["/Game/A", "/Game/B"]);
+  });
+
   it("does not treat a filesystem source (filePath) as an asset path", () => {
     // import uses filePath (disk) + packagePath; we only lock things that look
     // like content paths pulled from known asset-path keys.

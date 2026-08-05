@@ -34,10 +34,14 @@ const ASSET_ACTIONS = [
   "move_widget", "set_root", "wrap_root", "add_to_viewport",
 ];
 
-/** Actions that address a live instance or the project, never a single asset. */
+/**
+ * Actions that address a live instance or the project, never a single asset.
+ * extract_subtree names two assets of its own (sourceAssetPath +
+ * destinationAssetPath), so the single-asset rule does not apply to it.
+ */
 const NON_ASSET_ACTIONS = [
   "list", "list_classes", "list_runtime", "get_runtime", "get_runtime_delegates",
-  "invoke_runtime_function",
+  "invoke_runtime_function", "inspect_runtime_instances", "extract_subtree",
 ];
 
 describe("widget category parameter contract", () => {

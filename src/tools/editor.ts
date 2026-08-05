@@ -8,6 +8,12 @@ import { searchTools } from "../tool-search.js";
 import { Vec3, Rotator } from "../schemas.js";
 import { FunctionArgs, normalizeFunctionArgs, normalizePythonArgs } from "../function-args.js";
 
+/** Where a caller declares a standing opt-in to the Blueprint-error bypass.
+ *  Rides the normal global < project < env < local config cascade, so a
+ *  developer can enable it in the untracked ue-mcp.local.yml without
+ *  committing the relaxed behavior for the whole team. */
+const IGNORE_BLUEPRINT_ERRORS_CONFIG_KEY = "ue-mcp.pie.allowIgnoreBlueprintErrors";
+
 export const editorTool: ToolDef = categoryTool(
   "editor",
   "Editor commands, Python execution, PIE, undo/redo, hot reload, viewport, performance, sequencer, build pipeline, logs, editor control.",
@@ -197,16 +203,90 @@ export const editorTool: ToolDef = categoryTool(
     get_property: bp("Read UObject property. Params: objectPath, propertyName", "get_property"),
     describe_object: bp("Describe a UObject and optionally list/read properties. Params: objectPath, includeProperties?, includeValues?, propertyNames?", "describe_object"),
     play_in_editor: bp("PIE control. Params: pieAction (start|stop|status), waitForAssetRegistry? (start only; default true - block until the AssetRegistry initial scan completes before requesting PIE, otherwise PIE silently no-ops on cold editor starts), assetRegistryTimeoutSeconds? (default 180) (#406)", "pie_control", (p) => ({ action: p.pieAction ?? "status", waitForAssetRegistry: p.waitForAssetRegistry, assetRegistryTimeoutSeconds: p.assetRegistryTimeoutSeconds })),
+    play_in_editor_ignore_blueprint_errors: {
+      description: `Start PIE for one launch with the editor's unresolved-Blueprint-error prompt suppressed. PIE then runs whatever bytecode those Blueprints last compiled to, so the launch is authorized per call: set ${IGNORE_BLUEPRINT_ERRORS_CONFIG_KEY} to true in your ue-mcp config to pre-authorize it, otherwise the user answers an MCP approval prompt. The bridge refuses the launch when a Blueprint would have to be recompiled first (dirty non-data Blueprints, errored Level Blueprints) and lists every errored Blueprint it suppressed in loadedErroredBlueprints. Params: waitForAssetRegistry? (default true), assetRegistryTimeoutSeconds? (default 180).`,
+      handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
+        const preauthorized = ctx.project.config.pie?.allowIgnoreBlueprintErrors === true;
+        let authorizationSource = "config";
+
+        if (!preauthorized) {
+          authorizationSource = "user_approval";
+          if (!ctx.elicit) {
+            return {
+              success: false,
+              blocked: true,
+              code: "approval_required",
+              message: `This action needs a user approval prompt, and the connected MCP client did not advertise the elicitation capability. Set ${IGNORE_BLUEPRINT_ERRORS_CONFIG_KEY} to true in ue-mcp.local.yml to pre-authorize it instead.`,
+            };
+          }
+
+          let approval;
+          try {
+            approval = await ctx.elicit({
+              message: [
+                "Start Play In Editor while bypassing unresolved Blueprint compiler-error dialogs?",
+                "",
+                "PIE may run stale or invalid Blueprint bytecode. Runtime behavior and validation results may be unreliable until those Blueprint errors are fixed.",
+                "",
+                "Approve only for this PIE launch.",
+              ].join("\n"),
+              requestedSchema: {
+                type: "object",
+                properties: {},
+              },
+            });
+          } catch (error) {
+            return {
+              success: false,
+              blocked: true,
+              code: "approval_prompt_failed",
+              message: error instanceof Error ? error.message : String(error),
+            };
+          }
+
+          if (approval.action !== "accept") {
+            return {
+              success: false,
+              blocked: true,
+              code: approval.action === "decline" ? "user_declined" : "user_cancelled",
+              message: "PIE was not started because bypass approval was not granted.",
+            };
+          }
+        }
+
+        return ctx.bridge.call("pie_control", {
+          action: "start",
+          ignoreBlueprintErrors: true,
+          authorizationSource,
+          waitForAssetRegistry: p.waitForAssetRegistry,
+          assetRegistryTimeoutSeconds: p.assetRegistryTimeoutSeconds,
+        });
+      },
+    },
     get_runtime_value: bp("Read PIE actor property. Params: actorLabel, propertyName (supports dotted paths: component.field or component.struct.field for nested reads on component subobjects, #344/#381)", "get_runtime_value"),
     get_pie_pawn: bp("Resolve the controlled pawn in the active PIE world. Params: playerIndex? (default 0). Returns actorLabel/class/location/rotation (#228/#229)", "get_pie_pawn", (p) => ({ playerIndex: p.playerIndex })),
     list_pie_instances: bp("List the running PIE worlds with their instance id, net mode (standalone|listenServer|dedicatedServer|client), player count and whether they own a game viewport. In a multiplayer PIE session every other runtime action resolves the primary world (the server) unless you pass pieInstance, so this is how you discover that a client exists and what id addresses it. Params: none (#778)", "list_pie_instances"),
     invoke_object_function: bp("Call a UFUNCTION on any UObject, not just a placed actor. Target it with objectPath, or target=gameinstance|gamemode|gamestate|playercontroller|playerpawn|subsystem (subsystem also needs subsystemClass; playercontroller/playerpawn accept playerIndex). The GameInstance, GameMode and subsystems have no actor label, so invoke_function could never reach them. Returns output and return params under returnValues; an unknown function name lists the available ones. Params: functionName, objectPath? | target?, subsystemClass?, playerIndex?, args?, world? (editor|pie|auto), pieInstance? (#739)", "invoke_object_function", (p) => ({ functionName: p.functionName, objectPath: p.objectPath, target: p.target, subsystemClass: p.subsystemClass, playerIndex: p.playerIndex, args: normalizeFunctionArgs(p.args), world: p.world, pieInstance: p.pieInstance })),
-    get_object_properties: bp("Read reflected properties off any UObject, with the same targeting as invoke_object_function. Pass propertyNames to filter; names that do not exist come back under missingProperties instead of silently returning nothing. Params: objectPath? | target?, subsystemClass?, playerIndex?, propertyNames?, world? (editor|pie|auto), pieInstance? (#739)", "get_object_properties", (p) => ({ objectPath: p.objectPath, target: p.target, subsystemClass: p.subsystemClass, playerIndex: p.playerIndex, propertyNames: p.propertyNames, world: p.world, pieInstance: p.pieInstance, limit: p.limit, maxValueLength: p.maxValueLength })),
-    read_bone_transforms: bp("Read live skeletal bone and socket transforms off an actor, once. This is a point-in-time read, NOT a time series - for per-frame capture over a window use the pie category's observe actions. Pass bones (bone OR socket names) or omit for every bone up to limit. space=world (default) or component; component space is independent of where the actor is standing. Also reports the AnimInstance class/path. Params: actorLabel, componentName?, bones?, space?, limit?, world? (editor|pie|auto), pieInstance? (#756/#757/#761/#764)", "read_bone_transforms", (p) => ({ actorLabel: p.actorLabel, componentName: p.componentName, bones: p.bones, space: p.space, limit: p.limit, world: p.world, pieInstance: p.pieInstance })),
+    invoke_object_functions: {
+      description: "Call 1-64 UFUNCTIONs in order without yielding to the editor tick loop. Each call independently targets a UObject using the same fields as invoke_object_function, so one sequence can span an actor and its components. Calls stop at the first failure; earlier calls are not rolled back. Returns results[] in call order plus completedCalls/requestedCalls, and failedIndex when it stops early, so a retry can resume instead of replaying mutations. Params: calls[] ({functionName, objectPath? | target?, subsystemClass?, playerIndex?, args?}), world? (editor|pie|auto), pieInstance?",
+      bridge: "invoke_object_functions",
+      timeoutMs: 300_000,
+      mapParams: (p) => ({
+        calls: Array.isArray(p.calls)
+          ? (p.calls as Record<string, unknown>[]).map((c, i) => ({ ...c, args: normalizeFunctionArgs(c.args, `calls[${i}].args`) }))
+          : p.calls,
+        world: p.world,
+        pieInstance: p.pieInstance,
+      }),
+    },
+    read_bone_transforms: bp("Read live skeletal bone and socket transforms off an actor, once. This is a point-in-time read, NOT a time series - for per-frame capture over a window use the pie category's observe actions. Pass bones (bone OR socket names) or omit for every bone up to limit. space=world (default) or component; component space is independent of where the actor is standing. Pass relativeTo (bone OR socket name) to express every sample in that live reference frame; relativeTo supersedes space and is calculated in component space. Also reports the AnimInstance class/path. Params: actorLabel, componentName?, bones?, relativeTo?, space?, limit?, world? (editor|pie|auto), pieInstance? (#756/#757/#761/#764)", "read_bone_transforms", (p) => ({ actorLabel: p.actorLabel, componentName: p.componentName, bones: p.bones, relativeTo: p.relativeTo, space: p.space, limit: p.limit, world: p.world, pieInstance: p.pieInstance })),
+    get_object_properties: bp("Read reflected properties off any UObject, with the same targeting as invoke_object_function. Blueprint-declared variables are reflected properties, so they read the same way as native ones. Pass propertyNames to filter; entries may use the Details-panel spelling ('World Context Object' finds WorldContextObject, 'Is Active' finds bIsActive). Names that do not exist come back under missingProperties instead of silently returning nothing. Params: objectPath? | target?, subsystemClass?, playerIndex?, propertyNames?, world? (editor|pie|auto), pieInstance? (#739/#802)", "get_object_properties", (p) => ({ objectPath: p.objectPath, target: p.target, subsystemClass: p.subsystemClass, playerIndex: p.playerIndex, propertyNames: p.propertyNames, world: p.world, pieInstance: p.pieInstance, limit: p.limit, maxValueLength: p.maxValueLength })),
     set_movement_mode: bp("Set a live PIE character's movement mode and/or velocity on its CharacterMovementComponent. Modes are named (none|walking|navwalking|falling|swimming|flying|custom) rather than raw enum numbers, because a wrong number reads as success and then behaves as None. Reports previousMode/previousVelocity and reads the mode back afterwards, since SetMovementMode can refuse a mode the character cannot enter (flying with bCanFly off, swimming outside a volume). Params: actorLabel, mode?, customMode? (only with mode='custom'), velocity? {x,y,z}, world? (default pie), pieInstance? (#757)", "set_movement_mode", (p) => ({ actorLabel: p.actorLabel, mode: p.mode, customMode: p.customMode, velocity: p.velocity, world: p.world, pieInstance: p.pieInstance })),
+    set_object_property: bp("Write a reflected property on a live UObject instance, with the same targeting as invoke_object_function. Use this for a PIE actor, a spawned widget or any runtime instance: editor(set_property) is the asset path and marks the package dirty and saves it, which a live instance has no business doing. propertyName accepts dotted/indexed paths and the Details-panel spelling. Reports previousValue plus the value read back after the write, so a coerced or clamped write is visible. Nothing is saved; pass postEditChange=true to fire PostEditChangeProperty. Params: propertyName, value, objectPath? | target?, subsystemClass?, playerIndex?, postEditChange?, world? (editor|pie|auto), pieInstance? (#802)", "set_object_property", (p) => ({ propertyName: p.propertyName, value: p.value, objectPath: p.objectPath, target: p.target, subsystemClass: p.subsystemClass, playerIndex: p.playerIndex, postEditChange: p.postEditChange, world: p.world, pieInstance: p.pieInstance })),
+    find_object: bp("Resolve or search for a live UObject instance and report the objectPath that addresses it, which is what invoke_object_function / get_object_properties / set_object_property need. Pass objectPath to check one path (returns found/isValid rather than failing when it is gone), or className and/or nameContains to search every loaded object. className takes a short name (StaticMeshActor), a /Script path, a generated class name (WBP_Hud_C) or a Blueprint asset path. This is how you get the path of something spawned at runtime, an editor utility widget or a UMG widget, which no naming convention predicts. Params: objectPath? | className?, nameContains?, outerPath?, exactClass?, includeDefaults?, world? (any (default)|editor|pie), pieInstance?, limit? (default 50) (#802)", "find_object", (p) => ({ objectPath: p.objectPath, className: p.className, nameContains: p.nameContains, outerPath: p.outerPath, exactClass: p.exactClass, includeDefaults: p.includeDefaults, world: p.world, pieInstance: p.pieInstance, limit: p.limit })),
     teleport_runtime_actor: bp("Move a live PIE actor and have it STAY moved. A plain SetActorLocation on a Character is undone by CharacterMovement on the next tick, so this stops the movement component, teleports, and stops it again. Reports actualLocation read back from the actor rather than what was requested. Params: actorLabel, location?, rotation?, stopMovement? (default true), sweep? (default false), world? (default pie), pieInstance? (#770/#777)", "teleport_runtime_actor", (p) => ({ actorLabel: p.actorLabel, location: p.location, rotation: p.rotation, stopMovement: p.stopMovement, sweep: p.sweep, world: p.world, pieInstance: p.pieInstance })),
-    invoke_function: bp("Call a BlueprintCallable / Exec UFUNCTION on a target actor or one of its components. Params: actorLabel, functionName, component? (component subobject name; redirects target from the actor to that component, #382), args? (object mapping parameter name to value; an entry list of name/value objects, or a JSON string of either, is normalized to it - #811), actorArgs? (object mapping UObject* parameter name to actor label, resolved against live actors in the active world; #383), world? (editor|pie). Returns out/return params (#228/#229)", "invoke_function", (p) => ({ actorLabel: p.actorLabel, functionName: p.functionName, component: p.component, args: normalizeFunctionArgs(p.args), actorArgs: p.actorArgs, world: p.world, pieInstance: p.pieInstance })),
     invoke_static_function: bp("Call a static UFUNCTION on a UBlueprintFunctionLibrary (no actor instance). invoke_function needs an actor/component target; this targets the library class CDO instead, so it reaches static *_BlueprintOnly libraries (Voxel sculpt/query/stamp), GeometryScript, Kismet math, any function library. Params: className (short name or /Script/Module.Class path), functionName, args? (name -> JSON value, same marshalling as invoke_function), actorArgs? (name -> actor label for UObject* params that are actors, e.g. the sculpt actor), worldContextParam? (name of a UObject* param to fill with the editor/PIE world; auto-detected for params named WorldContextObject), world? (editor|pie). Returns return/out params under returnValues. Discover libraries + functions with list_function_libraries.", "invoke_static_function", (p) => ({ className: p.className, functionName: p.functionName, args: normalizeFunctionArgs(p.args), actorArgs: p.actorArgs, worldContextParam: p.worldContextParam, world: p.world, pieInstance: p.pieInstance })),
+    invoke_function: bp("Call a BlueprintCallable / Exec UFUNCTION on a target actor or one of its components. world=editor (the default) runs the function on the actor placed in the level, no PIE session needed, and reports which instance ran it as resolvedActorLabel/resolvedActorPath. actorLabel is matched against placed actors by editor label first, then internal object name, then full object path; a miss is an error naming what was searched (#806). Params: actorLabel, functionName, component? (component subobject name; redirects target from the actor to that component, #382), args? (object; struct values accept a JSON object such as {X,Y,Z} as well as an export-text string), actorArgs? (object mapping UObject* parameter name to actor label, resolved against live actors in the active world; #383), world? (editor|pie). Returns out/return params (#228/#229)", "invoke_function", (p) => ({ actorLabel: p.actorLabel, functionName: p.functionName, component: p.component, args: normalizeFunctionArgs(p.args), actorArgs: p.actorArgs, world: p.world, pieInstance: p.pieInstance })),
     list_function_libraries: bp("Enumerate UBlueprintFunctionLibrary subclasses on this build. Filter by name (case-insensitive substring, e.g. 'GeometryScript' / 'Kismet' / 'Animation'). Returns name, module, and (by default) every static BlueprintCallable function on the library with its tooltip. Use to discover what's available for editor.invoke_function (#455). Params: pattern?, includeFunctions?", "list_function_libraries", (p) => ({ pattern: p.pattern, includeFunctions: p.includeFunctions })),
     set_pie_time_scale: bp("Fast-forward PIE game time. Params: factor (>0). Raises WorldSettings caps and calls SetGlobalTimeDilation.", "set_pie_time_scale"),
     hot_reload: bp("Hot reload C++", "hot_reload"),
@@ -216,7 +296,7 @@ export const editorTool: ToolDef = categoryTool(
     run_stat: bp("Run a stat overlay. Params: name (bare stat name, e.g. 'unit','fps','game','gpu') OR command (full console command). A bare name is prefixed with 'stat ' (#722).", "run_stat_command", (p) => ({ command: p.command, name: p.name })),
     set_scalability: bp("Set rendering quality via the Scalability system (actually applies + persists, not just sg.* cvars). Params: level (Low|Medium|High|Epic|Cinematic). Returns appliedLevels (#591)", "set_scalability"),
     set_cvars: bp("Bulk-set console variables. Params: cvars ({name: value} object OR [{name, value}] array). Returns per-cvar old/new values and any notFound names (#591)", "set_cvars", (p) => ({ cvars: p.cvars })),
-    capture_screenshot: bp("Screenshot. target=pie captures the actual PIE game viewport with UI + on-screen debug canvas (what the player sees), even in Play-in-New-Window; target=editor captures the level viewport; target=window synchronously captures the whole active Slate window via FSlateApplication::TakeScreenshot - pixel-true for ALL Slate/UMG UI (painted widgets the compositing paths can miss), returns after the PNG is written, and works while the window is unfocused or off-screen, so it is the reliable mode for agent visual QA of game UI. Params: filename?, resolution?, target? (auto|pie|editor|window; auto routes to PIE when running). Returns includesDebugCanvas (#226/#724), and window title + width/height for target=window", "capture_screenshot"),
+    capture_screenshot: bp("Screenshot. target=pie synchronously captures the selected PIE client game viewport with UMG/Slate UI; target=editor captures the level viewport; target=window synchronously captures a whole Slate window via FSlateApplication::TakeScreenshot - pixel-true for ALL Slate/UMG UI, returns after the PNG is written, and works while the window is unfocused or off-screen. Multi-instance PIE automatically prefers a world with a game viewport; pass pieInstance or worldPath to select explicitly, which for target=window is what picks the PIE client window instead of the active editor window. Every mode captures at the source viewport/window size - use capture_scene_png for a chosen output size. Params: filename?, target? (auto|pie|editor|window), pieInstance?, worldPath?. Returns the resolved PIE instance/world and image dimensions (#226/#724).", "capture_screenshot", (p) => ({ filename: p.filename, target: p.target, pieInstance: p.pieInstance, worldPath: p.worldPath })),
     capture_scene_png: bp("Headless PNG screenshot via SceneCapture2D (works unfocused, guaranteed RGBA8 LDR). focusActorLabel auto-frames the camera on an actor's bounds; world:pie captures the running game world (#599). Params: outputPath, location?, rotation?, focusActorLabel?, focusDirection?, focusMargin?, world? (editor|pie), width? (default 1280), height? (default 720), fov? (default 90) (#148/#599)", "capture_scene_png", (p) => ({ pieInstance: p.pieInstance, outputPath: p.outputPath, location: p.location, rotation: p.rotation, focusActorLabel: p.focusActorLabel, focusDirection: p.focusDirection, focusMargin: p.focusMargin, world: p.world, width: p.width, height: p.height, fov: p.fov, fullyLoadTextures: p.fullyLoadTextures })),
     set_realtime: bp("Toggle realtime update on the level editor viewports so the editor-world sim (Niagara, anims) ticks - otherwise capture_scene_png renders an unticked, empty sim. Params: enabled (default true) (#537)", "set_realtime", (p) => ({ enabled: p.enabled })),
     get_viewport: bp("Get viewport camera", "get_viewport_info"),
@@ -256,7 +336,8 @@ export const editorTool: ToolDef = categoryTool(
     pie_set_player_view: bp("Point the running PIE player's view (control rotation) at a pitch/yaw/roll so a capture frames the intended direction. Requires PIE. Params: pitch?, yaw?, roll? (#671)", "pie_set_player_view", (p) => ({ pitch: p.pitch, yaw: p.yaw, roll: p.roll })),
     stage_game_input: bp("Stage input for the running game: set input mode (gameOnly|gameAndUI|uiOnly) and mouse cursor so injected/simulated input reaches the pawn. This only sets the mode - the injection itself lives in the pie category (pie(inject_input*)), not here. Requires PIE. Params: inputMode? (default gameOnly), showMouseCursor? (#671)", "stage_game_input", (p) => ({ inputMode: p.inputMode, showMouseCursor: p.showMouseCursor })),
     run_automation_tests: bp("Run registered Automation tests matching a filter and return per-test pass/fail plus error lines. Runs them synchronously through the test framework rather than the console queue, and suspends the editor's unfocused-CPU throttle for the duration - otherwise an unfocused editor drops to a few FPS and the framework's interactive-frame-rate gate never opens, leaving tests queued forever (#765). Params: filter?, maxTests? (default 50) (#693)", "run_automation_tests", (p) => ({ filter: p.filter, maxTests: p.maxTests })),
-    list_dirty_packages: bp("Enumerate currently-dirty content + map packages (#340)", "list_dirty_packages"),
+    list_dirty_packages: bp("Enumerate currently-dirty content + map packages, read from the editor's own dirty-package lists (the same ones Save All uses). Includes a never-saved /Temp world, because an unsaved new map is exactly the unsaved work a caller needs to see before closing or reloading (#340)", "list_dirty_packages"),
+    request_editor_shutdown: bp("Ask the editor to close itself from inside the engine, after it has checked that closing is safe. Refuses by default when any content or map package is dirty (including an unsaved /Temp world) and reports which ones, so nothing is lost to a silent discard. Ends an active PIE/SIE session first and closes only once play has actually stopped. The response is returned before the process exits. Use editor(stop_editor) for the full stop-and-confirm flow; this action is the in-engine half of it. Params: requireClean? (default true), endPIE? (default true)", "request_editor_shutdown", (p) => ({ requireClean: p.requireClean, endPIE: p.endPIE })),
   },
   undefined,
   {
@@ -271,18 +352,35 @@ export const editorTool: ToolDef = categoryTool(
     ruledOut: z.array(z.object({ action: z.string(), reason: z.string() })).optional().describe("execute_python: reason each searched candidate action does not fit; every candidate must be ruled out before Python runs (#704)"),
     filePath: z.string().optional().describe("Absolute path to a .py file for run_python_file"),
     args: FunctionArgs.optional().describe('run_python_file: array of positional args. invoke_function / invoke_object_function / invoke_static_function: object mapping parameter name to value, e.g. {"bEnabled": true}. An entry list ([{"name","value"}]) or a JSON string of either is accepted and normalized (#811)'),
+    calls: z.array(z.object({
+      functionName: z.string().min(1),
+      objectPath: z.string().optional(),
+      target: z.string().optional(),
+      subsystemClass: z.string().optional(),
+      playerIndex: z.number().int().optional(),
+      args: FunctionArgs.optional(),
+    })).min(1).max(64).optional().describe("invoke_object_functions: ordered UObject calls executed in one game-thread dispatch"),
     objectPath: z.string().optional(),
     target: z.string().optional().describe("capture_screenshot: auto (default) | pie | editor | window. invoke_object_function/get_object_properties: gameinstance | gamemode | gamestate | playercontroller | playerpawn | subsystem (#739)"),
+    worldPath: z.string().optional().describe("capture_screenshot: select an exact PIE UWorld path or name"),
     playerIndex: z.number().optional().describe("get_pie_pawn: 0-based player index (default 0)"),
     functionName: z.string().optional(),
     timeout: z.number().optional().describe("start_editor: seconds to wait for the bridge (default 120) (#758)"),
     probeWindows: z.boolean().optional().describe("get_engine_state: also enumerate native windows to catch pre-Slate dialogs (default true, costs ~2s)"),
+    requireClean: z.boolean().optional().describe("request_editor_shutdown: refuse to close while any content or map package is dirty (default true)"),
+    endPIE: z.boolean().optional().describe("request_editor_shutdown: end an active PIE/SIE session before closing (default true); false refuses to close while play is running"),
     pieInstance: z.number().optional().describe("Select which PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances (#778)"),
     subsystemClass: z.string().optional().describe("invoke_object_function/get_object_properties: subsystem class name or /Script path (#739)"),
     bones: z.array(z.string()).optional().describe("read_bone_transforms: bone OR socket names; omit for every bone (#756)"),
     componentName: z.string().optional().describe("read_bone_transforms: which SkeletalMeshComponent to read; omit for the first one (#756)"),
-    limit: z.number().optional().describe("read_bone_transforms: max bones when 'bones' is omitted (default 200). get_object_properties: max properties returned (default 200) (#756/#739)"),
+    relativeTo: z.string().optional().describe("read_bone_transforms: express every sample relative to this live bone OR socket; supersedes space"),
+    limit: z.number().optional().describe("read_bone_transforms: max bones when 'bones' is omitted (default 200). get_object_properties: max properties returned (default 200). find_object: max matches returned (default 50) (#756/#739/#802)"),
     maxValueLength: z.number().optional().describe("get_object_properties: truncate each exported value past this many characters (default 2000) (#739)"),
+    postEditChange: z.boolean().optional().describe("set_object_property: fire PostEditChangeProperty after the write (default false) (#802)"),
+    nameContains: z.string().optional().describe("find_object: case-insensitive substring of the object name (#802)"),
+    outerPath: z.string().optional().describe("find_object: only objects somewhere under this outer, e.g. one level or world (#802)"),
+    exactClass: z.boolean().optional().describe("find_object: match className exactly instead of including subclasses (default false) (#802)"),
+    includeDefaults: z.boolean().optional().describe("find_object: include class default objects and archetypes (default false) (#802)"),
     space: z.string().optional().describe("read_bone_transforms: world (default) | component (#756)"),
     stopMovement: z.boolean().optional().describe("teleport_runtime_actor: stop the movement component so the move is not undone (default true) (#777)"),
     mode: z.string().optional().describe("set_movement_mode: none|walking|navwalking|falling|swimming|flying|custom (#757)"),
@@ -291,7 +389,7 @@ export const editorTool: ToolDef = categoryTool(
     sweep: z.boolean().optional().describe("teleport_runtime_actor: collide on the way (default false) (#777)"),
     component: z.string().optional().describe("invoke_function: optional component subobject name to call the function on instead of the actor (#382)"),
     actorArgs: z.record(z.string()).optional().describe("invoke_function: map of UObject* parameter name to actor label, resolved against live actors in the active world (#383)"),
-    className: z.string().optional().describe("invoke_static_function: UBlueprintFunctionLibrary class - short name or /Script/Module.Class path"),
+    className: z.string().optional().describe("invoke_static_function: UBlueprintFunctionLibrary class - short name or /Script/Module.Class path. find_object: class to search for, including Blueprint generated classes (#802)"),
     worldContextParam: z.string().optional().describe("invoke_static_function: name of a UObject* param to fill with the editor/PIE world (auto-detected for params named WorldContextObject)"),
     world: z.string().optional().describe("invoke_function world scope: editor (default) | pie"),
     propertyName: z.string().optional(),
@@ -306,7 +404,6 @@ export const editorTool: ToolDef = categoryTool(
     actorLabel: z.string().optional(),
     level: z.string().optional(),
     filename: z.string().optional(),
-    resolution: z.number().optional(),
     location: Vec3.optional(),
     rotation: Rotator.optional(),
     name: z.string().optional(),

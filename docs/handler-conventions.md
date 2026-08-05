@@ -105,6 +105,16 @@ FindActorByLabelNameOrPath(World, Token)      // PIE invoke: any of three
 // Blueprint CDO load + cast with structured error
 LoadBlueprintCDO<TActor>(Path, OutError)
 
+// Class name resolution - one shared path for every string-to-UClass lookup.
+// Tolerates the C++ type prefix in both directions (UMyConfig <-> MyConfig),
+// object paths, Module.Class shorthand, and Blueprint generated classes.
+MCPResolveClass(Spec, bAllowLoad?)             // UClass* or nullptr
+MCPResolveClassOfType(Spec, Base, bAllowLoad?) // constrained to a base class
+FindClassByShortName(Name)                     // thin wrapper over MCPResolveClass
+MCPClassNotFoundError(Spec, ParamName?)        // lists tried spellings + suggestions
+MCPCheckClassUsable(Spec, Class, Base?, bConcrete?) // abstract / deprecated /
+                                               // wrong_base reported separately
+
 // Parameter extraction (Vec3 / Rotator / Color / Transform helpers)
 RequireString, OptionalString, OptionalNumber, OptionalInt, OptionalBool
 OptionalVec3, RequireVec3, OptionalRotator, RequireRotator, OptionalTransform
@@ -229,6 +239,16 @@ if (NotFound) {
 }
 return MCPResult(Result);
 ```
+
+### Batch handlers - preflight, then per-item results
+
+A batch handler takes one bounded array and does N of something. It has two obligations the single-item version does not.
+
+**Preflight the whole request before writing anything.** Resolve every class, validate every name and destination, reject duplicate targets, and apply every requested value to a transient copy of the target. A descriptor that cannot possibly work should reject the entire request while it is still free to do so. `asset(bulk_upsert_data_assets)` does this by duplicating the existing asset (or constructing a fresh instance) into the transient package and running the real property writes against that copy first, so a typo in a property path cannot leave half a batch written.
+
+**Report per item once you start writing.** Past the preflight boundary, a failure must not abort the response. Each entry in `items[]` carries its own `status`, `success`, and `error`, and the aggregate response still carries the rollback record naming everything that did land. Returning a bare error from inside the apply loop throws away exactly the information the caller needs to recover.
+
+Batch handlers should also accept `dryRun`, which runs the full preflight and reports what each item *would* do (`wouldCreate`, `wouldUpdate`, `wouldRemainUnchanged`, `wouldSkip`) without dirtying or saving a package, and should size their array bound explicitly rather than accepting an unbounded request.
 
 ## Non-convertible handlers
 

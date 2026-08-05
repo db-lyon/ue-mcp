@@ -1591,76 +1591,294 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprint(const TSharedPtr<FJs
 	return MCPResult(Result);
 }
 
+namespace MCPNodeSearch
+{
+	// #808: the old search compared the raw query against raw C++ function names
+	// on five hard-coded classes. Two things made that miss almost everything an
+	// agent types. Engine names carry no spaces ("IsPointInBox") while callers
+	// type the palette label ("Is Point in Box"), and the palette label often
+	// only exists as DisplayName metadata ("VSize" is shown as "Vector Length").
+	// Folding both sides to lowercase alphanumerics makes spacing, casing, and
+	// underscores stop mattering.
+	static FString Normalize(const FString& In)
+	{
+		FString Out;
+		Out.Reserve(In.Len());
+		for (const TCHAR C : In)
+		{
+			if (FChar::IsAlnum(C))
+			{
+				Out.AppendChar(FChar::ToLower(C));
+			}
+		}
+		return Out;
+	}
+
+	/** 0 when the candidate does not match at all; higher is a better match. */
+	static int32 ScoreTerm(const FString& NormCandidate, const FString& NormQuery)
+	{
+		if (NormCandidate.IsEmpty() || NormQuery.IsEmpty()) return 0;
+		if (NormCandidate == NormQuery) return 100;
+		if (NormCandidate.StartsWith(NormQuery, ESearchCase::CaseSensitive)) return 70;
+		if (NormCandidate.Contains(NormQuery, ESearchCase::CaseSensitive)) return 45;
+		return 0;
+	}
+
+	/** Every query word present somewhere in the candidate, order-independent. */
+	static bool ContainsAllTokens(const FString& NormCandidate, const TArray<FString>& NormTokens)
+	{
+		if (NormTokens.Num() < 2) return false;
+		for (const FString& Token : NormTokens)
+		{
+			if (!NormCandidate.Contains(Token, ESearchCase::CaseSensitive)) return false;
+		}
+		return true;
+	}
+
+	/** The authored palette label, or empty when the function has none. */
+	static FString DisplayNameMetaFor(const UFunction* Func)
+	{
+		static const FName NAME_DisplayNameMeta(TEXT("DisplayName"));
+		if (const FString* Meta = Func->FindMetaData(NAME_DisplayNameMeta))
+		{
+			if (!Meta->IsEmpty()) return *Meta;
+		}
+		return FString();
+	}
+
+	/** Label shown in the palette. Only reported for hits: the fallback spacing
+	 *  pass takes a lock and scans an exemption list, which is too expensive to
+	 *  run over every loaded function, and it cannot change a match anyway since
+	 *  it only inserts spaces that normalization strips again. */
+	static FString PaletteLabelFor(const UFunction* Func, const FString& KnownDisplayNameMeta)
+	{
+		if (!KnownDisplayNameMeta.IsEmpty()) return KnownDisplayNameMeta;
+		// An exact name match short-circuits the metadata read, so look once more
+		// before falling back to the spaced name.
+		const FString Meta = DisplayNameMetaFor(Func);
+		return Meta.IsEmpty() ? FName::NameToDisplayString(Func->GetName(), false) : Meta;
+	}
+
+	/** Skip engine bookkeeping classes that hold no placeable nodes. */
+	static bool IsSearchableClass(const UClass* Class)
+	{
+		if (!Class) return false;
+		if (Class->HasAnyClassFlags(CLASS_NewerVersionExists)) return false;
+		const FString Name = Class->GetName();
+		return !Name.StartsWith(TEXT("SKEL_"))
+			&& !Name.StartsWith(TEXT("REINST_"))
+			&& !Name.StartsWith(TEXT("TRASHCLASS_"))
+			&& !Name.StartsWith(TEXT("PLACEHOLDER-"));
+	}
+
+	struct FHit
+	{
+		int32 Score = 0;
+		FString SortName;
+		TSharedPtr<FJsonObject> Entry;
+	};
+}
+
 TSharedPtr<FJsonValue> FBlueprintHandlers::SearchNodeTypes(const TSharedPtr<FJsonObject>& Params)
 {
+	using namespace MCPNodeSearch;
+
 	FString Query;
 	if (auto Err = RequireString(Params, TEXT("query"), Query)) return Err;
 
-	TArray<TSharedPtr<FJsonValue>> MatchingTypes;
-	FString LowerQuery = Query.ToLower();
-
-	// Search UFunction names across common engine classes
-	TArray<UClass*> ClassesToSearch;
-	ClassesToSearch.Add(AActor::StaticClass());
-	ClassesToSearch.Add(UGameplayStatics::StaticClass());
-	ClassesToSearch.Add(UKismetSystemLibrary::StaticClass());
-	ClassesToSearch.Add(UKismetMathLibrary::StaticClass());
-	ClassesToSearch.Add(UKismetStringLibrary::StaticClass());
-
-	for (UClass* SearchClass : ClassesToSearch)
+	const FString NormQuery = Normalize(Query);
+	if (NormQuery.IsEmpty())
 	{
-		if (!SearchClass) continue;
-		for (TFieldIterator<UFunction> FuncIt(SearchClass); FuncIt; ++FuncIt)
+		return MCPError(TEXT("Parameter 'query' must contain at least one letter or digit"));
+	}
+
+	TArray<FString> RawTokens;
+	Query.ParseIntoArrayWS(RawTokens);
+	TArray<FString> NormTokens;
+	for (const FString& Token : RawTokens)
+	{
+		const FString NormToken = Normalize(Token);
+		if (!NormToken.IsEmpty()) NormTokens.Add(NormToken);
+	}
+
+	const int32 Limit = FMath::Clamp(OptionalInt(Params, TEXT("limit"), 50), 1, 500);
+	const bool bIncludeGraphNodes = OptionalBool(Params, TEXT("includeGraphNodes"), true);
+
+	// Optional narrowing to one owning class, by short name or object path.
+	FString ClassFilter = OptionalString(Params, TEXT("className"));
+	if (ClassFilter.IsEmpty()) ClassFilter = OptionalString(Params, TEXT("classFilter"));
+	UClass* FilterClass = nullptr;
+	if (!ClassFilter.IsEmpty())
+	{
+		if (ClassFilter.Contains(TEXT("/")))
+		{
+			FilterClass = LoadObject<UClass>(nullptr, *ClassFilter);
+		}
+		if (!FilterClass) FilterClass = FindClassByShortName(ClassFilter);
+		if (!FilterClass)
+		{
+			return MCPError(FString::Printf(TEXT("Class not found: %s"), *ClassFilter));
+		}
+	}
+
+	static const FName NAME_KeywordsMeta(TEXT("Keywords"));
+	static const FName NAME_CategoryMeta(TEXT("Category"));
+	static const FName NAME_DeprecatedFunctionMeta(TEXT("DeprecatedFunction"));
+	static const FName NAME_BlueprintInternalUseOnlyMeta(TEXT("BlueprintInternalUseOnly"));
+
+	TArray<FHit> Hits;
+
+	// Every loaded class is walked, not a hard-coded shortlist, so the whole
+	// UBlueprintFunctionLibrary surface (KismetMathLibrary and friends) plus
+	// member functions on gameplay classes are all reachable from one query.
+	for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt)
+	{
+		UClass* OwnerClass = *ClassIt;
+		if (!IsSearchableClass(OwnerClass)) continue;
+		if (FilterClass && OwnerClass != FilterClass) continue;
+
+		// ExcludeSuper: report each function once, at the class that declares it.
+		for (TFieldIterator<UFunction> FuncIt(OwnerClass, EFieldIteratorFlags::ExcludeSuper); FuncIt; ++FuncIt)
 		{
 			UFunction* Func = *FuncIt;
 			if (!Func) continue;
+			if (!Func->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure)) continue;
 
-			FString FuncName = Func->GetName();
-			if (FuncName.ToLower().Contains(LowerQuery))
+			const FString FuncName = Func->GetName();
+			const FString NormName = Normalize(FuncName);
+
+			// Cheapest test first. The metadata reads below are per-object map
+			// lookups and this loop runs over every loaded blueprint function.
+			int32 Score = ScoreTerm(NormName, NormQuery);
+
+			FString DisplayNameMeta;
+			FString NormDisplay;
+			if (Score < 100)
 			{
-				TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
-				Entry->SetStringField(TEXT("name"), FuncName);
-				Entry->SetStringField(TEXT("class"), SearchClass->GetName());
-				Entry->SetStringField(TEXT("fullPath"), Func->GetPathName());
-				MatchingTypes.Add(MakeShared<FJsonValueObject>(Entry));
+				DisplayNameMeta = DisplayNameMetaFor(Func);
+				NormDisplay = Normalize(DisplayNameMeta);
+				Score = FMath::Max(Score, ScoreTerm(NormDisplay, NormQuery));
 			}
+
+			FString Keywords;
+			if (Score == 0)
+			{
+				if (const FString* KeywordMeta = Func->FindMetaData(NAME_KeywordsMeta))
+				{
+					Keywords = *KeywordMeta;
+					if (Normalize(Keywords).Contains(NormQuery, ESearchCase::CaseSensitive))
+					{
+						Score = 25;
+					}
+				}
+			}
+
+			if (Score == 0 && (ContainsAllTokens(NormName, NormTokens) || ContainsAllTokens(NormDisplay, NormTokens)))
+			{
+				Score = 20;
+			}
+
+			if (Score == 0) continue;
+			if (Func->HasMetaData(NAME_BlueprintInternalUseOnlyMeta)) continue;
+
+			const FString DisplayName = PaletteLabelFor(Func, DisplayNameMeta);
+			if (Keywords.IsEmpty())
+			{
+				if (const FString* KeywordMeta = Func->FindMetaData(NAME_KeywordsMeta))
+				{
+					Keywords = *KeywordMeta;
+				}
+			}
+
+			const bool bDeprecated = Func->HasMetaData(NAME_DeprecatedFunctionMeta);
+			if (bDeprecated) Score -= 50;
+
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("type"), TEXT("function"));
+			Entry->SetStringField(TEXT("name"), FuncName);
+			Entry->SetStringField(TEXT("displayName"), DisplayName);
+			Entry->SetStringField(TEXT("class"), OwnerClass->GetName());
+			Entry->SetStringField(TEXT("classPath"), OwnerClass->GetPathName());
+			Entry->SetStringField(TEXT("fullPath"), Func->GetPathName());
+			Entry->SetBoolField(TEXT("pure"), Func->HasAnyFunctionFlags(FUNC_BlueprintPure));
+			Entry->SetBoolField(TEXT("static"), Func->HasAnyFunctionFlags(FUNC_Static));
+			if (bDeprecated) Entry->SetBoolField(TEXT("deprecated"), true);
+			if (!Keywords.IsEmpty()) Entry->SetStringField(TEXT("keywords"), Keywords);
+			if (const FString* CategoryMeta = Func->FindMetaData(NAME_CategoryMeta))
+			{
+				Entry->SetStringField(TEXT("category"), *CategoryMeta);
+			}
+
+			// The exact arguments add_node needs, so a search result can be
+			// placed without the caller guessing an identifier format.
+			TSharedPtr<FJsonObject> NodeParams = MakeShared<FJsonObject>();
+			NodeParams->SetStringField(TEXT("functionName"), FuncName);
+			NodeParams->SetStringField(TEXT("targetClass"), OwnerClass->GetPathName());
+			TSharedPtr<FJsonObject> AddNodeCall = MakeShared<FJsonObject>();
+			AddNodeCall->SetStringField(TEXT("nodeClass"), TEXT("CallFunction"));
+			AddNodeCall->SetObjectField(TEXT("nodeParams"), NodeParams);
+			Entry->SetObjectField(TEXT("addNode"), AddNodeCall);
+
+			Hits.Add(FHit{ Score, FuncName, Entry });
 		}
 	}
 
-	// Also search AnimGraph node types and other UEdGraphNode subclasses
-	for (TObjectIterator<UClass> It; It; ++It)
+	// AnimGraph node types and any other UEdGraphNode subclass, placed by class name.
+	if (bIncludeGraphNodes)
 	{
-		if (!It->IsChildOf(UEdGraphNode::StaticClass())) continue;
-		if (*It == UEdGraphNode::StaticClass()) continue;
-
-		FString ClassName = It->GetName();
-		if (ClassName.ToLower().Contains(LowerQuery))
+		for (TObjectIterator<UClass> It; It; ++It)
 		{
-			// Avoid duplicates from function search above
-			bool bAlreadyListed = false;
-			for (const TSharedPtr<FJsonValue>& Existing : MatchingTypes)
-			{
-				if (Existing->AsObject()->GetStringField(TEXT("name")) == ClassName)
-				{
-					bAlreadyListed = true;
-					break;
-				}
-			}
-			if (!bAlreadyListed)
-			{
-				TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
-				Entry->SetStringField(TEXT("name"), ClassName);
-				Entry->SetStringField(TEXT("class"), It->GetSuperClass() ? It->GetSuperClass()->GetName() : TEXT(""));
-				Entry->SetStringField(TEXT("fullPath"), It->GetPathName());
-				Entry->SetStringField(TEXT("type"), TEXT("graphNode"));
-				MatchingTypes.Add(MakeShared<FJsonValueObject>(Entry));
-			}
+			UClass* NodeClass = *It;
+			if (!NodeClass->IsChildOf(UEdGraphNode::StaticClass())) continue;
+			if (NodeClass == UEdGraphNode::StaticClass()) continue;
+			if (NodeClass->HasAnyClassFlags(CLASS_Abstract)) continue;
+			if (!IsSearchableClass(NodeClass)) continue;
+
+			const FString ClassName = NodeClass->GetName();
+			// K2Node_IfThenElse should answer a search for "if then else" as well
+			// as one for the bare class name.
+			const FString BareName = ClassName.StartsWith(TEXT("K2Node_"))
+				? ClassName.RightChop(7)
+				: ClassName;
+
+			int32 Score = FMath::Max(ScoreTerm(Normalize(ClassName), NormQuery), ScoreTerm(Normalize(BareName), NormQuery));
+			if (Score == 0 && ContainsAllTokens(Normalize(ClassName), NormTokens)) Score = 20;
+			if (Score == 0) continue;
+
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("type"), TEXT("graphNode"));
+			Entry->SetStringField(TEXT("name"), ClassName);
+			Entry->SetStringField(TEXT("class"), NodeClass->GetSuperClass() ? NodeClass->GetSuperClass()->GetName() : TEXT(""));
+			Entry->SetStringField(TEXT("fullPath"), NodeClass->GetPathName());
+
+			TSharedPtr<FJsonObject> AddNodeCall = MakeShared<FJsonObject>();
+			AddNodeCall->SetStringField(TEXT("nodeClass"), ClassName);
+			Entry->SetObjectField(TEXT("addNode"), AddNodeCall);
+
+			Hits.Add(FHit{ Score, ClassName, Entry });
 		}
+	}
+
+	Hits.Sort([](const FHit& A, const FHit& B)
+	{
+		if (A.Score != B.Score) return A.Score > B.Score;
+		if (A.SortName.Len() != B.SortName.Len()) return A.SortName.Len() < B.SortName.Len();
+		return A.SortName < B.SortName;
+	});
+
+	const int32 TotalMatches = Hits.Num();
+	TArray<TSharedPtr<FJsonValue>> MatchingTypes;
+	for (int32 Index = 0; Index < FMath::Min(TotalMatches, Limit); ++Index)
+	{
+		MatchingTypes.Add(MakeShared<FJsonValueObject>(Hits[Index].Entry));
 	}
 
 	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("query"), Query);
 	Result->SetArrayField(TEXT("results"), MatchingTypes);
 	Result->SetNumberField(TEXT("count"), MatchingTypes.Num());
+	Result->SetNumberField(TEXT("totalMatches"), TotalMatches);
+	Result->SetBoolField(TEXT("truncated"), TotalMatches > MatchingTypes.Num());
 	return MCPResult(Result);
 }
 

@@ -47,6 +47,9 @@ function cppHandlerNames(): Set<string> {
 // Add a comment next to each entry when extending this list.
 const CPP_ONLY: ReadonlySet<string> = new Set<string>([
   // e.g. "ping",  // infra health endpoint, not user-facing
+  // Inverse of bulk_upsert_data_assets. Reached only through the rollback
+  // descriptor that call emits, never authored by a caller by hand.
+  "bulk_restore_data_assets",
 ]);
 
 describe("TS <-> C++ bridge name drift", () => {

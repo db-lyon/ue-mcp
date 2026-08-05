@@ -45,6 +45,50 @@ describe("editor — read / query", () => {
 });
 
 describe("editor — safe commands", () => {
+  it("invoke_object_functions runs an ordered UObject call sequence", async () => {
+    const subsystem = {
+      target: "subsystem",
+      subsystemClass: "/Script/UnrealEd.EditorAssetSubsystem",
+    };
+    const r = await callBridge(bridge, "invoke_object_functions", {
+      world: "editor",
+      calls: [
+        { ...subsystem, functionName: "DoesAssetExist", args: { AssetPath: "/Engine/BasicShapes/Cube.Cube" } },
+        { ...subsystem, functionName: "DoesDirectoryExist", args: { DirectoryPath: "/Engine/BasicShapes" } },
+      ],
+    });
+    expect(r.ok, r.error).toBe(true);
+    const result = r.result as Record<string, unknown>;
+    expect(result.success).toBe(true);
+    expect(result.completedCalls).toBe(2);
+    expect(result.requestedCalls).toBe(2);
+    expect(result.results).toHaveLength(2);
+  });
+
+  it("invoke_object_functions stops at the first failure and says where", async () => {
+    const subsystem = {
+      target: "subsystem",
+      subsystemClass: "/Script/UnrealEd.EditorAssetSubsystem",
+    };
+    const r = await callBridge(bridge, "invoke_object_functions", {
+      world: "editor",
+      calls: [
+        { ...subsystem, functionName: "DoesAssetExist", args: { AssetPath: "/Engine/BasicShapes/Cube.Cube" } },
+        { ...subsystem, functionName: "NoSuchFunctionOnThisSubsystem" },
+        { ...subsystem, functionName: "DoesDirectoryExist", args: { DirectoryPath: "/Engine/BasicShapes" } },
+      ],
+    });
+    expect(r.ok, r.error).toBe(true);
+    const result = r.result as Record<string, unknown>;
+    expect(result.success).toBe(false);
+    expect(result.failedIndex).toBe(1);
+    // The failing call is reported but not counted as completed, and the third
+    // call never runs.
+    expect(result.completedCalls).toBe(1);
+    expect(result.requestedCalls).toBe(3);
+    expect(result.results).toHaveLength(2);
+  });
+
   it("execute_python (simple)", async () => {
     const r = await callBridge(bridge, "execute_python", { code: "result = 1 + 1" });
     expect(r.ok, r.error).toBe(true);
@@ -101,5 +145,76 @@ describe("editor — open_asset safety (#17)", () => {
     const result = r.result as Record<string, unknown>;
     // Should either succeed or fail gracefully — not crash
     expect(typeof result.success).toBe("boolean");
+  });
+});
+
+describe("editor - live object access (#802)", () => {
+  it("find_object resolves an exact path", async () => {
+    const r = await callBridge(bridge, "find_object", { objectPath: "/Engine/BasicShapes/Cube.Cube" });
+    expect(r.ok, r.error).toBe(true);
+    const result = r.result as Record<string, unknown>;
+    expect(result.success).toBe(true);
+    expect(result.found).toBe(true);
+    expect((result.object as Record<string, unknown>).class).toBe("StaticMesh");
+  });
+
+  it("find_object reports a missing path instead of failing the call", async () => {
+    const r = await callBridge(bridge, "find_object", { objectPath: "/Game/NoSuchPackage.NoSuchObject" });
+    expect(r.ok, r.error).toBe(true);
+    const result = r.result as Record<string, unknown>;
+    expect(result.success).toBe(true);
+    expect(result.found).toBe(false);
+  });
+
+  it("find_object searches live instances by class", async () => {
+    const r = await callBridge(bridge, "find_object", { className: "WorldSettings", world: "editor", limit: 5 });
+    expect(r.ok, r.error).toBe(true);
+    const result = r.result as Record<string, unknown>;
+    expect(result.success).toBe(true);
+    expect(result.totalMatches as number).toBeGreaterThan(0);
+  });
+
+  it("find_object needs a filter", async () => {
+    const r = await callBridge(bridge, "find_object", {});
+    expect(r.ok, r.error).toBe(true);
+    const result = r.result as Record<string, unknown>;
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("editor - live instance writes (#802)", () => {
+  it("find_object then set_object_property writes the instance it resolved", async () => {
+    const found = await callBridge(bridge, "find_object", { className: "WorldSettings", world: "editor", limit: 1 });
+    expect(found.ok, found.error).toBe(true);
+    const matches = (found.result as Record<string, unknown>).matches as Array<Record<string, unknown>>;
+    expect(matches.length).toBeGreaterThan(0);
+    const objectPath = matches[0].objectPath as string;
+
+    const r = await callBridge(bridge, "set_object_property", {
+      objectPath,
+      propertyName: "TimeDilation",
+      value: 1.0,
+      world: "editor",
+    });
+    expect(r.ok, r.error).toBe(true);
+    const result = r.result as Record<string, unknown>;
+    expect(result.success).toBe(true);
+    expect(result.previousValue).toBeDefined();
+    expect(result.persisted).toBe(false);
+  });
+
+  it("set_object_property lists the available properties when the name is wrong", async () => {
+    const found = await callBridge(bridge, "find_object", { className: "WorldSettings", world: "editor", limit: 1 });
+    const matches = (found.result as Record<string, unknown>).matches as Array<Record<string, unknown>>;
+    const r = await callBridge(bridge, "set_object_property", {
+      objectPath: matches[0].objectPath as string,
+      propertyName: "NoSuchVariableOnThisClass",
+      value: 1,
+      world: "editor",
+    });
+    expect(r.ok, r.error).toBe(true);
+    const result = r.result as Record<string, unknown>;
+    expect(result.success).toBe(false);
+    expect(String(result.error)).toContain("Available:");
   });
 });

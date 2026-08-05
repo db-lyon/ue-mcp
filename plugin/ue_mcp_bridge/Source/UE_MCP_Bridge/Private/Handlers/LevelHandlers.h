@@ -66,6 +66,10 @@ private:
 	static TSharedPtr<FJsonValue> SetActorProperty(const TSharedPtr<FJsonObject>& Params);
 	// #220: bulk delete actors by label prefix / class / tag
 	static TSharedPtr<FJsonValue> DeleteActors(const TSharedPtr<FJsonObject>& Params);
+	// Safely delete actors with exact editor labels across explicit level
+	// packages. Defaults to a dry run and saves only levels changed by a
+	// committed request.
+	static TSharedPtr<FJsonValue> DeleteExactLabeledActorsInLevels(const TSharedPtr<FJsonObject>& Params);
 	// #767: bulk-assign World Outliner folder paths in one transaction.
 	static TSharedPtr<FJsonValue> SetActorFolderPath(const TSharedPtr<FJsonObject>& Params);
 	// #746: World Partition actor descriptors - see unloaded actors and stream
@@ -80,6 +84,10 @@ private:
 	// #205: actor attach/detach + mobility
 	static TSharedPtr<FJsonValue> AttachActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DetachActor(const TSharedPtr<FJsonObject>& Params);
+	// Attach an exact named/root SceneComponent to an exact named/root parent
+	// SceneComponent, optionally at a validated socket.
+	static TSharedPtr<FJsonValue> AttachComponent(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DetachComponent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetActorMobility(const TSharedPtr<FJsonObject>& Params);
 	// #204: edit-level current sub-level
 	static TSharedPtr<FJsonValue> GetCurrentEditLevel(const TSharedPtr<FJsonObject>& Params);

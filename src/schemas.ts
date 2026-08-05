@@ -77,6 +77,17 @@ export const UeMcpConfigSchema = z
         strategy: z.enum(["full", "lean", "micro"]).optional(),
       })
       .optional(),
+    // Play In Editor. `allowIgnoreBlueprintErrors` pre-authorizes
+    // editor(play_in_editor_ignore_blueprint_errors), the one action that
+    // suppresses the editor's unresolved-Blueprint-error prompt. Off by
+    // default: without it every call blocks on an MCP approval prompt.
+    // Belongs in an untracked layer (ue-mcp.local.yml) unless the whole team
+    // really wants PIE to start over known Blueprint errors.
+    pie: z
+      .object({
+        allowIgnoreBlueprintErrors: z.boolean().optional(),
+      })
+      .optional(),
     // Per-plugin runtime config, keyed by plugin slug (`recipes`, i.e. the
     // package name minus `ue-mcp-`). `groups` toggles whole flow groups on/off
     // (opt-out: a group is enabled unless set to false). Lives here so it rides

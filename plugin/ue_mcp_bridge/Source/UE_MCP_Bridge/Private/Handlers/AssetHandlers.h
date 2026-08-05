@@ -23,6 +23,12 @@ private:
 	static TSharedPtr<FJsonValue> DeleteAssetBatch(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BulkRename(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateDataAsset(const TSharedPtr<FJsonObject>& Params);
+	// Bounded batch create-or-update of UDataAsset instances. Lives in
+	// AssetHandlers_BulkUpsert.cpp.
+	static TSharedPtr<FJsonValue> BulkUpsertDataAssets(const TSharedPtr<FJsonObject>& Params);
+	// Inverse of BulkUpsertDataAssets, driven by the rollback descriptor that
+	// call emits. Not a first-class action.
+	static TSharedPtr<FJsonValue> BulkRestoreDataAssets(const TSharedPtr<FJsonObject>& Params);
 	// #726: create an asset of any concrete UObject class via its registered
 	// factory (or NewObject fallback), not just UDataAsset subclasses.
 	static TSharedPtr<FJsonValue> CreateAssetByClass(const TSharedPtr<FJsonObject>& Params);
@@ -77,6 +83,8 @@ private:
 	static TSharedPtr<FJsonValue> CompareTextures(const TSharedPtr<FJsonObject>& Params);
 	// #430: one-call batch of texture imports - loops AssetImportTasks inside the editor.
 	static TSharedPtr<FJsonValue> ImportTextureBatch(const TSharedPtr<FJsonObject>& Params);
+	// Create and persist a TextureRenderTarget2D with explicit render settings.
+	static TSharedPtr<FJsonValue> CreateRenderTarget2D(const TSharedPtr<FJsonObject>& Params);
 
 	// StringTable handlers
 	static TSharedPtr<FJsonValue> CreateStringTable(const TSharedPtr<FJsonObject>& Params);
@@ -102,6 +110,12 @@ private:
 	// #420: nested-path UPROPERTY setter for any asset (materials, datatables,
 	// data assets, etc.) so callers don't read-modify-write struct copies.
 	static TSharedPtr<FJsonValue> SetAssetProperty(const TSharedPtr<FJsonObject>& Params);
+	// Append prevalidated JSON values to a reflected TArray without replacing
+	// existing entries. Supports native and user-defined struct elements.
+	static TSharedPtr<FJsonValue> AppendAssetArrayElements(const TSharedPtr<FJsonObject>& Params);
+	// Batch counterpart to SetAssetProperty. Preflights every asset/property
+	// before mutating any package and emits a replayable rollback payload.
+	static TSharedPtr<FJsonValue> BulkSetAssetProperties(const TSharedPtr<FJsonObject>& Params);
 	// #421: batch texture settings by canonical type (Normal/Grayscale/BaseColor/HDR).
 	static TSharedPtr<FJsonValue> SetTextureSettingsByType(const TSharedPtr<FJsonObject>& Params);
 	// #421: one-call factory for an Interchange pipeline asset with the

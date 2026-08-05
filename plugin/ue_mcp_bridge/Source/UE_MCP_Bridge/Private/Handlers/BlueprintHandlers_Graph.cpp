@@ -190,17 +190,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	else if (NodeClass == TEXT("ComponentBoundEvent")) ResolvedClass = TEXT("K2Node_ComponentBoundEvent");
 	else if (NodeClass == TEXT("InputAction") || NodeClass == TEXT("EnhancedInputAction")) ResolvedClass = TEXT("K2Node_EnhancedInputAction");
 
-	// Find the UEdGraphNode subclass by name (works for K2, AnimGraph, and any other graph node types)
-	UClass* NodeUClass = nullptr;
-	for (TObjectIterator<UClass> It; It; ++It)
-	{
-		if (It->GetName() == ResolvedClass && It->IsChildOf(UEdGraphNode::StaticClass()))
-		{
-			NodeUClass = *It;
-			break;
-		}
-	}
-
+	// Find the UEdGraphNode subclass by name (works for K2, AnimGraph, and any
+	// other graph node types). #823: shared resolution, restricted to graph
+	// nodes so "UK2Node_CallFunction" resolves while an unrelated class that
+	// happens to share a leaf name cannot win.
+	UClass* NodeUClass = MCPResolveClassOfType(ResolvedClass, UEdGraphNode::StaticClass());
 	if (!NodeUClass)
 	{
 		return MCPError(FString::Printf(TEXT("Node class not found: %s (must be a UEdGraphNode subclass)"), *NodeClass));

@@ -554,9 +554,10 @@ export async function startEditor(
   }
 }
 
-// Ask the editor to quit ITSELF, on the game thread, via a deferred slate tick
-// so the bridge can reply before the process exits. This is a clean in-process
-// exit, not an OS kill.
+// Fallback for plugin builds without the native request_editor_shutdown
+// handler: ask the editor to quit ITSELF, on the game thread, via a deferred
+// slate tick so the bridge can reply before the process exits. This is a clean
+// in-process exit, not an OS kill.
 const EDITOR_SELF_QUIT_PY = [
   "import unreal",
   "def _ue_mcp_quit(dt):",
@@ -583,10 +584,13 @@ function uprojectInDir(projectDir?: string): string | null {
 }
 
 /**
- * Ask the editor to quit itself via the bridge (`execute_python` -> quit_editor).
- * Returns true if the request was delivered. Never touches the OS process table.
+ * Send one bridge call on a throwaway socket and report whether the handler
+ * accepted it. A reply alone is not acceptance: an unregistered method answers
+ * with a JSON-RPC error, and a handler that refuses answers with
+ * `result.success === false`, both of which have to be told apart from a real
+ * acknowledgement so the caller can decide what to do next.
  */
-function requestEditorSelfQuit(port: number): Promise<boolean> {
+function sendOneBridgeCall(port: number, method: string, params: Record<string, unknown>): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     let settled = false;
     // Same host the reachability probe uses. Probing one host and sending the
@@ -599,10 +603,35 @@ function requestEditorSelfQuit(port: number): Promise<boolean> {
       resolve(v);
     };
     const timer = setTimeout(() => finish(false), 8000);
-    ws.on("open", () => ws.send(JSON.stringify({ id: "ue-mcp-stop", method: "execute_python", params: { code: EDITOR_SELF_QUIT_PY } })));
-    ws.on("message", () => { clearTimeout(timer); finish(true); });
+    ws.on("open", () => ws.send(JSON.stringify({ id: "ue-mcp-stop", method, params })));
+    ws.on("message", (data: unknown) => {
+      clearTimeout(timer);
+      try {
+        const msg = JSON.parse(String(data)) as { error?: unknown; result?: { success?: unknown } };
+        if (msg.error) return finish(false);
+        if (msg.result && msg.result.success === false) return finish(false);
+      } catch {
+        // An unparseable reply still means the bridge is answering; treat it
+        // the same as it was treated before the native path existed.
+      }
+      finish(true);
+    });
     ws.on("error", () => { clearTimeout(timer); finish(false); });
   });
+}
+
+/**
+ * Ask the editor to quit itself via the bridge. Prefers the native
+ * `request_editor_shutdown` handler, which ends PIE first and closes only once
+ * play has actually stopped. `requireClean` is false here because the caller
+ * asked for a stop, not for a save gate; use editor(request_editor_shutdown)
+ * directly to get the dirty-package refusal. Falls back to the Python route
+ * for editors running a plugin build that predates the handler. Never touches
+ * the OS process table.
+ */
+async function requestEditorSelfQuit(port: number): Promise<boolean> {
+  if (await sendOneBridgeCall(port, "request_editor_shutdown", { requireClean: false, endPIE: true })) return true;
+  return sendOneBridgeCall(port, "execute_python", { code: EDITOR_SELF_QUIT_PY });
 }
 
 /**

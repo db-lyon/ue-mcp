@@ -144,10 +144,81 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateFunction(const TSharedPtr<FJson
 }
 
 
+// #809: list_functions reported Blueprint->FunctionGraphs and nothing else, so
+// interface implementations, the EventGraph, macros and collapsed graphs never
+// showed up even though list_graphs reported them for the same asset. An audit
+// built on the old output under-reported the consumers of a variable, the
+// Blueprint still compiled, and the miss only surfaced as a PIE runtime error.
+// Every graph the Blueprint owns is enumerated now, each entry tagged with
+// `kind` and `source` so a caller can tell an interface implementation from a
+// function it declared itself. `name` and `nodeCount` keep their old meaning.
+namespace
+{
+	TSharedPtr<FJsonObject> MakeFunctionEntry(
+		const FString& Name,
+		const TCHAR* Kind,
+		const TCHAR* Source,
+		int32 NodeCount)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("name"), Name);
+		Obj->SetNumberField(TEXT("nodeCount"), NodeCount);
+		Obj->SetStringField(TEXT("kind"), Kind);
+		Obj->SetStringField(TEXT("source"), Source);
+		return Obj;
+	}
+
+	TSharedPtr<FJsonObject> MakeFunctionGraphEntry(UEdGraph* Graph, const TCHAR* Kind, const TCHAR* Source)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeFunctionEntry(Graph->GetName(), Kind, Source, Graph->Nodes.Num());
+		Obj->SetStringField(TEXT("graphName"), Graph->GetName());
+		Obj->SetStringField(TEXT("objectPath"), Graph->GetPathName());
+		return Obj;
+	}
+
+	/** Interface declaring FnName, whether implemented on this Blueprint or inherited. */
+	UClass* FindDeclaringInterface(UBlueprint* Blueprint, const FName& FnName)
+	{
+		for (const FBPInterfaceDescription& Impl : Blueprint->ImplementedInterfaces)
+		{
+			UClass* IfaceClass = Impl.Interface;
+			if (IfaceClass && IfaceClass->FindFunctionByName(FnName)) return IfaceClass;
+		}
+		if (UClass* ParentClass = Blueprint->ParentClass.Get())
+		{
+			for (const FImplementedInterface& Inherited : ParentClass->Interfaces)
+			{
+				UClass* IfaceClass = Inherited.Class;
+				if (IfaceClass && IfaceClass->FindFunctionByName(FnName)) return IfaceClass;
+			}
+		}
+		return nullptr;
+	}
+
+	/** Collapsed / nested graphs, recursively. list_graphs reports these too. */
+	void CollectFunctionSubGraphs(UEdGraph* Parent, TSet<UEdGraph*>& Seen, TArray<TSharedPtr<FJsonValue>>& Out)
+	{
+		if (!Parent) return;
+		for (UEdGraph* Sub : Parent->SubGraphs)
+		{
+			if (!Sub || Seen.Contains(Sub)) continue;
+			Seen.Add(Sub);
+			TSharedPtr<FJsonObject> Obj = MakeFunctionGraphEntry(Sub, TEXT("subgraph"), TEXT("own"));
+			Obj->SetStringField(TEXT("parentGraph"), Parent->GetName());
+			Out.Add(MakeShared<FJsonValueObject>(Obj));
+			CollectFunctionSubGraphs(Sub, Seen, Out);
+		}
+	}
+}
+
 TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintFunctions(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+
+	// Off by default: the inherited surface is large and list_overridable_functions
+	// already owns it. Opt in when one combined view of the callable surface is wanted.
+	const bool bIncludeInherited = OptionalBool(Params, TEXT("includeInherited"), false);
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -155,20 +226,174 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintFunctions(const TSharedP
 		return MCPError(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
 	}
 
+	// Skeleton class super is the reliable parent during an in-editor edit; fall
+	// back to ParentClass when the skeleton has not been generated yet.
+	UClass* ParentClass = Blueprint->SkeletonGeneratedClass
+		? Blueprint->SkeletonGeneratedClass->GetSuperClass()
+		: Blueprint->ParentClass.Get();
+
 	TArray<TSharedPtr<FJsonValue>> Functions;
+	TSet<FString> ImplementedNames;
+	// A graph reachable from two of the arrays below is reported once.
+	TSet<UEdGraph*> SeenGraphs;
+
+	// 1. Function graphs on this Blueprint. A name that resolves against the
+	//    parent chain is an override, and one that resolves against an interface
+	//    is an implementation of that interface.
 	for (UEdGraph* Graph : Blueprint->FunctionGraphs)
 	{
-		if (!Graph) continue;
-		TSharedPtr<FJsonObject> FuncObj = MakeShared<FJsonObject>();
-		FuncObj->SetStringField(TEXT("name"), Graph->GetName());
-		FuncObj->SetNumberField(TEXT("nodeCount"), Graph->Nodes.Num());
-		Functions.Add(MakeShared<FJsonValueObject>(FuncObj));
+		if (!Graph || SeenGraphs.Contains(Graph)) continue;
+		SeenGraphs.Add(Graph);
+		const FString Name = Graph->GetName();
+		const FName FnName(*Name);
+		ImplementedNames.Add(Name);
+
+		UClass* DeclaringInterface = FindDeclaringInterface(Blueprint, FnName);
+		UFunction* ParentFn = ParentClass ? ParentClass->FindFunctionByName(FnName) : nullptr;
+
+		TSharedPtr<FJsonObject> Obj;
+		if (DeclaringInterface)
+		{
+			Obj = MakeFunctionGraphEntry(Graph, TEXT("interface"), TEXT("interface"));
+			Obj->SetStringField(TEXT("declaringClass"), DeclaringInterface->GetName());
+			Obj->SetStringField(TEXT("declaringClassPath"), DeclaringInterface->GetPathName());
+		}
+		else if (ParentFn)
+		{
+			Obj = MakeFunctionGraphEntry(Graph, TEXT("override"), TEXT("parent"));
+			if (UClass* Owner = ParentFn->GetOwnerClass())
+			{
+				Obj->SetStringField(TEXT("declaringClass"), Owner->GetName());
+				Obj->SetStringField(TEXT("declaringClassPath"), Owner->GetPathName());
+			}
+		}
+		else
+		{
+			Obj = MakeFunctionGraphEntry(Graph, TEXT("function"), TEXT("own"));
+		}
+		Functions.Add(MakeShared<FJsonValueObject>(Obj));
+		CollectFunctionSubGraphs(Graph, SeenGraphs, Functions);
+	}
+
+	// 2. Interface implementations. Non-event interface functions get their own
+	//    graph under the interface description, never under FunctionGraphs, which
+	//    is exactly why they were invisible before.
+	for (const FBPInterfaceDescription& Impl : Blueprint->ImplementedInterfaces)
+	{
+		UClass* IfaceClass = Impl.Interface;
+		for (UEdGraph* Graph : Impl.Graphs)
+		{
+			if (!Graph || SeenGraphs.Contains(Graph)) continue;
+			SeenGraphs.Add(Graph);
+			ImplementedNames.Add(Graph->GetName());
+			TSharedPtr<FJsonObject> Obj = MakeFunctionGraphEntry(Graph, TEXT("interface"), TEXT("interface"));
+			if (IfaceClass)
+			{
+				Obj->SetStringField(TEXT("declaringClass"), IfaceClass->GetName());
+				Obj->SetStringField(TEXT("declaringClassPath"), IfaceClass->GetPathName());
+			}
+			Functions.Add(MakeShared<FJsonValueObject>(Obj));
+			CollectFunctionSubGraphs(Graph, SeenGraphs, Functions);
+		}
+	}
+
+	// 3. Ubergraph pages (EventGraph and friends) plus every entry point on them.
+	//    Custom events and implemented events are callable surface, and the pages
+	//    themselves hold the node bodies an audit has to read.
+	for (UEdGraph* Graph : Blueprint->UbergraphPages)
+	{
+		if (!Graph || SeenGraphs.Contains(Graph)) continue;
+		SeenGraphs.Add(Graph);
+		Functions.Add(MakeShared<FJsonValueObject>(MakeFunctionGraphEntry(Graph, TEXT("event_graph"), TEXT("own"))));
+
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			FString EventName;
+			const TCHAR* EventSource = TEXT("own");
+			UClass* DeclaringClass = nullptr;
+
+			if (UK2Node_CustomEvent* CustomEvent = Cast<UK2Node_CustomEvent>(Node))
+			{
+				EventName = CustomEvent->CustomFunctionName.ToString();
+			}
+			else if (UK2Node_Event* EventNode = Cast<UK2Node_Event>(Node))
+			{
+				EventName = EventNode->EventReference.GetMemberName().ToString();
+				DeclaringClass = EventNode->EventReference.GetMemberParentClass();
+				EventSource = (DeclaringClass && DeclaringClass->HasAnyClassFlags(CLASS_Interface))
+					? TEXT("interface")
+					: TEXT("parent");
+			}
+			else
+			{
+				continue;
+			}
+			if (EventName.IsEmpty()) continue;
+
+			ImplementedNames.Add(EventName);
+			// nodeCount is 0 for an entry point: it is a node inside graphName, not a graph.
+			TSharedPtr<FJsonObject> Obj = MakeFunctionEntry(EventName, TEXT("event"), EventSource, 0);
+			Obj->SetStringField(TEXT("graphName"), Graph->GetName());
+			if (DeclaringClass)
+			{
+				Obj->SetStringField(TEXT("declaringClass"), DeclaringClass->GetName());
+				Obj->SetStringField(TEXT("declaringClassPath"), DeclaringClass->GetPathName());
+			}
+			Functions.Add(MakeShared<FJsonValueObject>(Obj));
+		}
+	}
+
+	// 4. Macros and event dispatcher signatures. Both are graphs list_graphs
+	//    reports, and macro bodies reference member variables like any function.
+	for (UEdGraph* Graph : Blueprint->MacroGraphs)
+	{
+		if (!Graph || SeenGraphs.Contains(Graph)) continue;
+		SeenGraphs.Add(Graph);
+		Functions.Add(MakeShared<FJsonValueObject>(MakeFunctionGraphEntry(Graph, TEXT("macro"), TEXT("own"))));
+		CollectFunctionSubGraphs(Graph, SeenGraphs, Functions);
+	}
+	for (UEdGraph* Graph : Blueprint->DelegateSignatureGraphs)
+	{
+		if (!Graph || SeenGraphs.Contains(Graph)) continue;
+		SeenGraphs.Add(Graph);
+		Functions.Add(MakeShared<FJsonValueObject>(MakeFunctionGraphEntry(Graph, TEXT("delegate_signature"), TEXT("own"))));
+	}
+
+	// 5. Opt-in: inherited functions this Blueprint could override but has not.
+	if (bIncludeInherited && ParentClass)
+	{
+		for (TFieldIterator<UFunction> It(ParentClass, EFieldIteratorFlags::IncludeSuper); It; ++It)
+		{
+			UFunction* Function = *It;
+			if (!UEdGraphSchema_K2::CanKismetOverrideFunction(Function)) continue;
+			if (ImplementedNames.Contains(Function->GetName())) continue;
+			if (FObjectEditorUtils::IsFunctionHiddenFromClass(Function, ParentClass)) continue;
+			if (!Blueprint->AllowFunctionOverride(Function)) continue;
+
+			UClass* OuterClass = Cast<UClass>(Function->GetOuter());
+			if (OuterClass && FBlueprintEditorUtils::FindOverrideForFunction(Blueprint, OuterClass, Function->GetFName())) continue;
+
+			const bool bIsInterface = OuterClass && OuterClass->HasAnyClassFlags(CLASS_Interface);
+			TSharedPtr<FJsonObject> Obj = MakeFunctionEntry(
+				Function->GetName(),
+				TEXT("inherited"),
+				bIsInterface ? TEXT("interface") : TEXT("parent"),
+				0);
+			Obj->SetBoolField(TEXT("canBeEvent"), UEdGraphSchema_K2::FunctionCanBePlacedAsEvent(Function));
+			if (OuterClass)
+			{
+				Obj->SetStringField(TEXT("declaringClass"), OuterClass->GetName());
+				Obj->SetStringField(TEXT("declaringClassPath"), OuterClass->GetPathName());
+			}
+			Functions.Add(MakeShared<FJsonValueObject>(Obj));
+		}
 	}
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetArrayField(TEXT("functions"), Functions);
 	Result->SetNumberField(TEXT("count"), Functions.Num());
+	Result->SetBoolField(TEXT("includeInherited"), bIncludeInherited);
 	return MCPResult(Result);
 }
 

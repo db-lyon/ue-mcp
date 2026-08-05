@@ -5,10 +5,10 @@ export const reflectionTool: ToolDef = categoryTool(
   "reflection",
   "UE reflection: classes, structs, enums, gameplay tags, and SaveGame instances.",
   {
-    reflect_class:  bp("Reflect UClass. Params: className, includeInherited?", "reflect_class"),
+    reflect_class:  bp("Reflect UClass. className accepts the C++ spelling with or without the A/U/F/E prefix (UMyConfig and MyConfig both resolve), a /Script/Module.ClassName path, or a Blueprint class path; a failed lookup lists the spellings tried and the closest matches (#823). Params: className, includeInherited?", "reflect_class"),
     reflect_struct: bp("Reflect UScriptStruct. Params: structName", "reflect_struct"),
     reflect_enum:   bp("Reflect UEnum by full path, short name, or short name without the E prefix. Resolves native enums in any loaded module and loads unloaded Blueprint (UserDefinedEnum) assets via the asset registry. Returns enumPath, userDefined, and per-value name/value/displayName/tooltip; a failed lookup lists close matches (#762). Params: enumName", "reflect_enum"),
-    list_classes:   bp("List classes. Params: parentFilter?, limit?", "list_classes"),
+    list_classes:   bp("List classes. parentFilter resolves with or without the C++ A/U/F/E prefix (#823). Params: parentFilter?, limit?", "list_classes"),
     list_tags:      bp("List gameplay tags. Params: filter?", "list_gameplay_tags"),
     create_tag:     bp("Create gameplay tag. Params: tag, comment?", "create_gameplay_tag"),
     create_enum:    bp("Create UUserDefinedEnum asset, optionally seeded with entries. Params: name, packagePath?, entries?: (string|{name, displayName?})[], onConflict? (#274)", "create_enum", (p) => ({ name: p.name, packagePath: p.packagePath, entries: p.entries, onConflict: p.onConflict })),

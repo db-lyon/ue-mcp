@@ -408,9 +408,12 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ReflectClass(const TSharedPtr<FJsonO
 	if (auto Err = RequireString(Params, TEXT("className"), ClassName)) return Err;
 
 	UClass* Class = FindClass(ClassName);
+	// #823: reflection is a read, so it is worth loading a class the caller
+	// named by path but that is not in memory yet.
+	if (!Class) Class = MCPResolveClass(ClassName, /*bAllowLoad*/ true);
 	if (!Class)
 	{
-		return MCPError(FString::Printf(TEXT("Class not found: %s"), *ClassName));
+		return MCPClassNotFoundError(ClassName);
 	}
 
 	bool bIncludeInherited = OptionalBool(Params, TEXT("includeInherited"), false);
@@ -557,7 +560,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListClasses(const TSharedPtr<FJsonOb
 		UClass* ParentClass = FindClass(ParentFilter);
 		if (!ParentClass)
 		{
-			return MCPError(FString::Printf(TEXT("Parent class not found: %s"), *ParentFilter));
+			return MCPClassNotFoundError(ParentFilter, TEXT("parentFilter"));
 		}
 
 		TArray<TSharedPtr<FJsonValue>> ClassesArray;
@@ -698,30 +701,10 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateGameplayTag(const TSharedPtr<F
 
 UClass* FReflectionHandlers::FindClass(const FString& ClassName)
 {
-	// Full-path lookup first: /Script/Engine.Actor, /Script/Foo.UBar, etc.
-	UClass* Class = FindObject<UClass>(nullptr, *ClassName);
-	if (Class)
-	{
-		return Class;
-	}
-
-	// Short-name lookup. In UE 5.6+, FindObject(nullptr, "Actor") no longer
-	// scans every package - it only finds top-level objects. FindFirstObject
-	// is the replacement that walks all loaded UClass objects by leaf name.
-	// Try the caller's spelling, then common UE prefixes (A/U/F) that agents
-	// often drop when typing class names.
-	const TArray<FString> Prefixes = { TEXT(""), TEXT("A"), TEXT("U"), TEXT("F") };
-	for (const FString& Prefix : Prefixes)
-	{
-		const FString Candidate = Prefix + ClassName;
-		Class = FindFirstObject<UClass>(*Candidate, EFindFirstObjectOptions::NativeFirst);
-		if (Class)
-		{
-			return Class;
-		}
-	}
-
-	return nullptr;
+	// #823: one shared resolution order for every string-to-UClass lookup in
+	// the plugin. Non-loading on purpose: is_class_loaded reads a hit here as
+	// "already in memory" and does its own load probe afterwards.
+	return MCPResolveClass(ClassName, /*bAllowLoad*/ false);
 }
 
 UScriptStruct* FReflectionHandlers::FindStruct(const FString& StructName)
@@ -818,7 +801,8 @@ static TArray<FString> SuggestEnumNames(const FString& EnumName, int32 MaxSugges
 	const FString Needle = EnumName.ToLower();
 	for (TObjectIterator<UEnum> It; It && Suggestions.Num() < MaxSuggestions; ++It)
 	{
-		if (!*It) continue;
+		// TObjectIterator only stops on live objects and its dereference is annotated
+		// non-null, so a null test here is dead code that Clang rejects under -Werror.
 		const FString Name = It->GetName();
 		if (Name.ToLower().Contains(Needle))
 		{

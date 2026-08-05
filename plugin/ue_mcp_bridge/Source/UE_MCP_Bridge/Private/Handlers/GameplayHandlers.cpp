@@ -817,8 +817,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 		// (and the AI variant) so the schema class registers.
 		FModuleManager::Get().LoadModule(TEXT("GameplayStateTreeModule"));
 		UClass* SchemaClass = LoadClass<UStateTreeSchema>(nullptr, *SchemaName);
-		if (!SchemaClass) SchemaClass = FindObject<UClass>(nullptr, *SchemaName);
-		if (!SchemaClass) SchemaClass = FindFirstObjectSafe<UClass>(*SchemaName);
+		// #823: shared resolution catches the prefixed C++ spelling
+		// (UStateTreeComponentSchema, /Script/Module.UMySchema).
+		if (!SchemaClass) SchemaClass = MCPResolveClassOfType(SchemaName, UStateTreeSchema::StaticClass());
 		if (!SchemaClass)
 		{
 			// Fall back to any concrete, non-abstract StateTreeSchema subclass so

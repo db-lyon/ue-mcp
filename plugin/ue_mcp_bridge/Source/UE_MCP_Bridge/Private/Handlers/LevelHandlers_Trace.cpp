@@ -11,6 +11,8 @@
 #include "GameFramework/Actor.h"
 #include "Components/PrimitiveComponent.h"
 #include "CollisionQueryParams.h"
+#include "Engine/CollisionProfile.h"
+#include "Engine/EngineTypes.h"
 #include "Engine/HitResult.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Dom/JsonObject.h"
@@ -18,6 +20,76 @@
 
 namespace
 {
+	/**
+	 * Channel display names come from the project's collision settings, so a project
+	 * that renamed GameTraceChannel1 to "Weapon" can be traced by that name. The
+	 * built-in table is the fallback for the case where the profile config has not
+	 * been loaded yet and every lookup would otherwise fail.
+	 */
+	static bool ResolveTraceChannel(const FString& InName, ECollisionChannel& OutChannel, FString& OutResolvedName)
+	{
+		FString Name = InName.TrimStartAndEnd();
+		if (Name.StartsWith(TEXT("ECC_"))) Name = Name.RightChop(4);
+		if (Name.IsEmpty()) return false;
+
+		if (const UCollisionProfile* Profile = UCollisionProfile::Get())
+		{
+			for (int32 Index = 0; Index < ECC_MAX; ++Index)
+			{
+				const FName ChannelName = Profile->ReturnChannelNameFromContainerIndex(Index);
+				if (ChannelName.IsNone()) continue;
+				if (ChannelName.ToString().Equals(Name, ESearchCase::IgnoreCase))
+				{
+					OutChannel = static_cast<ECollisionChannel>(Index);
+					OutResolvedName = ChannelName.ToString();
+					return true;
+				}
+			}
+		}
+
+		struct FBuiltInChannel { const TCHAR* Name; ECollisionChannel Channel; };
+		static const FBuiltInChannel BuiltIns[] = {
+			{ TEXT("WorldStatic"),  ECC_WorldStatic },
+			{ TEXT("WorldDynamic"), ECC_WorldDynamic },
+			{ TEXT("Pawn"),         ECC_Pawn },
+			{ TEXT("Visibility"),   ECC_Visibility },
+			{ TEXT("Camera"),       ECC_Camera },
+			{ TEXT("PhysicsBody"),  ECC_PhysicsBody },
+			{ TEXT("Vehicle"),      ECC_Vehicle },
+			{ TEXT("Destructible"), ECC_Destructible },
+		};
+		for (const FBuiltInChannel& Entry : BuiltIns)
+		{
+			if (Name.Equals(Entry.Name, ESearchCase::IgnoreCase))
+			{
+				OutChannel = Entry.Channel;
+				OutResolvedName = Entry.Name;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Channel names this project accepts, for the "unknown channel" error. */
+	static FString DescribeTraceChannels()
+	{
+		TArray<FString> Names;
+		if (const UCollisionProfile* Profile = UCollisionProfile::Get())
+		{
+			for (int32 Index = 0; Index < ECC_MAX; ++Index)
+			{
+				const FName ChannelName = Profile->ReturnChannelNameFromContainerIndex(Index);
+				if (!ChannelName.IsNone()) Names.Add(ChannelName.ToString());
+			}
+		}
+		if (Names.Num() == 0)
+		{
+			Names = { TEXT("WorldStatic"), TEXT("WorldDynamic"), TEXT("Pawn"), TEXT("Visibility"),
+					  TEXT("Camera"), TEXT("PhysicsBody"), TEXT("Vehicle"), TEXT("Destructible") };
+		}
+		return FString::Join(Names, TEXT(", "));
+	}
+
 	static void EmitHitFields(TSharedPtr<FJsonObject> Result, const FHitResult& Hit)
 	{
 		AActor* HitActor = Hit.GetActor();
@@ -37,7 +109,9 @@ namespace
 		Result->SetObjectField(TEXT("normal"), MCPVec3ToJsonObject(Hit.Normal));
 		Result->SetObjectField(TEXT("impactNormal"), MCPVec3ToJsonObject(Hit.ImpactNormal));
 		Result->SetNumberField(TEXT("distance"), Hit.Distance);
-		Result->SetNumberField(TEXT("faceIndex"), Hit.FaceIndex);
+		// Only a per-triangle (complex) hit carries a face index. Emitting -1 for a
+		// simple hit invites callers to read it as a real triangle.
+		if (Hit.FaceIndex != INDEX_NONE) Result->SetNumberField(TEXT("faceIndex"), Hit.FaceIndex);
 		if (Hit.BoneName != NAME_None) Result->SetStringField(TEXT("boneName"), Hit.BoneName.ToString());
 		if (Hit.PhysMaterial.IsValid()) Result->SetStringField(TEXT("physicalMaterial"), Hit.PhysMaterial->GetPathName());
 	}
@@ -69,9 +143,28 @@ TSharedPtr<FJsonValue> FLevelHandlers::LineTrace(const TSharedPtr<FJsonObject>& 
 		return MCPError(TEXT("Pass either 'end' (Vec3) or 'direction' (Vec3) + 'distance?'"));
 	}
 
-	FCollisionQueryParams Query(SCENE_QUERY_STAT(MCPLineTrace), /*bTraceComplex*/ true);
+	// Gameplay traces run against simple collision unless they ask otherwise, so a
+	// trace taken here to verify in-game behaviour has to do the same by default.
+	// Complex geometry and its simple hull can be far apart, and a per-triangle hit
+	// the running game never produces reads as a confirmed impact point.
+	const bool bTraceComplex = OptionalBool(Params, TEXT("traceComplex"), false);
+
+	// Visibility is the editor picking channel. A gameplay trace usually runs on
+	// another one, and blocking differs per channel, so the channel has to be
+	// selectable for the result to mean anything about the game.
+	ECollisionChannel Channel = ECC_Visibility;
+	FString ChannelName = TEXT("Visibility");
+	const FString RequestedChannel = OptionalString(Params, TEXT("channel"));
+	if (!RequestedChannel.IsEmpty() && !ResolveTraceChannel(RequestedChannel, Channel, ChannelName))
+	{
+		return MCPError(FString::Printf(
+			TEXT("Unknown collision channel '%s'. Available channels: %s"),
+			*RequestedChannel, *DescribeTraceChannels()));
+	}
+
+	FCollisionQueryParams Query(SCENE_QUERY_STAT(MCPLineTrace), bTraceComplex);
 	Query.bReturnPhysicalMaterial = true;
-	Query.bReturnFaceIndex = true;
+	Query.bReturnFaceIndex = bTraceComplex;
 
 	const TArray<TSharedPtr<FJsonValue>>* IgnoreArr = nullptr;
 	if (Params->TryGetArrayField(TEXT("ignoreActors"), IgnoreArr) && IgnoreArr)
@@ -85,12 +178,16 @@ TSharedPtr<FJsonValue> FLevelHandlers::LineTrace(const TSharedPtr<FJsonObject>& 
 	}
 
 	FHitResult Hit;
-	const bool bHit = World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Query);
+	const bool bHit = World->LineTraceSingleByChannel(Hit, Start, End, Channel, Query);
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("hit"), bHit);
 	Result->SetObjectField(TEXT("start"), MCPVec3ToJsonObject(Start));
 	Result->SetObjectField(TEXT("end"), MCPVec3ToJsonObject(End));
+	// Report the collision semantics the result was produced under, so a caller
+	// comparing against the game can see which one it got.
+	Result->SetBoolField(TEXT("traceComplex"), bTraceComplex);
+	Result->SetStringField(TEXT("channel"), ChannelName);
 	if (bHit) EmitHitFields(Result, Hit);
 	return MCPResult(Result);
 }
