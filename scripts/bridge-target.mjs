@@ -128,7 +128,16 @@ export function isProcessAlive(pid) {
  * guard, which runs after the connection is up.
  */
 export function bridgePortCandidates(options = {}) {
-  const { explicitPort = null, lockfile = readPortLockfile() } = options;
+  // `projectDir` names a project other than this repo's test project. It is
+  // only ever passed by a harness driving more than one editor (#817); every
+  // ordinary caller omits it and gets exactly the behaviour it always had.
+  const { explicitPort = null, projectDir = null } = options;
+  const targetDir = projectDir ?? TEST_PROJECT_DIR;
+  const lockfile = options.lockfile ?? readPortLockfile(
+    projectDir
+      ? path.join(projectDir, "Saved", "UE_MCP_Bridge", "port.json")
+      : TEST_PORT_LOCKFILE,
+  );
 
   const candidates = [];
   const add = (port, source) => {
@@ -143,7 +152,7 @@ export function bridgePortCandidates(options = {}) {
   }
 
   add(lockfile.port, "lockfile");
-  add(deriveProjectPort(TEST_PROJECT_DIR), "derived from project path");
+  add(deriveProjectPort(targetDir), "derived from project path");
   add(LEGACY_BRIDGE_PORT, "legacy fixed port");
   return { candidates, lockfile };
 }

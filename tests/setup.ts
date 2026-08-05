@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { EditorBridge } from "../src/bridge.js";
 import {
   assertLoopbackHost,
@@ -6,8 +7,20 @@ import {
   verifyTestProjectTarget,
 } from "../scripts/bridge-target.mjs";
 
-let _bridge: EditorBridge | null = null;
+// One connection per project, not one per process (#817, plan item 7.1).
+// The single module-global bridge is what made "drive two editors from one
+// test process" unexpressible; keying by project root makes it ordinary.
+const _bridges = new Map<string, EditorBridge>();
 let _targetVerified = false;
+
+/** The key a project's connection is cached under. */
+function bridgeKey(projectDir?: string): string {
+  return (projectDir ?? "")
+    .split(path.sep)
+    .join("/")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+}
 
 // 127.0.0.1 rather than "localhost": on hosts where the IPv6 stack wins DNS,
 // "localhost" resolves to ::1 and the client waits on an empty socket while the
@@ -23,11 +36,41 @@ const ENV_PORT = Number.parseInt(process.env.UE_MCP_TEST_PORT ?? "", 10);
  * project other than tests/ue_mcp aborts the run before a single mutation.
  */
 export async function getBridge(): Promise<EditorBridge> {
-  if (_bridge?.isConnected) return _bridge;
+  return getBridgeFor();
+}
+
+/** Which editor a harness wants, and whether to enforce the test-project guard. */
+export interface BridgeTarget {
+  /**
+   * Project root to find a bridge for. Omitted means the repo's own test
+   * project, which is what every smoke file wants and the only target the
+   * guard below permits.
+   */
+  projectDir?: string;
+  /**
+   * Verify the connected editor has the repo's test project open. On by
+   * default, and only ever turned off for a harness talking to a bridge that
+   * is not an editor at all.
+   */
+  verifyTarget?: boolean;
+}
+
+/**
+ * Connect to one project's bridge. Repeat calls for the same project reuse the
+ * connection; different projects get different ones, so a single test process
+ * can drive several editors at once.
+ */
+export async function getBridgeFor(target: BridgeTarget = {}): Promise<EditorBridge> {
+  const key = bridgeKey(target.projectDir);
+  const cached = _bridges.get(key);
+  if (cached?.isConnected) return cached;
 
   assertLoopbackHost(TEST_BRIDGE_HOST);
+  // UE_MCP_TEST_PORT pins the repo's own test project, so it must not be
+  // applied to a harness that named a different project.
   const { candidates, lockfile } = bridgePortCandidates({
-    explicitPort: Number.isInteger(ENV_PORT) ? ENV_PORT : null,
+    explicitPort: !target.projectDir && Number.isInteger(ENV_PORT) ? ENV_PORT : null,
+    projectDir: target.projectDir,
   });
 
   let lastError: string | null = null;
@@ -40,8 +83,8 @@ export async function getBridge(): Promise<EditorBridge> {
       bridge.disconnect();
       continue;
     }
-    _bridge = bridge;
-    if (!_targetVerified) {
+    _bridges.set(key, bridge);
+    if (target.verifyTarget !== false && !_targetVerified) {
       await verifyTestProjectTarget((method, params) => bridge.call(method, params));
       _targetVerified = true;
     }
@@ -54,8 +97,14 @@ export async function getBridge(): Promise<EditorBridge> {
 }
 
 export function disconnectBridge(): void {
-  _bridge?.disconnect();
-  _bridge = null;
+  for (const bridge of _bridges.values()) bridge.disconnect();
+  _bridges.clear();
+}
+
+/** Drop every cached connection. Test-only; a smoke run wants them kept. */
+export function resetTestBridges(): void {
+  disconnectBridge();
+  _targetVerified = false;
 }
 
 export interface TestResult {
@@ -85,7 +134,7 @@ export async function callBridge(
       const message = e instanceof Error ? e.message : String(e);
       if (message.includes("connection lost") && attempt < 2) {
         await new Promise((r) => setTimeout(r, 2000));
-        try { await _bridge?.connect(5000); } catch { /* retry */ }
+        try { await bridge.connect(5000); } catch { /* retry */ }
         continue;
       }
       return { method, ok: false, ms: Math.round(performance.now() - start), error: message };

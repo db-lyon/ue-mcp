@@ -44,6 +44,19 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
+      - name: Multi-editor tier
+        # Two bridges on two loopback sockets, driven from one test process
+        # (#817, plan item 7.1). This gates merges on the routing property that
+        # multi-editor exists for: a call addressed to one editor arrives at
+        # that editor and at no other.
+        #
+        # The engine-dependent half of plan item 7.2 (the golden diff and the
+        # lifecycle matrix against a live editor) is NOT here and cannot be:
+        # these runners are ubuntu-latest with no Unreal install, so there is
+        # no editor to start and no second one to address. Everything above the
+        # handler is real; only the engine behind it is stubbed.
+        run: npm run test:multi-editor
+
       - name: Audit (high+ only, production deps)
         run: npm audit --omit=dev --audit-level=high
         continue-on-error: false
