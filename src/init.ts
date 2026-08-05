@@ -237,12 +237,22 @@ async function init() {
   ok(
     `Found UE ${project.engineAssociation ?? "?"} project "${project.projectName}"`,
   );
-  // Report this worktree's stable bridge port so multiple checkouts on one
-  // machine are visibly distinct. Derived from the project root path unless
-  // pinned via UE_MCP_PORT or ue-mcp.yml `ue-mcp.bridge.port`. The C++ bridge
-  // derives the same value; no config coordination needed.
+  // Report the bridge port this worktree will actually use, so multiple
+  // checkouts on one machine are visibly distinct. Derived from the project
+  // root path unless pinned via UE_MCP_PORT or ue-mcp.yml `ue-mcp.bridge.port`.
+  // The C++ bridge resolves the same way from the same inputs, so the number
+  // printed here is the number the editor will listen on.
   const derivedPort = deriveProjectPort(path.dirname(project.projectPath!));
-  info(`Bridge port for this worktree: ${DIM}${derivedPort}${RESET} (derived from the project path; pin with ue-mcp.bridge.port if needed)`);
+  const envPort = Number.parseInt(process.env.UE_MCP_PORT ?? "", 10);
+  const pinnedPort = Number.isFinite(envPort) && envPort > 0 ? envPort : project.config.bridge?.port;
+  const portOrigin = Number.isFinite(envPort) && envPort > 0
+    ? "pinned by UE_MCP_PORT"
+    : "pinned by ue-mcp.bridge.port";
+  info(
+    pinnedPort
+      ? `Bridge port for this worktree: ${DIM}${pinnedPort}${RESET} (${portOrigin}; ${derivedPort} is what the project path derives)`
+      : `Bridge port for this worktree: ${DIM}${derivedPort}${RESET} (derived from the project path; pin with ue-mcp.bridge.port if needed)`,
+  );
   console.log("");
 
   // On re-init, respect prior opt-outs in ue-mcp.yml so the user doesn't
