@@ -144,9 +144,11 @@ The `author` parameter is an enum with two values:
 
 If `author="user"` and no OAuth token is cached, the call returns an `auth_required` directive. Run `npx ue-mcp auth` to authorize, or call with `author="bot"` to post anonymously.
 
-Anonymous reports are signed by a hosted service rather than by this package, so nothing in the install carries a GitHub credential. The report is POSTed to `https://plugins.ue-mcp.com/api/feedback`, which holds the App key, checks the destination against ue-mcp core and the trackers of published plugins, rate-limits per caller, and opens the issue as `ue-mcp-feedback[bot]`. Point `UE_MCP_FEEDBACK_ENDPOINT` at another origin to use your own.
+Anonymous reports are signed by a hosted service rather than by this package, so nothing in the install carries a GitHub credential. The report is POSTed to `https://plugins.ue-mcp.com/api/feedback`, and the contract that endpoint implements is: hold the App key server-side, check the destination against ue-mcp core and the trackers of published plugins, rate-limit per caller, then open the issue as `ue-mcp-feedback[bot]`. Point `UE_MCP_FEEDBACK_ENDPOINT` at another origin to use your own.
 
 If that service is unreachable or turned off, nothing is lost: the call returns the approved body as a prefilled "new issue" URL you can open in one click, and `author="user"` keeps working independently.
+
+**Status:** the hosted endpoint is not deployed yet, so `author="bot"` takes the prefilled-URL path on every call today. See [#461](https://github.com/db-lyon/ue-mcp/issues/461) for the design and the reason the key left the package first. `author="user"`, the default, posts directly and is unaffected.
 
 ### Authorizing as your GitHub user
 
@@ -236,7 +238,7 @@ The hook handler self-gates: if `feedback` is in `ue-mcp.yml`'s `ue-mcp.disable[
 - **The agent is the adversary for the consent step.** The MCP elicitation prompt is rendered by your client, and the response comes back to the server over the protocol — the agent has no IPC to forge an approval.
 - **The redaction passes are non-bypassable.** They run before the body reaches the elicitation prompt or `submitFeedback`, and the agent never sees the pre-scrubbed bytes.
 - **Routing cannot aim a report at an arbitrary repo.** The `repo` parameter is accepted only for ue-mcp core or a repo a registered plugin owns, and the `Tracker` field on the approval prompt only accepts the two values it offered. There is no path from "an agent wrote a string" to "an issue on any GitHub project".
-- **The package ships no credentials.** `author="user"` posts with a token you authorized yourself through GitHub's device flow, stored under `~/.ue-mcp/`. `author="bot"` posts through a hosted signing service (`POST https://plugins.ue-mcp.com/api/feedback`) that holds the `ue-mcp-feedback` App key server-side, applies per-caller rate limits, re-runs the redaction pass, and only opens issues on ue-mcp core or the tracker of a published plugin. There is no key inside the package to extract.
+- **The package ships no credentials.** `author="user"` posts with a token you authorized yourself through GitHub's device flow, stored under `~/.ue-mcp/`. `author="bot"` posts through a hosted signing service (`POST https://plugins.ue-mcp.com/api/feedback`) whose contract is to hold the `ue-mcp-feedback` App key server-side, apply per-caller rate limits, re-run the redaction pass, and only open issues on ue-mcp core or the tracker of a published plugin. Until that endpoint is deployed the anonymous path hands back a prefilled issue URL instead of posting. Either way there is no key inside the package to extract.
 - **Disable the category if you don't want it available.** Add `"feedback"` to `ue-mcp.yml`'s `ue-mcp.disable[]` and the tool is not registered with the MCP server. The category checkbox lives in the **Agent behavior** section of `npx ue-mcp init` (default unchecked on fresh installs).
 
 ## For maintainers
