@@ -92,6 +92,29 @@ private:
 class FMCPBridgeServer;
 
 /**
+ * The port the bridge will try to bind, and where that number came from.
+ *
+ * The origin is carried alongside the number because the collision walk can
+ * move it. A user who pinned a port needs the log to say the pin did not take
+ * and what the bridge landed on, which is not something a bare int can say.
+ */
+struct FMCPBridgePortChoice
+{
+	/** The port to bind first. The walk in Run() starts here. */
+	int32 Port = 0;
+
+	/** Human-readable origin, for the one log line a user greps for. */
+	FString Source = TEXT("unknown");
+
+	/**
+	 * True when a human asked for this exact number (command line, environment,
+	 * or bridge.port in a config file). Losing a pinned port to a collision is
+	 * a warning; losing a derived one is routine.
+	 */
+	bool bPinned = false;
+};
+
+/**
  * Releases the connection record the accept loop made before it spawned this
  * thread.
  *
@@ -120,7 +143,7 @@ class FMCPBridgeServer : public FRunnable
 	friend class FMCPConnectionRelease;
 
 public:
-	FMCPBridgeServer(int32 Port = 9877);
+	FMCPBridgeServer(int32 Port = 9877, const FString& InPortSource = TEXT("default"), bool bInPortPinned = false);
 	~FMCPBridgeServer();
 
 	// Start the server
@@ -155,9 +178,13 @@ public:
 	static int32 DeriveProjectPort(const FString& ProjectRootDir);
 
 	// Resolve the base port to bind: -MCPPort= command line > UE_MCP_PORT env >
-	// deterministic derived port. The probe loop in Run() walks upward from
-	// here on collision, and the actual bound port is published to the lockfile.
-	static int32 ResolveConfiguredPort();
+	// `ue-mcp.bridge.port` from the project's config files > deterministic
+	// derived port. That order is the client's (see src/bridge.ts); both sides
+	// have to walk it identically or a pinned project ends up with a client
+	// aimed at one port and an editor listening on another (#819). The probe
+	// loop in Run() walks upward from here on collision, and the actual bound
+	// port is published to the lockfile.
+	static FMCPBridgePortChoice ResolveConfiguredPort();
 
 	// Get handler registry
 	FMCPHandlerRegistry& GetHandlerRegistry() { return HandlerRegistry; }
@@ -179,6 +206,11 @@ public:
 private:
 	// Server port
 	int32 ServerPort;
+
+	// Where ServerPort came from before the collision walk touched it, and
+	// whether it was pinned by a human. Only the log lines read these.
+	FString PortSource;
+	bool bPortPinned;
 
 	// Thread management
 	FRunnableThread* ServerThread;

@@ -18,12 +18,13 @@ static TSharedPtr<FMCPBridgeServer> G_BridgeServer;
 void FUE_MCP_BridgeModule::StartupModule()
 {
 	// Create and start bridge server. The base port is derived per-worktree
-	// from the project root path (or an explicit -MCPPort / UE_MCP_PORT
-	// override) so multiple checkouts can run side-by-side without colliding;
-	// the probe loop in Run() resolves the rare clash and publishes the actual
-	// bound port to the per-project lockfile.
-	const int32 BasePort = FMCPBridgeServer::ResolveConfiguredPort();
-	G_BridgeServer = MakeShared<FMCPBridgeServer>(BasePort);
+	// from the project root path, unless something pins it: -MCPPort,
+	// UE_MCP_PORT, or `bridge.port` in the project's ue-mcp.yml layers, in the
+	// order the client uses (#819). Deriving lets multiple checkouts run
+	// side-by-side without colliding; the probe loop in Run() resolves the rare
+	// clash and publishes the actual bound port to the per-project lockfile.
+	const FMCPBridgePortChoice PortChoice = FMCPBridgeServer::ResolveConfiguredPort();
+	G_BridgeServer = MakeShared<FMCPBridgeServer>(PortChoice.Port, PortChoice.Source, PortChoice.bPinned);
 
 	// The snapshot has been publishing since PostConfigInit, from the
 	// UE_MCP_BridgeStatus module. Now that Slate, the shader compiler and the
@@ -51,7 +52,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 	if (G_BridgeServer->Start())
 	{
-		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Bridge server starting on base port %d"), BasePort);
+		UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Bridge server starting on base port %d (%s)"), PortChoice.Port, *PortChoice.Source);
 	}
 	else
 	{
