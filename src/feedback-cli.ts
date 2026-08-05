@@ -165,6 +165,7 @@ type ApproveOutcome =
   | { kind: "posted"; number: number; url: string; repo: string }
   | { kind: "auth_required"; verification_uri: string; user_code: string }
   | { kind: "repo_unavailable"; repo: string; status: number; manualUrl: string }
+  | { kind: "bot_unavailable"; message: string; manualUrl: string }
   | { kind: "error"; message: string };
 
 /** Where a deferred entry goes. Entries written before routing existed carry
@@ -197,6 +198,15 @@ async function approveEntry(entry: DeferredFeedback): Promise<ApproveOutcome> {
       manualUrl: newIssueUrl(repo, entry.title, entry.body),
     };
   }
+  if (result.kind === "bot_unavailable") {
+    // Anonymous posting is off right now. Same treatment: the entry stays on
+    // disk and the user gets a door that always works.
+    return {
+      kind: "bot_unavailable",
+      message: result.message,
+      manualUrl: newIssueUrl(repo, entry.title, entry.body),
+    };
+  }
   deleteDeferred(entry.id);
   return { kind: "posted", number: result.number, url: result.url, repo: result.repo };
 }
@@ -218,6 +228,13 @@ async function cmdApprove(id: string): Promise<void> {
   if (outcome.kind === "repo_unavailable") {
     warn(`${outcome.repo} would not accept the issue (HTTP ${outcome.status}).`);
     console.log(`  ${BOLD}Open it manually:${RESET} ${CYAN}${outcome.manualUrl}${RESET}`);
+    info(`Entry left on disk. Discard with: npx ue-mcp feedback discard ${id}`);
+    process.exit(1);
+  }
+  if (outcome.kind === "bot_unavailable") {
+    warn(`Anonymous posting is unavailable: ${outcome.message}`);
+    console.log(`  ${BOLD}Open it manually:${RESET} ${CYAN}${outcome.manualUrl}${RESET}`);
+    info(`Or run \`npx ue-mcp auth\` and re-approve to post as your GitHub user.`);
     info(`Entry left on disk. Discard with: npx ue-mcp feedback discard ${id}`);
     process.exit(1);
   }
@@ -301,6 +318,13 @@ async function cmdReview(): Promise<void> {
       }
       if (outcome.kind === "repo_unavailable") {
         warn(`${outcome.repo} would not accept the issue (HTTP ${outcome.status}).`);
+        console.log(`  ${BOLD}Open it manually:${RESET} ${CYAN}${outcome.manualUrl}${RESET}`);
+        info(`Entry left on disk; continuing with the rest of the queue.`);
+        skipped++;
+        continue;
+      }
+      if (outcome.kind === "bot_unavailable") {
+        warn(`Anonymous posting is unavailable: ${outcome.message}`);
         console.log(`  ${BOLD}Open it manually:${RESET} ${CYAN}${outcome.manualUrl}${RESET}`);
         info(`Entry left on disk; continuing with the rest of the queue.`);
         skipped++;

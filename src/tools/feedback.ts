@@ -568,6 +568,19 @@ export const feedbackTool: ToolDef = categoryTool(
               manual_url: newIssueUrl(targetRepo, payload.title, payload.body),
             };
           }
+          if (result.kind === "bot_unavailable") {
+            // Anonymous submission goes through the hosted signing service, and
+            // it is not answering. The body is already assembled and scrubbed,
+            // so hand back the prefilled URL rather than dropping the report.
+            return {
+              message: `Feedback not posted: anonymous submission is unavailable. ${result.message}`,
+              submitted: false,
+              code: `bot_${result.code}`,
+              target_repo: repoSlug(postedTo),
+              manual_url: newIssueUrl(targetRepo, payload.title, payload.body),
+              hint: `Run \`npx ue-mcp auth\` and re-run with author="user" to post without the anonymous path.`,
+            };
+          }
           if (result.kind === "auth_required") {
             return directive(
               [
@@ -831,6 +844,40 @@ export const feedbackTool: ToolDef = categoryTool(
           labelsForRepo(payload.labels, targetRepo),
           { useBot: useBotForSubmit, repo: targetRepo },
         );
+
+        if (result.kind === "bot_unavailable") {
+          // The user approved an anonymous post and the hosted signing service
+          // could not make one. The approved bytes are still good, so give them
+          // the two doors that do not need that service.
+          const manualUrl = newIssueUrl(targetRepo, payload.title, payload.body);
+          return directive(
+            [
+              `[FEEDBACK APPROVED BUT NOT POSTED - ANONYMOUS SUBMISSION UNAVAILABLE]`,
+              `${result.message}`,
+              ``,
+              `Anonymous reports are signed by a hosted service so this package`,
+              `carries no credentials. That service did not take the report.`,
+              ``,
+              `Nothing was posted. Two options for the user:`,
+              `  1. Open it manually (body prefilled): ${manualUrl}`,
+              `  2. Run \`npx ue-mcp auth\`, then re-run feedback(submit) with author="user".`,
+              ``,
+              `Surface both to the user; do not pick for them.`,
+            ].join("\n"),
+            {
+              submitted: false,
+              code: `bot_${result.code}`,
+              target_repo: repoSlug(targetRepo),
+              manual_url: manualUrl,
+              ...(result.retryAfter ? { retry_after: result.retryAfter } : {}),
+            },
+            {
+              kind: "feedback.blocked",
+              requiredActions: ["surface_manual_issue_url_to_user", "offer_user_authored_submission"],
+              context: { code: `bot_${result.code}` },
+            },
+          );
+        }
 
         if (result.kind === "repo_unavailable") {
           // The user approved this exact body for this exact tracker and that
