@@ -378,7 +378,7 @@ async function main() {
   let targetingSignature = "";
   const syncEditorTargeting = (): void => {
     const names = sessions.list().map((s) => s.name);
-    const signature = names.length > 1 ? names.join(" ") : "";
+    const signature = names.length > 1 ? names.join(", ") : "";
     if (signature === targetingSignature) return;
     targetingSignature = signature;
     for (const tool of targetable) {
