@@ -24,6 +24,11 @@ import * as os from "node:os";
 
 interface ProjectState {
   installedHooks?: string[];
+  /** Per-project feedback approval mode (#817). Same preference as the
+   *  user-wide one below, scoped to one project root, which is what makes it a
+   *  per-session equivalent of UE_MCP_FEEDBACK_MODE without moving it into
+   *  tracked project yaml, where it does not belong. */
+  feedback?: { mode?: FeedbackMode };
 }
 
 export type FeedbackMode = "interactive" | "auto-approve" | "defer";
@@ -70,6 +75,7 @@ function writeState(state: UserState): void {
       ) {
         delete proj.installedHooks;
       }
+      if (proj.feedback && proj.feedback.mode === undefined) delete proj.feedback;
       if (Object.keys(proj).length === 0) {
         delete state.projects[key];
       }
@@ -119,16 +125,44 @@ export function setInstalledHooks(projectRoot: string, hooks: string[]): void {
   writeState(state);
 }
 
-export function getFeedbackMode(): FeedbackMode | undefined {
-  const mode = readState().preferences?.feedback?.mode;
-  return mode === "interactive" || mode === "auto-approve" || mode === "defer"
-    ? mode
-    : undefined;
+function asFeedbackMode(mode: unknown): FeedbackMode | undefined {
+  return mode === "interactive" || mode === "auto-approve" || mode === "defer" ? mode : undefined;
+}
+
+/**
+ * The feedback approval mode, for one project or for this user.
+ *
+ * A project's own preference wins over the user-wide one when it has been set
+ * (#817): with more than one editor registered, one of them can be a long
+ * unattended run while the user sits in front of another, and a single
+ * per-device answer cannot describe both. Nothing here reads project yaml -
+ * this is a per-user preference either way, and where a collaborator would see
+ * it is exactly where it does not belong.
+ */
+export function getFeedbackMode(projectRoot?: string | null): FeedbackMode | undefined {
+  const state = readState();
+  if (projectRoot) {
+    const scoped = asFeedbackMode(state.projects?.[projectKey(projectRoot)]?.feedback?.mode);
+    if (scoped) return scoped;
+  }
+  return asFeedbackMode(state.preferences?.feedback?.mode);
 }
 
 /** Set or clear the feedback mode preference. Pass undefined to clear. */
-export function setFeedbackMode(mode: FeedbackMode | undefined): void {
+export function setFeedbackMode(mode: FeedbackMode | undefined, projectRoot?: string | null): void {
   const state = readState();
+  if (projectRoot) {
+    const key = projectKey(projectRoot);
+    if (!state.projects) state.projects = {};
+    if (!state.projects[key]) state.projects[key] = {};
+    if (mode === undefined) {
+      delete state.projects[key].feedback;
+    } else {
+      state.projects[key].feedback = { mode };
+    }
+    writeState(state);
+    return;
+  }
   if (!state.preferences) state.preferences = {};
   if (!state.preferences.feedback) state.preferences.feedback = {};
   if (mode === undefined) {

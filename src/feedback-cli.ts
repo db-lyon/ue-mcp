@@ -64,31 +64,48 @@ function printHelp(): void {
   console.log("");
 }
 
-function cmdMode(arg: string | undefined): void {
+/**
+ * Print or set the feedback approval mode.
+ *
+ * With `--editor` the preference is scoped to that project (#817), which is the
+ * per-session equivalent of UE_MCP_FEEDBACK_MODE: one editor can be a long
+ * unattended run while the user sits in front of another. Without it, the
+ * user-wide preference is read and written exactly as before.
+ */
+function cmdMode(arg: string | undefined, projectRoot: string | null, editorLabel: string | null): void {
+  const scope = editorLabel ? `editor '${editorLabel}'` : "per-user";
   if (arg === undefined) {
     const env = (process.env.UE_MCP_FEEDBACK_MODE ?? "").trim().toLowerCase();
+    const scoped = projectRoot ? getFeedbackMode(projectRoot) : undefined;
     const pref = getFeedbackMode();
     const effective: FeedbackMode =
       env === "interactive" || env === "auto-approve" || env === "defer"
         ? env
-        : pref ?? "interactive";
+        : scoped ?? pref ?? "interactive";
 
     console.log("");
     console.log(`  ${BOLD}effective:${RESET} ${effective}`);
+    if (projectRoot) {
+      console.log(`  ${DIM}${scope}: ${scoped ?? "(not set; falls back to the per-user preference)"}${RESET}`);
+    }
     console.log(`  ${DIM}preference (~/.ue-mcp/state.json): ${pref ?? "(not set; default interactive)"}${RESET}`);
     if (env === "interactive" || env === "auto-approve" || env === "defer") {
       console.log(`  ${DIM}UE_MCP_FEEDBACK_MODE env override: ${env}${RESET}`);
     }
     console.log("");
-    console.log(`  ${DIM}Set with: npx ue-mcp feedback mode <interactive|auto-approve|defer>${RESET}`);
+    console.log(`  ${DIM}Set with: npx ue-mcp feedback mode <interactive|auto-approve|defer> [--editor <name>]${RESET}`);
     console.log(`  ${DIM}Clear preference: npx ue-mcp feedback mode default${RESET}`);
     console.log("");
     return;
   }
 
   if (arg === "default" || arg === "clear" || arg === "unset") {
-    setFeedbackMode(undefined);
-    ok(`Cleared mode preference. Effective mode will default to "interactive" until set again or overridden by UE_MCP_FEEDBACK_MODE.`);
+    setFeedbackMode(undefined, projectRoot);
+    ok(
+      projectRoot
+        ? `Cleared the mode for ${scope}. It falls back to the per-user preference.`
+        : `Cleared mode preference. Effective mode will default to "interactive" until set again or overridden by UE_MCP_FEEDBACK_MODE.`,
+    );
     info(getUserStatePath());
     return;
   }
@@ -97,8 +114,12 @@ function cmdMode(arg: string | undefined): void {
     fail(`Unknown mode "${arg}". Allowed: interactive, auto-approve, defer, default.`);
     process.exit(1);
   }
-  setFeedbackMode(arg);
-  ok(`Feedback mode set to "${arg}" (per-user, stored in ~/.ue-mcp/state.json).`);
+  setFeedbackMode(arg, projectRoot);
+  ok(
+    projectRoot
+      ? `Feedback mode for ${scope} set to "${arg}" (per-user, stored in ~/.ue-mcp/state.json).`
+      : `Feedback mode set to "${arg}" (per-user, stored in ~/.ue-mcp/state.json).`,
+  );
   if (process.env.UE_MCP_FEEDBACK_MODE) {
     warn(`UE_MCP_FEEDBACK_MODE=${process.env.UE_MCP_FEEDBACK_MODE} is set in your env and will override this preference for processes started from that shell.`);
   }
@@ -120,6 +141,14 @@ function setEditorFilter(projectPath?: string): void {
   editorFilter = projectPath.toLowerCase().endsWith(".uproject")
     ? path.basename(projectPath, path.extname(projectPath))
     : path.basename(projectPath.replace(/[\/]+$/, ""));
+}
+
+/** The project root a --editor value resolved to, for per-project preferences. */
+function projectRootOf(projectPath?: string): string | null {
+  if (!projectPath) return null;
+  return projectPath.toLowerCase().endsWith(".uproject")
+    ? path.dirname(path.resolve(projectPath))
+    : path.resolve(projectPath);
 }
 
 /** The deferred entries in scope: all of them, or one editor's. */
@@ -425,7 +454,7 @@ async function main(): Promise<void> {
 
   switch (sub) {
     case "mode":
-      cmdMode(id);
+      cmdMode(id, projectRootOf(target.projectPath), editorFilter);
       return;
     case "list":
       cmdList();

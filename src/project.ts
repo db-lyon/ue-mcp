@@ -32,7 +32,18 @@ export interface UeMcpConfig {
    *  it from the project root path (see port.ts). Unset = derived per-worktree port. */
   bridge?: {
     port?: number;
+    /** Per-project equivalent of UE_MCP_HOST (#817). Unset = 127.0.0.1. */
+    host?: string;
   };
+  /** Per-project equivalents of UE_EDITOR_PATH and UE_BUILD_TOOL_PATH (#817).
+   *  Unset = the engine this project's EngineAssociation names. */
+  editor?: {
+    path?: string;
+    buildToolPath?: string;
+  };
+  /** Per-project equivalent of UE_MCP_ENV (#817): the `ue-mcp.<env>.yml`
+   *  overlay this project merges. The env var still wins. */
+  env?: string;
   /** Per-asset exclusive locking for concurrent agents (see locking.ts).
    *  Opt-in; disabled by default. */
   locking?: {
@@ -317,18 +328,64 @@ export class ProjectContext {
  * ~/.ue-mcp/state.json.
  */
 function loadLayeredUeMcpBlock(projectDir: string): Record<string, unknown> {
-  const layers: Record<string, unknown>[] = [
-    readGlobalUeMcpBlock(),
-    readUeMcpBlock(path.join(projectDir, "ue-mcp.yml")),
-  ];
-  const env = process.env.UE_MCP_ENV;
-  if (env) layers.push(readUeMcpBlock(path.join(projectDir, `ue-mcp.${env}.yml`)));
+  const global = readGlobalUeMcpBlock();
+  const project = readUeMcpBlock(path.join(projectDir, "ue-mcp.yml"));
+
+  const layers: Record<string, unknown>[] = [global, project];
+  const overlayName = overlayFor(projectDir, global, project);
+  if (overlayName) layers.push(readUeMcpBlock(path.join(projectDir, `ue-mcp.${overlayName}.yml`)));
   layers.push(readUeMcpBlock(path.join(projectDir, "ue-mcp.local.yml")));
 
   return layers.reduce(
     (acc, layer) => deepMerge(acc, layer) as Record<string, unknown>,
     {} as Record<string, unknown>,
   );
+}
+
+/**
+ * Which `ue-mcp.<env>.yml` overlay this project merges (#817).
+ *
+ * UE_MCP_ENV is one value for the whole process, so with more than one project
+ * it puts every one of them on the same overlay. `env:` lets a project name its
+ * own. The variable still wins, which keeps a single-project user on exactly
+ * the behaviour they have.
+ *
+ * One caveat is worth a warning rather than silence: the editor plugin reads
+ * `bridge.port` out of these same files, and it selects its overlay from
+ * UE_MCP_ENV and nothing else. An overlay chosen by `env:` that pins the port
+ * would leave the client connecting to one port while the editor bound
+ * another.
+ */
+function overlayFor(
+  projectDir: string,
+  global: Record<string, unknown>,
+  project: Record<string, unknown>,
+): string | undefined {
+  const fromVariable = firstString(process.env.UE_MCP_ENV);
+  if (fromVariable) return fromVariable;
+
+  const local = readUeMcpBlock(path.join(projectDir, "ue-mcp.local.yml"));
+  const named = firstString(local.env, project.env, global.env);
+  if (!named) return undefined;
+
+  const overlay = readUeMcpBlock(path.join(projectDir, `ue-mcp.${named}.yml`));
+  if ((overlay.bridge as { port?: unknown } | undefined)?.port !== undefined) {
+    warn(
+      "project",
+      `ue-mcp.${named}.yml pins bridge.port and that overlay is selected by 'env: ${named}' in this project's ` +
+        `config. The editor plugin selects its overlay from UE_MCP_ENV only, so it will not read that pin and ` +
+        `the two would use different ports. Move the pin into ue-mcp.yml or ue-mcp.local.yml, or select the ` +
+        `overlay with UE_MCP_ENV.`,
+    );
+  }
+  return named;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim() !== "") return v.trim();
+  }
+  return undefined;
 }
 
 /**

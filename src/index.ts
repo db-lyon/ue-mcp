@@ -43,6 +43,7 @@ import type { FlowContext } from "./flow/context.js";
 import type { FlowConfig, PluginEntry } from "./flow/schema.js";
 import { loadPlugins, type PluginRecord } from "./plugin/loader.js";
 import { withAssetLocks, resolveLockingConfig } from "./locking.js";
+import { collapsingEnvWarnings } from "./session-env.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
@@ -174,6 +175,12 @@ async function main() {
     } catch (e) {
       console.error(`[ue-mcp] Failed to initialize project '${arg}': ${e instanceof Error ? e.message : e}`);
     }
+  }
+
+  // Say which environment variables are deciding for every editor at once.
+  // Silent at one editor: there is nothing to flatten and nothing to say.
+  for (const line of collapsingEnvWarnings(sessions.list().map((s) => s.name))) {
+    console.error(`[ue-mcp] ${line}`);
   }
 
   // No project argument, or every argument failed: keep one project-less

@@ -92,6 +92,7 @@ export class EditorSession {
     // the only thing stopping setProjectContext from overwriting an explicit
     // `bridge.port` with the derived per-project one.
     this.bridge.setConfigPort(this.project.config.bridge?.port);
+    this.bridge.setConfigHost(this.project.config.bridge?.host);
     this.bridge.setProjectContext(this.project.projectPath);
     this.guarded = new GuardedBridge(
       this.bridge,

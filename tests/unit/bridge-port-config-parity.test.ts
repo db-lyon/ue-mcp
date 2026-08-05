@@ -53,7 +53,7 @@ function layerOrder(body: string, markers: Array<[string, string]>): string[] {
 const TS_LAYERS: Array<[string, string]> = [
   ["user-global", "readGlobalUeMcpBlock()"],
   ["project", `"ue-mcp.yml"`],
-  ["env-overlay", "ue-mcp.${env}.yml"],
+  ["env-overlay", "ue-mcp.${overlayName}.yml"],
   ["local", `"ue-mcp.local.yml"`],
 ];
 

@@ -215,7 +215,9 @@ export const projectTool: ToolDef = categoryTool(
             const info = s.info(s === active);
             return {
               ...info,
-              bridgeReachable: await isBridgeReachable(s.bridge.port),
+              // The session's own host, so a project pointed elsewhere by
+              // `bridge.host` is probed where it actually lives (#817).
+              bridgeReachable: await isBridgeReachable(s.bridge.port, s.bridge.host),
               pluginBuildStale: s.project.projectPath
                 ? (checkPluginFreshness(s.project.projectPath).stale || undefined)
                 : undefined,

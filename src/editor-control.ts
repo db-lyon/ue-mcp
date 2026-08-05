@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { spawn } from "child_process";
 import * as net from "net";
 import WebSocket from "ws";
-import type { ProjectContext } from "./project.js";
+import { readUeMcpConfig, type ProjectContext } from "./project.js";
 import { findEngineInstall } from "./deployer.js";
 import { invalidatePluginFreshness } from "./plugin-freshness.js";
 import {
@@ -26,6 +26,21 @@ const IS_WINDOWS = process.platform === "win32";
 const NO_EDITOR_BINARY_MSG =
   "Unreal Editor executable not found. Set UE_EDITOR_PATH to the editor binary (on macOS that is inside UnrealEditor.app/Contents/MacOS/), or install the engine to a default location.";
 
+/**
+ * A project's `editor:` config, read from its .uproject path (#817).
+ *
+ * `buildProject` is handed a path rather than a loaded ProjectContext, and the
+ * CLI build has no context at all, so the config is read from the project root
+ * here rather than threaded through every caller.
+ */
+function readProjectEditorConfig(projectPath: string): { path?: string; buildToolPath?: string } {
+  try {
+    return readUeMcpConfig(path.dirname(path.resolve(projectPath))).editor ?? {};
+  } catch {
+    return {};
+  }
+}
+
 /** Read EngineAssociation from a .uproject, or null if unreadable. */
 function readEngineAssociation(projectPath: string): string | null {
   try {
@@ -36,9 +51,13 @@ function readEngineAssociation(projectPath: string): string | null {
   }
 }
 
-function findUEBuildTool(engineAssociation?: string | null): string | null {
+function findUEBuildTool(engineAssociation?: string | null, configuredPath?: string | null): string | null {
+  // UE_BUILD_TOOL_PATH is one value for the process and still wins;
+  // `editor.buildToolPath` is the per-project equivalent (#817), which matters
+  // as soon as two projects are on two engine versions.
   const envPath = process.env.UE_BUILD_TOOL_PATH;
   if (envPath) return envPath;
+  if (typeof configuredPath === "string" && configuredPath.trim() !== "") return configuredPath.trim();
 
   const scriptName = IS_WINDOWS ? "Build.bat" : "Build.sh";
 
@@ -112,8 +131,12 @@ function editorBinaryCandidates(engineRoot: string): string[] {
 }
 
 function findEditorExecutable(project?: ProjectContext): string | null {
+  // Same rule as the build tool: the env var is the global default and wins,
+  // `editor.path` is how one project names its own binary (#817).
   const envPath = process.env.UE_EDITOR_PATH;
   if (envPath) return envPath;
+  const configured = project?.config.editor?.path;
+  if (typeof configured === "string" && configured.trim() !== "") return configured.trim();
 
   const associatedEngineRoot = findEngineInstall(project?.engineAssociation ?? null);
   if (associatedEngineRoot) {
@@ -122,7 +145,7 @@ function findEditorExecutable(project?: ProjectContext): string | null {
     }
   }
 
-  const buildTool = findUEBuildTool(project?.engineAssociation ?? null);
+  const buildTool = findUEBuildTool(project?.engineAssociation ?? null, project?.config.editor?.buildToolPath);
   if (!buildTool) return null;
 
   const engineRoot = path.resolve(buildTool, "..", "..", "..", "..");
@@ -133,9 +156,27 @@ function findEditorExecutable(project?: ProjectContext): string | null {
   return null;
 }
 
-/** The host the client talks to a bridge on. UE_MCP_HOST covers remote setups. */
-function bridgeHost(): string {
-  return process.env.UE_MCP_HOST ?? "127.0.0.1";
+/**
+ * The host the client talks to one project's bridge on.
+ *
+ * UE_MCP_HOST covers remote setups and stays a global default: it is one value
+ * for the process, so with more than one project it points every editor at the
+ * same machine. It still wins. `bridge.host` in a project's ue-mcp.yml is how
+ * that project differs when it is unset (#817).
+ */
+function bridgeHost(projectDir?: string | null): string {
+  const env = process.env.UE_MCP_HOST;
+  if (env) return env;
+  if (projectDir) {
+    try {
+      const configured = readUeMcpConfig(projectDir).bridge?.host;
+      if (typeof configured === "string" && configured.trim() !== "") return configured.trim();
+    } catch {
+      // A project whose config cannot be read is not a reason to fail a
+      // liveness probe; the default host is the answer it had before.
+    }
+  }
+  return "127.0.0.1";
 }
 
 /**
@@ -399,7 +440,7 @@ async function waitForEditorReady(
     const socketUp =
       target.ok &&
       lockfileIsFromThisLaunch(target.writtenAtMs, opts.launchedAtMs) &&
-      (await isBridgeAvailable(undefined, target.port));
+      (await isBridgeAvailable(bridgeHost(projectDir), target.port));
     if (socketUp) {
       if (snapshot?.phase === "ready") {
         return finish({ ready: true, elapsedSeconds: elapsed(), timeline });
@@ -489,7 +530,7 @@ export async function startEditor(
   // refusing a launch forever.
   const target = resolveBridgeTarget(projectDir);
   const targetIsLive = target.ok && (target.pid === null || isPidAlive(target.pid));
-  if (target.ok && targetIsLive && (await isBridgeAvailable(undefined, target.port))) {
+  if (target.ok && targetIsLive && (await isBridgeAvailable(bridgeHost(projectDir), target.port))) {
     return {
       success: false,
       message: `Editor is already running for this project (its bridge is answering on port ${target.port}).`,
@@ -590,12 +631,17 @@ function uprojectInDir(projectDir?: string): string | null {
  * `result.success === false`, both of which have to be told apart from a real
  * acknowledgement so the caller can decide what to do next.
  */
-function sendOneBridgeCall(port: number, method: string, params: Record<string, unknown>): Promise<boolean> {
+function sendOneBridgeCall(
+  port: number,
+  method: string,
+  params: Record<string, unknown>,
+  host: string = bridgeHost(),
+): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     let settled = false;
     // Same host the reachability probe uses. Probing one host and sending the
     // quit to another is its own way of reaching an editor nobody addressed.
-    const ws = new WebSocket(`ws://${bridgeHost()}:${port}`);
+    const ws = new WebSocket(`ws://${host}:${port}`);
     const finish = (v: boolean) => {
       if (settled) return;
       settled = true;
@@ -629,9 +675,9 @@ function sendOneBridgeCall(port: number, method: string, params: Record<string, 
  * for editors running a plugin build that predates the handler. Never touches
  * the OS process table.
  */
-async function requestEditorSelfQuit(port: number): Promise<boolean> {
-  if (await sendOneBridgeCall(port, "request_editor_shutdown", { requireClean: false, endPIE: true })) return true;
-  return sendOneBridgeCall(port, "execute_python", { code: EDITOR_SELF_QUIT_PY });
+async function requestEditorSelfQuit(port: number, host: string): Promise<boolean> {
+  if (await sendOneBridgeCall(port, "request_editor_shutdown", { requireClean: false, endPIE: true }, host)) return true;
+  return sendOneBridgeCall(port, "execute_python", { code: EDITOR_SELF_QUIT_PY }, host);
 }
 
 /**
@@ -710,7 +756,8 @@ export async function stopEditor(force = false, projectDir?: string): Promise<{ 
   }
 
   const port = target.port;
-  const bridgeUp = await isBridgeAvailable(undefined, port);
+  const host = bridgeHost(projectDir);
+  const bridgeUp = await isBridgeAvailable(host, port);
   if (!bridgeUp && (await findInteractiveEditors(projectPath)).length === 0) {
     return { success: false, message: "Editor is not running" };
   }
@@ -726,7 +773,7 @@ export async function stopEditor(force = false, projectDir?: string): Promise<{ 
     };
   }
 
-  const quitSent = await requestEditorSelfQuit(port);
+  const quitSent = await requestEditorSelfQuit(port, host);
   if (!quitSent) {
     return {
       success: false,
@@ -737,7 +784,7 @@ export async function stopEditor(force = false, projectDir?: string): Promise<{ 
   // Confirm via the project's own bridge port closing - specific to this editor.
   for (let i = 0; i < 20; i++) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    if (!(await isBridgeAvailable(undefined, port))) {
+    if (!(await isBridgeAvailable(host, port))) {
       return { success: true, message: "Editor quit itself via the bridge" };
     }
   }
@@ -799,7 +846,10 @@ export async function buildProject(
   opts: { onOutput?: (line: string) => void } = {},
 ): Promise<BuildResult> {
   const resolvedPath = path.resolve(projectPath);
-  const buildTool = findUEBuildTool(readEngineAssociation(resolvedPath));
+  const buildTool = findUEBuildTool(
+    readEngineAssociation(resolvedPath),
+    readProjectEditorConfig(resolvedPath).buildToolPath,
+  );
   if (!buildTool) {
     return {
       success: false,

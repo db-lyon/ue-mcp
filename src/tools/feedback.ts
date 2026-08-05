@@ -15,19 +15,25 @@ import { CORE_REPO, newIssueUrl, repoSlug, sameRepo, type GitHubRepo } from "../
  * Resolve the active feedback mode. Precedence (highest wins):
  *
  *   1. UE_MCP_FEEDBACK_MODE env var       - per-process override
- *   2. ~/.ue-mcp/state.json preference    - per-user-per-device, set via
+ *   2. ~/.ue-mcp/state.json, this project - per-project, set via
+ *                                            `npx ue-mcp feedback mode <m> --editor <name>`
+ *   3. ~/.ue-mcp/state.json preference    - per-user-per-device, set via
  *                                            `npx ue-mcp feedback mode`
- *   3. default "interactive"
+ *   4. default "interactive"
+ *
+ * The project-scoped layer is what makes this per session (#817): one editor
+ * can be a long unattended run while the user sits in front of another, and a
+ * single per-device answer cannot describe both.
  *
  * Mode is NOT read from ue-mcp.yml. It's a per-user preference that varies
  * across machines and developers (am I at the keyboard, is this an
  * unattended run, etc.) - not project policy. The agent has no surface to
  * change this; it's set by the human running the server.
  */
-function resolveFeedbackMode(_ctx: ToolContext): FeedbackMode {
+function resolveFeedbackMode(ctx: ToolContext): FeedbackMode {
   const env = (process.env.UE_MCP_FEEDBACK_MODE ?? "").trim().toLowerCase();
   if (env === "auto-approve" || env === "defer" || env === "interactive") return env;
-  const pref = getFeedbackMode();
+  const pref = getFeedbackMode(ctx.project?.projectDir ?? null);
   if (pref) return pref;
   return "interactive";
 }

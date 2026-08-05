@@ -290,6 +290,19 @@ export class EditorBridge implements IBridge {
   public port: number;
 
   /**
+   * Apply `bridge.host` from ue-mcp.yml (#817).
+   *
+   * UE_MCP_HOST stays a global default: it is one value for the process, so
+   * with more than one project it points every session at the same machine.
+   * It still wins, which keeps an existing single-project setup exactly as it
+   * was, and this is what one project uses to differ when it is unset.
+   */
+  setConfigHost(host?: string): void {
+    if (process.env.UE_MCP_HOST) return;
+    if (typeof host === "string" && host.trim() !== "") this.host = host.trim();
+  }
+
+  /**
    * Apply an explicit `bridge.port` from ue-mcp.yml. Ignored when an
    * explicit constructor arg or UE_MCP_PORT already pinned the port.
    */
