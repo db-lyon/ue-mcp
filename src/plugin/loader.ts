@@ -190,7 +190,7 @@ export async function loadPlugins(
       for (const [bareName, injectSpec] of Object.entries(actions)) {
         const pluginTaskName = injectSpec.task;
         const ctor = taskCtors.get(pluginTaskName);
-        if (!ctor) continue; // skipped task — collision logged elsewhere
+        if (!ctor) continue; // skipped task - collision logged elsewhere
         const dispatchName = `${category}.${manifest.actionPrefix}_${bareName}`;
         taskRegistrations.push({ name: dispatchName, ctor });
       }
@@ -198,7 +198,7 @@ export async function loadPlugins(
 
     // Native handler auto-surfacing: when `nativeModule.category` is set, every
     // declared handler becomes an MCP action dispatching to the bare bridge
-    // method the C++ module registers. No TS task class is needed — a generic
+    // method the C++ module registers. No TS task class is needed - a generic
     // BridgeTask carries the method. A built-in category is injected into;
     // a new category is provisioned as a tool the plugin owns. Without
     // `category`, handlers stay bridge-only (back-compat).
@@ -226,7 +226,7 @@ export async function loadPlugins(
     // Provided categories: claim each name (first writer wins). Subsequent
     // plugins that try to provide the same name are skipped with a clear
     // reason. Actions land in the task registry under `<category>.<action>`
-    // with no prefix — the provider owns the namespace.
+    // with no prefix - the provider owns the namespace.
     for (const [category, providedSpec] of Object.entries(manifest.provides)) {
       const existing = provisionByCategory.get(category);
       if (existing) {
@@ -372,7 +372,7 @@ async function loadOne(
     if (bridgeApiVersion === null) {
       warn(
         "plugin",
-        `${entry.name}: declares nativeModule but no UE_MCP_Bridge is deployed yet — run \`ue-mcp init\` or \`ue-mcp deploy\` to deploy the bridge before invoking its native actions`,
+        `${entry.name}: declares nativeModule but no UE_MCP_Bridge is deployed yet - run \`ue-mcp init\` or \`ue-mcp deploy\` to deploy the bridge before invoking its native actions`,
       );
     } else if (manifest.nativeModule.minBridgeApi > bridgeApiVersion) {
       return skip(
@@ -536,7 +536,7 @@ export function nativeHandlerSurface(
   if (builtInCategories.has(cat)) {
     const actions: Record<string, ManifestInjectAction> = {};
     for (const [hName, hSpec] of Object.entries(native.handlers)) {
-      // `task` is synthetic — mergeInjectionsIntoTool reads only description
+      // `task` is synthetic - mergeInjectionsIntoTool reads only description
       // and schema; dispatch is wired through the registry registration below.
       actions[hName] = {
         task: `${manifest.actionPrefix}.${hName}`,

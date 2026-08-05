@@ -267,7 +267,7 @@ function formatFlowResult(result: FlowRunResult): Record<string, unknown> {
     const stepIcon = s.skipped ? "○" : s.result?.success ? "✓" : "✗";
     const status = s.skipped ? "skipped" : s.result?.success ? formatDuration(s.duration) : "FAILED";
     const attempts = s.attempts && s.attempts > 1 ? ` [${s.attempts} attempts]` : "";
-    lines.push(`  ${stepIcon} ${s.stepNumber}. ${s.name} (${s.type}) — ${status}${attempts}`);
+    lines.push(`  ${stepIcon} ${s.stepNumber}. ${s.name} (${s.type}) - ${status}${attempts}`);
 
     if (s.result?.error) {
       lines.push(`      ${s.result.error.message}`);
@@ -293,7 +293,7 @@ function formatFlowResult(result: FlowRunResult): Record<string, unknown> {
     lines.push("");
     lines.push(
       `  Rollback: ${result.rollback.succeeded}/${result.rollback.attempted} inverses succeeded` +
-        (result.rollback.errors.length ? ` — ${result.rollback.errors.length} failed` : ""),
+        (result.rollback.errors.length ? ` - ${result.rollback.errors.length} failed` : ""),
     );
     for (const e of result.rollback.errors) {
       lines.push(`      ✗ ${rollbackLabel(e)}: ${e.error.message}`);
@@ -314,7 +314,7 @@ function formatFlowResult(result: FlowRunResult): Record<string, unknown> {
     lines.push("");
     lines.push(`  Hook errors (${result.hookErrors.length}):`);
     for (const h of result.hookErrors) {
-      lines.push(`      ✗ ${h.phase}:${h.name} — ${h.error.message}`);
+      lines.push(`      ✗ ${h.phase}:${h.name} - ${h.error.message}`);
     }
   }
 

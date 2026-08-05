@@ -3,13 +3,13 @@ export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plu
 Every tool takes an "action" parameter that selects the operation. Call project(action="get_status") first.
 
 ═══ QUICK START ═══
-1. project(action="get_status") — check if the editor is connected
+1. project(action="get_status") - check if the editor is connected
 2. If not connected: editor(action="start_editor") to launch UE
-3. level(action="get_outliner") — see what's in the current level
-4. asset(action="list") — browse project assets
-5. reflection(action="reflect_class", className="StaticMeshActor") — understand any UE class
-6. demo(action="step", stepIndex=1) through 19 — run the Neon Shrine demo to see the bridge in action
-7. demo(action="cleanup") — clean up after the demo
+3. level(action="get_outliner") - see what's in the current level
+4. asset(action="list") - browse project assets
+5. reflection(action="reflect_class", className="StaticMeshActor") - understand any UE class
+6. demo(action="step", stepIndex=1) through 19 - run the Neon Shrine demo to see the bridge in action
+7. demo(action="cleanup") - clean up after the demo
 
 ═══ TOOLS ═══
 
@@ -25,13 +25,13 @@ feedback, statetree, chooser, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.
 • asset(action="search", query="/Game/Characters/*") accepts wildcards.
 • For BP scripting: blueprint(action="search_node_types") → blueprint(action="add_node") → blueprint(action="connect_pins").
 • editor(action="execute_python") is the escape hatch for any Unreal Python API call.
-• Animation tools need a skeleton path — use animation(action="list_skeletal_meshes") to find it.
+• Animation tools need a skeleton path - use animation(action="list_skeletal_meshes") to find it.
 • Editor lifecycle: editor(action="stop_editor") / editor(action="start_editor") / editor(action="restart_editor") manage the UE process. editor(action="build_project") builds the project C++ code (stop the editor first).
 • editor(action="hot_reload") triggers Live Coding compilation without restarting the editor.
 • editor(action="focus_on_actor", actorLabel="MyActor") snaps the viewport to any actor.
 • Log output: editor(action="get_log", category="LogMCPBridge") to see bridge-specific logs.
 
-═══ FLOWS — READ BEFORE ACTING ═══
+═══ FLOWS - READ BEFORE ACTING ═══
 
 Before you run bash/npm commands or chain 3+ category tool calls to
 satisfy a user request, look at the \`flows\` field returned by
@@ -72,16 +72,16 @@ complete, tell the user:
   "I had to use custom Python scripts to [describe what]. Would you like to submit
    feedback to help improve ue-mcp?"
 If the user agrees, call feedback(action="submit") with:
-  • title — short, generic description of the gap (no project-specific details)
-  • summary — what was attempted and why the native tool fell short
-  • pythonWorkaround — the Python code that was used
-  • idealTool — what tool/action should handle this natively
+  • title - short, generic description of the gap (no project-specific details)
+  • summary - what was attempted and why the native tool fell short
+  • pythonWorkaround - the Python code that was used
+  • idealTool - what tool/action should handle this natively
 This creates a GitHub issue so the maintainers can add proper support.
 
 Not every gap belongs to ue-mcp core. Plugins (PIE Studio, Perforce, Meshy, ...)
 own their own surfaces and their own trackers. submit checks the plugin registry
 and aims the issue at the owning repo on its own, and the approval prompt lets
-the user change it — do NOT set the repo parameter yourself unless the user
+the user change it - do NOT set the repo parameter yourself unless the user
 names a repo. feedback(action="route") answers "where would this land?" without
 posting anything.
 `;

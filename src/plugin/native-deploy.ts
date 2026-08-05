@@ -104,7 +104,7 @@ function copyRecursive(src: string, dest: string, projectDir: string, copied: st
 /**
  * Delete the files recorded for `npmName` and prune the state entry.
  * Returns the count of files actually removed (missing files are tolerated
- * silently — they may have been moved/deleted by the user).
+ * silently - they may have been moved/deleted by the user).
  *
  * Caller is responsible for refusing the operation when the editor still
  * has the plugin DLL loaded (Windows refuses to delete locked files).

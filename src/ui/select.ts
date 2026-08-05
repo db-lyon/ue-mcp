@@ -53,7 +53,7 @@ export function checkboxSelect(
 
     process.stdout.write(HIDE_CURSOR);
 
-    // Track how many TERMINAL rows the previous frame occupied — including
+    // Track how many TERMINAL rows the previous frame occupied - including
     // any rows produced by wrapping a long label+suffix at the column
     // boundary. Without this, MOVE_UP only walks back logical lines and
     // leaves wrapped fragments stranded above each redraw.
@@ -143,7 +143,7 @@ export function checkboxSelect(
         return;
       }
 
-      // Space — toggle
+      // Space - toggle
       if (key === " ") {
         states[cursor] = !states[cursor];
         render();
@@ -164,7 +164,7 @@ export function checkboxSelect(
         return;
       }
 
-      // 'a' — toggle all
+      // 'a' - toggle all
       if (key === "a") {
         const allChecked = states.every(Boolean);
         for (let i = 0; i < states.length; i++) states[i] = !allChecked;

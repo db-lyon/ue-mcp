@@ -44,7 +44,7 @@ export interface UeMcpConfig {
     enabled?: boolean;
     /** Default 7723. Bound to 127.0.0.1 only. */
     port?: number;
-    /** Override bind host. Defaults to 127.0.0.1 — do not expose externally. */
+    /** Override bind host. Defaults to 127.0.0.1 - do not expose externally. */
     host?: string;
   };
   /** Context-seeding strategy. `full` (default) lists every action inline;
@@ -229,7 +229,7 @@ export class ProjectContext {
       }
     }
     if (this.pluginsDir && fs.existsSync(this.pluginsDir)) scan(this.pluginsDir);
-    // Engine plugins (PCGBiomeCore, Niagara extras, etc.) — required for #253.
+    // Engine plugins (PCGBiomeCore, Niagara extras, etc.) - required for #253.
     const engineRoot = findEngineInstall(this.engineAssociation);
     if (engineRoot) {
       const enginePluginsRoot = path.join(engineRoot, "Engine", "Plugins");

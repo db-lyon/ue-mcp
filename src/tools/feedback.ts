@@ -14,14 +14,14 @@ import { CORE_REPO, newIssueUrl, repoSlug, sameRepo, type GitHubRepo } from "../
 /**
  * Resolve the active feedback mode. Precedence (highest wins):
  *
- *   1. UE_MCP_FEEDBACK_MODE env var       — per-process override
- *   2. ~/.ue-mcp/state.json preference    — per-user-per-device, set via
+ *   1. UE_MCP_FEEDBACK_MODE env var       - per-process override
+ *   2. ~/.ue-mcp/state.json preference    - per-user-per-device, set via
  *                                            `npx ue-mcp feedback mode`
  *   3. default "interactive"
  *
  * Mode is NOT read from ue-mcp.yml. It's a per-user preference that varies
  * across machines and developers (am I at the keyboard, is this an
- * unattended run, etc.) — not project policy. The agent has no surface to
+ * unattended run, etc.) - not project policy. The agent has no surface to
  * change this; it's set by the human running the server.
  */
 function resolveFeedbackMode(_ctx: ToolContext): FeedbackMode {
@@ -105,7 +105,7 @@ const CATEGORY_LABELS: Record<string, string[]> = {
 function inferLabels(title: string, summary: string, idealTool?: string): string[] {
   const labels = new Set<string>(["agent-feedback"]);
 
-  // Parse category from idealTool — e.g. "blueprint(action=foo)" or "asset(action=bar)"
+  // Parse category from idealTool - e.g. "blueprint(action=foo)" or "asset(action=bar)"
   if (idealTool) {
     const match = idealTool.match(/^(\w+)\s*\(/);
     if (match) {
@@ -240,7 +240,7 @@ function assemblePayload(
   //      name, OS username). Applied second so a path that contained a
   //      secret-shaped substring has the secret redacted before we drop the
   //      surrounding path bytes.
-  // The agent has no surface to bypass either pass — both are applied here
+  // The agent has no surface to bypass either pass - both are applied here
   // server-side before the body ever appears on the elicitation prompt or
   // crosses the GitHub API boundary.
   const secretsBody = scrubSecrets(rawBody);
@@ -290,7 +290,7 @@ function buildApprovalMessage(
   routing: RoutingDecision | null,
 ): string {
   const lines: string[] = [
-    "REVIEW BEFORE SUBMITTING — nothing has been posted yet.",
+    "REVIEW BEFORE SUBMITTING - nothing has been posted yet.",
     "",
     `Approving this prompt posts a new issue to the PUBLIC ${repoSlug(repo)} GitHub`,
     "tracker with the exact content shown below. Decline to discard.",
@@ -468,7 +468,7 @@ export const feedbackTool: ToolDef = categoryTool(
 
         // Two independent checks: (1) capture intent above, (2) validate
         // auth here. Auth validation only matters when intent is "user".
-        // If validation fails, return a normal error directive — there is
+        // If validation fails, return a normal error directive - there is
         // no third "plan" state to model.
         let authorPromptLine: string;
         let useBotForSubmit: boolean;
@@ -652,7 +652,7 @@ export const feedbackTool: ToolDef = categoryTool(
             message: buildApprovalMessage(payload, authorPromptLine, targetRepo, routing),
             // Radio semantics on `decision` (two-value enum, mutually
             // exclusive by schema). Filling the `revisions` text field is
-            // its own choice and takes precedence over `decision` — no
+            // its own choice and takes precedence over `decision` - no
             // extra checkbox to tick. Three outcomes the user can express:
             //
             //   decision = submit, revisions empty   → post the body as shown
@@ -665,7 +665,7 @@ export const feedbackTool: ToolDef = categoryTool(
             // Form-level Decline/cancel always declines, regardless of
             // field values.
             // The form-level Accept / Decline buttons are Claude Code's
-            // built-in form actions — they carry the submit/discard
+            // built-in form actions - they carry the submit/discard
             // decision. We only need ONE field in the schema, for the
             // optional revisions text. The three outcomes:
             //
@@ -680,11 +680,11 @@ export const feedbackTool: ToolDef = categoryTool(
                   type: "string",
                   title: "Submit with revisions (optional)",
                   description:
-                    "Leave EMPTY and click Accept to submit the body as shown. Fill in to ask the agent to rewrite the body per these notes — nothing posts until you re-approve the revised body. Click Decline to discard.",
+                    "Leave EMPTY and click Accept to submit the body as shown. Fill in to ask the agent to rewrite the body per these notes - nothing posts until you re-approve the revised body. Click Decline to discard.",
                 },
-                // Tracker override. The body is identical either way — the
+                // Tracker override. The body is identical either way - the
                 // routing section states what was matched, not where it
-                // landed — so flipping this cannot change the bytes you
+                // landed - so flipping this cannot change the bytes you
                 // just read.
                 ...(altRepo
                   ? {
@@ -1043,7 +1043,7 @@ export const feedbackTool: ToolDef = categoryTool(
       .enum(["user", "bot"])
       .optional()
       .describe(
-        'Who the issue is authored by. "user" (default): credit me — requires a cached GitHub OAuth token. "bot": anonymous as the ue-mcp-feedback bot.',
+        'Who the issue is authored by. "user" (default): credit me - requires a cached GitHub OAuth token. "bot": anonymous as the ue-mcp-feedback bot.',
       ),
     repo: z
       .string()

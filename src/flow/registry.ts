@@ -28,7 +28,7 @@ export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
         // FlowContext is a structural superset of ToolContext (see
         // context.ts), so we pass ctx straight through. Rebuilding it
         // field-by-field used to silently drop new accessors at this
-        // boundary — never reintroduce that pattern.
+        // boundary - never reintroduce that pattern.
         const originalHandler = spec.handler;
         registry.register(
           taskName,

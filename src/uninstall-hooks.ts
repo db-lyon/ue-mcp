@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `npx ue-mcp uninstall-hooks` — manual escape hatch.
+ * `npx ue-mcp uninstall-hooks` - manual escape hatch.
  *
  * Walks up from cwd (or a path passed as argv[2]) to find the project
  * root via `ue-mcp.yml`, reads `installedHooks` for that project from

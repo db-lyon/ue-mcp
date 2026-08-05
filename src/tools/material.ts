@@ -39,7 +39,7 @@ export const materialTool: ToolDef = categoryTool(
     list_expression_types: bp("List available expression types", "list_expression_types"),
     recompile:         bp("Recompile material. Pass recompileChildren=true to cascade to every MaterialInstanceConstant whose parent chain reaches this material (#421). Params: materialPath, recompileChildren?", "recompile_material", (p) => ({ materialPath: p.materialPath, recompileChildren: p.recompileChildren })),
     duplicate:         bp("Duplicate material asset. Params: sourcePath, destinationPath", "duplicate_material"),
-    validate:          bp("Validate material graph — find orphans, broken refs. Params: assetPath", "validate_material", (p) => ({ assetPath: p.assetPath ?? p.materialPath })),
+    validate:          bp("Validate material graph - find orphans, broken refs. Params: assetPath", "validate_material", (p) => ({ assetPath: p.assetPath ?? p.materialPath })),
     get_shader_stats:  bp("Shader compile stats, sampler+param counts. Params: assetPath", "get_material_shader_stats", (p) => ({ assetPath: p.assetPath ?? p.materialPath })),
     export_graph:      bp("Export material graph as JSON. Params: assetPath", "export_material_graph", (p) => ({ assetPath: p.assetPath ?? p.materialPath })),
     import_graph:      bp("Rebuild graph from JSON. Params: assetPath, nodes, propertyConnections?", "import_material_graph"),

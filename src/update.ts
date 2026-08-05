@@ -137,7 +137,7 @@ async function update() {
   // 5. Show the version table so alignment is visible.
   console.log(formatDoctor(collectDoctor(projectArg)));
 
-  // 6. Remind to relaunch — an update launched through the MCP client cannot
+  // 6. Remind to relaunch - an update launched through the MCP client cannot
   //    restart the server it was spawned by.
   console.log(`  ${BOLD}Next:${RESET} quit your MCP client and relaunch it so it spawns the updated server.`);
   console.log("");

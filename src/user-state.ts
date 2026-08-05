@@ -13,7 +13,7 @@ import * as os from "node:os";
  * Keyed by absolute project root so a single user can run ue-mcp across many
  * projects without state collision.
  *
- * Currently just `installedHooks` — the list of Claude Code settings files
+ * Currently just `installedHooks` - the list of Claude Code settings files
  * where the feedback PostToolUse hook was installed for a given project.
  * Read on `npx ue-mcp uninstall-hooks` and on re-init to seed the hook
  * checkbox.

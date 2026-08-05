@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `ue-mcp doctor` — diagnose every ue-mcp version source and flag the failure
+ * `ue-mcp doctor` - diagnose every ue-mcp version source and flag the failure
  * mode nothing else surfaces: a project-local `node_modules/ue-mcp` that
  * silently shadows the global install (npx prefers the local copy, so updating
  * the global one changes nothing the server actually runs). (#550)
@@ -127,7 +127,7 @@ export function parseServerInvocation(cmd: string): { script: string; project: s
   const script = path.normalize((scriptMatch[1] ?? "") + path.join("ue-mcp", "dist", "index.js"));
 
   // First argument after index.js decides server-vs-CLI. The char right after
-  // "index.js" may be the script path's own closing quote — drop it first.
+  // "index.js" may be the script path's own closing quote - drop it first.
   const idx = cmd.toLowerCase().indexOf("index.js");
   let rest = cmd.slice(idx + "index.js".length).replace(/^"/, "").trim();
   let firstArg = "";
@@ -218,7 +218,7 @@ function bridgePluginVersion(projectArg: string | undefined, cwd: string): { ver
 /**
  * Scan cwd + parents for a .mcp.json that launches the server via bare
  * `npx ue-mcp` (an npx server whose args include "ue-mcp" with no @version pin
- * and no -y) — the configuration that lets a local copy shadow the global one.
+ * and no -y) - the configuration that lets a local copy shadow the global one.
  */
 export function findBareNpxConfigs(cwd: string): string[] {
   const hits: string[] = [];

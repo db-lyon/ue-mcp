@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 
-// #685 — ChooserTable (UChooserTable) row authoring. Chooser tables are the
+// #685 - ChooserTable (UChooserTable) row authoring. Chooser tables are the
 // data-driven selection layer behind Motion Matching: a chooser maps character
 // state (Stance x MovementState x Gait) to which PoseSearchDatabase to search.
 // Extending locomotion means adding/editing ROWS (a set of input-column

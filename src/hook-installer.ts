@@ -15,7 +15,7 @@ import { getInstalledHooks, setInstalledHooks } from "./user-state.js";
  *      user-state file (not the project tree) because those absolute
  *      paths are user-machine-specific and have no business in tracked
  *      config.
- *   2. Uninstall is idempotent — calling it against a settings file that
+ *   2. Uninstall is idempotent - calling it against a settings file that
  *      doesn't have our matcher is a no-op, not an error.
  */
 
@@ -44,7 +44,7 @@ function readSettings(settingsPath: string): ClaudeSettings {
   } catch (e) {
     logWarn(
       "hook-installer",
-      `Claude settings at ${settingsPath} was not valid JSON — treating as empty`,
+      `Claude settings at ${settingsPath} was not valid JSON - treating as empty`,
       e,
     );
     return {};

@@ -518,7 +518,7 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     search_engine_cpp: {
-      description: "Search engine .h/.cpp/.inl files across Runtime/Editor/Developer/Plugins. Params: query, tree? (Runtime|Editor|Developer|Plugins|all — default Runtime), subdirectory?, maxResults? (default 500)",
+      description: "Search engine .h/.cpp/.inl files across Runtime/Editor/Developer/Plugins. Params: query, tree? (Runtime|Editor|Developer|Plugins|all - default Runtime), subdirectory?, maxResults? (default 500)",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
         const resolvedEngineRoot = findEngineInstall(ctx.project.engineAssociation ?? null);
@@ -644,13 +644,13 @@ export const projectTool: ToolDef = categoryTool(
     build: bp("Build C++ project. Params: configuration?, platform?, clean?", "build_project"),
     generate_project_files: bp("Generate IDE project files (Visual Studio, Xcode, etc.)", "generate_project_files"),
 
-    // v0.7.13 — native C++ authoring. Bridge handlers wrap
+    // v0.7.13 - native C++ authoring. Bridge handlers wrap
     // GameProjectUtils / ILiveCodingModule (same APIs used by the editor's
     // File → New C++ Class and Live Coding menus).
     create_cpp_class: {
       description: "Create a new native UCLASS in a project module. Uses the same engine template path as File → New C++ Class. Writes .h + .cpp; returns both paths plus needsEditorRestart (true unless Live Coding successfully hot-reloaded). Params: className (no prefix), parentClass? (default UObject; accepts short names like 'Actor' or /Script/<Module>.<Class> paths), moduleName? (default: first project module, use list_project_modules to pick), classDomain? ('public'|'private'|'classes', default public), subPath?",
       bridge: "create_cpp_class",
-      // AddCodeToProject regenerates IDE project files synchronously — can
+      // AddCodeToProject regenerates IDE project files synchronously - can
       // easily exceed the default 30-second cap on first use.
       timeoutMs: 300_000,
       mapParams: (p) => ({
@@ -677,7 +677,7 @@ export const projectTool: ToolDef = categoryTool(
       (p) => ({ moduleName: p.moduleName }),
     ),
     live_coding_compile: {
-      description: "Trigger a Live Coding compile (Windows only). Hot-patches method bodies of existing UCLASSes without editor restart — the fast inner loop for UFUNCTION implementations. Does NOT reliably register brand-new UCLASSes; use build_project + editor restart for those. Params: wait? (default false — fire and return 'in_progress').",
+      description: "Trigger a Live Coding compile (Windows only). Hot-patches method bodies of existing UCLASSes without editor restart - the fast inner loop for UFUNCTION implementations. Does NOT reliably register brand-new UCLASSes; use build_project + editor restart for those. Params: wait? (default false - fire and return 'in_progress').",
       bridge: "live_coding_compile",
       timeoutMs: 300_000,
       mapParams: (p) => ({ wait: p.wait }),
@@ -795,7 +795,7 @@ export const projectTool: ToolDef = categoryTool(
     },
     add_module_dependency: {
       description:
-        "Add a module to a target module's Build.cs dependency array. Params: moduleName (the Build.cs to edit — must exist in the project), dependency (module name to add, e.g. 'UMG'), access? ('public'|'private', default 'private'). Creates the corresponding AddRange block if missing. Rebuild required afterward.",
+        "Add a module to a target module's Build.cs dependency array. Params: moduleName (the Build.cs to edit - must exist in the project), dependency (module name to add, e.g. 'UMG'), access? ('public'|'private', default 'private'). Creates the corresponding AddRange block if missing. Rebuild required afterward.",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
         const moduleName = p.moduleName as string;
@@ -833,7 +833,7 @@ export const projectTool: ToolDef = categoryTool(
           // Insert a new AddRange block before the closing brace of the ModuleRules ctor.
           const ctorCloseRe = /(\n\s*\}\s*\n\s*\})\s*$/;
           if (!ctorCloseRe.test(content)) {
-            throw new Error(`Could not locate module ctor in ${buildCs} — edit manually.`);
+            throw new Error(`Could not locate module ctor in ${buildCs} - edit manually.`);
           }
           const newBlock = `\n\t\t${fieldName}.AddRange(\n\t\t\tnew string[]\n\t\t\t{\n\t\t\t\t"${dependency}",\n\t\t\t}\n\t\t);\n`;
           content = content.replace(ctorCloseRe, `${newBlock}$1`);
@@ -967,8 +967,8 @@ export const projectTool: ToolDef = categoryTool(
     tree: z.string().optional().describe("For search_engine_cpp: Runtime|Editor|Developer|Plugins|all (default Runtime)"),
     subdirectory: z.string().optional().describe("For search_engine_cpp: subdirectory within the chosen tree"),
 
-    // v0.7.13 — native C++ authoring
-    className: z.string().optional().describe("For create_cpp_class: new class name (no A/U prefix — handled by parent type)"),
+    // v0.7.13 - native C++ authoring
+    className: z.string().optional().describe("For create_cpp_class: new class name (no A/U prefix - handled by parent type)"),
     parentClass: z.string().optional().describe("For create_cpp_class: parent UClass. Short native names ('Actor') or /Script/<Module>.<Class> paths work. Default UObject."),
     classDomain: z.enum(["public", "private", "classes"]).optional().describe("For create_cpp_class: which folder under the module (Public/Private/Classes). Default 'public'."),
     subPath: z.string().optional().describe("For create_cpp_class: nested folder under the class domain (e.g. 'Gameplay/Abilities')."),

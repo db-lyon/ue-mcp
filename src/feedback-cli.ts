@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `npx ue-mcp feedback <list|show|approve|discard|review>` — review and act on
+ * `npx ue-mcp feedback <list|show|approve|discard|review>` - review and act on
  * submissions that ue-mcp deferred to disk while running in
  * `feedback.mode = "defer"`. Pairs with src/feedback-deferred.ts.
  *

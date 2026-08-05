@@ -35,8 +35,8 @@ export function normalizeProjectRoot(dir: string): string {
 /**
  * Derive the bridge base port from a project root directory. SHA-1 of the
  * normalized path, first 4 bytes folded into the ephemeral range. SHA-1 (not
- * SHA-256) because it is trivially available on both sides — Node's crypto and
- * UE's FSHA1 — and the hash is used only for port spreading, never security.
+ * SHA-256) because it is trivially available on both sides - Node's crypto and
+ * UE's FSHA1 - and the hash is used only for port spreading, never security.
  */
 export function deriveProjectPort(projectRootDir: string): number {
   const norm = normalizeProjectRoot(projectRootDir);

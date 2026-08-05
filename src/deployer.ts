@@ -62,7 +62,7 @@ export function deploySummary(r: DeployResult): string {
  * Non-destructive attach used on normal MCP server startup.
  *
  * Unlike `deploy()`, this NEVER overwrites bridge source under
- * `Plugins/UE_MCP_Bridge/Source/` — so local forks/edits and
+ * `Plugins/UE_MCP_Bridge/Source/` - so local forks/edits and
  * project-tracked bridge revisions are preserved. It only:
  *   - ensures PythonScriptPlugin is listed in the .uproject
  *   - ensures UE_MCP_Bridge is listed in the .uproject
@@ -117,11 +117,11 @@ export function attachSummary(r: AttachResult): string {
 
   if (!r.cppPluginPresent) {
     notes.push(
-      `UE_MCP_Bridge plugin NOT installed — run \`ue-mcp init <uproject>\` to deploy (packaged v${r.packagedVersion ?? "?"})`,
+      `UE_MCP_Bridge plugin NOT installed - run \`ue-mcp init <uproject>\` to deploy (packaged v${r.packagedVersion ?? "?"})`,
     );
   } else if (r.versionMatch === false) {
     notes.push(
-      `bridge version mismatch — installed v${r.installedVersion}, packaged v${r.packagedVersion}. Source left untouched; run \`ue-mcp deploy <uproject>\` to upgrade.`,
+      `bridge version mismatch - installed v${r.installedVersion}, packaged v${r.packagedVersion}. Source left untouched; run \`ue-mcp deploy <uproject>\` to upgrade.`,
     );
   } else if (r.versionMatch === true) {
     notes.push(`bridge v${r.installedVersion} present (source untouched)`);
@@ -160,7 +160,7 @@ function readUpluginVersion(upluginPath: string): string | null {
 }
 
 /* ------------------------------------------------------------------ */
-/*  PythonScriptPlugin — still needed for execute_python escape hatch */
+/*  PythonScriptPlugin - still needed for execute_python escape hatch */
 /* ------------------------------------------------------------------ */
 
 function ensurePythonPlugin(uprojectPath: string): boolean {

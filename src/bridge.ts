@@ -209,7 +209,7 @@ export interface BridgeTarget {
   verified: boolean;
 }
 
-/** Minimal interface for tool handlers — enables mocking in tests. */
+/** Minimal interface for tool handlers - enables mocking in tests. */
 export interface IBridge {
   readonly isConnected: boolean;
   /** #821: what the connected bridge reported at handshake, when there is one. */

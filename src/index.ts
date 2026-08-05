@@ -142,7 +142,7 @@ async function main() {
           (projectArgs.length > 1 ? ` as editor '${session.name}' on port ${session.bridge.port}` : ""),
       );
 
-      // Non-destructive attach — never overwrites local bridge source.
+      // Non-destructive attach - never overwrites local bridge source.
       // Source deployment is reserved for `ue-mcp init` / `ue-mcp deploy`.
       const result = attach(session.project);
       console.error(`[ue-mcp] ${attachSummary(result)}`);
@@ -173,7 +173,7 @@ async function main() {
   const bridge = primary.bridge;
 
   // ── Plugins ──────────────────────────────────────────────────────
-  // Read the user's `plugins:` entries from ue-mcp.yml (best-effort — a
+  // Read the user's `plugins:` entries from ue-mcp.yml (best-effort - a
   // missing or invalid file means zero plugins, never a fatal error). Then
   // resolve, validate, and inject into target categories BEFORE the flow
   // registry is built so plugin tasks register cleanly.
@@ -270,7 +270,7 @@ async function main() {
     console.error(`[ue-mcp] Context strategy: ${contextStrategy}`);
   }
 
-  // Lazy flow accessor — reads ue-mcp.yml fresh each call so agents see
+  // Lazy flow accessor - reads ue-mcp.yml fresh each call so agents see
   // edits without a server restart. project(get_status) uses this so the
   // first call agents make in any session reveals the registered flows.
   const getFlows = (): Array<{ name: string; description?: string }> => {
@@ -301,7 +301,7 @@ async function main() {
         // "user declined" from "client has no UI for this".
         throw new McpError(
           ErrorCode.UNKNOWN_ACTION,
-          "Connected MCP client did not advertise the `elicitation` capability — cannot obtain a deterministic user approval. Upgrade your client (Claude Code >= 2.1.76) or run the action from a client that supports MCP elicitation.",
+          "Connected MCP client did not advertise the `elicitation` capability - cannot obtain a deterministic user approval. Upgrade your client (Claude Code >= 2.1.76) or run the action from a client that supports MCP elicitation.",
         );
       }
       const result = await mcp.server.elicitInput(params);
@@ -429,7 +429,7 @@ async function main() {
     return { session: sessions.resolve(target), params: stripped };
   };
 
-  // ── Register category tools — dispatched through the task registry ──
+  // ── Register category tools - dispatched through the task registry ──
   for (const tool of tools) {
     const shape: Record<string, z.ZodType> = {};
     for (const [key, schema] of Object.entries(tool.schema)) {
@@ -527,9 +527,9 @@ async function main() {
     tasks: pluginLoad.taskDefs,
     flows: pluginLoad.flowDefs,
   });
-  console.error(`[ue-mcp] ue-mcp.yml loaded — ${Object.keys(initialLoad.config.flows).length} flow(s), ${Object.keys(initialLoad.config.tasks).length} custom task(s)`);
+  console.error(`[ue-mcp] ue-mcp.yml loaded - ${Object.keys(initialLoad.config.flows).length} flow(s), ${Object.keys(initialLoad.config.tasks).length} custom task(s)`);
 
-  // Config is reloaded on every flow call — edit ue-mcp.yml without restarting
+  // Config is reloaded on every flow call - edit ue-mcp.yml without restarting
   const reloadConfig = (): FlowConfig => loadFlowConfig(activeTools, configDir, {
     tasks: pluginLoad.taskDefs,
     flows: pluginLoad.flowDefs,
@@ -574,7 +574,7 @@ async function main() {
 
   // ── Optional HTTP surface for flow.run (#144) ───────────────────
   // Off by default; opt-in via ue-mcp.yml `ue-mcp.http: { enabled: true, port: 7723 }`.
-  // Binds to 127.0.0.1 only — do NOT expose to the network without adding auth.
+  // Binds to 127.0.0.1 only - do NOT expose to the network without adding auth.
   if (project.config.http?.enabled) {
     try {
       startFlowHttpServer(flowTool, ctx, {
@@ -615,7 +615,7 @@ async function main() {
 
 /**
  * Best-effort read of the `plugins:` array from ue-mcp.yml. Returns [] when
- * the file is missing, unreadable, or malformed — plugin failures are loud at
+ * the file is missing, unreadable, or malformed - plugin failures are loud at
  * load time, not fatal here.
  */
 function readPluginsEntries(configDir: string | undefined): PluginEntry[] {

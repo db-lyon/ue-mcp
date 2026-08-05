@@ -21,7 +21,7 @@ import * as os from "node:os";
  *
  * Project/username matches use `\b` word boundaries (case-insensitive) so
  * "david" inside paths or sentences matches but "davidson" does not. Class,
- * component, and actor names are NOT redacted — the user can use the
+ * component, and actor names are NOT redacted - the user can use the
  * "Revise first" path on the approval prompt to request specific further
  * redactions.
  */

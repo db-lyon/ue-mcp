@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-// Regex-based C++ header inspection. Not a full parser — extracts UCLASS /
+// Regex-based C++ header inspection. Not a full parser - extracts UCLASS /
 // USTRUCT / UENUM / UPROPERTY / UFUNCTION declarations well enough to feed
 // agents looking for the shape of a module.
 

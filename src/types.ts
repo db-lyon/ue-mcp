@@ -8,7 +8,7 @@ import { McpError, ErrorCode } from "./errors.js";
  * Elicit a deterministic, user-mediated form response via the MCP client.
  * The server blocks until the client returns one of accept / decline / cancel.
  * Returns null when the connected client did not advertise the `elicitation`
- * capability — handlers that rely on this gate must refuse to proceed in
+ * capability - handlers that rely on this gate must refuse to proceed in
  * that case rather than fall back to an agent-mediated approval.
  */
 export type ElicitFn = (params: ElicitParams) => Promise<ElicitResult>;
@@ -55,7 +55,7 @@ export interface ToolContext {
   /** MCP elicitation gate. When defined, calling this blocks the active
    *  tool invocation until the user responds in their MCP client UI. When
    *  undefined, the connected client does not declare the elicitation
-   *  capability — handlers that need a deterministic user signal MUST
+   *  capability - handlers that need a deterministic user signal MUST
    *  refuse instead of degrading to an agent-mediated channel. Used by
    *  feedback(submit) to gate every GitHub post on real user approval. */
   elicit?: ElicitFn;
@@ -272,8 +272,8 @@ export function stripEditorTarget(params: Record<string, unknown>): Record<strin
 export function bp(bridge: string, mapParams?: (p: Record<string, unknown>) => Record<string, unknown>): ActionSpec;
 export function bp(description: string, bridge: string, mapParams?: (p: Record<string, unknown>) => Record<string, unknown>): ActionSpec;
 export function bp(...args: unknown[]): ActionSpec {
-  // bp(bridge) or bp(bridge, mapParams) — no description
-  // bp(description, bridge) or bp(description, bridge, mapParams) — with description
+  // bp(bridge) or bp(bridge, mapParams) - no description
+  // bp(description, bridge) or bp(description, bridge, mapParams) - with description
   if (args.length >= 2 && typeof args[0] === "string" && typeof args[1] === "string") {
     return { description: args[0] as string, bridge: args[1] as string, mapParams: args[2] as ((p: Record<string, unknown>) => Record<string, unknown>) | undefined };
   }
@@ -302,7 +302,7 @@ export interface DirectiveMachine {
 
 export interface DirectiveResponse {
   __directive: true;
-  directive: string;            // instruction text — emitted as its own content block
+  directive: string;            // instruction text - emitted as its own content block
   machine?: DirectiveMachine;   // structured mirror for programmatic consumers
   result: unknown;              // actual tool result
 }

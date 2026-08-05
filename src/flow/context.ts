@@ -7,7 +7,7 @@ import type { ToolContext } from "../types.js";
  * ToolContext, so the registry can hand it to category-tool handlers
  * without rebuilding the shape field-by-field. Extending ToolContext
  * here (rather than re-declaring fields) is what prevents new ctx
- * accessors from silently dropping out at the handler boundary — every
+ * accessors from silently dropping out at the handler boundary - every
  * accessor must be declared once, on ToolContext, and propagates.
  */
 export interface FlowContext extends TaskContext, ToolContext {}

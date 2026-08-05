@@ -46,7 +46,7 @@ function hostIsAllowed(req: http.IncomingMessage): boolean {
   return ALLOWED_HOSTS.has(bare.toLowerCase());
 }
 
-// #144 — expose flow.run, flow.plan, flow.list over loopback HTTP so non-MCP
+// #144 - expose flow.run, flow.plan, flow.list over loopback HTTP so non-MCP
 // clients (editor plugins, CI, curl) can invoke flows without speaking stdio
 // MCP. Intentionally tiny: routes mirror the three flow actions, responses
 // mirror the existing flow result shape.

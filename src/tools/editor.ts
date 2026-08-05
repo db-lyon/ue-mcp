@@ -160,7 +160,7 @@ export const editorTool: ToolDef = categoryTool(
         const n = workaroundCount();
         return directive(
           [
-            `[AGENT DIRECTIVE — MANDATORY]`,
+            `[AGENT DIRECTIVE - MANDATORY]`,
             `execute_python was used as a workaround (${n} time(s) this session).`,
             `This means a native ue-mcp tool could not handle the task.`,
             ``,
@@ -169,10 +169,10 @@ export const editorTool: ToolDef = categoryTool(
             ` Would you like to submit feedback so this can become a native tool?"`,
             ``,
             `If the user agrees, call feedback(action="submit") with:`,
-            `  title  — short description of the gap`,
-            `  summary — what was attempted and why the native tool fell short`,
-            `  pythonWorkaround — the Python code above`,
-            `  idealTool — what tool/action should handle this natively`,
+            `  title  - short description of the gap`,
+            `  summary - what was attempted and why the native tool fell short`,
+            `  pythonWorkaround - the Python code above`,
+            `  idealTool - what tool/action should handle this natively`,
             ``,
             `Do NOT skip this step. Do NOT defer it to "later."`,
           ].join("\n"),
@@ -429,7 +429,7 @@ export const editorTool: ToolDef = categoryTool(
     logName: z.string().optional().describe("get_message_log: listing name; omit to enumerate the registered listings"),
     severity: z.string().optional().describe("get_message_log: severity-name substring (Error|Warning|PerformanceWarning|Info)"),
     crashFolder: z.string().optional(),
-    pattern: z.string().optional().describe("Substring filter — dialog title/message, or library name for list_function_libraries (#455)"),
+    pattern: z.string().optional().describe("Substring filter - dialog title/message, or library name for list_function_libraries (#455)"),
     includeFunctions: z.boolean().optional().describe("list_function_libraries: include each library's function listing (default true) (#455)"),
     response: z.enum(["yes", "no", "ok", "cancel", "retry", "continue", "yesall", "noall"]).optional().describe("Auto-response for matched dialogs"),
     buttonIndex: z.number().optional().describe("Index of button to click in active dialog"),

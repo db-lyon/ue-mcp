@@ -20,7 +20,7 @@ export function buildDefaults(tools: ToolDef[]): Record<string, unknown> {
       // class (registered in registry.ts with mapParams baked in) is the one
       // that runs. The previous default of class_path: "ue-mcp.bridge" routed
       // every bridge action through the generic BridgeTask which silently
-      // dropped mapParams — so YAML callers had to know each handler's exact
+      // dropped mapParams - so YAML callers had to know each handler's exact
       // C++-side param names instead of the documented TS-side ones.
       const taskDef: Record<string, unknown> = {
         class_path: taskName,
@@ -69,12 +69,12 @@ function defaultFlows(): Record<string, unknown> {
 
   // ── 2. Materials ──────────────────────────────────────────────────
 
-  // M_Floor — dark stone
+  // M_Floor - dark stone
   step("material.create", { name: "M_Floor", packagePath: PKG });
   step("material.set_base_color", { assetPath: M_FLOOR, color: { r: 15, g: 15, b: 18 } });
   step("material.recompile", { materialPath: M_FLOOR });
 
-  // M_Pillar — brushed metallic blue-grey
+  // M_Pillar - brushed metallic blue-grey
   step("material.create", { name: "M_Pillar", packagePath: PKG });
   step("material.set_base_color", { assetPath: M_PILLAR, color: { r: 60, g: 65, b: 80 } });
   step("material.add_expression", {
@@ -97,12 +97,12 @@ function defaultFlows(): Record<string, unknown> {
   });
   step("material.recompile", { materialPath: M_PILLAR });
 
-  // M_Pedestal — warm stone
+  // M_Pedestal - warm stone
   step("material.create", { name: "M_Pedestal", packagePath: PKG });
   step("material.set_base_color", { assetPath: M_PEDESTAL, color: { r: 90, g: 80, b: 65 } });
   step("material.recompile", { materialPath: M_PEDESTAL });
 
-  // M_Glow — parameterized emissive (VectorParam × Strength → EmissiveColor)
+  // M_Glow - parameterized emissive (VectorParam × Strength → EmissiveColor)
   step("material.create", { name: "M_Glow", packagePath: PKG });
   step("material.add_expression", {
     materialPath: M_GLOW, expressionType: "VectorParameter",
@@ -132,7 +132,7 @@ function defaultFlows(): Record<string, unknown> {
 
   // ── 3. Geometry ───────────────────────────────────────────────────
 
-  // Floor — large dark slab
+  // Floor - large dark slab
   step("level.place_actor", {
     actorClass: "StaticMeshActor", label: "Floor",
     staticMesh: CUBE, material: M_FLOOR,
@@ -140,7 +140,7 @@ function defaultFlows(): Record<string, unknown> {
     scale: { x: 25, y: 25, z: 0.1 },
   });
 
-  // Center pedestal — tall cylinder
+  // Center pedestal - tall cylinder
   step("level.place_actor", {
     actorClass: "StaticMeshActor", label: "Pedestal",
     staticMesh: CYLINDER, material: M_PEDESTAL,
@@ -235,7 +235,7 @@ function defaultFlows(): Record<string, unknown> {
     rotation: { pitch: -15, yaw: 30 },
   });
 
-  // Neon Shrine — wraps the C++ demo handlers (demo.step / demo.cleanup /
+  // Neon Shrine - wraps the C++ demo handlers (demo.step / demo.cleanup /
   // demo.go_home). These ship with the bridge so every project gets the
   // flow surface for free.
   const neonShrineSteps: Record<string, unknown> = {};
@@ -345,10 +345,10 @@ function defaultFlows(): Record<string, unknown> {
     targetExpression: "OutColor",
   });
 
-  // niagara_fire — author a valid, emitting flame from scratch and verify it.
+  // niagara_fire - author a valid, emitting flame from scratch and verify it.
   // Not a demo: a 0-to-1 best-practice starting point for a fire effect. Default
   // asset domain is a real one (/Game/VFX/Fire); override name/packagePath via
-  // runtime params. The last step is the verify gate — the run surfaces whether
+  // runtime params. The last step is the verify gate - the run surfaces whether
   // the system actually emits, catching the empty-shell failure.
   const FIRE_PKG = "/Game/VFX/Fire";
   const fireSteps: Record<string, unknown> = {
@@ -375,7 +375,7 @@ function defaultFlows(): Record<string, unknown> {
     },
     beacon: {
       description:
-        "Demo — build a shrine scene from scratch: floor, pedestal, orb, five pillars, " +
+        "Demo - build a shrine scene from scratch: floor, pedestal, orb, five pillars, " +
         "four materials (dark stone, brushed metal, warm stone, parameterized emissive), " +
         "colored lights, and atmosphere",
       steps,
@@ -407,7 +407,7 @@ function defaultFlows(): Record<string, unknown> {
 
 /**
  * Plugin-contributed tasks and flows to merge into the defaults layer. The
- * user's own ue-mcp.yml continues to win — plugins sit between built-ins and
+ * user's own ue-mcp.yml continues to win - plugins sit between built-ins and
  * user config in the layered order, so a user can always override.
  */
 export interface PluginContribution {

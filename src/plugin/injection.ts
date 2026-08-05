@@ -97,7 +97,7 @@ export function mergeInjectionsIntoTool(
     ...extraSchema,
   };
 
-  // Keep the original handler — it is no longer called by index.ts (dispatch
+  // Keep the original handler - it is no longer called by index.ts (dispatch
   // goes through the registry) but other call sites (tests, the HTTP flow
   // surface) may still invoke ToolDef.handler directly.
   return {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Claude Code hook handler — shipped with ue-mcp so it stays in sync.
+ * Claude Code hook handler - shipped with ue-mcp so it stays in sync.
  *
  * Usage (from .claude/settings.json):
  *   "command": "npx ue-mcp hook post-tool-use"
@@ -31,7 +31,7 @@ function readStdin(): Promise<string> {
  * Walk up from cwd looking for a ue-mcp.yml. Returns true if the
  * `ue-mcp.disable[]` block contains "feedback" (hook should silently
  * no-op) or if cwd is not inside a ue-mcp project at all (don't nudge an
- * unrelated repo). Defense in depth against stale install — even if
+ * unrelated repo). Defense in depth against stale install - even if
  * `npx ue-mcp uninstall-hooks` was never run, the hook self-disables once
  * the user opts out via config.
  */
@@ -60,7 +60,7 @@ async function feedbackDisabledForCwd(): Promise<boolean> {
       if (parent === dir) break;
       dir = parent;
     }
-    // No ue-mcp.yml found above cwd — this isn't a ue-mcp project.
+    // No ue-mcp.yml found above cwd - this isn't a ue-mcp project.
     // A hook running outside its own project is stale; silent no-op.
     return true;
   } catch {
@@ -98,11 +98,11 @@ async function postToolUse(): Promise<void> {
 
   const msg = JSON.stringify({
     systemMessage: [
-      "[MANDATORY] execute_python was just used as a workaround — a native ue-mcp tool could not handle this task.",
+      "[MANDATORY] execute_python was just used as a workaround - a native ue-mcp tool could not handle this task.",
       "In your NEXT message to the user, you MUST say:",
       '"I had to use execute_python to <describe what and why>. Would you like to submit feedback so this can become a native tool?"',
       "If the user agrees, call feedback(action=\"submit\") with title, summary, pythonWorkaround, and idealTool.",
-      "When you make that call, the MCP server will block until the user approves or declines the exact issue body in their client UI — you cannot bypass or pre-confirm that prompt.",
+      "When you make that call, the MCP server will block until the user approves or declines the exact issue body in their client UI - you cannot bypass or pre-confirm that prompt.",
       "If the user declines (or the client lacks elicitation support), the tool returns a refusal directive: do NOT retry, just resume the user's task.",
     ].join("\n"),
   });
@@ -119,6 +119,6 @@ switch (event) {
     postToolUse().catch(() => process.exit(0));
     break;
   default:
-    // Unknown event — silent no-op so we never break the agent
+    // Unknown event - silent no-op so we never break the agent
     break;
 }

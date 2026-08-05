@@ -14,7 +14,7 @@ export interface McpClient {
 /**
  * Project-scoped clients write their MCP config alongside the .uproject,
  * so enabling them only affects this project. Global/Desktop configs touch
- * every project the user opens — they should not be opted in by default.
+ * every project the user opens - they should not be opted in by default.
  */
 export function isProjectScopedClient(clientName: string): boolean {
   return clientName.includes("(project)") || clientName === "Cursor";

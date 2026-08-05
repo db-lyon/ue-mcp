@@ -33,7 +33,7 @@ export function resolveLockingConfig(cfg?: { enabled?: boolean; ttlSeconds?: num
 // Action-name prefixes that mutate an asset. Matched against the action segment
 // of a task name ("asset.create_data_asset" -> "create_data_asset"). Read verbs
 // are excluded first, so an unrecognized action falls through to "not mutating"
-// and is never locked (fail-open — locking never blocks a call we can't
+// and is never locked (fail-open - locking never blocks a call we can't
 // confidently classify).
 const READ_PREFIXES = [
   "list", "search", "read", "get", "describe", "reflect", "find", "has", "status",
@@ -147,7 +147,7 @@ export async function withAssetLocks<T>(
     try {
       res = (await bridge.call("acquire_lock", { path: p, sessionId: SESSION_ID, ttlSeconds: cfg.ttlSeconds })) as typeof res;
     } catch (e) {
-      // Lock subsystem unavailable — release what we took and run unlocked
+      // Lock subsystem unavailable - release what we took and run unlocked
       // rather than failing a legitimate mutation.
       debug("lock", `acquire_lock unavailable for ${p}; running unlocked`, e);
       await releaseAll(bridge, held);

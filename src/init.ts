@@ -47,7 +47,7 @@ const CATEGORIES: ToolCategory[] = [
   { name: "gas",        label: "gas",           description: "Gameplay Ability System abilities, effects, attributes", requiredPlugins: ["GameplayAbilities"] },
   { name: "networking", label: "networking",    description: "replication, dormancy, RPCs" },
   { name: "demo",       label: "demo",          description: "tutorial / demo project scaffolding" },
-  // feedback is intentionally NOT in the main category list — it has its
+  // feedback is intentionally NOT in the main category list - it has its
   // own toggle in the "Agent behavior" section below since enabling it
   // means giving the agent a tool that can post to a public issue tracker
   // (gated by user approval, but worth surfacing explicitly).
@@ -211,7 +211,7 @@ async function init() {
   // write actually succeeded.
   const wrote: Array<{ what: string; where: string }> = [];
 
-  // 1. Get project path — check CLI arg, then cwd, then ask
+  // 1. Get project path - check CLI arg, then cwd, then ask
   let uprojectPath = process.argv[2] || "";
 
   if (!uprojectPath) {
@@ -261,7 +261,7 @@ async function init() {
   // legacy .ue-mcp.json into the YAML files on first run).
   const existingDisabled = new Set(project.config.disable ?? []);
 
-  // 2. Tool category selection — interactive checkboxes with descriptions
+  // 2. Tool category selection - interactive checkboxes with descriptions
   const optional = CATEGORIES.filter((c) => !c.alwaysOn);
   const checkboxItems: CheckboxItem[] = optional.map((c) => {
     const parts: string[] = [];
@@ -270,7 +270,7 @@ async function init() {
     return {
       label: c.label,
       checked: !existingDisabled.has(c.name),
-      suffix: parts.length > 0 ? parts.join(" — ") : undefined,
+      suffix: parts.length > 0 ? parts.join(" - ") : undefined,
     };
   });
 
@@ -283,7 +283,7 @@ async function init() {
 
   console.log("");
 
-  // 2b. Native (Epic 5.8) MCP tools — on by default. Wraps Unreal's own
+  // 2b. Native (Epic 5.8) MCP tools - on by default. Wraps Unreal's own
   // ToolsetRegistry (the plugin behind Unreal's experimental MCP server) so
   // every official toolset is surfaced as first-class actions inside the
   // matching ue-mcp category. Requires UE 5.8+ with the ToolsetRegistry plugin.
@@ -346,7 +346,7 @@ async function init() {
   const deployResult = deploy(project);
   if (deployResult.error) {
     // Hard failure: without the bridge plugin deployed, every subsequent step
-    // is misleading at best — we would land on "Setup complete!" with nothing
+    // is misleading at best - we would land on "Setup complete!" with nothing
     // actually wired up. `fail` only prints; abort explicitly.
     fail(`Plugin deployment failed: ${deployResult.error}`);
     process.exit(1);
@@ -374,7 +374,7 @@ async function init() {
   }
 
   // ue-mcp.yml is written at the end of init() once all decisions
-  // (categories, MCP clients, agent behavior) are settled — see step 10.
+  // (categories, MCP clients, agent behavior) are settled - see step 10.
 
   // 7. Scaffold ue-mcp.yml if it doesn't exist
   const flowConfigPath = path.join(project.projectDir!, "ue-mcp.yml");
@@ -383,7 +383,7 @@ async function init() {
       "ue-mcp:",
       "  version: 1",
       "",
-      "# Custom tasks — pre-fill options for built-in actions",
+      "# Custom tasks - pre-fill options for built-in actions",
       "# All built-in actions are available without listing them here.",
       "#",
       "# tasks:",
@@ -430,7 +430,7 @@ async function init() {
 
   console.log("");
 
-  // 8. MCP client configuration — interactive
+  // 8. MCP client configuration - interactive
   const clients = detectMcpClients(project.projectDir!);
   const detected = clients.filter((c) => c.detected);
   let clientStates: boolean[] = [];
@@ -439,7 +439,7 @@ async function init() {
     const clientItems: CheckboxItem[] = detected.map((c) => ({
       label: c.name,
       // Global / Desktop configs affect every project on this machine, so
-      // they default to UNCHECKED — opting them in should be an explicit
+      // they default to UNCHECKED - opting them in should be an explicit
       // choice. Project-scoped configs default to checked since the user
       // running init for this project clearly wants ue-mcp here.
       checked: isProjectScopedClient(c.name),
@@ -477,13 +477,13 @@ async function init() {
     console.log("");
   }
 
-  // 9. Agent behavior — feedback toggle (always shown) plus the
+  // 9. Agent behavior - feedback toggle (always shown) plus the
   // Claude-Code-only rows (prompt hook + skills + OAuth). The hook and OAuth
   // are nested under feedback: if the user opts out of feedback, the hook
   // and the GitHub device flow are not even offered.
   //
   // Every checkbox in this section defaults OFF on a fresh install. A user
-  // who blasts through with Enter gets nothing added — no tool registered,
+  // who blasts through with Enter gets nothing added - no tool registered,
   // no hook installed, no skill files copied. Re-init preserves prior
   // choices by reading state from ue-mcp.yml (categories) +
   // ~/.ue-mcp/state.json (installedHooks) and the filesystem (skills directory).
@@ -512,7 +512,7 @@ async function init() {
   ];
   if (configuredClaudeCode) {
     // Seed the prompt-hook and skills checkboxes from current install state
-    // so re-init doesn't silently invert the user's prior choice — checking
+    // so re-init doesn't silently invert the user's prior choice - checking
     // installs, unchecking uninstalls (symmetric paths below), so a stale
     // default would silently un-do whatever the last init produced.
     const claudeSettingsPathForSeed = path.join(
@@ -606,7 +606,7 @@ async function init() {
       }
     }
 
-    // OAuth only when the prompt hook is on — the user has explicitly opted
+    // OAuth only when the prompt hook is on - the user has explicitly opted
     // into a flow where the agent will routinely ask to file feedback. For
     // anyone else (feedback enabled but no hook, or feedback off), they can
     // run `npx ue-mcp auth` later if they ever want to author as their own
@@ -616,7 +616,7 @@ async function init() {
     }
   }
 
-  // 10. Write ue-mcp.yml with the final disable[] — done last so the
+  // 10. Write ue-mcp.yml with the final disable[] - done last so the
   // feedback toggle from step 9 is captured. contentRoots seeding lives
   // inside writeProjectConfig.
   const ueMcpYmlPath = path.join(project.projectDir!, "ue-mcp.yml");
@@ -624,7 +624,7 @@ async function init() {
   ok("ue-mcp.yml written");
   wrote.push({ what: "tool surface + content roots", where: ueMcpYmlPath });
 
-  // 11. Done — recap what landed where so the user can find / undo anything.
+  // 11. Done - recap what landed where so the user can find / undo anything.
   console.log("");
   console.log(`  ${BOLD}${GREEN}Setup complete!${RESET}`);
   console.log("");

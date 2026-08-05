@@ -39,7 +39,7 @@ export const reflectionTool: ToolDef = categoryTool(
     entries: z.array(z.union([
       z.string(),
       z.object({ name: z.string(), displayName: z.string().optional() }),
-    ])).optional().describe("Enum entries — strings or {name, displayName?}"),
+    ])).optional().describe("Enum entries - strings or {name, displayName?}"),
     onConflict: z.string().optional().describe("Asset-creation conflict policy: skip (default) | error | overwrite"),
   },
 );

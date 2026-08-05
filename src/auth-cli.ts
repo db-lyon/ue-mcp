@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `npx ue-mcp auth` — interactive GitHub device-flow auth so feedback(submit)
+ * `npx ue-mcp auth` - interactive GitHub device-flow auth so feedback(submit)
  * can author issues as the user's real GitHub account.
  *
  * The same flow is offered inside `npx ue-mcp init` when the user opts into
