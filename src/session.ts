@@ -125,8 +125,10 @@ export interface RegisterSessionInput {
 export class SessionRegistry {
   private readonly byKey = new Map<string, EditorSession>();
   private activeKey: string | null = null;
-  /** Fired whenever the session count changes, so the caller can re-advertise. */
+  /** Fired whenever the session set changes, so the caller can re-advertise. */
   onCountChanged?: (count: number) => void;
+  /** Held while a compound edit is mid-flight, so observers see one change. */
+  private suppressNotify = false;
 
   constructor(private readonly guards: GuardRegistry = new GuardRegistry()) {}
 
@@ -174,7 +176,7 @@ export class SessionRegistry {
     this.byKey.set(key, session);
     if (input.makeActive || this.activeKey === null) this.activeKey = key;
     this.noteSharedPorts(session);
-    this.onCountChanged?.(this.byKey.size);
+    if (!this.suppressNotify) this.onCountChanged?.(this.byKey.size);
     return session;
   }
 
@@ -196,6 +198,35 @@ export class SessionRegistry {
       `No editor session named '${target}'. Registered: ${this.list().map((s) => s.name).join(", ")}. ` +
         `Use project(action='list_editors') to see them, or project(action='add_editor', projectPath=...) to register one.`,
     );
+  }
+
+  /**
+   * Point the active session at another project - what `project(set_project)`
+   * means. Switching to a project that is already registered selects it and
+   * leaves every other session alone; switching to a new one replaces the
+   * active binding rather than growing the set, so a single-editor server
+   * stays a single-editor server across a switch.
+   *
+   * The replaced session's editor is never touched: this detaches, it does
+   * not stop anything.
+   */
+  replaceActive(projectPath: string): { session: EditorSession; replaced?: string } {
+    const existing = this.find(projectPath);
+    if (existing) {
+      this.use(existing.name);
+      return { session: existing };
+    }
+    const previous = this.byKey.size > 0 ? this.active : null;
+    this.suppressNotify = true;
+    let session: EditorSession;
+    try {
+      session = this.register({ projectPath, makeActive: true });
+      if (previous && previous !== session) this.forget(previous);
+    } finally {
+      this.suppressNotify = false;
+    }
+    this.onCountChanged?.(this.byKey.size);
+    return { session, replaced: previous && previous !== session ? previous.name : undefined };
   }
 
   /** Resolve without throwing. */
@@ -241,16 +272,22 @@ export class SessionRegistry {
         `'${session.name}' is the only registered session; at least one must remain. Register another with project(action='add_editor') first.`,
       );
     }
+    this.forget(session);
+    this.onCountChanged?.(this.byKey.size);
+    return { name: session.name, projectPath: session.project.projectPath };
+  }
+
+  /** Close a session's socket and remove it. Never touches the editor process. */
+  private forget(session: EditorSession): void {
     session.bridge.disconnect();
     this.byKey.delete(session.key);
     for (const other of this.byKey.values()) {
       other.portSharedWith = other.portSharedWith.filter((n) => n !== session.name);
     }
     if (this.activeKey === session.key) {
-      this.activeKey = (this.byKey.values().next().value as EditorSession).key;
+      const next = this.byKey.values().next().value as EditorSession | undefined;
+      this.activeKey = next ? next.key : null;
     }
-    this.onCountChanged?.(this.byKey.size);
-    return { name: session.name, projectPath: session.project.projectPath };
   }
 
   /**
