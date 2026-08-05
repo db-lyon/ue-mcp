@@ -18,6 +18,42 @@ permissions:
   contents: read
 
 jobs:
+  em_dash:
+    # The style rule that bans U+2014 used to live only in CLAUDE.md, which
+    # made every commit a memory test. This job is the enforcement point: it
+    # runs on pull requests, where all work lands, and on main as a tripwire.
+    #
+    # Deliberately not in `needs:` for publish. A lint finding on main should
+    # be visible and fixed, not able to hold a release hostage mid-pipeline.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit message scan needs both ends of the pull request range.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # No install step: the checker uses only node builtins, on purpose, so
+      # this gate keeps working when the dependency tree is broken.
+      - name: Tracked files
+        run: node scripts/check-em-dashes.mjs
+
+      - name: Commit messages
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if ! git cat-file -e "$BASE^{commit}" 2>/dev/null || ! git cat-file -e "$HEAD^{commit}" 2>/dev/null; then
+            echo "::warning::Base or head commit missing from this checkout; commit message scan skipped."
+            exit 0
+          fi
+          node scripts/check-em-dashes.mjs --commits "$BASE..$HEAD"
+
   build:
     runs-on: ubuntu-latest
     steps:
