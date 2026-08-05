@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { collectDoctor, formatDoctor } from "./doctor.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "./version-check.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -23,6 +24,7 @@ function getInstalledVersion(): string {
   return require("../package.json").version;
 }
 
+/** The version behind the `latest` dist-tag, which is the stable line. */
 function getLatestVersion(): string | null {
   try {
     return execSync("npm view ue-mcp version", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
@@ -30,6 +32,7 @@ function getLatestVersion(): string | null {
     return null;
   }
 }
+
 
 function isGlobalInstall(): boolean {
   try {
@@ -82,16 +85,25 @@ async function update() {
   console.log("");
 
   // 1. Update the package this CLI lives in (global or local).
-  if (installed === latest) {
+  const wanted = resolveUpdateTarget(installed, latest);
+  // Everything below aligns to the version this install ends on, not to the
+  // stable line, so a prerelease tester's copies stay on the version they run.
+  const aligned = wanted ?? installed;
+  if (!wanted) {
     ok("Package already up to date");
+    if (isPrereleaseVersion(installed)) {
+      const tag = distTagForVersion(installed);
+      step(`You are on the ${tag} prerelease channel, ahead of the stable line (${latest}).`);
+      step(`Newer prereleases: npm install -g ue-mcp@${tag}. Back to stable: npm install -g ue-mcp@latest.`);
+    }
   } else {
-    console.log(`  ${YELLOW}Updating ue-mcp ${installed} -> ${latest}...${RESET}`);
+    console.log(`  ${YELLOW}Updating ue-mcp ${installed} -> ${wanted}...${RESET}`);
     console.log("");
-    const cmd = isGlobalInstall() ? `npm install -g ue-mcp@${latest}` : `npm install ue-mcp@${latest}`;
+    const cmd = isGlobalInstall() ? `npm install -g ue-mcp@${wanted}` : `npm install ue-mcp@${wanted}`;
     try {
       execSync(cmd, { stdio: "inherit" });
       console.log("");
-      ok(`Updated to ${latest}`);
+      ok(`Updated to ${wanted}`);
     } catch {
       console.log("");
       fail(`npm install failed. Try manually: ${cmd}`);
@@ -100,17 +112,17 @@ async function update() {
   }
 
   // 2. Detect a project-local node_modules/ue-mcp that would shadow the global
-  //    install (npx prefers it). If it is behind, align it to latest so the
-  //    server actually runs the new version. (#550)
+  //    install (npx prefers it). If it differs, align it to the version this
+  //    install ended on so the server actually runs that version. (#550)
   const preDoctor = collectDoctor(projectArg);
-  if (preDoctor.localShadow && preDoctor.localShadow.version !== latest) {
+  if (preDoctor.localShadow && preDoctor.localShadow.version !== aligned) {
     const shadowProjectRoot = path.dirname(path.dirname(preDoctor.localShadow.dir));
     console.log("");
     console.log(`  ${YELLOW}Local shadow detected: node_modules/ue-mcp@${preDoctor.localShadow.version} (npx runs this, not the global).${RESET}`);
-    step(`Aligning the local copy to ${latest} in ${shadowProjectRoot}...`);
+    step(`Aligning the local copy to ${aligned} in ${shadowProjectRoot}...`);
     try {
-      execSync(`npm install ue-mcp@${latest}`, { stdio: "inherit", cwd: shadowProjectRoot });
-      ok(`Local copy aligned to ${latest}`);
+      execSync(`npm install ue-mcp@${aligned}`, { stdio: "inherit", cwd: shadowProjectRoot });
+      ok(`Local copy aligned to ${aligned}`);
       console.log(`  ${DIM}Cleaner long-term: drop ue-mcp from this project's package.json and pin .mcp.json to \`npx -y ue-mcp@latest\`.${RESET}`);
     } catch {
       fail(`Could not update the local copy. Remove node_modules/ue-mcp manually, or pin .mcp.json to \`npx -y ue-mcp@latest\`.`);

@@ -72,6 +72,45 @@ async function fetchLatest(): Promise<string | null> {
   }
 }
 
+/**
+ * Release channel helpers.
+ *
+ * These mirror the rules in scripts/release-version.mjs, which the publish job
+ * uses to pick the npm dist-tag. The two cannot be one module: the publish job
+ * runs before tsc has produced dist/, and the package ships only dist/ and
+ * plugin/, so neither side can import the other. The parity test in
+ * tests/unit/release-channel-parity.test.ts holds them together.
+ *
+ * Both degrade to the stable channel on an unparseable version instead of
+ * throwing. These sit in CLI and startup paths where a crash is worse than a
+ * conservative answer.
+ */
+const CHANNEL_SEMVER_RE =
+  /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z][0-9A-Za-z.-]*))?(?:\+[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
+const SAFE_TAG_RE = /^[A-Za-z][0-9A-Za-z._-]*$/;
+const FALLBACK_TAG = "next";
+const STABLE_TAG = "latest";
+
+function prereleaseIdOf(version: string): string | null {
+  const m = CHANNEL_SEMVER_RE.exec(String(version ?? "").trim());
+  return m ? (m[4] ?? null) : null;
+}
+
+/** True when the version carries a prerelease identifier (1.2.0-beta.2). */
+export function isPrereleaseVersion(version: string): boolean {
+  return prereleaseIdOf(version) !== null;
+}
+
+/** The npm dist-tag a version belongs to: `latest` for X.Y.Z, else its channel. */
+export function distTagForVersion(version: string): string {
+  const pre = prereleaseIdOf(version);
+  if (pre === null) return STABLE_TAG;
+  const first = pre.split(".")[0];
+  if (!SAFE_TAG_RE.test(first)) return FALLBACK_TAG;
+  if (first.toLowerCase() === STABLE_TAG) return FALLBACK_TAG;
+  return first;
+}
+
 function parseVersion(v: string): [number, number, number, string] {
   const m = /^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/.exec(v.trim());
   if (!m) return [0, 0, 0, ""];
@@ -88,6 +127,20 @@ export function isNewer(latest: string, current: string): boolean {
   if (lp === "" && cp !== "") return true;
   if (lp !== "" && cp === "") return false;
   return lp > cp;
+}
+
+/**
+ * The version an install should move to, or null when it is already there.
+ *
+ * Only ever moves forward, and never crosses from the stable line onto a
+ * prerelease. Comparing installed against latest for plain inequality treats
+ * "ahead of the stable line" as "out of date", which rolls a prerelease tester
+ * back onto an older stable on their next update, and it would install a
+ * prerelease on every stable user the moment `latest` pointed at one.
+ */
+export function resolveUpdateTarget(installed: string, latest: string): string | null {
+  if (isPrereleaseVersion(latest) && !isPrereleaseVersion(installed)) return null;
+  return isNewer(latest, installed) ? latest : null;
 }
 
 function buildNotice(current: string, latest: string): string {
@@ -126,7 +179,14 @@ export function startVersionCheck(currentVersion: string): void {
         debug("update", `fetched latest=${latest ?? "null"}`);
       }
 
-      if (latest && isNewer(latest, currentVersion)) {
+      // A stable install is never nudged onto a prerelease. The registry's
+      // `latest` should only ever name a plain X.Y.Z, but this is the one
+      // place the answer reaches the user as an instruction, so the check does
+      // not rely on that holding. A prerelease install still gets told about a
+      // newer stable, which is the release that supersedes it.
+      if (latest && isPrereleaseVersion(latest) && !isPrereleaseVersion(currentVersion)) {
+        debug("update", `registry latest ${latest} is a prerelease; not offering it to a stable install`);
+      } else if (latest && isNewer(latest, currentVersion)) {
         pendingNotice = buildNotice(currentVersion, latest);
         warn(
           "update",

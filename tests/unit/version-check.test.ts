@@ -47,6 +47,35 @@ describe("version-check", () => {
     });
   });
 
+  describe("resolveUpdateTarget", () => {
+    it("moves a stable install forward on the stable line", async () => {
+      const { resolveUpdateTarget } = await import("../../src/version-check.js");
+      expect(resolveUpdateTarget("1.1.43", "1.1.44")).toBe("1.1.44");
+    });
+
+    it("returns null when already on the target", async () => {
+      const { resolveUpdateTarget } = await import("../../src/version-check.js");
+      expect(resolveUpdateTarget("1.1.44", "1.1.44")).toBeNull();
+    });
+
+    it("never moves a stable install onto a prerelease", async () => {
+      const { resolveUpdateTarget } = await import("../../src/version-check.js");
+      expect(resolveUpdateTarget("1.1.44", "1.2.0-beta")).toBeNull();
+      expect(resolveUpdateTarget("1.1.44", "1.2.0-rc.1")).toBeNull();
+    });
+
+    it("does not roll a prerelease tester back onto an older stable", async () => {
+      const { resolveUpdateTarget } = await import("../../src/version-check.js");
+      expect(resolveUpdateTarget("1.2.0-beta.2", "1.1.44")).toBeNull();
+    });
+
+    it("moves a prerelease onto the stable release that supersedes it", async () => {
+      const { resolveUpdateTarget } = await import("../../src/version-check.js");
+      expect(resolveUpdateTarget("1.2.0-rc.1", "1.2.0")).toBe("1.2.0");
+      expect(resolveUpdateTarget("1.2.0-beta.2", "1.3.0")).toBe("1.3.0");
+    });
+  });
+
   describe("consumeUpgradeNotice", () => {
     it("returns null when nothing pending", async () => {
       const { consumeUpgradeNotice } = await import("../../src/version-check.js");
@@ -98,6 +127,30 @@ describe("version-check", () => {
       startVersionCheck("1.0.0");
       for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
       expect(consumeUpgradeNotice()).toBeNull();
+    });
+
+    it("does not offer a prerelease to a stable install", async () => {
+      // `latest` should never name a prerelease, but this notice reaches the
+      // user as an instruction, so it does not rely on that holding.
+      vi.stubGlobal("fetch", vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ version: "1.2.0-beta" }),
+      })));
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      startVersionCheck("1.1.44");
+      for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+      expect(consumeUpgradeNotice()).toBeNull();
+    });
+
+    it("still offers a newer prerelease to an install already on that line", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ version: "1.2.0-beta.3" }),
+      })));
+      const { startVersionCheck, consumeUpgradeNotice } = await import("../../src/version-check.js");
+      startVersionCheck("1.2.0-beta.2");
+      for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+      expect(consumeUpgradeNotice()).toContain("1.2.0-beta.3");
     });
 
     it("never throws on network failure", async () => {
