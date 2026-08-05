@@ -16,6 +16,46 @@
 #include "Windows/HideWindowsPlatformTypes.h"
 #endif
 
+// One name for the platform socket handle so the connection code is written
+// once instead of twice behind #if blocks that can silently drift apart.
+#if PLATFORM_WINDOWS
+typedef SOCKET FMCPSocketHandle;
+#define MCP_INVALID_SOCKET INVALID_SOCKET
+#else
+typedef int32 FMCPSocketHandle;
+#define MCP_INVALID_SOCKET (-1)
+#endif
+
+/** WebSocket opcodes the bridge understands (RFC 6455 section 5.2). */
+enum class EMCPWebSocketOpcode : uint8
+{
+	Continuation = 0x0,
+	Text         = 0x1,
+	Binary       = 0x2,
+	Close        = 0x8,
+	Ping         = 0x9,
+	Pong         = 0xA,
+};
+
+/** Outcome of trying to decode one frame off the front of a receive buffer. */
+enum class EMCPFrameDecode : uint8
+{
+	/** The buffer holds a partial frame. Read more and try again. */
+	NeedMoreData,
+	/** OutFrame is filled in and the frame's bytes were consumed. */
+	Decoded,
+	/** The stream is no longer trustworthy. Close the connection. */
+	ProtocolError,
+};
+
+/** One decoded WebSocket frame. A message may span several of these. */
+struct FMCPWebSocketFrame
+{
+	EMCPWebSocketOpcode Opcode = EMCPWebSocketOpcode::Text;
+	bool bFinal = true;
+	TArray<uint8> Payload;
+};
+
 class FMCPBridgeServer : public FRunnable
 {
 public:
@@ -80,20 +120,32 @@ private:
 	FString CreateJsonRpcError(const TSharedPtr<FJsonObject>& Request, int32 ErrorCode, const FString& ErrorMessage);
 
 	// WebSocket connection handling
-#if PLATFORM_WINDOWS
-	void HandleWebSocketConnection(SOCKET ClientSocketFD);
-	FString PerformWebSocketHandshake(SOCKET ClientSocketFD);
-	void ProcessWebSocketMessages(SOCKET ClientSocketFD);
-	FString ReadHttpRequest(SOCKET SocketFD);
-#else
-	void HandleWebSocketConnection(int32 ClientSocketFD);
-	FString PerformWebSocketHandshake(int32 ClientSocketFD);
-	void ProcessWebSocketMessages(int32 ClientSocketFD);
-	FString ReadHttpRequest(int32 SocketFD);
-#endif
+	void HandleWebSocketConnection(FMCPSocketHandle ClientSocketFD);
+	FString PerformWebSocketHandshake(FMCPSocketHandle ClientSocketFD);
+	void ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD);
+	FString ReadHttpRequest(FMCPSocketHandle SocketFD);
+
 	FString CreateWebSocketAcceptKey(const FString& ClientKey);
 	TArray<uint8> CreateWebSocketFrame(const FString& Message);
-	FString ParseWebSocketFrame(const TArray<uint8>& Data);
+
+	/**
+	 * Decode at most one frame from the front of Buffer.
+	 *
+	 * On Decoded the frame's bytes (header, mask and payload) are consumed from
+	 * Buffer and whatever follows is left in place, so a read that delivered two
+	 * pipelined requests yields both instead of dropping the second. On
+	 * NeedMoreData nothing is consumed and the caller reads again.
+	 */
+	static EMCPFrameDecode DecodeWebSocketFrame(TArray<uint8>& Buffer, FMCPWebSocketFrame& OutFrame, FString& OutError);
+
+	/** Frame a control opcode (close, ping, pong) with its payload. */
+	static TArray<uint8> CreateControlFrame(EMCPWebSocketOpcode Opcode, const TArray<uint8>& Payload);
+
+	/** Send a close frame carrying a status code and a human-readable reason. */
+	static void SendCloseFrame(FMCPSocketHandle SocketFD, uint16 StatusCode, const FString& Reason);
+
+	/** Write every byte or report failure. Partial sends are not success. */
+	static bool SendAll(FMCPSocketHandle SocketFD, const uint8* Data, int32 NumBytes);
 
 	// Server socket (will use platform-specific implementation)
 	void* ServerSocket;

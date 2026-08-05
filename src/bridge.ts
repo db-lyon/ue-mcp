@@ -274,10 +274,18 @@ export class EditorBridge implements IBridge {
       }
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code: number, reasonRaw: Buffer) => {
+      // The bridge closes with a status code and a reason when it refuses a
+      // frame: 1009 for a message over its size bound, 1002 for a frame stream
+      // that stopped making sense. Repeating both verbatim is the difference
+      // between "something broke" and a caller knowing it sent too much.
+      const reason = reasonRaw?.toString("utf8") ?? "";
+      const detail = reason
+        ? `Bridge connection closed by the editor (code ${code}): ${reason}`
+        : `Bridge connection lost (close code ${code})`;
       for (const [, pending] of this.pending) {
         clearTimeout(pending.timer);
-        pending.reject(new McpError(ErrorCode.CONNECTION_LOST, "Bridge connection lost"));
+        pending.reject(new McpError(ErrorCode.CONNECTION_LOST, detail));
       }
       this.pending.clear();
       this.ws = null;

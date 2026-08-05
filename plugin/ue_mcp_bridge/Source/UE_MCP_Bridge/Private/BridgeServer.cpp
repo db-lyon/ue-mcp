@@ -69,6 +69,16 @@
 #pragma comment(lib, "advapi32.lib")
 #endif
 
+namespace
+{
+	// #821: a JSON-RPC message can span many TCP reads and many WebSocket
+	// frames, so the reader accumulates. These are the bounds on how much it
+	// will hold for one connection before it refuses and says why, instead of
+	// growing without limit on a corrupt or hostile length field.
+	constexpr int64 kMaxWebSocketMessageBytes = 64ll * 1024ll * 1024ll; // 64 MiB
+	constexpr int32 kRecvChunkBytes = 65536;
+}
+
 FMCPBridgeServer::FMCPBridgeServer(int32 Port)
 	: ServerPort(Port)
 	, ServerThread(nullptr)
@@ -608,11 +618,7 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	}
 }
 
-#if PLATFORM_WINDOWS
-void FMCPBridgeServer::HandleWebSocketConnection(SOCKET ClientSocketFD)
-#else
-void FMCPBridgeServer::HandleWebSocketConnection(int32 ClientSocketFD)
-#endif
+void FMCPBridgeServer::HandleWebSocketConnection(FMCPSocketHandle ClientSocketFD)
 {
 	// Set TCP_NODELAY on client socket for immediate send
 	int32 NoDelay = 1;
@@ -675,11 +681,7 @@ void FMCPBridgeServer::HandleWebSocketConnection(int32 ClientSocketFD)
 #endif
 }
 
-#if PLATFORM_WINDOWS
-FString FMCPBridgeServer::PerformWebSocketHandshake(SOCKET ClientSocketFD)
-#else
-FString FMCPBridgeServer::PerformWebSocketHandshake(int32 ClientSocketFD)
-#endif
+FString FMCPBridgeServer::PerformWebSocketHandshake(FMCPSocketHandle ClientSocketFD)
 {
 	FString Request = ReadHttpRequest(ClientSocketFD);
 	if (Request.IsEmpty())
@@ -768,11 +770,7 @@ FString FMCPBridgeServer::PerformWebSocketHandshake(int32 ClientSocketFD)
 	return Response;
 }
 
-#if PLATFORM_WINDOWS
-FString FMCPBridgeServer::ReadHttpRequest(SOCKET SocketFD)
-#else
-FString FMCPBridgeServer::ReadHttpRequest(int32 SocketFD)
-#endif
+FString FMCPBridgeServer::ReadHttpRequest(FMCPSocketHandle SocketFD)
 {
 	// Read HTTP request headers (until \r\n\r\n)
 	FString Request;
@@ -848,55 +846,163 @@ FString FMCPBridgeServer::CreateWebSocketAcceptKey(const FString& ClientKey)
 	return AcceptKey;
 }
 
-#if PLATFORM_WINDOWS
-void FMCPBridgeServer::ProcessWebSocketMessages(SOCKET ClientSocketFD)
-#else
-void FMCPBridgeServer::ProcessWebSocketMessages(int32 ClientSocketFD)
-#endif
+void FMCPBridgeServer::ProcessWebSocketMessages(FMCPSocketHandle ClientSocketFD)
 {
-	constexpr int32 RecvBufferSize = 65536;
-	TArray<uint8> Buffer;
-	Buffer.SetNumUninitialized(RecvBufferSize);
+	TArray<uint8> Chunk;
+	Chunk.SetNumUninitialized(kRecvChunkBytes);
+
+	// Everything received and not yet consumed by the decoder. A TCP read is a
+	// byte-stream event, not a message event: one read can carry half a frame,
+	// three frames, or two frames and half of a fourth. This buffer is what
+	// makes those all mean the same thing.
+	TArray<uint8> PendingBytes;
+
+	// Reassembly state for a fragmented message (a data frame with FIN clear
+	// followed by continuation frames).
+	TArray<uint8> MessagePayload;
+	bool bAssembling = false;
 
 	while (!bShouldStop)
 	{
-		fd_set ReadSet;
-		FD_ZERO(&ReadSet);
-		FD_SET(ClientSocketFD, &ReadSet);
-		
-		timeval Timeout;
-		Timeout.tv_sec = 1;
-		Timeout.tv_usec = 0;
-		
-		int32 SelectResult = select(ClientSocketFD + 1, &ReadSet, nullptr, nullptr, &Timeout);
-		
-		if (SelectResult > 0 && FD_ISSET(ClientSocketFD, &ReadSet))
+		// Decode before reading. Bytes left over from the previous read may
+		// already hold a whole request, and waiting on select first would stall
+		// it until the peer happened to send something else.
+		bool bDone = false;
+		for (;;)
 		{
-			int32 BytesReceived = recv(ClientSocketFD, (char*)Buffer.GetData(), RecvBufferSize, 0);
-			if (BytesReceived <= 0)
+			FMCPWebSocketFrame Frame;
+			FString DecodeError;
+			const EMCPFrameDecode Status = DecodeWebSocketFrame(PendingBytes, Frame, DecodeError);
+
+			if (Status == EMCPFrameDecode::NeedMoreData)
 			{
 				break;
 			}
-
-			TArray<uint8> FrameData(Buffer.GetData(), BytesReceived);
-			FString Message = ParseWebSocketFrame(FrameData);
-			
-			if (!Message.IsEmpty())
+			if (Status == EMCPFrameDecode::ProtocolError)
 			{
-				FString Response = ProcessMessage(Message);
-				TArray<uint8> ResponseFrame = CreateWebSocketFrame(Response);
-				int32 TotalToSend = ResponseFrame.Num();
-				int32 Sent = 0;
-				while (Sent < TotalToSend)
+				UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] WebSocket protocol error, closing connection: %s"), *DecodeError);
+				SendCloseFrame(ClientSocketFD, 1002, DecodeError);
+				bDone = true;
+				break;
+			}
+
+			if (Frame.Opcode == EMCPWebSocketOpcode::Close)
+			{
+				bDone = true;
+				break;
+			}
+			if (Frame.Opcode == EMCPWebSocketOpcode::Ping || Frame.Opcode == EMCPWebSocketOpcode::Pong)
+			{
+				continue;
+			}
+
+			if (Frame.Opcode == EMCPWebSocketOpcode::Continuation)
+			{
+				if (!bAssembling)
 				{
-					int32 BytesSent = send(ClientSocketFD, (char*)ResponseFrame.GetData() + Sent, TotalToSend - Sent, 0);
-					if (BytesSent <= 0) break;
-					Sent += BytesSent;
+					UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Continuation frame with no message in progress"));
+					SendCloseFrame(ClientSocketFD, 1002, TEXT("continuation frame with no message in progress"));
+					bDone = true;
+					break;
 				}
+				MessagePayload.Append(Frame.Payload);
+			}
+			else
+			{
+				if (bAssembling)
+				{
+					UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] New data frame while a fragmented message was still open"));
+					SendCloseFrame(ClientSocketFD, 1002, TEXT("data frame interleaved with an open fragmented message"));
+					bDone = true;
+					break;
+				}
+				MessagePayload = MoveTemp(Frame.Payload);
+				bAssembling = true;
+			}
+
+			if ((int64)MessagePayload.Num() > kMaxWebSocketMessageBytes)
+			{
+				// Say the number rather than dying quietly: a caller that sends
+				// a genuinely enormous payload needs to know it hit a limit and
+				// what the limit is, not watch the socket disappear.
+				const FString Reason = FString::Printf(
+					TEXT("message of %lld bytes exceeds the %lld byte bridge limit"),
+					(int64)MessagePayload.Num(), kMaxWebSocketMessageBytes);
+				UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] %s"), *Reason);
+				SendCloseFrame(ClientSocketFD, 1009, Reason);
+				bDone = true;
+				break;
+			}
+
+			if (!Frame.bFinal)
+			{
+				continue; // more fragments still to come
+			}
+
+			bAssembling = false;
+			FString Message;
+			if (MessagePayload.Num() > 0)
+			{
+				FUTF8ToTCHAR Converted((const char*)MessagePayload.GetData(), MessagePayload.Num());
+				Message = FString(Converted.Length(), Converted.Get());
+			}
+			MessagePayload.Reset();
+
+			if (Message.IsEmpty())
+			{
+				continue;
+			}
+
+			const FString Response = ProcessMessage(Message);
+			const TArray<uint8> ResponseFrame = CreateWebSocketFrame(Response);
+			if (!SendAll(ClientSocketFD, ResponseFrame.GetData(), ResponseFrame.Num()))
+			{
+				UE_LOG(LogMCPBridge, Warning, TEXT("[UE-MCP] Failed to send response frame; closing connection"));
+				bDone = true;
+				break;
 			}
 		}
-		else if (SelectResult < 0)
+
+		if (bDone)
 		{
+			break;
+		}
+
+		fd_set ReadSet;
+		FD_ZERO(&ReadSet);
+		FD_SET(ClientSocketFD, &ReadSet);
+
+		timeval Timeout;
+		Timeout.tv_sec = 1;
+		Timeout.tv_usec = 0;
+
+		const int32 SelectResult = select(ClientSocketFD + 1, &ReadSet, nullptr, nullptr, &Timeout);
+		if (SelectResult < 0)
+		{
+			break;
+		}
+		if (SelectResult == 0 || !FD_ISSET(ClientSocketFD, &ReadSet))
+		{
+			continue;
+		}
+
+		const int32 BytesReceived = recv(ClientSocketFD, (char*)Chunk.GetData(), kRecvChunkBytes, 0);
+		if (BytesReceived <= 0)
+		{
+			break;
+		}
+		PendingBytes.Append(Chunk.GetData(), BytesReceived);
+
+		// A peer that keeps sending without ever completing a frame would grow
+		// this buffer without limit. Bound it by the same number a single
+		// message is bounded by.
+		if ((int64)PendingBytes.Num() > kMaxWebSocketMessageBytes)
+		{
+			const FString Reason = FString::Printf(
+				TEXT("unparsed receive buffer of %lld bytes exceeds the %lld byte bridge limit"),
+				(int64)PendingBytes.Num(), kMaxWebSocketMessageBytes);
+			UE_LOG(LogMCPBridge, Error, TEXT("[UE-MCP] %s"), *Reason);
+			SendCloseFrame(ClientSocketFD, 1009, Reason);
 			break;
 		}
 	}
@@ -945,71 +1051,165 @@ TArray<uint8> FMCPBridgeServer::CreateWebSocketFrame(const FString& Message)
 	return Frame;
 }
 
-FString FMCPBridgeServer::ParseWebSocketFrame(const TArray<uint8>& Data)
+EMCPFrameDecode FMCPBridgeServer::DecodeWebSocketFrame(TArray<uint8>& Buffer, FMCPWebSocketFrame& OutFrame, FString& OutError)
 {
-	if (Data.Num() < 2)
+	const int64 Available = (int64)Buffer.Num();
+	if (Available < 2)
 	{
-		return TEXT("");
+		return EMCPFrameDecode::NeedMoreData;
 	}
 
-	uint8 FirstByte = Data[0];
-	uint8 SecondByte = Data[1];
+	const uint8 FirstByte = Buffer[0];
+	const uint8 SecondByte = Buffer[1];
 
-	bool bMasked = (SecondByte & 0x80) != 0;
-	int32 PayloadLen = SecondByte & 0x7F;
+	// RSV1-3 only carry meaning once an extension has been negotiated, and the
+	// bridge negotiates none. A set bit means the peer is framing to rules we
+	// never agreed to, so no boundary in the stream can be trusted.
+	if ((FirstByte & 0x70) != 0)
+	{
+		OutError = TEXT("reserved frame bits set with no negotiated extension");
+		return EMCPFrameDecode::ProtocolError;
+	}
 
-	int32 HeaderLen = 2;
+	OutFrame.bFinal = (FirstByte & 0x80) != 0;
+
+	const uint8 RawOpcode = FirstByte & 0x0F;
+	switch (RawOpcode)
+	{
+	case 0x0: OutFrame.Opcode = EMCPWebSocketOpcode::Continuation; break;
+	case 0x1: OutFrame.Opcode = EMCPWebSocketOpcode::Text; break;
+	case 0x2: OutFrame.Opcode = EMCPWebSocketOpcode::Binary; break;
+	case 0x8: OutFrame.Opcode = EMCPWebSocketOpcode::Close; break;
+	case 0x9: OutFrame.Opcode = EMCPWebSocketOpcode::Ping; break;
+	case 0xA: OutFrame.Opcode = EMCPWebSocketOpcode::Pong; break;
+	default:
+		OutError = FString::Printf(TEXT("unsupported WebSocket opcode 0x%X"), (int32)RawOpcode);
+		return EMCPFrameDecode::ProtocolError;
+	}
+
+	const bool bMasked = (SecondByte & 0x80) != 0;
+	uint64 PayloadLen = (uint64)(SecondByte & 0x7F);
+	int64 HeaderLen = 2;
+
 	if (PayloadLen == 126)
 	{
-		if (Data.Num() < 4)
+		if (Available < 4)
 		{
-			return TEXT("");
+			return EMCPFrameDecode::NeedMoreData;
 		}
-		PayloadLen = (Data[2] << 8) | Data[3];
+		PayloadLen = ((uint64)Buffer[2] << 8) | (uint64)Buffer[3];
 		HeaderLen = 4;
 	}
 	else if (PayloadLen == 127)
 	{
-		if (Data.Num() < 10)
+		if (Available < 10)
 		{
-			return TEXT("");
+			return EMCPFrameDecode::NeedMoreData;
 		}
+		// Accumulate in 64 bits. Folding an 8-byte length into a 32-bit
+		// accumulator is what turns a large or hostile length into a negative
+		// count and a read that walks off the end of the buffer.
 		PayloadLen = 0;
 		for (int32 i = 0; i < 8; ++i)
 		{
-			PayloadLen = (PayloadLen << 8) | Data[2 + i];
+			PayloadLen = (PayloadLen << 8) | (uint64)Buffer[2 + i];
+		}
+		if ((PayloadLen & 0x8000000000000000ull) != 0)
+		{
+			OutError = TEXT("64-bit payload length has its high bit set");
+			return EMCPFrameDecode::ProtocolError;
 		}
 		HeaderLen = 10;
 	}
 
-	if (bMasked)
+	const bool bIsControl = (RawOpcode & 0x08) != 0;
+	if (bIsControl)
 	{
-		HeaderLen += 4; // Masking key
-	}
-
-	if (Data.Num() < HeaderLen + PayloadLen)
-	{
-		return TEXT("");
-	}
-
-	TArray<uint8> Payload;
-	Payload.Append(Data.GetData() + HeaderLen, PayloadLen);
-
-	if (bMasked)
-	{
-		// Unmask payload
-		uint8 MaskKey[4];
-		MaskKey[0] = Data[HeaderLen - 4];
-		MaskKey[1] = Data[HeaderLen - 3];
-		MaskKey[2] = Data[HeaderLen - 2];
-		MaskKey[3] = Data[HeaderLen - 1];
-		
-		for (int32 i = 0; i < Payload.Num(); ++i)
+		// Control frames carry at most 125 bytes and are never fragmented.
+		if (PayloadLen > 125)
 		{
-			Payload[i] ^= MaskKey[i % 4];
+			OutError = FString::Printf(TEXT("control frame payload of %llu bytes exceeds 125"), PayloadLen);
+			return EMCPFrameDecode::ProtocolError;
+		}
+		if (!OutFrame.bFinal)
+		{
+			OutError = TEXT("fragmented control frame");
+			return EMCPFrameDecode::ProtocolError;
 		}
 	}
 
-	FUTF8ToTCHAR UTF8ToTCHAR((char*)Payload.GetData(), Payload.Num());
-	return FString(UTF8ToTCHAR.Length(), UTF8ToTCHAR.Get());
+	if (PayloadLen > (uint64)kMaxWebSocketMessageBytes)
+	{
+		OutError = FString::Printf(
+			TEXT("frame payload of %llu bytes exceeds the %lld byte bridge limit"),
+			PayloadLen, kMaxWebSocketMessageBytes);
+		return EMCPFrameDecode::ProtocolError;
+	}
+
+	if (bMasked)
+	{
+		HeaderLen += 4; // masking key
+	}
+
+	const int64 TotalLen = HeaderLen + (int64)PayloadLen;
+	if (Available < TotalLen)
+	{
+		// The rest of this frame is still in flight. Leave every byte in place
+		// and let the caller read again.
+		return EMCPFrameDecode::NeedMoreData;
+	}
+
+	OutFrame.Payload.Reset();
+	OutFrame.Payload.Append(Buffer.GetData() + HeaderLen, (int32)PayloadLen);
+
+	if (bMasked)
+	{
+		const uint8* MaskKey = Buffer.GetData() + HeaderLen - 4;
+		for (int32 i = 0; i < OutFrame.Payload.Num(); ++i)
+		{
+			OutFrame.Payload[i] ^= MaskKey[i % 4];
+		}
+	}
+
+	Buffer.RemoveAt(0, (int32)TotalLen);
+	return EMCPFrameDecode::Decoded;
+}
+
+TArray<uint8> FMCPBridgeServer::CreateControlFrame(EMCPWebSocketOpcode Opcode, const TArray<uint8>& Payload)
+{
+	TArray<uint8> Frame;
+	Frame.Add((uint8)(0x80 | (uint8)Opcode)); // FIN + opcode
+	const int32 Len = FMath::Min(Payload.Num(), 125);
+	Frame.Add((uint8)Len);
+	Frame.Append(Payload.GetData(), Len);
+	return Frame;
+}
+
+void FMCPBridgeServer::SendCloseFrame(FMCPSocketHandle SocketFD, uint16 StatusCode, const FString& Reason)
+{
+	TArray<uint8> Payload;
+	Payload.Add((uint8)((StatusCode >> 8) & 0xFF));
+	Payload.Add((uint8)(StatusCode & 0xFF));
+
+	FTCHARToUTF8 Utf8Reason(*Reason);
+	const int32 ReasonLen = FMath::Min(Utf8Reason.Length(), 123);
+	Payload.Append((const uint8*)Utf8Reason.Get(), ReasonLen);
+
+	const TArray<uint8> Frame = CreateControlFrame(EMCPWebSocketOpcode::Close, Payload);
+	SendAll(SocketFD, Frame.GetData(), Frame.Num());
+}
+
+bool FMCPBridgeServer::SendAll(FMCPSocketHandle SocketFD, const uint8* Data, int32 NumBytes)
+{
+	int32 Sent = 0;
+	while (Sent < NumBytes)
+	{
+		const int32 BytesSent = send(SocketFD, (const char*)Data + Sent, NumBytes - Sent, 0);
+		if (BytesSent <= 0)
+		{
+			return false;
+		}
+		Sent += BytesSent;
+	}
+	return true;
 }

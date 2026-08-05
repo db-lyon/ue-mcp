@@ -76,6 +76,25 @@ describe("EditorBridge connection handling", () => {
     }
   });
 
+  it("repeats the close code and reason when the bridge refuses a message", async () => {
+    const server = await withBridgeServer((_request, socket) => {
+      // What the bridge does when a message exceeds its size bound.
+      socket.close(1009, "message of 70000000 bytes exceeds the 67108864 byte bridge limit");
+    });
+
+    const { EditorBridge } = await import("../../src/bridge.js");
+    const bridge = new EditorBridge("127.0.0.1", server.port);
+
+    try {
+      await expect(bridge.call("oversized", {}, 2000)).rejects.toThrow(
+        /code 1009.*exceeds the 67108864 byte bridge limit/,
+      );
+    } finally {
+      bridge.disconnect();
+      await server.close();
+    }
+  });
+
   it("terminates a timed-out socket so the next call can reconnect", async () => {
     const server = await withBridgeServer((request, socket) => {
       if (request.method === "hang") return;
