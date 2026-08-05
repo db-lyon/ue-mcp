@@ -50,7 +50,7 @@
 
 
 // ===========================================================================
-// v0.7.9 — Material depth
+// v0.7.9 - Material depth
 // ===========================================================================
 
 TSharedPtr<FJsonValue> FMaterialHandlers::DuplicateMaterial(const TSharedPtr<FJsonObject>& Params)
@@ -210,7 +210,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::GetMaterialShaderStats(const TSharedPt
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 
-	// Texture sampler usage — count texture-sample expressions directly.
+	// Texture sampler usage - count texture-sample expressions directly.
 	int32 NumTextures = 0;
 	for (UMaterialExpression* Expr : Material->GetExpressions())
 	{
@@ -254,7 +254,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ExportMaterialGraph(const TSharedPtr<F
 		Node->SetNumberField(TEXT("posX"), Expr->MaterialExpressionEditorX);
 		Node->SetNumberField(TEXT("posY"), Expr->MaterialExpressionEditorY);
 
-		// Scalar / vector constants — capture literal
+		// Scalar / vector constants - capture literal
 		if (UMaterialExpressionConstant* C = Cast<UMaterialExpressionConstant>(Expr))
 		{
 			Node->SetNumberField(TEXT("value"), C->R);
@@ -310,7 +310,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ExportMaterialGraph(const TSharedPtr<F
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ImportMaterialGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	// Delegates to BuildMaterialGraph — same JSON spec format.
+	// Delegates to BuildMaterialGraph - same JSON spec format.
 	return BuildMaterialGraph(Params);
 }
 

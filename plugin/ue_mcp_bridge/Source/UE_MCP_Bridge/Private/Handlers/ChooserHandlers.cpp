@@ -487,7 +487,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& P
 	UChooserTable* Table = LoadChooserTable(TablePath);
 	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
 
-	// Build the output struct (optional — a row can start with no output).
+	// Build the output struct (optional - a row can start with no output).
 	FInstancedStruct OutputStruct;
 	OutputStruct.InitializeAs<FAssetChooser>();
 	const FString OutputPath = OptionalString(Params, TEXT("output"));

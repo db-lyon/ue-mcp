@@ -216,7 +216,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 			FString TargetClassName;
 
 			// Accept flat params: functionName, targetClass. className is also
-			// accepted (#546) — agents commonly pass the owning class as
+			// accepted (#546) - agents commonly pass the owning class as
 			// `className` for a custom C++ UFUNCTION, which previously bound to
 			// nothing and produced an unbound stub.
 			if (!(*NodeParams)->TryGetStringField(TEXT("functionName"), FunctionName))
@@ -290,7 +290,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 					}
 				}
 
-				// 4. #546: search the Blueprint's own component classes — a very
+				// 4. #546: search the Blueprint's own component classes - a very
 				// common case is calling a BlueprintCallable UFUNCTION on a custom
 				// C++ component the BP owns, without naming the class explicitly.
 				if (!FoundFunc && Blueprint->SimpleConstructionScript)
@@ -305,7 +305,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 					}
 				}
 
-				// 5. #546: last resort — scan loaded classes for a single
+				// 5. #546: last resort - scan loaded classes for a single
 				// BlueprintCallable function with this exact name. Resolves
 				// freshly-compiled custom C++ UFUNCTIONs that the palette index
 				// has not picked up. Only binds on an unambiguous match.
@@ -405,7 +405,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 			{
 				if (!OwnerClass.IsEmpty())
 				{
-					// #118: external class member get — typed Target input pin
+					// #118: external class member get - typed Target input pin
 					UClass* Owner = LoadClass<UObject>(nullptr, *OwnerClass);
 					if (!Owner) Owner = LoadObject<UClass>(nullptr, *OwnerClass);
 					if (!Owner && !OwnerClass.EndsWith(TEXT("_C")))
@@ -483,7 +483,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 		}
 	}
 
-	// #189: K2Node_CallDelegate — bind the DelegateReference so the node resolves
+	// #189: K2Node_CallDelegate - bind the DelegateReference so the node resolves
 	// its signature and generates correct pins for multicast delegate invocation.
 	else if (UK2Node_CallDelegate* DelegateNode = Cast<UK2Node_CallDelegate>(NewNode))
 	{
@@ -544,7 +544,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 				}
 				else
 				{
-					// Self member — delegate belongs to the Blueprint's own class
+					// Self member - delegate belongs to the Blueprint's own class
 					DelegateNode->DelegateReference.SetSelfMember(FName(*DelegateName));
 				}
 			}
@@ -557,7 +557,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 	// DelegateReference BEFORE AllocateDefaultPins makes the "Delegate" pin resolve to
 	// the dispatcher's signature; combined with the corrected
 	// AllocateDefaultPins-before-PostPlacedNewNode order, AssignDelegate's
-	// PostPlacedNewNode then auto-creates and wires the paired Custom Event — a fully
+	// PostPlacedNewNode then auto-creates and wires the paired Custom Event - a fully
 	// bound "Bind Event to <Dispatcher>" in one add_node call. Without these params the
 	// node still places (unbound) and does not crash.
 	if (UK2Node_BaseMCDelegate* MCDelegateNode = Cast<UK2Node_BaseMCDelegate>(NewNode))
@@ -611,7 +611,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 				}
 				else
 				{
-					// Self member — dispatcher belongs to the Blueprint's own class
+					// Self member - dispatcher belongs to the Blueprint's own class
 					MCDelegateNode->DelegateReference.SetSelfMember(FName(*DelegateName));
 				}
 			}
@@ -1450,7 +1450,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodeProperty(const TSharedPtr<FJso
 // ---------------------------------------------------------------------------
 // Resolve a component template on a Blueprint by name.
 //
-// Child Blueprints do NOT own inherited components in their own SCS — the
+// Child Blueprints do NOT own inherited components in their own SCS - the
 // component templates live on the parent Blueprint's SCS. Writing through
 // the parent's template corrupts the parent for every descendant. For
 // inherited components we must route writes through the child's
@@ -1479,7 +1479,7 @@ UActorComponent* ResolveComponentTemplate(
 	OutAvailable.Reset();
 	if (!Blueprint) return nullptr;
 
-	// 1) Own SCS — child's own components, write directly.
+	// 1) Own SCS - child's own components, write directly.
 	if (USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript)
 	{
 		for (USCS_Node* Node : SCS->GetAllNodes())
@@ -1535,7 +1535,7 @@ UActorComponent* ResolveComponentTemplate(
 
 		if (bForWrite)
 		{
-			// Must never write through the shared parent template — that
+			// Must never write through the shared parent template - that
 			// would mutate the parent and every other descendant.
 			if (!Override && ICH)
 			{
@@ -1549,7 +1549,7 @@ UActorComponent* ResolveComponentTemplate(
 		}
 	}
 
-	// 3) CDO fallback — catches native C++ components and anything the
+	// 3) CDO fallback - catches native C++ components and anything the
 	// SCS walk missed. The CDO component pointer is the right write target
 	// for default-value overrides on inherited native components: mutating
 	// it lands on the Blueprint's GeneratedClass CDO, which is what spawns
@@ -1855,10 +1855,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 }
 
 // ---------------------------------------------------------------------------
-// v1.0.0-rc.15 — agent-friendly BP authoring (#284 #285 #267 #277)
+// v1.0.0-rc.15 - agent-friendly BP authoring (#284 #285 #267 #277)
 // ---------------------------------------------------------------------------
 
-// #284 — compile_blueprints: batch compile + save with per-path status.
+// #284 - compile_blueprints: batch compile + save with per-path status.
 TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprints(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* PathsArray = nullptr;
@@ -1915,7 +1915,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprints(const TSharedPtr<FJ
 	return MCPResult(Result);
 }
 
-// #285 — cleanup_graph: remove orphan nodes (no pins, missing class, blank
+// #285 - cleanup_graph: remove orphan nodes (no pins, missing class, blank
 // title). Iterates one graph if graphName given, else every graph on the BP.
 TSharedPtr<FJsonValue> FBlueprintHandlers::CleanupGraph(const TSharedPtr<FJsonObject>& Params)
 {
@@ -1985,7 +1985,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CleanupGraph(const TSharedPtr<FJsonOb
 	return MCPResult(Result);
 }
 
-// #267 — connect_pins_batch: apply many wirings in one call, single compile.
+// #267 - connect_pins_batch: apply many wirings in one call, single compile.
 TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -1995,7 +1995,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 	const TArray<TSharedPtr<FJsonValue>>* ConnectionsArray = nullptr;
 	if (!Params->TryGetArrayField(TEXT("connections"), ConnectionsArray) || !ConnectionsArray)
 	{
-		return MCPError(TEXT("Missing 'connections' array — each entry: {sourceNode, sourcePin, targetNode, targetPin}"));
+		return MCPError(TEXT("Missing 'connections' array - each entry: {sourceNode, sourcePin, targetNode, targetPin}"));
 	}
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
@@ -2091,7 +2091,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 	return MCPResult(Result);
 }
 
-// #277 — set_node_position: write NodePosX/NodePosY on a target node.
+// #277 - set_node_position: write NodePosX/NodePosY on a target node.
 TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodePosition(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -2124,7 +2124,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetNodePosition(const TSharedPtr<FJso
 	return MCPResult(Result);
 }
 
-// #277 — auto_layout_graph: simple topological layered layout. Each node is
+// #277 - auto_layout_graph: simple topological layered layout. Each node is
 // placed in a column derived from longest predecessor path; rows are stacked
 // with a fixed gap. Not Sugiyama-perfect but eliminates the (0,0) stack that
 // programmatic add_node leaves behind.
@@ -2160,7 +2160,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AutoLayoutGraph(const TSharedPtr<FJso
 		return Result;
 	};
 
-	// Iterate to fixed point — simple but adequate for the typical 5-50 node
+	// Iterate to fixed point - simple but adequate for the typical 5-50 node
 	// graphs the bridge produces.
 	for (int32 Iter = 0; Iter < Order.Num() + 1; Iter++)
 	{

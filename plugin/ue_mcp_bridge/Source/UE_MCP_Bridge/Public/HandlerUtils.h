@@ -42,7 +42,7 @@ inline TSharedPtr<FJsonValue> MCPError(const FString& Message)
 }
 
 /** Return a formatted error. Usage: MCPError(FString::Printf(TEXT("Not found: %s"), *Path)) */
-// NOTE: Do not use a variadic template wrapper — UE 5.7's consteval format
+// NOTE: Do not use a variadic template wrapper - UE 5.7's consteval format
 // string validation requires TEXT() literals passed directly to FString::Printf.
 
 /** Wrap a populated FJsonObject as a FJsonValue (the common return). */
@@ -72,7 +72,7 @@ inline void MCPSetRollback(
 	Result->SetObjectField(TEXT("rollback"), Rollback);
 }
 
-/** Mark a result as "already existed, nothing created" — idempotent replay. */
+/** Mark a result as "already existed, nothing created" - idempotent replay. */
 inline void MCPSetExisted(TSharedPtr<FJsonObject> Result)
 {
 	Result->SetBoolField(TEXT("existed"), true);

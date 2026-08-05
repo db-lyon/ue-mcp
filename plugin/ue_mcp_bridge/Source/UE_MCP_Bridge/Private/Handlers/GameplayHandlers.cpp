@@ -2349,7 +2349,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadBehaviorTreeGraph(const TSharedPtr
 }
 
 // ─────────────────────────────────────────────────────────────
-// #163  get_navmesh_details — Detailed ARecastNavMesh configuration
+// #163  get_navmesh_details - Detailed ARecastNavMesh configuration
 // ─────────────────────────────────────────────────────────────
 TSharedPtr<FJsonValue> FGameplayHandlers::GetNavmeshDetails(const TSharedPtr<FJsonObject>& Params)
 {

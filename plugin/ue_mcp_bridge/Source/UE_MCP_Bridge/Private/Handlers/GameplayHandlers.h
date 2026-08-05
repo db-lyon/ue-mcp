@@ -72,15 +72,15 @@ private:
 	static TSharedPtr<FJsonValue> ListSmartObjectSlots(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddSmartObjectSlotBehavior(const TSharedPtr<FJsonObject>& Params);
 
-	// IMC read/write, PIE inspection, anim state, subsystem state — moved to pie-studio
+	// IMC read/write, PIE inspection, anim state, subsystem state - moved to pie-studio
 
 	// Helper to create a blueprint with a given parent class
 	static TSharedPtr<FJsonValue> CreateBlueprintWithParent(const FString& Name, const FString& PackagePath, const FString& ParentClassPath, const FString& FriendlyTypeName);
 
-	// v0.7.11 — BT graph traversal (#124)
+	// v0.7.11 - BT graph traversal (#124)
 	static TSharedPtr<FJsonValue> ReadBehaviorTreeGraph(const TSharedPtr<FJsonObject>& Params);
 
-	// #163 — detailed navmesh configuration
+	// #163 - detailed navmesh configuration
 	static TSharedPtr<FJsonValue> GetNavmeshDetails(const TSharedPtr<FJsonObject>& Params);
 
 	// ApplyDamageInPie moved to pie-studio

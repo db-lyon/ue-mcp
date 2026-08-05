@@ -7,7 +7,7 @@
 /**
  * Per-asset exclusive locking so concurrent agents (or an agent plus a human)
  * don't issue conflicting mutations against the same asset. Backed by
- * FMCPLockRegistry, which lives in the bridge — the single shared editor every
+ * FMCPLockRegistry, which lives in the bridge - the single shared editor every
  * agent connects to. Exposed as explicit acquire/release/list actions; the
  * Node dispatch layer also wraps mutating calls with these when locking is
  * enabled (see src/locking.ts).

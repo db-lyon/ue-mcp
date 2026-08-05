@@ -126,24 +126,24 @@ private:
 	static TSharedPtr<FJsonValue> CreateInterchangePipeline(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReloadPackage(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.8 — FTS5-backed asset search (stubs)
+	// v0.7.8 - FTS5-backed asset search (stubs)
 	static TSharedPtr<FJsonValue> SearchAssetsFTS(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReindexAssetsFTS(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.19 issue #150 — AssetRegistry referencers for a set of packages
+	// v0.7.19 issue #150 - AssetRegistry referencers for a set of packages
 	static TSharedPtr<FJsonValue> GetReferencers(const TSharedPtr<FJsonObject>& Params);
 
-	// issue #588 — AssetRegistry forward dependencies for a set of packages
+	// issue #588 - AssetRegistry forward dependencies for a set of packages
 	static TSharedPtr<FJsonValue> GetDependencies(const TSharedPtr<FJsonObject>& Params);
 
-	// issue #579 — AssetManager primary-asset-id enumeration / verification
+	// issue #579 - AssetManager primary-asset-id enumeration / verification
 	static TSharedPtr<FJsonValue> GetPrimaryAssetIds(const TSharedPtr<FJsonObject>& Params);
 
-	// v1.0.0-rc.2 — #155 (asset gaps)
+	// v1.0.0-rc.2 - #155 (asset gaps)
 	static TSharedPtr<FJsonValue> SetSkeletalMeshMaterialSlots(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DiagnoseRegistry(const TSharedPtr<FJsonObject>& Params);
 
-	// v1.0.0-rc.3 — #177, #192, #193
+	// v1.0.0-rc.3 - #177, #192, #193
 	static TSharedPtr<FJsonValue> GetMeshBounds(const TSharedPtr<FJsonObject>& Params);
 	// #431: one-call mesh QA - bounds + materials + LOD/vertex/skeleton.
 	static TSharedPtr<FJsonValue> GetMeshInfo(const TSharedPtr<FJsonObject>& Params);

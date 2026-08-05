@@ -24,7 +24,7 @@ private:
 	static TSharedPtr<FJsonValue> SetEmitterProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetEmitterInfo(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.10 — Niagara depth
+	// v0.7.10 - Niagara depth
 	static TSharedPtr<FJsonValue> ListEmitterRenderers(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddEmitterRenderer(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveEmitterRenderer(const TSharedPtr<FJsonObject>& Params);
@@ -34,7 +34,7 @@ private:
 	static TSharedPtr<FJsonValue> GetCompiledHLSL(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListSystemParameters(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.14 — module inputs, static switches, HLSL modules
+	// v0.7.14 - module inputs, static switches, HLSL modules
 	static TSharedPtr<FJsonValue> ListModuleInputs(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetModuleInput(const TSharedPtr<FJsonObject>& Params);
 	// Add a stock /Niagara/Modules script to an emitter's stack context.

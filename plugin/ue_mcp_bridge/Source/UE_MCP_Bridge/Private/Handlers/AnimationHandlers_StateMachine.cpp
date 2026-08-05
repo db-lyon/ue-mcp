@@ -1292,7 +1292,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRig(const TSharedPtr<FJsonObjec
 		Result->SetStringField(TEXT("rootBone"), RigSkeleton.BoneNames[0].ToString());
 	}
 
-	// Solvers — enumerate via reflection since GetSolverArray not available in all UE versions
+	// Solvers - enumerate via reflection since GetSolverArray not available in all UE versions
 	TArray<TSharedPtr<FJsonValue>> SolversArray;
 	FProperty* SolversProp = IKRig->GetClass()->FindPropertyByName(TEXT("Solvers"));
 	if (SolversProp)
@@ -1468,7 +1468,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRetargeter(const TSharedPtr<FJs
 	UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter);
 	if (!Controller)
 	{
-		Result->SetStringField(TEXT("warning"), TEXT("IKRetargeterController unavailable — returning shallow data"));
+		Result->SetStringField(TEXT("warning"), TEXT("IKRetargeterController unavailable - returning shallow data"));
 		return MCPResult(Result);
 	}
 
@@ -1499,7 +1499,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRetargeter(const TSharedPtr<FJs
 
 
 // ===========================================================================
-// v0.7.15 — PoseSearch (motion matching)
+// v0.7.15 - PoseSearch (motion matching)
 // ===========================================================================
 
 TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchDatabase(const TSharedPtr<FJsonObject>& Params)
@@ -1718,8 +1718,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BuildPoseSearchIndex(const TSharedPtr
 
 	UPoseSearchDatabase* Database = Cast<UPoseSearchDatabase>(UEditorAssetLibrary::LoadAsset(AssetPath));
 	if (!Database) return MCPError(FString::Printf(TEXT("PoseSearchDatabase not found: %s"), *AssetPath));
-	if (!Database->Schema) return MCPError(TEXT("Database has no Schema set — call set_pose_search_schema first"));
-	if (GetPoseSearchAnimationAssetCount(Database) == 0) return MCPError(TEXT("Database has no animation assets — call add_pose_search_sequence first"));
+	if (!Database->Schema) return MCPError(TEXT("Database has no Schema set - call set_pose_search_schema first"));
+	if (GetPoseSearchAnimationAssetCount(Database) == 0) return MCPError(TEXT("Database has no animation assets - call add_pose_search_sequence first"));
 
 	using namespace UE::PoseSearch;
 	const ERequestAsyncBuildFlag Flag = bWait

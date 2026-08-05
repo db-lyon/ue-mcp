@@ -118,7 +118,7 @@ namespace
 			}
 		}
 
-		// Hard UObject ref — accept asset path
+		// Hard UObject ref - accept asset path
 		if (FObjectProperty* ObjProp = CastField<FObjectProperty>(Prop))
 		{
 			FString Path;
@@ -131,7 +131,7 @@ namespace
 			}
 		}
 
-		// Hard UClass ref — accept class path
+		// Hard UClass ref - accept class path
 		if (FClassProperty* ClassProp = CastField<FClassProperty>(Prop))
 		{
 			FString Path;
@@ -144,7 +144,7 @@ namespace
 			}
 		}
 
-		// Soft object / soft class — accept path string
+		// Soft object / soft class - accept path string
 		if (FSoftObjectProperty* SoftObjProp = CastField<FSoftObjectProperty>(Prop))
 		{
 			FString Path;
@@ -187,7 +187,7 @@ namespace
 			if (i < Parts.Num() - 1)
 			{
 				FStructProperty* SP = CastField<FStructProperty>(Prop);
-				if (!SP) { OutError = FString::Printf(TEXT("'%s' is not a struct — cannot descend"), *Parts[i]); return false; }
+				if (!SP) { OutError = FString::Printf(TEXT("'%s' is not a struct - cannot descend"), *Parts[i]); return false; }
 				Container = SP->ContainerPtrToValuePtr<void>(Container);
 				ContainerStruct = SP->Struct;
 			}
@@ -196,7 +196,7 @@ namespace
 		return SetJsonOnProperty(Prop, ValueAddr, Value, OutError);
 	}
 
-	// #213: shared class lookup. Mirrors AddPCGNode's tolerant resolver — accepts
+	// #213: shared class lookup. Mirrors AddPCGNode's tolerant resolver - accepts
 	// short name, "/Script/PCG.X" path, or "U"-prefixed short name.
 	static UClass* FindPCGSettingsClass(const FString& ClassName)
 	{
@@ -1440,7 +1440,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 	const TArray<TSharedPtr<FJsonValue>>* EntriesArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("entries"), EntriesArr) || !EntriesArr)
 	{
-		return MCPError(TEXT("Missing 'entries' array — each item should be {mesh: <path>, weight?: <int>}"));
+		return MCPError(TEXT("Missing 'entries' array - each item should be {mesh: <path>, weight?: <int>}"));
 	}
 
 	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
@@ -1983,7 +1983,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 		NodesArr.Add(MakeShared<FJsonValueObject>(NodeObj));
 	}
 
-	// Edges — same shape as read_pcg_graph (#217), reused so import/export speak
+	// Edges - same shape as read_pcg_graph (#217), reused so import/export speak
 	// the same vocabulary. Walk every output pin, including Input/Output specials.
 	auto EmitEdgesFromNode = [](const UPCGNode* From, TArray<TSharedPtr<FJsonValue>>& OutEdges)
 	{

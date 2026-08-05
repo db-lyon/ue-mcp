@@ -4,7 +4,7 @@
 #include "Dom/JsonValue.h"
 #include "Dom/JsonObject.h"
 
-// #685 — ChooserTable (UChooserTable) row authoring. Chooser tables are the
+// #685 - ChooserTable (UChooserTable) row authoring. Chooser tables are the
 // data-driven selection layer behind Motion Matching (a chooser maps character
 // state to which PoseSearchDatabase to search). The engine stores columns/rows
 // as instanced structs with no scripting entry point, so extending a chooser

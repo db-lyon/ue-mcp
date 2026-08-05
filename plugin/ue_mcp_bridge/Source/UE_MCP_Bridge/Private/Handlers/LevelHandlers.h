@@ -52,11 +52,11 @@ private:
 	static TSharedPtr<FJsonValue> GetActorsByClass(const TSharedPtr<FJsonObject>& Params);
 	// #582 find actors that own a component of a given class
 	static TSharedPtr<FJsonValue> GetActorsByComponentClass(const TSharedPtr<FJsonObject>& Params);
-	// v0.7.19 issue #146 — actor class histogram (counts by class name)
+	// v0.7.19 issue #146 - actor class histogram (counts by class name)
 	static TSharedPtr<FJsonValue> CountActorsByClass(const TSharedPtr<FJsonObject>& Params);
-	// v0.7.19 issue #150 — RuntimeVirtualTextureVolume / component summary
+	// v0.7.19 issue #150 - RuntimeVirtualTextureVolume / component summary
 	static TSharedPtr<FJsonValue> GetRVTSummary(const TSharedPtr<FJsonObject>& Params);
-	// v0.7.19 issue #151 — set WaterBodyComponent property via runtime class lookup
+	// v0.7.19 issue #151 - set WaterBodyComponent property via runtime class lookup
 	static TSharedPtr<FJsonValue> SetWaterBodyProperty(const TSharedPtr<FJsonObject>& Params);
 	// #188: get actor origin + extent bounds
 	static TSharedPtr<FJsonValue> GetActorBounds(const TSharedPtr<FJsonObject>& Params);

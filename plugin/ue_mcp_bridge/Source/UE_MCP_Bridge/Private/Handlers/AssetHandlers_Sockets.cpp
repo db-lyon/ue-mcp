@@ -551,7 +551,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSocketTransform(const TSharedPtr<FJson
 		return MCPError(FString::Printf(TEXT("Could not load asset '%s'"), *AssetPath));
 	}
 
-	// Optional transform components — only fields that are passed are written.
+	// Optional transform components - only fields that are passed are written.
 	const bool bHasLoc = Params->HasField(TEXT("relativeLocation"));
 	const bool bHasRot = Params->HasField(TEXT("relativeRotation"));
 	const bool bHasScale = Params->HasField(TEXT("relativeScale"));

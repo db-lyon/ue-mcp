@@ -75,7 +75,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_emitter_property"), &SetEmitterProperty);
 	Registry.RegisterHandler(TEXT("get_emitter_info"), &GetEmitterInfo);
 
-	// v0.7.10 — depth
+	// v0.7.10 - depth
 	Registry.RegisterHandler(TEXT("list_emitter_renderers"), &ListEmitterRenderers);
 	Registry.RegisterHandler(TEXT("add_emitter_renderer"), &AddEmitterRenderer);
 	Registry.RegisterHandler(TEXT("remove_emitter_renderer"), &RemoveEmitterRenderer);
@@ -85,7 +85,7 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_niagara_compiled_hlsl"), &GetCompiledHLSL);
 	Registry.RegisterHandler(TEXT("list_niagara_system_parameters"), &ListSystemParameters);
 
-	// v0.7.14 — module inputs, static switches, HLSL modules
+	// v0.7.14 - module inputs, static switches, HLSL modules
 	Registry.RegisterHandler(TEXT("list_niagara_module_inputs"), &ListModuleInputs);
 	Registry.RegisterHandler(TEXT("set_niagara_module_input"), &SetModuleInput);
 	Registry.RegisterHandler(TEXT("add_niagara_module"), &AddModule);
@@ -882,7 +882,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::GetEmitterInfo(const TSharedPtr<FJsonOb
 }
 
 // ===========================================================================
-// v0.7.10 — Niagara depth
+// v0.7.10 - Niagara depth
 // ===========================================================================
 
 namespace
@@ -1301,7 +1301,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListSystemParameters(const TSharedPtr<F
 }
 
 // ===========================================================================
-// v0.7.14 — module inputs, static switches, HLSL modules
+// v0.7.14 - module inputs, static switches, HLSL modules
 // ===========================================================================
 
 namespace
@@ -2157,13 +2157,13 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateModuleFromHlsl(const TSharedPtr<F
 	Res->SetNumberField(TEXT("hlslLength"), Hlsl.Len());
 	Res->SetNumberField(TEXT("requestedInputs"), InputsArr ? InputsArr->Num() : 0);
 	Res->SetNumberField(TEXT("requestedOutputs"), OutputsArr ? OutputsArr->Num() : 0);
-	Res->SetStringField(TEXT("note"), TEXT("Module scaffold created with embedded CustomHLSL node. Pins are auto-derived from the HLSL body — open the asset to confirm signatures."));
+	Res->SetStringField(TEXT("note"), TEXT("Module scaffold created with embedded CustomHLSL node. Pins are auto-derived from the HLSL body - open the asset to confirm signatures."));
 	MCPSetDeleteAssetRollback(Res, Script->GetPathName());
 	return MCPResult(Res);
 }
 
 // ===========================================================================
-// #185 — Create an empty scratch-pad-style Niagara module (NiagaraScript asset)
+// #185 - Create an empty scratch-pad-style Niagara module (NiagaraScript asset)
 // ===========================================================================
 TSharedPtr<FJsonValue> FNiagaraHandlers::CreateScratchModule(const TSharedPtr<FJsonObject>& Params)
 {

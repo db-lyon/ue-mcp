@@ -142,7 +142,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateInputMappingContext(const TShare
 
 
 // ─────────────────────────────────────────────────────────────
-// #57 / #60  read_imc — Read InputMappingContext mappings
+// #57 / #60  read_imc - Read InputMappingContext mappings
 // ─────────────────────────────────────────────────────────────
 TSharedPtr<FJsonValue> FGameplayHandlers::ReadImc(const TSharedPtr<FJsonObject>& Params)
 {
@@ -200,7 +200,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadImc(const TSharedPtr<FJsonObject>&
 }
 
 // ─────────────────────────────────────────────────────────────
-// #57 / #60  add_imc_mapping — Add key mapping to an IMC
+// #57 / #60  add_imc_mapping - Add key mapping to an IMC
 // ─────────────────────────────────────────────────────────────
 TSharedPtr<FJsonValue> FGameplayHandlers::AddImcMapping(const TSharedPtr<FJsonObject>& Params)
 {
@@ -252,7 +252,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddImcMapping(const TSharedPtr<FJsonOb
 
 	IMC->MapKey(InputAction, Key);
 
-	// Mark dirty — caller can use asset(save) to persist (#197 fix: SavePackage crash)
+	// Mark dirty - caller can use asset(save) to persist (#197 fix: SavePackage crash)
 	UPackage* Pkg = IMC->GetOutermost();
 	if (Pkg)
 	{
@@ -269,13 +269,13 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddImcMapping(const TSharedPtr<FJsonOb
 }
 
 // ─────────────────────────────────────────────────────────────
-// #75  set_mapping_modifiers — Add modifiers/triggers to an IMC mapping
+// #75  set_mapping_modifiers - Add modifiers/triggers to an IMC mapping
 //      Creates UObject subobjects with IMC as outer so they serialize.
 // ─────────────────────────────────────────────────────────────
 
 
 // ─────────────────────────────────────────────────────────────
-// #75  set_mapping_modifiers — Add modifiers/triggers to an IMC mapping
+// #75  set_mapping_modifiers - Add modifiers/triggers to an IMC mapping
 //      Creates UObject subobjects with IMC as outer so they serialize.
 // ─────────────────────────────────────────────────────────────
 TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<FJsonObject>& Params)
@@ -352,7 +352,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 				continue; // skip unknown modifier types
 			}
 
-			// Create with IMC as outer — this is the key fix for #75
+			// Create with IMC as outer - this is the key fix for #75
 			UInputModifier* Modifier = NewObject<UInputModifier>(IMC, ModClass);
 
 			// #649: property source is a nested `properties` object when
@@ -541,7 +541,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 		Mapping.Triggers = NewTriggers;
 	}
 
-	// Mark dirty — caller can use asset(save) to persist (#197 fix)
+	// Mark dirty - caller can use asset(save) to persist (#197 fix)
 	UPackage* Pkg = IMC->GetOutermost();
 	if (Pkg)
 	{
@@ -612,7 +612,7 @@ namespace ImcEdit_Internal
 	{
 		UPackage* Pkg = IMC->GetOutermost();
 		if (!Pkg) return false;
-		// Mark dirty only — caller can use asset(save) to persist (#197 fix)
+		// Mark dirty only - caller can use asset(save) to persist (#197 fix)
 		Pkg->MarkPackageDirty();
 		return true;
 	}

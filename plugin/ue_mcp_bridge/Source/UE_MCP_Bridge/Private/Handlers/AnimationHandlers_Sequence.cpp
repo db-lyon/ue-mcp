@@ -270,7 +270,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ScanAnimationTracks(const TSharedPtr<
 
 
 // ---------------------------------------------------------------------------
-// create_sequence — Create a blank AnimSequence on a skeleton
+// create_sequence - Create a blank AnimSequence on a skeleton
 // Params: name, skeletonPath, packagePath?, numFrames?, frameRate?
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJsonObject>& Params)
@@ -314,7 +314,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 	FFrameRate DesiredFrameRate(static_cast<int32>(FrameRate), 1);
 	int32 FrameCount = static_cast<int32>(NumFrames);
 
-	// Initialize the data model first — required before any modifications
+	// Initialize the data model first - required before any modifications
 	Controller.InitializeModel();
 	Controller.OpenBracket(NSLOCTEXT("MCP", "CreateSequence", "MCP Create Sequence"));
 	Controller.SetFrameRate(DesiredFrameRate);
@@ -345,14 +345,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 }
 
 // ---------------------------------------------------------------------------
-// set_bone_keyframes — Set bone transform keyframes on an AnimSequence
+// set_bone_keyframes - Set bone transform keyframes on an AnimSequence
 // Params: assetPath, boneName, keyframes[]
 //   Each keyframe: { frame, location?: {x,y,z}, rotation?: {x,y,z,w}, scale?: {x,y,z} }
 // ---------------------------------------------------------------------------
 
 
 // ---------------------------------------------------------------------------
-// set_bone_keyframes — Set bone transform keyframes on an AnimSequence
+// set_bone_keyframes - Set bone transform keyframes on an AnimSequence
 // Params: assetPath, boneName, keyframes[]
 //   Each keyframe: { frame, location?: {x,y,z}, rotation?: {x,y,z,w}, scale?: {x,y,z} }
 // ---------------------------------------------------------------------------
@@ -395,7 +395,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 	IAnimationDataController& Controller = AnimSeq->GetController();
 	Controller.OpenBracket(NSLOCTEXT("MCP", "SetBoneKeyframes", "MCP Set Bone Keyframes"));
 
-	// Ensure bone track exists — add it if not present
+	// Ensure bone track exists - add it if not present
 	const FName BoneFName(*BoneName);
 	const IAnimationDataModel* DataModel = AnimSeq->GetDataModel();
 	if (!DataModel->IsValidBoneTrackName(BoneFName))
@@ -466,7 +466,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 }
 
 // ---------------------------------------------------------------------------
-// bake_keyframes_batch — write per-bone keyframe arrays for many bones into an
+// bake_keyframes_batch - write per-bone keyframe arrays for many bones into an
 // AnimSequence in one call. (#540) Replaces N round-trips of set_bone_keyframes
 // and the silent-T-pose failure mode: set_bone_track_keys returns false when the
 // track does not yet exist, so this auto-AddBoneCurve's each track first, wraps
@@ -602,7 +602,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeKeyframesBatch(const TSharedPtr<F
 }
 
 // ---------------------------------------------------------------------------
-// get_bone_transforms — Read reference pose transforms for specified bones
+// get_bone_transforms - Read reference pose transforms for specified bones
 // Params: skeletonPath, boneNames[]? (if omitted, returns all bones)
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::GetBoneTransforms(const TSharedPtr<FJsonObject>& Params)
@@ -750,7 +750,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddCurve(const TSharedPtr<FJsonObject
 
 	if (!bAdded)
 	{
-		// Curve already exists — idempotent replay
+		// Curve already exists - idempotent replay
 		MCPSetExisted(Result);
 		Result->SetStringField(TEXT("assetPath"), AssetPath);
 		Result->SetStringField(TEXT("curveName"), CurveName);
@@ -1148,7 +1148,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadBoneTrack(const TSharedPtr<FJsonO
 }
 
 // ===========================================================================
-// v1.0.0-rc.2 — animation authoring gaps
+// v1.0.0-rc.2 - animation authoring gaps
 // ===========================================================================
 
 // #153: batch-set properties on AnimSequence assets, optionally resolving
@@ -1157,7 +1157,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadBoneTrack(const TSharedPtr<FJsonO
 
 
 // ===========================================================================
-// v1.0.0-rc.2 — animation authoring gaps
+// v1.0.0-rc.2 - animation authoring gaps
 // ===========================================================================
 
 // #153: batch-set properties on AnimSequence assets, optionally resolving

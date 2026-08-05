@@ -726,7 +726,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 	Result->SetArrayField(TEXT("meshes"), ResultArray);
 	Result->SetStringField(TEXT("offsetApplied"), FString::Printf(TEXT("(%.2f, %.2f, %.2f)"), Center.X, Center.Y, Center.Z));
 	Result->SetNumberField(TEXT("meshCount"), Meshes.Num());
-	// No rollback: destructive/external — vertex offsets applied non-idempotently;
+	// No rollback: destructive/external - vertex offsets applied non-idempotently;
 	// re-running shifts the pivot again. Not natural-key idempotent.
 
 	return MCPResult(Result);
@@ -847,7 +847,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSkeletalMeshMaterialSlots(const TShare
 
 
 // ---------------------------------------------------------------------------
-// v1.0.0-rc.3 — #193 get_mesh_bounds
+// v1.0.0-rc.3 - #193 get_mesh_bounds
 // ---------------------------------------------------------------------------
 // #431: one-call asset QA - bounds + material slots + skeleton + LOD/vertex
 // counts in one shot. Works for both UStaticMesh and USkeletalMesh.
@@ -1020,7 +1020,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshBounds(const TSharedPtr<FJsonObjec
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 
-	// #351: accept SkeletalMesh too — get_mesh_bounds previously errored
+	// #351: accept SkeletalMesh too - get_mesh_bounds previously errored
 	// on SkeletalMesh assets and callers had to fall back to Python
 	// (load_asset + get_bounds). Probe StaticMesh first, then SkeletalMesh.
 	FBox BoundingBox(ForceInit);
@@ -1157,12 +1157,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadImportSources(const TSharedPtr<FJsonO
 }
 
 // ---------------------------------------------------------------------------
-// v1.0.0-rc.3 — #177 get_mesh_collision
+// v1.0.0-rc.3 - #177 get_mesh_collision
 // ---------------------------------------------------------------------------
 
 
 // ---------------------------------------------------------------------------
-// v1.0.0-rc.3 — #177 get_mesh_collision
+// v1.0.0-rc.3 - #177 get_mesh_collision
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAssetHandlers::GetMeshCollision(const TSharedPtr<FJsonObject>& Params)
 {
@@ -1228,12 +1228,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetMeshCollision(const TSharedPtr<FJsonOb
 }
 
 // ---------------------------------------------------------------------------
-// v1.0.0-rc.5 — #167 set_mesh_nav
+// v1.0.0-rc.5 - #167 set_mesh_nav
 // ---------------------------------------------------------------------------
 
 
 // ---------------------------------------------------------------------------
-// v1.0.0-rc.5 — #167 set_mesh_nav
+// v1.0.0-rc.5 - #167 set_mesh_nav
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAssetHandlers::SetMeshNav(const TSharedPtr<FJsonObject>& Params)
 {
@@ -1274,7 +1274,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshNav(const TSharedPtr<FJsonObject>&
 }
 
 // ---------------------------------------------------------------------------
-// v1.0.0-rc.3 — #192 move_folder
+// v1.0.0-rc.3 - #192 move_folder
 // ---------------------------------------------------------------------------
 
 // ─── #595 read_cloth_data ───────────────────────────────────────────

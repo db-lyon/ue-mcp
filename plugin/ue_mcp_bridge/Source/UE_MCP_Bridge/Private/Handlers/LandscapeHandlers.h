@@ -24,7 +24,7 @@ private:
 	// #251: standalone ULandscapeLayerInfoObject creation (does not require
 	// a landscape in the world).
 	static TSharedPtr<FJsonValue> CreateLandscapeLayerInfo(const TSharedPtr<FJsonObject>& Params);
-	// v0.7.19 issue #150 — concise material + component count summary per proxy
+	// v0.7.19 issue #150 - concise material + component count summary per proxy
 	static TSharedPtr<FJsonValue> GetMaterialUsageSummary(const TSharedPtr<FJsonObject>& Params);
 	// #733: enumerate loaded World Partition landscape streaming proxies with
 	// per-proxy world bounds, and resolve which proxy covers a world position.

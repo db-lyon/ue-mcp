@@ -38,8 +38,8 @@ void FUE_MCP_BridgeModule::StartupModule()
 	// slips through, decline it rather than blocking the game thread forever.
 	FDialogHandlers::AddDefaultPolicy(TEXT("already exists"), EAppReturnType::No);
 	FDialogHandlers::AddDefaultPolicy(TEXT("Overwrite"), EAppReturnType::No);
-	// Safety-net for the editor's auto "save level / save unsaved" prompts —
-	// when an agent session ends or the editor closes, these would otherwise
+	// Safety-net for the editor's auto "save level / save unsaved" prompts.
+	// When an agent session ends or the editor closes, these would otherwise
 	// block the main thread waiting on a human. Default to "Discard".
 	// (Agents that actually want to persist changes still call project(build)
 	//  / level(save) / asset(save) explicitly.)
@@ -67,7 +67,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 		{
 			if (!GEditor)
 			{
-				return true; // keep ticking — not ready yet
+				return true; // keep ticking - not ready yet
 			}
 
 			// Accept any world context (editor or PIE) as proof the editor is usable.
@@ -88,7 +88,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 			if (G_BridgeServer.IsValid())
 			{
 				G_BridgeServer->GetGameThreadExecutor().SetEditorReady();
-				UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Editor ready — accepting requests"));
+				UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Editor ready - accepting requests"));
 			}
 			FMCPEngineStatus::Get().SetPhase(TEXT("ready"));
 

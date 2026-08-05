@@ -538,7 +538,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObj
 		Result->SetStringField(TEXT("attachParent"), Parent->GetActorLabel());
 	}
 
-	// Components (always on) — name + class
+	// Components (always on) - name + class
 	TArray<UActorComponent*> Components;
 	Actor->GetComponents(Components);
 	TArray<TSharedPtr<FJsonValue>> CompArr;
@@ -1494,7 +1494,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 				Result.AppendChar(C);
 				if (C == TEXT('='))
 				{
-					// Gather the following identifier token (letters, digits, underscore) — stop before quotes/parens/paths
+					// Gather the following identifier token (letters, digits, underscore) - stop before quotes/parens/paths
 					int32 Start = i + 1;
 					int32 End = Start;
 					while (End < ValueStr.Len())
@@ -1866,7 +1866,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorMaterial(const TSharedPtr<FJsonOb
 
 	// Self-inverse: call set_actor_material again with the previous path.
 	// (If previous was unset, passing an empty path would fail material load;
-	//  skip the rollback record in that case — best-effort.)
+	//  skip the rollback record in that case - best-effort.)
 	if (!PreviousMaterialPath.IsEmpty())
 	{
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
@@ -2078,7 +2078,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetRVTSummary(const TSharedPtr<FJsonObjec
 			TSharedPtr<FJsonObject> CObj = MakeShared<FJsonObject>();
 			CObj->SetStringField(TEXT("name"), C->GetName());
 			CObj->SetStringField(TEXT("class"), CName);
-			// Try both common property names — UE has renamed this across versions.
+			// Try both common property names - UE has renamed this across versions.
 			if (FObjectProperty* VT = CastField<FObjectProperty>(C->GetClass()->FindPropertyByName(TEXT("VirtualTexture"))))
 			{
 				if (UObject* Asset = VT->GetObjectPropertyValue_InContainer(C))
@@ -2114,7 +2114,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetRVTSummary(const TSharedPtr<FJsonObjec
 // ─── #151 set_water_body_property ───────────────────────────────────
 // Set a property on the first UWaterBodyComponent of an actor (ShapeDilation,
 // WaterLevel, etc.). Uses runtime class lookup so the Water plugin is not a
-// hard build dependency — if the plugin isn't loaded, the handler returns
+// hard build dependency - if the plugin isn't loaded, the handler returns
 // a clear error rather than failing to link.
 TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJsonObject>& Params)
 {
@@ -2142,7 +2142,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJs
 	UClass* WBClass = LoadClass<UActorComponent>(nullptr, TEXT("/Script/Water.WaterBodyComponent"));
 	if (!WBClass)
 	{
-		return MCPError(TEXT("WaterBodyComponent class not available — enable the Water plugin"));
+		return MCPError(TEXT("WaterBodyComponent class not available - enable the Water plugin"));
 	}
 
 	UActorComponent* WBComp = nullptr;
@@ -2833,7 +2833,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 
 	const bool bEnabled = OptionalBool(Params, TEXT("enabled"), true);
 	Mesh->Modify();
-	// Use the accessor pair (GetNaniteSettings/SetNaniteSettings) — direct
+	// Use the accessor pair (GetNaniteSettings/SetNaniteSettings) - direct
 	// member access to NaniteSettings is deprecated in 5.7+.
 	FMeshNaniteSettings Settings = Mesh->GetNaniteSettings();
 	Settings.bEnabled = bEnabled;
@@ -4048,7 +4048,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchTranslate(const TSharedPtr<FJsonObje
 	return MCPResult(Result);
 }
 
-// #264 — place_actors_batch: spawn many StaticMeshActors with per-instance
+// #264 - place_actors_batch: spawn many StaticMeshActors with per-instance
 // mesh + transform. Avoids the chatty place_actor-per-row pattern that filled
 // up the workaround log for procedural placement scripts.
 TSharedPtr<FJsonValue> FLevelHandlers::PlaceActorsBatch(const TSharedPtr<FJsonObject>& Params)

@@ -15,7 +15,7 @@
 #include "GameProjectGenerationModule.h"
 #include "ModuleDescriptor.h" // FModuleContextInfo + EHostType
 
-// Live Coding — Win64 only, guarded by PLATFORM_WINDOWS
+// Live Coding - Win64 only, guarded by PLATFORM_WINDOWS
 #if PLATFORM_WINDOWS
 #include "ILiveCodingModule.h"
 #endif
@@ -104,20 +104,20 @@ void FProjectHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 // Creates a new native UCLASS in the project by calling the same engine
 // API that backs the editor's "File -> New C++ Class" dialog
 // (GameProjectUtils::AddCodeToProject). Generated .h/.cpp come from the
-// engine templates — byte-for-byte identical to what a human gets via
+// engine templates - byte-for-byte identical to what a human gets via
 // the dialog. Agents can then call write_cpp_file to fill in additional
 // UPROPERTYs/UFUNCTIONs and build_project to compile.
 //
 // Params:
 //   className    required. Must be C++-valid. Prefix handled by
 //                FNewClassInfo based on parent (A for Actor, U for UObject,
-//                etc.) — omit the prefix.
+//                etc.) - omit the prefix.
 //   parentClass  optional. Path or short name. Defaults to UObject.
 //                Examples: "Actor", "ActorComponent", "/Script/UMG.UserWidget".
 //   moduleName   optional. Target game module. Defaults to the project's
 //                first module (usually the primary runtime module).
 //   classDomain  optional. "public" | "private" | "classes". Default "public".
-//   subPath      optional. Nested folder under public/private — e.g.
+//   subPath      optional. Nested folder under public/private - e.g.
 //                "Gameplay/Abilities". Default: root of the domain folder.
 TSharedPtr<FJsonValue> FProjectHandlers::CreateCppClass(const TSharedPtr<FJsonObject>& Params)
 {
@@ -133,7 +133,7 @@ TSharedPtr<FJsonValue> FProjectHandlers::CreateCppClass(const TSharedPtr<FJsonOb
 	if (!ParentClass)
 	{
 		return MCPError(FString::Printf(
-			TEXT("Could not resolve parentClass '%s' — pass a /Script/<Module>.<Class> path or a loaded native class name"),
+			TEXT("Could not resolve parentClass '%s' - pass a /Script/<Module>.<Class> path or a loaded native class name"),
 			*ParentClassStr));
 	}
 
@@ -145,7 +145,7 @@ TSharedPtr<FJsonValue> FProjectHandlers::CreateCppClass(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("Project has no C++ modules to add the class to. Add at least one code file through the editor first, or create a module manually."));
 	}
 
-	// Copy by value — AddCodeToProject_Internal may reset/repopulate the
+	// Copy by value - AddCodeToProject_Internal may reset/repopulate the
 	// module cache, which would invalidate any reference we held into
 	// the engine's TArray<FModuleContextInfo>.
 	FModuleContextInfo SelectedModule;
@@ -219,7 +219,7 @@ TSharedPtr<FJsonValue> FProjectHandlers::CreateCppClass(const TSharedPtr<FJsonOb
 	// Hand off to the engine. Returns Succeeded | InvalidInput |
 	// FailedToAddCode | FailedToHotReload. FailedToHotReload means the
 	// files were written but live-coding/hot-reload couldn't pick up the
-	// new UCLASS — a full editor restart + UBT build is needed.
+	// new UCLASS - a full editor restart + UBT build is needed.
 	FString OutHeader, OutCpp;
 	FText OutFail;
 	GameProjectUtils::EReloadStatus OutReload = GameProjectUtils::EReloadStatus::NotReloaded;
@@ -307,7 +307,7 @@ TSharedPtr<FJsonValue> FProjectHandlers::ListProjectModules(const TSharedPtr<FJs
 // ─── live_coding_compile ─────────────────────────────────────────────
 // Triggers Live Coding compile (equivalent to Ctrl+Alt+F11 in the editor).
 // Live Coding hot-patches method bodies of EXISTING classes without an
-// editor restart — fast iteration on UFUNCTION implementations. It does
+// editor restart - fast iteration on UFUNCTION implementations. It does
 // NOT reliably pick up brand-new UCLASSes; use build_project +
 // editor restart for that.
 //

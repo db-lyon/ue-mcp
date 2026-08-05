@@ -104,14 +104,14 @@ private:
 	// #619 per-element Control Rig hierarchy metadata (name, type, index, parent)
 	static TSharedPtr<FJsonValue> ReadControlRigHierarchy(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.11 — depth
+	// v0.7.11 - depth
 	static TSharedPtr<FJsonValue> SetRootMotionSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddVirtualBone(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveVirtualBone(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateAnimComposite(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListAnimModifiers(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.11 — issue fixes
+	// v0.7.11 - issue fixes
 	static TSharedPtr<FJsonValue> CreateIKRetargeter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadIKRetargeter(const TSharedPtr<FJsonObject>& Params);
 	// #701/#703: IK rig/retargeter authoring tail + batch retarget bake.
@@ -123,11 +123,11 @@ private:
 	static TSharedPtr<FJsonValue> SetAnimBlueprintSkeleton(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadBoneTrack(const TSharedPtr<FJsonObject>& Params);
 
-	// v1.0.0-rc.2 — animation authoring gaps (#153, #154)
+	// v1.0.0-rc.2 - animation authoring gaps (#153, #154)
 	static TSharedPtr<FJsonValue> SetSequenceProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BakeRootMotionFromBone(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.15 — PoseSearch (motion matching)
+	// v0.7.15 - PoseSearch (motion matching)
 	static TSharedPtr<FJsonValue> CreatePoseSearchDatabase(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetPoseSearchSchema(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddPoseSearchSequence(const TSharedPtr<FJsonObject>& Params);
@@ -152,14 +152,14 @@ private:
 	// Drive the MM node's Database from a ChooserTable (runtime database selection).
 	static TSharedPtr<FJsonValue> SetMotionMatchingChooser(const TSharedPtr<FJsonObject>& Params);
 
-	// #713 — distance-matching graph authoring
+	// #713 - distance-matching graph authoring
 	// Add a Sequence Evaluator node (explicit-time player distance matching drives).
 	static TSharedPtr<FJsonValue> AddSequenceEvaluator(const TSharedPtr<FJsonObject>& Params);
 	// Bind a thread-safe anim-node function to a node's OnUpdate/OnBecomeRelevant/
 	// OnInitialUpdate (the mechanism distance matching uses to advance the evaluator).
 	static TSharedPtr<FJsonValue> BindAnimNodeFunction(const TSharedPtr<FJsonObject>& Params);
 
-	// #419/#420 — live-actor skeletal reads + rebind + preview (moved from Level)
+	// #419/#420 - live-actor skeletal reads + rebind + preview (moved from Level)
 	static TSharedPtr<FJsonValue> GetBoneTransform(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListBones(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RebindLeaderPose(const TSharedPtr<FJsonObject>& Params);

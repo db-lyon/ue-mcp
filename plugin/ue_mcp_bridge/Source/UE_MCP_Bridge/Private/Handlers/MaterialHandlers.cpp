@@ -76,7 +76,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("delete_material_expression"), &DeleteMaterialExpression);
 	Registry.RegisterHandler(TEXT("disconnect_material_property"), &DisconnectMaterialProperty);
 
-	// v0.7.9 — depth
+	// v0.7.9 - depth
 	Registry.RegisterHandler(TEXT("duplicate_material"), &DuplicateMaterial);
 	Registry.RegisterHandler(TEXT("validate_material"), &ValidateMaterial);
 	Registry.RegisterHandler(TEXT("get_material_shader_stats"), &GetMaterialShaderStats);
@@ -2152,7 +2152,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 		}
 	}
 
-	// #185: Generic UPROPERTY fallback — set arbitrary properties on any expression node
+	// #185: Generic UPROPERTY fallback - set arbitrary properties on any expression node
 	// by property name (e.g. Noise node Levels, Quality, NoiseFunction, etc.)
 	if (!bValueSet)
 	{

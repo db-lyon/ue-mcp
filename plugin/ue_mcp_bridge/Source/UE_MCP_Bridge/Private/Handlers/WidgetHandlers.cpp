@@ -345,7 +345,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityWidget(const TSharedPtr<
 		return MCPError(TEXT("EditorUtilitySubsystem not available"));
 	}
 
-	// No rollback: destructive/external — opens a dockable tab in the editor.
+	// No rollback: destructive/external - opens a dockable tab in the editor.
 	Subsystem->SpawnAndRegisterTab(EUWidget);
 
 	auto Result = MCPSuccess();
@@ -374,7 +374,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityBlueprint(const TSharedP
 		return MCPError(TEXT("EditorUtilitySubsystem not available"));
 	}
 
-	// No rollback: destructive/external — runs an editor utility script.
+	// No rollback: destructive/external - runs an editor utility script.
 	Subsystem->TryRun(LoadedAsset);
 
 	auto Result = MCPSuccess();
@@ -701,7 +701,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	}
 	else if (WidgetBP->WidgetTree->RootWidget == nullptr)
 	{
-		// No root yet — make this the root widget
+		// No root yet - make this the root widget
 		WidgetBP->WidgetTree->RootWidget = NewWidget;
 		bIsRoot = true;
 	}
@@ -941,7 +941,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::MoveWidget(const TSharedPtr<FJsonObject>
 	if (WidgetBP->WidgetTree->RootWidget == WidgetToMove)
 	{
 		return MCPError(FString::Printf(
-			TEXT("Cannot move the root widget '%s' via move_widget — use widget(set_root) or widget(wrap_root) instead"),
+			TEXT("Cannot move the root widget '%s' via move_widget - use widget(set_root) or widget(wrap_root) instead"),
 			*WidgetName));
 	}
 
@@ -1196,7 +1196,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ListWidgetClasses(const TSharedPtr<FJson
 }
 
 // ─────────────────────────────────────────────────────────────
-// #160  Runtime widget inspection — live PIE UUserWidget probing
+// #160  Runtime widget inspection - live PIE UUserWidget probing
 // ─────────────────────────────────────────────────────────────
 namespace WidgetRuntime_Internal
 {
@@ -2236,7 +2236,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::InvokeRuntimeWidgetFunction(const TShare
 }
 
 // ─────────────────────────────────────────────────────────────
-// #161  Runtime delegate inspection — list FMulticastDelegateProperty fields on a live UUserWidget
+// #161  Runtime delegate inspection - list FMulticastDelegateProperty fields on a live UUserWidget
 // ─────────────────────────────────────────────────────────────
 TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeDelegates(const TSharedPtr<FJsonObject>& Params)
 {

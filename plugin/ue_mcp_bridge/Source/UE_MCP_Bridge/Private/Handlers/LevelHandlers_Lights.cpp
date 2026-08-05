@@ -109,7 +109,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 	};
 
 	// Parse optional mobility (#310). Default to Movable so the light renders
-	// immediately without a lighting build — that matches the "spawn this and
+	// immediately without a lighting build - that matches the "spawn this and
 	// it just works" UX MCP callers expect. SkyLight ignores this.
 	const FString MobilityStr = OptionalString(Params, TEXT("mobility"), TEXT("Movable"));
 	EComponentMobility::Type Mobility = EComponentMobility::Movable;
@@ -151,7 +151,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 	}
 	else if (USkyLightComponent* SkyComp = NewLight->FindComponentByClass<USkyLightComponent>())
 	{
-		// SkyLight has no ULightComponent — set intensity on USkyLightComponent
+		// SkyLight has no ULightComponent - set intensity on USkyLightComponent
 		// directly and recapture so the change takes effect.
 		SkyComp->SetIntensity(Intensity);
 		FLinearColor LightColor;

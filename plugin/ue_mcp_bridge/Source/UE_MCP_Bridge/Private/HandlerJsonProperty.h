@@ -351,7 +351,7 @@ namespace MCPJsonProperty
 			}
 		}
 
-		// Hard UObject ref — accept asset path
+		// Hard UObject ref - accept asset path
 		if (FObjectProperty* ObjProp = CastField<FObjectProperty>(Prop))
 		{
 			FString Path;
@@ -364,7 +364,7 @@ namespace MCPJsonProperty
 			}
 		}
 
-		// Hard UClass ref — accept class path
+		// Hard UClass ref - accept class path
 		if (FClassProperty* ClassProp = CastField<FClassProperty>(Prop))
 		{
 			FString Path;
@@ -397,7 +397,7 @@ namespace MCPJsonProperty
 			}
 		}
 
-		// Soft class ref — accept class path string, same Blueprint suffix tolerance.
+		// Soft class ref - accept class path string, same Blueprint suffix tolerance.
 		if (FSoftClassProperty* SoftClassProp = CastField<FSoftClassProperty>(Prop))
 		{
 			FString Path;
@@ -418,7 +418,7 @@ namespace MCPJsonProperty
 			}
 		}
 
-		// Soft object ref — accept path string
+		// Soft object ref - accept path string
 		if (FSoftObjectProperty* SoftObjProp = CastField<FSoftObjectProperty>(Prop))
 		{
 			FString Path;
@@ -445,7 +445,7 @@ namespace MCPJsonProperty
 			FString Prefixed = FString::Printf(TEXT("%s::%s"), *Enum->GetName(), *InStr);
 			V = Enum->GetValueByNameString(Prefixed);
 			if (V != INDEX_NONE) { OutValue = V; return true; }
-			// 3. Friendly fallback — match each enumerator's display name and
+			// 3. Friendly fallback - match each enumerator's display name and
 			//    short-form name case-insensitively. Walks all enumerators so
 			//    "center" matches HAlign_Center, "left" matches HAlign_Left,
 			//    "EHTA_Center" matches itself, etc.
@@ -620,12 +620,12 @@ namespace MCPJsonProperty
 			else if (FObjectProperty* OP = CastField<FObjectProperty>(Prop))
 			{
 				UObject* Sub = OP->GetObjectPropertyValue(ValueAddr);
-				if (!Sub) { OutError = FString::Printf(TEXT("'%s' object reference is null — cannot descend"), *Token); return false; }
+				if (!Sub) { OutError = FString::Printf(TEXT("'%s' object reference is null - cannot descend"), *Token); return false; }
 				Container = Sub;
 				ContainerStruct = Sub->GetClass();
 				Owner = Sub;
 			}
-			else { OutError = FString::Printf(TEXT("'%s' is not a struct or object reference — cannot descend"), *Token); return false; }
+			else { OutError = FString::Printf(TEXT("'%s' is not a struct or object reference - cannot descend"), *Token); return false; }
 		}
 
 		OutError = TEXT("path resolution fell through");

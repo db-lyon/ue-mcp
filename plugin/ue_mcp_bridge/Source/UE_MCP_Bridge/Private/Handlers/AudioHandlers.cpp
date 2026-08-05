@@ -347,7 +347,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJso
 		Params->TryGetNumberField(TEXT("pitchMultiplier"), Pitch);
 	}
 
-	// No rollback: destructive/external — playing a one-shot sound has no inverse.
+	// No rollback: destructive/external - playing a one-shot sound has no inverse.
 	// Replays produce a new audible event; not natural-key idempotent.
 	UGameplayStatics::PlaySoundAtLocation(World, Sound, Location, static_cast<float>(Volume), static_cast<float>(Pitch));
 

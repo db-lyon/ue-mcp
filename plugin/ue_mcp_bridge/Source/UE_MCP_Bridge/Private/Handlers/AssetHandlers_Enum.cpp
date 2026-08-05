@@ -2,7 +2,7 @@
 // FAssetHandlers - this file is a translation-unit partition, not a new class.
 // Handler registration stays in AssetHandlers.cpp::RegisterHandlers.
 //
-// #686 — UserDefinedEnum authoring. UUserDefinedEnum exposes its DisplayNameMap
+// #686 - UserDefinedEnum authoring. UUserDefinedEnum exposes its DisplayNameMap
 // for reading but has no scripting entry point for adding/renaming/removing
 // enumerators; the editor does that through FEnumEditorUtils (editor-internal).
 // These handlers wrap FEnumEditorUtils so enum-keyed systems (Chooser tables,

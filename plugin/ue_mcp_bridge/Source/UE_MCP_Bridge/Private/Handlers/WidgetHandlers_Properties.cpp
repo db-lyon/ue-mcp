@@ -518,7 +518,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 				bPropertySet = true;
 			}
 		}
-		// (#159, #364) Brush fields — ImageSize, Tint, DrawAs, Tiling, Margin, ResourceObject.
+		// (#159, #364) Brush fields - ImageSize, Tint, DrawAs, Tiling, Margin, ResourceObject.
 		// Case-insensitive so "Brush.ImageSize" works as well as "brush.imageSize".
 		else if (PropertyName.StartsWith(TEXT("brush."), ESearchCase::IgnoreCase))
 		{
@@ -661,7 +661,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 		}
 	}
 	// (#135) SizeBox overrides: UMG 5.1+ requires the Set*Override accessors so the
-	// paired bOverride_ flag is toggled on — ImportText on the raw property doesn't do this.
+	// paired bOverride_ flag is toggled on - ImportText on the raw property doesn't do this.
 	if (!bPropertySet)
 	{
 		if (USizeBox* SizeBox = Cast<USizeBox>(FoundWidget))
@@ -700,7 +700,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetProperty(const TSharedPtr<FJson
 			// #532: a UE struct-text value ("(Value=2,SizeRule=Fill)",
 			// "(Left=26,Top=22,Right=26,Bottom=24)") or a nested field path
 			// ("Size.Value", "Padding.Left") must write through the real struct,
-			// not the positional comma-parsers below — those split struct text on
+			// not the positional comma-parsers below - those split struct text on
 			// commas and silently wrote 0 to the numeric fields while reporting
 			// success. Resolve the path rooted at the SLOT and ImportText into the
 			// struct so every field persists. A genuine parse failure is surfaced

@@ -342,7 +342,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 		{
 			auto Result = MCPSuccess();
 			Result->SetStringField(TEXT("warning"), FString::Printf(TEXT("Skeleton not found: %s, importing without skeleton target"), *SkeletonPath));
-			// Continue with import — don't return here, just note the warning
+			// Continue with import - don't return here, just note the warning
 		}
 	}
 
@@ -773,7 +773,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 	// Self-inverse rollback. We store enum values as numeric strings for the
 	// inverse call; the handler accepts strings so we'd lose the mapping back
 	// to string keys. For safety, emit rollback only when simple bool props
-	// changed — compression/LOD group changes are not reversed here.
+	// changed - compression/LOD group changes are not reversed here.
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), AssetPath);
 	bool bHaveReversibleField = false;
@@ -1756,7 +1756,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
 	Result->SetStringField(TEXT("message"), TEXT("DataTable reimported successfully from JSON"));
-	// No rollback: destructive/external — reimport replaces table contents.
+	// No rollback: destructive/external - reimport replaces table contents.
 
 	return MCPResult(Result);
 }
@@ -2544,7 +2544,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Reimport failed -- check that the asset has a valid source file"));
 	}
-	// No rollback: destructive/external — reimport pulls fresh from source file.
+	// No rollback: destructive/external - reimport pulls fresh from source file.
 
 	return MCPResult(Result);
 }
@@ -2553,7 +2553,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 
 
 // ---------------------------------------------------------------------------
-// export_asset — Export an asset to disk (e.g. Texture2D → PNG, StaticMesh → FBX)
+// export_asset - Export an asset to disk (e.g. Texture2D → PNG, StaticMesh → FBX)
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>& Params)
 {
@@ -2577,7 +2577,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 		PlatformFile.CreateDirectoryTree(*OutputDir);
 	}
 
-	// Use UE's AssetExportTask — same as unreal.AssetExportTask in Python
+	// Use UE's AssetExportTask - same as unreal.AssetExportTask in Python
 	UAssetExportTask* ExportTask = NewObject<UAssetExportTask>();
 	ExportTask->Object = Asset;
 	ExportTask->Filename = OutputPath;

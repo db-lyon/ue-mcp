@@ -303,7 +303,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
-	// #152: accept any JSON value type — scalars, numbers, booleans, or structured
+	// #152: accept any JSON value type - scalars, numbers, booleans, or structured
 	// objects like {x,y,z} for FVector. Previous impl only accepted strings, so
 	// RelativeLocation etc. couldn't be set without pre-formatting "(X=1,Y=2,Z=3)".
 	TSharedPtr<FJsonValue> ValueField = Params->TryGetField(TEXT("value"));
@@ -956,7 +956,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableDefault(const TSharedPtr<F
 }
 
 // ===========================================================================
-// v0.7.11 — Blueprint authoring depth
+// v0.7.11 - Blueprint authoring depth
 // ===========================================================================
 
 
@@ -1058,14 +1058,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 	return MCPResult(Result);
 }
 
-// ─── #128 get_component_property — inherited-aware single-prop read ──
+// ─── #128 get_component_property - inherited-aware single-prop read ──
 // Params: assetPath, componentName, propertyName
 // Returns the effective default for the given child BP: the ICH override
 // if one exists, otherwise the parent template value. Supports dotted
 // property paths ("RelativeLocation.X").
 
 
-// ─── #128 get_component_property — inherited-aware single-prop read ──
+// ─── #128 get_component_property - inherited-aware single-prop read ──
 // Params: assetPath, componentName, propertyName
 // Returns the effective default for the given child BP: the ICH override
 // if one exists, otherwise the parent template value. Supports dotted

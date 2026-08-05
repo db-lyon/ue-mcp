@@ -113,13 +113,13 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_blueprint_execution_flow"), &GetBlueprintExecutionFlow);
 	Registry.RegisterHandler(TEXT("get_blueprint_dependencies"), &GetBlueprintDependencies);
 
-	// v0.7.11 — BP authoring depth
+	// v0.7.11 - BP authoring depth
 	Registry.RegisterHandler(TEXT("duplicate_blueprint"), &DuplicateBlueprint);
 	Registry.RegisterHandler(TEXT("add_local_variable"), &AddLocalVariable);
 	Registry.RegisterHandler(TEXT("list_local_variables"), &ListLocalVariables);
 	Registry.RegisterHandler(TEXT("validate_blueprint"), &ValidateBlueprint);
 
-	// v0.7.11 — issue fixes
+	// v0.7.11 - issue fixes
 	Registry.RegisterHandler(TEXT("read_component_properties"), &ReadComponentProperties);
 	Registry.RegisterHandler(TEXT("read_node_property"), &ReadNodeProperty);
 	Registry.RegisterHandler(TEXT("reparent_component"), &ReparentComponent);
@@ -127,7 +127,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("flush_inheritable_component_handler"), &FlushInheritableComponentHandler);
 	Registry.RegisterHandler(TEXT("set_actor_tick_settings"), &SetActorTickSettings);
 
-	// v0.7.12 — issue #128 — single-property read (inherited-aware)
+	// v0.7.12 - issue #128 - single-property read (inherited-aware)
 	Registry.RegisterHandler(TEXT("get_blueprint_component_property"), &GetComponentProperty);
 
 	// v0.7.17 issue #130: bulk graph node import via T3D copy/paste
@@ -141,7 +141,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// issue #195: run construction script and inspect resulting components
 	Registry.RegisterHandler(TEXT("run_construction_script"), &RunConstructionScript);
 
-	// v1.0.0-rc.15 — agent-friendly BP authoring
+	// v1.0.0-rc.15 - agent-friendly BP authoring
 	Registry.RegisterHandler(TEXT("compile_blueprints"), &CompileBlueprints);
 	Registry.RegisterHandler(TEXT("cleanup_graph"), &CleanupGraph);
 	Registry.RegisterHandler(TEXT("connect_pins_batch"), &ConnectPinsBatch);
@@ -150,7 +150,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 }
 
 // ---------------------------------------------------------------------------
-// v0.7.8 STUBS — agent-ergonomics actions (Milestone A)
+// v0.7.8 STUBS - agent-ergonomics actions (Milestone A)
 // Bodies intentionally minimal; flesh out one per follow-up patch.
 // ---------------------------------------------------------------------------
 
@@ -833,7 +833,7 @@ FEdGraphPinType FBlueprintHandlers::MakePinType(const FString& TypeStr)
 	}
 	else
 	{
-		// Try short-name enum lookup before the struct resolver — many engine
+		// Try short-name enum lookup before the struct resolver - many engine
 		// enums (EAttachmentRule, EMovementMode) match the convention E* but
 		// would otherwise fall through and return an empty PinType. (#286)
 		auto TryResolveEnumShort = [&](const FString& Name) -> UEnum*
@@ -912,7 +912,7 @@ FEdGraphPinType FBlueprintHandlers::MakePinType(const FString& TypeStr)
 		{
 			// (#140) Last-ditch: treat as a bare class name (e.g. "Actor", "Pawn", "PlayerController").
 		}
-		// else: PinCategory remains NAME_None — caller must check for unresolved type (#181)
+		// else: PinCategory remains NAME_None - caller must check for unresolved type (#181)
 	}
 
 	return PinType;
@@ -1446,7 +1446,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("Component class not found: %s. Try the short name (e.g. 'StaticMeshComponent') or the full path ('/Script/Engine.StaticMeshComponent')."), *ComponentClass));
 	}
 
-	// #115: optional parentComponent — makes this component a child in the SCS hierarchy
+	// #115: optional parentComponent - makes this component a child in the SCS hierarchy
 	const FString ParentComponent = OptionalString(Params, TEXT("parentComponent"));
 
 	// Try using SubobjectDataSubsystem (UE5 method)

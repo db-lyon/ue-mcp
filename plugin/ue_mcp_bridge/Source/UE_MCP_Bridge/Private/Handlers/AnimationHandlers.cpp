@@ -54,11 +54,11 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 
-// IK Rig (#93) — use subdirectory path for UE 5.7
+// IK Rig (#93) - use subdirectory path for UE 5.7
 #include "Rig/IKRigDefinition.h"
 #include "RigEditor/IKRigController.h"
 
-// Control Rig (#11) — ControlRigBlueprint removed in UE 5.7, use reflection
+// Control Rig (#11) - ControlRigBlueprint removed in UE 5.7, use reflection
 #include "ControlRig.h"
 #include "Rigs/RigHierarchy.h"
 
@@ -143,24 +143,24 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_control_rig_graph"), &ReadControlRigGraph);
 	Registry.RegisterHandler(TEXT("read_control_rig_hierarchy"), &ReadControlRigHierarchy);
 
-	// v0.7.11 — depth
+	// v0.7.11 - depth
 	Registry.RegisterHandler(TEXT("set_root_motion_settings"), &SetRootMotionSettings);
 	Registry.RegisterHandler(TEXT("add_virtual_bone"), &AddVirtualBone);
 	Registry.RegisterHandler(TEXT("remove_virtual_bone"), &RemoveVirtualBone);
 	Registry.RegisterHandler(TEXT("create_anim_composite"), &CreateAnimComposite);
 	Registry.RegisterHandler(TEXT("list_anim_modifiers"), &ListAnimModifiers);
 
-	// v0.7.11 — issue fixes
+	// v0.7.11 - issue fixes
 	Registry.RegisterHandler(TEXT("create_ik_retargeter"), &CreateIKRetargeter);
 	Registry.RegisterHandler(TEXT("read_ik_retargeter"), &ReadIKRetargeter);
 	Registry.RegisterHandler(TEXT("set_anim_blueprint_skeleton"), &SetAnimBlueprintSkeleton);
 	Registry.RegisterHandler(TEXT("read_bone_track"), &ReadBoneTrack);
 
-	// v1.0.0-rc.2 — animation authoring gaps (#153, #154)
+	// v1.0.0-rc.2 - animation authoring gaps (#153, #154)
 	Registry.RegisterHandler(TEXT("set_sequence_properties"), &SetSequenceProperties);
 	Registry.RegisterHandler(TEXT("bake_root_motion_from_bone"), &BakeRootMotionFromBone);
 
-	// v0.7.15 — PoseSearch (motion matching)
+	// v0.7.15 - PoseSearch (motion matching)
 	Registry.RegisterHandler(TEXT("create_pose_search_database"), &CreatePoseSearchDatabase);
 	Registry.RegisterHandler(TEXT("set_pose_search_schema"), &SetPoseSearchSchema);
 	Registry.RegisterHandler(TEXT("add_pose_search_sequence"), &AddPoseSearchSequence);
@@ -181,11 +181,11 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_pose_history_node"), &AddPoseHistoryNode);
 	Registry.RegisterHandler(TEXT("set_motion_matching_chooser"), &SetMotionMatchingChooser);
 
-	// #713 — distance-matching graph authoring
+	// #713 - distance-matching graph authoring
 	Registry.RegisterHandler(TEXT("add_sequence_evaluator"), &AddSequenceEvaluator);
 	Registry.RegisterHandler(TEXT("bind_anim_node_function"), &BindAnimNodeFunction);
 
-	// #419/#420 — live-actor skeletal reads + rebind + preview (moved from Level)
+	// #419/#420 - live-actor skeletal reads + rebind + preview (moved from Level)
 	Registry.RegisterHandler(TEXT("get_bone_transform"), &GetBoneTransform);
 	Registry.RegisterHandler(TEXT("list_bones"), &ListBones);
 	Registry.RegisterHandler(TEXT("rebind_leader_pose"), &RebindLeaderPose);
@@ -1010,7 +1010,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 
 	FString NotifyClassName = OptionalString(Params, TEXT("notifyClass"));
 
-	// Load the animation asset — could be a montage or a sequence
+	// Load the animation asset - could be a montage or a sequence
 	UAnimSequenceBase* AnimAsset = LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!AnimAsset)
 	{
@@ -1662,7 +1662,7 @@ static void SetMontageSequenceLength(UAnimMontage* Montage, float NewLength)
 }
 
 // ---------------------------------------------------------------------------
-// set_montage_sequence — Replace the animation sequence in a montage's slot track
+// set_montage_sequence - Replace the animation sequence in a montage's slot track
 // Params: assetPath, animSequencePath, slotIndex? (default 0)
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<FJsonObject>& Params)
@@ -1767,7 +1767,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 }
 
 // ---------------------------------------------------------------------------
-// set_montage_properties — Set montage properties (duration, rate, blending)
+// set_montage_properties - Set montage properties (duration, rate, blending)
 // Params: assetPath, sequenceLength?, rateScale?, blendIn?, blendOut?
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr<FJsonObject>& Params)
@@ -1790,7 +1790,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 	TArray<FString> Modified;
 	bool bAnyChanged = false;
 
-	// sequenceLength — update via property reflection (SequenceLength is protected)
+	// sequenceLength - update via property reflection (SequenceLength is protected)
 	double SeqLen;
 	const bool bHasSeqLen = Params->TryGetNumberField(TEXT("sequenceLength"), SeqLen);
 	if (bHasSeqLen)
@@ -2521,7 +2521,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListControlRigVariables(const TShared
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	// In UE 5.7, ControlRigBlueprint was removed — load as a generic UBlueprint
+	// In UE 5.7, ControlRigBlueprint was removed - load as a generic UBlueprint
 	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
 	UBlueprint* CRBlueprint = Cast<UBlueprint>(LoadedAsset);
 	if (!CRBlueprint)
@@ -2618,7 +2618,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigHierarchy(const TShared
 }
 
 // ===========================================================================
-// v0.7.11 — Animation depth
+// v0.7.11 - Animation depth
 // ===========================================================================
 
 TSharedPtr<FJsonValue> FAnimationHandlers::SetRootMotionSettings(const TSharedPtr<FJsonObject>& Params)

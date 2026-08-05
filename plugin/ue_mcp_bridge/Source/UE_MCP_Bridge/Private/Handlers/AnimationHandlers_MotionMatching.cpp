@@ -819,7 +819,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 	return MCPResult(Res);
 }
 
-// ═══ #713 — distance-matching graph authoring ═════════════════════════════
+// ═══ #713 - distance-matching graph authoring ═════════════════════════════
 // Distance matching drives a Sequence Evaluator's explicit time each frame from
 // a thread-safe anim-node function. blueprint(search_node_types) can't surface
 // the evaluator node, and there was no way to bind the update function. These two

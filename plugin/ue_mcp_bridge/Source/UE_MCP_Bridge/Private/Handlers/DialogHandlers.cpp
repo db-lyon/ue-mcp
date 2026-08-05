@@ -100,7 +100,7 @@ EAppReturnType::Type FDialogHandlers::HandleModalDialog(EAppMsgType::Type MsgTyp
 		return UserAnswer;
 	}
 
-	// Bridge-initiated dialog with no matching policy — synthesize a safe default
+	// Bridge-initiated dialog with no matching policy - synthesize a safe default
 	// so the in-flight request does not block forever.
 	UE_LOG(LogMCPBridge, Log, TEXT("[UE-MCP] Bridge dialog auto-defaulted (no policy match): title='%s' message='%s'"),
 		*TitleStr, *MessageStr.Left(200));

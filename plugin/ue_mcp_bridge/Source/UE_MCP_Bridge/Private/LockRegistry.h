@@ -19,7 +19,7 @@ struct FMCPAssetLock
 };
 
 /**
- * Per-asset exclusive lock registry, living in the editor bridge — the single
+ * Per-asset exclusive lock registry, living in the editor bridge - the single
  * shared resource every agent connects to. A lock registry on the Node side
  * would only serialize one agent process; because every agent's Node server
  * talks to this one bridge, the registry has to live here to serialize across
@@ -40,7 +40,7 @@ public:
 	static FMCPLockRegistry& Get();
 
 	/** Canonical key: trimmed, forward-slashed, ObjectPath ("/Game/Foo.Foo")
-	 *  collapsed to PackagePath ("/Game/Foo"), lowercased — so every spelling
+	 *  collapsed to PackagePath ("/Game/Foo"), lowercased - so every spelling
 	 *  of the same asset contends for one lock. */
 	static FString NormalizeKey(const FString& AssetPath);
 

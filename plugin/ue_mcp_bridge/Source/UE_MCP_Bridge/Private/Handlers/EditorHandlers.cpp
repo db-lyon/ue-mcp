@@ -389,7 +389,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ExecutePython(const TSharedPtr<FJsonObje
 	return MCPResult(Result);
 }
 
-// #142 — Run a Python script file on disk with __file__/__name__ context populated.
+// #142 - Run a Python script file on disk with __file__/__name__ context populated.
 // Mirrors the execute_python return shape. Use this instead of execute_python
 // when you want to invoke a checked-in .py file without wrapping it in `exec()`.
 TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObject>& Params)

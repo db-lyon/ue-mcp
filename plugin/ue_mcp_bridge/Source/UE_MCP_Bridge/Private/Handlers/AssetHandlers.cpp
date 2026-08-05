@@ -78,7 +78,7 @@
 // Engine-shipped content (/Engine/, /Script/, /Memory/, /Temp/) and Verse
 // runtime classes must never be mutated through the bridge. UE's
 // UEditorAssetLibrary::DeleteAsset will happily destroy files under
-// <engineRoot>/Engine/Content/ if not stopped — verified the hard way.
+// <engineRoot>/Engine/Content/ if not stopped - verified the hard way.
 // Apply this check to every handler that deletes, moves, or renames an
 // asset. Plugin content roots (mounted under /<PluginName>/) are NOT
 // protected here; per-project plugin content is expected to be writable.
@@ -265,11 +265,11 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_stringtable_entry"), &RemoveStringTableEntry);
 	Registry.RegisterHandler(TEXT("import_stringtable"), &ImportStringTable);
 
-	// v0.7.8 stubs — FTS5-backed asset search
+	// v0.7.8 stubs - FTS5-backed asset search
 	Registry.RegisterHandler(TEXT("search_assets_fts"), &SearchAssetsFTS);
 	Registry.RegisterHandler(TEXT("reindex_assets_fts"), &ReindexAssetsFTS);
 
-	// v0.7.19 #150 — AssetRegistry referencers
+	// v0.7.19 #150 - AssetRegistry referencers
 	Registry.RegisterHandler(TEXT("get_asset_referencers"), &GetReferencers);
 	Registry.RegisterHandler(TEXT("get_asset_dependencies"), &GetDependencies);
 	Registry.RegisterHandler(TEXT("list_skeleton_bones"), &ListSkeletonBones);
@@ -278,11 +278,11 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_cloth_config"), &SetClothConfig);
 	Registry.RegisterHandler(TEXT("get_primary_asset_ids"), &GetPrimaryAssetIds);
 
-	// v1.0.0-rc.2 — #155 (asset gaps)
+	// v1.0.0-rc.2 - #155 (asset gaps)
 	Registry.RegisterHandler(TEXT("set_sk_material_slots"), &SetSkeletalMeshMaterialSlots);
 	Registry.RegisterHandler(TEXT("diagnose_registry"), &DiagnoseRegistry);
 
-	// v1.0.0-rc.3 — #177, #192, #193
+	// v1.0.0-rc.3 - #177, #192, #193
 	Registry.RegisterHandler(TEXT("get_mesh_bounds"), &GetMeshBounds);
 	Registry.RegisterHandler(TEXT("get_mesh_info"), &GetMeshInfo);
 	Registry.RegisterHandler(TEXT("read_import_sources"), &ReadImportSources);
@@ -293,7 +293,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("delete_folder"), &DeleteFolder);
 	Registry.RegisterHandler(TEXT("migrate"), &MigrateAssets);
 
-	// #686 — UserDefinedEnum authoring
+	// #686 - UserDefinedEnum authoring
 	Registry.RegisterHandler(TEXT("create_user_defined_enum"), &CreateUserDefinedEnum);
 	Registry.RegisterHandler(TEXT("list_enum_values"), &ListEnumValues);
 	Registry.RegisterHandler(TEXT("edit_user_defined_enum"), &EditUserDefinedEnum);
@@ -305,7 +305,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 }
 
 // ---------------------------------------------------------------------------
-// v0.7.8 STUBS — FTS5-backed asset index (Milestone A)
+// v0.7.8 STUBS - FTS5-backed asset index (Milestone A)
 // Strategy:
 //  - Index lives at <project>/Saved/MCP/asset_index.sqlite (SQLite with FTS5).
 //  - Columns: name, path, class, tags, referencers (tokenized).
@@ -418,7 +418,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SearchAssetsFTS(const TSharedPtr<FJsonObj
 
 TSharedPtr<FJsonValue> FAssetHandlers::ReindexAssetsFTS(const TSharedPtr<FJsonObject>& Params)
 {
-	// No persistent index yet — ranked search runs live against the asset registry,
+	// No persistent index yet - ranked search runs live against the asset registry,
 	// which keeps itself current. This endpoint forces a registry rescan so newly
 	// added assets on disk become searchable immediately.
 	const FString Directory = OptionalString(Params, TEXT("directory"), TEXT("/Game"));
@@ -746,7 +746,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 	Params->TryGetStringField(TEXT("valueFormat"), ValueFormat);
 	const bool bJsonValues = ValueFormat.Equals(TEXT("json"), ESearchCase::IgnoreCase);
 
-	// Helper lambda to export a property value as string (#48 — reads arrays, structs, sub-objects)
+	// Helper lambda to export a property value as string (#48 - reads arrays, structs, sub-objects)
 	auto ExportPropertyValue = [](FProperty* Prop, const void* Container, UObject* Outer) -> FString
 	{
 		FString ValueStr;
@@ -1809,14 +1809,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonOb
 	return MCPResult(Result);
 }
 
-// ─── #128 item 6 — bulk_rename_assets ───────────────────────────────
+// ─── #128 item 6 - bulk_rename_assets ───────────────────────────────
 // Scene-referenced assets are expensive to rename one-by-one because each
 // individual rename forces a redirector-fixup / level-reference-update
 // pass across the whole project. At batches of 10-15 this can crash the
 // editor (observed on the user's Vale project).
 //
 // Content Browser drag-moves use IAssetTools::RenameAssets() with an
-// array of FAssetRenameData — that collapses every rename into a single
+// array of FAssetRenameData - that collapses every rename into a single
 // transaction with one redirector-fixup pass. This handler mirrors that
 // pattern.
 //
@@ -1939,7 +1939,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkRename(const TSharedPtr<FJsonObject>&
 	IAssetTools& AssetTools = AssetToolsModule.Get();
 
 	// RenameAssets wraps all renames in a single transaction + one
-	// redirector-fixup pass — the same op the Content Browser performs on
+	// redirector-fixup pass - the same op the Content Browser performs on
 	// drag-and-drop. Returns true if every rename succeeded.
 	bool bOk = AssetTools.RenameAssets(BatchRenames);
 
@@ -1955,7 +1955,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkRename(const TSharedPtr<FJsonObject>&
 		const FAssetRenameData& Data = BatchRenames[Idx++];
 		// A rename is considered to have succeeded if the asset now lives
 		// at the destination. When bOk==false, some entries may still have
-		// landed — check per-item.
+		// landed - check per-item.
 		const FString DestFullPath = FString::Printf(TEXT("%s/%s.%s"),
 			*Data.NewPackagePath, *Data.NewName, *Data.NewName);
 		if (UEditorAssetLibrary::DoesAssetExist(DestFullPath))
@@ -2002,7 +2002,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataAsset(const TSharedPtr<FJsonObj
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 	UObject* NewAsset = Created.Asset;
 
-	// Optional properties object — use recursive JSON-to-property setter so that
+	// Optional properties object - use recursive JSON-to-property setter so that
 	// TArray<FStruct> with nested UObject refs, FGameplayTag, etc. all work (#196, #199).
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 	int32 SetCount = 0;
@@ -2626,7 +2626,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::MoveFolder(const TSharedPtr<FJsonObject>&
 }
 
 // ---------------------------------------------------------------------------
-// #212 — create empty content browser folder under /Game (or any mount point).
+// #212 - create empty content browser folder under /Game (or any mount point).
 // Accepts a single 'path' or a 'paths' array; returns per-path created/existed.
 // ---------------------------------------------------------------------------
 TSharedPtr<FJsonValue> FAssetHandlers::CreateFolder(const TSharedPtr<FJsonObject>& Params)

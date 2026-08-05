@@ -896,7 +896,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetPieTimeScale(const TSharedPtr<FJsonOb
 	UWorld* World = GetPIEWorld();
 	if (!World)
 	{
-		return MCPError(TEXT("No PIE/Game world active — start PIE first"));
+		return MCPError(TEXT("No PIE/Game world active - start PIE first"));
 	}
 
 	AWorldSettings* WS = World->GetWorldSettings();

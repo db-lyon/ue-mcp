@@ -55,7 +55,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::IsClassLoaded(const TSharedPtr<FJson
 	FString ClassName;
 	if (auto Err = RequireStringAlt(Params, TEXT("className"), TEXT("class"), ClassName)) return Err;
 
-	// FindClass does NOT load — a hit means the class is already in memory.
+	// FindClass does NOT load - a hit means the class is already in memory.
 	UClass* Found = FindClass(ClassName);
 	bool bLoaded = Found != nullptr;
 	bool bExists = bLoaded;
@@ -859,7 +859,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateEnum(const TSharedPtr<FJsonObj
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 	UUserDefinedEnum* Enum = Created.Asset;
 
-	// Optional entries[] — array of strings or {name, displayName?}.
+	// Optional entries[] - array of strings or {name, displayName?}.
 	const TArray<TSharedPtr<FJsonValue>>* EntriesArr = nullptr;
 	int32 Added = 0;
 	if (Params->TryGetArrayField(TEXT("entries"), EntriesArr) && EntriesArr)

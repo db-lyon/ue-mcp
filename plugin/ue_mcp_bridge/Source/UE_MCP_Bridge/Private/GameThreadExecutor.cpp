@@ -48,7 +48,7 @@ namespace
 	// Shared between the calling thread (which may abandon the wait on
 	// timeout) and the game-thread ticker lambda (which completes the work).
 	// Captured by value into the lambda so its lifetime extends past the
-	// caller's stack frame — critical when the caller times out on a long
+	// caller's stack frame - critical when the caller times out on a long
 	// Python script. Without this shared state, the ticker would later
 	// write through dangling references and trigger a pool-returned event,
 	// producing EXCEPTION_ACCESS_VIOLATION (issue #128 item 5).
@@ -108,7 +108,7 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 	// if the caller abandons the wait.
 	auto RunOnce = [State, Handler, Params]()
 	{
-		// Caller already gave up — skip the work entirely. Python may
+		// Caller already gave up - skip the work entirely. Python may
 		// still be mid-execution; we cannot safely cancel it, but we
 		// can avoid starting it.
 		if (State->bAbandoned)
@@ -149,7 +149,7 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 		FTickerDelegate::CreateLambda([RunOnce](float) -> bool
 		{
 			RunOnce();
-			return false; // one-shot — do not re-tick
+			return false; // one-shot - do not re-tick
 		})
 	);
 

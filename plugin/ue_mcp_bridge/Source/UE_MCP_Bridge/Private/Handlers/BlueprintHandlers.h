@@ -55,24 +55,24 @@ private:
 	static TSharedPtr<FJsonValue> AddFunctionParameter(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetVariableDefault(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.8 — agent-ergonomics additions (stubs)
+	// v0.7.8 - agent-ergonomics additions (stubs)
 	static TSharedPtr<FJsonValue> ReadBlueprintGraphSummary(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetBlueprintExecutionFlow(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetBlueprintDependencies(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.11 — BP authoring depth
+	// v0.7.11 - BP authoring depth
 	static TSharedPtr<FJsonValue> DuplicateBlueprint(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddLocalVariable(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListLocalVariables(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ValidateBlueprint(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.11 — issue fixes
+	// v0.7.11 - issue fixes
 	static TSharedPtr<FJsonValue> ReadComponentProperties(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadNodeProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReparentComponent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetActorTickSettings(const TSharedPtr<FJsonObject>& Params);
 
-	// v0.7.12 — issue #128 — read single component property (inherited-aware)
+	// v0.7.12 - issue #128 - read single component property (inherited-aware)
 	static TSharedPtr<FJsonValue> GetComponentProperty(const TSharedPtr<FJsonObject>& Params);
 
 	// v0.7.17 issue #130: bulk graph node import via T3D copy/paste
@@ -91,7 +91,7 @@ private:
 	// issue #195: run construction script and inspect resulting components
 	static TSharedPtr<FJsonValue> RunConstructionScript(const TSharedPtr<FJsonObject>& Params);
 
-	// v1.0.0-rc.15 — agent-friendly BP authoring (#284 #285 #267 #277)
+	// v1.0.0-rc.15 - agent-friendly BP authoring (#284 #285 #267 #277)
 	static TSharedPtr<FJsonValue> CompileBlueprints(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CleanupGraph(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ConnectPinsBatch(const TSharedPtr<FJsonObject>& Params);
