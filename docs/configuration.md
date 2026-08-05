@@ -188,9 +188,35 @@ Or per session, without editing the file: `UE_MCP_CONTEXT_STRATEGY=micro` (the e
 
 ## Bridge Connection
 
-The C++ plugin listens on a **per-project WebSocket port** derived from a hash of the project root path (in the IANA ephemeral range `49152-65535`). Deriving the port from the path means two checkouts of the same project - or several unrelated projects - on one machine each get a stable, launch-order-independent port, so their MCP clients never collide on a single fixed number. The Node client and the C++ bridge compute the identical value independently, and the bridge also publishes the actual bound port to `<project>/Saved/UE_MCP_Bridge/port.json` as the authoritative source (if the port is already taken, the bridge probes upward and the lockfile records where it really landed). The legacy fixed port `9877` remains the fallback when no project root is known. Pin an explicit port with `UE_MCP_PORT` or `bridge.port` in `ue-mcp.yml`. The MCP server auto-connects on startup and reconnects every 15 seconds if the connection drops.
+The C++ plugin listens on a **per-project WebSocket port** derived from a hash of the project root path (in the IANA ephemeral range `49152-65535`). Deriving the port from the path means two checkouts of the same project - or several unrelated projects - on one machine each get a stable, launch-order-independent port, so their MCP clients never collide on a single fixed number. The Node client and the C++ bridge compute the identical value independently, and the bridge also publishes the actual bound port to `<project>/Saved/UE_MCP_Bridge/port.json` as the authoritative source (if the port is already taken, the bridge probes upward and the lockfile records where it really landed). The legacy fixed port `9877` remains the fallback when no project root is known. The MCP server auto-connects on startup and reconnects every 15 seconds if the connection drops.
 
 On Windows the listening socket is claimed with `SO_EXCLUSIVEADDRUSE`, so a second editor of the same project cannot bind the same port. It walks upward instead and publishes where it landed, which is what lets two editors of one project coexist without their clients reaching the wrong one.
+
+### Pinning the port
+
+Pin an explicit port with `bridge.port` in `ue-mcp.yml`:
+
+```yaml
+ue-mcp:
+  bridge:
+    port: 50123
+```
+
+**Both halves honour it.** The client reads the key when it chooses where to connect, and the editor-side plugin reads it when it chooses where to listen, so a pinned project has one number on both ends (#819). Precedence is identical on both sides, highest first:
+
+| Rank | Source | Notes |
+|------|--------|-------|
+| 1 | `-MCPPort=NNNN` on the editor command line, or an explicit port argument to the client | Per launch |
+| 2 | `UE_MCP_PORT` | Per environment. Applies to every project the shell starts, which is why it is the wrong tool for pinning one project |
+| 3 | `bridge.port` in the config layers | Per project, and the one to reach for |
+| 4 | The port derived from the project root path | The default when nothing is pinned |
+
+The plugin reads `bridge.port` from the same layered files as the client, and honours the same winner: `~/.ue-mcp/config.yml`, then `<project>/ue-mcp.yml`, then `<project>/ue-mcp.{env}.yml` when `UE_MCP_ENV` is set, then `<project>/ue-mcp.local.yml`. See [Config layering](config-file.md#config-layering).
+
+Two things to know about a pinned port:
+
+- **The lockfile still wins at connect time.** A pin is a request, not a guarantee. If something else already holds the port, the bridge walks upward, binds what it can, logs a warning naming the port you asked for and the one it took, and publishes the port it actually bound. The client reads `port.json`, so it follows.
+- **A value the plugin cannot use is announced, not applied.** A `bridge.port` that is not a whole number in `1-65535` is logged as a warning and the derived port is used instead. The plugin reads this one key with a small purpose-built reader rather than a full YAML parser (Unreal ships none, and one integer is not worth a dependency), so it handles plain nested keys and refuses anything more exotic. Written the ordinary way, as in the example above, it is read. Written as a flow mapping (`bridge: { port: 50123 }`) or with anchors, it is not, and the editor log says so.
 
 ### Which editor lifecycle actions act on
 

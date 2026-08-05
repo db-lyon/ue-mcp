@@ -137,6 +137,25 @@ The editor publishes that file while its bridge is listening and removes it on a
 
 `start_editor` refusing with "Editor is already running for this project" is the same targeting rule from the other side: it names the PID, and that PID has this project's `.uproject` on its command line. Editors for other projects and headless shards never trigger it.
 
+### The editor is not listening on the port I pinned
+
+**Symptom:** `ue-mcp.yml` sets `bridge.port`, but the editor bound something else, or the client cannot reach it.
+
+Search the editor's Output Log for `LogMCPBridge` and the line naming the base port. It says where the number came from, one of `-MCPPort command line`, `UE_MCP_PORT environment variable`, `bridge.port in <file>`, or `derived from the project path`. That one line tells you which of the following happened.
+
+- **Something outranks the config.** `-MCPPort` and `UE_MCP_PORT` both win over `bridge.port`, on the client and in the editor alike. Clear the one that is set.
+- **The port was taken.** The log carries a warning naming the port that was asked for and the one bound instead. The bridge publishes the port it actually bound to `port.json` and the client follows it, so the connection works; the pin simply did not survive. Free the port, or pin a different one.
+- **The value was rejected.** A `bridge.port` that is not a whole number in `1-65535` is warned about by name and the derived port is used.
+- **The key is written in a form the plugin does not read.** The plugin reads this single key without a full YAML parser and warns when a file is beyond what it models. Write it as plain nested keys:
+
+    ```yaml
+    ue-mcp:
+      bridge:
+        port: 50123
+    ```
+
+    A flow mapping (`bridge: { port: 50123 }`), an anchor, or an alias is read by the client and not by the plugin, which is the one way the two can still disagree.
+
 ### A call ran in the wrong editor
 
 Only possible with more than one editor session registered. Start with `project(action="list_editors")`: it reports every session, the bridge port each resolved to, and which one untargeted calls fall through to.
