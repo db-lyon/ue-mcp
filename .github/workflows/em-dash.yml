@@ -1,0 +1,107 @@
+name: Em dash
+
+# The style rule that bans U+2014 used to live only in CLAUDE.md, which made
+# every commit a memory test. This workflow is the enforcement point.
+#
+# It runs on every branch push, not just on pull requests and main. The gate
+# shipped covering pull requests and main only, and the two commits that put
+# the character back into the tree during the very cleanup pass that removed it
+# were both feature-branch pushes. They were caught after landing on main
+# rather than at push time. A push trigger is the earliest moment CI can see
+# the work at all, so that is where the gate belongs.
+#
+# It lives in its own workflow rather than in ci.yml because ci.yml's push
+# trigger deliberately stays on main: widening it would run the install,
+# type-check, unit tier and audit on every branch push, a duplicate of the same
+# work the pull request run already does. This job installs nothing and needs
+# nothing, so running it everywhere is close to free.
+on:
+  push:
+    # Branches only. Listing `branches` at all excludes tag pushes, which
+    # matters because the publish job pushes a vX.Y.Z tag for every release and
+    # that tag points at a commit main already scanned.
+    branches: ["**"]
+  pull_request:
+    # Same-repo branches are already covered by the push trigger above. This is
+    # here for pull requests from forks, whose pushes never reach this repo.
+    branches: [main]
+
+# One run per head branch. A push to a branch that has an open pull request
+# fires both triggers, and three pushes in a row fire three times; without this
+# they would all run to completion and report the same answer.
+#
+# The identity is the head branch plus the repository it lives in, so a fork
+# whose branch happens to share a name with one here does not cancel it.
+#
+# Cancelling either of the two runs for a push is safe because they are
+# equivalent: both scan the whole tracked tree, and the commit message scan
+# below derives its range from whichever event it got. Main is the exception
+# and never cancels. Superseding a main run would drop the commit messages in
+# its range, which no later run's range covers again.
+concurrency:
+  group: em-dash-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  em_dash:
+    # Deliberately not in `needs:` for the publish job in ci.yml. A style
+    # finding on main should be visible and fixed, not able to hold a release
+    # hostage mid-pipeline.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit message scan needs both ends of the pushed or proposed
+          # range, and the new-branch fallback needs origin/main.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # No install step: the checker uses only node builtins, on purpose, so
+      # this gate keeps working when the dependency tree is broken.
+      - name: Tracked files
+        run: node scripts/check-em-dashes.mjs
+
+      - name: Commit messages
+        env:
+          EVENT: ${{ github.event_name }}
+          # Pull request: the range the pull request proposes.
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          # Push: the range the push moved the branch across. `before` is all
+          # zeros when the branch is new and can name a commit that no longer
+          # exists after a force push, so both cases fall back to the default
+          # branch below.
+          PUSH_BASE: ${{ github.event.before }}
+          PUSH_HEAD: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          have() { git cat-file -e "$1^{commit}" 2>/dev/null; }
+
+          if [ "$EVENT" = "pull_request" ]; then
+            if ! have "$PR_BASE" || ! have "$PR_HEAD"; then
+              echo "::warning::Base or head commit missing from this checkout; commit message scan skipped."
+              exit 0
+            fi
+            RANGE="$PR_BASE..$PR_HEAD"
+          elif have "${PUSH_BASE:-none}"; then
+            RANGE="$PUSH_BASE..$PUSH_HEAD"
+          elif have "origin/$DEFAULT_BRANCH"; then
+            # New branch, or a force push whose previous tip is unreachable.
+            # Everything this branch carries that the default branch does not
+            # is this branch's work, so scan all of it.
+            RANGE="origin/$DEFAULT_BRANCH..$PUSH_HEAD"
+          else
+            echo "::warning::No usable commit range for this push; commit message scan skipped."
+            exit 0
+          fi
+
+          echo "Scanning commit messages in $RANGE"
+          node scripts/check-em-dashes.mjs --commits "$RANGE"

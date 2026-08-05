@@ -140,6 +140,7 @@ Each category has a paired `Private/Handlers/<Category>Handlers.{h,cpp}`. Handle
 ### Writing style - public artifacts
 
 - **No em dashes (`—`).** Use hyphens (` - `), colons, parentheses, or split into sentences. Applies to commit messages, release notes, docs, PR bodies, code comments. <!-- em-dash-allowed: the rule has to show the character it bans -->
+  CI enforces this in `.github/workflows/em-dash.yml`, which runs on **every branch push** as well as on pull requests, so a bad character is caught when you push rather than after it reaches main. It scans the whole tracked tree plus the commit messages in the pushed range. Run `npm run audit:em-dash` locally to get the same answer, and `npm run audit:em-dash -- --explain` for the exemption policy.
 - **Never name competitor or comparison projects in public artifacts.** Commit messages, release notes, PR bodies, GitHub release bodies, code comments, docs - any of these. Even when the work is literally closing a gap against another project, describe the work on its own terms ("adds module input authoring"), not as "catching up to X" or "matching Y". Gap-analysis context belongs in private discussion, never in public git history.
 
 ### MCP design principle
