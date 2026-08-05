@@ -258,7 +258,8 @@ jobs:
         #   1. Attach the tarball.
         #   2. Replace the body with the frontmatter-stripped version so the
         #      published release page renders clean markdown.
-        #   3. Flip draft=false to publish.
+        #   3. Flip draft=false to publish, marking it prerelease or latest to
+        #      match the channel the npm publish used.
         #   4. Post the landing/headline commit status using the validated,
         #      ` · `-joined string from the step output. CI authors the
         #      status itself - releasers no longer post it manually.
@@ -268,15 +269,28 @@ jobs:
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
           VERSION: ${{ steps.version.outputs.local }}
+          PRERELEASE: ${{ steps.channel.outputs.prerelease }}
           HEADLINE: ${{ steps.release_inputs.outputs.HEADLINE }}
           BODY_PATH: ${{ steps.release_inputs.outputs.BODY_PATH }}
         run: |
           set -euo pipefail
           gh release upload "v$VERSION" ue-mcp.tar.gz --clobber
+
+          # Both flags are set explicitly in both directions. Leaving them off
+          # hands the repo's "Latest" badge to whatever was promoted last, so a
+          # beta would present itself as the current stable release on the
+          # releases page and in the GitHub API's /releases/latest.
+          if [ "$PRERELEASE" = "true" ]; then
+            CHANNEL_FLAGS=(--prerelease --latest=false)
+          else
+            CHANNEL_FLAGS=(--prerelease=false --latest)
+          fi
+
           gh release edit "v$VERSION" \
             --notes-file "$BODY_PATH" \
             --draft=false \
-            --tag "v$VERSION"
+            --tag "v$VERSION" \
+            "${CHANNEL_FLAGS[@]}"
           gh api -X POST "repos/$REPO/statuses/$SHA" \
             -f state=success \
             -f context=landing/headline \
