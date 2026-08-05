@@ -49,11 +49,15 @@ export function resolveLockingConfig(cfg?: { enabled?: boolean; ttlSeconds?: num
 // are excluded first, so an unrecognized action falls through to "not mutating"
 // and is never locked (fail-open - locking never blocks a call we can't
 // confidently classify).
-const READ_PREFIXES = [
+// Exported because the routing gate (#817, action-class.ts) classifies the same
+// surface for a different question and seeds itself from this lexicon rather
+// than restating it. Its own matching rule is stricter; the lists are shared so
+// a verb added for one is never missing from the other.
+export const READ_PREFIXES = [
   "list", "search", "read", "get", "describe", "reflect", "find", "has", "status",
   "exists", "inspect", "preview", "validate", "count", "resolve", "diff",
 ];
-const MUTATE_PREFIXES = [
+export const MUTATE_PREFIXES = [
   "create", "set", "add", "remove", "delete", "rename", "move", "duplicate",
   "import", "reimport", "save", "update", "connect", "disconnect", "spawn",
   "compile", "apply", "assign", "insert", "replace", "clear", "reset", "modify",
