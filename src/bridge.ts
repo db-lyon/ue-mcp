@@ -6,6 +6,7 @@ import { McpError, ErrorCode } from "./errors.js";
 import { debug, warn } from "./log.js";
 import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
 import { isPidAlive } from "./editor-target.js";
+import { syncRequestedPort } from "./requested-port.js";
 
 /**
  * The wire protocol this client speaks. Must match
@@ -336,6 +337,12 @@ export class EditorBridge implements IBridge {
       this.portSource = "derived";
       debug("bridge", `derived per-project bridge port ${this.port} from ${path.dirname(uprojectPath)}`);
     }
+    // #817: hand the pin to the editor. An editor launched from Explorer
+    // cannot see UE_MCP_PORT or the config merge that produced this number, so
+    // without this file a pinned project has its two halves on different ports.
+    if (uprojectPath) {
+      syncRequestedPort(path.dirname(uprojectPath), this.port, this.portSource);
+    }
   }
 
   /**
@@ -372,6 +379,13 @@ export class EditorBridge implements IBridge {
     } else {
       this.port = deriveProjectPort(path.dirname(resolved));
       this.portSource = "derived";
+    }
+
+    // #817: publish the new target's pin, and only its own. An unverified pin
+    // was chosen for the project we just left, so writing it into this one
+    // would ask this editor to bind a number that says nothing about it.
+    if (!this.unverifiedPin) {
+      syncRequestedPort(path.dirname(resolved), this.port, this.portSource);
     }
 
     debug(
