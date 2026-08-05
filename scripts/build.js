@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, exec } from 'child_process';
-import { log, logSection, fileExists, createTestBuildPlan } from './build-utils.js';
+import { log, logSection, assertTestProject, createTestBuildPlan } from './build-utils.js';
 
 function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -62,24 +62,35 @@ async function main() {
   let plan;
   try {
     plan = createTestBuildPlan();
+    assertTestProject(plan.projectFile);
   } catch (error) {
     log(`ERROR: ${error.message}`, 'red');
     process.exit(1);
   }
 
-  const { projectRoot, projectFile, engineRoot, buildTool, buildArgs, allowEngineChanges } = plan;
-
-  // Check if project file exists
-  if (!(await fileExists(projectFile))) {
-    log(`ERROR: Project file not found at ${projectFile}`, 'red');
-    process.exit(1);
-  }
+  const {
+    projectRoot,
+    projectFile,
+    engineRoot,
+    engineRootSource,
+    buildTool,
+    buildArgs,
+    allowEngineChanges,
+    protectedRoots,
+  } = plan;
 
   log(`Project Root: ${projectRoot}`);
   log(`Project File: ${projectFile}`);
-  log(`Test Engine Root: ${engineRoot}`);
+  log(`Engine Root: ${engineRoot} (from ${engineRootSource})`);
   log(`Build Tool: ${buildTool}`);
-  log(`Engine changes: ${allowEngineChanges ? 'explicitly allowed' : 'blocked'}`);
+  if (protectedRoots.length > 0) {
+    log(`Protected roots: ${protectedRoots.join(', ')}`);
+  }
+  if (allowEngineChanges) {
+    log('Engine changes: ALLOWED via UE_MCP_ALLOW_TEST_ENGINE_CHANGES. This build may write into the engine tree.', 'yellow');
+  } else {
+    log('Engine changes: blocked (-NoEngineChanges)');
+  }
   log('');
 
   log('Starting build...');
