@@ -26,7 +26,7 @@ The maintained surface of this repo:
 - The `ue-mcp` npm package (`src/`, the published `dist/`)
 - The `UE_MCP_Bridge` C++ plugin in `plugin/`
 - The build, release, and publish workflows in `.github/workflows/`
-- The bundled installation credential and its decoder (`assets/installation.bin`, `src/manifest-signature.ts`) — note: the credential is intentionally scoped to `issues:write` on this repo, so issue spam on this repo alone is the documented blast radius. Reports demonstrating use beyond that scope are very much in scope.
+- The hosted signing service the anonymous feedback path posts to (`POST https://plugins.ue-mcp.com/api/feedback`). It holds the feedback App key server-side; the package ships no credential of its own. Anything that gets it to open an issue on a repo outside its allowlist, to bypass its rate limits, or to leak key material is in scope.
 
 Examples of in-scope findings:
 
