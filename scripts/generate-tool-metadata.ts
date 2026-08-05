@@ -122,7 +122,7 @@ function splitDescription(raw: string | undefined): { desc: string; params: stri
  * place in this repo that has to keep it. Leave it alone during style sweeps.
  */
 function deEm(s: string): string {
-  return s.replace(/\s*—\s*/g, " - ");
+  return s.replace(/\s*—\s*/g, " - "); // em-dash-allowed: the literal is the character being stripped
 }
 
 /** Escape pipes in a markdown table cell. */

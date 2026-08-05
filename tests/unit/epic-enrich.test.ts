@@ -207,7 +207,7 @@ describe("enrichToolsWithEpicCatalog", () => {
           tools: [
             {
               name: "NiagaraToolsets.NiagaraToolset_System.GetEmitterData",
-              description: "Returns emitter properties — fields use PascalCase.",
+              description: "Returns emitter properties — fields use PascalCase.", // em-dash-allowed: fixture input for the sanitiser
               inputSchema: { properties: { system: {} }, required: ["system"] },
             },
           ],
@@ -216,7 +216,7 @@ describe("enrichToolsWithEpicCatalog", () => {
     });
     const niagara = tools.find((t) => t.name === "niagara")!;
     const desc = niagara.actions.epic_get_emitter_data.description;
-    expect(desc).not.toContain("—");
+    expect(desc).not.toContain("—"); // em-dash-allowed: asserts the sanitiser removed it
     expect(desc).toContain("Returns emitter properties - fields use PascalCase.");
   });
 });

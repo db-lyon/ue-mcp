@@ -117,7 +117,7 @@ export interface EpicCatalog { toolsets?: EpicToolset[]; }
  * The literal in the pattern is the character being stripped and has to stay.
  */
 function deEm(s: string): string {
-  return s.replace(/\s*—\s*/g, " - ");
+  return s.replace(/\s*—\s*/g, " - "); // em-dash-allowed: the literal is the character being stripped
 }
 
 // ── Naming ────────────────────────────────────────────────────────────────────
