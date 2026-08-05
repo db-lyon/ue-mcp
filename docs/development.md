@@ -144,11 +144,29 @@ npm run test:smoke
 ```
 
 !!! warning "Smoke tests require the test project"
-    The smoke runner targets `tests/ue_mcp/ue_mcp.uproject` only. Real mutations execute against the connected editor (creating blueprints, deleting assets, modifying the level). **Never run smoke tests against a real project.** The runner aborts if it detects a connection to anything else.
+    The smoke runner targets `tests/ue_mcp/ue_mcp.uproject` only. Real mutations execute against the connected editor (creating blueprints, deleting assets, modifying the level). **Never run smoke tests against a real project.** After connecting, the runner asks the editor which project it has open and aborts before sending anything if the answer is not `tests/ue_mcp`. Non-loopback hosts are refused outright.
 
 !!! note "Prerequisites"
     - Editor running with the test project
     - Bridge connected (`project(action="get_status")` returns `editorConnected: true`)
+
+#### How the harness finds the bridge
+
+The editor binds a per-project port, not a fixed one, and publishes the port it
+actually bound to `tests/ue_mcp/Saved/UE_MCP_Bridge/port.json`. Both harnesses
+(`scripts/smoke-test.js` and the Vitest suites) resolve the endpoint through
+`scripts/bridge-target.mjs`, which probes in this order:
+
+1. The port recorded in that lockfile.
+2. The port derived from the project path, which is what the bridge binds when
+   nothing is in its way.
+3. The legacy fixed port `9877`, for older bridges.
+
+Start the editor and run the tests; no environment variable is needed. When
+nothing answers, the failure names the lockfile path it read, the state that
+file was in (missing, malformed, or stale with a dead pid), and every port it
+tried. `--port` on the runner and `UE_MCP_TEST_PORT` for the Vitest suites still
+pin the port for unusual setups, and neither weakens the project check above.
 
 ### Test Suites
 
