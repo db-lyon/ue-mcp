@@ -107,6 +107,19 @@ export interface EpicToolset {
 }
 export interface EpicCatalog { toolsets?: EpicToolset[]; }
 
+/**
+ * Replace em dashes with hyphens (CLAUDE.md style rule for public artifacts).
+ * Upstream tool descriptions use them freely, and these strings are surfaced
+ * verbatim to every connected agent and republished as docs/native-tools.md,
+ * so they are sanitised here rather than by rewriting the catalog snapshot.
+ * Doing it on this path is what keeps the doc generator's zero-drift promise:
+ * the page runs this same enrichment, so page and runtime cannot diverge.
+ * The literal in the pattern is the character being stripped and has to stay.
+ */
+function deEm(s: string): string {
+  return s.replace(/\s*—\s*/g, " - ");
+}
+
 // ── Naming ────────────────────────────────────────────────────────────────────
 function bareToolName(qualified: string): string {
   const idx = qualified.lastIndexOf(".");
@@ -333,9 +346,10 @@ export function enrichToolsWithEpicCatalog(
 
       const qualifiedTool = tool.name;
       const toolsetName = ts.name;
-      const desc =
+      const desc = deEm(
         `[Epic ${toolsetName}] ${tool.description ?? bare}`.replace(/\s+/g, " ").trim() +
-        paramHint(tool);
+          paramHint(tool),
+      );
 
       const spec: ActionSpec = {
         description: desc,

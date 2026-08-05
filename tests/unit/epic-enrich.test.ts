@@ -191,4 +191,32 @@ describe("enrichToolsWithEpicCatalog", () => {
     const gas = tools.find((t) => t.name === "gas")!;
     expect(Object.keys(gas.actions).some((a) => a.startsWith("epic_"))).toBe(false);
   });
+
+  it("strips em dashes out of upstream descriptions and param hints", () => {
+    // Upstream catalog text is not written to this repo's style rules, and
+    // these strings are read by every connected agent and republished as
+    // docs/native-tools.md, so enrichment is the single place they get fixed.
+    // The two literals below are the input and the expected output of that
+    // conversion, so this test has to keep the character. Leave it alone
+    // during style sweeps.
+    const tools = fixtureTools();
+    enrichToolsWithEpicCatalog(tools, {
+      toolsets: [
+        {
+          name: "NiagaraToolsets.NiagaraToolset_System",
+          tools: [
+            {
+              name: "NiagaraToolsets.NiagaraToolset_System.GetEmitterData",
+              description: "Returns emitter properties — fields use PascalCase.",
+              inputSchema: { properties: { system: {} }, required: ["system"] },
+            },
+          ],
+        },
+      ],
+    });
+    const niagara = tools.find((t) => t.name === "niagara")!;
+    const desc = niagara.actions.epic_get_emitter_data.description;
+    expect(desc).not.toContain("—");
+    expect(desc).toContain("Returns emitter properties - fields use PascalCase.");
+  });
 });
