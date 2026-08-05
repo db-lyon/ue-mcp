@@ -26,17 +26,28 @@ on:
     # here for pull requests from forks, whose pushes never reach this repo.
     branches: [main]
 
-# One run per head branch. Three pushes in a row fire three times, and without
-# this they all run to completion to report the same answer about a tree that
-# only the newest of them describes.
+# One run per head branch per event. Three pushes in a row fire three times,
+# and without this they all run to completion to report the same answer about
+# a tree that only the newest of them describes.
 #
-# The identity is the head branch plus the repository it lives in, so a fork
-# whose branch happens to share a name with one here does not cancel it.
+# The identity is the event, the head branch, and the repository the branch
+# lives in. All three parts earn their place:
+#
+#   - The event, because a run enters its concurrency group before any job's
+#     `if:` is evaluated. Grouping the two events together had the pull request
+#     run cancel the in-progress push run for the same commit and then skip
+#     itself, which left that commit with no scan at all. Measured, not
+#     theorised: run 31050424894 was cancelled by run 31050428238 doing exactly
+#     this. The two events no longer overlap by design, so they must not share
+#     a group either.
+#   - The branch, so an unrelated branch is never cancelled.
+#   - The repository, so a fork whose branch happens to share a name with one
+#     here does not cancel it.
 #
 # Main never cancels. Superseding a main run would drop the commit messages in
 # its range, and no later run's range covers them again.
 concurrency:
-  group: em-dash-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  group: em-dash-${{ github.event_name }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
