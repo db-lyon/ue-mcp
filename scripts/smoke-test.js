@@ -1,11 +1,11 @@
 /**
- * Smoke Test — UE MCP Bridge Handler Verification
+ * Smoke Test - UE MCP Bridge Handler Verification
  *
  * Connects to the UE MCP bridge via WebSocket and sends a JSON-RPC call
  * to every registered handler. Categorises each response as:
- *   SUCCESS        — handler returned a result
- *   EXPECTED_ERROR — handler returned an error (e.g. missing params) — still alive
- *   FAILURE        — timeout, connection lost, or unknown-method error
+ *   SUCCESS        - handler returned a result
+ *   EXPECTED_ERROR - handler returned an error (e.g. missing params) - still alive
+ *   FAILURE        - timeout, connection lost, or unknown-method error
  *
  * Exit code 0 when no FAILURES, 1 otherwise.
  *
@@ -289,7 +289,7 @@ function rpcCall(ws, method, id) {
       if (msg.error) {
         // "Method not found" style errors are real failures.
         // Everything else (missing params, invalid input, etc.) means
-        // the handler exists and responded — that's a pass.
+        // the handler exists and responded - that's a pass.
         const code = msg.error.code;
         const message = (msg.error.message || "").toLowerCase();
         const isUnknown =
@@ -316,7 +316,7 @@ async function main() {
   // Discover
   const handlers = discoverHandlers();
   if (handlers.length === 0) {
-    console.error(`${RED}No handlers discovered — check the C++ source path.${RESET}`);
+    console.error(`${RED}No handlers discovered - check the C++ source path.${RESET}`);
     process.exit(1);
   }
 
@@ -443,10 +443,10 @@ async function main() {
   console.log(`  ${YELLOW}Skipped        : ${skipped.length} (Live Coding handlers)${RESET}`);
 
   if (failures.length > 0) {
-    console.log(`\n${RED}${BOLD}SMOKE TEST FAILED${RESET} — ${failures.length} handler(s) did not respond.\n`);
+    console.log(`\n${RED}${BOLD}SMOKE TEST FAILED${RESET} - ${failures.length} handler(s) did not respond.\n`);
     process.exit(1);
   } else {
-    console.log(`\n${GREEN}${BOLD}SMOKE TEST PASSED${RESET} — all ${handlers.length} handlers responded.\n`);
+    console.log(`\n${GREEN}${BOLD}SMOKE TEST PASSED${RESET} - all ${handlers.length} handlers responded.\n`);
     process.exit(0);
   }
 }

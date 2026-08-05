@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One-off harness to invoke a named flow against the live editor — same
+ * One-off harness to invoke a named flow against the live editor - same
  * code path the MCP server's flow tool uses, just driven from CLI.
  *
  * Usage: npx tsx scripts/run-flow.mjs <flowName>

@@ -31,7 +31,7 @@ function tsBridgeMethods() {
       const src = fs.readFileSync(full, "utf8");
       const rel = path.relative(path.join(ROOT, "src"), full).replace(/\\/g, "/");
 
-      // bp("desc", "method_name", ...) — the dominant pattern in tools/*.ts.
+      // bp("desc", "method_name", ...) - the dominant pattern in tools/*.ts.
       // The 2nd string arg is the C++ bridge method. The description must be
       // matched with escape awareness: a naive "[^"]*" stops at the first \"
       // inside the prose, so any action whose description quotes something
@@ -41,14 +41,14 @@ function tsBridgeMethods() {
         if (!methods.has(method)) methods.set(method, []);
         methods.get(method).push({ file: rel });
       }
-      // { ..., bridge: "method_name", ... } — custom action specs.
+      // { ..., bridge: "method_name", ... } - custom action specs.
       for (const m of src.matchAll(/\bbridge\s*:\s*"([a-z_][a-z0-9_]*)"/g)) {
         const method = m[1];
         if (!methods.has(method)) methods.set(method, []);
         methods.get(method).push({ file: rel });
       }
-      // ctx.bridge.call("method_name", ...) and bridge.call("...", ...) —
-      // direct calls in custom handlers (asset.list, asset.search, etc.).
+      // ctx.bridge.call("method_name", ...) and bridge.call("...", ...)
+      // are direct calls in custom handlers (asset.list, asset.search, etc.).
       for (const m of src.matchAll(/\bbridge\.call\(\s*"([a-z_][a-z0-9_]*)"/g)) {
         const method = m[1];
         if (!methods.has(method)) methods.set(method, []);
@@ -145,7 +145,7 @@ if (aliasOnly.length) {
 }
 
 if (!errored && !cppOnly.length) {
-  console.log(`OK — ${ts.size} TS bridge methods all map to ${cpp.size} C++ handler registrations.`);
+  console.log(`OK - ${ts.size} TS bridge methods all map to ${cpp.size} C++ handler registrations.`);
 }
 
 process.exit(errored ? 1 : 0);

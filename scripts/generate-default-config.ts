@@ -45,7 +45,7 @@ const ALL_TOOLS: ToolDef[] = [
 function generate(): string {
   const lines: string[] = [];
 
-  lines.push("# Auto-generated — do not edit by hand.");
+  lines.push("# Auto-generated - do not edit by hand.");
   lines.push("# Source: scripts/generate-default-config.ts");
   lines.push("");
   lines.push("ue-mcp:");
@@ -146,4 +146,4 @@ const outPath = path.join(outDir, "ue-mcp.default.yml");
 fs.writeFileSync(outPath, yaml, "utf-8");
 
 const taskCount = (yaml.match(/^\s{2}\w+\.\w+:/gm) ?? []).length;
-console.log(`[generate] ${outPath} — ${taskCount} tasks`);
+console.log(`[generate] ${outPath} - ${taskCount} tasks`);

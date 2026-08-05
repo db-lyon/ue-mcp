@@ -125,7 +125,7 @@ export function validate(items) {
       throw new ValidationError(
         `headline[${idx}] '${item}' contains forbidden characters. ` +
           `Allowed: letters, digits, spaces, and the punctuation _ - / ( ) . , +. ` +
-          `Sentence punctuation (: ; ? !) and the joiner (·) are forbidden — ` +
+          `Sentence punctuation (: ; ? !) and the joiner (·) are forbidden - ` +
           `headlines are noun-phrase lists, not sentences.`
       );
     }

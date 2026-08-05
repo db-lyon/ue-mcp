@@ -58,7 +58,7 @@ async function main() {
     console.log("  result:", JSON.stringify(created, null, 2));
   } catch (e) {
     // Idempotency: if the class already exists from a prior run, that's
-    // OK — we still want to assert the files are on disk.
+    // OK - we still want to assert the files are on disk.
     console.log("  create failed (may already exist):", e.message);
   }
 
@@ -74,12 +74,12 @@ async function main() {
   }
 
   // write_cpp_file / read_cpp_source / add_module_dependency are
-  // TS-side handlers — they route through the MCP tool layer, not the
+  // TS-side handlers - they route through the MCP tool layer, not the
   // WebSocket bridge this script talks to. They're verified via vitest
   // instead.
 
   // Tidy up: delete the generated files so the tree stays clean for
-  // the next test run. (We don't call live coding or build — those would
+  // the next test run. (We don't call live coding or build - those would
   // take minutes and aren't safe in CI.)
   for (const p of [headerPath, cppPath].filter(Boolean)) {
     try { fs.unlinkSync(p); console.log(`  cleaned ${p}`); } catch { /* fine */ }
