@@ -29,6 +29,7 @@ import { makeResolveExistingFile } from "./flow/task-guards.js";
 import { normalizeProjectRoot } from "./port.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { warn } from "./log.js";
+import { newLockOwnerId } from "./locking.js";
 
 /** Key used for the session that has no project bound. */
 export const DEFAULT_SESSION_KEY = "";
@@ -67,13 +68,24 @@ export class EditorSession {
   readonly guarded: GuardedBridge;
   /** Names of other sessions that resolved to the same port. */
   portSharedWith: string[] = [];
+  /**
+   * Who this editor's asset locks belong to (#817).
+   *
+   * The lock registry lives in the bridge, which is per editor, so the holder
+   * has to be per editor as well. One id shared across sessions would make a
+   * lock taken in one editor read as re-entrant in another, which defeats the
+   * point of taking it.
+   */
+  readonly lockOwnerId: string = newLockOwnerId();
 
   constructor(
     public name: string,
     /** Resolved project root. Moves when the session's project moves. */
     public key: string,
     readonly project: ProjectContext,
-    guards: GuardRegistry,
+    /** This session's own guard pipeline. Guards from one project's plugins
+     *  must not veto another project's calls, so each session has its own. */
+    readonly guards: GuardRegistry,
   ) {
     this.bridge = new EditorBridge();
     // Order matters: setConfigPort marks the port as config-pinned, which is
@@ -131,7 +143,18 @@ export class SessionRegistry {
   /** Held while a compound edit is mid-flight, so observers see one change. */
   private suppressNotify = false;
 
+  /**
+   * `guards` is the pipeline the FIRST session gets, so a caller that already
+   * built one (the server, which populates it after the task registries exist)
+   * keeps working unchanged at one editor. Every session after the first gets
+   * its own, because a guard declared by one project's plugins has no business
+   * running on another project's calls.
+   */
   constructor(private readonly guards: GuardRegistry = new GuardRegistry()) {}
+
+  private guardsForNewSession(): GuardRegistry {
+    return this.byKey.size === 0 ? this.guards : new GuardRegistry();
+  }
 
   get size(): number {
     return this.byKey.size;
@@ -173,7 +196,7 @@ export class SessionRegistry {
     }
 
     const name = this.uniqueName(input.name ?? project.projectName ?? DEFAULT_SESSION_NAME);
-    const session = new EditorSession(name, key, project, this.guards);
+    const session = new EditorSession(name, key, project, this.guardsForNewSession());
     this.byKey.set(key, session);
     if (input.makeActive || this.activeKey === null) this.activeKey = key;
     this.noteSharedPorts(session);

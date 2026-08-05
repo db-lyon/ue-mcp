@@ -369,11 +369,16 @@ async function main() {
       getPlugins: () => getPlugins(load.surface.session),
     };
     for (const g of discoverTaskGuards(load.registry!, guardCtx, load.surface.session.bridge)) {
-      guardRegistry.register(g);
+      load.surface.session.guards.register(g);
     }
   }
-  if (guardRegistry.size > 0) {
-    info("guard", `${guardRegistry.size} bridge guard(s) active: ${guardRegistry.list().map((g) => g.name).join(", ")}`);
+  for (const session of sessions.list()) {
+    if (session.guards.size === 0) continue;
+    const label = sessions.size > 1 ? `editor '${session.name}': ` : "";
+    info(
+      "guard",
+      `${label}${session.guards.size} bridge guard(s) active: ${session.guards.list().map((g) => g.name).join(", ")}`,
+    );
   }
 
   // ── Plugin knowledge → server instructions ──────────────────────
@@ -516,7 +521,14 @@ async function main() {
         const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
         // Locks are acquired in the editor the call runs in, so they must be
         // taken on that session's bridge rather than the process default.
-        const result = await withAssetLocks(session.bridge, lockingCfg, taskName, taskParams, () => task.run());
+        const result = await withAssetLocks(
+          session.bridge,
+          lockingCfg,
+          taskName,
+          taskParams,
+          () => task.run(),
+          session.lockOwnerId,
+        );
 
         if (!result.success) {
           const msg = result.error?.message ?? `Task ${taskName} failed`;

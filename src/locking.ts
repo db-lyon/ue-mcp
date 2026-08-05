@@ -15,8 +15,22 @@ import { debug } from "./log.js";
 // agent drives one editor. The explicit asset(lock/unlock/list_locks) actions
 // work regardless of this setting.
 
-/** Stable id for this server process; sent with every lock op. */
+/**
+ * Stable id for this server process, and the fallback owner for a lock op with
+ * no editor session behind it.
+ *
+ * Locks live in the bridge, which is per editor, so the owner of a lock has to
+ * be per editor too (#817). Two editors sharing one owner id makes a lock taken
+ * in one look re-entrant in the other, which is the opposite of what locking is
+ * for. Sessions carry their own id and pass it in; this stays as the answer for
+ * a caller with no session, which is what a single-editor server had.
+ */
 export const SESSION_ID = crypto.randomUUID();
+
+/** Mint an owner id for one editor session. */
+export function newLockOwnerId(): string {
+  return crypto.randomUUID();
+}
 
 export interface LockingConfig {
   enabled: boolean;
@@ -113,10 +127,10 @@ export function classifyAction(taskName: string, params: Record<string, unknown>
   return { mutates: true, paths: [...paths] };
 }
 
-async function releaseAll(bridge: IBridge, paths: string[]): Promise<void> {
+async function releaseAll(bridge: IBridge, paths: string[], ownerId: string): Promise<void> {
   for (const p of paths) {
     try {
-      await bridge.call("release_lock", { path: p, sessionId: SESSION_ID });
+      await bridge.call("release_lock", { path: p, sessionId: ownerId });
     } catch (e) {
       debug("lock", `release_lock failed for ${p} (lease will expire)`, e);
     }
@@ -135,6 +149,8 @@ export async function withAssetLocks<T>(
   taskName: string,
   params: Record<string, unknown>,
   run: () => Promise<T>,
+  /** Who holds the locks. The addressed editor's id; omitted means this process. */
+  ownerId: string = SESSION_ID,
 ): Promise<T> {
   if (!cfg.enabled) return run();
 
@@ -145,16 +161,16 @@ export async function withAssetLocks<T>(
   for (const p of paths) {
     let res: { acquired?: boolean; holder?: { sessionId?: string; ttlSecondsRemaining?: number } } | undefined;
     try {
-      res = (await bridge.call("acquire_lock", { path: p, sessionId: SESSION_ID, ttlSeconds: cfg.ttlSeconds })) as typeof res;
+      res = (await bridge.call("acquire_lock", { path: p, sessionId: ownerId, ttlSeconds: cfg.ttlSeconds })) as typeof res;
     } catch (e) {
       // Lock subsystem unavailable - release what we took and run unlocked
       // rather than failing a legitimate mutation.
       debug("lock", `acquire_lock unavailable for ${p}; running unlocked`, e);
-      await releaseAll(bridge, held);
+      await releaseAll(bridge, held, ownerId);
       return run();
     }
     if (!res?.acquired) {
-      await releaseAll(bridge, held);
+      await releaseAll(bridge, held, ownerId);
       const holder = res?.holder?.sessionId ?? "another session";
       const wait = res?.holder?.ttlSecondsRemaining;
       throw new McpError(
@@ -168,6 +184,6 @@ export async function withAssetLocks<T>(
   try {
     return await run();
   } finally {
-    await releaseAll(bridge, held);
+    await releaseAll(bridge, held, ownerId);
   }
 }

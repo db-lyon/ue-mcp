@@ -78,6 +78,16 @@ export class FakeBridge {
 
         this.calls.push({ method: msg.method, params });
 
+        // The lock registry is the one piece of editor state this stands in
+        // for rather than stubs, because per-editor lock ownership is exactly
+        // what the multi-editor tier is asserting. It lives in the bridge in
+        // production too, so one registry per fake bridge is faithful.
+        const lockReply = this.serveLock(msg.method, params);
+        if (lockReply !== undefined) {
+          ws.send(JSON.stringify({ id: msg.id, result: lockReply }));
+          return;
+        }
+
         const handler = this.handlers[msg.method];
         if (handler) {
           ws.send(JSON.stringify({ id: msg.id, result: handler(params) }));
@@ -131,6 +141,53 @@ export class FakeBridge {
       }),
       "utf-8",
     );
+  }
+
+  /** Asset path to the session id holding its lock. */
+  private readonly locks = new Map<string, string>();
+
+  /** Answer the lock methods, or undefined for anything else. */
+  private serveLock(method: string, params: Record<string, unknown>): unknown | undefined {
+    const owner = String(params.sessionId ?? "");
+    const assetPath = String(params.path ?? params.assetPath ?? "");
+    switch (method) {
+      case "acquire_lock": {
+        const holder = this.locks.get(assetPath);
+        // Re-entrant for the same owner, refused for anybody else. That
+        // asymmetry is the whole reason the owner id has to be per editor.
+        if (holder !== undefined && holder !== owner) {
+          return { acquired: false, holder: { sessionId: holder, ttlSecondsRemaining: 60 } };
+        }
+        this.locks.set(assetPath, owner);
+        return { acquired: true };
+      }
+      case "release_lock": {
+        const holder = this.locks.get(assetPath);
+        if (holder === owner || params.force === true) {
+          this.locks.delete(assetPath);
+          return { released: true };
+        }
+        return { released: false, holder: { sessionId: holder } };
+      }
+      case "release_session_locks": {
+        let released = 0;
+        for (const [asset, holder] of [...this.locks]) {
+          if (holder !== owner) continue;
+          this.locks.delete(asset);
+          released++;
+        }
+        return { released };
+      }
+      case "list_locks":
+        return { locks: [...this.locks].map(([path, sessionId]) => ({ path, sessionId })) };
+      default:
+        return undefined;
+    }
+  }
+
+  /** Who currently holds a lock on an asset here, if anyone. */
+  lockHolder(assetPath: string): string | undefined {
+    return this.locks.get(assetPath);
   }
 
   /** Methods this bridge was asked for, in order. */

@@ -2,6 +2,21 @@ import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { Vec3, Rotator } from "../schemas.js";
 import { SESSION_ID } from "../locking.js";
+import type { ToolContext } from "../types.js";
+
+/**
+ * Who a lock belongs to: the addressed editor, or this process when there is
+ * no session behind the call (#817).
+ *
+ * The lock registry lives in the bridge, which is per editor, so the owner has
+ * to match whatever `withAssetLocks` used on the dispatch path or an explicit
+ * asset(unlock) would not match the lock asset(lock) took. Both read this.
+ */
+function lockOwner(ctx: ToolContext, params: Record<string, unknown>): string {
+  const explicit = params.sessionId;
+  if (typeof explicit === "string" && explicit.trim() !== "") return explicit;
+  return ctx.session?.lockOwnerId ?? SESSION_ID;
+}
 
 export const assetTool: ToolDef = categoryTool(
   "asset",
@@ -155,10 +170,29 @@ export const assetTool: ToolDef = categoryTool(
     // lives in the bridge (the shared editor), keyed by asset path with a TTL
     // so a crashed session never wedges an asset. sessionId defaults to this
     // server process; pass it explicitly to coordinate across processes.
-    lock:                 bp("Acquire an exclusive lock on an asset for this session. Returns acquired=true, or acquired=false with holder{sessionId,ttlSecondsRemaining} when another session holds it. Params: assetPath, ttlSeconds? (default 300), sessionId?", "acquire_lock", (p) => ({ path: p.assetPath ?? p.path, sessionId: p.sessionId ?? SESSION_ID, ttlSeconds: p.ttlSeconds })),
-    unlock:               bp("Release an asset lock held by this session (or force=true to break any holder's lock). Params: assetPath, force?, sessionId?", "release_lock", (p) => ({ path: p.assetPath ?? p.path, sessionId: p.sessionId ?? SESSION_ID, force: p.force })),
+    lock: {
+      description: "Acquire an exclusive lock on an asset for this editor. Returns acquired=true, or acquired=false with holder{sessionId,ttlSecondsRemaining} when another session holds it. Params: assetPath, ttlSeconds? (default 300), sessionId?",
+      handler: async (ctx, p) => ctx.bridge.call("acquire_lock", {
+        path: p.assetPath ?? p.path,
+        sessionId: lockOwner(ctx, p),
+        ttlSeconds: p.ttlSeconds,
+      }),
+    },
+    unlock: {
+      description: "Release an asset lock held by this editor (or force=true to break any holder's lock). Params: assetPath, force?, sessionId?",
+      handler: async (ctx, p) => ctx.bridge.call("release_lock", {
+        path: p.assetPath ?? p.path,
+        sessionId: lockOwner(ctx, p),
+        force: p.force,
+      }),
+    },
     list_locks:           bp("List all currently-held asset locks with holder session id, acquiredAt, and ttlSecondsRemaining.", "list_locks"),
-    unlock_all:           bp("Release every lock held by one session in a single call, returning the number released. Defaults to this server process's session; pass sessionId to clear a different one (for example after a crashed session left assets wedged). Params: sessionId?", "release_session_locks", (p) => ({ sessionId: p.sessionId ?? SESSION_ID })),
+    unlock_all: {
+      description: "Release every lock held by one session in a single call, returning the number released. Defaults to the addressed editor's own session; pass sessionId to clear a different one (for example after a crashed session left assets wedged). Params: sessionId?",
+      handler: async (ctx, p) => ctx.bridge.call("release_session_locks", {
+        sessionId: lockOwner(ctx, p),
+      }),
+    },
     diff:                 bp("Semantic structural diff between two assets of any type, dispatching on the asset's class. Blueprints are diffed structurally (parent class, variables, functions, components, per-graph node and connection deltas); other asset types report that diffing is not supported yet rather than failing opaquely. Params: assetPath, otherPath", "diff_asset", (p) => ({ assetPath: p.assetPath ?? p.path, otherPath: p.otherPath })),
   },
   undefined,
