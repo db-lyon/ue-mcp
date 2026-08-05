@@ -1,4 +1,46 @@
-export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) - 24 category tools covering 685+ actions, plus 830 official Unreal 5.8 tools wrapped in-process (UE 5.8+; see the epic category).
+import { ALL_TOOLS } from "./tools.js";
+
+/**
+ * Counts and the category list, derived rather than transcribed (#817, plan
+ * item 6.6).
+ *
+ * All three variants carried a hand-written "685+ actions" and a category list
+ * missing `fab`, both of which had been wrong for many releases. A number a
+ * human retypes on every surface change is a number that goes stale, and this
+ * text is the first thing every agent reads, so being wrong here sends them
+ * looking for actions that exist and past ones that do not. Reading the tool
+ * graph makes both correct by construction.
+ *
+ * `tools.ts` is a leaf as far as this module is concerned: nothing in the tool
+ * graph imports these instructions, so the import closes no cycle.
+ */
+const CATEGORY_COUNT = ALL_TOOLS.length;
+const ACTION_COUNT = ALL_TOOLS.reduce((n, t) => n + Object.keys(t.actions).length, 0);
+
+/** Every category name, wrapped so the block reads the way it always has. */
+function categoryList(): string {
+  const names = ALL_TOOLS.map((t) => t.name);
+  const lines: string[] = [];
+  let line = "";
+  for (const name of names) {
+    const next = line ? `${line}, ${name}` : name;
+    if (next.length > 70) {
+      lines.push(`${line},`);
+      line = name;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.join("\n").replace(
+    /\bepic\b(?![\w-])/,
+    "epic (830 wrapped Unreal 5.8 tools; UE 5.8+)",
+  );
+}
+
+const CATEGORIES = categoryList();
+
+export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) - ${CATEGORY_COUNT} category tools covering ${ACTION_COUNT} actions, plus 830 official Unreal 5.8 tools wrapped in-process (UE 5.8+; see the epic category).
 
 Every tool takes an "action" parameter that selects the operation. Call project(action="get_status") first.
 
@@ -15,9 +57,7 @@ Every tool takes an "action" parameter that selects the operation. Call project(
 
 Every category tool lists its own actions (and each action's parameters) in
 its description - read the description of the category you need. Categories:
-project, asset, blueprint, level, material, animation, landscape, pcg, foliage,
-niagara, audio, widget, editor, reflection, gameplay, gas, networking, demo,
-feedback, statetree, chooser, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+).
+${CATEGORIES}.
 
 ═══ TIPS ═══
 • Start with level(action="get_outliner") or asset(action="list") to discover what's in the project.
@@ -90,22 +130,20 @@ posting anything.
 // catalog is intentionally omitted: agents pull it on demand via the `catalog`
 // tool or a category's `describe` action. This keeps the initialize handshake
 // small for token-constrained clients while preserving full capability.
-export const SERVER_INSTRUCTIONS_LEAN = `UE-MCP (lean mode): Unreal Engine editor bridge (C++ plugin). 24 category tools; the per-action catalog is loaded on demand to keep context small.
+export const SERVER_INSTRUCTIONS_LEAN = `UE-MCP (lean mode): Unreal Engine editor bridge (C++ plugin). ${CATEGORY_COUNT} category tools covering ${ACTION_COUNT} actions; the per-action catalog is loaded on demand to keep context small.
 
 Every tool takes an "action" parameter that selects the operation. Start with project(action="get_status").
 
 ═══ DISCOVER ACTIONS ═══
 Tool descriptions are trimmed in lean mode. Find the action you need with:
 - catalog(action="search", query="spawn actor") - rank matching actions across every category
-- catalog(action="list_categories") - the 23 categories with one-line summaries
+- catalog(action="list_categories") - the ${CATEGORY_COUNT} categories with one-line summaries
 - <category>(action="describe") - every action in one category (e.g. blueprint(action="describe"))
 
 Each category's "action" parameter is still a validated enum, so unknown actions are rejected up front. Call describe/search first when you are unsure of the exact action name.
 
 ═══ CATEGORIES ═══
-project, asset, blueprint, level, material, animation, landscape, pcg, foliage,
-niagara, audio, widget, editor, reflection, gameplay, gas, networking, demo,
-feedback, statetree, chooser, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+).
+${CATEGORIES}.
 
 ═══ FLOWS ═══
 Before chaining 3+ tool calls, check the \`flows\` field from project(action="get_status")
@@ -124,7 +162,7 @@ context.strategy: lean in ue-mcp.yml or UE_MCP_CONTEXT_STRATEGY=lean.
 // Smallest surface (context.strategy = "micro"). The entire ue-mcp API is
 // reached through one gateway tool, mirroring the native MCP toolset gateway
 // (list_toolsets / describe_toolset / call_tool). Nothing else is advertised.
-export const SERVER_INSTRUCTIONS_MICRO = `UE-MCP (micro mode): Unreal Engine editor bridge (C++ plugin). The entire surface (23 categories, 600+ actions) is reached through a single gateway tool to keep context tiny.
+export const SERVER_INSTRUCTIONS_MICRO = `UE-MCP (micro mode): Unreal Engine editor bridge (C++ plugin). The entire surface (${CATEGORY_COUNT} categories, ${ACTION_COUNT} actions) is reached through a single gateway tool to keep context tiny.
 
 ═══ HOW TO USE ═══
 - tools(action="list_categories") - list every category with a one-line summary
@@ -135,9 +173,7 @@ export const SERVER_INSTRUCTIONS_MICRO = `UE-MCP (micro mode): Unreal Engine edi
 Start with: tools(action="call", category="project", method="get_status").
 
 ═══ CATEGORIES ═══
-project, asset, blueprint, level, material, animation, landscape, pcg, foliage,
-niagara, audio, widget, editor, reflection, gameplay, gas, networking, demo,
-feedback, statetree, chooser, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+).
+${CATEGORIES}.
 
 ═══ FLOWS ═══
 flow(action="run", flowName="<name>") runs a named sequence; see the \`flows\` field
