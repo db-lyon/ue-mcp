@@ -2,7 +2,7 @@
 
 ## MCP Client Configuration
 
-The easiest way to configure UE-MCP is to run `npx ue-mcp init` — it detects your MCP clients and writes the config automatically.
+The easiest way to configure UE-MCP is to run `npx ue-mcp init` - it detects your MCP clients and writes the config automatically.
 
 ### Manual Configuration
 
@@ -38,7 +38,7 @@ enabled = true
 
 ### Without a Project Path
 
-You can start the server without a `.uproject` argument. It will run in a limited mode — you can then use `project(action="set_project", projectPath="...")` at runtime to attach to a project.
+You can start the server without a `.uproject` argument. It will run in a limited mode - you can then use `project(action="set_project", projectPath="...")` at runtime to attach to a project.
 
 ### Several Editors From One Server
 
@@ -111,7 +111,7 @@ Unreal Engine 5.8 ships an experimental AI Toolset Registry (the plugin behind U
 
 To turn it off entirely, set `nativeTools.enabled: false` (the `epic` gateway stays available). To keep it on but drop a noisy domain, add that category to `nativeTools.exclude`.
 
-The feedback approval mode (`interactive` / `auto-approve` / `defer`) is intentionally **not** in `ue-mcp.yml` — it varies per developer and per machine, so it lives in `~/.ue-mcp/state.json` and is managed with `npx ue-mcp feedback mode ...` or the `UE_MCP_FEEDBACK_MODE` env var. See [Feedback → modes](feedback.md#feedback-modes).
+The feedback approval mode (`interactive` / `auto-approve` / `defer`) is intentionally **not** in `ue-mcp.yml` - it varies per developer and per machine, so it lives in `~/.ue-mcp/state.json` and is managed with `npx ue-mcp feedback mode ...` or the `UE_MCP_FEEDBACK_MODE` env var. See [Feedback → modes](feedback.md#feedback-modes).
 
 ### User-machine state (`~/.ue-mcp/`)
 
@@ -119,7 +119,7 @@ Machine-specific state that ue-mcp commands write but you wouldn't hand-edit liv
 
 | Path | What |
 |------|------|
-| `~/.ue-mcp/state.json` | Two things: (a) per-project `installedHooks` — absolute paths of every Claude Code `settings.json` where ue-mcp installed the feedback PostToolUse hook, keyed by absolute project root; (b) `preferences.feedback.mode` — your personal default for the feedback approval mode (`interactive` / `auto-approve` / `defer`). Maintained by `npx ue-mcp init`, `npx ue-mcp uninstall-hooks`, and `npx ue-mcp feedback mode`. |
+| `~/.ue-mcp/state.json` | Two things: (a) per-project `installedHooks` - absolute paths of every Claude Code `settings.json` where ue-mcp installed the feedback PostToolUse hook, keyed by absolute project root; (b) `preferences.feedback.mode` - your personal default for the feedback approval mode (`interactive` / `auto-approve` / `defer`). Maintained by `npx ue-mcp init`, `npx ue-mcp uninstall-hooks`, and `npx ue-mcp feedback mode`. |
 | `~/.ue-mcp/auth.json` | Cached GitHub OAuth token for `feedback(submit)` author=user mode. Mode 600. Written by `npx ue-mcp auth`. |
 | `~/.ue-mcp/pending-feedback/<id>.json` | Submissions captured while `feedback mode` is `defer`. Acted on with `npx ue-mcp feedback list/approve/discard`. |
 
@@ -139,17 +139,17 @@ plugins:
 At server start, ue-mcp resolves each entry against the project's `node_modules/`, validates the plugin manifest, and merges its injected actions into the host category tools. Stay-on-disk facts:
 
 - The package must already be installed under `<project>/node_modules/`. Use `ue-mcp plugin install <name>` to add an entry **and** run `npm install --save` in one step.
-- Plugins are loaded only when the server boots — edit the array and restart your MCP client (`/mcp` in Claude Code).
+- Plugins are loaded only when the server boots - edit the array and restart your MCP client (`/mcp` in Claude Code).
 - A plugin that fails validation is skipped with a loud warning. Other plugins keep loading; the host tools are never partially mutated.
 - Use the `plugins` tool to introspect the loaded set:
-  - `plugins(action="list")` — name, version, prefix, status, injected count, host UE plugin presence.
-  - `plugins(action="describe", name="<package>")` — full detail including injected actions, knowledge files, and flows.
+  - `plugins(action="list")` - name, version, prefix, status, injected count, host UE plugin presence.
+  - `plugins(action="describe", name="<package>")` - full detail including injected actions, knowledge files, and flows.
 
 Order matters: earlier entries win on inter-plugin action-name collisions. A plugin action can never overwrite a built-in.
 
 ### Host UE plugin dependencies
 
-A plugin can declare `uePluginDependency: <PluginName>` in its `ue-mcp.plugin.yml`. The MCP server checks the project's `.uproject` for `Plugins[].Name == "<PluginName>"` and exposes the result as `uePluginPresent` in `plugins(action="list")`. The npm side loads regardless — the flag is a signal that the host UE plugin needs to be enabled before the injected actions will actually run.
+A plugin can declare `uePluginDependency: <PluginName>` in its `ue-mcp.plugin.yml`. The MCP server checks the project's `.uproject` for `Plugins[].Name == "<PluginName>"` and exposes the result as `uePluginPresent` in `plugins(action="list")`. The npm side loads regardless - the flag is a signal that the host UE plugin needs to be enabled before the injected actions will actually run.
 
 For example, a plugin that declares `uePluginDependency: SomePlugin` will report `uePluginPresent: false` until `SomePlugin` is added to `<Project>.uproject`'s `Plugins` array and the C++ modules are built.
 
@@ -278,11 +278,11 @@ The plugin is editor-only and has no runtime footprint.
 
 The C++ bridge plugin enables these UE plugins (adding them to `.uproject` if missing):
 
-- `PythonScriptPlugin` — for `editor(action="execute_python")`
-- `EnhancedInput` — for input action/mapping creation
-- `GameplayAbilities` — for GAS tools
-- `Niagara` — for VFX tools
-- `PCG` — for procedural generation tools
+- `PythonScriptPlugin` - for `editor(action="execute_python")`
+- `EnhancedInput` - for input action/mapping creation
+- `GameplayAbilities` - for GAS tools
+- `Niagara` - for VFX tools
+- `PCG` - for procedural generation tools
 
 ## CLI Subcommands
 

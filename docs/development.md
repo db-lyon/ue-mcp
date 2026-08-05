@@ -30,7 +30,7 @@ This:
 4. Claude reads code, implements the fix, runs `npx tsc --noEmit`, and commits.
 5. The script then pushes the branch and opens a PR against `db-lyon/ue-mcp`.
 
-Requires `gh` and `claude` CLIs, write access to the repo (or a fork to push to), and you must run it from inside a `ue-mcp` clone — it operates on the working tree, not a temp clone.
+Requires `gh` and `claude` CLIs, write access to the repo (or a fork to push to), and you must run it from inside a `ue-mcp` clone - it operates on the working tree, not a temp clone.
 
 ## Building
 
@@ -154,12 +154,12 @@ Smoke tests run against a **live editor** and verify tool functionality end-to-e
 npm run test:level
 npm run test:blueprint
 npm run test:material
-# ... 16 suites total — see scripts in package.json
+# ... 16 suites total - see scripts in package.json
 
 # All suites (Vitest)
 npm test
 
-# Full smoke test runner — exercises every registered handler
+# Full smoke test runner - exercises every registered handler
 npm run test:smoke
 ```
 
@@ -259,11 +259,11 @@ For a full editor restart: `editor(action="restart_editor")`
 ## Dependencies
 
 ### Runtime
-- `@modelcontextprotocol/sdk` — MCP protocol implementation
-- `ws` — WebSocket client
-- `zod` — Schema validation
+- `@modelcontextprotocol/sdk` - MCP protocol implementation
+- `ws` - WebSocket client
+- `zod` - Schema validation
 
 ### Dev
-- `typescript` — Type checking
-- `tsx` — TypeScript execution (dev mode)
-- `vitest` — Test runner
+- `typescript` - Type checking
+- `tsx` - TypeScript execution (dev mode)
+- `vitest` - Test runner

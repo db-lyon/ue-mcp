@@ -2,7 +2,7 @@
 
 **Unreal Engine Model Context Protocol Server** - lets AI assistants drive the Unreal Editor through <!-- count:tools -->24<!-- /count --> category tools covering <!-- count:actions -->783+<!-- /count --> actions.
 
-UE-MCP is a bridge between an AI client (Claude Code, Claude Desktop, Cursor, etc.) and the Unreal Editor. It runs a TypeScript MCP server on your machine, which talks over WebSocket to a C++ plugin running inside the editor. The result: your AI can place actors, write blueprints, author materials, sculpt landscape, set up Niagara VFX, configure replication, run PIE, build the project — anything the editor can do.
+UE-MCP is a bridge between an AI client (Claude Code, Claude Desktop, Cursor, etc.) and the Unreal Editor. It runs a TypeScript MCP server on your machine, which talks over WebSocket to a C++ plugin running inside the editor. The result: your AI can place actors, write blueprints, author materials, sculpt landscape, set up Niagara VFX, configure replication, run PIE, build the project - anything the editor can do.
 
 ```mermaid
 flowchart LR
@@ -16,7 +16,7 @@ Filesystem-based reads (config INI parsing, C++ header reflection, asset directo
 
 ## New Here?
 
-Start with **[Getting Started](getting-started.md)**. It assumes zero knowledge — no Node.js, no MCP, no command line — and walks you all the way to your AI placing actors in your level.
+Start with **[Getting Started](getting-started.md)**. It assumes zero knowledge - no Node.js, no MCP, no command line - and walks you all the way to your AI placing actors in your level.
 
 ## What Can It Do?
 
@@ -45,9 +45,9 @@ Start with **[Getting Started](getting-started.md)**. It assumes zero knowledge 
 | **Demo** | Built-in 19-step Neon Shrine procedural scene |
 | **Feedback** | Submit tool-gap reports as GitHub issues |
 
-Plus a **flow engine** that lets you chain any of these into multi-step YAML workflows with rollback, retries, and step references — see [Flows](flows.md).
+Plus a **flow engine** that lets you chain any of these into multi-step YAML workflows with rollback, retries, and step references - see [Flows](flows.md).
 
-And a **plugin system** that lets npm packages inject new actions into the existing categories. Plugins ship through `npm install` and slot into the same `pcg`/`landscape`/etc. tools the agent is already using — there is nothing extra for the agent to discover. See [Plugins](plugins.md) for the author contract and [Configuration → Plugins](configuration.md#plugins) for the consumer view.
+And a **plugin system** that lets npm packages inject new actions into the existing categories. Plugins ship through `npm install` and slot into the same `pcg`/`landscape`/etc. tools the agent is already using - there is nothing extra for the agent to discover. See [Plugins](plugins.md) for the author contract and [Configuration → Plugins](configuration.md#plugins) for the consumer view.
 
 ## Navigation
 

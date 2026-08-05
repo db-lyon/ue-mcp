@@ -6,7 +6,7 @@ It is also just one file in a deep-merged stack. This page is the reference for 
 
 ## Anatomy
 
-Four top-level keys. Only the `ue-mcp:` block is required — `init` writes `version: 1`.
+Four top-level keys. Only the `ue-mcp:` block is required - `init` writes `version: 1`.
 
 ```yaml
 ue-mcp:            # project-level server config (detailed below)
@@ -35,12 +35,12 @@ plugins: []        # npm packages that inject new actions
 
 | Layer | File | Tracked? | For |
 |-------|------|----------|-----|
-| Built-in defaults | (shipped in the package) | — | The baseline every project starts from. |
-| **User-global** | `~/.ue-mcp/config.yml` | No (per-user) | Your personal defaults for **every** project on this machine — e.g. `context.strategy`. Mirrors the project file's shape (a `ue-mcp:` block plus optional `tasks:` / `flows:`). Hand-edited. |
+| Built-in defaults | (shipped in the package) | - | The baseline every project starts from. |
+| **User-global** | `~/.ue-mcp/config.yml` | No (per-user) | Your personal defaults for **every** project on this machine - e.g. `context.strategy`. Mirrors the project file's shape (a `ue-mcp:` block plus optional `tasks:` / `flows:`). Hand-edited. |
 | **Project** | `<project>/ue-mcp.yml` | **Yes** | The shared project surface every collaborator gets. |
-| Env overlay | `<project>/ue-mcp.{env}.yml` | Optional | Loaded only when `UE_MCP_ENV` is set — e.g. `ue-mcp.ci.yml` with `UE_MCP_ENV=ci`. |
+| Env overlay | `<project>/ue-mcp.{env}.yml` | Optional | Loaded only when `UE_MCP_ENV` is set - e.g. `ue-mcp.ci.yml` with `UE_MCP_ENV=ci`. |
 | **Local** | `<project>/ue-mcp.local.yml` | No (git-ignore it) | Per-developer overrides for this one project that shouldn't be committed. |
-| Env vars | `UE_MCP_CONTEXT_STRATEGY`, … | — | Highest precedence; win over every file, per session. |
+| Env vars | `UE_MCP_CONTEXT_STRATEGY`, … | - | Highest precedence; win over every file, per session. |
 
 **Deep merge semantics.** Nested objects merge key-by-key, so a later layer setting `context.strategy` does not wipe sibling keys. Arrays replace by default; put `__merge: append` on an override array to concatenate onto the base instead. A `null` in a later layer explicitly clears a value.
 
@@ -48,7 +48,7 @@ flowkit, the engine behind `tasks:` / `flows:`, uses this same layered model, an
 
 ## Where each setting belongs
 
-Every key is valid in **every** layer — the schema is identical at each level. So "where does this go?" is a choice of *layer*, not a restriction the schema enforces. The layer you pick decides whether a value is shared with the team, personal to you, or scoped to one machine.
+Every key is valid in **every** layer - the schema is identical at each level. So "where does this go?" is a choice of *layer*, not a restriction the schema enforces. The layer you pick decides whether a value is shared with the team, personal to you, or scoped to one machine.
 
 The rule of thumb:
 
@@ -59,7 +59,7 @@ The rule of thumb:
 | `disable`, `nativeTools` | Either | A project *may* ship a shared default (this project has no GAS, so disable it for everyone), and any developer overrides it in their user or local layer. |
 | `bridge.port` | **Project** `ue-mcp.yml` when the whole team wants a known port; **local** `ue-mcp.local.yml` when one machine needs one | A port is a machine fact as much as a project one. Both the client and the plugin read whichever layer wins, so the two agree either way. |
 
-Nothing stops you putting `context.strategy` in the tracked `ue-mcp.yml` as a project default — a later user or local layer simply overrides it. What is deliberately kept out of every yml file is machine **state** the tool writes for itself (installed-hook paths, feedback mode); that lives in `~/.ue-mcp/state.json` (see the callout under the block reference).
+Nothing stops you putting `context.strategy` in the tracked `ue-mcp.yml` as a project default - a later user or local layer simply overrides it. What is deliberately kept out of every yml file is machine **state** the tool writes for itself (installed-hook paths, feedback mode); that lives in `~/.ue-mcp/state.json` (see the callout under the block reference).
 
 ## `ue-mcp:` block reference
 
@@ -74,13 +74,13 @@ Nothing stops you putting `context.strategy` in the tracked `ue-mcp.yml` as a pr
 | `pie` | `object` | `{ allowIgnoreBlueprintErrors: false }` | Play In Editor policy. `allowIgnoreBlueprintErrors` (bool, default `false`) pre-authorizes `editor(action="play_in_editor_ignore_blueprint_errors")`, the one action that starts PIE with the editor's unresolved-Blueprint-error prompt suppressed. Left off, every such launch blocks on an MCP approval prompt the user has to answer. Turning it on means PIE runs whatever bytecode the errored Blueprints last compiled to, without asking, so it belongs in the untracked `ue-mcp.local.yml` unless the whole team wants it. |
 | `context` | `object` | `{ strategy: full }` | Context-seeding strategy. `strategy: full` (default) advertises every action inline; `lean` keeps action names but serves descriptions on demand (~half the seed); `micro` collapses everything behind one gateway tool (~1k tokens). See [Context strategy](configuration.md#context-strategy-full-lean-micro). |
 
-!!! info "Config vs. machine state — two homes under `~/.ue-mcp/`"
-    - `~/.ue-mcp/config.yml` — your per-user **config** layer (see [Config layering](#config-layering)). Hand-edited. Personal defaults applied across every project.
-    - `~/.ue-mcp/state.json` — machine **state** the tool writes and you never hand-edit: absolute paths to the Claude Code settings files where the feedback hook was installed, plus your feedback-mode preference. Maintained by `npx ue-mcp init` / `npx ue-mcp uninstall-hooks` / `npx ue-mcp feedback mode`.
+!!! info "Config vs. machine state - two homes under `~/.ue-mcp/`"
+    - `~/.ue-mcp/config.yml` - your per-user **config** layer (see [Config layering](#config-layering)). Hand-edited. Personal defaults applied across every project.
+    - `~/.ue-mcp/state.json` - machine **state** the tool writes and you never hand-edit: absolute paths to the Claude Code settings files where the feedback hook was installed, plus your feedback-mode preference. Maintained by `npx ue-mcp init` / `npx ue-mcp uninstall-hooks` / `npx ue-mcp feedback mode`.
 
 !!! tip "Migrating from older versions"
     - Pre-1.0.29 used `.ue-mcp.json` for the project config. On first load it is migrated into `ue-mcp.yml` (project fields) + `~/.ue-mcp/state.json` (machine state), then removed.
-    - 1.0.29 briefly wrote machine state (`installedHooks`) into `ue-mcp.local.yml`. On first load that one key is moved to `~/.ue-mcp/state.json` and stripped from the file — **the rest of `ue-mcp.local.yml` is left in place**, because it is now a supported per-machine override layer (see [Config layering](#config-layering)). A file that held nothing but `installedHooks` is deleted once emptied.
+    - 1.0.29 briefly wrote machine state (`installedHooks`) into `ue-mcp.local.yml`. On first load that one key is moved to `~/.ue-mcp/state.json` and stripped from the file - **the rest of `ue-mcp.local.yml` is left in place**, because it is now a supported per-machine override layer (see [Config layering](#config-layering)). A file that held nothing but `installedHooks` is deleted once emptied.
     - Both migrations are automatic and idempotent; you don't need to do anything.
 
 ## See also

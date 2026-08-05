@@ -1,12 +1,12 @@
 # Neon Shrine Demo
 
-The Neon Shrine is a built-in **19-step procedural demo** that builds a complete scene from scratch through MCP tool calls — materials, geometry, lighting, atmosphere, VFX, PCG, sequencer, even an editor utility widget. It's the fastest way to see UE-MCP working end-to-end after install.
+The Neon Shrine is a built-in **19-step procedural demo** that builds a complete scene from scratch through MCP tool calls - materials, geometry, lighting, atmosphere, VFX, PCG, sequencer, even an editor utility widget. It's the fastest way to see UE-MCP working end-to-end after install.
 
 ## Running the Demo
 
 ### Prerequisites
 
-- Editor running and connected. Check with `project(action="get_status")` — `editorConnected` must be `true`.
+- Editor running and connected. Check with `project(action="get_status")` - `editorConnected` must be `true`.
 - An empty or expendable level. The demo creates ~30 actors and writes assets under `/Game/Demo/`.
 
 ### Step List
@@ -76,4 +76,4 @@ The implementation lives in `plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/H
 
 ## See Also
 
-For a much larger declarative example, see the **Beacon** flow described in [Flows](flows.md#beacon) — a 56-step shrine scene composed entirely from individual MCP tool calls in `src/flow/loader.ts`.
+For a much larger declarative example, see the **Beacon** flow described in [Flows](flows.md#beacon) - a 56-step shrine scene composed entirely from individual MCP tool calls in `src/flow/loader.ts`.

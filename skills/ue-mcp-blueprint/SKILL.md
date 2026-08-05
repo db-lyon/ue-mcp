@@ -24,42 +24,42 @@ The DSL authors and compiles an entire graph in a single round-trip, which is ma
 
 For any existing Blueprint:
 
-- `blueprint(action="read", assetPath=...)` — structure (parent, components, graphs)
-- `blueprint(action="read_graph_summary", assetPath=..., graphName=...)` — lightweight node+edge summary (~10KB) — use this before `read_graph` (which can be 100KB+)
-- `blueprint(action="list_graphs", assetPath=...)` — every graph in the BP including event graphs, functions, macros, interface impls
+- `blueprint(action="read", assetPath=...)` - structure (parent, components, graphs)
+- `blueprint(action="read_graph_summary", assetPath=..., graphName=...)` - lightweight node+edge summary (~10KB) - use this before `read_graph` (which can be 100KB+)
+- `blueprint(action="list_graphs", assetPath=...)` - every graph in the BP including event graphs, functions, macros, interface impls
 - `blueprint(action="list_variables" | "list_functions" | "list_local_variables")` - the member surface. `list_functions` covers the same graphs as `list_graphs` (own functions, parent overrides, interface impls, event graphs and their entry points, macros, collapsed subgraphs), each tagged with `kind` and `source`; pass `includeInherited: true` to also see overridable functions not implemented yet
-- `blueprint(action="get_execution_flow", assetPath=..., entryPoint=...)` — trace exec pins from an entry point
-- `blueprint(action="get_dependencies", assetPath=..., reverse=false|true)` — classes/functions/assets this BP uses, or callers if `reverse: true`
+- `blueprint(action="get_execution_flow", assetPath=..., entryPoint=...)` - trace exec pins from an entry point
+- `blueprint(action="get_dependencies", assetPath=..., reverse=false|true)` - classes/functions/assets this BP uses, or callers if `reverse: true`
 
 ## Mutation recipe
 
-1. **Create the skeleton** — `blueprint(action="create", assetPath, parentClass?)`.
-2. **Add variables + components** — `add_variable`, `add_component` (pass `parentComponent` for SCS hierarchy).
-3. **Build graphs** — `add_node` each K2Node, `set_node_property` for pin defaults, `connect_pins` to wire exec + data.
-4. **Compile** — `blueprint(action="compile", assetPath)`. Compilation errors come back in the result; fix them before proceeding.
+1. **Create the skeleton** - `blueprint(action="create", assetPath, parentClass?)`.
+2. **Add variables + components** - `add_variable`, `add_component` (pass `parentComponent` for SCS hierarchy).
+3. **Build graphs** - `add_node` each K2Node, `set_node_property` for pin defaults, `connect_pins` to wire exec + data.
+4. **Compile** - `blueprint(action="compile", assetPath)`. Compilation errors come back in the result; fix them before proceeding.
 
 ## Node wiring fundamentals
 
 - `add_node` takes `nodeClass` as a K2Node class short name (`K2Node_CallFunction`, `K2Node_VariableGet`, `K2Node_DynamicCast`, `K2Node_IfThenElse`, etc.) plus `nodeParams` for class-specific fields (`FunctionReference`, `VariableReference`, `TargetType`).
 - Pin defaults vs linked values: `set_node_property` writes a literal default onto a pin; `connect_pins` wires a pin to another node's output. A literal default is ignored once a pin is linked.
-- `read_node_property` reads either a pin default or a reflected node UPROPERTY — use this to verify the pin was actually set before compiling.
+- `read_node_property` reads either a pin default or a reflected node UPROPERTY - use this to verify the pin was actually set before compiling.
 - Graphs with duplicate names (rare but possible after rename) can be disambiguated by passing `graphIndex` alongside `graphName`.
 
 ## Components (SCS)
 
-- `add_component` creates a node in the Simple Construction Script. Pass `parentComponent` to put the new component under an existing parent — otherwise it becomes a top-level child of the scene root.
-- `set_component_property` writes on the child BP's InheritableComponentHandler override template, not on the parent — the parent stays untouched. This matters when editing inherited components.
+- `add_component` creates a node in the Simple Construction Script. Pass `parentComponent` to put the new component under an existing parent - otherwise it becomes a top-level child of the scene root.
+- `set_component_property` writes on the child BP's InheritableComponentHandler override template, not on the parent - the parent stays untouched. This matters when editing inherited components.
 - `read_component_properties` dumps every UPROPERTY on the template, including array contents.
 - `reparent_component` moves an SCS node to a new parent.
 
 ## CDO (class defaults)
 
-- `set_class_default` writes a UPROPERTY on the Blueprint CDO (the class default object). For actor tick settings specifically, use `set_actor_tick_settings` — it handles `bCanEverTick`, `bStartWithTickEnabled`, `TickInterval` in one call.
+- `set_class_default` writes a UPROPERTY on the Blueprint CDO (the class default object). For actor tick settings specifically, use `set_actor_tick_settings` - it handles `bCanEverTick`, `bStartWithTickEnabled`, `TickInterval` in one call.
 
 ## Interfaces + event dispatchers
 
-- `create_interface` + `add_interface` — the implement-side.
-- `add_event_dispatcher` — fires a multicast delegate from the BP.
+- `create_interface` + `add_interface` - the implement-side.
+- `add_event_dispatcher` - fires a multicast delegate from the BP.
 
 ## Verify before compile
 

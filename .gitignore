@@ -30,10 +30,10 @@ obj/
 plans/
 comms/
 
-## Announcement / comms drafts (Discord posts, demo recipes — never shipped)
+## Announcement / comms drafts (Discord posts, demo recipes - never shipped)
 comms/
 
-## Test-project Claude Code artifacts (ephemeral — installed by `ue-mcp init` / skills dry-runs)
+## Test-project Claude Code artifacts (ephemeral - installed by `ue-mcp init` / skills dry-runs)
 tests/ue_mcp/.claude/
 
 ## Deployed bridge plugin (source of truth lives in plugin/; scripts/deploy.mjs regenerates this on every build)

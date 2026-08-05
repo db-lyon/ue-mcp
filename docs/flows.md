@@ -1,6 +1,6 @@
 # Flows
 
-Flows let you define multi-step workflows in YAML and run them as a single operation. They're powered by [`@db-lyon/flowkit`](https://github.com/db-lyon/flowkit) and are fully customizable — you can chain built-in tasks, run shell commands, override tasks with your own implementations, or compose tasks together.
+Flows let you define multi-step workflows in YAML and run them as a single operation. They're powered by [`@db-lyon/flowkit`](https://github.com/db-lyon/flowkit) and are fully customizable - you can chain built-in tasks, run shell commands, override tasks with your own implementations, or compose tasks together.
 
 ## Quick Start
 
@@ -28,7 +28,7 @@ Run it from the AI:
 flow(action="run", flowName="build_and_check")
 ```
 
-That's it. The config is **hot-reloaded on every call** — edit the YAML and run again without restarting the MCP server.
+That's it. The config is **hot-reloaded on every call** - edit the YAML and run again without restarting the MCP server.
 
 ## Concepts
 
@@ -52,7 +52,7 @@ The fields:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `class_path` | Yes | How the task is resolved — a registered name, a built-in class path, or a path to your own `.js`/`.ts` file |
+| `class_path` | Yes | How the task is resolved - a registered name, a built-in class path, or a path to your own `.js`/`.ts` file |
 | `description` | No | Human-readable description |
 | `group` | No | Category for organization |
 | `options` | No | Default options passed to the task (can be overridden per-step) |
@@ -109,8 +109,8 @@ steps:
 
 Options are merged in two layers:
 
-1. **Task definition** — default options in the `tasks:` section
-2. **Step** — per-step overrides in the `flows:` section
+1. **Task definition** - default options in the `tasks:` section
+2. **Step** - per-step overrides in the `flows:` section
 
 Step options win:
 
@@ -156,10 +156,10 @@ See the full list by running `flow(action="list")` (the bundled defaults live in
 
 Built-in tasks fall into two categories:
 
-- **Bridge tasks** — forwarded to the C++ plugin over WebSocket. Defined with `class_path: ue-mcp.bridge` and a `method` option.
-- **Handler tasks** — executed locally in Node.js (filesystem operations like config parsing, asset directory scanning).
+- **Bridge tasks** - forwarded to the C++ plugin over WebSocket. Defined with `class_path: ue-mcp.bridge` and a `method` option.
+- **Handler tasks** - executed locally in Node.js (filesystem operations like config parsing, asset directory scanning).
 
-The `shell` task is also built in — it runs a command via `child_process`:
+The `shell` task is also built in - it runs a command via `child_process`:
 
 ```yaml
 steps:
@@ -190,7 +190,7 @@ taskDef.options  <  step.options  <  runtime params
 
 So a step with `options: { levelPath: "/Game/Flows/Beacon" }` in the YAML will use `/Game/MyCustomLevel` if you pass `params: { levelPath: "/Game/MyCustomLevel" }` at runtime.
 
-Params apply to every step — steps that don't use a given key simply ignore it. This makes flows fully parameterizable without templating syntax.
+Params apply to every step - steps that don't use a given key simply ignore it. This makes flows fully parameterizable without templating syntax.
 
 ## Step References
 
@@ -215,8 +215,8 @@ flows:
           command: "echo built ${steps.project.build.version}"  # embedded → stringified
 ```
 
-- **`<id>`** — step number (`1`) or task name (`project.build`). For task names that contain dots, the longest prefix that matches a step wins.
-- **`<path>`** — dot path into that step's `result.data`.
+- **`<id>`** - step number (`1`) or task name (`project.build`). For task names that contain dots, the longest prefix that matches a step wins.
+- **`<path>`** - dot path into that step's `result.data`.
 - If a task name appears in multiple steps, references resolve to the **most recently completed** one.
 - If the whole option value is a single `${...}` reference, the raw value is substituted (objects and arrays round-trip). Embedded references inside a larger string are stringified.
 - References that can't be resolved fail the step.
@@ -227,7 +227,7 @@ Precedence (highest wins):
 taskDef.options  <  step.options  <  runtime params
 ```
 
-References in any of those layers resolve at step-execution time against already-completed steps in the same flow. Nested flows have their own scope — a nested step cannot reference a step in the enclosing flow.
+References in any of those layers resolve at step-execution time against already-completed steps in the same flow. Nested flows have their own scope - a nested step cannot reference a step in the enclosing flow.
 
 ## Flow-level Hooks
 
@@ -246,12 +246,12 @@ flows:
       2: { task: asset.save }
 ```
 
-- **`on_start`** — before the first step. Failure aborts the flow.
-- **`on_success`** — after all steps succeed.
-- **`on_failure`** — after any step fails. The `${error.message|name|stack|step}` namespace resolves inside this phase.
-- **`finally`** — after `on_success` / `on_failure`, regardless of outcome.
+- **`on_start`** - before the first step. Failure aborts the flow.
+- **`on_success`** - after all steps succeed.
+- **`on_failure`** - after any step fails. The `${error.message|name|stack|step}` namespace resolves inside this phase.
+- **`finally`** - after `on_success` / `on_failure`, regardless of outcome.
 
-Hook steps share the full execution model — same references, same option merging, same runtime params. Hook failures appear in `result.hookErrors` but don't change the primary success/failure outcome.
+Hook steps share the full execution model - same references, same option merging, same runtime params. Hook failures appear in `result.hookErrors` but don't change the primary success/failure outcome.
 
 ## Per-step Retry
 
@@ -285,7 +285,7 @@ flows:
 
 If step 3 fails: the `delete_actor` inverses for B and A run, leaving the level as it was. Handlers without an inverse (`execute_command`, `shell`, some deletes) simply don't contribute records; their steps are left as-is when rollback runs.
 
-Conventions for handlers — natural keys, the `onConflict: skip|update|error` option, and rollback record shape — live in [docs/handler-conventions.md](handler-conventions.md).
+Conventions for handlers - natural keys, the `onConflict: skip|update|error` option, and rollback record shape - live in [docs/handler-conventions.md](handler-conventions.md).
 
 ## Git Snapshot Safety Net
 
@@ -301,7 +301,7 @@ git_snapshot:
   max_age_hours: 24                  # prune older snapshot refs on each run
 ```
 
-The shadow repo is completely separate from any project-level git — your real history isn't touched. Snapshot failure doesn't fail the flow; handler-level rollbacks still apply. Restore outcomes surface in `result.snapshotRestore`.
+The shadow repo is completely separate from any project-level git - your real history isn't touched. Snapshot failure doesn't fail the flow; handler-level rollbacks still apply. Restore outcomes surface in `result.snapshotRestore`.
 
 ## Live Observation (SSE)
 
@@ -393,7 +393,7 @@ flow(action="run", flowName="niagara_fire", params={ "name": "NS_Torch", "packag
 
 ### Beacon
 
-A 56-step demo that builds a complete shrine scene from scratch — geometry, materials, lighting, atmosphere, and camera.
+A 56-step demo that builds a complete shrine scene from scratch - geometry, materials, lighting, atmosphere, and camera.
 
 ```
 flow(action="run", flowName="beacon")
@@ -404,10 +404,10 @@ What it creates:
 | Steps | Category | What |
 |-------|----------|------|
 | 1–4 | level | New level, SkyAtmosphere, ExponentialHeightFog, SkyLight |
-| 5–7 | material | **M_Floor** — dark stone base color |
-| 8–16 | material | **M_Pillar** — brushed metallic (Metallic=1, Roughness=0.3) |
-| 17–19 | material | **M_Pedestal** — warm stone |
-| 20–28 | material | **M_Glow** — parameterized emissive (VectorParameter × 50 → EmissiveColor) |
+| 5–7 | material | **M_Floor** - dark stone base color |
+| 8–16 | material | **M_Pillar** - brushed metallic (Metallic=1, Roughness=0.3) |
+| 17–19 | material | **M_Pedestal** - warm stone |
+| 20–28 | material | **M_Glow** - parameterized emissive (VectorParameter × 50 → EmissiveColor) |
 | 29 | level | Floor slab (scaled Cube with M_Floor) |
 | 30 | level | Center pedestal (Cylinder with M_Pedestal) |
 | 31 | level | Glowing orb (Sphere with M_Glow) |
@@ -498,12 +498,12 @@ tasks:
 
 Key points:
 
-- **Export as default** — the loader looks for a default export, or a named export matching the filename.
-- **Must extend `UeMcpTask`** — the registry validates this at load time.
-- **`this.options`** — receives the merged options (task defaults + step overrides).
-- **`this.ctx`** — the shared context, typed for you as `FlowContext`: `bridge` (editor WebSocket) and `project` (path resolution). `UeMcpTask` also exposes a `this.bridge` shortcut.
-- **`this.call(name, opts)`** — resolve and execute another task by name. The original built-in task is still in the registry even when you override it via YAML `class_path`.
-- **`this.resolve(name, opts)`** — like `call()` but returns the task instance without running it, in case you need to inspect or configure it first.
+- **Export as default** - the loader looks for a default export, or a named export matching the filename.
+- **Must extend `UeMcpTask`** - the registry validates this at load time.
+- **`this.options`** - receives the merged options (task defaults + step overrides).
+- **`this.ctx`** - the shared context, typed for you as `FlowContext`: `bridge` (editor WebSocket) and `project` (path resolution). `UeMcpTask` also exposes a `this.bridge` shortcut.
+- **`this.call(name, opts)`** - resolve and execute another task by name. The original built-in task is still in the registry even when you override it via YAML `class_path`.
+- **`this.resolve(name, opts)`** - like `call()` but returns the task instance without running it, in case you need to inspect or configure it first.
 
 ### Extending a Bridge Task
 
@@ -524,7 +524,7 @@ export default class SafeBuild extends UeMcpTask {
     if (!status.success || !status.data?.connected) {
       return {
         success: false,
-        error: new Error('Editor not connected — cannot build'),
+        error: new Error('Editor not connected - cannot build'),
       };
     }
 
@@ -613,13 +613,13 @@ registry.wrap('asset.list', (Original) => {
 });
 ```
 
-Multiple wraps compose — each layer sees the previously wrapped version as its parent:
+Multiple wraps compose - each layer sees the previously wrapped version as its parent:
 
 ```typescript
 // First wrap adds logging
 registry.wrap('asset.list', (Original) => class extends Original { /* log */ });
 
-// Second wrap adds caching — it wraps the logged version
+// Second wrap adds caching - it wraps the logged version
 registry.wrap('asset.list', (Original) => class extends Original { /* cache */ });
 ```
 
@@ -641,7 +641,7 @@ Each layer deep-merges on top of the previous. Later layers win for scalar value
 **Example:** keep your shared flows in `ue-mcp.yml` and machine-specific overrides in `ue-mcp.local.yml`:
 
 ```yaml
-# ue-mcp.local.yml — not committed
+# ue-mcp.local.yml - not committed
 tasks:
   shell:
     options:
@@ -660,7 +660,7 @@ This loads `ue-mcp.ci.yml` on top of `ue-mcp.yml`.
 
 ## Hot Reload
 
-The config is **reloaded from disk on every flow call**. Edit `ue-mcp.yml`, save, and run the flow again — no server restart needed. This makes it easy to iterate on flow definitions.
+The config is **reloaded from disk on every flow call**. Edit `ue-mcp.yml`, save, and run the flow again - no server restart needed. This makes it easy to iterate on flow definitions.
 
 ## Dynamic Class Loading
 
@@ -673,7 +673,7 @@ When you set `class_path` to a file path (e.g., `./tasks/MyTask`), the registry 
 
 The loaded module must export a class that extends `UeMcpTask`, either as the default export or as a named export matching the filename.
 
-Dynamically loaded classes are cached — the file is only imported once per class path per session.
+Dynamically loaded classes are cached - the file is only imported once per class path per session.
 
 ## UeMcpTask Reference
 
@@ -692,11 +692,11 @@ abstract class UeMcpTask<TOpts = Record<string, unknown>> {
 
   protected validate(): void;           // Option validation (override, called before execute)
 
-  // Composition — resolve/run other tasks from within your task
+  // Composition - resolve/run other tasks from within your task
   protected resolve(taskName: string, options?: Record<string, unknown>): Promise<UeMcpTask>;
   protected call(taskName: string, options?: Record<string, unknown>): Promise<TaskResult>;
 
-  // Lifecycle — called by the engine, not by you
+  // Lifecycle - called by the engine, not by you
   run(): Promise<TaskResult>;           // validate → execute → catch errors → return result
 }
 ```

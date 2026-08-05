@@ -187,7 +187,7 @@ The C++ bridge links against many UE modules. If compilation fails:
 
 If the editor starts but the bridge doesn't appear in the Output Log:
 
-1. Check **Edit > Plugins** in the editor — search for "UE_MCP_Bridge" and ensure it's enabled.
+1. Check **Edit > Plugins** in the editor - search for "UE_MCP_Bridge" and ensure it's enabled.
 2. Check that the plugin is listed in your `.uproject`:
    ```json
    { "Name": "UE_MCP_Bridge", "Enabled": true }
@@ -198,14 +198,14 @@ If the editor starts but the bridge doesn't appear in the Output Log:
 ### Server won't start
 
 1. **Node.js version.** Requires Node 18+. Check with `node --version`.
-2. **Build step.** Make sure you ran `npm run build` — the server runs from `dist/index.js`, not source.
+2. **Build step.** Make sure you ran `npm run build` - the server runs from `dist/index.js`, not source.
 3. **Path to .uproject.** The path must be absolute and point to a valid `.uproject` file.
 
 ### Tools return errors
 
-- **"Bridge not connected"** — the editor isn't running or the plugin isn't loaded. See connection issues above.
-- **"Handler not found"** — the action name might be wrong. Check the [Tool Reference](tool-reference.md) for valid action names.
-- **"Asset not found"** — asset paths should use the `/Game/` prefix (e.g., `/Game/Blueprints/BP_Player`), not filesystem paths.
+- **"Bridge not connected"** - the editor isn't running or the plugin isn't loaded. See connection issues above.
+- **"Handler not found"** - the action name might be wrong. Check the [Tool Reference](tool-reference.md) for valid action names.
+- **"Asset not found"** - asset paths should use the `/Game/` prefix (e.g., `/Game/Blueprints/BP_Player`), not filesystem paths.
 - **Timeout** - the default timeout is 30 seconds, and some actions set their own (`widget(add_widget)` allows 120s, project builds 300s). A timeout is not a failed call: see [A call timed out - did it happen or not?](#a-call-timed-out-did-it-happen-or-not) before retrying.
 
 ## Asset Path Issues
@@ -219,9 +219,9 @@ UE-MCP expects Unreal-style asset paths:
 | Full object path | `/Game/Blueprints/BP_Player.BP_Player_C` |
 
 !!! warning "Common mistakes"
-    - Using filesystem paths (`C:/Users/.../Content/...`) — use `/Game/...` instead
-    - Including file extensions (`.uasset`) — omit the extension
-    - Missing the leading slash — `/Game/Foo`, not `Game/Foo`
+    - Using filesystem paths (`C:/Users/.../Content/...`) - use `/Game/...` instead
+    - Including file extensions (`.uasset`) - omit the extension
+    - Missing the leading slash - `/Game/Foo`, not `Game/Foo`
 
 ## Class Names and the A/U/F/E Prefix
 

@@ -65,7 +65,7 @@ jobs:
         with:
           # Node 24 LTS ships npm 11.x natively. Trusted publishing (OIDC)
           # requires npm >= 11.5.1. Bumping the node version here is the
-          # cleanest path — corepack on Node 22 downloads npm 11.x but its
+          # cleanest path - corepack on Node 22 downloads npm 11.x but its
           # shim is shadowed by setup-node's pinned binary, so `npm` keeps
           # resolving to 10.x and OIDC never engages.
           node-version: "24"

@@ -1,6 +1,6 @@
 # Feedback
 
-`feedback(submit)` files a GitHub issue describing a tool gap, so maintainers can close it with a native handler. It picks the tracker that owns the surface being reported — ue-mcp core, or the plugin that provides it — by consulting the [plugin registry](https://plugins.ue-mcp.com). The flow is gated on explicit user approval (no agent-mediated consent), and the body is server-side scrubbed for credentials and personal/project identifiers before anything leaves your machine.
+`feedback(submit)` files a GitHub issue describing a tool gap, so maintainers can close it with a native handler. It picks the tracker that owns the surface being reported - ue-mcp core, or the plugin that provides it - by consulting the [plugin registry](https://plugins.ue-mcp.com). The flow is gated on explicit user approval (no agent-mediated consent), and the body is server-side scrubbed for credentials and personal/project identifiers before anything leaves your machine.
 
 ## How it works
 
@@ -19,7 +19,7 @@ flowchart LR
 2. Server validates the submission (rejects placeholder titles, meta-apology phrases, too-short summaries, etc.).
 3. Server works out which tracker owns the surface ([jump to section](#routing-to-the-right-tracker)).
 4. Server assembles the body, applies a credential scrub pass and a privacy redaction pass ([jump to section](#what-gets-scrubbed)).
-5. Server requests an **MCP elicitation** — your client surfaces an approval prompt with the full body, the destination tracker, an optional revisions text field, and an Accept / Decline action.
+5. Server requests an **MCP elicitation** - your client surfaces an approval prompt with the full body, the destination tracker, an optional revisions text field, and an Accept / Decline action.
 6. Based on your choice the server submits the POST, returns a revision directive to the agent, or discards.
 
 ## Routing to the right tracker
@@ -48,7 +48,7 @@ feedback(action="route",
 
 It returns the target repo, the matched plugin and why, any runner-up suggestions, the core anchor it found, and whether the registry was reachable.
 
-Every posted issue carries a `## Routing` section stating what was matched and on what evidence. It describes the analysis, not the destination, so it reads the same whether you accept the suggested tracker or override it — which is also why flipping the tracker at the prompt cannot change the bytes you just read.
+Every posted issue carries a `## Routing` section stating what was matched and on what evidence. It describes the analysis, not the destination, so it reads the same whether you accept the suggested tracker or override it - which is also why flipping the tracker at the prompt cannot change the bytes you just read.
 
 Registry lookups never block a submission: an unreachable registry with no cached copy resolves to core, the behaviour that existed before routing did. To pin every report to core and skip the lookup entirely:
 
@@ -59,13 +59,13 @@ UE_MCP_FEEDBACK_ROUTING=off npx ue-mcp ./MyGame.uproject
 !!! note "Labels off-core"
     Core category labels (`blueprint`, `niagara`, ...) describe the ue-mcp core surface. A report filed on a plugin repo carries `agent-feedback` plus any type label (`bug`, `enhancement`) and nothing else.
 
-If the chosen tracker refuses the issue (issues disabled, or your account cannot open one there), nothing is posted anywhere. The tool returns a prefilled `https://github.com/<owner>/<repo>/issues/new?...` URL and the option to re-run against core. In `auto-approve` mode — where nobody is at the keyboard to read that — the report falls back to the core tracker and says so in the result.
+If the chosen tracker refuses the issue (issues disabled, or your account cannot open one there), nothing is posted anywhere. The tool returns a prefilled `https://github.com/<owner>/<repo>/issues/new?...` URL and the option to re-run against core. In `auto-approve` mode - where nobody is at the keyboard to read that - the report falls back to the core tracker and says so in the result.
 
 ## Feedback modes
 
-The default is **interactive** — every `feedback(submit)` blocks on the MCP elicitation approval prompt. Two other modes exist for autonomous / long-running agent sessions where waiting for human input on every submission isn't acceptable.
+The default is **interactive** - every `feedback(submit)` blocks on the MCP elicitation approval prompt. Two other modes exist for autonomous / long-running agent sessions where waiting for human input on every submission isn't acceptable.
 
-The mode is a **per-user, per-device** preference, not a project policy — it's stored in `~/.ue-mcp/state.json`, not in the tracked `ue-mcp.yml`. The agent has no surface to change it.
+The mode is a **per-user, per-device** preference, not a project policy - it's stored in `~/.ue-mcp/state.json`, not in the tracked `ue-mcp.yml`. The agent has no surface to change it.
 
 | Mode | What happens on `feedback(submit)` | When to use it |
 |---|---|---|
@@ -83,7 +83,7 @@ npx ue-mcp feedback mode interactive
 npx ue-mcp feedback mode default         # clear the preference (back to "interactive")
 ```
 
-For a one-off agent run, set the env var instead — it overrides the persisted preference and is not written to disk:
+For a one-off agent run, set the env var instead - it overrides the persisted preference and is not written to disk:
 
 ```bash
 UE_MCP_FEEDBACK_MODE=defer npx ue-mcp ./MyGame.uproject
@@ -103,11 +103,11 @@ npx ue-mcp feedback discard <id>     # delete without posting
 
 `review` is **experimental** in this release. It is the path of least friction once you have more than one entry queued: it prints each item in turn and asks `[a]pprove  [d]iscard  [s]kip  [q]uit`. Approved items POST to GitHub and are removed from disk; discarded items are deleted without posting; skipped items stay on disk for the next pass; quit stops the loop and leaves the rest untouched. If a POST hits an auth prompt or a network failure, the loop stops with the entry left on disk so you can resume after fixing the cause. The per-id `approve`/`discard` commands are still there for scripting and one-offs.
 
-Deferred entries are stored at `~/.ue-mcp/pending-feedback/<id>.json` (override with `UE_MCP_PENDING_DIR`). The recorded `author` choice from the original `feedback(submit)` is honored on approve, as is the tracker it was routed to — `list` and `show` print it, so you can see where each pending entry is headed before approving it. Entries written before routing existed carry no tracker and approve against core.
+Deferred entries are stored at `~/.ue-mcp/pending-feedback/<id>.json` (override with `UE_MCP_PENDING_DIR`). The recorded `author` choice from the original `feedback(submit)` is honored on approve, as is the tracker it was routed to - `list` and `show` print it, so you can see where each pending entry is headed before approving it. Entries written before routing existed carry no tracker and approve against core.
 
 ### Threat-model note
 
-Both `auto-approve` and `defer` bypass the elicitation consent gate. The scrubs (credential + privacy) still run server-side regardless of mode — auto-approve doesn't downgrade the redaction story, it just removes the human-in-the-loop confirmation that the scrub caught everything you care about. Use defer instead if you want unattended operation **with** human review before anything ships.
+Both `auto-approve` and `defer` bypass the elicitation consent gate. The scrubs (credential + privacy) still run server-side regardless of mode - auto-approve doesn't downgrade the redaction story, it just removes the human-in-the-loop confirmation that the scrub caught everything you care about. Use defer instead if you want unattended operation **with** human review before anything ships.
 
 ## The approval prompt
 
@@ -130,7 +130,7 @@ Outcomes:
 
 The `Tracker` field only ever offers the two repos named on the prompt (the routed one and its alternative). A value that was not offered is ignored and the default stands.
 
-The agent has no way to bypass this prompt or forge a response — the consent signal comes from your client's UI, not from a tool result.
+The agent has no way to bypass this prompt or forge a response - the consent signal comes from your client's UI, not from a tool result.
 
 !!! info "Requires elicitation support"
     `feedback(submit)` requires the connected MCP client to advertise the `elicitation` capability. Claude Code 2.1.76+ supports it. If your client does not, the call returns a `feedback.blocked` directive with `code: "elicitation_unsupported"` instead of posting.
@@ -139,8 +139,8 @@ The agent has no way to bypass this prompt or forge a response — the consent s
 
 The `author` parameter is an enum with two values:
 
-- `author: "user"` (default) — issue is authored by your real GitHub account via a cached OAuth token
-- `author: "bot"` — issue is authored anonymously by the `ue-mcp-feedback[bot]`
+- `author: "user"` (default) - issue is authored by your real GitHub account via a cached OAuth token
+- `author: "bot"` - issue is authored anonymously by the `ue-mcp-feedback[bot]`
 
 If `author="user"` and no OAuth token is cached, the call returns an `auth_required` directive. Run `npx ue-mcp auth` to authorize, or call with `author="bot"` to post anonymously.
 
@@ -193,7 +193,7 @@ Personal and project identifiers are replaced with stable placeholders:
 
 Path matching covers both slash and backslash separator conventions so the same path is caught whether it came from `execute_python` output, a JSON config, or a console trace. Word-boundary matching avoids substring false positives (`Davidson` keeps the `d`, `Valedictory` keeps the `V`).
 
-Class, component, and actor names are **not** redacted automatically — the agent often needs to reference them to describe the gap. Use the **Submit with revisions** field on the approval prompt to request additional case-by-case redactions; the agent will rewrite and bring you a fresh prompt.
+Class, component, and actor names are **not** redacted automatically - the agent often needs to reference them to describe the gap. Use the **Submit with revisions** field on the approval prompt to request additional case-by-case redactions; the agent will rewrite and bring you a fresh prompt.
 
 ## Submit parameters
 
@@ -235,7 +235,7 @@ The hook handler self-gates: if `feedback` is in `ue-mcp.yml`'s `ue-mcp.disable[
 
 ## Security model
 
-- **The agent is the adversary for the consent step.** The MCP elicitation prompt is rendered by your client, and the response comes back to the server over the protocol — the agent has no IPC to forge an approval.
+- **The agent is the adversary for the consent step.** The MCP elicitation prompt is rendered by your client, and the response comes back to the server over the protocol - the agent has no IPC to forge an approval.
 - **The redaction passes are non-bypassable.** They run before the body reaches the elicitation prompt or `submitFeedback`, and the agent never sees the pre-scrubbed bytes.
 - **Routing cannot aim a report at an arbitrary repo.** The `repo` parameter is accepted only for ue-mcp core or a repo a registered plugin owns, and the `Tracker` field on the approval prompt only accepts the two values it offered. There is no path from "an agent wrote a string" to "an issue on any GitHub project".
 - **The package ships no credentials.** `author="user"` posts with a token you authorized yourself through GitHub's device flow, stored under `~/.ue-mcp/`. `author="bot"` posts through a hosted signing service (`POST https://plugins.ue-mcp.com/api/feedback`) whose contract is to hold the `ue-mcp-feedback` App key server-side, apply per-caller rate limits, re-run the redaction pass, and only open issues on ue-mcp core or the tracker of a published plugin. Until a signing key is installed on that deployment the anonymous path hands back a prefilled issue URL instead of posting. Either way there is no key inside the package to extract.
@@ -245,11 +245,11 @@ The hook handler self-gates: if `feedback` is in `ue-mcp.yml`'s `ue-mcp.disable[
 
 Submitted issues carry the `agent-feedback` label and include:
 
-- **Summary** — what the user was trying to do (post-scrub)
-- **Ideal Tool/Action** — suggested native tool signature, if supplied
-- **Python Workaround Used** — the workaround code (post-scrub), if supplied
-- **Session Workaround Log** — every `execute_python` call recorded during the session (post-scrub)
-- **Routing** — the plugin the classifier matched and the evidence, when one matched. On a core issue it is the hint that the report may belong to a plugin; on a plugin issue it is why it arrived there.
+- **Summary** - what the user was trying to do (post-scrub)
+- **Ideal Tool/Action** - suggested native tool signature, if supplied
+- **Python Workaround Used** - the workaround code (post-scrub), if supplied
+- **Session Workaround Log** - every `execute_python` call recorded during the session (post-scrub)
+- **Routing** - the plugin the classifier matched and the evidence, when one matched. On a core issue it is the hint that the report may belong to a plugin; on a plugin issue it is why it arrived there.
 
 These form a prioritized backlog of tool gaps to close.
 

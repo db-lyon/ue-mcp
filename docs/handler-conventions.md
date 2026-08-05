@@ -6,8 +6,8 @@ How mutating C++ handlers participate in **idempotency** (safe replay) and **rol
 
 Flows mutate editor state. When a flow fails partway, the user wants two guarantees:
 
-1. **Rerun is safe** — running the same flow again doesn't duplicate work or explode on "already exists" errors.
-2. **Failure is recoverable** — the user can opt into automatic rollback that undoes completed mutations in reverse order.
+1. **Rerun is safe** - running the same flow again doesn't duplicate work or explode on "already exists" errors.
+2. **Failure is recoverable** - the user can opt into automatic rollback that undoes completed mutations in reverse order.
 
 Both are properties of each individual handler. The runner coordinates across handlers; each handler decides what the natural key is, how to detect existing state, and what the inverse operation looks like.
 
@@ -28,9 +28,9 @@ Each handler accepts a parameter identifying the entity it operates on. Examples
 | Component | parent + `componentName` |
 | Material parameter | `materialPath` + `parameterName` |
 
-Handlers without a natural key (e.g., `execute_command`, `shell`) **cannot** be idempotent or reversible — document them as such, do not emit rollback records.
+Handlers without a natural key (e.g., `execute_command`, `shell`) **cannot** be idempotent or reversible - document them as such, do not emit rollback records.
 
-### `onConflict` — creates only
+### `onConflict` - creates only
 
 Create handlers accept an optional `onConflict` parameter controlling what happens when the natural key already resolves to an existing entity:
 
@@ -72,7 +72,7 @@ The TS bridge lifts the `rollback` field onto `TaskResult.rollback`. When `rollb
 
 **Key rules:**
 
-- **Only emit a rollback record when the handler actually mutated state.** An `existed: true` result means nothing was changed, so there's nothing to undo — do NOT emit a record.
+- **Only emit a rollback record when the handler actually mutated state.** An `existed: true` result means nothing was changed, so there's nothing to undo - do NOT emit a record.
 - **The inverse must be another registered handler.** Don't invent bespoke inverse handlers unless necessary; for creates, it's almost always the paired `delete_X`. For modifies, it's the same handler called with the previous value (self-inverse).
 - **Modifies capture the previous value _before_ mutation.** The rollback payload restores exactly that value.
 
@@ -224,7 +224,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorMaterial(const TSharedPtr<FJsonOb
 }
 ```
 
-### Delete — document as non-reversible
+### Delete - document as non-reversible
 
 Delete handlers are idempotent (deleting a non-existent thing is a no-op) but **not reversible** by default. Undoing a delete requires snapshotting the deleted entity beforehand, which is only worthwhile for high-value handlers.
 
@@ -235,7 +235,7 @@ if (NotFound) {
 } else {
     /* delete */
     Result->SetBoolField(TEXT("deleted"), true);
-    // No rollback record — delete is not reversible by default.
+    // No rollback record - delete is not reversible by default.
 }
 return MCPResult(Result);
 ```
@@ -254,21 +254,21 @@ Batch handlers should also accept `dryRun`, which runs the full preflight and re
 
 These handlers cannot meaningfully participate:
 
-- `shell` — arbitrary command execution
-- `editor.execute_command` — arbitrary console commands
-- `editor.take_screenshot` — side-effect with no natural inverse
-- `editor.start_editor`, `editor.quit_editor`, `level.save`, `level.load` — lifecycle operations
+- `shell` - arbitrary command execution
+- `editor.execute_command` - arbitrary console commands
+- `editor.take_screenshot` - side-effect with no natural inverse
+- `editor.start_editor`, `editor.quit_editor`, `level.save`, `level.load` - lifecycle operations
 
 ## Conversion progress
 
 | Category | Done | Remaining |
 |---|---|---|
-| Level | place_actor, spawn_light, spawn_volume, move_actor, set_actor_material, set_light_properties, set_component_property, set_volume_properties, set_world_settings, add_component_to_actor, delete_actor | — |
+| Level | place_actor, spawn_light, spawn_volume, move_actor, set_actor_material, set_light_properties, set_component_property, set_volume_properties, set_world_settings, add_component_to_actor, delete_actor | - |
 | Asset | duplicate_asset, rename_asset, move_asset, delete_asset, create_datatable, import_static_mesh, import_skeletal_mesh, import_animation, import_texture, set_mesh_material, set_texture_properties (partial), add_socket, remove_socket | recenter_pivot, reimport_* |
 | Blueprint | create_blueprint, add_variable, add_component, create_function, rename_function, delete_function, delete_node, delete_variable, remove_component, create_blueprint_interface | set_variable_properties, set_node_property, add_node, connect_pins, set_class_default, set_variable_default, add_function_parameter |
 | Material | create_material, create_material_instance, create_material_from_texture | add_material_expression, set_*, connect_expression, delete_expression |
 | Animation | create_anim_blueprint, create_montage, create_blendspace, create_sequence | add_anim_notify, create_state_machine, add_state, add_transition, set_*, set_bone_keyframes |
-| Audio | create_sound_cue, create_metasound_source, spawn_ambient_sound | — |
+| Audio | create_sound_cue, create_metasound_source, spawn_ambient_sound | - |
 | Foliage | create_foliage_type | set_foliage_type_settings |
 | Gameplay | create_smart_object_definition, create_input_action, create_input_mapping_context, create_blackboard, create_behavior_tree, create_eqs_query, create_state_tree, create_game_mode/state/player_controller/player_state/hud (via CreateBlueprintWithParent), spawn_nav_modifier_volume | set_collision_profile, set_physics_enabled, set_body_properties, create_ai_perception_config |
 | GAS | create_gameplay_effect, create_gameplay_ability, create_attribute_set, create_gameplay_cue, create_gameplay_cue_notify | add_ability_tag, add_attribute, set_ability_tags, set_effect_modifier, add_ability_system_component |
@@ -277,6 +277,6 @@ These handlers cannot meaningfully participate:
 | Sequencer | create_level_sequence | add_track, sequence_control |
 | Spline | create_spline_actor | set_spline_points |
 | Widget | create_widget_blueprint, create_editor_utility_widget, create_editor_utility_blueprint | set_widget_property, add_widget, remove_widget, move_widget |
-| Landscape/Networking/Physics/Reflection | create_landscape, create_landscape_layer_info, set_landscape_material, create_enum (#251/#303), set_replicates, set_collision_profile, set_simulate_physics, set_mass_override, set_linear_damping | — |
+| Landscape/Networking/Physics/Reflection | create_landscape, create_landscape_layer_info, set_landscape_material, create_enum (#251/#303), set_replicates, set_collision_profile, set_simulate_physics, set_mass_override, set_linear_damping | - |
 
 Every handler in the "Done" column is idempotent (checks for existing entity by natural key, returns `{ existed: true }` on replay) and emits a rollback record where a paired inverse exists. Handlers in "Remaining" are either pure modifies that need before-state capture, or pure deletes that need snapshot-before-delete to be reversible. They still work; they just don't yet participate in rollback.

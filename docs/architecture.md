@@ -32,7 +32,7 @@ The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), r
 | `instructions.ts` | AI-facing server instructions (embedded documentation) |
 | `auth.ts` | GitHub OAuth device flow + `~/.ue-mcp/auth.json` token cache (default authorship path for feedback issues) |
 | `github-app.ts` | GitHub App auth used as the bot fallback when OAuth isn't authorized |
-| `flow/` | Flow engine (registry, loader, task factory, HTTP server) — see [Flows](flows.md) |
+| `flow/` | Flow engine (registry, loader, task factory, HTTP server) - see [Flows](flows.md) |
 | `init.ts` / `update.ts` / `resolve.ts` / `hook-handler.ts` | CLI subcommands (`npx ue-mcp init`, `update`, `resolve`, `hook`) |
 
 ### Tool Registration Pattern
@@ -53,8 +53,8 @@ export const levelTool: ToolDef = categoryTool(
 
 **Two action types:**
 
-- **Bridge actions** (`bp()`) — forwarded to the C++ plugin over WebSocket
-- **Local actions** — handled in Node.js (filesystem operations like INI parsing, C++ header reading)
+- **Bridge actions** (`bp()`) - forwarded to the C++ plugin over WebSocket
+- **Local actions** - handled in Node.js (filesystem operations like INI parsing, C++ header reading)
 
 ### Bridge Communication
 

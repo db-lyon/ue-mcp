@@ -1,15 +1,15 @@
 # CLAUDE.md
 
-Operating guide for Claude Code (and any AI agent) working in this repo. Shared team knowledge — checked into the repo so every contributor gets the same rulebook.
+Operating guide for Claude Code (and any AI agent) working in this repo. Shared team knowledge - checked into the repo so every contributor gets the same rulebook.
 
 ## Repo at a glance
 
-- **TS server** (`src/`) — the MCP server. Wraps the UE bridge over WebSocket, exposes 19 category tools with 440+ actions.
-- **C++ plugin** (`plugin/ue_mcp_bridge/`) — the editor-side bridge. Lives in `Private/Handlers/*.cpp`, registers actions with `FMCPHandlerRegistry`.
-- **Test project** (`tests/ue_mcp/`) — the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
-- **Docs** (`docs/`) — MkDocs site. `docs/release-notes-X.Y.Z.md` is the canonical release body.
+- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes 19 category tools with 440+ actions.
+- **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/*.cpp`, registers actions with `FMCPHandlerRegistry`.
+- **Test project** (`tests/ue_mcp/`) - the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
+- **Docs** (`docs/`) - MkDocs site. `docs/release-notes-X.Y.Z.md` is the canonical release body.
 
-Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plugins/UE_MCP_Bridge/` — never hand-copy.
+Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plugins/UE_MCP_Bridge/` - never hand-copy.
 
 ## Development workflow
 
@@ -21,7 +21,7 @@ Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plu
 
 ### Versioning
 
-**Hard rule: patch-level bumps only.** Version bumps in this repo are always `X.Y.Z → X.Y.(Z+1)`. Never increment major or minor without explicit sign-off. This holds even for genuinely large features — the answer is still a patch bump, and if you think otherwise, ask first.
+**Hard rule: patch-level bumps only.** Version bumps in this repo are always `X.Y.Z → X.Y.(Z+1)`. Never increment major or minor without explicit sign-off. This holds even for genuinely large features - the answer is still a patch bump, and if you think otherwise, ask first.
 
 - Bump `package.json` version.
 - Commit and push. **Do not create git tags.** CI detects the version bump on `main` and publishes to npm + creates the GitHub release automatically.
@@ -35,7 +35,7 @@ Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plu
 - `npm run up:build` stops the editor, builds, and relaunches. Use when iterating live.
 - The deployer (`scripts/deploy.mjs`, also called implicitly by `npm run up`) syncs `plugin/` → `tests/ue_mcp/Plugins/UE_MCP_Bridge/`. Run it after plugin source edits before building.
 
-### Smoke tests — REQUIRED
+### Smoke tests - REQUIRED
 
 `npm run test:smoke` exercises every registered handler via the live WebSocket bridge. **Run this before shipping a release.**
 
@@ -109,10 +109,10 @@ Each category has a paired `Private/Handlers/<Category>Handlers.{h,cpp}`. Handle
 - **Param names must exactly match between the TS schema and the C++ handler.** Drift is how silent failures start. Audit new actions in both places.
 - Modules that may not be loaded (Water, WaterSpline, etc.) should be reached via `LoadClass<>()` at runtime rather than a `Build.cs` dependency. Fail with a clear "plugin X not available" error instead of a link-time break.
 
-### Writing style — public artifacts
+### Writing style - public artifacts
 
 - **No em dashes (`—`).** Use hyphens (` - `), colons, parentheses, or split into sentences. Applies to commit messages, release notes, docs, PR bodies, code comments.
-- **Never name competitor or comparison projects in public artifacts.** Commit messages, release notes, PR bodies, GitHub release bodies, code comments, docs — any of these. Even when the work is literally closing a gap against another project, describe the work on its own terms ("adds module input authoring"), not as "catching up to X" or "matching Y". Gap-analysis context belongs in private discussion, never in public git history.
+- **Never name competitor or comparison projects in public artifacts.** Commit messages, release notes, PR bodies, GitHub release bodies, code comments, docs - any of these. Even when the work is literally closing a gap against another project, describe the work on its own terms ("adds module input authoring"), not as "catching up to X" or "matching Y". Gap-analysis context belongs in private discussion, never in public git history.
 
 ### MCP design principle
 
