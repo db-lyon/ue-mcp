@@ -40,6 +40,48 @@ enabled = true
 
 You can start the server without a `.uproject` argument. It will run in a limited mode — you can then use `project(action="set_project", projectPath="...")` at runtime to attach to a project.
 
+### Several Editors From One Server
+
+Pass more than one `.uproject` and each becomes an addressable **editor session** with its own bridge connection, its own port and its own port lockfile:
+
+```json
+{
+  "mcpServers": {
+    "ue-mcp": {
+      "command": "npx",
+      "args": ["ue-mcp", "C:/games/Alpha/Alpha.uproject", "C:/games/Beta/Beta.uproject"]
+    }
+  }
+}
+```
+
+Sessions are keyed by resolved project root, so one project is one session however its path is spelled, and two editors of the same project are never addressed as two sessions.
+
+| Action | What it does |
+|--------|--------------|
+| `project(action="list_editors")` | Every session: name, project, bridge port, socket state, liveness, and which one untargeted calls use |
+| `project(action="add_editor", projectPath="...")` | Register another project at runtime. `start: true` also launches its editor and waits until it is ready |
+| `project(action="use_editor", editorTarget="Beta")` | Move the default target |
+| `project(action="drop_editor", editorTarget="Beta")` | Forget a session and close its socket. The editor keeps running |
+
+While more than one session is registered, **every** category tool, the `flow` tool and the HTTP `run` route accept an `editor` parameter naming the session, the project, or a `.uproject` path:
+
+```
+level(action="place_actor", editor="Beta", assetPath="/Game/Rock", location=[0,0,0])
+editor(action="start_editor", editor="Beta")
+flow(action="run", flowName="build_and_check", editor="Beta")
+```
+
+Calls with no `editor` run in the active session, which is the first project on the command line until `use_editor` moves it.
+
+**One editor is unchanged.** The `editor` parameter is advertised only while a second session exists, so a single-editor client sees exactly the schema, the status response and the events it always has. Registering or dropping a session re-advertises the tool list, so a client that honours `tools/list_changed` can target an editor it registered at runtime.
+
+**Each project needs its own port.** Ports are derived from the project root, so this works out of the box. Pinning every project to the same port (the same `bridge.port` in two `ue-mcp.yml` files, or a global `UE_MCP_PORT`) collapses the sessions onto one address: ue-mcp reports the clash in `list_editors`, and refuses `stop_editor` and `restart_editor` for the affected sessions rather than acting on an editor it cannot attribute.
+
+**Lifecycle actions act only on the editor you addressed.** Before asking anything to quit, ue-mcp asks the editor on that port which project it has open and refuses if the answer is a different one. `drop_editor` detaches only: stopping an editor is always an explicit `editor(action="stop_editor")` against that session.
+
+Multi-editor needs a bridge built from the current plugin source in each project involved. A project whose bridge is missing or stale is still registered and still startable; `project(action="list_editors")` reports it.
+
 ## Project Configuration (`ue-mcp.yml`)
 
 Project config lives in `ue-mcp.yml` next to your `.uproject`, tracked in git so every collaborator shares the same surface. `npx ue-mcp init` scaffolds and maintains it.

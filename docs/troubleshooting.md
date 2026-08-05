@@ -88,6 +88,16 @@ The MCP server auto-reconnects every 15 seconds. If the editor is restarted, the
 
 If the connection is flapping (connecting then immediately disconnecting), check the editor's Output Log for errors in the `LogMCPBridge` category.
 
+### A call ran in the wrong editor
+
+Start with `project(action="list_editors")`. It reports every registered session, the bridge port each resolved to, and which session untargeted calls fall through to.
+
+- **Two sessions on one port.** They cannot be told apart, and `list_editors` says so. It happens when two projects pin the same `bridge.port` in their `ue-mcp.yml`, or when a global `UE_MCP_PORT` overrides both. Give each project its own port, or unset the variable, then restart the server.
+- **The call had no target.** Untargeted calls run in the active session. Pass `editor="<name>"` on the call, or move the default with `project(action="use_editor", editorTarget="<name>")`.
+- **The `editor` parameter is not advertised.** It appears only while more than one session is registered. Add the other project with `project(action="add_editor", projectPath="...")`, or list both `.uproject` paths in your MCP client config.
+
+`editor(action="stop_editor")` asks the editor on the target port which project it has open and refuses when the answer is a different project, so a misdirected stop reports a refusal rather than closing someone else's editor.
+
 ## Plugin Build Issues
 
 ### Plugin fails to compile

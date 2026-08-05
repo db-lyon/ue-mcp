@@ -2,7 +2,7 @@
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal 5.8 tools that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering **<!-- count:actions -->759+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering **<!-- count:actions -->764+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -19,7 +19,11 @@ UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering
 | Action | Description |
 |--------|-------------|
 | `get_status` | Check server mode and editor connection. Also reports pluginBuildStale when the compiled bridge is older than its source, which is the real cause of 'Unknown method' on handlers that do exist (#785) |
-| `set_project` | Switch project. Params: `projectPath` |
+| `set_project` | Switch project. The bridge moves with it: path resolution and editor calls always describe the same project (#818). Params: `projectPath` |
+| `list_editors` | List every editor session this server drives: name, project, bridge port, whether the socket is connected, whether anything is answering on that port, and which session untargeted calls fall through to (#817) |
+| `use_editor` | Make one editor session the default target for untargeted calls. Does not change the session set and never touches any editor process. Params: `editorTarget (session name, project name, or .uproject path) (#817)` |
+| `add_editor` | Register another project as an addressable editor session, with its own bridge connection and port. Optionally launch its editor. Every category then accepts editor="<name>" to run a call there. Params: `projectPath, editorName? (defaults to the project name), start? (launch the editor and wait for it to be ready), timeout? (seconds, default 300) (#817)` |
+| `drop_editor` | Forget an editor session and close its bridge socket. The editor process is LEFT RUNNING and untouched - this detaches, it does not stop anything (use editor(stop_editor) for that). Params: `editorTarget (#817)` |
 | `get_info` | Read .uproject file details |
 | `read_config` | Read INI config. Params: `configName (e.g. 'Engine', 'Game')` |
 | `search_config` | Search INI files. Params: `query` |
@@ -652,8 +656,7 @@ UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering
 |--------|-------------|
 | `start_editor` | Launch Unreal Editor and BLOCK until it is fully ready (not merely until the socket answers), rendering a startup progress bar in the terminal. Returns the phase timeline it waited through. Do NOT poll get_engine_state or get_status afterwards: this call already waited, and a ready editor is the only way it returns success. Params: `timeout? (seconds, default 300)` |
 | `get_engine_state` | What the engine is REALLY doing, read from outside the game thread: startup phase from the editor's own log, process table (PID, command line, responding), the plugin's status snapshot (slow-task name and percent, active modal dialog, game-thread stall), and native dialog windows. Call this ONCE when something is already wrong (handlers timing out, an editor that will not come up). Never call it in a wait loop: start_editor blocks until ready on its own, and polling this during startup burns tokens re-reading state that is already tracked. Params: `probeWindows? (default true; scans native windows, costs ~2s)` |
-| `get_engine_state` | What the engine is REALLY doing, read from outside the game thread: startup phase from the editor's own log, process table (PID, command line, responding), the plugin's status snapshot (slow-task name and percent, active modal dialog, game-thread stall), and native dialog windows. Call this ONCE when something is already wrong (handlers timing out, an editor that will not come up). Never call it in a wait loop: start_editor blocks until ready on its own, and polling this during startup burns tokens re-reading state that is already tracked. Params: `probeWindows? (default true; scans native windows, costs ~2s)` |
-| `stop_editor` | Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill) |
+| `stop_editor` | Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill). Acts only on the addressed project's editor: the editor is asked which project it has open and the request is refused if the answer is a different one |
 | `restart_editor` | Stop then start the editor |
 | `build_project` | Build the project's C++ code using Unreal Build Tool. Editor should be stopped first |
 | `execute_command` | Run console command. Params: `command` |
