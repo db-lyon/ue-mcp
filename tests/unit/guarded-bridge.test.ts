@@ -9,6 +9,8 @@ function fakeInner(result: unknown = { ok: true }): IBridge & { calls: Array<{ m
     calls,
     isConnected: true,
     connect: async () => {},
+    retargetProject: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
+    getTarget: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
     call: async (method, params) => {
       calls.push({ method, params });
       return result;

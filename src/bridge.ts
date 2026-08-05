@@ -43,11 +43,46 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
 }
 
+/**
+ * How the port the bridge is about to use was chosen.
+ *
+ * The first three are attributable to the targeted project: the lockfile is
+ * written by that project's own editor, the config port comes from that
+ * project's ue-mcp.yml, and the derived port is a hash of that project's root
+ * that the C++ side computes identically. The last two are pins that say
+ * nothing about which project answers on that port.
+ */
+export type BridgePortSource = "lockfile" | "config" | "derived" | "explicit" | "env" | "default";
+
+/** Which editor the bridge is pointed at, and how sure it is. */
+export interface BridgeTarget {
+  /** Absolute .uproject path whose editor this connection belongs to. */
+  projectPath: string | null;
+  /** Port the next connect will use, before any lockfile re-read. */
+  port: number;
+  portSource: BridgePortSource;
+  /**
+   * True when the port is attributable to `projectPath`. False means the port
+   * is a pin inherited from the environment or an earlier target, so
+   * connecting could land on some other project's editor. Connects are
+   * refused in that state (see connect()).
+   */
+  verified: boolean;
+}
+
 /** Minimal interface for tool handlers — enables mocking in tests. */
 export interface IBridge {
   readonly isConnected: boolean;
   call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown>;
   connect(timeoutMs?: number): Promise<void>;
+  /**
+   * Move the connection to another project's editor (#818). Drops the current
+   * socket before returning, so the caller can re-point path resolution in the
+   * same synchronous step and never expose a state where the two disagree.
+   */
+  retargetProject(uprojectPath: string, configPort?: number): BridgeTarget;
+  /** Snapshot of the current target, for reporting and for tests. */
+  getTarget(): BridgeTarget;
 }
 
 export class EditorBridge implements IBridge {
@@ -63,7 +98,23 @@ export class EditorBridge implements IBridge {
   // it is the port the editor actually bound. Deriving only kicks in while the
   // source is still "default", so an explicit/env/config pin is never
   // clobbered by the path hash.
-  private portSource: "explicit" | "env" | "config" | "derived" | "default" = "default";
+  private portSource: BridgePortSource = "default";
+
+  /**
+   * Set once the bridge has been retargeted at a specific project (#818).
+   * A pinned port (constructor arg or UE_MCP_PORT) was chosen for whatever
+   * project the process started on, so after a switch it is not evidence about
+   * the new target. While this is true and no lockfile confirms the port,
+   * connect() refuses rather than risk answering as the wrong editor.
+   */
+  private unverifiedPin = false;
+
+  /**
+   * Bumped on every retarget and every socket teardown. A connect that was
+   * already in flight when the target moved must not install its socket, or a
+   * switch would silently reconnect to the project we just left.
+   */
+  private targetGeneration = 0;
 
   constructor(host?: string, port?: number) {
     // #497: default to 127.0.0.1 so the client picks the loopback IPv4 the
@@ -139,21 +190,94 @@ export class EditorBridge implements IBridge {
     }
   }
 
+  /**
+   * Point the bridge at another project's editor (#818).
+   *
+   * The socket is dropped before anything else, so from the moment this
+   * returns the only editor reachable is the one belonging to `uprojectPath`.
+   * The port is re-decided from that project alone: its lockfile first (the
+   * port its editor actually bound), then its own `bridge.port` config, then
+   * the port derived from its root path. A port pinned by the constructor or
+   * UE_MCP_PORT survives only as a last resort and is flagged unverified,
+   * because it was chosen for a different project.
+   *
+   * Callers must re-point path resolution in the same synchronous step. That
+   * is what keeps the pair honest: a handler can never observe the resolved
+   * project and the connected editor referring to different projects.
+   */
+  retargetProject(uprojectPath: string, configPort?: number): BridgeTarget {
+    const resolved = path.resolve(uprojectPath);
+    const previous = this.projectPathForLockfile;
+    this.closeSocket(`Bridge retargeted to ${resolved}`);
+    this.projectPathForLockfile = resolved;
+    this.unverifiedPin = false;
+
+    const lockfile = readBridgeLockfile(resolved);
+    if (lockfile) {
+      this.port = lockfile.port;
+      this.portSource = "lockfile";
+    } else if (typeof configPort === "number" && configPort > 0) {
+      this.port = configPort;
+      this.portSource = "config";
+    } else if (this.portSource === "explicit" || this.portSource === "env") {
+      this.unverifiedPin = true;
+    } else {
+      this.port = deriveProjectPort(path.dirname(resolved));
+      this.portSource = "derived";
+    }
+
+    debug(
+      "bridge",
+      `retargeted from ${previous ?? "(no project)"} to ${resolved}: port ${this.port} (${this.portSource})`,
+    );
+    return this.getTarget();
+  }
+
+  getTarget(): BridgeTarget {
+    return {
+      projectPath: this.projectPathForLockfile,
+      port: this.port,
+      portSource: this.portSource,
+      verified: !this.unverifiedPin,
+    };
+  }
+
   async connect(timeoutMs = 3000): Promise<void> {
     if (this.isConnected) return;
 
-    this.ws?.terminate();
+    this.closeSocket("Bridge reconnecting");
 
     // #492: if a per-project lockfile exists for this .uproject, prefer the
     // port it advertises over the default. Lets multiple editors run side-
     // by-side without their npm clients colliding on 9877.
     const lockfile = readBridgeLockfile(this.projectPathForLockfile);
-    if (lockfile && lockfile.port !== this.port) {
-      debug("bridge", `lockfile points at port ${lockfile.port}, using it instead of default ${this.port}`);
-      this.port = lockfile.port;
+    if (lockfile) {
+      if (lockfile.port !== this.port) {
+        debug("bridge", `lockfile points at port ${lockfile.port}, using it instead of default ${this.port}`);
+        this.port = lockfile.port;
+      }
+      // The target project's own editor published this port, which is the
+      // proof a pin could not give.
+      this.portSource = "lockfile";
+      this.unverifiedPin = false;
+    }
+
+    // #818: refuse rather than guess. The alternative is connecting to a port
+    // chosen for a different project and executing every subsequent mutation
+    // in an editor the caller never asked for.
+    if (this.unverifiedPin) {
+      throw new McpError(
+        ErrorCode.NOT_CONNECTED,
+        `Refusing to connect: the bridge is targeted at ${this.projectPathForLockfile}, ` +
+          `but port ${this.port} is pinned (${this.portSource === "env" ? "UE_MCP_PORT" : "explicit port argument"}) ` +
+          `and was not chosen for this project, so it may belong to another editor. ` +
+          `Start this project's editor (it publishes Saved/UE_MCP_Bridge/port.json), ` +
+          `or clear the pin so the per-project port is derived from the project path.`,
+      );
     }
 
     const url = `ws://${this.host}:${this.port}`;
+    const generation = this.targetGeneration;
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -165,6 +289,18 @@ export class EditorBridge implements IBridge {
 
       ws.on("open", () => {
         clearTimeout(timer);
+        // The target moved while this handshake was in flight. Installing the
+        // socket now would put the bridge back on the project we just left.
+        if (this.targetGeneration !== generation) {
+          ws.terminate();
+          reject(
+            new McpError(
+              ErrorCode.NOT_CONNECTED,
+              `Abandoned the connection to ${url}: the bridge was retargeted while connecting.`,
+            ),
+          );
+          return;
+        }
         this.ws = ws;
         this.setupListeners(ws);
         resolve();
@@ -243,15 +379,27 @@ export class EditorBridge implements IBridge {
 
   disconnect(): void {
     this.stopReconnecting();
+    this.closeSocket("Bridge disconnected", { graceful: true });
+  }
+
+  /**
+   * Drop the socket and fail everything riding on it. Retargeting terminates
+   * instead of closing: a close handshake leaves the socket usable for another
+   * round trip, and the caller is switching projects precisely because nothing
+   * more should reach this editor.
+   */
+  private closeSocket(reason: string, opts?: { graceful?: boolean }): void {
+    this.targetGeneration += 1;
     for (const [, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(new McpError(ErrorCode.CONNECTION_LOST, "Bridge disconnected"));
+      pending.reject(new McpError(ErrorCode.CONNECTION_LOST, reason));
     }
     this.pending.clear();
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+    const ws = this.ws;
+    this.ws = null;
+    if (!ws) return;
+    if (opts?.graceful) ws.close();
+    else ws.terminate();
   }
 
   private setupListeners(ws: WebSocket): void {
@@ -275,6 +423,10 @@ export class EditorBridge implements IBridge {
     });
 
     ws.on("close", () => {
+      // A socket we already replaced (retarget, reconnect) closes after its
+      // successor is live. Without this guard its late close event would null
+      // out the new connection and fail the calls riding on it.
+      if (this.ws !== ws) return;
       for (const [, pending] of this.pending) {
         clearTimeout(pending.timer);
         pending.reject(new McpError(ErrorCode.CONNECTION_LOST, "Bridge connection lost"));

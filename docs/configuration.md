@@ -148,6 +148,17 @@ Or per session, without editing the file: `UE_MCP_CONTEXT_STRATEGY=micro` (the e
 
 The C++ plugin listens on a **per-project WebSocket port** derived from a hash of the project root path (in the IANA ephemeral range `49152-65535`). Deriving the port from the path means two checkouts of the same project - or several unrelated projects - on one machine each get a stable, launch-order-independent port, so their MCP clients never collide on a single fixed number. The Node client and the C++ bridge compute the identical value independently, and the bridge also publishes the actual bound port to `<project>/Saved/UE_MCP_Bridge/port.json` as the authoritative source (if the port is already taken, the bridge probes upward and the lockfile records where it really landed). The legacy fixed port `9877` remains the fallback when no project root is known. Pin an explicit port with `UE_MCP_PORT` or `bridge.port` in `ue-mcp.yml`. The MCP server auto-connects on startup and reconnects every 15 seconds if the connection drops.
 
+### Which editor lifecycle actions act on
+
+`editor(start_editor)`, `editor(stop_editor)` and `editor(restart_editor)` act on a process, so they resolve their target more strictly than ordinary tool calls (#819):
+
+- **The port comes from the lockfile and nowhere else.** No environment variable, no derived value, no `9877`. The bridge writes `<project>/Saved/UE_MCP_Bridge/port.json` whatever port it binds and removes it on exit, so it is the only file that says where this project's editor is listening. When it is absent, the action fails and names the path it checked instead of probing a port some other project's editor could answer on.
+- **The process check is scoped by `.uproject`.** "Is an editor running" is never the question; "is the editor holding this project open running" is. A second editor, a headless shard, or somebody else's project no longer blocks a launch.
+- **Stopping verifies before it acts.** The lockfile records the editor's PID, and a lockfile outlives a crash, so `stop_editor` confirms that PID is still an editor for this project before it sends the quit request.
+- **No project loaded means no lifecycle action.** With nothing loaded there is no editor these calls could be about, so they say so rather than picking one.
+
+Consequence worth knowing: if an editor is killed rather than closed, its lockfile stays behind and `stop_editor` reports the stale PID it names. Delete `<project>/Saved/UE_MCP_Bridge/port.json` to clear it.
+
 ### Connection States
 
 | State | Meaning |
@@ -156,7 +167,15 @@ The C++ plugin listens on a **per-project WebSocket port** derived from a hash o
 | **Disconnected** | Editor not running or plugin not loaded. Filesystem tools still work (INI parsing, C++ headers, asset listing) |
 | **Reconnecting** | Connection lost, auto-retry in progress |
 
-Check the current state with `project(action="get_status")`.
+Check the current state with `project(action="get_status")`. Alongside `editorConnected`, it reports `editorTarget`: the `.uproject` the connection belongs to, the port, and how that port was chosen (`lockfile`, `config`, `derived`, `env`, `explicit`). The connection is always bound to one project, so `editorTarget.projectPath` matches the loaded project.
+
+### Switching Projects
+
+`project(action="set_project", projectPath="...")` moves path resolution and the editor connection together. The socket to the previous project's editor is dropped before the new project is loaded, so no action can execute in the project you just left.
+
+The port for the new project is chosen from that project alone: its `Saved/UE_MCP_Bridge/port.json` lockfile first, then its own `bridge.port`, then the port derived from its root path.
+
+A port pinned with `UE_MCP_PORT` (or an explicit port argument) is the exception. It was chosen for whichever project the server started on and says nothing about the one you switched to, so if the new project has published no lockfile the switch still completes and the connection is refused with an explanation. Start the new project's editor, which publishes the lockfile, or clear the pin so each project gets its derived port.
 
 ## Plugin Deployment
 

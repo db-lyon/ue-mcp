@@ -59,6 +59,49 @@ export interface UeMcpConfig {
   pluginConfig?: Record<string, { groups?: Record<string, boolean> } & Record<string, unknown>>;
 }
 
+/**
+ * Resolve a user-supplied path (a .uproject, or a directory holding one) to an
+ * absolute .uproject path. Pure: it touches no state, so a caller that has to
+ * move several things at once can validate the target first and leave
+ * everything where it was when the path is bad.
+ */
+export function resolveUProjectPath(inputPath: string): string {
+  if (inputPath.endsWith(".uproject")) {
+    const resolved = path.resolve(inputPath);
+    if (!fs.existsSync(resolved)) {
+      throw new McpError(ErrorCode.NOT_FOUND, `No .uproject file at ${resolved}`);
+    }
+    return resolved;
+  }
+
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(inputPath);
+  } catch {
+    throw new McpError(ErrorCode.NOT_FOUND, `Project directory not found: ${inputPath}`);
+  }
+  const files = entries.filter((f) => f.endsWith(".uproject"));
+  if (files.length === 0) {
+    throw new McpError(ErrorCode.NOT_FOUND, `No .uproject file found in ${inputPath}`);
+  }
+  return path.resolve(inputPath, files[0]);
+}
+
+/**
+ * Read the merged `ue-mcp:` config for a project directory without loading the
+ * project. Lets a caller learn a project's settings (its pinned bridge port,
+ * say) before committing to the switch.
+ */
+export function readUeMcpConfig(projectDir: string): UeMcpConfig {
+  const block = loadLayeredUeMcpBlock(projectDir);
+  const parsed = UeMcpConfigSchema.safeParse(block);
+  if (!parsed.success) {
+    warn("project", `merged ue-mcp: config did not match expected shape - using defaults`, parsed.error);
+    return {};
+  }
+  return parsed.data;
+}
+
 export class ProjectContext {
   projectPath: string | null = null;
   projectName: string | null = null;
@@ -71,20 +114,12 @@ export class ProjectContext {
   }
 
   setProject(inputPath: string): void {
-    if (inputPath.endsWith(".uproject")) {
-      this.projectPath = path.resolve(inputPath);
-    } else {
-      const files = fs
-        .readdirSync(inputPath)
-        .filter((f) => f.endsWith(".uproject"));
-      if (files.length === 0) {
-        throw new McpError(ErrorCode.NOT_FOUND, `No .uproject file found in ${inputPath}`);
-      }
-      this.projectPath = path.resolve(inputPath, files[0]);
-    }
-
+    this.projectPath = resolveUProjectPath(inputPath);
     this.projectName = path.basename(this.projectPath, ".uproject");
     this.contentDir = path.join(path.dirname(this.projectPath), "Content");
+    // The cache is keyed to nothing but the process, so a switch would keep
+    // resolving /MyPlugin/ paths against the project we just left.
+    this._pluginCache = null;
     this.parseUProject();
     this.loadConfig();
   }
@@ -254,18 +289,8 @@ export class ProjectContext {
     migrateLegacyLocalYaml(this.projectDir);
     migrateLegacyFeedbackModeInYaml(this.projectDir);
 
-    const block = loadLayeredUeMcpBlock(this.projectDir);
-    const parsed = UeMcpConfigSchema.safeParse(block);
-    if (!parsed.success) {
-      warn(
-        "project",
-        `merged ue-mcp: config did not match expected shape - using defaults`,
-        parsed.error,
-      );
-      return;
-    }
-    this.config = parsed.data;
-    if (Object.keys(block).length > 0) {
+    this.config = readUeMcpConfig(this.projectDir);
+    if (Object.keys(this.config).length > 0) {
       info("project", `loaded config from ue-mcp.yml (merged with any global / env / local layers)`);
     }
   }

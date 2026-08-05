@@ -159,24 +159,57 @@ async function queryEditorProcesses(): Promise<EditorProcess[]> {
   }
 }
 
+/** Two .uproject paths that name the same file, whatever their spelling. */
+function sameProjectFile(a: string, b: string): boolean {
+  const norm = (v: string): string => path.resolve(v).replace(/\\/g, "/").toLowerCase();
+  return norm(a) === norm(b);
+}
+
 /**
- * The interactive editor(s) holding `projectPath` open. Headless shards are
- * excluded, and when a project path is known, editors for other projects are
- * too - launching a second project while a shard or another project's editor
- * runs is legitimate (#804).
+ * Does this process have exactly `projectPath` open?
+ *
+ * The `.uproject` on the command line is the only thing that ties a process to
+ * a project, so it is the only thing this looks at. A process whose command
+ * line could not be read is never a positive match: every lifecycle action that
+ * can stop or attach to an editor is scoped through this, and "might be ours"
+ * is the wrong answer to give any of them (#819).
  */
-export async function findInteractiveEditors(projectPath?: string | null): Promise<EditorProcess[]> {
-  const all = await listEditorProcesses();
-  const interactive = all.filter((p) => !p.headless);
+export function editorOwnsProject(proc: EditorProcess, projectPath: string): boolean {
+  return proc.projectPath !== null && sameProjectFile(proc.projectPath, projectPath);
+}
+
+/**
+ * Narrow a process list to the interactive editors for one project. Pure, so
+ * the matching rule can be tested without a process table.
+ *
+ * Headless shards are excluded, and so are editors for other projects -
+ * launching a second project while a shard or another project's editor runs is
+ * legitimate (#804).
+ */
+export function selectEditorsForProject(
+  processes: EditorProcess[],
+  projectPath?: string | null,
+): EditorProcess[] {
+  const interactive = processes.filter((p) => !p.headless);
   if (!projectPath) return interactive;
-  const target = path.resolve(projectPath).toLowerCase();
-  const matched = interactive.filter((p) => p.projectPath?.toLowerCase() === target);
+  const matched = interactive.filter((p) => editorOwnsProject(p, projectPath));
   // A process whose command line could not be read (permissions, race) has a
   // null projectPath. Counting it as "not ours" would let a second editor
   // launch onto the same project; counting it as ours would resurrect #804 for
   // everyone else. Treat unknown as ours only when nothing matched positively.
   if (matched.length > 0) return matched;
   return interactive.filter((p) => p.projectPath === null);
+}
+
+/** The interactive editor(s) holding `projectPath` open, from the live process table. */
+export async function findInteractiveEditors(projectPath?: string | null): Promise<EditorProcess[]> {
+  return selectEditorsForProject(await listEditorProcesses(), projectPath);
+}
+
+/** The running editor with this PID, or null when it is gone. */
+export async function findEditorByPid(pid: number): Promise<EditorProcess | null> {
+  const all = await listEditorProcesses();
+  return all.find((p) => p.pid === pid) ?? null;
 }
 
 // ---------------------------------------------------------------------------

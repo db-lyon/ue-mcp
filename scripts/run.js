@@ -1,59 +1,64 @@
 #!/usr/bin/env node
 
 import { spawn } from 'child_process';
-import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import { log, logSection, getProjectPaths, findUEBuildTool } from './build-utils.js';
+import path from 'path';
+import {
+  log,
+  logSection,
+  assertTestProject,
+  engineRootFromEnginePath,
+  getProjectPaths,
+  protectedEngineRoots,
+  isSameOrUnder,
+  resolveTestEngine,
+} from './build-utils.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+/**
+ * UE_EDITOR_PATH stays supported so an existing setup keeps working, but it
+ * goes through the same protected-root deny list as a discovered engine.
+ * Otherwise a stale override would be the one way around the guard.
+ */
+function editorFromOverride(overridePath) {
+  const editorExecutable = path.resolve(overridePath);
+  const engineRoot = engineRootFromEnginePath(editorExecutable) ?? path.dirname(editorExecutable);
+  const roots = protectedEngineRoots();
+  const match = roots.find((root) => isSameOrUnder(engineRoot, root));
 
-function findEditorExecutable() {
-  // Check for environment variable override first
-  const envPath = process.env.UE_EDITOR_PATH;
-  if (envPath) {
-    return envPath;
+  if (match) {
+    throw new Error(
+      `UE_EDITOR_PATH resolves under protected engine root '${match}'. Refusing to launch the test project from it.`
+    );
   }
 
-  // Find build tool to get engine root
-  const buildTool = findUEBuildTool();
-  if (!buildTool) {
-    return null;
-  }
-
-  // Extract engine root from build tool path
-  // Build.bat is at Engine/Build/BatchFiles/Build.bat
-  // Go up 4 levels to get to UE_X.X root, then Engine/Binaries/Win64/UnrealEditor.exe
-  const engineRoot = path.resolve(buildTool, '..', '..', '..', '..');
-  const editorExe = path.join(engineRoot, 'Engine', 'Binaries', 'Win64', 'UnrealEditor.exe');
-  
-  if (fs.existsSync(editorExe)) {
-    return editorExe;
-  }
-
-  return null;
+  return { editorExecutable, engineRoot, engineRootSource: 'UE_EDITOR_PATH' };
 }
 
 async function main() {
   logSection('UE-MCP Run');
 
   const { projectFile } = getProjectPaths();
-  const editorExe = findEditorExecutable();
+  let engine;
+  try {
+    assertTestProject(projectFile);
+    engine = process.env.UE_EDITOR_PATH
+      ? editorFromOverride(process.env.UE_EDITOR_PATH)
+      : resolveTestEngine();
+  } catch (error) {
+    log(`ERROR: ${error.message}`, 'red');
+    process.exit(1);
+  }
 
-  if (!editorExe) {
-    log('ERROR: Unreal Editor executable not found!', 'red');
-    log('');
-    log('Please either:');
-    log('  1. Install UE5.3+ to default location, OR');
-    log('  2. Set UE_EDITOR_PATH environment variable to your UnrealEditor.exe path');
-    log('');
-    log('Example: set UE_EDITOR_PATH=C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor.exe');
+  const editorExe = engine.editorExecutable;
+
+  if (!fs.existsSync(editorExe)) {
+    log(`ERROR: Unreal Editor executable not found: ${editorExe}`, 'red');
+    log(`Resolved from ${engine.engineRootSource}. Set UE_MCP_TEST_ENGINE_ROOT or UE_EDITOR_PATH to correct it.`);
     process.exit(1);
   }
 
   log(`Project File: ${projectFile}`);
+  log(`Engine Root: ${engine.engineRoot} (from ${engine.engineRootSource})`);
   log(`Editor: ${editorExe}`);
   log('');
 
@@ -65,6 +70,7 @@ async function main() {
   // terminal holds its stdout open for its whole session, so `npm run up`
   // never returns when piped, and the editor's own logging would scribble
   // over the progress bar below. The editor writes Saved/Logs either way.
+  const launchedAtMs = Date.now();
   const proc = spawn(editorExe, [projectFile], {
     stdio: 'ignore',
     detached: true,
@@ -76,7 +82,9 @@ async function main() {
   // until the editor is actually usable, rather than printing "launched!" over
   // a splash screen that has forty seconds of module loading left.
   const { waitForEditorReadyExternal } = await import('../dist/editor-control.js');
-  const result = await waitForEditorReadyExternal(projectFile, path.dirname(projectFile), 300);
+  // The launch timestamp makes the wait ignore a port lockfile an earlier
+  // session left behind, so readiness is judged on this editor's bridge.
+  const result = await waitForEditorReadyExternal(projectFile, path.dirname(projectFile), 300, launchedAtMs);
   if (result.ready) {
     log(`Editor ready in ${result.elapsedSeconds.toFixed(1)}s`, 'green');
   } else {

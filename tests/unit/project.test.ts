@@ -284,3 +284,28 @@ describe("ProjectContext config loading", () => {
     expect(ctx.config.nativeTools?.enabled).toBe(false);
   });
 });
+
+describe("ProjectContext plugin discovery across a switch", () => {
+  function makeProjectWithPlugin(pluginName: string): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-plugin-cache-"));
+    const uproject = path.join(dir, "Test.uproject");
+    // No EngineAssociation: keeps discoverPlugins off any real engine install.
+    fs.writeFileSync(uproject, JSON.stringify({ FileVersion: 3 }));
+    const pluginDir = path.join(dir, "Plugins", pluginName);
+    fs.mkdirSync(path.join(pluginDir, "Content"), { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, `${pluginName}.uplugin`), "{}");
+    return uproject;
+  }
+
+  it("rediscovers plugins after the loaded project changes", () => {
+    const ctx = new ProjectContext();
+    ctx.setProject(makeProjectWithPlugin("AlphaPlugin"));
+    expect(ctx.discoverPlugins().map((p) => p.name)).toEqual(["AlphaPlugin"]);
+
+    ctx.setProject(makeProjectWithPlugin("BetaPlugin"));
+    expect(ctx.discoverPlugins().map((p) => p.name)).toEqual(["BetaPlugin"]);
+    // The stale cache used to keep resolving the previous project's mounts.
+    expect(ctx.resolvePluginPath("/AlphaPlugin/Thing")).toBeNull();
+    expect(ctx.resolvePluginPath("/BetaPlugin/Thing")).not.toBeNull();
+  });
+});

@@ -10,6 +10,7 @@ import { readDeployedBridgeApiVersion } from "../plugin/bridge-api.js";
 import { searchTools, type ToolSearchHit } from "../tool-search.js";
 import { getWorkarounds } from "../workaround-tracker.js";
 import { readLogState, readEngineSnapshot } from "../engine-observer.js";
+import { switchProject, isTargetDiverged } from "../project-switch.js";
 
 /**
  * Resolve a module name to its Source/<Module> directory, searching the project
@@ -95,12 +96,26 @@ export const projectTool: ToolDef = categoryTool(
           };
         })();
 
+        // Which editor this connection belongs to (#818). "connected" on its
+        // own never said whose editor answered, so a bridge left on another
+        // project read as a healthy session.
+        const target = ctx.bridge.getTarget();
+
         return {
           engine: offlineEngine ?? undefined,
           pluginBuildStale: freshness.checked ? freshness.stale : undefined,
           pluginBuildWarning: freshness.stale ? freshness.message : undefined,
           mode: ctx.bridge.isConnected ? "live" : "disconnected",
           editorConnected: ctx.bridge.isConnected,
+          editorTarget: {
+            projectPath: target.projectPath,
+            port: target.port,
+            portSource: target.portSource,
+          },
+          // Bridge calls and path resolution would be hitting different
+          // projects. Unreachable through set_project, reported so it can
+          // never be silent again.
+          editorTargetMismatch: isTargetDiverged(ctx.project, target) || undefined,
           project: ctx.project.isLoaded ? { name: ctx.project.projectName, path: ctx.project.projectPath, contentDir: ctx.project.contentDir, engineAssociation: ctx.project.engineAssociation, config: Object.keys(ctx.project.config).length > 0 ? ctx.project.config : undefined } : null,
           // Bridge ABI version of the deployed plugin in this project.
           // Plugins declaring nativeModule.minBridgeApi compare against
@@ -114,12 +129,31 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     set_project: {
-      description: "Switch project. Params: projectPath",
+      description: "Switch project: moves both path resolution and the editor connection to the new .uproject. Params: projectPath",
       handler: async (ctx, p) => {
-        ctx.project.setProject(p.projectPath as string);
+        // switchProject moves the bridge and the path resolver together (#818).
+        // Doing it here by hand is what left the socket on the previous
+        // project's editor while every path resolved against the new one.
+        const switched = await switchProject(ctx.project, ctx.bridge, p.projectPath as string);
         const result = deploy(ctx.project);
-        try { await ctx.bridge.connect(); } catch { /* editor might not be running */ }
-        return { success: true, projectName: ctx.project.projectName, contentDir: ctx.project.contentDir, engineAssociation: ctx.project.engineAssociation, editorConnected: ctx.bridge.isConnected, bridgeSetup: deploySummary(result) };
+        return {
+          success: true,
+          projectName: ctx.project.projectName,
+          contentDir: ctx.project.contentDir,
+          engineAssociation: ctx.project.engineAssociation,
+          previousProject: switched.previousProjectPath ?? undefined,
+          editorConnected: switched.connected,
+          // The editor this connection belongs to. Always the project above.
+          editorTarget: {
+            projectPath: switched.target.projectPath,
+            port: switched.target.port,
+            portSource: switched.target.portSource,
+          },
+          // Present when no editor answered: the switch still completed, and
+          // nothing can reach the previous project's editor any more.
+          editorUnreachable: switched.connectError,
+          bridgeSetup: deploySummary(result),
+        };
       },
     },
     get_info: {
