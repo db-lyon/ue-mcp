@@ -146,3 +146,24 @@ from tools(action="call", category="project", method="get_status").
 Full mode (every action listed inline) is the default. This micro surface is selected by
 context.strategy: micro in ue-mcp.yml or UE_MCP_CONTEXT_STRATEGY=micro.
 `;
+
+/**
+ * Targeting block, appended to whichever instruction variant is in use, and
+ * only when this server drives more than one editor. At one editor the
+ * initialize payload is exactly what it has always been.
+ */
+export function multiEditorInstructions(sessionNames: string[], activeName: string): string {
+  return [
+    "═══ MULTIPLE EDITORS ═══",
+    `This server drives ${sessionNames.length} editors: ${sessionNames.join(", ")}.`,
+    `Every call takes an optional \`editor\` parameter naming one of them. Calls without it run in the active editor (${activeName}).`,
+    "",
+    "- project(action=\"list_editors\") - every editor, its project, its bridge port and its state",
+    "- project(action=\"use_editor\", editorTarget=\"<name>\") - move the default target",
+    "- project(action=\"add_editor\", projectPath=\"...\") - register another project",
+    "- project(action=\"drop_editor\", editorTarget=\"<name>\") - detach from an editor and leave it running",
+    "",
+    "Name the editor explicitly on anything that writes, and on every lifecycle call",
+    "(start_editor / stop_editor / restart_editor / build_project), so the work lands where you intend.",
+  ].join("\n");
+}

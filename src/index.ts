@@ -5,7 +5,7 @@ import { z } from "zod";
 import { SessionRegistry, type EditorSession } from "./session.js";
 import type { ProjectContext } from "./project.js";
 import { attach, attachSummary } from "./deployer.js";
-import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO } from "./instructions.js";
+import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO, multiEditorInstructions } from "./instructions.js";
 import { resolveContextStrategy, applyLeanContext, buildMicroGateway } from "./lean-context.js";
 import {
   isDirectiveResponse,
@@ -347,9 +347,14 @@ async function main() {
     : contextStrategy === "lean"
       ? SERVER_INSTRUCTIONS_LEAN
       : SERVER_INSTRUCTIONS;
-  const serverInstructions = knowledgeBlock
+  const withKnowledge = knowledgeBlock
     ? `${baseInstructions}\n\n═══ PLUGIN KNOWLEDGE ═══\n${knowledgeBlock}`
     : baseInstructions;
+  // Targeting is documented only when there is something to target, so a
+  // single-editor client's initialize payload is unchanged.
+  const serverInstructions = sessions.size > 1
+    ? `${withKnowledge}\n\n${multiEditorInstructions(sessions.list().map((s) => s.name), sessions.active.name)}`
+    : withKnowledge;
 
   const server = new McpServer({
     name: "ue-mcp",
