@@ -29,7 +29,9 @@ Edit only under `plugin/ue_mcp_bridge/`. The deployer syncs to `tests/ue_mcp/Plu
 ### Building the plugin
 
 - TS: `npx tsc --noEmit` for type-checking, `npx tsc` for emit. Build output goes to `dist/`.
-- UE C++: `npm run build`. This calls `scripts/build.js` which invokes Unreal's Build.bat against `tests/ue_mcp/ue_mcp.uproject`.
+- UE C++: `npm run build`. This calls `scripts/build.js`, which always builds the `ue_mcpEditor` target against `tests/ue_mcp/ue_mcp.uproject` and nothing else.
+- Test builds pass `-NoEngineChanges`, so Unreal aborts with the offending file list if the build would overwrite anything already in the engine tree. Set `UE_MCP_ALLOW_TEST_ENGINE_CHANGES=true` only to bootstrap engine outputs in an engine you are willing to have written to.
+- Optional: `UE_MCP_TEST_ENGINE_ROOT` pins the engine to build and run with, and `UE_MCP_PROTECTED_ENGINE_ROOTS` is a deny list of roots the scripts refuse to touch at all. The deny list outranks every other setting, including the opt-in above.
 - `npm run up:build` stops the editor, builds, and relaunches. Use when iterating live.
 - The deployer (`scripts/deploy.mjs`, also called implicitly by `npm run up`) syncs `plugin/` → `tests/ue_mcp/Plugins/UE_MCP_Bridge/`. Run it after plugin source edits before building.
 

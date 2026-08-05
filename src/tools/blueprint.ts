@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { resolveCreateAssetPath } from "../asset-path.js";
 
 export const blueprintTool: ToolDef = categoryTool(
   "blueprint",
@@ -13,7 +14,7 @@ export const blueprintTool: ToolDef = categoryTool(
     get_execution_flow: bp("Trace exec pins from an entry point. Params: assetPath, graphName?, entryPoint?", "get_blueprint_execution_flow", (p) => ({ path: p.assetPath, graphName: p.graphName, entryPoint: p.entryPoint })),
     get_dependencies:   bp("Forward (classes/functions/assets) or reverse (referencers) deps. Params: assetPath, reverse?", "get_blueprint_dependencies", (p) => ({ path: p.assetPath, reverse: p.reverse })),
     diff:               bp("Semantic structural diff between two Blueprints (binary uassets are unreviewable in git). Compares parent class, variables (type/default), functions/macros, components, and per-graph node + connection deltas keyed on stable node GUIDs so edits are matched rather than shown as remove+add. Returns a structured delta plus a human summary and changeCount. Params: assetPath (base/A), otherPath (compare/B). Revision-based diffing (fromRevision/toRevision via source control) is a staged follow-up.", "diff_blueprint", (p) => ({ assetPath: p.assetPath, otherPath: p.otherPath, fromRevision: p.fromRevision, toRevision: p.toRevision })),
-    create:            bp("Create Blueprint. Params: assetPath, parentClass?", "create_blueprint", (p) => ({ path: p.assetPath, parentClass: p.parentClass })),
+    create:            bp("Create Blueprint. assetPath is the full destination, e.g. /Game/Blueprints/BP_Example; a name plus packagePath pair is accepted as the same thing. A .uasset suffix, an object suffix, and backslashes are normalized away rather than reaching the editor as an invalid asset name. Params: assetPath, name?, packagePath?, parentClass?", "create_blueprint", (p) => ({ path: resolveCreateAssetPath(p), parentClass: p.parentClass })),
     add_variable:      bp("Add variable. varType accepts bool/int/float/string/name/text/byte/vector/rotator/transform/gameplaytag, object:/Script/Module.Class, struct:/Game/Path/To/Struct, or a full class/struct path. Unrecognized types are rejected rather than silently defaulting. Params: assetPath, name, varType (alias: type), onConflict? (skip|error, default skip) (#745)", "add_variable", (p) => ({ path: p.assetPath, name: p.name, type: p.varType ?? p.type, onConflict: p.onConflict })),
     set_variable_properties: bp("Edit variable properties. Note: replication is set with networking(set_property_replicated), and blueprintReadOnly is not writable here - list_variables reports it. Params: assetPath, name, editFlag? (EditAnywhere|EditDefaultsOnly|EditInstanceOnly|none - the exact value list_variables reports, and the only form that round-trips every state), instanceEditable? (two-state shorthand; mutually exclusive with editFlag), private?, category?, tooltip?, exposeOnSpawn?", "set_variable_properties", (p) => ({ path: p.assetPath, name: p.name, instanceEditable: p.instanceEditable, editFlag: p.editFlag, private: p.private, category: p.category, tooltip: p.tooltip, exposeOnSpawn: p.exposeOnSpawn })),
     create_function:   bp("Create function. Params: assetPath, functionName", "create_function", (p) => ({ path: p.assetPath, functionName: p.functionName })),
@@ -102,6 +103,10 @@ export const blueprintTool: ToolDef = categoryTool(
   undefined,
   {
     assetPath: z.string().optional().describe("Blueprint asset path"),
+    // Declared so the transport cannot strip them before `create` folds them
+    // into the canonical assetPath (#798).
+    path: z.string().optional().describe("Legacy alias for assetPath. Use assetPath (#798)"),
+    packagePath: z.string().optional().describe("create: destination folder, used with name. assetPath is the canonical alternative (#798)"),
     graphName: z.string().optional(), functionName: z.string().optional(),
     name: z.string().optional(), varType: z.string().optional().describe("Variable type for add_variable/add_local_variable"),
     // `type` is the name callers reach for first; without it the value was

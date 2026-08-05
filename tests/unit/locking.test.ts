@@ -48,6 +48,8 @@ function fakeBridge(calls: Array<[string, Record<string, unknown>]>, responder: 
   return {
     isConnected: true,
     connect: async () => {},
+    retargetProject: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
+    getTarget: () => ({ projectPath: null, port: 0, portSource: "default" as const, verified: true }),
     call: async (method: string, params?: Record<string, unknown>) => {
       calls.push([method, params ?? {}]);
       return responder(method, params ?? {});

@@ -1,142 +1,157 @@
 /**
- * Stopping an editor must reach the editor that was addressed and no other
- * (#817, #819).
- *
- * A port is an address, not an identity: a collision walk, a pinned port or a
- * stale lockfile can all put another project's editor at the address this one
- * resolved to. These tests stand up a fake bridge that answers the identity
- * probe with a project of its own choosing and assert what stopEditor does
- * with each answer, including whether the quit request is sent at all.
+ * Lifecycle actions must act on the editor for the loaded project and on no
+ * other one (#819). These cover the paths where the port lockfile cannot vouch
+ * for a listener, which is where the old resolver fell through to port 9877 and
+ * a stop request could reach a different project's editor.
  */
-import { once } from "node:events";
+
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AddressInfo } from "node:net";
-import { WebSocketServer } from "ws";
-import { afterEach, describe, expect, it } from "vitest";
-import { stopEditor } from "../../src/editor-control.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { EditorProcess } from "../../src/engine-observer.js";
 
-interface FakeBridge {
-  port: number;
-  /** Python bodies the fake editor was asked to run, in order. */
-  received: string[];
-  close: () => Promise<void>;
-}
-
-/**
- * A bridge that reports `reportedProjectDir` as the project it has open, and
- * shuts itself down when asked to quit (which is what a real editor exiting
- * looks like from outside).
- */
-async function fakeEditorBridge(reportedProjectDir: string | null): Promise<FakeBridge> {
-  const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
-  const received: string[] = [];
-  let closed = false;
-
-  const close = async (): Promise<void> => {
-    if (closed) return;
-    closed = true;
-    for (const client of server.clients) client.terminate();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+vi.mock("../../src/engine-observer.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/engine-observer.js")>();
+  return {
+    ...actual,
+    listEditorProcesses: vi.fn(async () => []),
+    findInteractiveEditors: vi.fn(async () => []),
+    findEditorByPid: vi.fn(async () => null),
+    readEngineState: vi.fn(async () => ({
+      running: true,
+      processes: [],
+      log: { logPath: null, secondsSinceWrite: null, phase: "unknown", blocking: false, lastLine: null, tail: [], errors: [], warnings: [] },
+      snapshot: null,
+      dialogs: [],
+      summary: "stubbed engine state.",
+      blocked: false,
+    })),
   };
-
-  server.on("connection", (socket) => {
-    socket.on("message", (data) => {
-      const msg = JSON.parse(data.toString()) as { id: string; params?: { code?: string; resultVariable?: string } };
-      const code = msg.params?.code ?? "";
-      received.push(code);
-      if (msg.params?.resultVariable) {
-        if (reportedProjectDir === null) {
-          socket.send(JSON.stringify({ id: msg.id, error: { code: 1, message: "Python scripting is not available" } }));
-          return;
-        }
-        socket.send(JSON.stringify({
-          id: msg.id,
-          result: { success: true, result: `'${reportedProjectDir}'`, resultVariableResolved: true },
-        }));
-        return;
-      }
-      // A quit request: answer, then go quiet like an editor that exited.
-      socket.send(JSON.stringify({ id: msg.id, result: { success: true } }));
-      void close();
-    });
-  });
-
-  await once(server, "listening");
-  return { port: (server.address() as AddressInfo).port, received, close };
-}
-
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => {
-  for (const c of cleanups.splice(0)) await c();
 });
 
-function makeProjectDir(name: string): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `ue-mcp-${name}-`));
-  fs.writeFileSync(path.join(dir, `${name}.uproject`), "{}", "utf-8");
-  cleanups.push(async () => fs.rmSync(dir, { recursive: true, force: true }));
-  return dir;
+const observer = await import("../../src/engine-observer.js");
+const { startEditor, stopEditor, restartEditor } = await import("../../src/editor-control.js");
+const { bridgeLockfilePath } = await import("../../src/editor-target.js");
+const { ProjectContext } = await import("../../src/project.js");
+
+const findInteractiveEditors = vi.mocked(observer.findInteractiveEditors);
+const findEditorByPid = vi.mocked(observer.findEditorByPid);
+
+const temporaryRoots: string[] = [];
+
+function makeProject(): { projectDir: string; projectPath: string } {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-lifecycle-"));
+  temporaryRoots.push(projectDir);
+  const projectPath = path.join(projectDir, "Demo.uproject");
+  fs.writeFileSync(projectPath, JSON.stringify({ EngineAssociation: "5.8" }));
+  return { projectDir, projectPath };
 }
 
+function writeLockfile(projectDir: string, contents: Record<string, unknown>): void {
+  const file = bridgeLockfilePath(projectDir);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(contents));
+}
+
+function editor(pid: number, projectPath: string | null): EditorProcess {
+  return { pid, commandLine: "", projectPath, headless: false, responding: true, windowTitle: null };
+}
+
+afterEach(() => {
+  vi.clearAllMocks();
+  findInteractiveEditors.mockResolvedValue([]);
+  findEditorByPid.mockResolvedValue(null);
+  while (temporaryRoots.length > 0) {
+    fs.rmSync(temporaryRoots.pop()!, { recursive: true, force: true });
+  }
+});
+
 describe("stopEditor targeting", () => {
-  it("refuses when the editor on that port has another project open", async () => {
-    const mine = makeProjectDir("Mine");
-    const theirs = makeProjectDir("Theirs");
-    const bridge = await fakeEditorBridge(theirs);
-    cleanups.push(bridge.close);
-
-    const result = await stopEditor(false, mine, { port: bridge.port });
-
+  it("refuses without a loaded project instead of hunting for an editor", async () => {
+    const result = await stopEditor(false, undefined);
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/Refusing to stop/);
-    expect(result.message).toContain(theirs);
-    // The decisive assertion: no quit request ever reached that editor.
-    expect(bridge.received.some((code) => code.includes("quit_editor"))).toBe(false);
+    expect(result.message).toContain("set_project");
+    expect(findInteractiveEditors).not.toHaveBeenCalled();
   });
 
-  it("quits the editor that reports the addressed project", async () => {
-    const mine = makeProjectDir("Mine");
-    const bridge = await fakeEditorBridge(mine);
-    cleanups.push(bridge.close);
-
-    const result = await stopEditor(false, mine, { port: bridge.port });
-
-    expect(result.success).toBe(true);
-    expect(bridge.received.some((code) => code.includes("quit_editor"))).toBe(true);
-  });
-
-  it("tolerates a bridge that cannot answer the probe while one editor is registered", async () => {
-    const mine = makeProjectDir("Mine");
-    const bridge = await fakeEditorBridge(null);
-    cleanups.push(bridge.close);
-
-    const result = await stopEditor(false, mine, { port: bridge.port });
-
-    expect(result.success).toBe(true);
-    expect(bridge.received.some((code) => code.includes("quit_editor"))).toBe(true);
-  });
-
-  it("refuses an unidentifiable editor once more than one is registered", async () => {
-    const mine = makeProjectDir("Mine");
-    const bridge = await fakeEditorBridge(null);
-    cleanups.push(bridge.close);
-
-    const result = await stopEditor(false, mine, { port: bridge.port, strict: true });
-
+  it("names the lockfile it checked when no port is published", async () => {
+    const { projectDir } = makeProject();
+    const result = await stopEditor(false, projectDir);
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/could not confirm which project/);
-    expect(bridge.received.some((code) => code.includes("quit_editor"))).toBe(false);
+    expect(result.message).toContain(bridgeLockfilePath(projectDir));
+    expect(result.message).not.toContain("9877");
   });
 
-  it("matches project directories that differ only in slash style or case", async () => {
-    const mine = makeProjectDir("Mine");
-    const reported = mine.replace(/\\/g, "/").toUpperCase();
-    const bridge = await fakeEditorBridge(reported);
-    cleanups.push(bridge.close);
+  it("does not guess a port when UE_MCP_PORT is set and the lockfile is gone", async () => {
+    const previous = process.env.UE_MCP_PORT;
+    process.env.UE_MCP_PORT = "9877";
+    try {
+      const { projectDir } = makeProject();
+      const result = await stopEditor(false, projectDir);
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("Editor is not running for this project");
+    } finally {
+      if (previous === undefined) delete process.env.UE_MCP_PORT;
+      else process.env.UE_MCP_PORT = previous;
+    }
+  });
 
-    const result = await stopEditor(false, mine, { port: bridge.port, strict: true });
+  it("reports the running editor when it published no port", async () => {
+    const { projectDir, projectPath } = makeProject();
+    findInteractiveEditors.mockResolvedValue([editor(777, projectPath)]);
 
-    expect(result.success).toBe(true);
+    const result = await stopEditor(false, projectDir);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("777");
+    expect(result.message).toContain("never force-kills");
+  });
+
+  it("refuses a lockfile whose process is gone rather than trusting its port", async () => {
+    const { projectDir } = makeProject();
+    writeLockfile(projectDir, { port: 51999, pid: 4242 });
+
+    const result = await stopEditor(false, projectDir);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("4242");
+    expect(result.message).toContain("no longer running");
+    expect(findEditorByPid).toHaveBeenCalledWith(4242);
+  });
+
+  it("refuses when the recorded pid now belongs to another project", async () => {
+    const { projectDir } = makeProject();
+    const otherProject = path.join(os.tmpdir(), "SomeoneElse", "Other.uproject");
+    writeLockfile(projectDir, { port: 51999, pid: 4242 });
+    findEditorByPid.mockResolvedValue(editor(4242, otherProject));
+
+    const result = await stopEditor(false, projectDir);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("Other.uproject");
+    expect(result.message).toContain("not this project");
+  });
+
+  it("refuses a pidless lockfile when no editor for the project is running", async () => {
+    const { projectDir } = makeProject();
+    writeLockfile(projectDir, { port: 51999 });
+
+    const result = await stopEditor(false, projectDir);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("no pid");
+  });
+});
+
+describe("start and restart without a loaded project", () => {
+  it("startEditor asks for a project instead of scanning the machine", async () => {
+    const result = await startEditor(new ProjectContext());
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("set_project");
+    expect(findInteractiveEditors).not.toHaveBeenCalled();
+  });
+
+  it("restartEditor asks for a project instead of scanning the machine", async () => {
+    const result = await restartEditor(new ProjectContext());
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("set_project");
+    expect(findInteractiveEditors).not.toHaveBeenCalled();
   });
 });

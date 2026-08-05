@@ -6,8 +6,16 @@ import WebSocket from "ws";
 import type { ProjectContext } from "./project.js";
 import { findEngineInstall } from "./deployer.js";
 import { invalidatePluginFreshness } from "./plugin-freshness.js";
-import { findInteractiveEditors, readEngineState, readEngineSnapshot, readLogState, type EngineState } from "./engine-observer.js";
-import { deriveProjectPort, normalizeProjectRoot, DEFAULT_BRIDGE_PORT } from "./port.js";
+import {
+  editorOwnsProject,
+  findEditorByPid,
+  findInteractiveEditors,
+  readEngineState,
+  readEngineSnapshot,
+  readLogState,
+  type EngineState,
+} from "./engine-observer.js";
+import { isPidAlive, lockfileIsFromThisLaunch, resolveBridgeTarget } from "./editor-target.js";
 import { startProgress } from "./ui/progress.js";
 import type { ProgressFn } from "./types.js";
 
@@ -125,28 +133,21 @@ function findEditorExecutable(project?: ProjectContext): string | null {
   return null;
 }
 
-/**
- * #804: this used to be a `tasklist /FI "IMAGENAME eq UnrealEditor.exe"` string
- * match, which cannot tell an interactive editor apart from a headless shard
- * (`-server -game -nullrhi`) or from an editor holding a completely different
- * project. Two shards on the box made start_editor refuse with "Editor is
- * already running" while get_status reported nothing connected. The probe now
- * matches on PID + command line and scopes to the project being asked about.
- */
-async function isEditorRunning(projectPath?: string | null): Promise<boolean> {
-  return (await findInteractiveEditors(projectPath ?? null)).length > 0;
-}
-
-/** Is anything answering on this port? Used to report per-session liveness. */
-export function isBridgeReachable(port: number, host?: string, timeoutMs = 1000): Promise<boolean> {
-  return isBridgeAvailable(host, port, timeoutMs);
-}
-
+/** The host the client talks to a bridge on. UE_MCP_HOST covers remote setups. */
 function bridgeHost(): string {
   return process.env.UE_MCP_HOST ?? "127.0.0.1";
 }
 
-async function isBridgeAvailable(host = bridgeHost(), port = DEFAULT_BRIDGE_PORT, timeoutMs = 1000): Promise<boolean> {
+/**
+ * Is anything answering on this port? Exported so a session can be reported as
+ * reachable or not without opening a bridge connection to find out (#817).
+ */
+export function isBridgeReachable(port: number, host?: string, timeoutMs = 1000): Promise<boolean> {
+  return isBridgeAvailable(host, port, timeoutMs);
+}
+
+async function isBridgeAvailable(host = bridgeHost(), port = 0, timeoutMs = 1000): Promise<boolean> {
+  if (!port) return false;
   return new Promise((resolve) => {
     const socket = new net.Socket();
     let resolved = false;
@@ -189,19 +190,6 @@ async function isBridgeAvailable(host = bridgeHost(), port = DEFAULT_BRIDGE_PORT
 const STALLED_STARTUP_MS = 45_000;
 const WINDOW_PROBE_INTERVAL_MS = 60_000;
 
-/**
- * Which editor a lifecycle action is aimed at (#817).
- *
- * `port` is the addressed session's resolved port, which already accounts for
- * an explicit pin, the environment and ue-mcp.yml. `strict` says this server
- * drives more than one editor, so an editor that cannot be identified is
- * refused rather than assumed to be the right one.
- */
-export interface LifecycleTarget {
-  port?: number;
-  strict?: boolean;
-}
-
 export interface ReadyPhase {
   phase: string;
   atSeconds: number;
@@ -232,15 +220,16 @@ export async function waitForEditorReadyExternal(
   projectPath: string,
   projectDir: string,
   maxWaitSeconds = 300,
+  launchedAtMs?: number,
 ): Promise<ReadyResult> {
-  return waitForEditorReady(projectPath, projectDir, maxWaitSeconds);
+  return waitForEditorReady(projectPath, projectDir, maxWaitSeconds, { launchedAtMs });
 }
 
 async function waitForEditorReady(
   projectPath: string | null | undefined,
   projectDir: string | undefined,
   maxWaitSeconds: number,
-  opts: { showProgress?: boolean; onProgress?: ProgressFn; port?: number } = {},
+  opts: { showProgress?: boolean; onProgress?: ProgressFn; launchedAtMs?: number } = {},
 ): Promise<ReadyResult> {
   const startTime = Date.now();
   const maxWaitMs = maxWaitSeconds * 1000;
@@ -400,9 +389,17 @@ async function waitForEditorReady(
     // Ready means both: the plugin says so, and the socket actually answers.
     // #758: the port is re-read every pass rather than resolved once, because
     // the bridge binds a per-project port and only publishes it to
-    // Saved/UE_MCP_Bridge/port.json once it starts - a port resolved up front
-    // is the default 9877 and never matches.
-    const socketUp = await isBridgeAvailable(undefined, resolveBridgePort(projectDir, opts.port));
+    // Saved/UE_MCP_Bridge/port.json once it starts, so there is nothing to
+    // resolve up front. #819: only that file is consulted, and only once it has
+    // been written by this launch - a lockfile left behind by a crashed session
+    // can point at a port some unrelated editor has since taken, and answering
+    // "ready" on the strength of that is how a wait ends up watching the wrong
+    // process.
+    const target = resolveBridgeTarget(projectDir);
+    const socketUp =
+      target.ok &&
+      lockfileIsFromThisLaunch(target.writtenAtMs, opts.launchedAtMs) &&
+      (await isBridgeAvailable(undefined, target.port));
     if (socketUp) {
       if (snapshot?.phase === "ready") {
         return finish({ ready: true, elapsedSeconds: elapsed(), timeline });
@@ -471,20 +468,37 @@ export async function startEditor(
   project: ProjectContext,
   timeoutSeconds = 300,
   onProgress?: ProgressFn,
-  target: LifecycleTarget = {},
 ): Promise<{ success: boolean; message: string; state?: EngineState; timeline?: ReadyPhase[]; elapsedSeconds?: number }> {
-  // Fast signal first: a bridge answering on this project's port is proof its
-  // editor is up, costs a millisecond, and needs no process table at all. The
-  // process probe (seconds, on Windows) only runs when that fails, which is
-  // also the only case where its extra detail is worth anything.
-  const projectDirForPort = project.projectPath ? path.dirname(project.projectPath) : undefined;
-  if (await isBridgeAvailable(undefined, resolveBridgePort(projectDirForPort, target.port))) {
-    return { success: false, message: "Editor is already running for this project (its bridge is answering)." };
+  // Every check below is about ONE editor: the one holding this project. Know
+  // which project that is before looking at anything, because without it the
+  // only available question is "is any editor running on this machine", and
+  // refusing to launch on the strength of somebody else's editor is exactly the
+  // bug this guard used to have (#819).
+  if (!project.projectPath) {
+    return { success: false, message: "No project loaded. Use project(action='set_project') first." };
+  }
+  const projectDir = path.dirname(project.projectPath);
+
+  // Fast signal first: a bridge answering on the port THIS project published is
+  // proof its editor is up, costs a millisecond, and needs no process table at
+  // all. The process probe (seconds, on Windows) only runs when that fails,
+  // which is also the only case where its extra detail is worth anything.
+  // A lockfile whose process is gone was left by a crash, and the port it names
+  // can since have been taken by something else, so an answer on it proves
+  // nothing. Discarding it here costs a syscall and keeps a stale file from
+  // refusing a launch forever.
+  const target = resolveBridgeTarget(projectDir);
+  const targetIsLive = target.ok && (target.pid === null || isPidAlive(target.pid));
+  if (target.ok && targetIsLive && (await isBridgeAvailable(undefined, target.port))) {
+    return {
+      success: false,
+      message: `Editor is already running for this project (its bridge is answering on port ${target.port}).`,
+    };
   }
 
-  const alreadyRunning = await findInteractiveEditors(project.projectPath ?? null);
+  const alreadyRunning = await findInteractiveEditors(project.projectPath);
   if (alreadyRunning.length > 0) {
-    const state = await readEngineState(project.projectPath ?? null, { probeWindows: true });
+    const state = await readEngineState(project.projectPath, { probeWindows: true });
     return {
       success: false,
       message: `Editor is already running for this project (pid ${alreadyRunning.map((p) => p.pid).join(", ")}) but its bridge is not answering yet. ${state.summary}`,
@@ -500,11 +514,10 @@ export async function startEditor(
     };
   }
 
-  if (!project.projectPath) {
-    return { success: false, message: "No project loaded. Use project(action='set_project') first." };
-  }
-
   try {
+    // Recorded before the spawn so the wait can tell the lockfile this editor
+    // publishes from one an earlier session left behind.
+    const launchedAtMs = Date.now();
     const editorProcess = spawn(editorExe, [project.projectPath], {
       stdio: "ignore",
       detached: true,
@@ -515,8 +528,7 @@ export async function startEditor(
     // Hold here until the editor is actually usable, drawing the startup as a
     // progress bar. Returning as soon as the socket answered is what left
     // callers polling get_engine_state in a loop while shaders compiled.
-    const projectDir = path.dirname(project.projectPath);
-    const result = await waitForEditorReady(project.projectPath, projectDir, timeoutSeconds, { onProgress, port: target.port });
+    const result = await waitForEditorReady(project.projectPath, projectDir, timeoutSeconds, { onProgress, launchedAtMs });
 
     if (!result.ready) {
       return {
@@ -571,148 +583,14 @@ function uprojectInDir(projectDir?: string): string | null {
 }
 
 /**
- * The port this project's editor is on.
- *
- * Order: the port the editor published, then the port the session resolved
- * (explicit > env > config), then the port derived from this project root.
- * The fixed default is reachable only when there is no project at all.
- *
- * The derived step is what makes this project-specific while the editor is
- * down, which is exactly when lifecycle actions run: falling through to a
- * shared default meant a stop aimed at a project whose lockfile was gone
- * resolved to whatever editor happened to be pinned there, and quit THAT one
- * while reporting success (#819).
- */
-function resolveBridgePort(projectDir?: string, preferredPort?: number): number {
-  if (projectDir) {
-    try {
-      const raw = fs.readFileSync(path.join(projectDir, "Saved", "UE_MCP_Bridge", "port.json"), "utf-8");
-      const p = JSON.parse(raw) as { port?: unknown };
-      if (typeof p.port === "number" && p.port > 0) return p.port;
-    } catch { /* fall through */ }
-  }
-  if (typeof preferredPort === "number" && preferredPort > 0) return preferredPort;
-  if (projectDir) return deriveProjectPort(projectDir);
-  const env = Number(process.env.UE_MCP_PORT);
-  return Number.isFinite(env) && env > 0 ? env : DEFAULT_BRIDGE_PORT;
-}
-
-/**
- * Ask the editor on this port which project it has open.
- *
- * The answer is the only thing that proves a lifecycle action is about to act
- * on the editor it was aimed at. A port is an address, not an identity: a
- * collision walk, a pinned port, or a stale lockfile can all put a different
- * project's editor at the address this one was derived to. Runs on its own
- * connection so it cannot be queued behind a long call.
- */
-function probeEditorProjectDir(port: number, timeoutMs = 8000): Promise<string | null> {
-  const code = [
-    "import unreal",
-    "_ue_mcp_project_dir = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir())",
-  ].join("\n");
-  return new Promise<string | null>((resolve) => {
-    let settled = false;
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(`ws://${bridgeHost()}:${port}`);
-    } catch {
-      resolve(null);
-      return;
-    }
-    const finish = (v: string | null) => {
-      if (settled) return;
-      settled = true;
-      try { ws.close(); } catch { /* ignore */ }
-      resolve(v);
-    };
-    const timer = setTimeout(() => finish(null), timeoutMs);
-    ws.on("open", () => ws.send(JSON.stringify({
-      id: "ue-mcp-identity",
-      method: "execute_python",
-      params: { code, resultVariable: "_ue_mcp_project_dir" },
-    })));
-    ws.on("message", (data) => {
-      clearTimeout(timer);
-      try {
-        const msg = JSON.parse(data.toString()) as { result?: { result?: unknown; resultVariableResolved?: unknown } };
-        const raw = msg.result?.result;
-        if (msg.result?.resultVariableResolved === true && typeof raw === "string") {
-          finish(raw.trim().replace(/^['"]|['"]$/g, ""));
-          return;
-        }
-      } catch { /* unparseable - treat as unverifiable */ }
-      finish(null);
-    });
-    ws.on("error", () => { clearTimeout(timer); finish(null); });
-  });
-}
-
-export interface IdentityCheck {
-  ok: boolean;
-  reason?: string;
-  reportedProjectDir?: string;
-}
-
-/**
- * Refuse to act on an editor that is not the one addressed.
- *
- * A verified mismatch is always refused: acting on another project's editor
- * is the failure this exists to prevent. An unverifiable answer (no Python,
- * no reply, an older bridge) is allowed through when the port came from that
- * project's own lockfile, which is project-attributed evidence in itself, and
- * refused when several editors are registered and the address was only
- * derived.
- */
-async function verifyEditorIdentity(
-  port: number,
-  expectedProjectDir: string | null | undefined,
-  opts: { portFromLockfile: boolean; strict: boolean },
-): Promise<IdentityCheck> {
-  if (!expectedProjectDir) return { ok: true };
-  const reported = await probeEditorProjectDir(port);
-  if (reported === null) {
-    if (opts.portFromLockfile || !opts.strict) return { ok: true };
-    return {
-      ok: false,
-      reason:
-        `could not confirm which project the editor on port ${port} has open, and this server drives more than one editor. ` +
-        `Start that editor through ue-mcp, or close it manually - ue-mcp will not act on an editor it cannot identify.`,
-    };
-  }
-  if (normalizeProjectRoot(reported) !== normalizeProjectRoot(expectedProjectDir)) {
-    return {
-      ok: false,
-      reportedProjectDir: reported,
-      reason:
-        `the editor answering on port ${port} has ${reported} open, not ${expectedProjectDir}. ` +
-        `Refusing to act on another project's editor.`,
-    };
-  }
-  return { ok: true, reportedProjectDir: reported };
-}
-
-/** Did this project publish the port we are about to act on? */
-function lockfilePort(projectDir?: string): number | null {
-  if (!projectDir) return null;
-  try {
-    const raw = fs.readFileSync(path.join(projectDir, "Saved", "UE_MCP_Bridge", "port.json"), "utf-8");
-    const p = JSON.parse(raw) as { port?: unknown };
-    return typeof p.port === "number" && p.port > 0 ? p.port : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Ask the editor to quit itself via the bridge (`execute_python` -> quit_editor).
  * Returns true if the request was delivered. Never touches the OS process table.
  */
 function requestEditorSelfQuit(port: number): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     let settled = false;
-    // Same host the reachability probe used. Probing one host and quitting
-    // another is how a stop aimed at a remote editor lands on a local one.
+    // Same host the reachability probe uses. Probing one host and sending the
+    // quit to another is its own way of reaching an editor nobody addressed.
     const ws = new WebSocket(`ws://${bridgeHost()}:${port}`);
     const finish = (v: boolean) => {
       if (settled) return;
@@ -734,18 +612,77 @@ function requestEditorSelfQuit(port: number): Promise<boolean> {
  * is accepted for back-compat but there is deliberately no force-kill path.
  * Success is confirmed by the project's own bridge port going quiet, so it is
  * specific to this editor even when others are open.
+ *
+ * The port comes from this project's lockfile and nowhere else, and the process
+ * it names is checked before the quit goes out (#819).
  */
-export async function stopEditor(
-  force = false,
-  projectDir?: string,
-  target: LifecycleTarget = {},
-): Promise<{ success: boolean; message: string; state?: EngineState }> {
+export async function stopEditor(force = false, projectDir?: string): Promise<{ success: boolean; message: string; state?: EngineState }> {
   void force;
 
   const projectPath = uprojectInDir(projectDir);
-  const port = resolveBridgePort(projectDir, target.port);
+  if (!projectDir || !projectPath) {
+    return {
+      success: false,
+      message:
+        "No project is loaded, so stop_editor has no editor to aim at. Use project(action='set_project') first. " +
+        "A lifecycle action never falls back to whichever editor it can find.",
+    };
+  }
+
+  const target = resolveBridgeTarget(projectDir);
+  if (!target.ok) {
+    const running = await findInteractiveEditors(projectPath);
+    if (running.length === 0) {
+      return { success: false, message: `Editor is not running for this project. ${target.reason}` };
+    }
+    const state = await readEngineState(projectPath, { probeWindows: true });
+    return {
+      success: false,
+      message:
+        `Editor is running (pid ${running.map((p) => p.pid).join(", ")}) but no bridge port is published for it, ` +
+        `so it cannot be asked to quit cleanly. ${target.reason} ${state.summary} ` +
+        "Close it manually - ue-mcp never force-kills processes.",
+      state,
+    };
+  }
+
+  // The lockfile was written by an editor that had THIS project open, but it
+  // outlives a crash, and the port it names can be taken by something else
+  // afterwards. Confirm the process it points at is still that editor before
+  // sending anything a quit request (#819).
+  if (target.pid !== null) {
+    const owner = await findEditorByPid(target.pid);
+    if (!owner) {
+      return {
+        success: false,
+        message:
+          `The bridge lockfile at ${target.lockfilePath} names pid ${target.pid}, which is no longer running - ` +
+          "the editor exited without removing it. Nothing was asked to quit, because port " +
+          `${target.port} may since have been taken by an unrelated process. Delete that file if it persists.`,
+      };
+    }
+    if (owner.projectPath !== null && !editorOwnsProject(owner, projectPath)) {
+      return {
+        success: false,
+        message:
+          `The bridge lockfile at ${target.lockfilePath} names pid ${target.pid}, but that process now has ` +
+          `${owner.projectPath} open, not this project. Nothing was asked to quit. Delete that file if it persists.`,
+      };
+    }
+  } else if ((await findInteractiveEditors(projectPath)).length === 0) {
+    // Plugin builds before the lockfile carried a pid leave nothing to identify
+    // the listener with, so the process table has to answer instead.
+    return {
+      success: false,
+      message:
+        `The bridge lockfile at ${target.lockfilePath} records no pid (older plugin build) and no editor for this ` +
+        `project is running, so port ${target.port} cannot be shown to belong to it. Nothing was asked to quit.`,
+    };
+  }
+
+  const port = target.port;
   const bridgeUp = await isBridgeAvailable(undefined, port);
-  if (!bridgeUp && !(await isEditorRunning(projectPath))) {
+  if (!bridgeUp && (await findInteractiveEditors(projectPath)).length === 0) {
     return { success: false, message: "Editor is not running" };
   }
   if (!bridgeUp) {
@@ -758,16 +695,6 @@ export async function stopEditor(
       message: `Editor is running but its bridge is unreachable, so it cannot be asked to quit cleanly. ${state.summary} Close it manually - ue-mcp never force-kills processes.`,
       state,
     };
-  }
-
-  // Confirm this is the addressed project's editor BEFORE asking anything to
-  // quit. A port identifies an address, not a project.
-  const identity = await verifyEditorIdentity(port, projectDir, {
-    portFromLockfile: lockfilePort(projectDir) === port,
-    strict: target.strict === true,
-  });
-  if (!identity.ok) {
-    return { success: false, message: `Refusing to stop the editor on port ${port}: ${identity.reason}` };
   }
 
   const quitSent = await requestEditorSelfQuit(port);
@@ -791,20 +718,25 @@ export async function stopEditor(
   };
 }
 
-export async function restartEditor(
-  project: ProjectContext,
-  bridge?: { connect: (timeoutMs?: number) => Promise<void> },
-  target: LifecycleTarget = {},
-): Promise<{ success: boolean; message: string }> {
-  const stopResult = await stopEditor(false, project.projectDir ?? undefined, target);
-  if (!stopResult.success && (await isEditorRunning(project.projectPath ?? null))) {
+export async function restartEditor(project: ProjectContext, bridge?: { connect: (timeoutMs?: number) => Promise<void> }): Promise<{ success: boolean; message: string }> {
+  // Same rule as start and stop: without a loaded project there is no editor
+  // this is about, and the machine-wide answer is somebody else's editor (#819).
+  if (!project.projectPath) {
+    return { success: false, message: "No project loaded. Use project(action='set_project') first." };
+  }
+
+  const stopResult = await stopEditor(false, project.projectDir ?? undefined);
+  // Whether the stop mattered is a question about THIS project's editor: a
+  // failed stop with nothing of ours left running just means it was already
+  // down, and another project's editor being up says nothing either way.
+  if (!stopResult.success && (await findInteractiveEditors(project.projectPath)).length > 0) {
     return { success: false, message: `Failed to stop editor: ${stopResult.message}` };
   }
 
   // Wait for process to fully terminate and release locks
   await new Promise((resolve) => setTimeout(resolve, 3000));
 
-  const startResult = await startEditor(project, 300, undefined, target);
+  const startResult = await startEditor(project);
   if (!startResult.success) {
     return startResult;
   }

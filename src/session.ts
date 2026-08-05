@@ -70,7 +70,8 @@ export class EditorSession {
 
   constructor(
     public name: string,
-    readonly key: string,
+    /** Resolved project root. Moves when the session's project moves. */
+    public key: string,
     readonly project: ProjectContext,
     guards: GuardRegistry,
   ) {
@@ -201,32 +202,45 @@ export class SessionRegistry {
   }
 
   /**
-   * Point the active session at another project - what `project(set_project)`
-   * means. Switching to a project that is already registered selects it and
-   * leaves every other session alone; switching to a new one replaces the
-   * active binding rather than growing the set, so a single-editor server
-   * stays a single-editor server across a switch.
+   * Re-file a session after its project moved (`project(set_project)`).
    *
-   * The replaced session's editor is never touched: this detaches, it does
-   * not stop anything.
+   * switchProject moves the ProjectContext and the socket together; this moves
+   * the registry entry with them, since sessions are keyed by project root. A
+   * session named after the project it just left is renamed too, so the handle
+   * a caller sees still describes what it addresses.
+   *
+   * The editor of the project being left is never touched: this detaches, it
+   * does not stop anything.
    */
-  replaceActive(projectPath: string): { session: EditorSession; replaced?: string } {
-    const existing = this.find(projectPath);
-    if (existing) {
-      this.use(existing.name);
-      return { session: existing };
+  rekey(session: EditorSession): EditorSession {
+    const previousKey = session.key;
+    const nextKey = session.project.projectPath ? sessionKeyFor(session.project.projectPath) : DEFAULT_SESSION_KEY;
+    if (nextKey === previousKey) return session;
+
+    const occupant = this.byKey.get(nextKey);
+    if (occupant && occupant !== session) {
+      throw new McpError(
+        ErrorCode.INVALID_PARAMS,
+        `'${occupant.name}' is already registered for that project; two sessions cannot address one editor.`,
+      );
     }
-    const previous = this.byKey.size > 0 ? this.active : null;
-    this.suppressNotify = true;
-    let session: EditorSession;
-    try {
-      session = this.register({ projectPath, makeActive: true });
-      if (previous && previous !== session) this.forget(previous);
-    } finally {
-      this.suppressNotify = false;
+
+    this.byKey.delete(previousKey);
+    session.key = nextKey;
+    this.byKey.set(nextKey, session);
+    if (this.activeKey === previousKey) this.activeKey = nextKey;
+
+    const projectName = session.project.projectName;
+    if (projectName && projectName.toLowerCase() !== session.name.toLowerCase()) {
+      session.name = this.uniqueName(projectName, session);
     }
-    this.onCountChanged?.(this.byKey.size);
-    return { session, replaced: previous && previous !== session ? previous.name : undefined };
+
+    session.portSharedWith = [];
+    for (const other of this.byKey.values()) {
+      other.portSharedWith = other.portSharedWith.filter((n) => n !== session.name);
+    }
+    this.noteSharedPorts(session);
+    return session;
   }
 
   /** Resolve without throwing. */
@@ -311,8 +325,10 @@ export class SessionRegistry {
     }
   }
 
-  private uniqueName(base: string): string {
-    const taken = new Set([...this.byKey.values()].map((s) => s.name.toLowerCase()));
+  private uniqueName(base: string, ignore?: EditorSession): string {
+    const taken = new Set(
+      [...this.byKey.values()].filter((s) => s !== ignore).map((s) => s.name.toLowerCase()),
+    );
     if (!taken.has(base.toLowerCase())) return base;
     for (let i = 2; ; i++) {
       const candidate = `${base}-${i}`;

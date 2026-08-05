@@ -156,37 +156,35 @@ describe("SessionRegistry", () => {
     expect(counts).toEqual([1, 2, 1]);
   });
 
-  it("set_project replaces the active binding rather than growing the set", () => {
+  it("re-files a session when its project moves, without growing the set", () => {
     const alpha = makeProject("Alpha");
     const beta = makeProject("Beta");
     const registry = new SessionRegistry();
-    registry.register({ projectPath: alpha });
+    const session = registry.register({ projectPath: alpha });
 
-    const counts: number[] = [];
-    registry.onCountChanged = (n) => counts.push(n);
-    const { session, replaced } = registry.replaceActive(beta);
+    // What set_project does: switchProject moves the ProjectContext and the
+    // socket together, then the registry moves the entry with them.
+    session.project.setProject(beta);
+    registry.rekey(session);
 
-    expect(replaced).toBe("Alpha");
     expect(registry.size).toBe(1);
-    expect(session.project.projectPath).toBe(path.resolve(beta));
-    // The socket moved with the project: same object, one lockfile, one port.
-    expect(session.bridge.projectPathForLockfile).toBe(session.project.projectPath);
-    expect(session.bridge.port).toBe(deriveProjectPort(path.dirname(beta)));
-    // One net change, not a transient two-session server.
-    expect(counts).toEqual([1]);
+    expect(registry.active).toBe(session);
+    expect(session.name).toBe("Beta");
+    expect(registry.resolve("Beta")).toBe(session);
+    expect(registry.resolve(beta)).toBe(session);
+    // The project it left is no longer addressable through this server.
+    expect(() => registry.resolve("Alpha")).toThrowError(/No editor session named 'Alpha'/);
   });
 
-  it("switching to an already-registered project selects it and leaves the others alone", () => {
+  it("refuses to re-file a session onto a project another session already holds", () => {
     const alpha = makeProject("Alpha");
     const beta = makeProject("Beta");
     const registry = new SessionRegistry();
-    registry.register({ projectPath: alpha });
+    const a = registry.register({ projectPath: alpha });
     const b = registry.register({ projectPath: beta });
 
-    const { session, replaced } = registry.replaceActive(alpha);
-    expect(replaced).toBeUndefined();
-    expect(session.project.projectName).toBe("Alpha");
-    expect(registry.size).toBe(2);
+    a.project.setProject(beta);
+    expect(() => registry.rekey(a)).toThrowError(/already registered for that project/);
     expect(registry.resolve("Beta")).toBe(b);
   });
 

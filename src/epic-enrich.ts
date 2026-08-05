@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { categoryTool, type ToolDef, type ActionSpec } from "./types.js";
+import { McpError, ErrorCode } from "./errors.js";
+import { coerceAssetPathValue } from "./asset-path.js";
 
 /**
  * First-class surfacing of Epic's native UE 5.8 toolsets.
@@ -132,6 +134,121 @@ function paramHint(tool: EpicTool): string {
   return ` Params (pass as input): ${rendered}.`;
 }
 
+// ── Input envelope ────────────────────────────────────────────────────────────
+// A wrapped engine tool takes its arguments as one nested object, while the
+// surrounding ue-mcp category takes flat, canonical parameters. Passing a flat
+// parameter used to reach the engine as an empty input object, which came back
+// as "input params Json is empty" with no clue about what to send instead
+// (#798). Build the envelope here: honour an explicit `input`, fold in the
+// top-level parameters the tool's own schema names, fill an asset reference
+// from the category's canonical `assetPath`, and refuse the call with the
+// required shape when something is still missing.
+
+interface SchemaProp {
+  type?: string;
+  properties?: Record<string, unknown>;
+  required?: string[];
+}
+
+function asProp(value: unknown): SchemaProp | undefined {
+  return value && typeof value === "object" ? (value as SchemaProp) : undefined;
+}
+
+/** True when a schema property is the engine's `{ refPath }` object reference. */
+function isAssetRefProp(prop: SchemaProp | undefined): boolean {
+  return !!prop && prop.type === "object" && !!prop.properties && "refPath" in prop.properties;
+}
+
+function parseObjectish(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+/** Render one required property as the JSON a caller should send for it. */
+function exampleFor(name: string, prop: SchemaProp | undefined): string {
+  if (isAssetRefProp(prop)) return `"${name}": { "refPath": "/Game/UI/WBP_Example" }`;
+  if (prop?.type === "number" || prop?.type === "integer") return `"${name}": 0`;
+  if (prop?.type === "boolean") return `"${name}": false`;
+  if (prop?.type === "array") return `"${name}": []`;
+  if (prop?.type === "object") return `"${name}": {}`;
+  return `"${name}": "..."`;
+}
+
+/**
+ * Build the `input` object for one wrapped engine tool call.
+ * Returns the arguments to hand the bridge; throws INVALID_PARAMS when the
+ * tool's required arguments cannot be assembled from what the caller sent.
+ */
+export function resolveEpicToolInput(
+  tool: EpicTool,
+  params: Record<string, unknown>,
+): { input?: unknown; inputJson?: unknown } {
+  // An explicit raw JSON string is the caller taking full control.
+  if (typeof params.inputJson === "string" && params.inputJson.trim() !== "") {
+    return { inputJson: params.inputJson };
+  }
+
+  const schema = tool.inputSchema;
+  const props = schema?.properties;
+  if (!props) return { input: params.input, inputJson: params.inputJson };
+
+  const given = parseObjectish(params.input);
+  const input: Record<string, unknown> =
+    given && typeof given === "object" && !Array.isArray(given)
+      ? { ...(given as Record<string, unknown>) }
+      : {};
+
+  const propNames = Object.keys(props);
+  const required = schema?.required ?? [];
+
+  // 1. Top-level parameters the tool's own schema names.
+  for (const name of propNames) {
+    if (input[name] !== undefined) continue;
+    const flat = params[name];
+    if (flat === undefined || flat === null || flat === "") continue;
+    const prop = asProp(props[name]);
+    let value = parseObjectish(flat);
+    if (isAssetRefProp(prop) && typeof value === "string") {
+      value = { refPath: value };
+    }
+    input[name] = value;
+  }
+
+  // 2. The category's canonical asset path fills the tool's asset reference,
+  //    but only when exactly one is still unresolved, so nothing is guessed.
+  const unresolvedRefs = propNames.filter((n) => input[n] === undefined && isAssetRefProp(asProp(props[n])));
+  const canonicalAsset = coerceAssetPathValue(params.assetPath) ?? coerceAssetPathValue(params.path);
+  if (unresolvedRefs.length === 1 && canonicalAsset) {
+    input[unresolvedRefs[0]] = { refPath: canonicalAsset };
+  }
+
+  // 3. Refuse rather than dispatch a call the engine will reject anyway.
+  const missing = required.filter((n) => input[n] === undefined);
+  if (missing.length > 0) {
+    const known = new Set([...propNames, "action", "input", "inputJson"]);
+    const ignored = Object.keys(params).filter(
+      (k) => !known.has(k) && params[k] !== undefined && params[k] !== null,
+    );
+    const shape = missing.map((n) => exampleFor(n, asProp(props[n]))).join(", ");
+    throw new McpError(
+      ErrorCode.INVALID_PARAMS,
+      `${tool.name} is missing required argument(s): ${missing.join(", ")}. ` +
+      `Pass them in 'input', for example {"input": {${shape}}}.` +
+      (ignored.length > 0
+        ? ` These top-level parameters are not arguments of this tool and were not sent: ${ignored.join(", ")}.`
+        : ""),
+    );
+  }
+
+  return { input };
+}
+
 // ── Enrichment ─────────────────────────────────────────────────────────────────
 export interface EnrichResult {
   injected: number;
@@ -226,8 +343,7 @@ export function enrichToolsWithEpicCatalog(
         mapParams: (p: Record<string, unknown>) => ({
           toolset: toolsetName,
           tool: qualifiedTool,
-          input: p.input,
-          inputJson: p.inputJson,
+          ...resolveEpicToolInput(tool, p),
         }),
       };
       target.actions[key] = spec;
@@ -253,7 +369,7 @@ export function enrichToolsWithEpicCatalog(
         .describe("Epic tool arguments as a raw JSON string (alternative to input)");
     }
     const added = result.byCategory[catName] ?? 0;
-    t.description += `\n\nEpic 5.8 toolset actions (${added}): the epic_* actions above wrap Unreal's native ToolsetRegistry tools for this domain. Pass tool arguments via 'input'.`;
+    t.description += `\n\nEpic 5.8 toolset actions (${added}): the epic_* actions above wrap Unreal's native ToolsetRegistry tools for this domain. Pass tool arguments via 'input'. A top-level parameter named by the wrapped tool's own schema is folded into 'input' for you, as is this category's canonical asset path when the tool takes a single asset reference. A call that is still missing a required argument is refused with the exact shape to send, instead of being dispatched (#798).`;
   }
 
   return result;

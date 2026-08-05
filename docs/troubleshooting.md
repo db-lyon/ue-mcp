@@ -88,15 +88,27 @@ The MCP server auto-reconnects every 15 seconds. If the editor is restarted, the
 
 If the connection is flapping (connecting then immediately disconnecting), check the editor's Output Log for errors in the `LogMCPBridge` category.
 
+### stop_editor or restart_editor says no port is published
+
+**Symptom:** `stop_editor` returns something like `No bridge port published at C:/Game/Saved/UE_MCP_Bridge/port.json`, or reports that the PID in that file is no longer running.
+
+The editor publishes that file while its bridge is listening and removes it on a clean exit, and lifecycle actions read it and nothing else: a guessed port is how a quit request reaches whichever editor happens to hold that number (#819). So the message means one of three things.
+
+1. **No editor is running for this project.** Nothing to stop. Start one with `editor(start_editor)`.
+2. **The editor is running but its bridge never started.** Check the Output Log for `LogMCPBridge` (see [Bridge not running](#editor-not-connected--bridge-not-running)). The message includes the phase the editor is actually at.
+3. **A previous editor was killed rather than closed.** Its lockfile is still on disk naming a PID that has gone. Delete `<project>/Saved/UE_MCP_Bridge/port.json` and the message clears.
+
+`start_editor` refusing with "Editor is already running for this project" is the same targeting rule from the other side: it names the PID, and that PID has this project's `.uproject` on its command line. Editors for other projects and headless shards never trigger it.
+
 ### A call ran in the wrong editor
 
-Start with `project(action="list_editors")`. It reports every registered session, the bridge port each resolved to, and which session untargeted calls fall through to.
+Only possible with more than one editor session registered. Start with `project(action="list_editors")`: it reports every session, the bridge port each resolved to, and which one untargeted calls fall through to.
 
-- **Two sessions on one port.** They cannot be told apart, and `list_editors` says so. It happens when two projects pin the same `bridge.port` in their `ue-mcp.yml`, or when a global `UE_MCP_PORT` overrides both. Give each project its own port, or unset the variable, then restart the server.
 - **The call had no target.** Untargeted calls run in the active session. Pass `editor="<name>"` on the call, or move the default with `project(action="use_editor", editorTarget="<name>")`.
 - **The `editor` parameter is not advertised.** It appears only while more than one session is registered. Add the other project with `project(action="add_editor", projectPath="...")`, or list both `.uproject` paths in your MCP client config.
+- **Two sessions on one port.** `list_editors` reports it as `portSharedWith`. It happens when two projects pin the same `bridge.port`, or when a global `UE_MCP_PORT` overrides both, and it means the editor answering there cannot be attributed to either project. Give each project its own port, or unset the variable, then restart the server.
 
-`editor(action="stop_editor")` asks the editor on the target port which project it has open and refuses when the answer is a different project, so a misdirected stop reports a refusal rather than closing someone else's editor.
+Lifecycle actions are not affected by the last case: they resolve through the addressed project's own lockfile and the PID it names, and refuse rather than guess.
 
 ## Plugin Build Issues
 

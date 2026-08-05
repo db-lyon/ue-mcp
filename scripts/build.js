@@ -1,16 +1,7 @@
 #!/usr/bin/env node
 
-import path from 'path';
 import { spawn, exec } from 'child_process';
-import { promisify } from 'util';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import { log, logSection, fileExists, findUEBuildTool, getProjectPaths } from './build-utils.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const execPromise = promisify(exec);
+import { log, logSection, assertTestProject, createTestBuildPlan } from './build-utils.js';
 
 function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -68,42 +59,39 @@ function runCommand(command, args, options = {}) {
 async function main() {
   logSection('UE-MCP Build');
 
-  const { projectRoot, projectFile } = getProjectPaths();
-
-  // Check if project file exists
-  if (!(await fileExists(projectFile))) {
-    log(`ERROR: Project file not found at ${projectFile}`, 'red');
+  let plan;
+  try {
+    plan = createTestBuildPlan();
+    assertTestProject(plan.projectFile);
+  } catch (error) {
+    log(`ERROR: ${error.message}`, 'red');
     process.exit(1);
   }
 
-  // Find UE5 build tool
-  const buildTool = findUEBuildTool();
-  
-  if (!buildTool) {
-    log('ERROR: Unreal Engine build tool not found!', 'red');
-    log('');
-    log('Please either:');
-    log('  1. Install UE5.3+ to default location, OR');
-    log('  2. Set UE_BUILD_TOOL_PATH environment variable to your Build.bat path');
-    log('');
-    log('Example: set UE_BUILD_TOOL_PATH=C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Build\\BatchFiles\\Build.bat');
-    process.exit(1);
-  }
+  const {
+    projectRoot,
+    projectFile,
+    engineRoot,
+    engineRootSource,
+    buildTool,
+    buildArgs,
+    allowEngineChanges,
+    protectedRoots,
+  } = plan;
 
   log(`Project Root: ${projectRoot}`);
   log(`Project File: ${projectFile}`);
+  log(`Engine Root: ${engineRoot} (from ${engineRootSource})`);
   log(`Build Tool: ${buildTool}`);
+  if (protectedRoots.length > 0) {
+    log(`Protected roots: ${protectedRoots.join(', ')}`);
+  }
+  if (allowEngineChanges) {
+    log('Engine changes: ALLOWED via UE_MCP_ALLOW_TEST_ENGINE_CHANGES. This build may write into the engine tree.', 'yellow');
+  } else {
+    log('Engine changes: blocked (-NoEngineChanges)');
+  }
   log('');
-
-  // Build command arguments
-  const buildArgs = [
-    'ue_mcpEditor',
-    'Win64',
-    'Development',
-    `-Project="${projectFile}"`,
-    '-WaitMutex',
-    '-FromMsBuild',
-  ];
 
   log('Starting build...');
   log(`Command: ${buildTool} ${buildArgs.join(' ')}`);

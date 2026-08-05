@@ -157,6 +157,8 @@ Switch to the project at C:/path/to/Other.uproject.
 
 UE-MCP redeploys the bridge and reconnects. (Calls `project(action="set_project")` under the hood.)
 
+Path resolution and the editor connection move as one. The connection to the previous project's editor is dropped before the new project is loaded, so nothing can execute in the project you switched away from. If the new project's editor is not running, the switch still completes and the response reports the connection as unavailable: filesystem tools work, bridge actions wait for that editor. See [Switching Projects](configuration.md#switching-projects) for how the new project's port is chosen.
+
 ## Manual configuration
 
 If you'd rather skip `npx ue-mcp init`, edit the MCP client config yourself.
