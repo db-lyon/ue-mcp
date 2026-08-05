@@ -15,6 +15,7 @@ import { runFeedbackAuthStep } from "./auth-cli.js";
 import { getInstalledHooks } from "./user-state.js";
 import { detectMcpClients, isProjectScopedClient, writeMcpConfig } from "./mcp-client-config.js";
 import { deriveProjectPort } from "./port.js";
+import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 
 /* ------------------------------------------------------------------ */
 /*  Tool categories                                                    */
@@ -211,8 +212,15 @@ async function init() {
   // write actually succeeded.
   const wrote: Array<{ what: string; where: string }> = [];
 
-  // 1. Get project path - check CLI arg, then cwd, then ask
-  let uprojectPath = process.argv[2] || "";
+  // 1. Get project path: check --editor, then CLI arg, then cwd, then ask
+  let initTarget: { projectPath?: string; rest: string[] };
+  try {
+    initTarget = takeEditorTarget(process.argv.slice(2));
+  } catch (e) {
+    fail(e instanceof EditorFlagError ? e.message : String(e));
+    process.exit(1);
+  }
+  let uprojectPath = initTarget.projectPath || initTarget.rest[0] || "";
 
   if (!uprojectPath) {
     // Auto-detect .uproject in current directory

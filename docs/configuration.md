@@ -82,6 +82,18 @@ Calls with no `editor` run in the active session, which is the first project on 
 
 Multi-editor needs a bridge built from the current plugin source in each project involved. A project whose bridge is missing or stale is still registered and still startable; `project(action="list_editors")` reports it.
 
+**The CLI takes a target too.** Every one-shot subcommand accepts `--editor <name-or-path>`, resolved as a session name first and a project path second:
+
+```bash
+npx ue-mcp deploy --editor Beta
+npx ue-mcp build --editor Beta
+npx ue-mcp doctor --editor Beta
+npx ue-mcp context lean --editor Beta
+npx ue-mcp feedback list --editor Beta
+```
+
+The name is the one `project(action="list_editors")` reports, read back from the argv in your MCP client config, so a name means the same editor on the command line that it means in a tool call. Without the flag every subcommand behaves exactly as it did: positional path first, then the project in the current directory.
+
 ## Project Configuration (`ue-mcp.yml`)
 
 Project config lives in `ue-mcp.yml` next to your `.uproject`, tracked in git so every collaborator shares the same surface. `npx ue-mcp init` scaffolds and maintains it.
@@ -303,6 +315,8 @@ The C++ bridge plugin enables these UE plugins (adding them to `.uproject` if mi
 | `npx ue-mcp plugin uninstall <name>` | Inverse of install. |
 | `npx ue-mcp plugin create <name>` | Scaffold a new plugin package. See [Plugins](plugins.md). |
 | `npx ue-mcp context [full\|lean\|micro]` | Read or set the [context strategy](#context-strategy-full-lean-micro) in `ue-mcp.yml`. No argument prints the current strategy. |
+
+Every subcommand above also accepts `--editor <name-or-path>` to pick which of several editors it acts on. See [Several Editors From One Server](#several-editors-from-one-server).
 
 ## Editor Lifecycle
 

@@ -11,6 +11,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -26,7 +27,16 @@ export interface DoctorReport {
   npmGlobal: { version: string | null; dir: string | null };
   localShadow: { version: string; dir: string } | null; // nearest node_modules/ue-mcp from cwd up
   effectiveNpx: string | null;    // what `npx ue-mcp` would run: shadow ?? global
-  runningServers: Array<{ pid: number; version: string | null; script: string; project: string | null; servesTarget: boolean }>;
+  runningServers: Array<{
+    pid: number;
+    version: string | null;
+    script: string;
+    /** First project positional; the one a single-editor server drives. */
+    project: string | null;
+    /** Every project positional, so a multi-editor server reports all of them (#817). */
+    projects?: string[];
+    servesTarget: boolean;
+  }>;
   targetProjectDir: string | null;   // dir of the .uproject doctor is reporting for
   bridgePlugin: { version: string | null; project: string } | null;
   bareNpxConfigs: string[];       // .mcp.json paths using bare `npx ue-mcp`
@@ -113,15 +123,25 @@ function versionForScript(scriptPath: string): string | null {
 const NON_SERVER_ARGS = new Set([
   "doctor", "update", "deploy", "build", "init", "hook", "uninstall-hooks",
   "auth", "feedback", "resolve", "plugin", "version", "--version", "-v", "--help", "-h", "help",
+  // These three were missing, so `ue-mcp context lean`, `ue-mcp login` and
+  // `ue-mcp logout` each parsed as a running server whose project was the
+  // subcommand's own name.
+  "context", "login", "logout",
 ]);
 
 /**
- * Parse a `node .../ue-mcp/dist/index.js <project>` command line into the script
- * path and the project argument. Returns null when the command line is not a
- * running server (a flag/subcommand invocation, or no ue-mcp index.js). Exported
- * for tests. (#550)
+ * Parse a `node .../ue-mcp/dist/index.js <project> [<project>...]` command line
+ * into the script path and every project argument. Returns null when the
+ * command line is not a running server (a flag/subcommand invocation, or no
+ * ue-mcp index.js). Exported for tests. (#550, #817)
+ *
+ * `project` is the first positional and is what a single-editor report reads.
+ * `projects` is all of them, so a server driving several editors is reported
+ * as driving several rather than as driving the first one only.
  */
-export function parseServerInvocation(cmd: string): { script: string; project: string | null } | null {
+export function parseServerInvocation(
+  cmd: string,
+): { script: string; project: string | null; projects: string[] } | null {
   const scriptMatch = cmd.match(/([A-Za-z]:[\\/].*?|\/.*?)ue-mcp[\\/]dist[\\/]index\.js/i);
   if (!scriptMatch) return null;
   const script = path.normalize((scriptMatch[1] ?? "") + path.join("ue-mcp", "dist", "index.js"));
@@ -129,17 +149,37 @@ export function parseServerInvocation(cmd: string): { script: string; project: s
   // First argument after index.js decides server-vs-CLI. The char right after
   // "index.js" may be the script path's own closing quote - drop it first.
   const idx = cmd.toLowerCase().indexOf("index.js");
-  let rest = cmd.slice(idx + "index.js".length).replace(/^"/, "").trim();
-  let firstArg = "";
-  if (rest.startsWith('"')) {
-    const close = rest.indexOf('"', 1);
-    firstArg = close > 0 ? rest.slice(1, close) : rest.slice(1);
-  } else {
-    firstArg = rest.split(/\s+/)[0] ?? "";
-  }
-  firstArg = firstArg.trim();
+  const rest = cmd.slice(idx + "index.js".length).replace(/^"/, "").trim();
+  const tokens = tokenizeArgs(rest);
+  const firstArg = (tokens[0] ?? "").trim();
   if (!firstArg || firstArg.startsWith("-") || NON_SERVER_ARGS.has(firstArg)) return null;
-  return { script: script.replace(/\\/g, "/"), project: firstArg };
+  const projects = tokens.filter((t) => !t.startsWith("-"));
+  return { script: script.replace(/\\/g, "/"), project: projects[0] ?? null, projects };
+}
+
+/** Split a command-line tail into arguments, honouring double quotes. */
+function tokenizeArgs(rest: string): string[] {
+  const out: string[] = [];
+  let current = "";
+  let quoted = false;
+  let started = false;
+  for (const ch of rest) {
+    if (ch === '"') {
+      quoted = !quoted;
+      started = true;
+      continue;
+    }
+    if (!quoted && /\s/.test(ch)) {
+      if (started) out.push(current);
+      current = "";
+      started = false;
+      continue;
+    }
+    current += ch;
+    started = true;
+  }
+  if (started) out.push(current);
+  return out.map((t) => t.trim()).filter((t) => t !== "");
 }
 
 /** The directory that owns a project arg (a .uproject file or its containing dir). */
@@ -150,8 +190,8 @@ function projectDirOf(projectArg: string | null): string | null {
 }
 
 /** Best-effort scan of running node processes for a ue-mcp server. */
-function findRunningServers(): Array<{ pid: number; version: string | null; script: string; project: string | null }> {
-  const out: Array<{ pid: number; version: string | null; script: string; project: string | null }> = [];
+function findRunningServers(): Array<{ pid: number; version: string | null; script: string; project: string | null; projects: string[] }> {
+  const out: Array<{ pid: number; version: string | null; script: string; project: string | null; projects: string[] }> = [];
   const selfPid = process.pid;
   let lines: string[] = [];
 
@@ -180,7 +220,7 @@ function findRunningServers(): Array<{ pid: number; version: string | null; scri
     const parsed = parseServerInvocation(cmd);
     if (!parsed) continue;
     if (out.some((s) => s.pid === pid)) continue;
-    out.push({ pid, version: versionForScript(parsed.script), script: parsed.script, project: parsed.project });
+    out.push({ pid, version: versionForScript(parsed.script), script: parsed.script, project: parsed.project, projects: parsed.projects });
   }
   return out;
 }
@@ -254,9 +294,17 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
   const uproject = findUproject(projectArg, cwd);
   const targetProjectDir = projectDirOf(uproject);
   const servers = findRunningServers().map((s) => {
-    const serverDir = projectDirOf(s.project);
-    const servesTarget = !!(targetProjectDir && serverDir &&
-      serverDir.toLowerCase() === targetProjectDir.toLowerCase());
+    // A server serves the target when ANY of its projects is the target: a
+    // multi-editor server driving the project doctor was asked about is
+    // serving it, and reporting otherwise reads as "no server is running".
+    const candidates = s.projects.length > 0 ? s.projects : [s.project];
+    const servesTarget = !!(
+      targetProjectDir &&
+      candidates.some((p) => {
+        const dir = projectDirOf(p);
+        return dir !== null && dir.toLowerCase() === targetProjectDir.toLowerCase();
+      })
+    );
     return { ...s, servesTarget };
   });
   return {
@@ -309,8 +357,15 @@ export function formatDoctor(d: DoctorReport): string {
     for (const s of servers) {
       const deleted = s.version === null;
       const v = deleted ? `${RED}deleted files${RESET}` : (s.version as string);
-      const proj = s.project ? path.basename(s.project.replace(/[\\/]+$/, "")) || s.project : "?";
-      const scope = s.servesTarget ? `${BOLD}this project${RESET}` : `${DIM}${proj}${RESET}`;
+      const names = (s.projects && s.projects.length > 0 ? s.projects : [s.project])
+        .filter((p): p is string => !!p)
+        .map((p) => path.basename(p.replace(/[\\/]+$/, "")) || p);
+      const proj = names.length > 0 ? names.join(", ") : "?";
+      const scope = s.servesTarget
+        ? names.length > 1
+          ? `${BOLD}this project${RESET} ${DIM}(with ${names.length - 1} more: ${proj})${RESET}`
+          : `${BOLD}this project${RESET}`
+        : `${DIM}${proj}${RESET}`;
       const mismatch = latest && s.version && s.version !== latest;
       const tag = deleted
         ? `${RED}(running pruned files - relaunch)${RESET}`
@@ -376,8 +431,15 @@ export function formatDoctor(d: DoctorReport): string {
   return lines.join("\n");
 }
 
-/** Entry point for `ue-mcp doctor [project.uproject]`. */
+/** Entry point for `ue-mcp doctor [project.uproject] [--editor <name-or-path>]`. */
 export function runDoctorCli(): void {
-  const projectArg = process.argv.slice(2).find((a) => !a.startsWith("-"));
+  let target: { projectPath?: string; rest: string[] };
+  try {
+    target = takeEditorTarget(process.argv.slice(2));
+  } catch (e) {
+    console.error(`  ${RED}${e instanceof EditorFlagError ? e.message : String(e)}${RESET}`);
+    process.exit(1);
+  }
+  const projectArg = target.projectPath ?? target.rest.find((a) => !a.startsWith("-"));
   console.log(formatDoctor(collectDoctor(projectArg)));
 }

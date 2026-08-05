@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { collectDoctor, formatDoctor } from "./doctor.js";
+import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -53,10 +54,17 @@ function runSelfCli(scriptBase: string, projectArg: string | undefined): boolean
 }
 
 async function update() {
-  const args = process.argv.slice(2);
+  let target: { projectPath?: string; rest: string[] };
+  try {
+    target = takeEditorTarget(process.argv.slice(2));
+  } catch (e) {
+    fail(e instanceof EditorFlagError ? e.message : String(e));
+    process.exit(1);
+  }
+  const args = target.rest;
   const shouldBuild = args.includes("--build");
   const shouldDeploy = shouldBuild || args.includes("--deploy");
-  const projectArg = args.find((a) => !a.startsWith("-"));
+  const projectArg = target.projectPath ?? args.find((a) => !a.startsWith("-"));
 
   console.log("");
   console.log(`  ${BOLD}${CYAN}UE-MCP Update${shouldBuild ? " --build" : ""}${RESET}`);

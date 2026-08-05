@@ -10,13 +10,15 @@
  */
 
 import * as readline from "node:readline";
+import * as path from "node:path";
 import {
   deleteDeferred,
   getPendingDir,
-  listDeferred,
+  listDeferred as listAllDeferred,
   loadDeferred,
   type DeferredFeedback,
 } from "./feedback-deferred.js";
+import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { submitFeedback } from "./github-app.js";
 import {
   CORE_REPO,
@@ -102,10 +104,41 @@ function cmdMode(arg: string | undefined): void {
   }
 }
 
+/**
+ * `--editor <name-or-path>` scopes every listing to the entries that
+ * originated in that editor (#817). The deferred store is user-scoped, because
+ * feedback files against the ue-mcp tracker rather than the user's project, so
+ * the flag filters what is shown rather than pointing somewhere else.
+ */
+let editorFilter: string | null = null;
+
+function setEditorFilter(projectPath?: string): void {
+  if (!projectPath) {
+    editorFilter = null;
+    return;
+  }
+  editorFilter = projectPath.toLowerCase().endsWith(".uproject")
+    ? path.basename(projectPath, path.extname(projectPath))
+    : path.basename(projectPath.replace(/[\/]+$/, ""));
+}
+
+/** The deferred entries in scope: all of them, or one editor's. */
+function listDeferred(): DeferredFeedback[] {
+  const all = listAllDeferred();
+  if (!editorFilter) return all;
+  const needle = editorFilter.toLowerCase();
+  return all.filter((e) => (e.project ?? "").toLowerCase() === needle);
+}
+
 function cmdList(): void {
   const entries = listDeferred();
   if (entries.length === 0) {
-    info("No pending feedback submissions.");
+    const total = listAllDeferred().length;
+    if (editorFilter && total > 0) {
+      info(`No pending feedback submissions from '${editorFilter}'. ${total} pending from other editors.`);
+    } else {
+      info("No pending feedback submissions.");
+    }
     info(getPendingDir());
     return;
   }
@@ -375,8 +408,20 @@ function cmdDiscard(id: string): void {
 }
 
 async function main(): Promise<void> {
-  const sub = process.argv[2];
-  const id = process.argv[3];
+  // --editor scopes the deferred store to entries that originated in one of
+  // this server's editors. The store itself is user-scoped (feedback files
+  // against the ue-mcp tracker, not the project), so the flag is a filter
+  // rather than a different location.
+  let target: { projectPath?: string; rest: string[] };
+  try {
+    target = takeEditorTarget(process.argv.slice(2));
+  } catch (e) {
+    fail(e instanceof EditorFlagError ? e.message : String(e));
+    process.exit(1);
+  }
+  setEditorFilter(target.projectPath);
+  const sub = target.rest[0];
+  const id = target.rest[1];
 
   switch (sub) {
     case "mode":

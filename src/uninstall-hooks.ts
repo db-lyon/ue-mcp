@@ -12,11 +12,20 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { uninstallAllRegisteredHooks } from "./hook-installer.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
+import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 
 function resolveProjectDir(): string | null {
   // index.ts splices the "uninstall-hooks" arg out before this module loads,
-  // so a user-supplied project dir lands at argv[2].
-  const arg = process.argv[2];
+  // so a user-supplied project dir lands at argv[2]. --editor names one of the
+  // editors this server drives and wins over it.
+  let arg: string | undefined;
+  try {
+    const target = takeEditorTarget(process.argv.slice(2));
+    arg = target.projectPath ?? target.rest[0];
+  } catch (e) {
+    fail(e instanceof EditorFlagError ? e.message : String(e));
+    return null;
+  }
   if (arg) {
     if (!fs.existsSync(arg)) {
       fail(`Path does not exist: ${arg}`);

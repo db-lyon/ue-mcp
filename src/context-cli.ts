@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
 import { dumpYaml } from "./yaml-dump.js";
+import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 
 /**
  * `ue-mcp context [full|lean|micro|status] [project]` - read or set the context
@@ -34,20 +35,33 @@ function printHelp(): void {
     ue-mcp context lean            action names visible, descriptions on demand
     ue-mcp context micro           one gateway tool fronts everything (smallest)
 
-  A project path may be passed as the last argument; otherwise the .uproject in
-  the current directory is used. Restart your MCP client (/mcp in Claude Code)
-  after changing the strategy.
+  A project path may be passed as the last argument, or an editor named with
+  --editor <name-or-path>; otherwise the .uproject in the current directory is
+  used. Restart your MCP client (/mcp in Claude Code) after changing the
+  strategy.
 `);
 }
 
 function parseArgs(): { action: string; projectArg?: string; help: boolean } {
-  const args = process.argv.slice(2);
-  if (args.some((a) => a === "-h" || a === "--help" || a === "help")) {
+  const argv = process.argv.slice(2);
+  if (argv.some((a) => a === "-h" || a === "--help" || a === "help")) {
     return { action: "status", help: true };
   }
-  const positional = args.filter((a) => !a.startsWith("-"));
+  // Flags were dropped wholesale here, so --editor would have been silently
+  // discarded and the command would have retargeted cwd. Take it first, then
+  // keep the original positional-only behaviour for everything else.
+  let target: { projectPath?: string; rest: string[] };
+  try {
+    target = takeEditorTarget(argv);
+  } catch (e) {
+    console.log(`
+  ${RED}${e instanceof EditorFlagError ? e.message : String(e)}${RESET}
+`);
+    process.exit(1);
+  }
+  const positional = target.rest.filter((a) => !a.startsWith("-"));
   let action: string | undefined;
-  let projectArg: string | undefined;
+  let projectArg: string | undefined = target.projectPath;
   for (const a of positional) {
     if (!action && ACTIONS.has(a.toLowerCase())) action = a.toLowerCase();
     else if (!projectArg) projectArg = a;

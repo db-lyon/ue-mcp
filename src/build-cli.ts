@@ -2,6 +2,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { buildProject } from "./editor-control.js";
+import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -10,7 +11,16 @@ const RED = "\x1b[31m";
 const CYAN = "\x1b[36m";
 
 function findUProject(): string | null {
-  const arg = process.argv[2];
+  // --editor names one of the editors this server drives; it wins over the
+  // positional, which in turn wins over cwd.
+  let arg: string | undefined;
+  try {
+    const target = takeEditorTarget(process.argv.slice(2));
+    arg = target.projectPath ?? target.rest[0];
+  } catch (e) {
+    console.log(`  ${RED}${e instanceof EditorFlagError ? e.message : String(e)}${RESET}`);
+    process.exit(1);
+  }
   if (arg && arg.endsWith(".uproject")) return path.resolve(arg);
   if (arg && fs.existsSync(arg) && fs.statSync(arg).isDirectory()) {
     const found = fs.readdirSync(arg).filter((f) => f.endsWith(".uproject"));

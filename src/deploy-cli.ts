@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { ProjectContext } from "./project.js";
 import { deploy, deploySummary } from "./deployer.js";
 import { installSkills } from "./skills.js";
+import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -20,8 +21,15 @@ async function deployCmd() {
   console.log(`  ${BOLD}${CYAN}UE-MCP Deploy${RESET}`);
   console.log("");
 
-  // Find project: CLI arg, then cwd
-  let uprojectPath = process.argv[2] || "";
+  // Find project: --editor, then CLI arg, then cwd.
+  let target: { projectPath?: string; rest: string[] };
+  try {
+    target = takeEditorTarget(process.argv.slice(2));
+  } catch (e) {
+    fail(e instanceof EditorFlagError ? e.message : String(e));
+    process.exit(1);
+  }
+  let uprojectPath = target.projectPath || target.rest[0] || "";
 
   if (!uprojectPath) {
     const cwd = process.cwd();

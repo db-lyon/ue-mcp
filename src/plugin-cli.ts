@@ -42,8 +42,13 @@ import {
 } from "./plugin/native-deploy.js";
 import { ALL_TOOLS } from "./tools.js";
 import { resolvePublishToken } from "./registry-auth.js";
+import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-flag.js";
 
-const args = process.argv.slice(2);
+// --editor names one of the editors this server drives; every project lookup
+// below starts from it instead of cwd. Taken before the subcommand is shifted
+// off so it can appear anywhere on the line.
+const parsedEditor = parseEditorFlag(process.argv.slice(2));
+const args = parsedEditor.rest;
 const sub = args.shift();
 
 const RESTART_NOTE =
@@ -61,6 +66,21 @@ function note(msg: string): void {
 interface ProjectInfo {
   projectDir: string;
   configPath: string;
+}
+
+/**
+ * Where project resolution starts: the editor named by --editor when there is
+ * one, cwd otherwise. Resolved lazily so a subcommand that never touches a
+ * project (login, publish) does not fail on an unresolvable name.
+ */
+function projectStartDir(): string {
+  if (parsedEditor.editor === undefined) return process.cwd();
+  try {
+    const projectPath = resolveEditorFlag(parsedEditor.editor);
+    return projectPath.toLowerCase().endsWith(".uproject") ? path.dirname(projectPath) : projectPath;
+  } catch (e) {
+    fail(e instanceof EditorFlagError ? e.message : String(e));
+  }
 }
 
 function findProjectDir(startDir: string): ProjectInfo {
@@ -203,7 +223,7 @@ function cmdInstall(): void {
     note(`resolved '${requested}' -> '${name}' via the registry`);
   }
 
-  const proj = findProjectDir(process.cwd());
+  const proj = findProjectDir(projectStartDir());
 
   // Ensure a package.json exists. npm install will refuse without one.
   if (!fs.existsSync(path.join(proj.projectDir, "package.json"))) {
@@ -343,7 +363,7 @@ function cmdInstall(): void {
 function cmdUninstall(): void {
   const name = args.shift();
   if (!name) fail("usage: ue-mcp plugin uninstall <name>");
-  const proj = findProjectDir(process.cwd());
+  const proj = findProjectDir(projectStartDir());
 
   // Remove any deployed native module BEFORE npm uninstall so we can still
   // read the manifest (for diagnostics) and so the state file stays
@@ -367,7 +387,7 @@ function cmdUninstall(): void {
 }
 
 function cmdList(): void {
-  const proj = findProjectDir(process.cwd());
+  const proj = findProjectDir(projectStartDir());
   const list = readPluginsList(proj.configPath);
   if (list.length === 0) {
     note(`no plugins declared in ${proj.configPath}`);
@@ -399,7 +419,7 @@ function cmdList(): void {
 
 function cmdUpdate(): void {
   const name = args.shift();
-  const proj = findProjectDir(process.cwd());
+  const proj = findProjectDir(projectStartDir());
   if (name) {
     runNpm(["update", name], proj.projectDir);
   } else {
@@ -1190,7 +1210,7 @@ async function cmdConfig(): Promise<void> {
     else if (a === "--global") target = "global";
   }
 
-  const proj = findProjectDir(process.cwd());
+  const proj = findProjectDir(projectStartDir());
   const resolved = resolveInstalledPlugin(proj, nameArg);
   const manifest = loadManifest(resolved.pkgDir).manifest;
   const groups = deriveGroups(manifest.flows);
