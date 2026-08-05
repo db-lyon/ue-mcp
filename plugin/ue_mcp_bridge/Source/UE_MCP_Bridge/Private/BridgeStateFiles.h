@@ -132,6 +132,10 @@ public:
 	 * still occupied", which is all a staleness sweep needs. Deciding that a
 	 * given editor is the right editor is the client's job and it has the
 	 * capability handshake to do it with.
+	 *
+	 * The probe connects and hangs up without upgrading, so the editor on the
+	 * other end logs one line about a connection that closed before its upgrade
+	 * request arrived. That line is this function, once per sweep per record.
 	 */
 	static bool IsPortAccepting(int32 Port, int32 TimeoutMilliseconds);
 
