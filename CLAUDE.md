@@ -91,6 +91,17 @@ CI **gates the publish job** on a single pre-staged input: the draft GitHub rele
 
 Release notes structure (below the frontmatter): one-line summary, then `### Server` / `### Bug fixes` / `### Internals` sections. See prior releases on GitHub for the style. (The `docs/release-notes-*.md` files in the repo predate this flow and are kept as references only.)
 
+### Prereleases
+
+A version with a prerelease suffix (`1.2.0-beta`, `1.2.0-beta.2`, `1.3.0-rc.1`) goes through the exact same flow: draft release with headline frontmatter, bump, push. CI routes it to its own channel automatically.
+
+- **npm dist-tag** comes from the first prerelease identifier, so `1.2.0-beta` and `1.2.0-beta.2` publish under `beta` and `1.3.0-rc.1` under `rc`. `npx ue-mcp` keeps resolving to the newest plain `X.Y.Z`; testers opt in with `ue-mcp@beta`.
+- **The GitHub release** is marked as a prerelease, so it does not take the "Latest" badge or answer `/releases/latest`.
+- **The publish gate** asks whether that exact version is already on the registry, so a prerelease does not wedge every later push.
+- The rules live in `scripts/release-version.mjs` (unit tested in `tests/unit/release-version.test.ts`), mirrored for the shipped CLI in `src/version-check.ts`. Change one and the parity test will tell you to change the other.
+
+The tag name still has to match the version exactly: `gh release create v1.2.0-beta --draft --notes-file ...`.
+
 ## Issue handling
 
 - **Never close an issue without shipping code that resolves it.** Not "out of scope for this patch", not "prerequisite shipped", not "follow-up". Issues close only when the fix ships.
