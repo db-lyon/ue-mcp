@@ -304,8 +304,8 @@ export const assetTool: ToolDef = categoryTool(
     migrate: {
       description:
         "Copy assets and their dependencies into ANOTHER project's Content directory - the scripted form of the content browser's Migrate (#760). " +
-        "Name the destination as an editor this server drives (toEditor) and its Content folder is resolved for you and rescanned afterwards, so the assets are visible there without a manual rescan (#817); " +
-        "otherwise pass destinationContentDir, the TARGET project's Content folder, and rescan there yourself. " +
+        "destinationContentDir is the TARGET project's Content folder. " +
+        "While this server drives more than one editor, a 'toEditor' parameter is offered as well: name the destination editor and its Content folder is resolved for you and its asset registry rescanned afterwards, so the assets are visible there without a manual rescan (#817). " +
         "The call runs in the editor holding the SOURCE assets, so it pushes assets out of the project it is attached to. " +
         "Unsaved or never-saved assets are refused, because migrate copies files and would otherwise silently omit your edits. " +
         "Every asset is resolved before anything is copied, and the destination is checked for the packages afterwards rather than reporting success on the call returning. " +
