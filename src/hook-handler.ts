@@ -9,11 +9,10 @@
  * agent needs a nudge (e.g. after execute_python workarounds).
  */
 
-interface HookInput {
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
+import { hookProjectDir, feedbackDisabledForDir, type HookPayload } from "./hook-session.js";
+
+interface HookInput extends HookPayload {
   tool_output?: string;
-  [key: string]: unknown;
 }
 
 function readStdin(): Promise<string> {
@@ -27,50 +26,11 @@ function readStdin(): Promise<string> {
   });
 }
 
-/**
- * Walk up from cwd looking for a ue-mcp.yml. Returns true if the
- * `ue-mcp.disable[]` block contains "feedback" (hook should silently
- * no-op) or if cwd is not inside a ue-mcp project at all (don't nudge an
- * unrelated repo). Defense in depth against stale install - even if
- * `npx ue-mcp uninstall-hooks` was never run, the hook self-disables once
- * the user opts out via config.
- */
-async function feedbackDisabledForCwd(): Promise<boolean> {
-  try {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const yaml = (await import("js-yaml")).default;
-    let dir = process.cwd();
-    for (let i = 0; i < 32; i++) {
-      const ymlPath = path.join(dir, "ue-mcp.yml");
-      if (fs.existsSync(ymlPath)) {
-        try {
-          const doc = yaml.load(fs.readFileSync(ymlPath, "utf-8")) as
-            | { "ue-mcp"?: { disable?: unknown } }
-            | null;
-          const block = doc && typeof doc === "object" ? doc["ue-mcp"] : undefined;
-          const list = block && Array.isArray(block.disable) ? block.disable : [];
-          return list.includes("feedback");
-        } catch {
-          // Malformed config: don't nudge, safer to no-op.
-          return true;
-        }
-      }
-      const parent = path.dirname(dir);
-      if (parent === dir) break;
-      dir = parent;
-    }
-    // No ue-mcp.yml found above cwd - this isn't a ue-mcp project.
-    // A hook running outside its own project is stale; silent no-op.
-    return true;
-  } catch {
-    return true;
-  }
-}
-
 async function postToolUse(): Promise<void> {
-  if (await feedbackDisabledForCwd()) return;
-
+  // The payload is read before anything is decided, because the payload is
+  // what says which project this call was about (#817). With more than one
+  // editor registered, this process's cwd is the agent's working directory and
+  // has no reason to be the project the call ran against.
   let input: HookInput;
   try {
     const raw = await readStdin();
@@ -95,6 +55,12 @@ async function postToolUse(): Promise<void> {
   }
 
   if (input.tool_input?.action !== "execute_python") return;
+
+  // Unchanged where it matters: a hook whose project resolves to nothing that
+  // is a ue-mcp project stays silent, exactly as it did when the only signal
+  // was cwd. What changed is which directory gets asked.
+  const project = await hookProjectDir(input);
+  if (await feedbackDisabledForDir(project.dir)) return;
 
   const msg = JSON.stringify({
     systemMessage: [
