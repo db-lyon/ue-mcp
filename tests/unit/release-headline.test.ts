@@ -136,4 +136,13 @@ describe("release-headline processBody", () => {
     const body = wrap("headline:\n  - First: feature");
     expect(() => processBody(body)).toThrowError(ValidationError);
   });
+
+  it("does not care about the version shape, so a prerelease tag validates", () => {
+    // The publish gate reads only the headline frontmatter. A v1.2.0-beta
+    // draft must clear it exactly like a v1.1.44 draft does.
+    const body = wrap("headline:\n  - Prerelease publishing", "## v1.2.0-beta\n\nbeta body\n");
+    const out = processBody(body);
+    expect(out.headline).toBe("Prerelease publishing");
+    expect(out.strippedBody.startsWith("## v1.2.0-beta")).toBe(true);
+  });
 });
