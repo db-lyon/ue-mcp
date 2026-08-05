@@ -94,17 +94,44 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Check if version changed
+      - name: Check whether this version is already published
         id: version
         run: |
+          set -euo pipefail
           LOCAL=$(node -p "require('./package.json').version")
-          PUBLISHED=$(npm view ue-mcp version 2>/dev/null || echo "0.0.0")
           echo "local=$LOCAL" >> "$GITHUB_OUTPUT"
-          echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
-          if [ "$LOCAL" != "$PUBLISHED" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+
+          # Ask whether THIS EXACT version exists on the registry, not whether
+          # it differs from the `latest` dist-tag. `npm view ue-mcp version`
+          # reports only `latest`, so once a prerelease publishes under its own
+          # tag `latest` stops tracking the repo: every later push would see a
+          # difference, retry the publish, and fail on npm refusing to replace
+          # an existing version. That failure never clears on its own.
+          #
+          # Retried a few times because a registry blip here would otherwise
+          # decide the release.
+          VERSIONS=""
+          for attempt in 1 2 3; do
+            if VERSIONS=$(npm view ue-mcp versions --json 2>/dev/null); then break; fi
+            VERSIONS=""
+            echo "npm view attempt $attempt failed; retrying in 5s"
+            sleep 5
+          done
+
+          # An empty payload fails the step by design. Reading an unreachable
+          # registry as "not published yet" would publish blind.
+          ALREADY=$(node scripts/release-version.mjs --version "$LOCAL" --published-in "$VERSIONS" \
+            | sed -n 's/^published=//p')
+          echo "already_published=$ALREADY" >> "$GITHUB_OUTPUT"
+
+          if [ "$ALREADY" = "true" ]; then
+            # Clean skip, not a failure: re-running main after a release is
+            # normal and every publish step below is gated on this output.
+            echo "ue-mcp@$LOCAL is already on the registry. Nothing to publish."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "ue-mcp@$LOCAL is not on the registry. Publishing."
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Validate release inputs
@@ -121,7 +148,7 @@ jobs:
         #   HEADLINE  - the joined ` · ` string posted as the landing/headline status
         #   BODY_PATH - path to a temp file containing the frontmatter-stripped body,
         #               used by the Promote step to update the published release body
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.should_publish == 'true'
         id: release_inputs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -155,7 +182,7 @@ jobs:
           printf '%s' "$DRAFT_BODY" | node scripts/release-headline.mjs >> "$GITHUB_OUTPUT"
 
       - name: Install & Build
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.should_publish == 'true'
         # See note on the build job's Install step re: the rollup
         # optional-deps bug.
         run: |
@@ -164,7 +191,7 @@ jobs:
           npx tsc
 
       - name: Verify build output
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.should_publish == 'true'
         run: |
           # Fail loud if prepublishOnly's output is missing or empty - a
           # broken publish is very hard to retract, so we stop here.
@@ -173,7 +200,7 @@ jobs:
           test -s dist/update.js || (echo "dist/update.js missing or empty" && exit 1)
 
       - name: Tag release (before publish)
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.should_publish == 'true'
         run: |
           # Create and push the tag BEFORE publishing to npm. If the tag push
           # fails (network / permissions), we have not yet stranded a live
@@ -191,11 +218,11 @@ jobs:
         # GitHub Actions OIDC token from the runner and exchanges it with
         # npmjs.org under the trusted-publisher config bound to this repo
         # and workflow. `id-token: write` on the job is required (set above).
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.should_publish == 'true'
         run: npm publish --access public --provenance
 
       - name: Package tarball
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.should_publish == 'true'
         run: tar czf ue-mcp.tar.gz dist/ plugin/ package.json package-lock.json README.md LICENSE
 
       - name: Promote draft release
@@ -208,7 +235,7 @@ jobs:
         #   4. Post the landing/headline commit status using the validated,
         #      ` · `-joined string from the step output. CI authors the
         #      status itself - releasers no longer post it manually.
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.should_publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
