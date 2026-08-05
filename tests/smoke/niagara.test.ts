@@ -18,7 +18,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("niagara — read / list", () => {
+describe("niagara - read / list", () => {
   it("list_niagara_systems", async ({ skip }) => {
     if (!hasNiagara) skip();
     const r = await callBridge(bridge, "list_niagara_systems", { recursive: true });
@@ -32,7 +32,7 @@ describe("niagara — read / list", () => {
   });
 });
 
-describe("niagara — create (with cleanup)", () => {
+describe("niagara - create (with cleanup)", () => {
   it("create_niagara_system", async ({ skip }) => {
     if (!hasNiagara) skip();
     const r = await callBridge(bridge, "create_niagara_system", {
@@ -68,14 +68,14 @@ describe("niagara — create (with cleanup)", () => {
   });
 });
 
-describe("niagara — v0.7.14: module inputs + static switches + HLSL modules", () => {
+describe("niagara - v0.7.14: module inputs + static switches + HLSL modules", () => {
   it("list_niagara_module_inputs tolerates empty systems", async ({ skip }) => {
     if (!hasNiagara) skip();
     const r = await callBridge(bridge, "list_niagara_module_inputs", {
       systemPath: `${TEST_PREFIX}/NS_SmokeTest`,
       stackContext: "all",
     });
-    // Empty system has no emitters — handler should return a structured error, not crash
+    // Empty system has no emitters - handler should return a structured error, not crash
     expect(typeof r.ok).toBe("boolean");
   });
 

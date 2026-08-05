@@ -1,4 +1,4 @@
-// Regression: #723 — spawn_light accepted attenuationRadius but never applied it,
+// Regression: #723 - spawn_light accepted attenuationRadius but never applied it,
 // so spawned lights always came out with the class-default radius.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge } from "../setup.js";
@@ -11,7 +11,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("level — spawn_light attenuationRadius (#723)", () => {
+describe("level - spawn_light attenuationRadius (#723)", () => {
   it("applies attenuationRadius to the spawned point-light component", async () => {
     const r = await callBridge(bridge, "spawn_light", {
       lightType: "point",

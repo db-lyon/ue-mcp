@@ -1,4 +1,4 @@
-// Regression: #717 — no way to query/set per-actor editor visibility, so both
+// Regression: #717 - no way to query/set per-actor editor visibility, so both
 // the query (find editor-hidden actors) and the bulk unhide needed Python.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge, resultArray } from "../setup.js";
@@ -11,7 +11,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("level — editor visibility (#717)", () => {
+describe("level - editor visibility (#717)", () => {
   beforeAll(async () => {
     await callBridge(bridge, "place_actor", {
       actorClass: "/Script/Engine.StaticMeshActor",

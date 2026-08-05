@@ -12,7 +12,7 @@ beforeAll(async () => {
 });
 afterAll(() => disconnectBridge());
 
-describe("landscape — read (requires landscape in level)", () => {
+describe("landscape - read (requires landscape in level)", () => {
   it("get_landscape_info", async ({ skip }) => {
     if (!hasLandscape) skip();
     const r = await callBridge(bridge, "get_landscape_info");

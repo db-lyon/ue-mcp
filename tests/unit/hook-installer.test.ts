@@ -60,7 +60,7 @@ describe("hook installer", () => {
     expect(fs.existsSync(path.join(projectDir, "ue-mcp.local.yml"))).toBe(false);
   });
 
-  it("is idempotent on repeated install — no duplicate matcher, no duplicate registry entry", () => {
+  it("is idempotent on repeated install - no duplicate matcher, no duplicate registry entry", () => {
     installClaudeHooks(settingsPath, projectDir);
     installClaudeHooks(settingsPath, projectDir);
     const settings = readJson<ClaudeSettings>(settingsPath);
@@ -98,7 +98,7 @@ describe("hook installer", () => {
     expect(readInstalledHooks(projectDir)).not.toContain(path.resolve(settingsPath));
   });
 
-  it("uninstall is idempotent — returns false when nothing to remove", () => {
+  it("uninstall is idempotent - returns false when nothing to remove", () => {
     fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
     fs.writeFileSync(settingsPath, JSON.stringify({ hooks: {} }));
     const removed = uninstallClaudeHooks(settingsPath, projectDir);
@@ -119,7 +119,7 @@ describe("hook installer", () => {
 
   it("nothing is ever written inside the project tree", () => {
     installClaudeHooks(settingsPath, projectDir);
-    // No .ue-mcp.json, no ue-mcp.local.yml — those days are over.
+    // No .ue-mcp.json, no ue-mcp.local.yml - those days are over.
     expect(fs.existsSync(path.join(projectDir, ".ue-mcp.json"))).toBe(false);
     expect(fs.existsSync(path.join(projectDir, "ue-mcp.local.yml"))).toBe(false);
   });

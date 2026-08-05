@@ -1,4 +1,4 @@
-// Regression: #733 — no native way to enumerate loaded World Partition landscape
+// Regression: #733 - no native way to enumerate loaded World Partition landscape
 // streaming proxies or resolve which proxy covers a world position.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge } from "../setup.js";
@@ -8,7 +8,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("landscape — World Partition proxies (#733)", () => {
+describe("landscape - World Partition proxies (#733)", () => {
   it("list_proxies returns the shape even with zero proxies", async () => {
     const r = await callBridge(bridge, "list_landscape_proxies");
     expect(r.ok, r.error).toBe(true);

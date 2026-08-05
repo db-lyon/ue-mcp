@@ -7,7 +7,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("asset — read", () => {
+describe("asset - read", () => {
   it("search_assets (wildcard)", async () => {
     const r = await callBridge(bridge, "search_assets", { query: "*", maxResults: 10 });
     expect(r.ok, r.error).toBe(true);
@@ -24,7 +24,7 @@ describe("asset — read", () => {
   });
 });
 
-describe("asset — read specific (dynamic)", () => {
+describe("asset - read specific (dynamic)", () => {
   let assetPath: string | undefined;
 
   beforeAll(async () => {
@@ -51,7 +51,7 @@ describe("asset — read specific (dynamic)", () => {
   });
 });
 
-describe("asset — write (with cleanup)", () => {
+describe("asset - write (with cleanup)", () => {
   const created: string[] = [];
 
   afterAll(async () => {

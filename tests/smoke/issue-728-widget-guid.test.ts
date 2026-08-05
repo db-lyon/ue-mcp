@@ -1,4 +1,4 @@
-// Regression: #728 — adding a widget to a created Widget Blueprint tripped the
+// Regression: #728 - adding a widget to a created Widget Blueprint tripped the
 // WidgetBlueprintCompiler ensure ("Widget [X] was added but did not get a GUID")
 // on UE 5.8 because the GUID-map registration was gated to exactly 5.4.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -12,7 +12,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("widget — add_widget GUID registration (#728)", () => {
+describe("widget - add_widget GUID registration (#728)", () => {
   it("adds a widget and compiles without the missing-GUID ensure", async () => {
     const create = await callBridge(bridge, "create_widget_blueprint", {
       name: "WBP_GuidTest", packagePath: TEST_PREFIX,

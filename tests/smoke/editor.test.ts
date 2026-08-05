@@ -7,7 +7,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("editor — read / query", () => {
+describe("editor - read / query", () => {
   it("get_viewport_info", async () => {
     const r = await callBridge(bridge, "get_viewport_info");
     expect(r.ok, r.error).toBe(true);
@@ -44,7 +44,7 @@ describe("editor — read / query", () => {
   });
 });
 
-describe("editor — safe commands", () => {
+describe("editor - safe commands", () => {
   it("invoke_object_functions runs an ordered UObject call sequence", async () => {
     const subsystem = {
       target: "subsystem",
@@ -128,7 +128,7 @@ describe("editor — safe commands", () => {
   });
 });
 
-describe("editor — open_asset safety (#17)", () => {
+describe("editor - open_asset safety (#17)", () => {
   it("open_asset returns success:false instead of crashing for missing asset", async () => {
     const r = await callBridge(bridge, "open_asset", { assetPath: "/Game/DoesNotExist/SM_Nope" });
     expect(r.ok, r.error).toBe(true);
@@ -143,7 +143,7 @@ describe("editor — open_asset safety (#17)", () => {
     const r = await callBridge(bridge, "open_asset", { assetPath: "/Engine/BasicShapes/Cube" });
     expect(r.ok, r.error).toBe(true);
     const result = r.result as Record<string, unknown>;
-    // Should either succeed or fail gracefully — not crash
+    // Should either succeed or fail gracefully - not crash
     expect(typeof result.success).toBe("boolean");
   });
 });

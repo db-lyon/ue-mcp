@@ -1,4 +1,4 @@
-// Regression: #726 — create_data_asset refused non-UDataAsset classes and there
+// Regression: #726 - create_data_asset refused non-UDataAsset classes and there
 // was no generic create-asset-by-class action (e.g. UPhysicalMaterial subclasses).
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge, TEST_PREFIX } from "../setup.js";
@@ -11,7 +11,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("asset — create_asset_by_class (#726)", () => {
+describe("asset - create_asset_by_class (#726)", () => {
   it("creates a non-UDataAsset class (PhysicalMaterial) as an asset", async () => {
     const r = await callBridge(bridge, "create_asset_by_class", {
       name: "PM_SmokeByClass",

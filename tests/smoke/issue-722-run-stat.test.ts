@@ -1,4 +1,4 @@
-// Regression: #722 — run_stat name="unit" executed `stat fps` instead of `stat unit`.
+// Regression: #722 - run_stat name="unit" executed `stat fps` instead of `stat unit`.
 // The handler only read "command" and defaulted to "stat fps"; a bare stat name
 // passed as "name" was ignored.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -9,7 +9,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("editor — run_stat name mapping (#722)", () => {
+describe("editor - run_stat name mapping (#722)", () => {
   it("name=unit resolves to 'stat unit'", async () => {
     const r = await callBridge(bridge, "run_stat_command", { name: "unit" });
     expect(r.ok, r.error).toBe(true);

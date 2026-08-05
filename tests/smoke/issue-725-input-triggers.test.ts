@@ -1,4 +1,4 @@
-// Regression: #725 — Enhanced Input trigger subobjects could not be authored via
+// Regression: #725 - Enhanced Input trigger subobjects could not be authored via
 // set_mapping_modifiers (only {type} worked, {class} rejected), and a failed
 // shape could leave a null Triggers entry that trips AssetCheck on save.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -14,7 +14,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("gameplay — Enhanced Input triggers (#725)", () => {
+describe("gameplay - Enhanced Input triggers (#725)", () => {
   beforeAll(async () => {
     await callBridge(bridge, "create_input_action", { name: "IA_TrigTest", packagePath: TEST_PREFIX });
     await callBridge(bridge, "create_input_mapping_context", { name: "IMC_TrigTest", packagePath: TEST_PREFIX });

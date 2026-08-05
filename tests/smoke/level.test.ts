@@ -7,7 +7,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("level — read", () => {
+describe("level - read", () => {
   it("get_world_outliner", async () => {
     const r = await callBridge(bridge, "get_world_outliner");
     expect(r.ok, r.error).toBe(true);
@@ -50,7 +50,7 @@ describe("level — read", () => {
   });
 });
 
-describe("level — actor details (dynamic)", () => {
+describe("level - actor details (dynamic)", () => {
   let firstActor: string | undefined;
 
   beforeAll(async () => {
@@ -71,7 +71,7 @@ describe("level — actor details (dynamic)", () => {
   });
 });
 
-describe("level — write (with cleanup)", () => {
+describe("level - write (with cleanup)", () => {
   const placed: string[] = [];
   const createdAssets: string[] = [];
 

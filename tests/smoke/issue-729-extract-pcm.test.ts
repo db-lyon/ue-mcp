@@ -1,4 +1,4 @@
-// Regression: #729 — no way to extract a USoundWave's decoded audio in memory.
+// Regression: #729 - no way to extract a USoundWave's decoded audio in memory.
 // extract_sound_wave_pcm decodes the imported data to base64 PCM without needing
 // the original source file.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -30,7 +30,7 @@ async function findSoundWavePath(): Promise<string | undefined> {
   return m && m[1] ? m[1] : undefined;
 }
 
-describe("audio — extract_sound_wave_pcm (#729)", () => {
+describe("audio - extract_sound_wave_pcm (#729)", () => {
   it("returns decoded PCM metadata + base64 samples for a SoundWave", async ({ skip }) => {
     const wave = await findSoundWavePath();
     if (!wave) skip();

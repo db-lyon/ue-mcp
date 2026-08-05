@@ -121,7 +121,7 @@ export function resultField(result: unknown, key: string): unknown {
 }
 
 // ---------------------------------------------------------------------------
-// Feature gating — skip tests when required UE plugins are not loaded
+// Feature gating - skip tests when required UE plugins are not loaded
 // ---------------------------------------------------------------------------
 
 export type Feature =

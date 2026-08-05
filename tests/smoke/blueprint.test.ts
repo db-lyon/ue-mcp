@@ -16,7 +16,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("blueprint — read helpers", () => {
+describe("blueprint - read helpers", () => {
   it("search_node_types", async () => {
     const r = await callBridge(bridge, "search_node_types", { query: "PrintString" });
     expect(r.ok, r.error).toBe(true);
@@ -28,7 +28,7 @@ describe("blueprint — read helpers", () => {
   });
 });
 
-describe("blueprint — full lifecycle", () => {
+describe("blueprint - full lifecycle", () => {
   it("create_blueprint", async () => {
     const r = await callBridge(bridge, "create_blueprint", { path: bpPath, parentClass: "Actor" });
     expect(r.ok, r.error).toBe(true);
@@ -233,7 +233,7 @@ describe("blueprint — full lifecycle", () => {
   });
 });
 
-describe("blueprint — interface", () => {
+describe("blueprint - interface", () => {
   it("create_blueprint_interface", async () => {
     const r = await callBridge(bridge, "create_blueprint_interface", { path: `${TEST_PREFIX}/BPI_SmokeTest` });
     expect(r.ok, r.error).toBe(true);

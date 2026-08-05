@@ -40,7 +40,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("gameplay — read / query", () => {
+describe("gameplay - read / query", () => {
   it("get_navmesh_info", async () => {
     const r = await callBridge(bridge, "get_navmesh_info");
     expect(r.ok, r.error).toBe(true);
@@ -81,7 +81,7 @@ describe("gameplay — read / query", () => {
   });
 });
 
-describe("gameplay — create assets (with cleanup)", () => {
+describe("gameplay - create assets (with cleanup)", () => {
   it("create_input_action", async () => {
     const r = await callBridge(bridge, "create_input_action", {
       name: "IA_SmokeTest", packagePath: TEST_PREFIX,

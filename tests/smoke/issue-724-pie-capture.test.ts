@@ -33,7 +33,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("editor — capture_screenshot target=pie (#724)", () => {
+describe("editor - capture_screenshot target=pie (#724)", () => {
   it("captures the client viewport in networked PIE", async ({ skip }) => {
     const configured = await callBridge(bridge, "configure_pie", {
       numClients: 1,

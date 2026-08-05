@@ -1,4 +1,4 @@
-// Regression: #721 — set_simulate_physics silently no-opped because the TS schema
+// Regression: #721 - set_simulate_physics silently no-opped because the TS schema
 // named the parameter "simulate" while the handler read only "enabled".
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge } from "../setup.js";
@@ -11,7 +11,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("gameplay — set_simulate_physics param (#721)", () => {
+describe("gameplay - set_simulate_physics param (#721)", () => {
   beforeAll(async () => {
     await callBridge(bridge, "place_actor", {
       actorClass: "/Script/Engine.StaticMeshActor",

@@ -13,14 +13,14 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("material — read helpers", () => {
+describe("material - read helpers", () => {
   it("list_expression_types", async () => {
     const r = await callBridge(bridge, "list_expression_types");
     expect(r.ok, r.error).toBe(true);
   });
 });
 
-describe("material — full lifecycle", () => {
+describe("material - full lifecycle", () => {
   it("create_material", async () => {
     const r = await callBridge(bridge, "create_material", { name: "M_SmokeTest", packagePath: TEST_PREFIX });
     expect(r.ok, r.error).toBe(true);
@@ -75,7 +75,7 @@ describe("material — full lifecycle", () => {
   });
 });
 
-describe("material — expression connections in read (#44)", () => {
+describe("material - expression connections in read (#44)", () => {
   const connMatPath = `${TEST_PREFIX}/M_ConnTest`;
 
   afterAll(async () => {
@@ -118,7 +118,7 @@ describe("material — expression connections in read (#44)", () => {
   });
 });
 
-describe("material — delete_expression cleans up references (#44)", () => {
+describe("material - delete_expression cleans up references (#44)", () => {
   const delMatPath = `${TEST_PREFIX}/M_DelTest`;
 
   afterAll(async () => {
@@ -148,7 +148,7 @@ describe("material — delete_expression cleans up references (#44)", () => {
     });
     expect(del.ok, del.error).toBe(true);
 
-    // Read the graph — Multiply should still exist with no connected input
+    // Read the graph - Multiply should still exist with no connected input
     const read = await callBridge(bridge, "read_material", { assetPath: delMatPath });
     expect(read.ok, read.error).toBe(true);
     const result = read.result as Record<string, unknown>;

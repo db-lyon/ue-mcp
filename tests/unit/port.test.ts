@@ -38,7 +38,7 @@ describe("deriveProjectPort", () => {
 
   it("pins a known value so drift from the C++ implementation is caught", () => {
     // If this value changes, src/port.ts and BridgeServer.cpp::DeriveProjectPort
-    // have diverged (or the algorithm changed) — update both, not just one.
+    // have diverged (or the algorithm changed) - update both, not just one.
     // sha1("c:/users/dev/gamea") first 4 bytes -> big-endian uint32 -> % 16384 + 49152.
     expect(deriveProjectPort("C:/Users/Dev/GameA")).toBe(referencePort("c:/users/dev/gamea"));
   });

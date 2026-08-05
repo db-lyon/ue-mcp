@@ -7,7 +7,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("reflection — read", () => {
+describe("reflection - read", () => {
   it("reflect_class (Actor)", async () => {
     const r = await callBridge(bridge, "reflect_class", { className: "Actor" });
     expect(r.ok, r.error).toBe(true);
@@ -39,7 +39,7 @@ describe("reflection — read", () => {
   });
 });
 
-describe("reflection — write (safe)", () => {
+describe("reflection - write (safe)", () => {
   it("create_gameplay_tag", async () => {
     const r = await callBridge(bridge, "create_gameplay_tag", {
       tag: "MCPTest.SmokeTest", comment: "Created by smoke test",

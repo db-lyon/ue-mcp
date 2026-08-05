@@ -17,14 +17,14 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("audio — read", () => {
+describe("audio - read", () => {
   it("list_sound_assets", async () => {
     const r = await callBridge(bridge, "list_sound_assets", { recursive: true });
     expect(r.ok, r.error).toBe(true);
   });
 });
 
-describe("audio — create (with cleanup)", () => {
+describe("audio - create (with cleanup)", () => {
   it("create_sound_cue", async () => {
     const r = await callBridge(bridge, "create_sound_cue", {
       name: "SC_SmokeTest", packagePath: TEST_PREFIX,

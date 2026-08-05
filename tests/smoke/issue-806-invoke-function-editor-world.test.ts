@@ -33,7 +33,7 @@ function parseVector(text: string): { x: number; y: number; z: number } {
   return { x: read("X"), y: read("Y"), z: read("Z") };
 }
 
-describe("editor — invoke_function against the editor world (#806)", () => {
+describe("editor - invoke_function against the editor world (#806)", () => {
   it("reads the placed actor's own location, not a zeroed frame", async () => {
     const r = await callBridge(bridge, "invoke_function", {
       actorLabel: LABEL,

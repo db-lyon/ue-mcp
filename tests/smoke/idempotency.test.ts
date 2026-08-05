@@ -16,7 +16,7 @@ afterEach(async () => {
   await callBridge(bridge, "delete_actor", { actorLabel: TEST_LIGHT_LABEL });
 });
 
-describe("idempotency — place_actor", () => {
+describe("idempotency - place_actor", () => {
   it("first call returns created:true with a rollback record", async () => {
     const r = await callBridge(bridge, "place_actor", {
       actorClass: "StaticMeshActor",
@@ -41,7 +41,7 @@ describe("idempotency — place_actor", () => {
     });
     expect(first.ok, first.error).toBe(true);
 
-    // Second call — should short-circuit
+    // Second call - should short-circuit
     const second = await callBridge(bridge, "place_actor", {
       actorClass: "StaticMeshActor",
       label: TEST_LABEL,
@@ -71,7 +71,7 @@ describe("idempotency — place_actor", () => {
   });
 });
 
-describe("idempotency — spawn_light", () => {
+describe("idempotency - spawn_light", () => {
   it("first call creates with rollback, second returns existed", async () => {
     const first = await callBridge(bridge, "spawn_light", {
       lightType: "point",
@@ -94,7 +94,7 @@ describe("idempotency — spawn_light", () => {
   });
 });
 
-describe("idempotency — delete_actor", () => {
+describe("idempotency - delete_actor", () => {
   it("deleting a non-existent actor returns alreadyDeleted", async () => {
     const r = await callBridge(bridge, "delete_actor", {
       actorLabel: "NonExistent_MCPTest_Nothing",
@@ -105,7 +105,7 @@ describe("idempotency — delete_actor", () => {
   });
 });
 
-describe("rollback payload — set_actor_material", () => {
+describe("rollback payload - set_actor_material", () => {
   it("captures previous material path for rollback", async () => {
     // Create a test actor first
     await callBridge(bridge, "place_actor", {

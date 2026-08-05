@@ -16,7 +16,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("pcg — read / list", () => {
+describe("pcg - read / list", () => {
   it("list_pcg_graphs", async ({ skip }) => {
     if (!hasPCG) skip();
     const r = await callBridge(bridge, "list_pcg_graphs", { recursive: true });
@@ -30,7 +30,7 @@ describe("pcg — read / list", () => {
   });
 });
 
-describe("pcg — create (with cleanup)", () => {
+describe("pcg - create (with cleanup)", () => {
   it("create_pcg_graph", async ({ skip }) => {
     if (!hasPCG) skip();
     const r = await callBridge(bridge, "create_pcg_graph", {

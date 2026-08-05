@@ -14,7 +14,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("networking — on test blueprint", () => {
+describe("networking - on test blueprint", () => {
   it("get_networking_info", async () => {
     const r = await callBridge(bridge, "get_networking_info", { blueprintPath: bpPath });
     expect(r.ok, r.error).toBe(true);

@@ -10,7 +10,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("animation — read / list", () => {
+describe("animation - read / list", () => {
   it("list_anim_assets", async () => {
     const r = await callBridge(bridge, "list_anim_assets", { recursive: true });
     expect(r.ok, r.error).toBe(true);
@@ -22,7 +22,7 @@ describe("animation — read / list", () => {
   });
 });
 
-describe("animation — read specific (dynamic)", () => {
+describe("animation - read specific (dynamic)", () => {
   let skelMeshPath: string | undefined;
 
   beforeAll(async () => {
@@ -55,7 +55,7 @@ describe("animation — read specific (dynamic)", () => {
   });
 });
 
-describe("animation — v0.7.15: PoseSearch (motion matching)", () => {
+describe("animation - v0.7.15: PoseSearch (motion matching)", () => {
   const DB_PATH = `${TEST_PREFIX}/PSDB_SmokeTest`;
 
   it("create_pose_search_database", async () => {
@@ -99,7 +99,7 @@ describe("animation — v0.7.15: PoseSearch (motion matching)", () => {
     const r = await callBridge(bridge, "build_pose_search_index", { assetPath: DB_PATH });
     expect(r.ok, r.error).toBe(true);
     const res = r.result as Record<string, unknown>;
-    // Empty DB with no schema — handler must return success=false, not crash
+    // Empty DB with no schema - handler must return success=false, not crash
     expect(res.success).toBe(false);
     expect(typeof res.error).toBe("string");
   });

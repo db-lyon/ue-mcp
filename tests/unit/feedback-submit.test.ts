@@ -519,7 +519,7 @@ describe("feedback(submit) elicitation gate", () => {
     expect(mockSubmitFeedback).not.toHaveBeenCalled();
   });
 
-  it("posts the EXACT bytes the user saw — agent params after approval cannot mutate them", async () => {
+  it("posts the EXACT bytes the user saw - agent params after approval cannot mutate them", async () => {
     // The handler only consults `params` once, before elicitation, and posts
     // the captured payload after. Nothing in the API exposes a way to mutate
     // between approval and post. Lock that behavior with a test that

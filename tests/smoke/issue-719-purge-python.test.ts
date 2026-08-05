@@ -1,4 +1,4 @@
-// Regression: #719 — no native way to purge cached embedded-Python modules by
+// Regression: #719 - no native way to purge cached embedded-Python modules by
 // prefix, so tool-dev iteration required execute_python.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge, resultArray } from "../setup.js";
@@ -8,7 +8,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("editor — purge_python_modules (#719)", () => {
+describe("editor - purge_python_modules (#719)", () => {
   it("purges modules matching a prefix and reports them", async () => {
     // Seed a fake cached module.
     await callBridge(bridge, "execute_python", {

@@ -1,4 +1,4 @@
-// Regression: #732 — execute_python / run_python_file had no first-class result
+// Regression: #732 - execute_python / run_python_file had no first-class result
 // channel, forcing print() as transport. resultVariable returns a named
 // top-level variable as `result`, separate from logs.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -9,7 +9,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("editor — execute_python result channel (#732)", () => {
+describe("editor - execute_python result channel (#732)", () => {
   it("returns a named variable as `result` without using print()", async () => {
     const r = await callBridge(bridge, "execute_python", {
       code: "mcp_result = 'finished-scoring-82-assets'",

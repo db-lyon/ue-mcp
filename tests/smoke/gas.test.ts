@@ -19,7 +19,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("gas — query", () => {
+describe("gas - query", () => {
   it("get_gas_info (no target, should handle gracefully)", async ({ skip }) => {
     if (!hasGAS) skip();
     const r = await callBridge(bridge, "get_gas_info", { blueprintPath: "/Game/NonExistent" });
@@ -27,7 +27,7 @@ describe("gas — query", () => {
   });
 });
 
-describe("gas — create (with cleanup)", () => {
+describe("gas - create (with cleanup)", () => {
   it("create_gameplay_ability", async ({ skip }) => {
     if (!hasGAS) skip();
     const r = await callBridge(bridge, "create_gameplay_ability", {

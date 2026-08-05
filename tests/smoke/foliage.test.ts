@@ -7,7 +7,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("foliage — read", () => {
+describe("foliage - read", () => {
   it("list_foliage_types", async () => {
     const r = await callBridge(bridge, "list_foliage_types");
     expect(r.ok, r.error).toBe(true);

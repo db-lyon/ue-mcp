@@ -1,4 +1,4 @@
-// Regression: #730 — audio.list dropped the bridge connection and ignored the
+// Regression: #730 - audio.list dropped the bridge connection and ignored the
 // directory. list_sound_assets now filters by directory, paginates, and returns
 // count/total/hasMore so a large project cannot overflow one response.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -9,7 +9,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("audio — list_sound_assets directory + pagination (#730)", () => {
+describe("audio - list_sound_assets directory + pagination (#730)", () => {
   it("returns pagination metadata and keeps the bridge alive", async () => {
     const r = await callBridge(bridge, "list_sound_assets", { directory: "/Game", recursive: true });
     expect(r.ok, r.error).toBe(true);

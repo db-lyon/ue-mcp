@@ -1,4 +1,4 @@
-// Regression: #718 — no native action closed the open Level Sequence editor.
+// Regression: #718 - no native action closed the open Level Sequence editor.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge, TEST_PREFIX } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge.js";
@@ -10,7 +10,7 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("editor — close_sequence (#718)", () => {
+describe("editor - close_sequence (#718)", () => {
   it("closes an open sequence and reports it", async () => {
     await callBridge(bridge, "create_level_sequence", { name: "LS_CloseTest", packagePath: TEST_PREFIX });
     await callBridge(bridge, "open_asset", { assetPath: `${TEST_PREFIX}/LS_CloseTest` });

@@ -42,7 +42,7 @@ describe("readLogState", () => {
     // Asset registry and shader lines keep scrolling long after startup, so
     // newest-wins alone would report a live editor as still starting.
     const project = makeProject([
-      "LogMCPBridge: [UE-MCP] Editor ready — accepting requests",
+      "LogMCPBridge: [UE-MCP] Editor ready - accepting requests",
       "LogAssetRegistry: Asset registry scan of /Game finished",
       "LogAssetRegistry: Asset registry scan of /Engine finished",
     ]);
@@ -62,7 +62,7 @@ describe("readLogState", () => {
 
   it("prefers a crash over any other sticky marker", () => {
     const project = makeProject([
-      "LogMCPBridge: [UE-MCP] Editor ready — accepting requests",
+      "LogMCPBridge: [UE-MCP] Editor ready - accepting requests",
       "LogWindows: Error: === Critical error: ===",
     ]);
     const state = readLogState(project);

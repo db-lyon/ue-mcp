@@ -1,4 +1,4 @@
-// Regression: #727 — no native action opened editor settings/UI tabs, so
+// Regression: #727 - no native action opened editor settings/UI tabs, so
 // producing visual settings evidence required the Python escape hatch.
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { getBridge, disconnectBridge, callBridge } from "../setup.js";
@@ -8,7 +8,7 @@ let bridge: EditorBridge;
 beforeAll(async () => { bridge = await getBridge(); });
 afterAll(() => disconnectBridge());
 
-describe("editor — open_tab / open_settings (#727)", () => {
+describe("editor - open_tab / open_settings (#727)", () => {
   it("open_tab opens a registered tab by ID", async () => {
     const r = await callBridge(bridge, "open_tab", { tabId: "OutputLog" });
     expect(r.ok, r.error).toBe(true);

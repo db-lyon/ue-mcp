@@ -12,14 +12,14 @@ afterAll(async () => {
   disconnectBridge();
 });
 
-describe("widget — read / list", () => {
+describe("widget - read / list", () => {
   it("list_widget_blueprints", async () => {
     const r = await callBridge(bridge, "list_widget_blueprints", { recursive: true });
     expect(r.ok, r.error).toBe(true);
   });
 });
 
-describe("widget — create (with cleanup)", () => {
+describe("widget - create (with cleanup)", () => {
   it("create_widget_blueprint", async () => {
     const r = await callBridge(bridge, "create_widget_blueprint", {
       name: "WBP_SmokeTest", packagePath: TEST_PREFIX,
@@ -34,7 +34,7 @@ describe("widget — create (with cleanup)", () => {
     expect(r.ok, r.error).toBe(true);
   });
 
-  it("add_widget — root CanvasPanel", async () => {
+  it("add_widget - root CanvasPanel", async () => {
     const r = await callBridge(bridge, "add_widget", {
       assetPath: `${TEST_PREFIX}/WBP_SmokeTest`,
       widgetClass: "CanvasPanel",
@@ -45,7 +45,7 @@ describe("widget — create (with cleanup)", () => {
     expect(res.isRoot).toBe(true);
   });
 
-  it("add_widget — child TextBlock", async () => {
+  it("add_widget - child TextBlock", async () => {
     const r = await callBridge(bridge, "add_widget", {
       assetPath: `${TEST_PREFIX}/WBP_SmokeTest`,
       widgetClass: "TextBlock",
@@ -69,7 +69,7 @@ describe("widget — create (with cleanup)", () => {
     expect((tree.children as unknown[]).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("remove_widget — child TextBlock", async () => {
+  it("remove_widget - child TextBlock", async () => {
     const r = await callBridge(bridge, "remove_widget", {
       assetPath: `${TEST_PREFIX}/WBP_SmokeTest`,
       widgetName: "Txt_Hello",
