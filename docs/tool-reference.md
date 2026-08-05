@@ -19,7 +19,7 @@ UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering
 | Action | Description |
 |--------|-------------|
 | `get_status` | Check server mode and editor connection. Also reports pluginBuildStale when the compiled bridge is older than its source, which is the real cause of 'Unknown method' on handlers that do exist (#785) |
-| `set_project` | Switch project. Params: `projectPath` |
+| `set_project` | Switch project: moves both path resolution and the editor connection to the new .uproject. Params: `projectPath` |
 | `get_info` | Read .uproject file details |
 | `read_config` | Read INI config. Params: `configName (e.g. 'Engine', 'Game')` |
 | `search_config` | Search INI files. Params: `query` |

@@ -156,7 +156,15 @@ The C++ plugin listens on a **per-project WebSocket port** derived from a hash o
 | **Disconnected** | Editor not running or plugin not loaded. Filesystem tools still work (INI parsing, C++ headers, asset listing) |
 | **Reconnecting** | Connection lost, auto-retry in progress |
 
-Check the current state with `project(action="get_status")`.
+Check the current state with `project(action="get_status")`. Alongside `editorConnected`, it reports `editorTarget`: the `.uproject` the connection belongs to, the port, and how that port was chosen (`lockfile`, `config`, `derived`, `env`, `explicit`). The connection is always bound to one project, so `editorTarget.projectPath` matches the loaded project.
+
+### Switching Projects
+
+`project(action="set_project", projectPath="...")` moves path resolution and the editor connection together. The socket to the previous project's editor is dropped before the new project is loaded, so no action can execute in the project you just left.
+
+The port for the new project is chosen from that project alone: its `Saved/UE_MCP_Bridge/port.json` lockfile first, then its own `bridge.port`, then the port derived from its root path.
+
+A port pinned with `UE_MCP_PORT` (or an explicit port argument) is the exception. It was chosen for whichever project the server started on and says nothing about the one you switched to, so if the new project has published no lockfile the switch still completes and the connection is refused with an explanation. Start the new project's editor, which publishes the lockfile, or clear the pin so each project gets its derived port.
 
 ## Plugin Deployment
 
