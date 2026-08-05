@@ -852,7 +852,8 @@ export async function buildProject(
       // A build is the only event that can turn a "stale plugin" verdict fresh
       // ahead of the cache TTL, so drop the cached answer here rather than
       // making the next get_status report a binary that no longer exists.
-      invalidatePluginFreshness();
+      // Only this project's: a build in one editor says nothing about another.
+      invalidatePluginFreshness(resolvedPath);
       resolve(
         code === 0
           ? { success: true, exitCode: 0, message: "Build succeeded" }

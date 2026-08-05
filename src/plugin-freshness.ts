@@ -111,10 +111,25 @@ function findCompiledBinary(pluginDir: string): { file: string; mtimeMs: number 
 const CACHE_TTL_MS = 10_000;
 const cache = new Map<string, { at: number; value: PluginFreshness }>();
 
-/** Drop the cached verdict. Called after a build, which is the only thing that
- *  can flip a stale verdict to fresh sooner than the TTL. */
-export function invalidatePluginFreshness(): void {
-  cache.clear();
+/**
+ * Drop a cached verdict. Called after a build, which is the only thing that
+ * can flip a stale verdict to fresh sooner than the TTL.
+ *
+ * Per project (#817): a build targets one project, and clearing every entry
+ * made the other editors re-walk their plugin binaries for no reason and, on
+ * a slow disk, report a verdict they had already answered. Omitting the path
+ * still clears everything, which is what a caller with no project in hand
+ * wants.
+ */
+export function invalidatePluginFreshness(uprojectPath?: string | null): void {
+  if (!uprojectPath) {
+    cache.clear();
+    return;
+  }
+  cache.delete(uprojectPath);
+  // The key is whatever string the caller passed to checkPluginFreshness, so
+  // a resolved path and the spelling it arrived in can both be present.
+  cache.delete(path.resolve(uprojectPath));
 }
 
 export function checkPluginFreshness(uprojectPath: string | null): PluginFreshness {
