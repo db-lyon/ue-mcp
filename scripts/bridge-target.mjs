@@ -1,17 +1,23 @@
 /**
- * Shared bridge discovery for the test harnesses (scripts/smoke-test.js and
+ * Shared target resolution for the test harnesses (scripts/smoke-test.js and
  * everything under tests/).
  *
- * The editor no longer binds a fixed port: it derives a per-project port from
- * the project root path and publishes the port it actually bound to
- * <Project>/Saved/UE_MCP_Bridge/port.json. Harnesses that hardcode 9877 cannot
- * connect. Discovery order here is lockfile, then the derived port, then the
- * legacy fixed port, so a running editor is found with no environment variables
- * and no flags.
+ * Two jobs:
  *
- * The project itself is hardcoded to tests/ue_mcp/ue_mcp.uproject relative to
- * this file: smoke runs perform real mutations, so they only ever address the
- * dedicated test project.
+ *  1. Find the bridge. The editor no longer binds a fixed port: it derives a
+ *     per-project port from the project root path and publishes the port it
+ *     actually bound to <Project>/Saved/UE_MCP_Bridge/port.json. Harnesses that
+ *     hardcode 9877 cannot connect. Discovery order here is lockfile, then the
+ *     derived port, then the legacy fixed port, so a running editor is found
+ *     with no environment variables and no flags.
+ *
+ *  2. Refuse anything that is not the dedicated test project. Smoke runs
+ *     perform real mutations (create blueprints, delete assets, rewrite the
+ *     level), so pointing them at a working project can destroy someone's work.
+ *     The project is hardcoded to tests/ue_mcp/ue_mcp.uproject relative to this
+ *     file. Host and port remain overridable for odd local setups, so the guard
+ *     is enforced after connecting by asking the editor which project it has
+ *     open and aborting on any mismatch.
  */
 
 import crypto from "node:crypto";
@@ -118,7 +124,8 @@ export function isProcessAlive(pid) {
  * Ordered list of ports worth trying for the test project bridge.
  *
  * An explicit port (CLI flag or environment variable) short-circuits discovery
- * so a developer can pin an unusual setup.
+ * so a developer can pin an unusual setup. It does not weaken the project
+ * guard, which runs after the connection is up.
  */
 export function bridgePortCandidates(options = {}) {
   const { explicitPort = null, lockfile = readPortLockfile() } = options;
@@ -139,6 +146,20 @@ export function bridgePortCandidates(options = {}) {
   add(deriveProjectPort(TEST_PROJECT_DIR), "derived from project path");
   add(LEGACY_BRIDGE_PORT, "legacy fixed port");
   return { candidates, lockfile };
+}
+
+/** Loopback-only: a smoke run must never reach an editor on another machine. */
+export function isLoopbackHost(host) {
+  const h = String(host).trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return h === "localhost" || h === "127.0.0.1" || h === "::1" || h.startsWith("127.");
+}
+
+export function assertLoopbackHost(host) {
+  if (isLoopbackHost(host)) return;
+  throw new Error(
+    `Refusing to run the smoke harness against host "${host}". ` +
+    `It is hardcoded to the local test project (${TEST_PROJECT_UPROJECT}) and only loopback hosts can serve it.`,
+  );
 }
 
 /**
@@ -175,3 +196,74 @@ export function describeMissingBridge(options) {
   return lines.join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// Project identity guard
+// ---------------------------------------------------------------------------
+
+/**
+ * Python the harness runs on the connected editor to learn which project is
+ * open. Printed with a marker so it survives whatever shape the bridge wraps
+ * python output in.
+ */
+export const PROJECT_IDENTITY_PYTHON =
+  'import unreal\nprint("MCP_PROJECT_DIR:" + unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()))';
+
+/**
+ * Pull the reported project directory out of an execute_python result. The
+ * result is stringified first, so the marker is found whatever key the python
+ * output landed under; JSON escaping is then undone so a Windows path survives
+ * the round trip intact.
+ */
+export function extractReportedProjectDir(result) {
+  const text = typeof result === "string" ? result : JSON.stringify(result ?? "");
+  const match = /MCP_PROJECT_DIR:((?:\\.|[^"\r\n])*)/.exec(text);
+  if (!match) return null;
+  const unescaped = match[1].replace(/\\(.)/g, (_, ch) =>
+    ch === "n" ? "\n" : ch === "r" ? "\r" : ch === "t" ? "\t" : ch,
+  );
+  const dir = unescaped.split(/[\r\n]/, 1)[0].trim();
+  return dir.length > 0 ? dir : null;
+}
+
+/** True when the editor's open project is this checkout's test project. */
+export function isTestProjectDir(reportedDir) {
+  if (!reportedDir) return false;
+  return normalizeProjectRoot(reportedDir) === normalizeProjectRoot(TEST_PROJECT_DIR);
+}
+
+/**
+ * Hard guard. Throws unless the connected editor has the test project open.
+ * Called before the harness issues a single mutating request.
+ */
+export function assertTestProjectDir(reportedDir) {
+  if (isTestProjectDir(reportedDir)) return reportedDir;
+  const what = reportedDir
+    ? `it reported "${reportedDir}"`
+    : "the editor did not report a project directory (is the Python plugin enabled?)";
+  throw new Error(
+    "Aborting: the connected editor is not the smoke test project.\n" +
+    `  Expected : ${TEST_PROJECT_DIR}\n` +
+    `  Reported : ${reportedDir ?? "(unknown)"}\n` +
+    `Smoke runs perform destructive mutations, so the harness only ever talks to its own test project. ` +
+    `Because ${what}, nothing was sent.`,
+  );
+}
+
+/**
+ * Run the guard over any RPC caller. `call` takes (method, params) and resolves
+ * to the raw handler result (or anything containing it); the identity marker is
+ * matched out of the stringified value.
+ */
+export async function verifyTestProjectTarget(call) {
+  let result;
+  try {
+    result = await call("execute_python", { code: PROJECT_IDENTITY_PYTHON });
+  } catch (err) {
+    throw new Error(
+      "Aborting: could not confirm which project the connected editor has open " +
+      `(execute_python failed: ${err instanceof Error ? err.message : String(err)}).\n` +
+      `The smoke harness only runs against ${TEST_PROJECT_UPROJECT}, so it will not send mutations it cannot vouch for.`,
+    );
+  }
+  return assertTestProjectDir(extractReportedProjectDir(result));
+}

@@ -1,10 +1,13 @@
 import { EditorBridge } from "../src/bridge.js";
 import {
+  assertLoopbackHost,
   bridgePortCandidates,
   describeMissingBridge,
+  verifyTestProjectTarget,
 } from "../scripts/bridge-target.mjs";
 
 let _bridge: EditorBridge | null = null;
+let _targetVerified = false;
 
 // 127.0.0.1 rather than "localhost": on hosts where the IPv6 stack wins DNS,
 // "localhost" resolves to ::1 and the client waits on an empty socket while the
@@ -16,10 +19,13 @@ const ENV_PORT = Number.parseInt(process.env.UE_MCP_TEST_PORT ?? "", 10);
  * Connect to the bridge for tests/ue_mcp. The bridge binds a per-project port
  * and publishes it to that project's Saved/UE_MCP_Bridge/port.json, so the port
  * is discovered rather than assumed; UE_MCP_TEST_PORT still pins it when set.
+ * The connected editor is then challenged for its project directory, and any
+ * project other than tests/ue_mcp aborts the run before a single mutation.
  */
 export async function getBridge(): Promise<EditorBridge> {
   if (_bridge?.isConnected) return _bridge;
 
+  assertLoopbackHost(TEST_BRIDGE_HOST);
   const { candidates, lockfile } = bridgePortCandidates({
     explicitPort: Number.isInteger(ENV_PORT) ? ENV_PORT : null,
   });
@@ -35,6 +41,10 @@ export async function getBridge(): Promise<EditorBridge> {
       continue;
     }
     _bridge = bridge;
+    if (!_targetVerified) {
+      await verifyTestProjectTarget((method, params) => bridge.call(method, params));
+      _targetVerified = true;
+    }
     return bridge;
   }
 

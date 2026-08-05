@@ -19,8 +19,12 @@ import path from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
 import {
+  assertLoopbackHost,
   bridgePortCandidates,
   describeMissingBridge,
+  assertTestProjectDir,
+  extractReportedProjectDir,
+  PROJECT_IDENTITY_PYTHON,
   TEST_PROJECT_UPROJECT,
 } from "./bridge-target.mjs";
 
@@ -189,6 +193,7 @@ let WS_URL = null;
 // cheap (a refused TCP connect returns immediately) and it means a developer
 // never has to look up which port this worktree's editor bound.
 async function connectToTestBridge() {
+  assertLoopbackHost(HOST);
   const { candidates, lockfile } = bridgePortCandidates({
     explicitPort: Number.isInteger(EXPLICIT_PORT) ? EXPLICIT_PORT : null,
   });
@@ -208,6 +213,22 @@ async function connectToTestBridge() {
   }
 
   throw new Error(describeMissingBridge({ host: HOST, candidates, lockfile, lastError }));
+}
+
+// The harness is hardcoded to tests/ue_mcp and every call below mutates the
+// connected editor. Confirm the editor really has that project open before
+// sending anything: a stale lockfile or a hand-passed --port must not be able
+// to point a destructive sweep at someone's working project.
+async function assertConnectedToTestProject(ws, idGen) {
+  const msg = await rpcRaw(ws, "execute_python", { code: PROJECT_IDENTITY_PYTHON }, idGen());
+  if (msg.error) {
+    throw new Error(
+      `Aborting: could not confirm which project the connected editor has open (${msg.error.message}).\n` +
+      `The smoke harness only runs against ${TEST_PROJECT_UPROJECT}, so nothing was sent.`,
+    );
+  }
+  const reported = assertTestProjectDir(extractReportedProjectDir(msg.result));
+  console.log(`${DIM}  target confirmed: ${reported}${RESET}`);
 }
 
 const SCRATCH_LEVEL = "/Game/MCP_SmokeScratch";
@@ -315,6 +336,15 @@ async function main() {
 
   let nextId = 1;
   const idGen = () => nextId++;
+
+  // Guard before any mutation: prove this editor is the test project.
+  try {
+    await assertConnectedToTestProject(ws, idGen);
+  } catch (err) {
+    console.error(`\n${RED}${BOLD}${err.message}${RESET}\n`);
+    ws.close();
+    process.exit(1);
+  }
   console.log("");
 
   // Run calls sequentially to avoid flooding the bridge.

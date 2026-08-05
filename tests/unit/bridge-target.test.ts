@@ -3,14 +3,20 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  assertLoopbackHost,
+  assertTestProjectDir,
   bridgePortCandidates,
   describeMissingBridge,
   deriveProjectPort,
+  extractReportedProjectDir,
+  isLoopbackHost,
+  isTestProjectDir,
   LEGACY_BRIDGE_PORT,
   readPortLockfile,
   TEST_PORT_LOCKFILE,
   TEST_PROJECT_DIR,
   TEST_PROJECT_UPROJECT,
+  verifyTestProjectTarget,
 } from "../../scripts/bridge-target.mjs";
 import { deriveProjectPort as srcDeriveProjectPort } from "../../src/port.js";
 
@@ -118,3 +124,65 @@ describe("describeMissingBridge", () => {
   });
 });
 
+describe("host guard", () => {
+  it("accepts loopback only", () => {
+    expect(isLoopbackHost("127.0.0.1")).toBe(true);
+    expect(isLoopbackHost("localhost")).toBe(true);
+    expect(isLoopbackHost("::1")).toBe(true);
+    expect(isLoopbackHost("192.168.1.20")).toBe(false);
+    expect(isLoopbackHost("build-box.local")).toBe(false);
+  });
+
+  it("refuses to point the harness at another machine", () => {
+    expect(() => assertLoopbackHost("192.168.1.20")).toThrow(/Refusing/);
+    expect(() => assertLoopbackHost("127.0.0.1")).not.toThrow();
+  });
+});
+
+describe("test-project guard", () => {
+  it("accepts the repo test project in any path spelling", () => {
+    expect(isTestProjectDir(TEST_PROJECT_DIR)).toBe(true);
+    expect(isTestProjectDir(`${TEST_PROJECT_DIR}/`)).toBe(true);
+    expect(isTestProjectDir(TEST_PROJECT_DIR.replace(/\\/g, "/").toUpperCase())).toBe(true);
+  });
+
+  it("refuses any other project", () => {
+    expect(isTestProjectDir("C:/Users/dev/RealGame/")).toBe(false);
+    expect(isTestProjectDir(`${TEST_PROJECT_DIR}_other`)).toBe(false);
+    expect(isTestProjectDir(null)).toBe(false);
+    expect(() => assertTestProjectDir("C:/Users/dev/RealGame/")).toThrow(/not the smoke test project/);
+    expect(() => assertTestProjectDir("C:/Users/dev/RealGame/")).toThrow(/RealGame/);
+  });
+
+  it("extracts the reported project directory from a python result", () => {
+    expect(extractReportedProjectDir({ output: "MCP_PROJECT_DIR:C:/x/y/\n" })).toBe("C:/x/y/");
+    expect(extractReportedProjectDir("MCP_PROJECT_DIR:/home/dev/proj/")).toBe("/home/dev/proj/");
+    expect(extractReportedProjectDir({ logs: ["noise", "MCP_PROJECT_DIR:/a/b/"] })).toBe("/a/b/");
+    expect(extractReportedProjectDir({ output: "nothing here" })).toBeNull();
+    // A backslashed Windows path survives JSON escaping.
+    expect(extractReportedProjectDir({ output: "MCP_PROJECT_DIR:C:\\work\\proj\\" })).toBe("C:\\work\\proj\\");
+  });
+
+  it("passes when the editor reports the test project", async () => {
+    await expect(
+      verifyTestProjectTarget(async () => ({ output: `MCP_PROJECT_DIR:${TEST_PROJECT_DIR}/` })),
+    ).resolves.toBeTruthy();
+  });
+
+  it("aborts when the editor has a different project open", async () => {
+    await expect(
+      verifyTestProjectTarget(async () => ({ output: "MCP_PROJECT_DIR:C:/Users/dev/RealGame/" })),
+    ).rejects.toThrow(/not the smoke test project/);
+  });
+
+  it("aborts when the project cannot be identified at all", async () => {
+    await expect(
+      verifyTestProjectTarget(async () => {
+        throw new Error("Unknown method: execute_python");
+      }),
+    ).rejects.toThrow(/could not confirm which project/);
+    await expect(
+      verifyTestProjectTarget(async () => ({ output: "" })),
+    ).rejects.toThrow(/not the smoke test project/);
+  });
+});
