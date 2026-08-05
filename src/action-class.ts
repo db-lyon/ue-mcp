@@ -120,6 +120,11 @@ const OVERRIDES: Readonly<Record<string, ActionClass>> = {
   "project.add_editor": "read",
   "project.drop_editor": "read",
 
+  // Renders a flow's execution plan without running a step of it. `flow.run`
+  // is a mutation by the lexicon, which is correct: a flow is whatever its
+  // steps are.
+  "flow.plan": "read",
+
   // ── Arbitrary payload decides the effect ────────────────────────────
   "epic.call_tool": "unknown",
   "editor.execute_python": "mutate",

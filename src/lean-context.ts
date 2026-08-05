@@ -206,6 +206,17 @@ export function applyLeanContext(tools: ToolDef[]): ToolDef[] {
  * `call` dispatches straight to the target ActionSpec (handler or bridge) using
  * the same logic categoryTool() uses, so no registry round-trip is needed.
  */
+/**
+ * The one tool micro mode advertises. Named here rather than inline because
+ * dispatch has to recognise it: a call through the gateway carries its real
+ * category and action as parameters, so anything classifying the call (the
+ * multi-editor write gate, #817) has to look past the gateway to find them.
+ */
+export const MICRO_GATEWAY_TOOL = "tools";
+
+/** The gateway action that invokes something. `category` + `method` name it. */
+export const MICRO_GATEWAY_CALL = "call";
+
 export function buildMicroGateway(tools: ToolDef[]): ToolDef {
   const byName = new Map(tools.map((t) => [t.name, t] as const));
   const summaries = tools.map((t) => ({ category: t.name, summary: splitDescription(t.description).summary }));
@@ -259,7 +270,7 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
   };
 
   return categoryTool(
-    "tools",
+    MICRO_GATEWAY_TOOL,
     "Gateway to every ue-mcp category (micro context mode). Discover with list_categories/describe, then invoke with call.",
     actions,
     undefined,

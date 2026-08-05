@@ -1,7 +1,8 @@
 import * as http from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { createFlowTool } from "./flow-tool.js";
-import { sessionContext, type ToolContext } from "../types.js";
+import { sessionContext, EDITOR_TARGET_PARAM, type ToolContext } from "../types.js";
+import { refuseUntargetedCall } from "../editor-gate.js";
 import { info, warn, error as logError } from "../log.js";
 import { subscribeFlowEvents, type FlowEvent } from "./events.js";
 
@@ -118,6 +119,7 @@ export function startFlowHttpServer(
         // surface, rather than staying pinned to whichever session was
         // active when this server started.
         let runCtx = activeContext();
+        let targeted = false;
         if (body && typeof body === "object") {
           const b = body as Record<string, unknown>;
           if (b.params !== undefined) params.params = b.params;
@@ -132,7 +134,21 @@ export function startFlowHttpServer(
             } catch (e) {
               return send(404, { error: e instanceof Error ? e.message : String(e) });
             }
+            targeted = true;
           }
+        }
+        // Same gate as the MCP surface (#817): beyond one editor a run has to
+        // say which one it means, because a flow is whatever its steps are and
+        // the fall-through would edit a project nobody named. Inert at one
+        // editor, where this returns null without classifying anything.
+        if (!targeted && ctx.sessions && ctx.sessions.size > 1) {
+          const refusal = refuseUntargetedCall({
+            taskName: "flow.run",
+            editors: ctx.sessions.list().map((s) => s.name),
+            activeEditor: ctx.sessions.active.name,
+            targetParam: EDITOR_TARGET_PARAM,
+          });
+          if (refusal) return send(400, { error: refusal });
         }
         const result = await flowTool.handler(runCtx, params);
         return send(200, result);
