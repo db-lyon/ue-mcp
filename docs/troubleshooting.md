@@ -88,6 +88,18 @@ The MCP server auto-reconnects every 15 seconds. If the editor is restarted, the
 
 If the connection is flapping (connecting then immediately disconnecting), check the editor's Output Log for errors in the `LogMCPBridge` category.
 
+### stop_editor or restart_editor says no port is published
+
+**Symptom:** `stop_editor` returns something like `No bridge port published at C:/Game/Saved/UE_MCP_Bridge/port.json`, or reports that the PID in that file is no longer running.
+
+The editor publishes that file while its bridge is listening and removes it on a clean exit, and lifecycle actions read it and nothing else: a guessed port is how a quit request reaches whichever editor happens to hold that number (#819). So the message means one of three things.
+
+1. **No editor is running for this project.** Nothing to stop. Start one with `editor(start_editor)`.
+2. **The editor is running but its bridge never started.** Check the Output Log for `LogMCPBridge` (see [Bridge not running](#editor-not-connected--bridge-not-running)). The message includes the phase the editor is actually at.
+3. **A previous editor was killed rather than closed.** Its lockfile is still on disk naming a PID that has gone. Delete `<project>/Saved/UE_MCP_Bridge/port.json` and the message clears.
+
+`start_editor` refusing with "Editor is already running for this project" is the same targeting rule from the other side: it names the PID, and that PID has this project's `.uproject` on its command line. Editors for other projects and headless shards never trigger it.
+
 ## Plugin Build Issues
 
 ### Plugin fails to compile

@@ -60,6 +60,8 @@ export const levelTool: ToolDef = categoryTool(
 
 The `EditorBridge` maintains a WebSocket connection to the bridge's per-project port (derived from the project root path, published to `<project>/Saved/UE_MCP_Bridge/port.json`; see [Configuration](configuration.md#bridge-connection)). The legacy fixed `9877` is the fallback when no project root is known.
 
+Editor lifecycle actions (`start_editor`, `stop_editor`, `restart_editor`) do not share that fallback. They act on a process rather than on a connection, so they resolve the target editor from the project's lockfile alone and refuse when it is absent, and they scope every process check to the `.uproject` on the command line. See [Which editor lifecycle actions act on](configuration.md#which-editor-lifecycle-actions-act-on).
+
 **Protocol:** JSON-RPC 2.0
 
 ```json

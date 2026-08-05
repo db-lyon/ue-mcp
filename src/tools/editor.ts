@@ -63,13 +63,13 @@ export const editorTool: ToolDef = categoryTool(
       },
     },
     stop_editor: {
-      description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill)",
+      description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill). Acts only on the editor for the loaded project, resolved from the port lockfile that editor published at <project>/Saved/UE_MCP_Bridge/port.json. With no lockfile there is no port to aim at and the call refuses, naming the file it checked, rather than probing a default port that another project's editor could answer on (#819).",
       handler: async (ctx: ToolContext) => {
         return stopEditor(false, ctx.project.projectDir ?? undefined);
       },
     },
     restart_editor: {
-      description: "Stop then start the editor",
+      description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819).",
       handler: async (ctx: ToolContext) => {
         return restartEditor(ctx.project, ctx.bridge);
       },
