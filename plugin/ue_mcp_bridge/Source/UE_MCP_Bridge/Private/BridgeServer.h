@@ -171,6 +171,20 @@ public:
 	 *  own path so a failed start can never overwrite a live editor's record. */
 	void WriteBindFailureRecord(int32 FirstPort, int32 LastPort, int32 ErrorCode);
 
+	// #817: this process's own record under Saved/UE_MCP_Bridge/instances/.
+	//
+	// port.json names one bridge for a whole project directory, which is the
+	// right answer for one editor and no answer at all for two. A per-pid file
+	// has exactly one writer by construction, so a second editor of the same
+	// project describes itself instead of overwriting the first, and a record
+	// left by a crash is provably stale instead of merely suspicious.
+	void WriteInstanceRecord(const FString& State, int32 PortValue);
+	void DeleteOwnInstanceRecord();
+
+	/** Remove records whose process is gone. Runs once, at startup, on the
+	 *  server thread; the sweep never touches this instance's own record. */
+	void ReapStaleInstanceRecords();
+
 	// Deterministic per-worktree base port. Derived from a hash of the project
 	// root path so every checkout gets a stable, launch-order-independent port
 	// that the Node client computes identically (see src/port.ts). Keep the two

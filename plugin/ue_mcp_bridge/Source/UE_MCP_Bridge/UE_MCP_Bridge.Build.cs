@@ -8,6 +8,7 @@ public class UE_MCP_Bridge : ModuleRules
 	// new .cpp until this file changes.
 	// Private/Handlers/AssetHandlers_BulkUpsert.cpp: UBT caches the module's
 	// file list and will not pick up a new .cpp until this file changes.
+	// Private/BridgeStateFiles.cpp: same reason.
 	public UE_MCP_Bridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
