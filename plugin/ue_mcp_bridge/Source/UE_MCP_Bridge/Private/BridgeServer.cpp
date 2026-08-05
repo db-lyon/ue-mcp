@@ -1,4 +1,5 @@
 #include "BridgeServer.h"
+#include "BridgeParamEcho.h"
 #include "BridgeStateFiles.h"
 #include "UE_MCP_BridgeModule.h"
 #include "MCPEngineStatus.h"
@@ -119,6 +120,12 @@ FMCPBridgeServer::FMCPBridgeServer(int32 Port, const FString& InPortSource, bool
 	, InstanceId(FGuid::NewGuid())
 	, StartedAtUtc(FDateTime::UtcNow())
 {
+	// #817: construction-gated, from the command line or the environment only.
+	// There is deliberately no way to turn this on over the socket: it is a
+	// test facility, and a facility a caller can enable remotely is a facility
+	// an attacker can enable remotely.
+	FMCPParamEcho::Get().SetEnabled(FMCPParamEcho::ResolveEnabledFromEnvironment());
+
 	// Register core handlers
 	FEditorHandlers::RegisterHandlers(HandlerRegistry);
 	FAssetHandlers::RegisterHandlers(HandlerRegistry);
@@ -1381,6 +1388,13 @@ TSharedPtr<FJsonObject> FMCPBridgeServer::BuildCapabilitiesPayload()
 		TEXT("capability-handshake"),
 		TEXT("exclusive-port-claim"),
 		TEXT("owned-port-record"),
+		// #817. Both are always compiled in and always advertised: a caller has
+		// to be able to tell "this bridge cannot do that" from "this bridge can
+		// and the facility is switched off", and only the first of those two is
+		// grounds for skipping a test.
+		TEXT("instance-records"),
+		TEXT("requested-port-file"),
+		TEXT("param-echo"),
 	};
 	TArray<TSharedPtr<FJsonValue>> FeatureValues;
 	for (const TCHAR* Feature : Features)
@@ -1388,6 +1402,11 @@ TSharedPtr<FJsonObject> FMCPBridgeServer::BuildCapabilitiesPayload()
 		FeatureValues.Add(MakeShared<FJsonValueString>(Feature));
 	}
 	Payload->SetArrayField(TEXT("features"), FeatureValues);
+
+	// Whether the echo is currently recording, which is a runtime fact and not
+	// a capability. A test asserting on forwarded parameters needs both: the
+	// feature name says the method exists, this says the answer will be real.
+	Payload->SetBoolField(TEXT("paramEcho"), FMCPParamEcho::Get().IsEnabled());
 
 	// The registered action list, from the running binary. This is the only
 	// answer to "does the plugin I reached have this method" that a stale DLL
@@ -1440,6 +1459,19 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		Params = MakeShared<FJsonObject>();
 	}
 
+	// #817: note what this dispatch was handed, before anything decides what to
+	// do with it. Recorded for unknown methods too: a leaked parameter on a
+	// method the bridge does not have is still a leaked parameter, and it is
+	// the case a stale-plugin test is most likely to hit.
+	//
+	// The two echo methods are excluded so reading the log does not append to
+	// it, which would make a second read return a different answer from the
+	// first for reasons that have nothing to do with the call under test.
+	if (Method != TEXT("get_param_echo") && Method != TEXT("clear_param_echo"))
+	{
+		FMCPParamEcho::Get().Record(Method, Params);
+	}
+
 	// Served here, on the socket thread, deliberately. Every other method waits
 	// on the game thread, so when the game thread is inside a modal dialog, a
 	// slow task, or a hang, this is the only question the bridge can still
@@ -1459,6 +1491,25 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 	if (Method == TEXT("get_bridge_capabilities"))
 	{
 		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(BuildCapabilitiesPayload()));
+	}
+
+	// #817: the parameter-name log, and its reset. Served off the game thread
+	// for the same reason the handshake is: the assertion that reads it runs
+	// straight after the call it is about, and making it queue behind the game
+	// thread would let an unrelated slow handler decide whether a leak test
+	// passes.
+	if (Method == TEXT("get_param_echo"))
+	{
+		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(FMCPParamEcho::Get().BuildPayload()));
+	}
+	if (Method == TEXT("clear_param_echo"))
+	{
+		FMCPParamEcho::Get().Clear();
+		TSharedPtr<FJsonObject> Cleared = MakeShared<FJsonObject>();
+		Cleared->SetBoolField(TEXT("success"), true);
+		Cleared->SetBoolField(TEXT("servedWithoutGameThread"), true);
+		Cleared->SetBoolField(TEXT("enabled"), FMCPParamEcho::Get().IsEnabled());
+		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(Cleared));
 	}
 
 	// Execute handler on game thread
