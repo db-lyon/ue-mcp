@@ -168,6 +168,14 @@ public:
 	// Process a JSON-RPC message
 	FString ProcessMessage(const FString& Message);
 
+	/**
+	 * #821: what this bridge is and what it can do, answered without the game
+	 * thread. Protocol version, handler ABI version, the binary's compile
+	 * timestamp, this instance's identity, and the action list the running
+	 * binary actually registered.
+	 */
+	TSharedPtr<FJsonObject> BuildCapabilitiesPayload();
+
 private:
 	// Server port
 	int32 ServerPort;

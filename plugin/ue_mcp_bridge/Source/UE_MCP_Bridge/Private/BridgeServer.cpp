@@ -14,6 +14,8 @@
 #include "Misc/Paths.h"
 #include "Misc/DateTime.h"
 #include "Misc/Timespan.h"
+#include "Misc/App.h"
+#include "Misc/EngineVersion.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/SecureHash.h"
@@ -541,6 +543,7 @@ void FMCPBridgeServer::WritePortLockfile(int32 PortValue)
 	// instances of one project would otherwise be indistinguishable on disk.
 	Obj->SetStringField(TEXT("instanceId"), InstanceId.ToString(EGuidFormats::DigitsWithHyphens));
 	Obj->SetStringField(TEXT("status"), TEXT("listening"));
+	Obj->SetNumberField(TEXT("protocolVersion"), (double)UEMCP_BRIDGE_PROTOCOL_VERSION);
 	Obj->SetNumberField(TEXT("handlerApiVersion"), (double)UEMCP_BRIDGE_API_VERSION);
 
 	if (!PublishJsonAtomically(FilePath, Obj))
@@ -720,6 +723,59 @@ FString FMCPBridgeServer::CreateJsonRpcError(const TSharedPtr<FJsonObject>& Requ
 	return OutputString;
 }
 
+TSharedPtr<FJsonObject> FMCPBridgeServer::BuildCapabilitiesPayload()
+{
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetBoolField(TEXT("success"), true);
+	Payload->SetBoolField(TEXT("servedWithoutGameThread"), true);
+	Payload->SetNumberField(TEXT("protocolVersion"), (double)UEMCP_BRIDGE_PROTOCOL_VERSION);
+	Payload->SetNumberField(TEXT("handlerApiVersion"), (double)UEMCP_BRIDGE_API_VERSION);
+
+	// The question behind "which version is this" is nearly always "is the
+	// binary I am talking to the one built from the source on disk". A compile
+	// timestamp answers that; a constant read out of a header file cannot,
+	// because the header is the source and the source is what got ahead.
+	Payload->SetStringField(TEXT("builtAt"), ANSI_TO_TCHAR(__DATE__ " " __TIME__));
+	Payload->SetStringField(TEXT("engineVersion"), FEngineVersion::Current().ToString());
+	Payload->SetStringField(TEXT("projectName"), FApp::GetProjectName());
+	Payload->SetStringField(TEXT("instanceId"), InstanceId.ToString(EGuidFormats::DigitsWithHyphens));
+	Payload->SetNumberField(TEXT("pid"), (double)FPlatformProcess::GetCurrentProcessId());
+	Payload->SetNumberField(TEXT("port"), ServerPort);
+	Payload->SetStringField(TEXT("startedAt"), StartedAtUtc.ToIso8601());
+
+	// Named capabilities rather than "anything at or above version N", so a
+	// client can ask about the one thing it needs.
+	static const TCHAR* const Features[] = {
+		TEXT("frame-reassembly"),
+		TEXT("control-frames"),
+		TEXT("capability-handshake"),
+		TEXT("exclusive-port-claim"),
+		TEXT("owned-port-record"),
+	};
+	TArray<TSharedPtr<FJsonValue>> FeatureValues;
+	for (const TCHAR* Feature : Features)
+	{
+		FeatureValues.Add(MakeShared<FJsonValueString>(Feature));
+	}
+	Payload->SetArrayField(TEXT("features"), FeatureValues);
+
+	// The registered action list, from the running binary. This is the only
+	// answer to "does the plugin I reached have this method" that a stale DLL
+	// cannot fake.
+	TArray<FString> Names = HandlerRegistry.GetHandlerNames();
+	Names.Sort();
+	TArray<TSharedPtr<FJsonValue>> ActionValues;
+	ActionValues.Reserve(Names.Num());
+	for (const FString& Name : Names)
+	{
+		ActionValues.Add(MakeShared<FJsonValueString>(Name));
+	}
+	Payload->SetNumberField(TEXT("actionCount"), Names.Num());
+	Payload->SetArrayField(TEXT("actions"), ActionValues);
+
+	return Payload;
+}
+
 FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 {
 	TSharedPtr<FJsonObject> Request = ParseJsonRpcRequest(Message);
@@ -764,6 +820,15 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		Snapshot->SetBoolField(TEXT("success"), true);
 		Snapshot->SetBoolField(TEXT("servedWithoutGameThread"), true);
 		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(Snapshot));
+	}
+
+	// #821: also served here, for the same reason and one more. This is the
+	// question a client asks to find out whether the plugin it reached
+	// understands the protocol it speaks, and it asks it on connect, which is
+	// exactly when the game thread is least likely to answer anything.
+	if (Method == TEXT("get_bridge_capabilities"))
+	{
+		return CreateJsonRpcResponse(Request, MakeShared<FJsonValueObject>(BuildCapabilitiesPayload()));
 	}
 
 	// Execute handler on game thread

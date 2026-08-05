@@ -31,6 +31,26 @@
  *  signature or registration contract changes in a breaking way. */
 #define UEMCP_BRIDGE_API_VERSION 1
 
+/**
+ * Current bridge wire protocol version, reported by get_bridge_capabilities.
+ *
+ * Distinct from the handler ABI above: this describes what a client can expect
+ * of the socket (framing, control frames, the handshake itself), not what a
+ * native plugin can expect of the registration API.
+ *
+ * Version 1 is every bridge built before the handshake existed. Those answer
+ * get_bridge_capabilities with "Unknown method", which is how a client
+ * recognises them.
+ *
+ * Version 2 reassembles messages across reads and frames, answers close and
+ * ping frames, validates the upgrade request, and serves this handshake.
+ *
+ * Bump this when a change would make an older client misread the wire. The
+ * client compares its own expectation against what it is told and names both
+ * numbers when they differ, so the value is only useful if it moves.
+ */
+#define UEMCP_BRIDGE_PROTOCOL_VERSION 2
+
 namespace UEMCP
 {
 	using FExternalHandlerFn = TFunction<TSharedPtr<FJsonValue>(const TSharedPtr<FJsonObject>& Params)>;

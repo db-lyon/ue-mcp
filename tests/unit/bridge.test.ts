@@ -17,8 +17,19 @@ function writeBridgeRecord(dir: string, name: string, body: unknown): void {
   fs.writeFileSync(path.join(dir, "Saved", "UE_MCP_Bridge", name), JSON.stringify(body));
 }
 
+/** What a current bridge answers the capability handshake with. */
+const DEFAULT_CAPABILITIES = {
+  protocolVersion: 2,
+  handlerApiVersion: 1,
+  builtAt: "Aug  5 2026 09 14 22",
+  actionCount: 3,
+  actions: ["first", "second", "ping"],
+};
+
 async function withBridgeServer(
   onRequest: (request: Record<string, unknown>, socket: import("ws").WebSocket) => void,
+  /** null makes the server answer the handshake the way a pre-handshake plugin does. */
+  capabilities: Record<string, unknown> | null = DEFAULT_CAPABILITIES,
 ): Promise<{
   close: () => Promise<void>;
   connectionCount: () => number;
@@ -30,7 +41,18 @@ async function withBridgeServer(
   server.on("connection", (socket) => {
     connections += 1;
     socket.on("message", (data) => {
-      onRequest(JSON.parse(data.toString()) as Record<string, unknown>, socket);
+      const request = JSON.parse(data.toString()) as Record<string, unknown>;
+      if (request.method === "get_bridge_capabilities") {
+        socket.send(
+          JSON.stringify(
+            capabilities
+              ? { id: request.id, result: capabilities }
+              : { id: request.id, error: { code: -32601, message: "Unknown method: get_bridge_capabilities" } },
+          ),
+        );
+        return;
+      }
+      onRequest(request, socket);
     });
   });
 
@@ -160,5 +182,66 @@ describe("bridge state records", () => {
 
     writeBridgeRecord(dir, "bridge-error.json", { status: "bind-failed", pid: 0x7ffffffe });
     expect(readBridgeErrorRecord(uproject)).toBeNull();
+  });
+});
+
+describe("bridge capability handshake", () => {
+  it("records what the bridge says it is on connect", async () => {
+    const server = await withBridgeServer((request, socket) => {
+      socket.send(JSON.stringify({ id: request.id, result: "ok" }));
+    });
+
+    const { EditorBridge } = await import("../../src/bridge.js");
+    const bridge = new EditorBridge("127.0.0.1", server.port);
+
+    try {
+      await bridge.call("ping", {}, 1000);
+      expect(bridge.capabilities?.protocolVersion).toBe(2);
+      expect(bridge.capabilities?.legacy).toBe(false);
+      expect(bridge.capabilities?.builtAt).toBe("Aug  5 2026 09 14 22");
+    } finally {
+      bridge.disconnect();
+      await server.close();
+    }
+  });
+
+  it("names both versions when an older plugin does not know a method", async () => {
+    const server = await withBridgeServer(
+      (request, socket) => {
+        socket.send(JSON.stringify({ id: request.id, error: { code: -32601, message: "Unknown method: set_water_body_property" } }));
+      },
+      null, // a plugin built before the handshake existed
+    );
+
+    const { EditorBridge, CLIENT_PROTOCOL_VERSION } = await import("../../src/bridge.js");
+    const bridge = new EditorBridge("127.0.0.1", server.port);
+
+    try {
+      const failure = await bridge.call("set_water_body_property", {}, 1000).catch((e: Error) => e.message);
+      expect(bridge.capabilities?.legacy).toBe(true);
+      expect(failure).toContain("Unknown method: set_water_body_property");
+      expect(failure).toContain("protocol version 1");
+      expect(failure).toContain(`version ${CLIENT_PROTOCOL_VERSION}`);
+      expect(failure).toContain("npx ue-mcp update");
+    } finally {
+      bridge.disconnect();
+      await server.close();
+    }
+  });
+
+  it("tells the user to update the package when the plugin is newer", async () => {
+    const { describeProtocolMismatch, CLIENT_PROTOCOL_VERSION } = await import("../../src/bridge.js");
+    const message = describeProtocolMismatch({
+      protocolVersion: CLIENT_PROTOCOL_VERSION + 1,
+      legacy: false,
+      builtAt: "Sep 1 2026 12 00 00",
+    });
+    expect(message).toContain(`protocol version ${CLIENT_PROTOCOL_VERSION + 1}`);
+    expect(message).toContain("ue-mcp@latest");
+  });
+
+  it("says nothing when the versions agree", async () => {
+    const { describeProtocolMismatch, CLIENT_PROTOCOL_VERSION } = await import("../../src/bridge.js");
+    expect(describeProtocolMismatch({ protocolVersion: CLIENT_PROTOCOL_VERSION, legacy: false })).toBeNull();
   });
 });

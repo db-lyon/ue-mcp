@@ -7,6 +7,7 @@ import { deploy, deploySummary, findEngineInstall } from "../deployer.js";
 import { resolveConfigPath, findIniFiles, parseIni, buildTagTree } from "../config-parser.js";
 import { parseHeader, collectFiles, findSourceRoots, resolveModuleDir } from "../cpp-parser.js";
 import { readDeployedBridgeApiVersion } from "../plugin/bridge-api.js";
+import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../bridge.js";
 import { searchTools, type ToolSearchHit } from "../tool-search.js";
 import { getWorkarounds } from "../workaround-tracker.js";
 import { readLogState, readEngineSnapshot } from "../engine-observer.js";
@@ -105,7 +106,23 @@ export const projectTool: ToolDef = categoryTool(
           // Bridge ABI version of the deployed plugin in this project.
           // Plugins declaring nativeModule.minBridgeApi compare against
           // this number; older bridges refuse newer plugins.
+          //
+          // Read from the header on disk, which describes the source, not the
+          // loaded binary. bridgeProtocol below comes from the running plugin
+          // itself and is the one to trust when the two disagree.
           bridgeApiVersion: bridgeApiVersion ?? undefined,
+          // #821: what the connected plugin said it was, and whether that
+          // matches the client. A mismatch here is the reason behind an
+          // "Unknown method" on an action the schema advertises.
+          bridgeProtocol: ctx.bridge.capabilities
+            ? {
+                plugin: ctx.bridge.capabilities.protocolVersion,
+                client: CLIENT_PROTOCOL_VERSION,
+                builtAt: ctx.bridge.capabilities.builtAt,
+                actionCount: ctx.bridge.capabilities.actionCount,
+                mismatch: describeProtocolMismatch(ctx.bridge.capabilities) ?? undefined,
+              }
+            : undefined,
           // Pre-built sequences for this project. If the user's request
           // matches a flow's name/description, prefer flow(action="run")
           // over composing the sequence by hand. See SERVER_INSTRUCTIONS.
