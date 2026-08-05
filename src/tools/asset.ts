@@ -2,6 +2,8 @@ import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { Vec3, Rotator } from "../schemas.js";
 import { SESSION_ID } from "../locking.js";
+import { McpError, ErrorCode } from "../errors.js";
+import type { EditorSession } from "../session.js";
 import type { ToolContext } from "../types.js";
 
 /**
@@ -16,6 +18,151 @@ function lockOwner(ctx: ToolContext, params: Record<string, unknown>): string {
   const explicit = params.sessionId;
   if (typeof explicit === "string" && explicit.trim() !== "") return explicit;
   return ctx.session?.lockOwnerId ?? SESSION_ID;
+}
+
+/**
+ * `asset(migrate)`, with a second editor as the destination (#817, plan 6.5).
+ *
+ * Migration is the one action with two editors in it: the call runs in the
+ * editor holding the source assets and its output lands in another project
+ * entirely. Naming that project as a path worked, but left two things to the
+ * caller that the server already knows: which directory it is, and the fact
+ * that the destination editor will not see the new packages until its asset
+ * registry is rescanned. A destination editor answers both.
+ *
+ * The migrate call itself is unchanged and still goes to the source editor's
+ * bridge; `toEditor` never reaches it.
+ */
+async function migrateAssets(
+  ctx: ToolContext,
+  p: Record<string, unknown>,
+): Promise<unknown> {
+  const requested = typeof p.toEditor === "string" ? p.toEditor.trim() : "";
+  const explicitDir = typeof p.destinationContentDir === "string" ? p.destinationContentDir.trim() : "";
+
+  let destination: EditorSession | undefined;
+  let destinationContentDir = explicitDir;
+
+  if (requested) {
+    if (explicitDir) {
+      throw new McpError(
+        ErrorCode.INVALID_PARAMS,
+        "Pass 'toEditor' or 'destinationContentDir', not both: they name the same thing and " +
+          "there is no safe answer when they disagree.",
+      );
+    }
+    if (!ctx.sessions) {
+      throw new McpError(
+        ErrorCode.INVALID_PARAMS,
+        "'toEditor' addresses another editor this server drives, and there is no session registry here. " +
+          "Pass 'destinationContentDir' with the target project's Content folder instead.",
+      );
+    }
+    destination = ctx.sessions.resolve(requested);
+    if (ctx.session && destination === ctx.session) {
+      throw new McpError(
+        ErrorCode.INVALID_PARAMS,
+        `'${destination.name}' is the editor this call runs in, so there is nothing to migrate between. ` +
+          "Address the source editor with 'editor' and the destination with 'toEditor'.",
+      );
+    }
+    const dir = destination.project.contentDir;
+    if (!dir) {
+      throw new McpError(
+        ErrorCode.INVALID_PARAMS,
+        `Editor '${destination.name}' has no project bound, so it has no Content directory to migrate into.`,
+      );
+    }
+    destinationContentDir = dir;
+  }
+
+  const result = (await ctx.bridge.call("migrate", {
+    assetPaths: p.assetPaths,
+    assetPath: p.assetPath,
+    destinationContentDir,
+    includeDependencies: p.includeDependencies,
+    onConflict: p.onConflict,
+    allowDirty: p.allowDirty,
+    dryRun: p.dryRun,
+  })) as Record<string, unknown>;
+
+  if (!destination) return result;
+
+  const out: Record<string, unknown> = {
+    ...(result && typeof result === "object" ? result : { result }),
+    destination: {
+      editor: destination.name,
+      project: destination.project.projectPath,
+      contentDir: destinationContentDir,
+    },
+  };
+  out.rescan = p.dryRun === true
+    ? { attempted: false, reason: "dryRun copied nothing, so there is nothing to rescan." }
+    : await rescanDestination(destination, contentPathsOf(p));
+  return out;
+}
+
+/** The content directories a migrate landed in, derived from what it was asked to move. */
+function contentPathsOf(p: Record<string, unknown>): string[] {
+  const raw = [
+    ...(Array.isArray(p.assetPaths) ? p.assetPaths : []),
+    ...(typeof p.assetPath === "string" ? [p.assetPath] : []),
+  ].filter((v): v is string => typeof v === "string" && v.startsWith("/"));
+
+  const dirs = new Set<string>();
+  for (const assetPath of raw) {
+    const withoutObject = assetPath.split(".")[0];
+    const slash = withoutObject.lastIndexOf("/");
+    dirs.add(slash > 0 ? withoutObject.slice(0, slash) : withoutObject);
+  }
+  // Nothing recognisable to narrow by: rescan the whole game root rather than
+  // leave the destination editor blind to what just landed in it.
+  if (dirs.size === 0) return ["/Game"];
+  return [...dirs].slice(0, 32);
+}
+
+/**
+ * Make the migrated packages visible in the destination editor.
+ *
+ * Unreal does not notice files that appeared under Content while it was
+ * running, so without this the assets are on disk and absent from every
+ * registry query until someone restarts or rescans by hand. `diagnose_registry`
+ * with `reconcile` is a forced synchronous scan of one path, which is exactly
+ * the operation needed and already exists on the bridge.
+ *
+ * Best-effort by design: the migration itself has already succeeded, so a
+ * destination editor that is closed or on an older plugin is reported, not
+ * turned into a failure of a copy that worked.
+ */
+async function rescanDestination(
+  destination: EditorSession,
+  contentPaths: string[],
+): Promise<Record<string, unknown>> {
+  if (!destination.bridge.isConnected) {
+    return {
+      attempted: false,
+      reason:
+        `Editor '${destination.name}' is not connected, so its asset registry could not be rescanned. ` +
+        "The files are on disk; that editor will see them when it next starts.",
+    };
+  }
+  const scanned: string[] = [];
+  const failed: Array<{ path: string; error: string }> = [];
+  for (const contentPath of contentPaths) {
+    try {
+      await destination.guarded.call("diagnose_registry", {
+        path: contentPath,
+        recursive: true,
+        reconcile: true,
+      });
+      scanned.push(contentPath);
+    } catch (e) {
+      failed.push({ path: contentPath, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return failed.length === 0
+    ? { attempted: true, editor: destination.name, scanned }
+    : { attempted: true, editor: destination.name, scanned, failed };
 }
 
 export const assetTool: ToolDef = categoryTool(
@@ -154,7 +301,18 @@ export const assetTool: ToolDef = categoryTool(
     get_mesh_info:        bp("One-call mesh QA: bounds + material slots + skeleton + LOD/vertex counts. Works for both UStaticMesh and USkeletalMesh. Params: assetPath. Returns meshKind, boundsOrigin, boundsExtent, heightM, lodCount, vertexCount, skeletonPath (skeletal only), materialSlots:[{index, slotName, materialPath, isDefaultFallback}], materialCount (#431)", "get_mesh_info"),
     read_import_sources:  bp("Read AssetImportData source filenames on an imported asset (StaticMesh, SkeletalMesh, Texture, Animation, etc.). Returns sources[] of {relativeFilename, absolutePath, timestamp, fileHash, displayLabelName}. Params: assetPath (#270)", "read_import_sources", (p) => ({ assetPath: p.assetPath ?? p.path })),
     get_mesh_collision:   bp("Inspect StaticMesh collision setup. Params: assetPath. Returns collisionTraceFlag, hasSimple/ComplexCollision, element counts (#177)", "get_mesh_collision"),
-    migrate: bp("Copy assets and their dependencies into ANOTHER project's Content directory - the scripted form of the content browser's Migrate (#760). destinationContentDir is the TARGET project's Content folder. The bridge attaches to one editor, so it pushes assets out of the project it is attached to; combined with project(set_project) and editor(restart_editor) that makes the cross-project round trip reachable (attach to the reference project, retarget there, migrate the results into the game project). Unsaved or never-saved assets are refused, because migrate copies files and would otherwise silently omit your edits. Every asset is resolved before anything is copied, and the destination is checked for the packages afterwards rather than reporting success on the call returning. Params: assetPaths (string[]) or assetPath, destinationContentDir, includeDependencies? (default true), onConflict? (skip|overwrite, default skip), allowDirty?, dryRun?", "migrate", (p) => ({ assetPaths: p.assetPaths, assetPath: p.assetPath, destinationContentDir: p.destinationContentDir, includeDependencies: p.includeDependencies, onConflict: p.onConflict, allowDirty: p.allowDirty, dryRun: p.dryRun })),
+    migrate: {
+      description:
+        "Copy assets and their dependencies into ANOTHER project's Content directory - the scripted form of the content browser's Migrate (#760). " +
+        "Name the destination as an editor this server drives (toEditor) and its Content folder is resolved for you and rescanned afterwards, so the assets are visible there without a manual rescan (#817); " +
+        "otherwise pass destinationContentDir, the TARGET project's Content folder, and rescan there yourself. " +
+        "The call runs in the editor holding the SOURCE assets, so it pushes assets out of the project it is attached to. " +
+        "Unsaved or never-saved assets are refused, because migrate copies files and would otherwise silently omit your edits. " +
+        "Every asset is resolved before anything is copied, and the destination is checked for the packages afterwards rather than reporting success on the call returning. " +
+        "Params: assetPaths (string[]) or assetPath, toEditor OR destinationContentDir, includeDependencies? (default true), onConflict? (skip|overwrite, default skip), allowDirty?, dryRun?",
+      destinationEditor: true,
+      handler: async (ctx, p) => migrateAssets(ctx, p),
+    },
     move_folder:          bp("Move/rename entire content folder with redirector fixup in one transaction. Params: sourcePath, destinationPath (#192)", "move_folder"),
     create_folder:        bp("Create empty content browser folder(s). Params: path OR paths[] (e.g. /Game/Foo, /Game/Bar/Baz). Returns per-path created/existed/failed (#212)", "create_folder", (p) => ({ path: p.path, paths: p.paths })),
     delete_folder:        bp("Delete content browser folder(s) - counterpart to delete_asset, which leaves the parent directory entry behind as an orphan. Empty folders only by default; pass force=true to also delete any assets still inside (Content Browser 'Delete folder' equivalent). Per-path status (deleted/absent/failed) with reason (invalid_path/protected_path/not_empty/delete_failed) and a sample of contained assets on not_empty entries. Params: path OR paths[], force?", "delete_folder", (p) => ({ path: p.path, paths: p.paths, force: p.force })),

@@ -119,6 +119,8 @@ export interface ToolDef {
    *  Dispatch reads it to know whether an `editor` param is a routing
    *  instruction (strip it) or one of the tool's own params (forward it). */
   injectedEditorParam?: boolean;
+  /** Set once the destination-editor parameter has been injected (#817). */
+  injectedMigrateParam?: boolean;
   /**
    * Build an independent copy of this tool (#817).
    *
@@ -152,6 +154,7 @@ export function cloneToolDef(tool: ToolDef): ToolDef {
     copy.description = tool.description;
     copy.schema = { ...tool.schema };
     copy.injectedEditorParam = tool.injectedEditorParam;
+    copy.injectedMigrateParam = tool.injectedMigrateParam;
     return copy;
   }
   return {
@@ -173,6 +176,14 @@ export interface ActionSpec {
   handler?: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
   /** Override the bridge call timeout in milliseconds. Defaults to 30s. */
   timeoutMs?: number;
+  /**
+   * This action moves something INTO a second editor, so its category takes a
+   * `toEditor` parameter alongside the `editor` one every category gets (#817).
+   * Declared on the action rather than assumed from its name, and injected
+   * under the same rule: only while this server drives more than one editor.
+   * `asset(migrate)` is the one action that has it.
+   */
+  destinationEditor?: boolean;
 }
 
 /**
@@ -216,6 +227,59 @@ export function removeEditorTarget(tool: ToolDef): boolean {
   tool.schema = rest;
   tool.injectedEditorParam = false;
   return true;
+}
+
+/**
+ * The destination editor for an action that moves content between two of them
+ * (#817). `editor` says where a call runs; this says where its output lands.
+ */
+export const MIGRATE_TARGET_PARAM = "toEditor";
+
+/** Does any of this tool's actions move content into a second editor? */
+export function hasDestinationEditorAction(tool: ToolDef): boolean {
+  return Object.values(tool.actions).some((spec) => spec.destinationEditor === true);
+}
+
+/**
+ * Add the destination parameter, under the same rule as the target parameter:
+ * only while more than one editor is registered, and never over a parameter the
+ * tool already declares.
+ */
+export function injectMigrateTarget(
+  tool: ToolDef,
+  sessionNames: string[],
+): { injected: boolean; reason?: string } {
+  if (!hasDestinationEditorAction(tool)) return { injected: false };
+  if (!tool.injectedMigrateParam && MIGRATE_TARGET_PARAM in tool.schema) {
+    return {
+      injected: false,
+      reason: `'${tool.name}' declares its own '${MIGRATE_TARGET_PARAM}' parameter, so cross-editor migration is unavailable for it.`,
+    };
+  }
+  tool.schema = { ...tool.schema, [MIGRATE_TARGET_PARAM]: migrateTargetSchema(sessionNames) };
+  tool.injectedMigrateParam = true;
+  return { injected: true };
+}
+
+/** Undo injectMigrateTarget, restoring the single-editor schema exactly. */
+export function removeMigrateTarget(tool: ToolDef): boolean {
+  if (!tool.injectedMigrateParam) return false;
+  const { [MIGRATE_TARGET_PARAM]: _dropped, ...rest } = tool.schema;
+  tool.schema = rest;
+  tool.injectedMigrateParam = false;
+  return true;
+}
+
+export function migrateTargetSchema(sessionNames: string[]): z.ZodType {
+  return z
+    .string()
+    .optional()
+    .describe(
+      `migrate: the editor to migrate INTO (${sessionNames.join(", ")}), by session name, ` +
+        `project name, or .uproject path. Its Content directory becomes destinationContentDir ` +
+        `and its asset registry is rescanned afterwards, so the assets are visible there ` +
+        `without a manual rescan. Pass this or destinationContentDir, not both.`,
+    );
 }
 
 export function editorTargetSchema(sessionNames: string[]): z.ZodType {

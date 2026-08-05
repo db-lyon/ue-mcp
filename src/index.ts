@@ -18,6 +18,8 @@ import {
   isDirectiveResponse,
   injectEditorTarget,
   removeEditorTarget,
+  injectMigrateTarget,
+  removeMigrateTarget,
   stripEditorTarget,
   sessionContext,
   EDITOR_TARGET_PARAM,
@@ -439,8 +441,13 @@ async function main() {
       if (signature) {
         const outcome = injectEditorTarget(tool, names);
         if (!outcome.injected && outcome.reason) console.error(`[ue-mcp] ${outcome.reason}`);
+        // asset(migrate) also takes a DESTINATION editor: it is the one action
+        // whose output lands in a project other than the one it runs in (6.5).
+        const destination = injectMigrateTarget(tool, names);
+        if (!destination.injected && destination.reason) console.error(`[ue-mcp] ${destination.reason}`);
       } else {
         removeEditorTarget(tool);
+        removeMigrateTarget(tool);
       }
       const registration = registeredTools.get(tool.name);
       if (registration) registration.update({ paramsSchema: tool.schema });
