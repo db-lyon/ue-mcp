@@ -17,6 +17,8 @@ Prefer `beforeWrite`/`afterWrite` for anything write-oriented so reads are never
 
 The guard task is invoked with `{ method, params, paths }` (`paths` = the existing on-disk files the call will touch, empty for non-writes) plus `result` for `after` phases.
 
+The phase name has to be one of the four. A task named `guard.policy.beforeWrites` fails the server at boot with the list of valid phases, rather than registering a guard that never runs. A guard that silently does nothing is the worst outcome for the thing standing between an agent and a mutation, so the typo is worth a loud failure.
+
 ## A deny guard (access policy)
 
 Blocks writes outside a sandbox path. A `before`/`beforeWrite` guard denies by returning `success: false` (or throwing); the underlying call never runs and the agent gets a `WRITE_BLOCKED` error carrying your message.

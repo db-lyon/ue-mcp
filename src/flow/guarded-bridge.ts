@@ -6,16 +6,14 @@
  * hook runs in reverse order and may replace the result. With an empty registry
  * this is a pure pass-through, so it is always safe to install.
  *
- * Only `call` is gated; connection lifecycle delegates straight through.
+ * The pipeline itself is `runGuarded` from flowkit; what this class adds is the
+ * `IBridge` shape. Only `call` is gated; connection lifecycle delegates
+ * straight through.
  */
+import { runGuarded } from "@db-lyon/flowkit/guard";
 import type { BridgeTarget, IBridge } from "../bridge.js";
 import type { EditorSession } from "../session.js";
-import {
-  GuardRegistry,
-  makeCallContext,
-  type BridgeGuard,
-  type ResolveExistingFile,
-} from "./guard.js";
+import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
 
 export type { ResolveExistingFile } from "./guard.js";
 
@@ -50,34 +48,21 @@ export class GuardedBridge implements IBridge {
     params?: Record<string, unknown>,
     timeoutMs?: number,
   ): Promise<unknown> {
+    // `runGuarded` is already a pass-through on an empty registry, but building
+    // the context is not free and every bridge call lands here. Most servers run
+    // with no guards at all, so skip the allocation outright.
     if (this.registry.size === 0) {
       return this.inner.call(method, params, timeoutMs);
     }
 
-    const ctx = makeCallContext(method, params ?? {}, timeoutMs, this.inner, this.resolveExistingFile, this.session);
-
-    // Resolve applicability once so `before`/`after` see a consistent set.
-    const applicable: BridgeGuard[] = [];
-    for (const g of this.registry.list()) {
-      if (!g.appliesTo || (await g.appliesTo(ctx))) applicable.push(g);
-    }
-
-    // before: in order. A throw denies the call and propagates unchanged.
-    for (const g of applicable) {
-      if (g.before) await g.before(ctx);
-    }
-
-    let result = await this.inner.call(method, params, timeoutMs);
-
-    // after: in reverse order. A returned value replaces the result.
-    for (let i = applicable.length - 1; i >= 0; i--) {
-      const g = applicable[i];
-      if (g.after) {
-        const replaced = await g.after(ctx, result);
-        if (replaced !== undefined) result = replaced;
-      }
-    }
-
-    return result;
+    const ctx = makeCallContext(
+      method,
+      params ?? {},
+      timeoutMs,
+      this.inner,
+      this.resolveExistingFile,
+      this.session,
+    );
+    return runGuarded(ctx, this.registry, () => this.inner.call(method, params, timeoutMs));
   }
 }

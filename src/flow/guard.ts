@@ -1,19 +1,25 @@
 /**
- * A general guard pipeline around the editor bridge, in the shape of NestJS
- * guards/interceptors but agnostic to what any guard does.
+ * The bridge's binding of flowkit's guard pipeline.
  *
- * Every mutating and non-mutating action crosses `IBridge.call`. A `GuardedBridge`
- * runs a registry of `BridgeGuard`s on that seam: each guard may inspect the call,
- * run a `before` hook that can veto it (throw) or act on it (e.g. check a file
- * out), and an optional `after` hook that can observe or replace the result
- * (audit, transform). The chain itself knows nothing about source control,
- * policy, rate limiting, or any concrete concern - those are guards.
+ * Every mutating and non-mutating action crosses `IBridge.call`. That seam is
+ * guarded: each guard may inspect the call, run a `before` hook that can veto
+ * it (throw) or act on it (e.g. check a file out), and an `after` hook that can
+ * observe or replace the result. The chain itself knows nothing about source
+ * control, policy, rate limiting, or any concrete concern - those are guards.
  *
- * `CallContext` is the per-call execution context handed to guards. It carries
- * the raw method/params and a lazy enrichment layer (`write()` / `writeFiles()`)
- * that write-oriented guards may consult, computed on demand and cached so a
- * guard that ignores writes pays nothing.
+ * The pipeline, its ordering, and the `guard.<name>.<phase>` task convention
+ * live in `@db-lyon/flowkit/guard`, because none of that is about Unreal. What
+ * stays here is what is: the shape of a bridge call, and the write
+ * classification in `write-methods.ts` that decides which content paths a call
+ * is about to modify.
  */
+import {
+  GuardRegistry as FlowkitGuardRegistry,
+  guardContextBase,
+  lazy,
+  type Guard,
+  type GuardContext,
+} from "@db-lyon/flowkit/guard";
 import type { IBridge } from "../bridge.js";
 import type { EditorSession } from "../session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";
@@ -21,8 +27,8 @@ import { classifyWrite, type WriteClassification } from "./write-methods.js";
 /** Resolve a UE content path to an absolute on-disk file, or null if it does not exist. */
 export type ResolveExistingFile = (contentPath: string) => string | null;
 
-/** Per-call execution context passed to every guard. Analogous to a NestJS ExecutionContext. */
-export interface CallContext {
+/** Per-call execution context passed to every guard. */
+export interface CallContext extends GuardContext {
   readonly method: string;
   readonly params: Record<string, unknown>;
   readonly timeoutMs?: number;
@@ -30,8 +36,6 @@ export interface CallContext {
   readonly bridge: IBridge;
   /** The editor this call is bound to. Absent only for a bridge built outside a session. */
   readonly session?: EditorSession;
-  /** Scratch space shared across guards for the life of one call. */
-  readonly meta: Map<string, unknown>;
   /** Lazy: how this call classifies as a write (which content paths it touches). Cached. */
   write(): WriteClassification;
   /** Lazy: absolute, existing on-disk files this call will modify (subset of write paths). Cached. */
@@ -39,41 +43,22 @@ export interface CallContext {
 }
 
 /**
- * A guard on the bridge pipeline. Any of the hooks is optional. Guards are
- * agnostic: source control, access policy, audit, rate limiting, and approval
- * gating are all just guards.
+ * A guard on the bridge pipeline. Guards are agnostic: source control, access
+ * policy, audit, rate limiting, and approval gating are all just guards.
  */
-export interface BridgeGuard {
-  /** Stable identifier, for logging and ordering ties. */
-  readonly name: string;
-  /** Lower runs first in `before` and last in `after`. Default 0. */
-  readonly order?: number;
-  /** Whether this guard participates for a given call. Default: always. */
-  appliesTo?(ctx: CallContext): boolean | Promise<boolean>;
-  /** Runs before the call. Throw to DENY the call; side effects are allowed. */
-  before?(ctx: CallContext): Promise<void>;
-  /** Runs after a successful call. Return a value to replace the result; return nothing to leave it. */
-  after?(ctx: CallContext, result: unknown): Promise<unknown | void>;
-}
+export type BridgeGuard = Guard<CallContext, unknown>;
 
-/** An ordered set of guards. Built-in guards register directly; plugin guards are discovered. */
-export class GuardRegistry {
-  private guards: BridgeGuard[] = [];
+/** The bridge's guard set. Built-in guards register directly; plugin guards are discovered. */
+export class GuardRegistry extends FlowkitGuardRegistry<CallContext, unknown> {}
 
-  register(guard: BridgeGuard): this {
-    this.guards.push(guard);
-    // Stable order: by `order`, then by name for determinism.
-    this.guards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
-    return this;
-  }
-
-  list(): readonly BridgeGuard[] {
-    return this.guards;
-  }
-
-  get size(): number {
-    return this.guards.length;
-  }
+/**
+ * The scope a `guard.<name>.<phase>Write` task binds to: the call resolves to
+ * existing on-disk files it is about to modify. Declared here rather than in
+ * the task layer so the hand-written and task-backed guards agree on what
+ * "write" means.
+ */
+export function writeScope(ctx: CallContext): boolean {
+  return ctx.writeFiles().length > 0;
 }
 
 /** Build the per-call context, wiring the lazy write-enrichment helpers. */
@@ -85,18 +70,22 @@ export function makeCallContext(
   resolveExistingFile: ResolveExistingFile,
   session?: EditorSession,
 ): CallContext {
-  let writeCache: WriteClassification | undefined;
-  let filesCache: string[] | undefined;
+  const ctx = {
+    ...guardContextBase(),
+    method,
+    params,
+    timeoutMs,
+    bridge: rawBridge,
+    session,
+  } as CallContext;
 
-  const write = (): WriteClassification => (writeCache ??= classifyWrite(method, params));
-  const writeFiles = (): string[] => {
-    if (filesCache) return filesCache;
+  const write = lazy(ctx, "write", () => classifyWrite(method, params));
+  const writeFiles = lazy(ctx, "writeFiles", () => {
     const c = write();
-    filesCache = c.writes
+    return c.writes
       ? c.contentPaths.map(resolveExistingFile).filter((f): f is string => f !== null)
       : [];
-    return filesCache;
-  };
+  });
 
-  return { method, params, timeoutMs, bridge: rawBridge, session, meta: new Map(), write, writeFiles };
+  return Object.assign(ctx, { write, writeFiles });
 }
