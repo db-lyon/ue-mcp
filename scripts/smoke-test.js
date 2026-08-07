@@ -156,14 +156,23 @@ const PARAM_OVERRIDES = {
   run_automation_tests:        { filter: "__smoke_no_match__", maxTests: 0 },
 };
 
-// Handlers the smoke sweep must NOT invoke: they trigger Live Coding, which
-// disrupts a developer's own Live Coding session and can load stale hot-patches
-// over a freshly built DLL. Plugin changes are validated by full UBT rebuilds,
-// never Live Coding, so these are skipped (still counted as covered).
+// Handlers the smoke sweep must NOT invoke, because calling them breaks the
+// sweep or the developer's machine rather than testing anything. Still counted
+// as covered.
+//
+// Live Coding: disrupts a developer's own Live Coding session and can load
+// stale hot-patches over a freshly built DLL. Plugin changes are validated by
+// full UBT rebuilds, never Live Coding.
+//
+// request_editor_shutdown: shuts down the editor the rest of the sweep needs.
+// It defaults to requireClean, and `save_dirty` runs earlier in the same sweep,
+// so by the time it is reached the editor is clean and the shutdown really is
+// scheduled. Every handler after it then fails against a dead bridge.
 const SKIP_METHODS = new Set([
   "live_coding_compile",
   "live_coding_status",
   "hot_reload",
+  "request_editor_shutdown",
 ]);
 
 // Direct RPC helper for setup/teardown (separate from rpcCall which classifies
@@ -364,7 +373,7 @@ async function main() {
     const id = nextId++;
     if (SKIP_METHODS.has(method)) {
       results.push({ status: "SKIPPED", method, file });
-      process.stdout.write(`\r  [${id}/${handlers.length}] ${method} ${YELLOW}SKIPPED (never invoke Live Coding)${RESET}\n`);
+      process.stdout.write(`\r  [${id}/${handlers.length}] ${method} ${YELLOW}SKIPPED (unsafe to invoke in a sweep)${RESET}\n`);
       continue;
     }
     process.stdout.write(`${DIM}  [${id}/${handlers.length}] ${method} ...${RESET}`);
@@ -440,7 +449,7 @@ async function main() {
   console.log(`  ${GREEN}Success        : ${successes.length}${RESET}`);
   console.log(`  ${YELLOW}Expected Error : ${expectedErrors.length}${RESET}`);
   console.log(`  ${RED}Failure        : ${failures.length}${RESET}`);
-  console.log(`  ${YELLOW}Skipped        : ${skipped.length} (Live Coding handlers)${RESET}`);
+  console.log(`  ${YELLOW}Skipped        : ${skipped.length} (unsafe to invoke in a sweep)${RESET}`);
 
   if (failures.length > 0) {
     console.log(`\n${RED}${BOLD}SMOKE TEST FAILED${RESET} - ${failures.length} handler(s) did not respond.\n`);
