@@ -1,4 +1,5 @@
 #include "SequencerHandlers.h"
+#include "SequencerHandlers_Internal.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
@@ -21,6 +22,7 @@
 #include "Sections/MovieScene3DAttachSection.h"
 #include "Sections/MovieScene3DTransformSection.h"
 #include "Sections/MovieSceneCameraCutSection.h"
+#include "Channels/MovieSceneChannel.h"
 #include "Channels/MovieSceneDoubleChannel.h"
 #include "Channels/MovieSceneFloatChannel.h"
 #include "Channels/MovieSceneChannelProxy.h"
@@ -158,15 +160,30 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("name"), Sequence->GetName());
 	Result->SetStringField(TEXT("path"), Sequence->GetPathName());
 
-	// Display rate
-	FFrameRate DisplayRate = MovieScene->GetDisplayRate();
+	const FFrameRate DisplayRate = MovieScene->GetDisplayRate();
+	const FFrameRate TickResolution = MovieScene->GetTickResolution();
+	if (!UEMCP::SequencerInfo::IsUsableFrameRate(DisplayRate) ||
+		!UEMCP::SequencerInfo::IsUsableFrameRate(TickResolution))
+	{
+		return MCPError(FString::Printf(
+			TEXT("LevelSequence has invalid timing rates (displayRate=%d/%d, tickResolution=%d/%d)"),
+			DisplayRate.Numerator,
+			DisplayRate.Denominator,
+			TickResolution.Numerator,
+			TickResolution.Denominator));
+	}
+
 	TSharedPtr<FJsonObject> DisplayRateObj = MakeShared<FJsonObject>();
-	DisplayRateObj->SetNumberField(TEXT("numerator"), DisplayRate.Numerator);
-	DisplayRateObj->SetNumberField(TEXT("denominator"), DisplayRate.Denominator);
+	UEMCP::SequencerInfo::SetFrameRateFields(*DisplayRateObj, DisplayRate);
 	Result->SetObjectField(TEXT("displayRate"), DisplayRateObj);
 
-	// Playback range
-	TRange<FFrameNumber> PlaybackRange = MovieScene->GetPlaybackRange();
+	TSharedPtr<FJsonObject> TickResolutionObj = MakeShared<FJsonObject>();
+	UEMCP::SequencerInfo::SetFrameRateFields(*TickResolutionObj, TickResolution);
+	Result->SetObjectField(TEXT("tickResolution"), TickResolutionObj);
+
+	// Keep the legacy startFrame/endFrame values in tick-resolution units.
+	// The explicit fields below remove that ambiguity without changing callers.
+	const TRange<FFrameNumber> PlaybackRange = MovieScene->GetPlaybackRange();
 	TSharedPtr<FJsonObject> RangeObj = MakeShared<FJsonObject>();
 	if (PlaybackRange.HasLowerBound())
 	{
@@ -176,27 +193,62 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 	{
 		RangeObj->SetNumberField(TEXT("endFrame"), PlaybackRange.GetUpperBoundValue().Value);
 	}
+	UEMCP::SequencerInfo::SetTimingRangeFields(*RangeObj, PlaybackRange, TickResolution, DisplayRate);
 	Result->SetObjectField(TEXT("playbackRange"), RangeObj);
 
-	// #52: optional section-level detail (attach sockets, first transform key values)
 	const bool bIncludeDetails = OptionalBool(Params, TEXT("includeSectionDetails"));
+	UEMCP::SequencerInfo::FDetailBudget DetailBudget;
 
-	auto ExtractSectionDetails = [&](UMovieSceneTrack* Track, TSharedPtr<FJsonObject>& TrackObj)
+	if (bIncludeDetails)
+	{
+		TSharedPtr<FJsonObject> LimitsObj = MakeShared<FJsonObject>();
+		LimitsObj->SetNumberField(TEXT("maxSections"), UEMCP::SequencerInfo::MaxDetailedSections);
+		LimitsObj->SetNumberField(TEXT("maxChannels"), UEMCP::SequencerInfo::MaxDetailedChannels);
+		LimitsObj->SetNumberField(TEXT("maxKeyTimes"), UEMCP::SequencerInfo::MaxDetailedKeyTimes);
+		LimitsObj->SetNumberField(TEXT("maxKeyTimesPerChannel"), UEMCP::SequencerInfo::MaxKeyTimesPerChannel);
+		Result->SetObjectField(TEXT("detailLimits"), LimitsObj);
+	}
+
+	auto ExtractSectionDetails = [&](UMovieSceneTrack* Track, const TSharedPtr<FJsonObject>& TrackObj)
 	{
 		if (!bIncludeDetails || !Track) return;
+
+		const TArray<UMovieSceneSection*>& AllSections = Track->GetAllSections();
 		TArray<TSharedPtr<FJsonValue>> SectionsArr;
-		for (UMovieSceneSection* Section : Track->GetAllSections())
+		for (int32 SectionIndex = 0; SectionIndex < AllSections.Num(); ++SectionIndex)
 		{
-			if (!Section) continue;
+			if (DetailBudget.Sections <= 0)
+			{
+				DetailBudget.bTruncated = true;
+				break;
+			}
+
+			UMovieSceneSection* Section = AllSections[SectionIndex];
+			if (!Section)
+			{
+				DetailBudget.bTruncated = true;
+				continue;
+			}
+			--DetailBudget.Sections;
+
 			TSharedPtr<FJsonObject> SObj = MakeShared<FJsonObject>();
+			SObj->SetNumberField(TEXT("index"), SectionIndex);
+			SObj->SetStringField(TEXT("class"), Section->GetClass()->GetName());
+			UEMCP::SequencerInfo::SetTimingRangeFields(
+				*SObj,
+				Section->GetTrueRange(),
+				TickResolution,
+				DisplayRate);
+
 			if (UMovieScene3DAttachSection* Attach = Cast<UMovieScene3DAttachSection>(Section))
 			{
 				SObj->SetStringField(TEXT("attachSocket"), Attach->AttachSocketName.ToString());
 				SObj->SetStringField(TEXT("attachComponent"), Attach->AttachComponentName.ToString());
 			}
-			if (UMovieScene3DTransformSection* Xf = Cast<UMovieScene3DTransformSection>(Section))
+
+			const FMovieSceneChannelProxy& Proxy = Section->GetChannelProxy();
+			if (Cast<UMovieScene3DTransformSection>(Section))
 			{
-				FMovieSceneChannelProxy& Proxy = Xf->GetChannelProxy();
 				TArray<FName> ChannelNames = {
 					TEXT("Location.X"), TEXT("Location.Y"), TEXT("Location.Z"),
 					TEXT("Rotation.X"), TEXT("Rotation.Y"), TEXT("Rotation.Z"),
@@ -229,11 +281,135 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 				}
 				SObj->SetObjectField(TEXT("firstKeyValues"), FirstKeys);
 			}
-			SObj->SetStringField(TEXT("class"), Section->GetClass()->GetName());
+
+			const int32 ChannelCount = Proxy.NumChannels();
+			TArray<TSharedPtr<FJsonValue>> ChannelsArr;
+			bool bStopChannels = false;
+			for (const FMovieSceneChannelEntry& Entry : Proxy.GetAllEntries())
+			{
+				const FString ChannelType = Entry.GetChannelTypeName().ToString();
+				const TArrayView<FMovieSceneChannel* const> Channels = Entry.GetChannels();
+				const TArrayView<const FMovieSceneChannelMetaData> MetaData = Entry.GetMetaData();
+
+				for (int32 ChannelIndex = 0; ChannelIndex < Channels.Num(); ++ChannelIndex)
+				{
+					if (DetailBudget.Channels <= 0)
+					{
+						DetailBudget.bTruncated = true;
+						bStopChannels = true;
+						break;
+					}
+
+					FMovieSceneChannel* Channel = Channels[ChannelIndex];
+					if (!Channel)
+					{
+						DetailBudget.bTruncated = true;
+						continue;
+					}
+					--DetailBudget.Channels;
+
+					FString ChannelName;
+					if (MetaData.IsValidIndex(ChannelIndex) && !MetaData[ChannelIndex].Name.IsNone())
+					{
+						ChannelName = MetaData[ChannelIndex].Name.ToString();
+					}
+					else
+					{
+						ChannelName = FString::Printf(TEXT("%s[%d]"), *ChannelType, ChannelIndex);
+					}
+
+					TArray<FFrameNumber> KeyTimes;
+					if (DetailBudget.KeyTimes > 0)
+					{
+						Channel->GetKeys(TRange<FFrameNumber>::All(), &KeyTimes, nullptr);
+						KeyTimes.Sort([](const FFrameNumber A, const FFrameNumber B)
+						{
+							return A.Value < B.Value;
+						});
+					}
+
+					const int32 KeyCount = FMath::Max(Channel->GetNumKeys(), KeyTimes.Num());
+					const int32 KeyTimesToReturn = FMath::Min3(
+						KeyTimes.Num(),
+						UEMCP::SequencerInfo::MaxKeyTimesPerChannel,
+						DetailBudget.KeyTimes);
+
+					TArray<TSharedPtr<FJsonValue>> KeyTimesArr;
+					KeyTimesArr.Reserve(KeyTimesToReturn);
+					for (int32 KeyIndex = 0; KeyIndex < KeyTimesToReturn; ++KeyIndex)
+					{
+						KeyTimesArr.Add(MakeShared<FJsonValueObject>(
+							UEMCP::SequencerInfo::MakeKeyTimeObject(
+								KeyTimes[KeyIndex],
+								TickResolution,
+								DisplayRate)));
+					}
+					DetailBudget.KeyTimes -= KeyTimesToReturn;
+
+					const bool bKeyTimesTruncated = KeyTimesToReturn < KeyCount;
+					DetailBudget.bTruncated |= bKeyTimesTruncated;
+
+					TSharedPtr<FJsonObject> ChannelObj = MakeShared<FJsonObject>();
+					ChannelObj->SetNumberField(TEXT("index"), ChannelIndex);
+					ChannelObj->SetStringField(TEXT("name"), ChannelName);
+					ChannelObj->SetStringField(TEXT("type"), ChannelType);
+					ChannelObj->SetNumberField(TEXT("keyCount"), KeyCount);
+					ChannelObj->SetArrayField(TEXT("keyTimes"), KeyTimesArr);
+					ChannelObj->SetBoolField(TEXT("keyTimesTruncated"), bKeyTimesTruncated);
+					ChannelsArr.Add(MakeShared<FJsonValueObject>(ChannelObj));
+				}
+
+				if (bStopChannels) break;
+			}
+
+			const bool bChannelsTruncated = ChannelsArr.Num() < ChannelCount;
+			DetailBudget.bTruncated |= bChannelsTruncated;
+			SObj->SetNumberField(TEXT("channelCount"), ChannelCount);
+			SObj->SetArrayField(TEXT("channels"), ChannelsArr);
+			SObj->SetBoolField(TEXT("channelsTruncated"), bChannelsTruncated);
 			SectionsArr.Add(MakeShared<FJsonValueObject>(SObj));
 		}
+
+		const bool bSectionsTruncated = SectionsArr.Num() < AllSections.Num();
+		DetailBudget.bTruncated |= bSectionsTruncated;
 		TrackObj->SetArrayField(TEXT("sections"), SectionsArr);
+		TrackObj->SetBoolField(TEXT("sectionsTruncated"), bSectionsTruncated);
 	};
+
+	auto MakeTrackObject = [&](UMovieSceneTrack* Track) -> TSharedPtr<FJsonObject>
+	{
+		TSharedPtr<FJsonObject> TrackObj = MakeShared<FJsonObject>();
+		TrackObj->SetStringField(TEXT("name"), Track->GetTrackName().ToString());
+		TrackObj->SetStringField(TEXT("class"), Track->GetClass()->GetName());
+		TrackObj->SetNumberField(TEXT("sectionCount"), Track->GetAllSections().Num());
+		ExtractSectionDetails(Track, TrackObj);
+		return TrackObj;
+	};
+
+	// Camera cuts are stored separately from UMovieScene::GetTracks(). Emit the
+	// camera-cut track first so the root-track inspection is never hidden behind
+	// the bounded detail budget, then append the ordinary root tracks once each.
+	TArray<UMovieSceneTrack*> RootTracks;
+	if (UMovieSceneTrack* CameraCutTrack = MovieScene->GetCameraCutTrack())
+	{
+		RootTracks.Add(CameraCutTrack);
+	}
+	for (UMovieSceneTrack* Track : MovieScene->GetTracks())
+	{
+		if (Track && !RootTracks.Contains(Track))
+		{
+			RootTracks.Add(Track);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> MasterTracksArray;
+	for (UMovieSceneTrack* Track : RootTracks)
+	{
+		if (!Track) continue;
+		MasterTracksArray.Add(MakeShared<FJsonValueObject>(MakeTrackObject(Track)));
+	}
+	Result->SetArrayField(TEXT("masterTracks"), MasterTracksArray);
+	Result->SetNumberField(TEXT("masterTrackCount"), MasterTracksArray.Num());
 
 	// #556: collect the Sequencer binding tags (group labels) that reference a
 	// given binding guid, from the MovieScene's tagged-binding map.
@@ -254,80 +430,47 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJs
 		return Out;
 	};
 
-	// Bindings (possessables and spawnables)
 	TArray<TSharedPtr<FJsonValue>> BindingsArray;
-	for (int32 i = 0; i < MovieScene->GetPossessableCount(); ++i)
+	auto AppendBinding = [&](const FString& Name, const FGuid& Guid, const TCHAR* Type)
 	{
-		const FMovieScenePossessable& Possessable = MovieScene->GetPossessable(i);
 		TSharedPtr<FJsonObject> BindingObj = MakeShared<FJsonObject>();
-		BindingObj->SetStringField(TEXT("name"), Possessable.GetName());
-		BindingObj->SetStringField(TEXT("guid"), Possessable.GetGuid().ToString());
-		BindingObj->SetStringField(TEXT("type"), TEXT("possessable"));
-		BindingObj->SetArrayField(TEXT("tags"), TagsForGuid(Possessable.GetGuid()));
+		BindingObj->SetStringField(TEXT("name"), Name);
+		BindingObj->SetStringField(TEXT("guid"), Guid.ToString());
+		BindingObj->SetStringField(TEXT("type"), Type);
+		BindingObj->SetArrayField(TEXT("tags"), TagsForGuid(Guid));
 
-		// List tracks for this binding (with optional section detail)
 		TArray<TSharedPtr<FJsonValue>> TrackArr;
-		const FMovieSceneBinding* Binding = MovieScene->FindBinding(Possessable.GetGuid());
+		const FMovieSceneBinding* Binding = MovieScene->FindBinding(Guid);
 		if (Binding)
 		{
 			for (UMovieSceneTrack* Track : Binding->GetTracks())
 			{
 				if (!Track) continue;
-				TSharedPtr<FJsonObject> TObj = MakeShared<FJsonObject>();
-				TObj->SetStringField(TEXT("class"), Track->GetClass()->GetName());
-				TObj->SetStringField(TEXT("name"), Track->GetTrackName().ToString());
-				ExtractSectionDetails(Track, TObj);
-				TrackArr.Add(MakeShared<FJsonValueObject>(TObj));
+				TrackArr.Add(MakeShared<FJsonValueObject>(MakeTrackObject(Track)));
 			}
 		}
 		BindingObj->SetArrayField(TEXT("tracks"), TrackArr);
-
 		BindingsArray.Add(MakeShared<FJsonValueObject>(BindingObj));
+	};
+
+	for (int32 i = 0; i < MovieScene->GetPossessableCount(); ++i)
+	{
+		const FMovieScenePossessable& Possessable = MovieScene->GetPossessable(i);
+		AppendBinding(Possessable.GetName(), Possessable.GetGuid(), TEXT("possessable"));
 	}
 
 	for (int32 i = 0; i < MovieScene->GetSpawnableCount(); ++i)
 	{
 		const FMovieSceneSpawnable& Spawnable = MovieScene->GetSpawnable(i);
-		TSharedPtr<FJsonObject> BindingObj = MakeShared<FJsonObject>();
-		BindingObj->SetStringField(TEXT("name"), Spawnable.GetName());
-		BindingObj->SetStringField(TEXT("guid"), Spawnable.GetGuid().ToString());
-		BindingObj->SetStringField(TEXT("type"), TEXT("spawnable"));
-		BindingObj->SetArrayField(TEXT("tags"), TagsForGuid(Spawnable.GetGuid()));
-
-		TArray<TSharedPtr<FJsonValue>> TrackArr;
-		const FMovieSceneBinding* Binding = MovieScene->FindBinding(Spawnable.GetGuid());
-		if (Binding)
-		{
-			for (UMovieSceneTrack* Track : Binding->GetTracks())
-			{
-				if (!Track) continue;
-				TSharedPtr<FJsonObject> TObj = MakeShared<FJsonObject>();
-				TObj->SetStringField(TEXT("class"), Track->GetClass()->GetName());
-				TObj->SetStringField(TEXT("name"), Track->GetTrackName().ToString());
-				ExtractSectionDetails(Track, TObj);
-				TrackArr.Add(MakeShared<FJsonValueObject>(TObj));
-			}
-		}
-		BindingObj->SetArrayField(TEXT("tracks"), TrackArr);
-
-		BindingsArray.Add(MakeShared<FJsonValueObject>(BindingObj));
+		AppendBinding(Spawnable.GetName(), Spawnable.GetGuid(), TEXT("spawnable"));
 	}
 	Result->SetArrayField(TEXT("bindings"), BindingsArray);
 	Result->SetNumberField(TEXT("bindingCount"), BindingsArray.Num());
 
-	// Master tracks
-	TArray<TSharedPtr<FJsonValue>> MasterTracksArray;
-	for (UMovieSceneTrack* Track : MovieScene->GetTracks())
+	if (bIncludeDetails)
 	{
-		if (!Track) continue;
-		TSharedPtr<FJsonObject> TrackObj = MakeShared<FJsonObject>();
-		TrackObj->SetStringField(TEXT("name"), Track->GetTrackName().ToString());
-		TrackObj->SetStringField(TEXT("class"), Track->GetClass()->GetName());
-		TrackObj->SetNumberField(TEXT("sectionCount"), Track->GetAllSections().Num());
-		MasterTracksArray.Add(MakeShared<FJsonValueObject>(TrackObj));
+		Result->SetBoolField(TEXT("detailsTruncated"), DetailBudget.bTruncated);
 	}
-	Result->SetArrayField(TEXT("masterTracks"), MasterTracksArray);
-	Result->SetNumberField(TEXT("masterTrackCount"), MasterTracksArray.Num());
 
 	return MCPResult(Result);
 }
