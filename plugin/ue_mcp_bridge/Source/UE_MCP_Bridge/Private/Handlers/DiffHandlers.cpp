@@ -7,6 +7,9 @@
 #include "EdGraph/EdGraphPin.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
+#include "Animation/Skeleton.h"
+#include "Engine/SkeletalMesh.h"
+#include "ReferenceSkeleton.h"
 
 // ── Structural extraction helpers ────────────────────────────────────────────
 namespace
@@ -90,6 +93,68 @@ namespace
 		Out.Reserve(In.Num());
 		for (const FString& S : In) Out.Add(MakeShared<FJsonValueString>(S));
 		return Out;
+	}
+
+	struct FVirtualBoneDiffRecord
+	{
+		FName Name;
+		FName Source;
+		FName Target;
+
+		bool operator==(const FVirtualBoneDiffRecord& Other) const
+		{
+			return Name == Other.Name && Source == Other.Source && Target == Other.Target;
+		}
+	};
+
+	bool VirtualBoneRecordLess(const FVirtualBoneDiffRecord& A, const FVirtualBoneDiffRecord& B)
+	{
+		if (A.Name != B.Name) return A.Name.ToString() < B.Name.ToString();
+		if (A.Source != B.Source) return A.Source.ToString() < B.Source.ToString();
+		return A.Target.ToString() < B.Target.ToString();
+	}
+
+	TArray<FVirtualBoneDiffRecord> CollectVirtualBones(const USkeleton* Skeleton)
+	{
+		TArray<FVirtualBoneDiffRecord> Out;
+		if (!Skeleton)
+		{
+			return Out;
+		}
+		Out.Reserve(Skeleton->GetVirtualBones().Num());
+		for (const FVirtualBone& Bone : Skeleton->GetVirtualBones())
+		{
+			Out.Add({
+				Bone.VirtualBoneName,
+				Bone.SourceBoneName,
+				Bone.TargetBoneName
+			});
+		}
+		Out.Sort(VirtualBoneRecordLess);
+		return Out;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> VirtualBonesToJson(const TArray<FVirtualBoneDiffRecord>& In)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		Out.Reserve(In.Num());
+		for (const FVirtualBoneDiffRecord& Bone : In)
+		{
+			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+			Obj->SetStringField(TEXT("name"), Bone.Name.ToString());
+			Obj->SetStringField(TEXT("sourceBone"), Bone.Source.ToString());
+			Obj->SetStringField(TEXT("targetBone"), Bone.Target.ToString());
+			Out.Add(MakeShared<FJsonValueObject>(Obj));
+		}
+		return Out;
+	}
+
+	FName RawParentName(const TArray<FMeshBoneInfo>& Bones, int32 BoneIndex)
+	{
+		const int32 ParentIndex = Bones[BoneIndex].ParentIndex;
+		if (ParentIndex == INDEX_NONE) return NAME_None;
+		if (Bones.IsValidIndex(ParentIndex)) return Bones[ParentIndex].Name;
+		return FName(*FString::Printf(TEXT("<invalid:%d>"), ParentIndex));
 	}
 }
 
@@ -309,6 +374,187 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprint(const TSharedPtr<FJsonObject
 	return MCPResult(Result);
 }
 
+TSharedPtr<FJsonValue> FDiffHandlers::DiffSkeleton(const TSharedPtr<FJsonObject>& Params)
+{
+	FString PathA;
+	if (TSharedPtr<FJsonValue> Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), PathA)) return Err;
+	FString PathB;
+	if (TSharedPtr<FJsonValue> Err = RequireString(Params, TEXT("otherPath"), PathB)) return Err;
+
+	UObject* AssetA = LoadAssetByPath<UObject>(PathA);
+	if (!AssetA) return MCPError(FString::Printf(TEXT("Asset not found: %s"), *PathA));
+	const bool bSkeletonAssets = AssetA->GetClass() == USkeleton::StaticClass();
+	const bool bSkeletalMeshAssets = AssetA->GetClass() == USkeletalMesh::StaticClass();
+	if (!bSkeletonAssets && !bSkeletalMeshAssets)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Asset at '%s' must be exactly a Skeleton or SkeletalMesh; found '%s'"),
+			*PathA, *AssetA->GetClass()->GetName()));
+	}
+
+	UObject* AssetB = LoadAssetByPath<UObject>(PathB);
+	if (!AssetB) return MCPError(FString::Printf(TEXT("Asset not found: %s"), *PathB));
+	if (AssetB->GetClass() != AssetA->GetClass())
+	{
+		return MCPError(FString::Printf(
+			TEXT("Asset at '%s' must be exactly a %s to match the first asset; found '%s'"),
+			*PathB, *AssetA->GetClass()->GetName(), *AssetB->GetClass()->GetName()));
+	}
+
+	const USkeleton* SkeletonAssetA = bSkeletonAssets ? CastChecked<USkeleton>(AssetA) : nullptr;
+	const USkeleton* SkeletonAssetB = bSkeletonAssets ? CastChecked<USkeleton>(AssetB) : nullptr;
+	const USkeletalMesh* SkeletalMeshA = bSkeletalMeshAssets ? CastChecked<USkeletalMesh>(AssetA) : nullptr;
+	const USkeletalMesh* SkeletalMeshB = bSkeletalMeshAssets ? CastChecked<USkeletalMesh>(AssetB) : nullptr;
+	const FReferenceSkeleton& ReferenceA = bSkeletonAssets
+		? SkeletonAssetA->GetReferenceSkeleton()
+		: SkeletalMeshA->GetRefSkeleton();
+	const FReferenceSkeleton& ReferenceB = bSkeletonAssets
+		? SkeletonAssetB->GetReferenceSkeleton()
+		: SkeletalMeshB->GetRefSkeleton();
+	const USkeleton* PolicySkeletonA = bSkeletonAssets ? SkeletonAssetA : SkeletalMeshA->GetSkeleton();
+	const USkeleton* PolicySkeletonB = bSkeletonAssets ? SkeletonAssetB : SkeletalMeshB->GetSkeleton();
+	const TArray<FMeshBoneInfo>& RawA = ReferenceA.GetRawRefBoneInfo();
+	const TArray<FMeshBoneInfo>& RawB = ReferenceB.GetRawRefBoneInfo();
+
+	TMap<FName, FName> ParentByBoneA;
+	TMap<FName, FName> ParentByBoneB;
+	TMap<FName, int32> IndexByBoneA;
+	TMap<FName, int32> IndexByBoneB;
+	for (int32 Index = 0; Index < RawA.Num(); ++Index)
+	{
+		ParentByBoneA.Add(RawA[Index].Name, RawParentName(RawA, Index));
+		IndexByBoneA.Add(RawA[Index].Name, Index);
+	}
+	for (int32 Index = 0; Index < RawB.Num(); ++Index)
+	{
+		ParentByBoneB.Add(RawB[Index].Name, RawParentName(RawB, Index));
+		IndexByBoneB.Add(RawB[Index].Name, Index);
+	}
+
+	TArray<FString> RawBonesAdded;
+	TArray<FString> RawBonesRemoved;
+	TArray<FName> SharedRawBones;
+	for (const TPair<FName, FName>& Bone : ParentByBoneB)
+	{
+		if (!ParentByBoneA.Contains(Bone.Key)) RawBonesAdded.Add(Bone.Key.ToString());
+	}
+	for (const TPair<FName, FName>& Bone : ParentByBoneA)
+	{
+		if (ParentByBoneB.Contains(Bone.Key)) SharedRawBones.Add(Bone.Key);
+		else RawBonesRemoved.Add(Bone.Key.ToString());
+	}
+	RawBonesAdded.Sort();
+	RawBonesRemoved.Sort();
+	SharedRawBones.Sort([](const FName& Left, const FName& Right)
+	{
+		return Left.ToString() < Right.ToString();
+	});
+
+	TArray<TSharedPtr<FJsonValue>> Reparented;
+	TArray<TSharedPtr<FJsonValue>> RawBoneIndexChanges;
+	bool bSharedParentsMatch = true;
+	for (const FName& BoneName : SharedRawBones)
+	{
+		const FName ParentA = ParentByBoneA.FindChecked(BoneName);
+		const FName ParentB = ParentByBoneB.FindChecked(BoneName);
+		if (ParentA != ParentB)
+		{
+			bSharedParentsMatch = false;
+			TSharedPtr<FJsonObject> Delta = MakeShared<FJsonObject>();
+			Delta->SetStringField(TEXT("bone"), BoneName.ToString());
+			Delta->SetStringField(TEXT("fromParent"), ParentA.ToString());
+			Delta->SetStringField(TEXT("toParent"), ParentB.ToString());
+			Reparented.Add(MakeShared<FJsonValueObject>(Delta));
+		}
+
+		const int32 IndexA = IndexByBoneA.FindChecked(BoneName);
+		const int32 IndexB = IndexByBoneB.FindChecked(BoneName);
+		if (IndexA != IndexB)
+		{
+			TSharedPtr<FJsonObject> Delta = MakeShared<FJsonObject>();
+			Delta->SetStringField(TEXT("bone"), BoneName.ToString());
+			Delta->SetNumberField(TEXT("fromIndex"), IndexA);
+			Delta->SetNumberField(TEXT("toIndex"), IndexB);
+			RawBoneIndexChanges.Add(MakeShared<FJsonValueObject>(Delta));
+		}
+	}
+
+	const TArray<FVirtualBoneDiffRecord> VirtualA = CollectVirtualBones(PolicySkeletonA);
+	const TArray<FVirtualBoneDiffRecord> VirtualB = CollectVirtualBones(PolicySkeletonB);
+	TArray<FVirtualBoneDiffRecord> VirtualBonesAdded;
+	TArray<FVirtualBoneDiffRecord> VirtualBonesRemoved;
+	for (const FVirtualBoneDiffRecord& Bone : VirtualB)
+	{
+		if (!VirtualA.Contains(Bone)) VirtualBonesAdded.Add(Bone);
+	}
+	for (const FVirtualBoneDiffRecord& Bone : VirtualA)
+	{
+		if (!VirtualB.Contains(Bone)) VirtualBonesRemoved.Add(Bone);
+	}
+	VirtualBonesAdded.Sort(VirtualBoneRecordLess);
+	VirtualBonesRemoved.Sort(VirtualBoneRecordLess);
+
+	const bool bSameRawRoot = RawA.Num() > 0
+		&& RawB.Num() > 0
+		&& RawA[0].ParentIndex == INDEX_NONE
+		&& RawB[0].ParentIndex == INDEX_NONE
+		&& RawA[0].Name == RawB[0].Name;
+	const bool bHierarchyCompatible = bSameRawRoot && bSharedParentsMatch;
+	const bool bEditorCompatible = PolicySkeletonA
+		&& PolicySkeletonB
+		&& (PolicySkeletonA == PolicySkeletonB
+			|| PolicySkeletonA->IsCompatibleForEditor(PolicySkeletonB)
+			|| PolicySkeletonB->IsCompatibleForEditor(PolicySkeletonA));
+	const int32 ChangeCount = RawBonesAdded.Num()
+		+ RawBonesRemoved.Num()
+		+ Reparented.Num()
+		+ RawBoneIndexChanges.Num()
+		+ VirtualBonesAdded.Num()
+		+ VirtualBonesRemoved.Num();
+
+	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	const FString AssetType = bSkeletonAssets ? TEXT("Skeleton") : TEXT("SkeletalMesh");
+	Result->SetStringField(TEXT("assetType"), AssetType);
+	Result->SetStringField(TEXT("from"), PathA);
+	Result->SetStringField(TEXT("to"), PathB);
+	Result->SetNumberField(TEXT("boneCountFrom"), ReferenceA.GetNum());
+	Result->SetNumberField(TEXT("boneCountTo"), ReferenceB.GetNum());
+	Result->SetNumberField(TEXT("rawBoneCountFrom"), RawA.Num());
+	Result->SetNumberField(TEXT("rawBoneCountTo"), RawB.Num());
+	Result->SetNumberField(TEXT("virtualBoneCountFrom"), VirtualA.Num());
+	Result->SetNumberField(TEXT("virtualBoneCountTo"), VirtualB.Num());
+	Result->SetStringField(TEXT("virtualBoneSourceFrom"), GetPathNameSafe(PolicySkeletonA));
+	Result->SetStringField(TEXT("virtualBoneSourceTo"), GetPathNameSafe(PolicySkeletonB));
+	Result->SetNumberField(TEXT("sharedRawBoneCount"), SharedRawBones.Num());
+	Result->SetArrayField(TEXT("rawBonesAdded"), StringsToJson(RawBonesAdded));
+	Result->SetArrayField(TEXT("rawBonesRemoved"), StringsToJson(RawBonesRemoved));
+	Result->SetArrayField(TEXT("reparented"), Reparented);
+	Result->SetArrayField(TEXT("rawBoneIndexChanges"), RawBoneIndexChanges);
+	Result->SetArrayField(TEXT("virtualBonesAdded"), VirtualBonesToJson(VirtualBonesAdded));
+	Result->SetArrayField(TEXT("virtualBonesRemoved"), VirtualBonesToJson(VirtualBonesRemoved));
+	Result->SetBoolField(TEXT("editorCompatible"), bEditorCompatible);
+	Result->SetBoolField(TEXT("hierarchyCompatible"), bHierarchyCompatible);
+	Result->SetBoolField(TEXT("referencePoseCompared"), false);
+	Result->SetBoolField(TEXT("exportNamesCompared"), false);
+	Result->SetStringField(
+		TEXT("structureScope"),
+		TEXT("raw bone names, parent names, raw indices, and declared virtual bones; excludes reference-pose transforms and export names"));
+	Result->SetNumberField(TEXT("changeCount"), ChangeCount);
+	Result->SetBoolField(TEXT("structurallyIdentical"), ChangeCount == 0);
+	Result->SetBoolField(TEXT("identical"), ChangeCount == 0);
+	Result->SetStringField(TEXT("summary"), ChangeCount == 0
+		? FString::Printf(
+			TEXT("%s structures are identical: %d final, %d raw, %d declared virtual"),
+			*AssetType, ReferenceA.GetNum(), RawA.Num(), VirtualA.Num())
+		: FString::Printf(
+			TEXT("%s delta: %d change(s), final %d -> %d, raw %d -> %d, declared virtual %d -> %d"),
+			*AssetType, ChangeCount,
+			ReferenceA.GetNum(), ReferenceB.GetNum(),
+			RawA.Num(), RawB.Num(), VirtualA.Num(), VirtualB.Num()));
+
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FDiffHandlers::DiffAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PathA;
@@ -320,8 +566,13 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffAsset(const TSharedPtr<FJsonObject>& P
 		{
 			return DiffBlueprint(Params);
 		}
+		if (Asset->GetClass() == USkeleton::StaticClass()
+			|| Asset->GetClass() == USkeletalMesh::StaticClass())
+		{
+			return DiffSkeleton(Params);
+		}
 		return MCPError(FString::Printf(
-			TEXT("Diffing '%s' assets is not supported yet. Blueprint diffing is available now; StateTree and other graph assets are staged follow-ups."),
+			TEXT("Diffing '%s' assets is not supported yet. Blueprint, Skeleton, and SkeletalMesh diffing are available now; StateTree and other graph assets are staged follow-ups."),
 			*Asset->GetClass()->GetName()));
 	}
 	return MCPError(FString::Printf(TEXT("Asset not found: %s"), *PathA));
