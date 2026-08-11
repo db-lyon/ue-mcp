@@ -2,7 +2,7 @@
 
 This page lists ue-mcp's own category tools and actions. For the official Unreal 5.8 tools that ue-mcp wraps (surfaced inside these same categories), see [Native Tools](native-tools.md).
 
-UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering **<!-- count:actions -->783+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
+UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering **<!-- count:actions -->784+<!-- /count --> actions**, plus a `flow` tool for running multi-step YAML workflows. Every category tool takes an `action` parameter that selects the operation, plus action-specific parameters.
 
 !!! tip "First call in any session"
     Start with `project(action="get_status")` to check the connection, then `level(action="get_outliner")` or `asset(action="list")` to explore.
@@ -494,6 +494,7 @@ UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering
 | `get_material_usage_summary` | Per-proxy summary: landscape/hole material paths + component/grass/nanite counts (#150) |
 | `list_proxies` | Enumerate loaded World Partition LandscapeStreamingProxy actors with per-proxy worldBounds (origin/extent), plus loadedProxies + parentLandscapes counts. Unloaded proxies are not spawned as actors, so only loaded ones appear - use this to confirm a proxy is streamed in before trusting a layer/height readback (#733) |
 | `find_proxy_at` | Resolve which loaded LandscapeStreamingProxy covers a world X/Y. Returns found/loaded + label, or loaded:false when the covering proxy is streamed out (so a 0-weight readback there is ambiguous, not real). Params: `worldX, worldY (#733)` |
+| `refresh_physical_material_collision` | UE 5.8+: safely refresh physical-material collision data in memory on loaded World Partition LandscapeStreamingProxy actors after a LayerInfo PhysMaterial change. Requires complete registered collision coverage and no pending landscape edit-layer work. Preserves and verifies every raw, complex-live, and simple-live height sample, builds material data before one collision recreation, and fails the whole matched batch on any unsafe result. Filters combine: actorLabels[], guids[], and bounds {min,max}; omitting them targets every loaded proxy up to maxActors (default 256, hard max 1024). Unloaded proxies are untouched; pin them first with level(load_actor_descs). Refuses PIE/SIE and non-World-Partition maps. Persistence is deliberately unsupported because Landscape PreSave can mutate edit-layer collision data; this action never saves packages. Returns loaded/matched/refreshed/failed counts and exact affected package paths |
 
 ---
 

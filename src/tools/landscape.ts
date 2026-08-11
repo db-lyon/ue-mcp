@@ -20,6 +20,10 @@ export const landscapeTool: ToolDef = categoryTool(
     get_material_usage_summary: bp("Per-proxy summary: landscape/hole material paths + component/grass/nanite counts (#150)", "get_landscape_material_usage_summary"),
     list_proxies:      bp("Enumerate loaded World Partition LandscapeStreamingProxy actors with per-proxy worldBounds (origin/extent), plus loadedProxies + parentLandscapes counts. Unloaded proxies are not spawned as actors, so only loaded ones appear - use this to confirm a proxy is streamed in before trusting a layer/height readback (#733)", "list_landscape_proxies"),
     find_proxy_at:     bp("Resolve which loaded LandscapeStreamingProxy covers a world X/Y. Returns found/loaded + label, or loaded:false when the covering proxy is streamed out (so a 0-weight readback there is ambiguous, not real). Params: worldX, worldY (#733)", "find_landscape_proxy_at", (p) => ({ worldX: p.worldX, worldY: p.worldY })),
+    refresh_physical_material_collision: {
+      ...bp("UE 5.8+: safely refresh physical-material collision data in memory on loaded World Partition LandscapeStreamingProxy actors after a LayerInfo PhysMaterial change. Requires complete registered collision coverage and no pending landscape edit-layer work. Preserves and verifies every raw, complex-live, and simple-live height sample, builds material data before one collision recreation, and fails the whole matched batch on any unsafe result. Filters combine: actorLabels[], guids[], and bounds {min,max}; omitting them targets every loaded proxy up to maxActors (default 256, hard max 1024). Unloaded proxies are untouched; pin them first with level(load_actor_descs). Refuses PIE/SIE and non-World-Partition maps. Persistence is deliberately unsupported because Landscape PreSave can mutate edit-layer collision data; this action never saves packages. Returns loaded/matched/refreshed/failed counts and exact affected package paths.", "refresh_landscape_physical_material_collision", (p) => ({ actorLabels: p.actorLabels, guids: p.guids, bounds: p.bounds, maxActors: p.maxActors })),
+      timeoutMs: 600_000,
+    },
   },
   undefined,
   {
@@ -52,5 +56,9 @@ export const landscapeTool: ToolDef = categoryTool(
     numSubsections: z.number().optional(),
     heightOffset: z.number().optional(),
     label: z.string().optional(),
+    actorLabels: z.array(z.string().min(1)).min(1).max(256).optional().describe("refresh_physical_material_collision: exact editor labels of loaded LandscapeStreamingProxy actors"),
+    guids: z.array(z.string().min(1).max(64)).min(1).max(256).optional().describe("refresh_physical_material_collision: actor GUIDs of loaded LandscapeStreamingProxy actors"),
+    bounds: z.object({ min: Vec3, max: Vec3 }).optional().describe("refresh_physical_material_collision: world-space AABB intersecting proxies to refresh"),
+    maxActors: z.number().int().min(1).max(1024).optional().describe("refresh_physical_material_collision: refuse more matches than this (default 256)"),
   },
 );

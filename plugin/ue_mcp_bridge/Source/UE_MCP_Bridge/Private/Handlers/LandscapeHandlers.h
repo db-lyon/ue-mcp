@@ -30,6 +30,9 @@ private:
 	// per-proxy world bounds, and resolve which proxy covers a world position.
 	static TSharedPtr<FJsonValue> ListLandscapeProxies(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> FindLandscapeProxyAt(const TSharedPtr<FJsonObject>& Params);
+	// Refresh the physical-material data embedded in loaded World Partition
+	// landscape collision after a LayerInfo physical material changes.
+	static TSharedPtr<FJsonValue> RefreshPhysicalMaterialCollision(const TSharedPtr<FJsonObject>& Params);
 	// #742: sculpting and weight painting - the writes the category has always
 	// advertised but never had.
 	static TSharedPtr<FJsonValue> Sculpt(const TSharedPtr<FJsonObject>& Params);
