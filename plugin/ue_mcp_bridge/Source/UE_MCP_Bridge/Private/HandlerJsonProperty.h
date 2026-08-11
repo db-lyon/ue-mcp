@@ -8,6 +8,7 @@
 #include "UObject/UnrealType.h"
 #include "UObject/PropertyPortFlags.h"
 #include "UObject/SoftObjectPtr.h"
+#include "StructUtils/InstancedStruct.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"
 #include "Engine/Blueprint.h"
@@ -571,12 +572,13 @@ namespace MCPJsonProperty
 		if (Parts.Num() == 0) { OutError = TEXT("empty property name"); return false; }
 
 		void* Container = Root;
-		UStruct* ContainerStruct = Root->GetClass();
+		const UStruct* ContainerStruct = Root->GetClass();
 		UObject* Owner = Root;
 
 		for (int32 i = 0; i < Parts.Num(); ++i)
 		{
 			FString Token = Parts[i];
+			const FString PathToken = Token;
 			int32 Index = INDEX_NONE;
 			int32 BracketPos;
 			if (Token.FindChar(TEXT('['), BracketPos))
@@ -614,8 +616,25 @@ namespace MCPJsonProperty
 			// Descend for the next token.
 			if (FStructProperty* SP = CastField<FStructProperty>(Prop))
 			{
-				Container = ValueAddr;
-				ContainerStruct = SP->Struct;
+				if (SP->Struct == FInstancedStruct::StaticStruct())
+				{
+					FInstancedStruct* InstancedStruct = static_cast<FInstancedStruct*>(ValueAddr);
+					const UScriptStruct* PayloadStruct = InstancedStruct->GetScriptStruct();
+					void* PayloadMemory = InstancedStruct->GetMutableMemory();
+					if (!PayloadStruct || !PayloadMemory)
+					{
+						OutError = FString::Printf(TEXT("'%s' FInstancedStruct payload is empty - cannot descend"), *PathToken);
+						return false;
+					}
+
+					Container = PayloadMemory;
+					ContainerStruct = PayloadStruct;
+				}
+				else
+				{
+					Container = ValueAddr;
+					ContainerStruct = SP->Struct;
+				}
 			}
 			else if (FObjectProperty* OP = CastField<FObjectProperty>(Prop))
 			{

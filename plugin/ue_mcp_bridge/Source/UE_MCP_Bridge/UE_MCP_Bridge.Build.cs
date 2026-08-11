@@ -139,4 +139,4 @@ public class UE_MCP_Bridge : ModuleRules
 	}
 }
 
-// Rescan trigger: round 2 added handler translation units.
+// Rescan trigger: FInstancedStruct scalar, wrapper-array and nested path tests added.
