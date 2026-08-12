@@ -36,6 +36,12 @@
 #include "AnimGraphNode_BlendSpacePlayer.h"
 #include "Rig/IKRigDefinition.h"
 #include "RigEditor/IKRigController.h"
+#if UE_MCP_HAS_5_8_API
+#include "Rig/Solvers/IKRigFullBodyIK.h"
+#include "Retargeter/IKRetargetChainMapping.h"
+#include "Retargeter/IKRetargetOps.h"
+#include "Retargeter/IKRetargetProcessor.h"
+#endif
 #include "PoseSearch/PoseSearchDatabase.h"
 #include "PoseSearch/PoseSearchSchema.h"
 #include "PoseSearch/PoseSearchDerivedData.h"
@@ -53,11 +59,81 @@
 #include "UObject/UObjectGlobals.h"
 #include "EditorAssetLibrary.h"
 #include "Editor.h"
+#include "ScopedTransaction.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
 
 #define UE_MCP_HAS_POSESEARCH_DATABASE_ASSET_API (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4))
+
+#if UE_MCP_HAS_5_8_API
+static TSharedPtr<FJsonObject> AnimationVectorToJson(const FVector& Value)
+{
+	TSharedPtr<FJsonObject> Json = MakeShared<FJsonObject>();
+	Json->SetNumberField(TEXT("x"), Value.X);
+	Json->SetNumberField(TEXT("y"), Value.Y);
+	Json->SetNumberField(TEXT("z"), Value.Z);
+	return Json;
+}
+
+static TSharedPtr<FJsonObject> AnimationQuaternionToJson(const FQuat& Value)
+{
+	TSharedPtr<FJsonObject> Json = MakeShared<FJsonObject>();
+	Json->SetNumberField(TEXT("x"), Value.X);
+	Json->SetNumberField(TEXT("y"), Value.Y);
+	Json->SetNumberField(TEXT("z"), Value.Z);
+	Json->SetNumberField(TEXT("w"), Value.W);
+	return Json;
+}
+
+static TSharedPtr<FJsonObject> AnimationTransformToJson(const FTransform& Value)
+{
+	TSharedPtr<FJsonObject> Json = MakeShared<FJsonObject>();
+	Json->SetObjectField(TEXT("translation"), AnimationVectorToJson(Value.GetTranslation()));
+	Json->SetObjectField(TEXT("rotationQuaternion"), AnimationQuaternionToJson(Value.GetRotation()));
+	Json->SetObjectField(TEXT("scale"), AnimationVectorToJson(Value.GetScale3D()));
+	return Json;
+}
+
+// Processor initialization temporarily redirects editor-instance pointers on
+// the serialized op stack. Restore them after validation and batch execution.
+class FScopedBatchRetargetEditorInstanceRestore
+{
+	struct FState
+	{
+		FIKRetargetOpBase* Op = nullptr;
+		FIKRetargetOpBase* OpEditorInstance = nullptr;
+		FIKRetargetOpSettingsBase* Settings = nullptr;
+		FIKRetargetOpSettingsBase* SettingsEditorInstance = nullptr;
+	};
+
+public:
+	explicit FScopedBatchRetargetEditorInstanceRestore(UIKRetargeter* Retargeter)
+	{
+		if (!Retargeter) return;
+		States.Reserve(Retargeter->GetRetargetOps().Num());
+		for (const FInstancedStruct& OpStruct : Retargeter->GetRetargetOps())
+		{
+			FIKRetargetOpBase* Op = const_cast<FIKRetargetOpBase*>(OpStruct.GetPtr<FIKRetargetOpBase>());
+			if (!Op) continue;
+			FIKRetargetOpSettingsBase* Settings = Op->GetSettings();
+			States.Add({Op, Op->EditorInstance, Settings, Settings ? Settings->EditorInstance : nullptr});
+		}
+	}
+
+	~FScopedBatchRetargetEditorInstanceRestore()
+	{
+		for (const FState& State : States)
+		{
+			State.Op->EditorInstance = State.OpEditorInstance;
+			if (State.Settings) State.Settings->EditorInstance = State.SettingsEditorInstance;
+		}
+	}
+
+private:
+	TArray<FState> States;
+};
+#endif
 
 static int32 GetPoseSearchAnimationAssetCount(const UPoseSearchDatabase* Database)
 {
@@ -1278,6 +1354,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRig(const TSharedPtr<FJsonObjec
 		ChainObj->SetStringField(TEXT("name"), Chain.ChainName.ToString());
 		ChainObj->SetStringField(TEXT("startBone"), Chain.StartBone.BoneName.ToString());
 		ChainObj->SetStringField(TEXT("endBone"), Chain.EndBone.BoneName.ToString());
+#if UE_MCP_HAS_5_8_API
+		ChainObj->SetStringField(TEXT("goal"), Chain.IKGoalName.ToString());
+#endif
 		ChainsArray.Add(MakeShared<FJsonValueObject>(ChainObj));
 	}
 	Result->SetArrayField(TEXT("retargetChains"), ChainsArray);
@@ -1292,8 +1371,95 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRig(const TSharedPtr<FJsonObjec
 		Result->SetStringField(TEXT("rootBone"), RigSkeleton.BoneNames[0].ToString());
 	}
 
-	// Solvers - enumerate via reflection since GetSolverArray not available in all UE versions
+	// UE 5.8 replaced the legacy UObject solver array with typed instanced
+	// structs. Keep the reflection fallback for older supported engines.
 	TArray<TSharedPtr<FJsonValue>> SolversArray;
+#if UE_MCP_HAS_5_8_API
+	UIKRigController* Controller = UIKRigController::GetController(IKRig);
+	if (!Controller)
+	{
+		return MCPError(TEXT("IKRigController unavailable"));
+	}
+
+	Result->SetStringField(TEXT("retargetRoot"), Controller->GetRetargetRoot().ToString());
+	Result->SetStringField(TEXT("rootMotionBone"), Controller->GetRootMotionBone().ToString());
+	Result->SetStringField(
+		TEXT("skeletonRootBone"),
+		RigSkeleton.BoneNames.IsEmpty() ? TEXT("") : RigSkeleton.BoneNames[0].ToString());
+
+	TArray<TSharedPtr<FJsonValue>> GoalsArray;
+	for (UIKRigEffectorGoal* Goal : Controller->GetAllGoals())
+	{
+		if (!Goal) continue;
+		TSharedPtr<FJsonObject> GoalObj = MakeShared<FJsonObject>();
+		GoalObj->SetStringField(TEXT("name"), Goal->GoalName.ToString());
+		GoalObj->SetStringField(TEXT("bone"), Goal->BoneName.ToString());
+		GoalObj->SetNumberField(TEXT("positionAlpha"), Goal->PositionAlpha);
+		GoalObj->SetNumberField(TEXT("rotationAlpha"), Goal->RotationAlpha);
+		GoalObj->SetObjectField(TEXT("currentTransform"), AnimationTransformToJson(Goal->CurrentTransform));
+		GoalObj->SetObjectField(TEXT("initialTransform"), AnimationTransformToJson(Goal->InitialTransform));
+
+		TArray<TSharedPtr<FJsonValue>> ConnectedSolvers;
+		for (int32 SolverIndex = 0; SolverIndex < Controller->GetNumSolvers(); ++SolverIndex)
+		{
+			if (Controller->IsGoalConnectedToSolver(Goal->GoalName, SolverIndex))
+			{
+				ConnectedSolvers.Add(MakeShared<FJsonValueNumber>(SolverIndex));
+			}
+		}
+		GoalObj->SetArrayField(TEXT("connectedSolverIndices"), ConnectedSolvers);
+		GoalsArray.Add(MakeShared<FJsonValueObject>(GoalObj));
+	}
+	Result->SetArrayField(TEXT("goals"), GoalsArray);
+
+	TArray<TSharedPtr<FJsonValue>> ExcludedBones;
+	for (const FName BoneName : RigSkeleton.BoneNames)
+	{
+		if (Controller->GetBoneExcluded(BoneName))
+		{
+			ExcludedBones.Add(MakeShared<FJsonValueString>(BoneName.ToString()));
+		}
+	}
+	Result->SetArrayField(TEXT("excludedBones"), ExcludedBones);
+
+	for (int32 SolverIndex = 0; SolverIndex < Controller->GetNumSolvers(); ++SolverIndex)
+	{
+		FInstancedStruct* SolverStruct = Controller->GetSolverStructAtIndex(SolverIndex);
+		const UScriptStruct* SolverType = SolverStruct ? SolverStruct->GetScriptStruct() : nullptr;
+		TSharedPtr<FJsonObject> SolverObj = MakeShared<FJsonObject>();
+		SolverObj->SetNumberField(TEXT("index"), SolverIndex);
+		SolverObj->SetStringField(TEXT("name"), Controller->GetSolverUniqueName(SolverIndex));
+		SolverObj->SetStringField(TEXT("type"), SolverType ? SolverType->GetPathName() : TEXT(""));
+		SolverObj->SetBoolField(TEXT("enabled"), Controller->GetSolverEnabled(SolverIndex));
+		SolverObj->SetStringField(TEXT("startBone"), Controller->GetStartBone(SolverIndex).ToString());
+		SolverObj->SetStringField(TEXT("endBone"), Controller->GetEndBone(SolverIndex).ToString());
+
+		TArray<TSharedPtr<FJsonValue>> Effectors;
+		if (UIKRigFBIKController* FBIKController = Cast<UIKRigFBIKController>(Controller->GetSolverController(SolverIndex)))
+		{
+			SolverObj->SetBoolField(TEXT("fullBodyIK"), true);
+			for (UIKRigEffectorGoal* Goal : Controller->GetAllGoals())
+			{
+				if (!Goal || !Controller->IsGoalConnectedToSolver(Goal->GoalName, SolverIndex)) continue;
+				const FIKRigFBIKGoalSettings Settings = FBIKController->GetGoalSettings(Goal->GoalName);
+				TSharedPtr<FJsonObject> EffectorObj = MakeShared<FJsonObject>();
+				EffectorObj->SetStringField(TEXT("goal"), Goal->GoalName.ToString());
+				EffectorObj->SetStringField(TEXT("bone"), Settings.BoneName.ToString());
+				EffectorObj->SetNumberField(TEXT("chainDepth"), Settings.ChainDepth);
+				EffectorObj->SetNumberField(TEXT("strengthAlpha"), Settings.StrengthAlpha);
+				EffectorObj->SetNumberField(TEXT("pullChainAlpha"), Settings.PullChainAlpha);
+				EffectorObj->SetNumberField(TEXT("pinRotation"), Settings.PinRotation);
+				Effectors.Add(MakeShared<FJsonValueObject>(EffectorObj));
+			}
+		}
+		else
+		{
+			SolverObj->SetBoolField(TEXT("fullBodyIK"), false);
+		}
+		SolverObj->SetArrayField(TEXT("effectors"), Effectors);
+		SolversArray.Add(MakeShared<FJsonValueObject>(SolverObj));
+	}
+#else
 	FProperty* SolversProp = IKRig->GetClass()->FindPropertyByName(TEXT("Solvers"));
 	if (SolversProp)
 	{
@@ -1307,6 +1473,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRig(const TSharedPtr<FJsonObjec
 			SolversArray.Add(MakeShared<FJsonValueObject>(SolverInfo));
 		}
 	}
+#endif
 	Result->SetArrayField(TEXT("solvers"), SolversArray);
 
 	return MCPResult(Result);
@@ -1340,7 +1507,78 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("IKRetargeter"), RetargeterClass, Factory);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
 	UObject* NewAsset = Created.Asset;
+	const bool bAutoMap = OptionalBool(Params, TEXT("autoMapChains"), true);
+	int32 ChainsMapped = 0;
+	FString SrcErr;
+	FString TgtErr;
+	FString OpsWarning;
 
+#if UE_MCP_HAS_5_8_API
+	UIKRetargeter* Retargeter = Cast<UIKRetargeter>(NewAsset);
+	if (!Retargeter)
+	{
+		UEditorAssetLibrary::DeleteAsset(NewAsset->GetPathName());
+		return MCPError(TEXT("Created asset is not an IKRetargeter"));
+	}
+
+	UIKRigDefinition* SourceRig = SourceRigPath.IsEmpty()
+		? nullptr
+		: LoadObject<UIKRigDefinition>(nullptr, *SourceRigPath);
+	UIKRigDefinition* TargetRig = TargetRigPath.IsEmpty()
+		? nullptr
+		: LoadObject<UIKRigDefinition>(nullptr, *TargetRigPath);
+	if (!SourceRigPath.IsEmpty() && !SourceRig)
+	{
+		UEditorAssetLibrary::DeleteAsset(NewAsset->GetPathName());
+		return MCPError(FString::Printf(TEXT("IKRig not found: %s"), *SourceRigPath));
+	}
+	if (!TargetRigPath.IsEmpty() && !TargetRig)
+	{
+		UEditorAssetLibrary::DeleteAsset(NewAsset->GetPathName());
+		return MCPError(FString::Printf(TEXT("IKRig not found: %s"), *TargetRigPath));
+	}
+
+	UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter);
+	if (!Controller)
+	{
+		UEditorAssetLibrary::DeleteAsset(NewAsset->GetPathName());
+		return MCPError(TEXT("IKRetargeterController unavailable"));
+	}
+
+	// The factory does not install the operational stack. AddDefaultOps is
+	// idempotent and must precede per-op rig assignment and chain mapping.
+	Controller->AddDefaultOps();
+	if (SourceRig)
+	{
+		Controller->SetIKRig(ERetargetSourceOrTarget::Source, SourceRig);
+		Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Source, SourceRig);
+	}
+	if (TargetRig)
+	{
+		Controller->SetIKRig(ERetargetSourceOrTarget::Target, TargetRig);
+		Controller->AssignIKRigToAllOps(ERetargetSourceOrTarget::Target, TargetRig);
+	}
+	if (bAutoMap)
+	{
+		Controller->AutoMapChains(EAutoMapChainType::Exact, true);
+	}
+	Controller->CleanAsset();
+
+	if ((SourceRig && Controller->GetIKRig(ERetargetSourceOrTarget::Source) != SourceRig)
+		|| (TargetRig && Controller->GetIKRig(ERetargetSourceOrTarget::Target) != TargetRig))
+	{
+		UEditorAssetLibrary::DeleteAsset(NewAsset->GetPathName());
+		return MCPError(TEXT("IK Retargeter rig assignment failed readback validation"));
+	}
+
+	if (TargetRig)
+	{
+		for (const FBoneChain& Chain : TargetRig->GetRetargetChains())
+		{
+			if (!Controller->GetSourceChain(Chain.ChainName).IsNone()) ++ChainsMapped;
+		}
+	}
+#else
 	// Optionally set source / target IK Rigs via reflection
 	auto SetRigProperty = [&](const FString& PropName, const FString& Path) -> FString
 	{
@@ -1354,16 +1592,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 		return Prop->ImportText_Direct(*Export, Addr, NewAsset, PPF_None) ? TEXT("") : FString::Printf(TEXT("Failed to set %s"), *PropName);
 	};
 
-	FString SrcErr = SetRigProperty(TEXT("SourceIKRigAsset"), SourceRigPath);
-	FString TgtErr = SetRigProperty(TEXT("TargetIKRigAsset"), TargetRigPath);
+	SrcErr = SetRigProperty(TEXT("SourceIKRigAsset"), SourceRigPath);
+	TgtErr = SetRigProperty(TEXT("TargetIKRigAsset"), TargetRigPath);
 
 	// UE 5.7+ ops-stack initialization (#246). After CreateAsset the per-op
 	// IK Rig refs and chain mappings are unset, so the retargeter cannot be
 	// driven by an Anim Graph. Mirror what the Python workaround does:
 	// AssignIKRigToAllOps(SOURCE/TARGET) + AutoMapChains.
-	bool bAutoMap = OptionalBool(Params, TEXT("autoMapChains"), true);
-	int32 ChainsMapped = 0;
-	FString OpsWarning;
 	if (bAutoMap)
 	{
 		UIKRetargeter* Retargeter = Cast<UIKRetargeter>(NewAsset);
@@ -1431,9 +1666,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateIKRetargeter(const TSharedPtr<F
 			}
 		}
 	}
+#endif
 
-	NewAsset->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(NewAsset->GetPathName());
+	if (!SaveAssetPackage(NewAsset))
+	{
+		const FString FailedPackage = NewAsset->GetOutermost()->GetName();
+		UEditorAssetLibrary::DeleteAsset(NewAsset->GetPathName());
+		return MCPError(FString::Printf(TEXT("Failed to save IKRetargeter package '%s'"), *FailedPackage));
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -1476,6 +1716,93 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRetargeter(const TSharedPtr<FJs
 	const UIKRigDefinition* TgtRig = Controller->GetIKRig(ERetargetSourceOrTarget::Target);
 	Result->SetStringField(TEXT("sourceRig"), SrcRig ? SrcRig->GetPathName() : TEXT(""));
 	Result->SetStringField(TEXT("targetRig"), TgtRig ? TgtRig->GetPathName() : TEXT(""));
+
+#if UE_MCP_HAS_5_8_API
+	USkeletalMesh* SourcePreviewMesh = Controller->GetPreviewMesh(ERetargetSourceOrTarget::Source);
+	USkeletalMesh* TargetPreviewMesh = Controller->GetPreviewMesh(ERetargetSourceOrTarget::Target);
+	Result->SetStringField(TEXT("sourcePreviewMesh"), SourcePreviewMesh ? SourcePreviewMesh->GetPathName() : TEXT(""));
+	Result->SetStringField(TEXT("targetPreviewMesh"), TargetPreviewMesh ? TargetPreviewMesh->GetPathName() : TEXT(""));
+
+	auto WritePoses = [&](const ERetargetSourceOrTarget Side, const TCHAR* CurrentField, const TCHAR* PosesField)
+	{
+		const FName CurrentPoseName = Controller->GetCurrentRetargetPoseName(Side);
+		Result->SetStringField(CurrentField, CurrentPoseName.ToString());
+
+		TMap<FName, FIKRetargetPose>& Poses = Controller->GetRetargetPoses(Side);
+		TArray<FName> PoseNames;
+		Poses.GetKeys(PoseNames);
+		PoseNames.Sort([](const FName& A, const FName& B)
+		{
+			return A.ToString() < B.ToString();
+		});
+
+		TArray<TSharedPtr<FJsonValue>> PosesArray;
+		for (const FName PoseName : PoseNames)
+		{
+			const FIKRetargetPose* Pose = Poses.Find(PoseName);
+			if (!Pose) continue;
+			TSharedPtr<FJsonObject> PoseObj = MakeShared<FJsonObject>();
+			PoseObj->SetStringField(TEXT("name"), PoseName.ToString());
+			PoseObj->SetBoolField(TEXT("current"), PoseName == CurrentPoseName);
+			PoseObj->SetObjectField(TEXT("rootTranslationOffset"), AnimationVectorToJson(Pose->GetRootTranslationDelta()));
+
+			TArray<FName> OffsetBones;
+			Pose->GetAllDeltaRotations().GetKeys(OffsetBones);
+			OffsetBones.Sort([](const FName& A, const FName& B)
+			{
+				return A.ToString() < B.ToString();
+			});
+
+			TArray<TSharedPtr<FJsonValue>> RotationOffsets;
+			for (const FName BoneName : OffsetBones)
+			{
+				const FQuat* Rotation = Pose->GetAllDeltaRotations().Find(BoneName);
+				if (!Rotation) continue;
+				TSharedPtr<FJsonObject> OffsetObj = MakeShared<FJsonObject>();
+				OffsetObj->SetStringField(TEXT("bone"), BoneName.ToString());
+				OffsetObj->SetObjectField(TEXT("rotationQuaternion"), AnimationQuaternionToJson(*Rotation));
+				RotationOffsets.Add(MakeShared<FJsonValueObject>(OffsetObj));
+			}
+			PoseObj->SetArrayField(TEXT("rotationOffsets"), RotationOffsets);
+			PosesArray.Add(MakeShared<FJsonValueObject>(PoseObj));
+		}
+		Result->SetArrayField(PosesField, PosesArray);
+	};
+
+	WritePoses(ERetargetSourceOrTarget::Source, TEXT("currentSourcePose"), TEXT("sourcePoses"));
+	WritePoses(ERetargetSourceOrTarget::Target, TEXT("currentTargetPose"), TEXT("targetPoses"));
+
+	TArray<TSharedPtr<FJsonValue>> RetargetOps;
+	for (int32 OpIndex = 0; OpIndex < Controller->GetNumRetargetOps(); ++OpIndex)
+	{
+		const FName OpName = Controller->GetOpName(OpIndex);
+		FInstancedStruct* OpStruct = Controller->GetRetargetOpStructAtIndex(OpIndex);
+		const UScriptStruct* OpType = OpStruct ? OpStruct->GetScriptStruct() : nullptr;
+		TSharedPtr<FJsonObject> OpObj = MakeShared<FJsonObject>();
+		OpObj->SetNumberField(TEXT("index"), OpIndex);
+		OpObj->SetStringField(TEXT("name"), OpName.ToString());
+		OpObj->SetStringField(TEXT("type"), OpType ? OpType->GetPathName() : TEXT(""));
+		OpObj->SetBoolField(TEXT("enabled"), Controller->GetRetargetOpEnabled(OpIndex));
+		OpObj->SetStringField(TEXT("parentOp"), Controller->GetParentOpByName(OpName).ToString());
+		const UIKRigDefinition* OpTargetRig = Controller->GetTargetIKRigForOp(OpName);
+		OpObj->SetStringField(TEXT("targetRig"), OpTargetRig ? OpTargetRig->GetPathName() : TEXT(""));
+
+		TArray<TSharedPtr<FJsonValue>> OpMappings;
+		if (const FRetargetChainMapping* ChainMapping = Controller->GetChainMapping(OpName))
+		{
+			for (const FRetargetChainPair& Pair : ChainMapping->GetChainPairs())
+			{
+				TSharedPtr<FJsonObject> MappingObj = MakeShared<FJsonObject>();
+				MappingObj->SetStringField(TEXT("targetChain"), Pair.TargetChainName.ToString());
+				MappingObj->SetStringField(TEXT("sourceChain"), Pair.SourceChainName.ToString());
+				OpMappings.Add(MakeShared<FJsonValueObject>(MappingObj));
+			}
+		}
+		OpObj->SetArrayField(TEXT("chainMappings"), OpMappings);
+		RetargetOps.Add(MakeShared<FJsonValueObject>(OpObj));
+	}
+	Result->SetArrayField(TEXT("retargetOps"), RetargetOps);
+#endif
 
 	// Chain mappings: for each target chain, report the source chain it's mapped to.
 	TArray<TSharedPtr<FJsonValue>> Mappings;
@@ -1841,6 +2168,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetIKRigMesh(const TSharedPtr<FJsonOb
 {
 	FString RigPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("rigPath"), TEXT("assetPath"), RigPath)) return Err;
+	if (MCPIsProtectedAssetPath(RigPath))
+	{
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RigPath));
+	}
 	FString MeshPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("meshPath"), TEXT("skeletalMesh"), MeshPath)) return Err;
 
@@ -1877,9 +2208,18 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetIKRetargeterRig(const TSharedPtr<F
 {
 	FString RetargeterPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("retargeterPath"), TEXT("assetPath"), RetargeterPath)) return Err;
+	if (MCPIsProtectedAssetPath(RetargeterPath))
+	{
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RetargeterPath));
+	}
 	FString RigPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("rigPath"), TEXT("ikRig"), RigPath)) return Err;
 	const FString Side = OptionalString(Params, TEXT("side"), TEXT("target"));
+	if (!Side.Equals(TEXT("source"), ESearchCase::IgnoreCase)
+		&& !Side.Equals(TEXT("target"), ESearchCase::IgnoreCase))
+	{
+		return MCPError(TEXT("'side' must be 'source' or 'target'"));
+	}
 
 	UIKRetargeter* Retargeter = LoadObject<UIKRetargeter>(nullptr, *RetargeterPath);
 	if (!Retargeter) return MCPError(FString::Printf(TEXT("IKRetargeter not found: %s"), *RetargeterPath));
@@ -1888,8 +2228,38 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetIKRetargeterRig(const TSharedPtr<F
 
 	UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter);
 	if (!Controller) return MCPError(TEXT("IKRetargeterController unavailable"));
-	Controller->SetIKRig(ParseSourceOrTarget(Side), IKRig);
-	SaveAssetPackage(Retargeter);
+	const ERetargetSourceOrTarget SourceOrTarget = ParseSourceOrTarget(Side);
+	bool bAssignmentFailed = false;
+	{
+		const FScopedTransaction Transaction(NSLOCTEXT("UE_MCP", "SetIKRetargeterRig", "Set IK Retargeter Rig"));
+		Retargeter->Modify();
+#if UE_MCP_HAS_5_8_API
+		if (Controller->GetNumRetargetOps() == 0)
+		{
+			Controller->AddDefaultOps();
+		}
+		Controller->SetIKRig(SourceOrTarget, IKRig);
+		Controller->AssignIKRigToAllOps(SourceOrTarget, IKRig);
+		Controller->CleanAsset();
+#else
+		Controller->SetIKRig(SourceOrTarget, IKRig);
+#endif
+		bAssignmentFailed = Controller->GetIKRig(SourceOrTarget) != IKRig;
+	}
+	if (bAssignmentFailed)
+	{
+		const bool bRolledBack = GEditor && GEditor->UndoTransaction();
+		return MCPError(bRolledBack
+			? TEXT("IK Retargeter rig assignment failed readback validation and was rolled back")
+			: TEXT("IK Retargeter rig assignment failed readback validation and could not be rolled back"));
+	}
+	if (!SaveAssetPackage(Retargeter))
+	{
+		const bool bRolledBack = GEditor && GEditor->UndoTransaction();
+		return MCPError(bRolledBack
+			? TEXT("IK Retargeter rig assignment could not be saved and was rolled back")
+			: TEXT("IK Retargeter rig assignment could not be saved and the editor transaction could not be rolled back"));
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
@@ -1904,6 +2274,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AutoAlignRetargetPose(const TSharedPt
 {
 	FString RetargeterPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("retargeterPath"), TEXT("assetPath"), RetargeterPath)) return Err;
+	if (MCPIsProtectedAssetPath(RetargeterPath))
+	{
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RetargeterPath));
+	}
 	const FString Side = OptionalString(Params, TEXT("side"), TEXT("target"));
 
 	UIKRetargeter* Retargeter = LoadObject<UIKRetargeter>(nullptr, *RetargeterPath);
@@ -1927,6 +2301,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ResetRetargetPose(const TSharedPtr<FJ
 {
 	FString RetargeterPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("retargeterPath"), TEXT("assetPath"), RetargeterPath)) return Err;
+	if (MCPIsProtectedAssetPath(RetargeterPath))
+	{
+		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *RetargeterPath));
+	}
 	const FString Side = OptionalString(Params, TEXT("side"), TEXT("target"));
 
 	UIKRetargeter* Retargeter = LoadObject<UIKRetargeter>(nullptr, *RetargeterPath);
@@ -1950,6 +2328,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ResetRetargetPose(const TSharedPtr<FJ
 // ─── #701 batch_retarget_animations ─────────────────────────────────
 TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TSharedPtr<FJsonObject>& Params)
 {
+#if !(ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), false);
+	Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
+	Result->SetStringField(TEXT("error"), TEXT("batch_retarget_animations requires Unreal Engine 5.8 or newer"));
+	return MCPResult(Result);
+#else
 	FString RetargeterPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("retargeterPath"), TEXT("assetPath"), RetargeterPath)) return Err;
 	FString SourceMeshPath, TargetMeshPath;
@@ -1962,6 +2347,46 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 	if (!SourceMesh) return MCPError(FString::Printf(TEXT("Source mesh not found: %s"), *SourceMeshPath));
 	USkeletalMesh* TargetMesh = LoadObject<USkeletalMesh>(nullptr, *TargetMeshPath);
 	if (!TargetMesh) return MCPError(FString::Printf(TEXT("Target mesh not found: %s"), *TargetMeshPath));
+	if (SourceMesh == TargetMesh) return MCPError(TEXT("sourceMesh and targetMesh must be different"));
+	if (OptionalBool(Params, TEXT("overwrite"), false))
+	{
+		return MCPError(TEXT("overwrite=true is not supported; choose a new output name/path so existing assets are never replaced"));
+	}
+
+	bool bMappingInspectionAvailable = false;
+	int32 TargetChainCount = 0;
+	int32 MappedChainCount = 0;
+	TArray<TSharedPtr<FJsonValue>> UnmappedTargetChains;
+	if (UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter))
+	{
+		if (const UIKRigDefinition* TargetRig = Controller->GetIKRig(ERetargetSourceOrTarget::Target))
+		{
+			bMappingInspectionAvailable = true;
+			for (const FBoneChain& TargetChain : TargetRig->GetRetargetChains())
+			{
+				++TargetChainCount;
+				if (Controller->GetSourceChain(TargetChain.ChainName).IsNone())
+				{
+					UnmappedTargetChains.Add(MakeShared<FJsonValueString>(TargetChain.ChainName.ToString()));
+				}
+				else
+				{
+					++MappedChainCount;
+				}
+			}
+		}
+	}
+	const bool bRequireCompleteMapping = OptionalBool(Params, TEXT("requireCompleteMapping"), false);
+	if (bRequireCompleteMapping && !bMappingInspectionAvailable)
+	{
+		return MCPError(TEXT("Cannot verify complete mapping because the retargeter has no target IK Rig"));
+	}
+	if (bRequireCompleteMapping && !UnmappedTargetChains.IsEmpty())
+	{
+		return MCPError(FString::Printf(
+			TEXT("Retargeter has %d unmapped target chain(s) and requireCompleteMapping=true"),
+			UnmappedTargetChains.Num()));
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* AnimArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("animPaths"), AnimArr) || !AnimArr || AnimArr->Num() == 0)
@@ -1969,40 +2394,123 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 		return MCPError(TEXT("Missing 'animPaths' (array of AnimSequence paths to retarget)"));
 	}
 
-	// The FIKRetargetBatchOperationInputs / UIKRetargetBatchOperation::RunBatchRetarget
-	// batch API is UE 5.8+. The 5.7 batch-retarget API differs; rather than a
-	// partial reimplementation, return a clear error below 5.8.
-#if !(ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
-	return MCPError(TEXT("batch_retarget_animations requires UE 5.8+ (the FIKRetargetBatchOperationInputs / RunBatchRetarget API is unavailable in this engine version)."));
-#else
 	FIKRetargetBatchOperationInputs Inputs;
 	Inputs.SourceMesh = SourceMesh;
 	Inputs.TargetMesh = TargetMesh;
 	Inputs.IKRetargetAsset = Retargeter;
-	Inputs.bOverwriteExistingFiles = OptionalBool(Params, TEXT("overwrite"), false);
+	Inputs.bOverwriteExistingFiles = false;
+	Inputs.bIncludeReferencedAssets = false;
 	Inputs.Prefix = OptionalString(Params, TEXT("prefix"));
 	Inputs.Suffix = OptionalString(Params, TEXT("suffix"), TEXT("_Retargeted"));
 	const FString TargetPath = OptionalString(Params, TEXT("outputPath"));
+	if (!TargetPath.IsEmpty() && MCPIsProtectedAssetPath(TargetPath))
+	{
+		return MCPError(FString::Printf(TEXT("Protected output path is not allowed: %s"), *TargetPath));
+	}
 	if (TargetPath.IsEmpty()) { Inputs.bUseSourcePath = true; }
 	else { Inputs.TargetPath = TargetPath; }
 
+	TSet<FString> SeenPaths;
 	int32 Loaded = 0;
-	for (const TSharedPtr<FJsonValue>& V : *AnimArr)
+	for (int32 Index = 0; Index < AnimArr->Num(); ++Index)
 	{
+		const TSharedPtr<FJsonValue>& V = (*AnimArr)[Index];
 		FString P;
-		if (!V->TryGetString(P) || P.IsEmpty()) continue;
-		if (UAnimSequence* Anim = LoadObject<UAnimSequence>(nullptr, *P))
+		if (!V.IsValid() || !V->TryGetString(P) || P.IsEmpty())
 		{
-			Inputs.AssetsToRetarget.Add(FAssetData(Anim));
-			++Loaded;
+			return MCPError(FString::Printf(TEXT("animPaths[%d] must be a non-empty AnimSequence asset path"), Index));
 		}
+		if (SeenPaths.Contains(P))
+		{
+			return MCPError(FString::Printf(TEXT("Duplicate animPaths entry: %s"), *P));
+		}
+		if (TargetPath.IsEmpty() && MCPIsProtectedAssetPath(P))
+		{
+			return MCPError(FString::Printf(TEXT("Cannot create a retargeted asset beside protected source path: %s"), *P));
+		}
+		UAnimSequence* Anim = LoadObject<UAnimSequence>(nullptr, *P);
+		if (!Anim)
+		{
+			return MCPError(FString::Printf(TEXT("AnimSequence not found: %s"), *P));
+		}
+		if (!SourceMesh->GetSkeleton() || !Anim->GetSkeleton()
+			|| !SourceMesh->GetSkeleton()->IsCompatibleForEditor(Anim->GetSkeleton()))
+		{
+			return MCPError(FString::Printf(
+				TEXT("AnimSequence skeleton is incompatible with sourceMesh: %s"), *P));
+		}
+		SeenPaths.Add(P);
+		Inputs.AssetsToRetarget.Add(FAssetData(Anim));
+		++Loaded;
 	}
-	if (Loaded == 0) return MCPError(TEXT("No valid AnimSequences resolved from animPaths"));
+
+	FScopedBatchRetargetEditorInstanceRestore RestoreEditorInstances(Retargeter);
+	FIKRetargetProcessor ValidationProcessor;
+	FRetargetInitParameters ValidationParameters;
+	ValidationParameters.SourceSkeletalMesh = SourceMesh;
+	ValidationParameters.TargetSkeletalMesh = TargetMesh;
+	ValidationParameters.RetargeterAsset = Retargeter;
+	ValidationParameters.bSuppressWarnings = false;
+	ValidationProcessor.Initialize(ValidationParameters);
+	const TArray<FText> ValidationErrors = ValidationProcessor.Log.GetErrors();
+	if (!ValidationProcessor.IsInitialized() || !ValidationErrors.IsEmpty())
+	{
+		return MCPError(!ValidationErrors.IsEmpty()
+			? FString::Printf(TEXT("IK Retargeter processor validation failed: %s"), *ValidationErrors[0].ToString())
+			: TEXT("IK Retargeter processor validation failed to initialize"));
+	}
 
 	const TArray<FAssetData> Created = UIKRetargetBatchOperation::RunBatchRetarget(Inputs);
+	auto DeleteCreatedAssets = [&Created]()
+	{
+		TArray<FString> ResidualPaths;
+		for (const FAssetData& AssetData : Created)
+		{
+			const FString ObjectPath = AssetData.GetObjectPathString();
+			if (ObjectPath.IsEmpty())
+			{
+				ResidualPaths.Add(TEXT("<unknown output path>"));
+				continue;
+			}
+			UEditorAssetLibrary::DeleteAsset(ObjectPath);
+			if (UEditorAssetLibrary::DoesAssetExist(ObjectPath)) ResidualPaths.Add(ObjectPath);
+		}
+		return ResidualPaths;
+	};
+	if (Created.Num() != Loaded)
+	{
+		const TArray<FString> ResidualPaths = DeleteCreatedAssets();
+		if (!ResidualPaths.IsEmpty())
+		{
+			return MCPError(FString::Printf(
+				TEXT("Batch retarget created %d of %d requested assets and cleanup failed for: %s"),
+				Created.Num(), Loaded, *FString::Join(ResidualPaths, TEXT(", "))));
+		}
+		return MCPError(FString::Printf(
+			TEXT("Batch retarget created %d of %d requested assets; all new outputs were deleted"),
+			Created.Num(), Loaded));
+	}
 
 	TArray<TSharedPtr<FJsonValue>> OutPaths;
-	for (const FAssetData& AD : Created) OutPaths.Add(MakeShared<FJsonValueString>(AD.GetObjectPathString()));
+	for (const FAssetData& AD : Created)
+	{
+		UObject* CreatedAsset = AD.GetAsset();
+		if (!CreatedAsset || !SaveAssetPackage(CreatedAsset))
+		{
+			const FString FailedPath = AD.GetObjectPathString();
+			const TArray<FString> ResidualPaths = DeleteCreatedAssets();
+			if (!ResidualPaths.IsEmpty())
+			{
+				return MCPError(FString::Printf(
+					TEXT("Failed to save retargeted asset '%s' and cleanup failed for: %s"),
+					*FailedPath, *FString::Join(ResidualPaths, TEXT(", "))));
+			}
+			return MCPError(FString::Printf(
+				TEXT("Failed to save retargeted asset '%s'; all new outputs were deleted"),
+				*FailedPath));
+		}
+		OutPaths.Add(MakeShared<FJsonValueString>(AD.GetObjectPathString()));
+	}
 
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
@@ -2010,6 +2518,25 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 	Result->SetNumberField(TEXT("requested"), Loaded);
 	Result->SetNumberField(TEXT("createdCount"), OutPaths.Num());
 	Result->SetArrayField(TEXT("createdAssets"), OutPaths);
+	Result->SetBoolField(TEXT("includedReferencedAssets"), false);
+	Result->SetBoolField(TEXT("requireCompleteMapping"), bRequireCompleteMapping);
+	Result->SetBoolField(TEXT("mappingInspectionAvailable"), bMappingInspectionAvailable);
+	if (bMappingInspectionAvailable)
+	{
+		Result->SetNumberField(TEXT("targetChainCount"), TargetChainCount);
+		Result->SetNumberField(TEXT("mappedChainCount"), MappedChainCount);
+		Result->SetArrayField(TEXT("unmappedTargetChains"), UnmappedTargetChains);
+		Result->SetBoolField(TEXT("mappingComplete"), UnmappedTargetChains.IsEmpty());
+		if (!UnmappedTargetChains.IsEmpty())
+		{
+			Result->SetStringField(TEXT("mappingWarning"), FString::Printf(
+				TEXT("Retarget completed with %d unmapped target chain(s); inspect deformation and compare sampled poses before accepting the output"),
+				UnmappedTargetChains.Num()));
+		}
+	}
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	RollbackPayload->SetArrayField(TEXT("assetPaths"), OutPaths);
+	MCPSetRollback(Result, TEXT("delete_asset_batch"), RollbackPayload);
 	return MCPResult(Result);
 #endif
 }

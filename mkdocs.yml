@@ -59,6 +59,7 @@ nav:
   - Getting Started: getting-started.md
   - Architecture: architecture.md
   - Tool Reference: tool-reference.md
+  - Control Rig Animation: control-rig-animation.md
   - Native Tools: native-tools.md
   - Handler Conventions: handler-conventions.md
   - Widgets:

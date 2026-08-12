@@ -1,5 +1,5 @@
 {
-  "instructions": "UE-MCP: Unreal Engine editor bridge (C++ plugin) - 24 category tools covering 783 actions, plus 830 official Unreal 5.8 tools wrapped in-process (UE 5.8+; see the epic category).\n\nEvery tool takes an \"action\" parameter that selects the operation. Call project(action=\"get_status\") first.\n\n═══ QUICK START ═══\n1. project(action=\"get_status\") - check if the editor is connected\n2. If not connected: editor(action=\"start_editor\") to launch UE\n3. level(action=\"get_outliner\") - see what's in the current level\n4. asset(action=\"list\") - browse project assets\n5. reflection(action=\"reflect_class\", className=\"StaticMeshActor\") - understand any UE class\n6. demo(action=\"step\", stepIndex=1) through 19 - run the Neon Shrine demo to see the bridge in action\n7. demo(action=\"cleanup\") - clean up after the demo\n\n═══ TOOLS ═══\n\nEvery category tool lists its own actions (and each action's parameters) in\nits description - read the description of the category you need. Categories:\nproject, asset, blueprint, level, material, animation, landscape, pcg,\nfoliage, niagara, audio, widget, editor, reflection, gameplay, gas,\nnetworking, demo, feedback, statetree, chooser, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+), fab.\n\n═══ TIPS ═══\n• Start with level(action=\"get_outliner\") or asset(action=\"list\") to discover what's in the project.\n• Use reflection(action=\"reflect_class\") to understand any UE class's properties.\n• asset(action=\"search\", query=\"/Game/Characters/*\") accepts wildcards.\n• For BP scripting: blueprint(action=\"search_node_types\") → blueprint(action=\"add_node\") → blueprint(action=\"connect_pins\").\n• editor(action=\"execute_python\") is the escape hatch for any Unreal Python API call.\n• Animation tools need a skeleton path - use animation(action=\"list_skeletal_meshes\") to find it.\n• Editor lifecycle: editor(action=\"stop_editor\") / editor(action=\"start_editor\") / editor(action=\"restart_editor\") manage the UE process. editor(action=\"build_project\") builds the project C++ code (stop the editor first).\n• editor(action=\"hot_reload\") triggers Live Coding compilation without restarting the editor.\n• editor(action=\"focus_on_actor\", actorLabel=\"MyActor\") snaps the viewport to any actor.\n• Log output: editor(action=\"get_log\", category=\"LogMCPBridge\") to see bridge-specific logs.\n\n═══ FLOWS - READ BEFORE ACTING ═══\n\nBefore you run bash/npm commands or chain 3+ category tool calls to\nsatisfy a user request, look at the `flows` field returned by\nproject(action=\"get_status\").\n\nThat field lists named, pre-built sequences for this project. Each\nentry has a name and description. If ANY flow's description matches\nwhat the user asked for, you MUST run it instead of building the\nsequence yourself.\n\nExamples:\n  User asks                          | Look for a flow like\n  ---------------------------------- | ------------------------------\n  \"rebuild and relaunch the editor\"  | rebuild\n  \"run the smoke tests\"              | smoke\n  \"redeploy the plugin\"              | deploy, redeploy\n  \"package the project\"              | package\n\nRun a matched flow with: flow(action=\"run\", flowName=\"<name>\")\n\nDO NOT:\n- Skip the get_status flows check before running bash/npm yourself.\n- Author a new flow on your own. Only the user authors flows.\n- Suggest a flow for a one-off task the user is unlikely to repeat.\n\nDO suggest a new flow IF AND ONLY IF all three are true:\n  1. You just finished a sequence with 3+ steps.\n  2. The sequence had the same shape every run, with only 1-2 values\n     changing.\n  3. The user is likely to ask for the same shape again.\nIn that case say: \"This sequence (X -> Y -> Z) might be worth registering\nas a flow in ue-mcp.yml. Want me to draft one?\" Then STOP. Wait.\n\n═══ FEEDBACK ═══\nIf you had to use editor(action=\"execute_python\") as a workaround because a native tool\ncouldn't handle the task, keep a mental note of what you did and why. When your task is\ncomplete, tell the user:\n  \"I had to use custom Python scripts to [describe what]. Would you like to submit\n   feedback to help improve ue-mcp?\"\nIf the user agrees, call feedback(action=\"submit\") with:\n  • title - short, generic description of the gap (no project-specific details)\n  • summary - what was attempted and why the native tool fell short\n  • pythonWorkaround - the Python code that was used\n  • idealTool - what tool/action should handle this natively\nThis creates a GitHub issue so the maintainers can add proper support.\n\nNot every gap belongs to ue-mcp core. Plugins (PIE Studio, Perforce, Meshy, ...)\nown their own surfaces and their own trackers. submit checks the plugin registry\nand aims the issue at the owning repo on its own, and the approval prompt lets\nthe user change it - do NOT set the repo parameter yourself unless the user\nnames a repo. feedback(action=\"route\") answers \"where would this land?\" without\nposting anything.\n",
+  "instructions": "UE-MCP: Unreal Engine editor bridge (C++ plugin) - 24 category tools covering 790 actions, plus 830 official Unreal 5.8 tools wrapped in-process (UE 5.8+; see the epic category).\n\nEvery tool takes an \"action\" parameter that selects the operation. Call project(action=\"get_status\") first.\n\n═══ QUICK START ═══\n1. project(action=\"get_status\") - check if the editor is connected\n2. If not connected: editor(action=\"start_editor\") to launch UE\n3. level(action=\"get_outliner\") - see what's in the current level\n4. asset(action=\"list\") - browse project assets\n5. reflection(action=\"reflect_class\", className=\"StaticMeshActor\") - understand any UE class\n6. demo(action=\"step\", stepIndex=1) through 19 - run the Neon Shrine demo to see the bridge in action\n7. demo(action=\"cleanup\") - clean up after the demo\n\n═══ TOOLS ═══\n\nEvery category tool lists its own actions (and each action's parameters) in\nits description - read the description of the category you need. Categories:\nproject, asset, blueprint, level, material, animation, landscape, pcg,\nfoliage, niagara, audio, widget, editor, reflection, gameplay, gas,\nnetworking, demo, feedback, statetree, chooser, plugins, epic (830 wrapped Unreal 5.8 tools; UE 5.8+), fab.\n\n═══ TIPS ═══\n• Start with level(action=\"get_outliner\") or asset(action=\"list\") to discover what's in the project.\n• Use reflection(action=\"reflect_class\") to understand any UE class's properties.\n• asset(action=\"search\", query=\"/Game/Characters/*\") accepts wildcards.\n• For BP scripting: blueprint(action=\"search_node_types\") → blueprint(action=\"add_node\") → blueprint(action=\"connect_pins\").\n• editor(action=\"execute_python\") is the escape hatch for any Unreal Python API call.\n• Animation tools need a skeleton path - use animation(action=\"list_skeletal_meshes\") to find it.\n• Editor lifecycle: editor(action=\"stop_editor\") / editor(action=\"start_editor\") / editor(action=\"restart_editor\") manage the UE process. editor(action=\"build_project\") builds the project C++ code (stop the editor first).\n• editor(action=\"hot_reload\") triggers Live Coding compilation without restarting the editor.\n• editor(action=\"focus_on_actor\", actorLabel=\"MyActor\") snaps the viewport to any actor.\n• Log output: editor(action=\"get_log\", category=\"LogMCPBridge\") to see bridge-specific logs.\n\n═══ FLOWS - READ BEFORE ACTING ═══\n\nBefore you run bash/npm commands or chain 3+ category tool calls to\nsatisfy a user request, look at the `flows` field returned by\nproject(action=\"get_status\").\n\nThat field lists named, pre-built sequences for this project. Each\nentry has a name and description. If ANY flow's description matches\nwhat the user asked for, you MUST run it instead of building the\nsequence yourself.\n\nExamples:\n  User asks                          | Look for a flow like\n  ---------------------------------- | ------------------------------\n  \"rebuild and relaunch the editor\"  | rebuild\n  \"run the smoke tests\"              | smoke\n  \"redeploy the plugin\"              | deploy, redeploy\n  \"package the project\"              | package\n\nRun a matched flow with: flow(action=\"run\", flowName=\"<name>\")\n\nDO NOT:\n- Skip the get_status flows check before running bash/npm yourself.\n- Author a new flow on your own. Only the user authors flows.\n- Suggest a flow for a one-off task the user is unlikely to repeat.\n\nDO suggest a new flow IF AND ONLY IF all three are true:\n  1. You just finished a sequence with 3+ steps.\n  2. The sequence had the same shape every run, with only 1-2 values\n     changing.\n  3. The user is likely to ask for the same shape again.\nIn that case say: \"This sequence (X -> Y -> Z) might be worth registering\nas a flow in ue-mcp.yml. Want me to draft one?\" Then STOP. Wait.\n\n═══ FEEDBACK ═══\nIf you had to use editor(action=\"execute_python\") as a workaround because a native tool\ncouldn't handle the task, keep a mental note of what you did and why. When your task is\ncomplete, tell the user:\n  \"I had to use custom Python scripts to [describe what]. Would you like to submit\n   feedback to help improve ue-mcp?\"\nIf the user agrees, call feedback(action=\"submit\") with:\n  • title - short, generic description of the gap (no project-specific details)\n  • summary - what was attempted and why the native tool fell short\n  • pythonWorkaround - the Python code that was used\n  • idealTool - what tool/action should handle this natively\nThis creates a GitHub issue so the maintainers can add proper support.\n\nNot every gap belongs to ue-mcp core. Plugins (PIE Studio, Perforce, Meshy, ...)\nown their own surfaces and their own trackers. submit checks the plugin registry\nand aims the issue at the owning repo on its own, and the approval prompt lets\nthe user change it - do NOT set the repo parameter yourself unless the user\nnames a repo. feedback(action=\"route\") answers \"where would this land?\" without\nposting anything.\n",
   "scenario": "editor-connected",
   "schemaVersion": 1,
   "server": {
@@ -9,7 +9,7 @@
   "toolCount": 27,
   "tools": [
     {
-      "description": "Animation assets, skeletons, montages, blendspaces, anim blueprints, physics assets.\n\nActions:\n- read_anim_blueprint: Read AnimBP structure. Params: assetPath\n- read_montage: Read montage. Params: assetPath\n- read_sequence: Read anim sequence. Params: assetPath\n- scan_animation_tracks: Scan AnimSequence bone-track counts. Params: directory?, recursive?, assetPaths?, skeletonPath?, targetTrackCount?, includeTrackNames?\n- read_blendspace: Read blendspace. Params: assetPath\n- add_blend_sample: Append a sample to a BlendSpace. Params: assetPath, animation (AnimSequence path), position {x,y} (or flat x,y) (#248)\n- set_blend_sample: Move an existing BlendSpace sample or swap its animation. Params: assetPath, sampleIndex, position? {x,y} (or flat x,y), animation? (#272)\n- list: List anim assets. Params: directory?, recursive?\n- create_montage: Create montage. Params: animSequencePath, name?, packagePath?\n- author_montages_batch: Batch-author montages in one call: idempotent create, slot name, blend/rate/length properties, sections and notifies, then save. Every item reports success plus the failing stage (validate|create|slot|properties|sections|notifies|save) and error, so one bad item does not hide the rest. Newly created montages come back as a delete_asset_batch rollback. Each montage still holds the single segment create_montage builds. Params: items[] (each: name, animSequencePath, packagePath?, onConflict?, slotName?, trackIndex?, rateScale?, blendIn?, blendOut?, sequenceLength?, sections? [{sectionName, startTime?, linkedSection?}], notifies? [{notifyName, triggerTime, notifyClass?, properties?}])\n- create_anim_blueprint: Create AnimBP. Params: skeletonPath, name?, packagePath?, parentClass?\n- create_blendspace: Create blendspace (2D). Params: skeletonPath, name?, packagePath?, axisHorizontal?, axisVertical?\n- create_blendspace_1d: Create BlendSpace1D. Params: skeletonPath, name?, packagePath?, axisName? (default Speed), axisMin?, axisMax?, gridNum? (#459)\n- populate_blendspace: One-call axis params + samples authoring for BlendSpace 1D/2D. Params: assetPath, axis? ({name?, min?, max?, gridNum?}) for axis 0, blendspaceAxes? (per-axis array), axisHorizontal?/axisVertical? + horizontalMin/horizontalMax/verticalMin/verticalMax/gridNumHorizontal/gridNumVertical (back-compat), samples ([{animationPath, x, y?}]), clearExisting? (default true) (#459)\n- add_notify: Add notify. For PlayMontageNotify the notifyName is also written onto the spawned notify object so OnPlayMontageNotifyBegin broadcasts it (not 'None'), and montage branching-point markers refresh (#528). notifyProperties writes EditAnywhere fields onto the spawned notify object and therefore requires a notifyClass that resolves. Params: assetPath, notifyName, triggerTime, notifyClass?, notifyProperties?\n- remove_notify: Remove notify(s) by name and/or class. Pass at least one of notifyName/notifyClass; both filters AND. Idempotent: alreadyDeleted=true if no match. Params: assetPath, notifyName?, notifyClass? (#471)\n- get_skeleton_info: Read skeleton. Params: assetPath\n- list_sockets: List sockets. Params: assetPath\n- list_skeletal_meshes: List skeletal meshes. Params: directory?, recursive?\n- get_physics_asset: Read physics asset. Params: assetPath\n- create_sequence: Create blank AnimSequence. Params: name, skeletonPath, packagePath?, numFrames?, frameRate?\n- set_bone_keyframes: Set bone transform keyframes. Params: assetPath, boneName, keyframes\n- bake_keyframes_batch: Bake per-bone keyframe arrays for many bones into an AnimSequence in one call. Auto-creates each bone track first (set_bone_keyframes silently leaves a T-pose if the track is missing), wraps the batch in one transaction, and raises if any bone fails instead of reporting hollow success (#540). Params: assetPath, tracks ([{bone, keyframes:[{location,rotation{x,y,z,w},scale?}]}]), save? (default true)\n- get_bone_transforms: Read reference pose transforms for one, many, or ALL bones. Omit boneNames to return every bone with index/parentIndex/location/rotation/scale. With boneNames, returns only the named bones. Params: skeletonPath, boneNames? (omit = all bones), space? ('local' default, or 'component' for composed parent-chain transforms - retarget-chain / anatomical-scale work) (#245)\n- inspect_anim_nodes: Deep-dump the FAnimNode_* struct of anim graph nodes (PoseDriver PoseTargets/PoseAsset/RBF params/source bones, etc.) that read_anim_graph omits because it skips the 'Node' property. Params: assetPath, graphName? (default AnimGraph), nodeClass? (substring filter, e.g. 'PoseDriver') (#657)\n- compare_curves_to_morph_targets: Compare an AnimSequence/PoseAsset's curve names against a SkeletalMesh's morph target names. Returns curves[], morphTargets[], matched[], curvesWithoutMorph[], morphsWithoutCurve[] - verify authored curves drive morphs without Python. Params: animPath (AnimSequence or PoseAsset), skeletalMeshPath (#656)\n- set_montage_sequence: Replace the animation sequence in a montage slot. With segmentIndex, replaces only that one segment; without it, replaces every segment in the slot. Params: assetPath, animSequencePath, slotIndex? (default 0), segmentIndex? (#626)\n- set_montage_properties: Set montage properties. Params: assetPath, sequenceLength?, rateScale?, blendIn?, blendOut?\n- create_state_machine: Create state machine in AnimBP. Params: assetPath, name?, graphName?\n- add_state: Add state to a state machine. Params: assetPath, stateMachineName, stateName\n- add_transition: Add directed transition between states. Params: assetPath, stateMachineName, fromState, toState\n- set_state_animation: Assign anim asset to state. Params: assetPath, stateMachineName, stateName, animAssetPath\n- set_transition_blend: Set blend type/duration on transition. Params: assetPath, stateMachineName, fromState, toState, blendDuration?, blendLogic?\n- set_transition_condition: Set a transition's 'can enter transition' condition from a bool variable, keyed by transition (not graph name - every rule graph is named 'Transition' so blueprint graph tools can only reach the first). Wires VariableGet(bool) -> bCanEnterTransition, replacing any prior condition. Identify the transition by transitionGuid (from add_transition/read_state_machine) OR fromState+toState. Params: assetPath, stateMachineName, variableName (existing bool var), transitionGuid? OR fromState?+toState?, negate? (default false) (#707)\n- read_state_machine: Read state machine topology. Params: assetPath, stateMachineName\n- read_anim_graph: Read AnimBP AnimGraph nodes with properties & pins. Params: assetPath, graphName?\n- add_curve: Add float curve to AnimSequence. Params: assetPath, curveName, curveType?\n- set_anim_curve_keys: Set float-curve key VALUES on an AnimSequence (add_curve only creates an empty named curve - it cannot set keyframe values). Adds the curve if missing, then replaces its keys. Use for authoring Distance/Speed/any float curve directly. Params: assetPath, curveName, keys ([{time, value, interp?('linear'|'constant'|'cubic')}]), interpolation? (default 'linear', applied to keys without their own interp) (#712)\n- apply_animation_modifier: Instantiate a UAnimationModifier subclass and run it on an AnimSequence. Headline use: modifierClass='DistanceCurveModifier' bakes a Distance curve from the clip's root motion for distance matching (needs root motion baked first - see bake_root_motion_from_bone). Registers the modifier on the sequence so it re-applies on reimport. props sets the modifier's EditAnywhere fields (e.g. DistanceCurveModifier: {CurveName, Axis:'XY'|'X'|..., bStopAtEnd, StopSpeedThreshold, SampleRate}). Note: DistanceCurveModifier ships in the 'Animation Locomotion Library' plugin (off by default) - enable it first. Params: assetPath, modifierClass (short name or /Script path), props? (#712)\n- set_montage_slot: Set slot name on a montage track. Params: assetPath, slotName, trackIndex?\n- add_montage_section: Add composite section to montage. Pass segmentIndex (with slotName or slotIndex) to anchor the section to a specific segment: its startTime is taken from that segment and it stays linked, so inserting a segment ahead of it moves the marker with its animation. Without segmentIndex the section is a bare absolute-time marker. Params: assetPath, sectionName, startTime?, linkedSection?, segmentIndex?, slotName?, slotIndex? (#826)\n- add_montage_segment: Append (or insert) an animation segment into a montage slot's anim track. This is the only way to get more than one animation into a montage: create_montage builds exactly one segment, set_montage_sequence replaces rather than appends, and add_montage_section only writes a time marker with no animation behind it. Creates the named slot when it does not exist. Validates that the source shares the montage's skeleton and matches the track's additive type, then relays out the segments, refreshes linked sections and notifies, and rewrites the montage length. Params: assetPath, animSequencePath, slotName? (created if absent), slotIndex? (default 0, used when slotName is omitted), startPos? (trim into the source, default 0), endPos? (default source play length), playRate? (default 1, negative reverses), loopCount? (default 1), insertIndex? (default appends) (#826)\n- remove_montage_segment: Remove a segment from a montage slot by index, then relay out the remaining segments and rewrite the montage length. Idempotent: alreadyDeleted=true when the slot already holds no segments. Params: assetPath, segmentIndex, slotName?, slotIndex? (default 0) (#826)\n- list_montage_segments: List every slot's segments on a montage so a caller can address them by index: animation path, startPos/endPos trim, playRate, loopCount, track position and length per segment, plus the sections with the slot and segment each one links to. Params: assetPath, slotName? (filter to one slot) (#826)\n- create_ik_rig: Create IKRigDefinition asset, optionally with retargetRoot + chains[]. Params: name, skeletalMeshPath, packagePath?, retargetRoot?, chains?: [{name, startBone, endBone, goal?}]\n- read_ik_rig: Read IK Rig chains, solvers, skeleton. Params: assetPath\n- list_control_rig_variables: List ControlRig variables and hierarchy. Params: assetPath\n- read_control_rig_graph: Read a Control Rig's RigVM models: every graph with its nodes (name, node path, class), each node's pins (name, pin path, cppType, direction, execute flag, default value, nested sub-pins) and the links between them, plus full member-variable metadata (type, subtype, array-ness, default, public/read-only). list_control_rig_variables only ever reported a node COUNT, which is not enough to verify solver wiring (#774). Params: assetPath, graphName? (substring filter), includePins? (default true), includeDefaults? (default true), includeLinks? (default true), limit? (nodes per graph, default 200)\n- read_control_rig_hierarchy: Read a Control Rig's per-element hierarchy metadata: each element's name, type (Bone|Control|Null|Curve...), index, and parent. Params: assetPath (#619)\n- set_root_motion: Set root motion settings on AnimSequence. Params: assetPath, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?\n- add_virtual_bone: Add virtual bone. Params: skeletonPath, sourceBone, targetBone\n- remove_virtual_bone: Remove virtual bone. Params: skeletonPath, virtualBoneName\n- create_composite: Create AnimComposite. Params: name, skeletonPath, packagePath?\n- list_modifiers: List applied animation modifiers. Params: assetPath\n- create_ik_retargeter: Create IKRetargeter asset and (default) initialize the UE 5.7 ops stack: assigns sourceRig+targetRig to all ops, runs AutoMapChains. Returns chainsMapped count. Params: name, packagePath?, sourceRig?, targetRig?, autoMapChains? (default true) (#246)\n- read_ik_retargeter: Read IKRetargeter: source/target rigs and chain mappings. Params: assetPath (#246)\n- set_ik_rig_mesh: Set the preview/source skeletal mesh on an EXISTING IK Rig. Params: rigPath, meshPath (#701)\n- set_ik_retargeter_rig: Set the source or target IK Rig on an EXISTING IK Retargeter. Params: retargeterPath, rigPath, side? (source|target, default target) (#703)\n- auto_align_retarget_pose: Auto-align all bones of the source/target retarget pose (chain-to-chain) - fixes a retargeter that outputs a static reference pose. Params: retargeterPath, side? (source|target, default target) (#701)\n- reset_retarget_pose: Reset the current retarget pose (all bones) to the reference pose. Params: retargeterPath, side? (source|target, default target) (#701)\n- batch_retarget_animations: Bake a set of source AnimSequences onto the target skeleton through an IK Retargeter (RunBatchRetarget). Params: retargeterPath, sourceMesh, targetMesh, animPaths[], outputPath? (default: alongside source), prefix?, suffix? (default _Retargeted), overwrite? (#701)\n- set_anim_blueprint_skeleton: Set target skeleton on AnimBP. Params: assetPath, skeletonPath\n- read_bone_track: Read bone transform samples from AnimSequence. Params: assetPath, boneName, frames?: [int]\n- create_pose_search_database: Create a PoseSearchDatabase asset (motion matching). Params: name, packagePath?, schemaPath?\n- set_pose_search_schema: Set the Schema on an existing PoseSearchDatabase. Params: assetPath, schemaPath\n- add_pose_search_sequence: Append an AnimSequence/AnimComposite/AnimMontage/BlendSpace to a PoseSearchDatabase, with optional per-clip flags. Params: assetPath, sequencePath, mirror? ('original'|'mirrored'|'both'), disableReselection?, sampleStart?, sampleEnd?, enabled? (#684)\n- set_pose_search_clips: Author the whole clip list of a PoseSearchDatabase in one call (the 'duplicate a stock PSD, swap its clips' pipeline step). Replaces the list by default. Each clip carries per-entry flags. Params: assetPath, clips ([{sequencePath, mirror? ('original'|'mirrored'|'both'), disableReselection?, sampleStart?, sampleEnd?, enabled?}] - a bare string path also works), clearExisting? (default true). Follow with build_pose_search_index (#684)\n- build_pose_search_index: Build (or rebuild) the search index. Params: assetPath, wait? (default true)\n- read_pose_search_database: Inspect a PoseSearchDatabase: schema, animation entries, cost biases, tags. Params: assetPath\n- set_pose_search_database_settings: Tune a PoseSearchDatabase: cost biases, KD-tree neighbours, search mode, PCA components, normalization set. Params: assetPath, continuingPoseCostBias?, baseCostBias?, loopingCostBias?, kdTreeQueryNumNeighbors?, numberOfPrincipalComponents?, poseSearchMode? ('bruteforce'|'pcakdtree'|'vptree'|'eventonly'), normalizationSetPath? (motion matching)\n- create_pose_search_schema: Create a PoseSearchSchema (the feature definition a database indexes against). Binds a skeleton (and optional mirror table) and, by default, adds Trajectory+Pose default channels so the schema is immediately buildable. Refine with add_pose_search_schema_*_channel. Params: name, skeletonPath, packagePath?, mirrorDataTablePath?, sampleRate?, addDefaultChannels? (default true) (motion matching)\n- add_pose_search_schema_pose_channel: Add a Pose feature channel to a schema (samples named bones for velocity/position/rotation/phase). Params: schemaPath, bones ([{bone, flags?:['velocity','position','rotation','phase'], weight?}] - a bare bone-name string defaults to position), weight? (motion matching)\n- add_pose_search_schema_trajectory_channel: Add a Trajectory feature channel to a schema (past/future motion samples). Params: schemaPath, samples ([{offset (seconds; negative=history, positive=prediction), flags?:['position','velocity','facingDirection','velocityDirection', ...XY variants], weight?}]), weight? (motion matching)\n- read_pose_search_schema: Inspect a PoseSearchSchema: skeleton(s), mirror table, sample rate, feature channels. Params: schemaPath (motion matching)\n- create_mirror_data_table: Create a MirrorDataTable for a skeleton (needed for mirrored poses in motion matching / mirror nodes). Auto-derives bone-pair rows from find/replace expressions (defaults to UE mannequin _l/_r suffix swap). Params: name, skeletonPath, packagePath?, expressions? ([{find, replace, method?:'suffix'|'prefix'|'regex'}]), mirrorAxis? (X|Y|Z, default X), mirrorRootMotion? (default true)\n- read_mirror_data_table: Inspect a MirrorDataTable: skeleton and bone-pair rows (name -> mirroredName). Params: assetPath (motion matching)\n- create_pose_search_normalization_set: Create a PoseSearchNormalizationSet grouping databases so they normalize their cost space together (consistent blending across a locomotion set). Assign it via set_pose_search_database_settings(normalizationSetPath). Params: name, packagePath?, databases? ([PoseSearchDatabase paths]) (motion matching)\n- add_motion_matching_node: Add a Motion Matching node to an AnimBP AnimGraph and point it at a PoseSearchDatabase (the runtime node that searches the database each frame). Connects its output to the Output Pose by default. For chooser-driven database selection, bind an anim-node function that calls SetDatabasesToSearch. Params: assetPath (AnimBP), databasePath, graphName? (default AnimGraph), connectToOutput? (default true), blendTime? (motion matching)\n- add_pose_history_node: Add a Pose History (PoseSearchHistoryCollector) node to an AnimBP AnimGraph - the Motion Matching node needs it in the graph to query pose/trajectory history. Defaults to self-generated trajectory (no external trajectory pin needed) and inserts itself into the pose chain feeding the Output Pose. Params: assetPath (AnimBP), graphName? (default AnimGraph), poseCount?, samplingInterval?, generateTrajectory? (default true), trajectoryHistoryCount?, trajectoryPredictionCount?, insertBeforeOutput? (default true) (motion matching)\n- set_motion_matching_chooser: Drive the Motion Matching node's Database from a ChooserTable so the database is selected at runtime by character state. Wires a thread-safe EvaluateChooser (result typed to PoseSearchDatabase) into the MM node's Database pin. contextSource selects what the chooser reads its columns from: 'self' (default, the anim instance - choosers branching on AnimBP variables) or 'pawn' (the owning pawn via TryGetPawnOwner - choosers branching on character/pawn state). Params: assetPath (AnimBP), chooserPath (ChooserTable), graphName? (default AnimGraph), contextSource? ('self'|'pawn') (motion matching)\n- add_sequence_evaluator: Add a Sequence Evaluator node (explicit-time player) to an AnimBP graph - the node distance matching drives by setting its ExplicitTime each frame. graphName can be the top-level AnimGraph or a state's inner graph (pass the state name). Defaults bTeleportToExplicitTime=false so time advances and root motion extracts. Connects to the Output Pose by default. Returns nodeGuid for bind_anim_node_function. Params: assetPath (AnimBP), sequencePath? (AnimSequence to evaluate), graphName? (default AnimGraph), explicitTime?, shouldLoop?, teleportToExplicitTime? (default false), connectToOutput? (default true) (#713)\n- bind_anim_node_function: Bind a thread-safe anim-node function to an anim graph node's update slot - the mechanism distance matching uses to advance a Sequence Evaluator's explicit time each frame (function calls AnimDistanceMatchingLibrary::DistanceMatchToTarget / AdvanceTimeByDistanceMatching). The function must already exist on the AnimBP (create it as a BlueprintThreadSafe function first). Identify the node by nodeGuid (from add_sequence_evaluator / add_*_node). Params: assetPath (AnimBP), nodeGuid, functionName, graphName? (default AnimGraph), binding? ('update' (default)|'becomeRelevant'|'initialUpdate') (#713)\n- set_sequence_properties: Batch-set properties on AnimSequence assets. If a path is a Montage and resolveFromMontages is true (default), resolves to its first AnimSequence. Params: assetPaths[], properties{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?}, resolveFromMontages?\n- bake_root_motion_from_bone: Bake delta translation from a source bone (e.g. pelvis) onto the root bone across the whole sequence; compensates the source bone so world-space position is unchanged. Params: assetPath, sourceBone, rootBone? (default 'root'), axes? (default ['x','y']), interpolation? ('linear'|'per_frame', default 'linear')\n- get_bone_transform: Read a bone or socket transform on a live actor's SkeletalMeshComponent. Wraps GetBoneTransform / GetSocketTransform. Params: actorLabel, boneName (or socket name), componentName? (default: CharacterMesh0 / Mesh / first SK component), world? (auto|pie|game|editor, default auto), space? (world|component|local, default world). Returns location, rotation, scale (#420)\n- list_bones: List bones in a live actor's SkeletalMeshComponent ref skeleton (name, index, parent). Params: actorLabel, componentName?, world? (auto|pie|game|editor, default auto) (#420)\n- rebind_leader_pose: Re-bind every secondary SkeletalMeshComponent on an actor to a body component (default CharacterMesh0 / Mesh). One-call fix for the 'character explodes after rotating the actor' failure mode. Params: actorLabel, bodyComponent? (#419)\n- preview_animation: Toggle bUpdateAnimationInEditor + VisibilityBasedAnimTickOption=AlwaysTickPoseAndRefreshBones on every SkeletalMeshComponent of an actor. Bypasses the 'cannot be edited on templates' guard for level instances. Params: actorLabel, enabled (#419/#420)\n\nEpic 5.8 toolset actions (341): the epic_* actions above wrap Unreal's native ToolsetRegistry tools for this domain. Pass tool arguments via 'input'. A top-level parameter named by the wrapped tool's own schema is folded into 'input' for you, as is this category's canonical asset path when the tool takes a single asset reference. A call that is still missing a required argument is refused with the exact shape to send, instead of being dispatched (#798).",
+      "description": "Animation assets, skeletons, montages, blendspaces, anim blueprints, physics assets.\n\nActions:\n- read_anim_blueprint: Read AnimBP structure. Params: assetPath\n- read_montage: Read montage. Params: assetPath\n- read_sequence: Read anim sequence. Params: assetPath\n- scan_animation_tracks: Scan AnimSequence bone-track counts. Params: directory?, recursive?, assetPaths?, skeletonPath?, targetTrackCount?, includeTrackNames?\n- read_blendspace: Read blendspace. Params: assetPath\n- add_blend_sample: Append a sample to a BlendSpace. Params: assetPath, animation (AnimSequence path), position {x,y} (or flat x,y) (#248)\n- set_blend_sample: Move an existing BlendSpace sample or swap its animation. Params: assetPath, sampleIndex, position? {x,y} (or flat x,y), animation? (#272)\n- list: List anim assets. Params: directory?, recursive?\n- create_montage: Create montage. Params: animSequencePath, name?, packagePath?\n- author_montages_batch: Batch-author montages in one call: idempotent create, slot name, blend/rate/length properties, sections and notifies, then save. Every item reports success plus the failing stage (validate|create|slot|properties|sections|notifies|save) and error, so one bad item does not hide the rest. Newly created montages come back as a delete_asset_batch rollback. Each montage still holds the single segment create_montage builds. Params: items[] (each: name, animSequencePath, packagePath?, onConflict?, slotName?, trackIndex?, rateScale?, blendIn?, blendOut?, sequenceLength?, sections? [{sectionName, startTime?, linkedSection?}], notifies? [{notifyName, triggerTime, notifyClass?, properties?}])\n- create_anim_blueprint: Create AnimBP. Params: skeletonPath, name?, packagePath?, parentClass?\n- create_blendspace: Create blendspace (2D). Params: skeletonPath, name?, packagePath?, axisHorizontal?, axisVertical?\n- create_blendspace_1d: Create BlendSpace1D. Params: skeletonPath, name?, packagePath?, axisName? (default Speed), axisMin?, axisMax?, gridNum? (#459)\n- populate_blendspace: One-call axis params + samples authoring for BlendSpace 1D/2D. Params: assetPath, axis? ({name?, min?, max?, gridNum?}) for axis 0, blendspaceAxes? (per-axis array), axisHorizontal?/axisVertical? + horizontalMin/horizontalMax/verticalMin/verticalMax/gridNumHorizontal/gridNumVertical (back-compat), samples ([{animationPath, x, y?}]), clearExisting? (default true) (#459)\n- add_notify: Add notify. For PlayMontageNotify the notifyName is also written onto the spawned notify object so OnPlayMontageNotifyBegin broadcasts it (not 'None'), and montage branching-point markers refresh (#528). notifyProperties writes EditAnywhere fields onto the spawned notify object and therefore requires a notifyClass that resolves. Params: assetPath, notifyName, triggerTime, notifyClass?, notifyProperties?\n- remove_notify: Remove notify(s) by name and/or class. Pass at least one of notifyName/notifyClass; both filters AND. Idempotent: alreadyDeleted=true if no match. Params: assetPath, notifyName?, notifyClass? (#471)\n- get_skeleton_info: Read skeleton. Params: assetPath\n- list_sockets: List sockets. Params: assetPath\n- list_skeletal_meshes: List skeletal meshes. Params: directory?, recursive?\n- get_physics_asset: Read physics asset. Params: assetPath\n- create_sequence: Create blank AnimSequence. Params: name, skeletonPath, packagePath?, numFrames?, frameRate?\n- set_bone_keyframes: Set bone transform keyframes. Params: assetPath, boneName, keyframes\n- bake_keyframes_batch: Bake per-bone keyframe arrays for many bones into an AnimSequence in one call. Auto-creates each bone track first (set_bone_keyframes silently leaves a T-pose if the track is missing), wraps the batch in one transaction, and raises if any bone fails instead of reporting hollow success (#540). Params: assetPath, tracks ([{bone, keyframes:[{location,rotation{x,y,z,w},scale?}]}]), save? (default true)\n- get_bone_transforms: Read reference pose transforms for one, many, or ALL bones. Omit boneNames to return every bone with index/parentIndex/location/rotation/scale. With boneNames, returns only the named bones. Params: skeletonPath, boneNames? (omit = all bones), space? ('local' default, or 'component' for composed parent-chain transforms - retarget-chain / anatomical-scale work) (#245)\n- inspect_anim_nodes: Deep-dump the FAnimNode_* struct of anim graph nodes (PoseDriver PoseTargets/PoseAsset/RBF params/source bones, etc.) that read_anim_graph omits because it skips the 'Node' property. Params: assetPath, graphName? (default AnimGraph), nodeClass? (substring filter, e.g. 'PoseDriver') (#657)\n- compare_curves_to_morph_targets: Compare an AnimSequence/PoseAsset's curve names against a SkeletalMesh's morph target names. Returns curves[], morphTargets[], matched[], curvesWithoutMorph[], morphsWithoutCurve[] - verify authored curves drive morphs without Python. Params: animPath (AnimSequence or PoseAsset), skeletalMeshPath (#656)\n- set_montage_sequence: Replace the animation sequence in a montage slot. With segmentIndex, replaces only that one segment; without it, replaces every segment in the slot. Params: assetPath, animSequencePath, slotIndex? (default 0), segmentIndex? (#626)\n- set_montage_properties: Set montage properties. Params: assetPath, sequenceLength?, rateScale?, blendIn?, blendOut?\n- create_state_machine: Create state machine in AnimBP. Params: assetPath, name?, graphName?\n- add_state: Add state to a state machine. Params: assetPath, stateMachineName, stateName\n- add_transition: Add directed transition between states. Params: assetPath, stateMachineName, fromState, toState\n- set_state_animation: Assign anim asset to state. Params: assetPath, stateMachineName, stateName, animAssetPath\n- set_transition_blend: Set blend type/duration on transition. Params: assetPath, stateMachineName, fromState, toState, blendDuration?, blendLogic?\n- set_transition_condition: Set a transition's 'can enter transition' condition from a bool variable, keyed by transition (not graph name - every rule graph is named 'Transition' so blueprint graph tools can only reach the first). Wires VariableGet(bool) -> bCanEnterTransition, replacing any prior condition. Identify the transition by transitionGuid (from add_transition/read_state_machine) OR fromState+toState. Params: assetPath, stateMachineName, variableName (existing bool var), transitionGuid? OR fromState?+toState?, negate? (default false) (#707)\n- read_state_machine: Read state machine topology. Params: assetPath, stateMachineName\n- read_anim_graph: Read AnimBP AnimGraph nodes with properties & pins. Params: assetPath, graphName?\n- add_curve: Add float curve to AnimSequence. Params: assetPath, curveName, curveType?\n- set_anim_curve_keys: Set float-curve key VALUES on an AnimSequence (add_curve only creates an empty named curve - it cannot set keyframe values). Adds the curve if missing, then replaces its keys. Use for authoring Distance/Speed/any float curve directly. Params: assetPath, curveName, keys ([{time, value, interp?('linear'|'constant'|'cubic')}]), interpolation? (default 'linear', applied to keys without their own interp) (#712)\n- apply_animation_modifier: Instantiate a UAnimationModifier subclass and run it on an AnimSequence. Headline use: modifierClass='DistanceCurveModifier' bakes a Distance curve from the clip's root motion for distance matching (needs root motion baked first - see bake_root_motion_from_bone). Registers the modifier on the sequence so it re-applies on reimport. props sets the modifier's EditAnywhere fields (e.g. DistanceCurveModifier: {CurveName, Axis:'XY'|'X'|..., bStopAtEnd, StopSpeedThreshold, SampleRate}). Note: DistanceCurveModifier ships in the 'Animation Locomotion Library' plugin (off by default) - enable it first. Params: assetPath, modifierClass (short name or /Script path), props? (#712)\n- set_montage_slot: Set slot name on a montage track. Params: assetPath, slotName, trackIndex?\n- add_montage_section: Add composite section to montage. Pass segmentIndex (with slotName or slotIndex) to anchor the section to a specific segment: its startTime is taken from that segment and it stays linked, so inserting a segment ahead of it moves the marker with its animation. Without segmentIndex the section is a bare absolute-time marker. Params: assetPath, sectionName, startTime?, linkedSection?, segmentIndex?, slotName?, slotIndex? (#826)\n- add_montage_segment: Append (or insert) an animation segment into a montage slot's anim track. This is the only way to get more than one animation into a montage: create_montage builds exactly one segment, set_montage_sequence replaces rather than appends, and add_montage_section only writes a time marker with no animation behind it. Creates the named slot when it does not exist. Validates that the source shares the montage's skeleton and matches the track's additive type, then relays out the segments, refreshes linked sections and notifies, and rewrites the montage length. Params: assetPath, animSequencePath, slotName? (created if absent), slotIndex? (default 0, used when slotName is omitted), startPos? (trim into the source, default 0), endPos? (default source play length), playRate? (default 1, negative reverses), loopCount? (default 1), insertIndex? (default appends) (#826)\n- remove_montage_segment: Remove a segment from a montage slot by index, then relay out the remaining segments and rewrite the montage length. Idempotent: alreadyDeleted=true when the slot already holds no segments. Params: assetPath, segmentIndex, slotName?, slotIndex? (default 0) (#826)\n- list_montage_segments: List every slot's segments on a montage so a caller can address them by index: animation path, startPos/endPos trim, playRate, loopCount, track position and length per segment, plus the sections with the slot and segment each one links to. Params: assetPath, slotName? (filter to one slot) (#826)\n- create_ik_rig: Create IKRigDefinition asset, optionally with retargetRoot + chains[]. Params: name, skeletalMeshPath, packagePath?, retargetRoot?, chains?: [{name, startBone, endBone, goal?}]\n- read_ik_rig: Read an IK Rig's preview mesh, skeleton roots/bones, ancestry-validated chains and goal assignments, concrete goals, exclusions, and structured solver/FBIK effector state. Params: assetPath\n- configure_ik_rig: UE 5.8 only. Author an existing IK Rig through UIKRigController with strict bone, ancestry, goal, and setting validation, native readback, one transaction, and checked save; older engines return unsupported_engine_version. autoSetup='retarget' installs the native retarget definition; 'full_body' installs the retarget definition then Full Body IK before requested desired-state upserts. Params: rigPath, autoSetup? ('retarget'|'full_body'), retargetRoot?, rootMotionBone?, chains?: [{name,startBone,endBone,goal?}], fullBodyIK?: {solverIndex?,rootBone,enabled?,goals:[{name,bone,positionAlpha?,rotationAlpha?,chainDepth?,strengthAlpha?,pullChainAlpha?,pinRotation?}]}, exclusions?: [{bone,excluded}].\n- list_control_rig_variables: List ControlRig variables and hierarchy. Params: assetPath\n- read_control_rig_graph: Read a Control Rig's RigVM models: every graph with its nodes (name, node path, class), each node's pins (name, pin path, cppType, direction, execute flag, default value, nested sub-pins) and the links between them, plus full member-variable metadata (type, subtype, array-ness, default, public/read-only). list_control_rig_variables only ever reported a node COUNT, which is not enough to verify solver wiring (#774). Params: assetPath, graphName? (substring filter), includePins? (default true), includeDefaults? (default true), includeLinks? (default true), limit? (nodes per graph, default 200)\n- read_control_rig_hierarchy: Read a Control Rig's per-element hierarchy metadata: each element's name, type (Bone|Control|Null|Curve...), index, and parent. Params: assetPath (#619)\n- begin_control_rig_edit: UE 5.8 only. Create a Sequencer Control Rig editing session over a source AnimSequence; native returns unsupported_engine_version on older engines. Baseline first: before this call, reuse or create a Control Rig for the target character, bind/import the exact target skeleton, add the intended controls, author Forward Solve, add Backward/Inverse Solve, verify it with read_control_rig_hierarchy/read_control_rig_graph, and pass an unchanged source round-trip. For a new baseline, the bundled Epic 5.8 controlrig actions include epic_create, epic_import_bones_from_asset, epic_add_control, and epic_add_backward_solve_graph; epic_create alone is not a usable rig. There is no silent fallback to raw bone-key authoring. rigMode='fk' uses UFKControlRig only when generated FK controls are sufficient; rigMode='asset' requires the verified controlRigPath and rejects rigs without inverse execution. bindingTag is the stable natural key for replay. onConflict is skip|error (default error); existing sessions are never modified. layered defaults false. startFrame is inclusive and endFrame is exclusive. Params: sequencePath, skeletalMeshPath, sourceAnimationPath, rigMode ('fk'|'asset'), controlRigPath?, layered?, startFrame?, endFrame?, displayRate?, bindingTag?, onConflict?. Returns the resolved bindingTag/binding GUID, rig, frame range, controls and created/existed status.\n- read_control_rig_edit: UE 5.8 only. Read transform, bool, float/scale-float, and integer/enum controls from a Control Rig editing session without changing editor state; native returns unsupported_engine_version on older engines and has no silent fallback. Params: sequencePath, bindingTag, controlNames?, frames?, space? ('local'|'global'). Scalar samples return value instead of transform. Control metadata includes native controlType, animatable, and enum path/options where applicable. Returns session identity, layered mode, range/rate, filtered control metadata, and requested frame samples.\n- apply_control_rig_edits: UE 5.8 only. Apply typed Control Rig edits in one transaction; native returns unsupported_engine_version on older engines. There is no silent fallback to raw bone tracks. set_keys writes strictly ordered full per-frame transforms from normalized quaternions and preserves shortest-arc quaternion continuity. A set operation writes one full absolute transform at frame or frames. An offset operation applies translation/rotation/scale deltas across an inclusive frame range with optional edge blends. contact_lock densely constrains a translatable driver control, or an optional driven bone/socket reference, to a fixed component-space target with smooth edge blends and optional pole/control stabilization. Driver and stabilizer keys are read back transactionally. A drivenReference contact returns verification='bake_and_analyze_required'; bake it and analyze every constrained frame before accepting the bone/socket result. set_bool, set_float, and set_int key matching scalar controls; enum controls use set_int with one of the integer values reported in enumOptions. Params: sequencePath, bindingTag, operations[] where set_keys={op:'set_keys',control,keys:[{frame,transform:{translation,rotationQuaternion,scale}}],space?}, set={op:'set',control,frame|frames,transform:{translation,rotationDegrees,scale},space?}, offset={op:'offset',control,startFrame,endFrame,translationCm?,rotationDegrees?,scaleMultiplier?,space?,blendInFrames?,blendOutFrames?}, contact_lock={op:'contact_lock',control,drivenReference?,startFrame,endFrame,target:{translation,rotationQuaternion?},blendInFrames?,blendOutFrames?,stabilizeControls?,positionToleranceCm?,rotationToleranceDegrees?}, set_bool={op:'set_bool',control,frame|frames,value}, set_float={op:'set_float',control,frame|frames,value}, or set_int={op:'set_int',control,frame|frames,value}. Sequencer's current interpolation mode is retained. Returns per-operation counts, affected controls/frames, and contactQa summaries; a failed key/readback batch is undone.\n- bake_control_rig_edit: UE 5.8 only. Bake the evaluated Control Rig session to a new AnimSequence asset; native returns unsupported_engine_version on older engines and has no raw-track fallback. The source LevelSequence remains unchanged. outputAssetPath is the output natural key; onConflict is skip|error (default error), never overwrite. Key reduction and Sequencer links are not supported yet, so reduceKeys/createLink must be false or omitted. Params: sequencePath, bindingTag, outputAssetPath, frameRate?, reduceKeys?, tolerance?, createLink?, onConflict?. Returns output asset metadata, frame/rate counts, status, and delete-created-asset rollback.\n- analyze_animation: Cross-version, data-driven AnimSequence inspection using the native animation APIs available in the compiled engine. Samples an AnimSequence and reports deterministic numeric motion diagnostics without Python or viewport inference. Params: assetPath (required AnimSequence), skeletalMeshPath?, boneNames?, frames?, sampleRate?, loop?, outputDirectory? (must resolve under Project/Saved/Codex/AnimationQA and must not already contain artifacts). Returns source/rate/range metadata, sampled local/component transforms, root-motion and continuity metrics, and any written analysis artifacts.\n- set_root_motion: Set root motion settings on AnimSequence. Params: assetPath, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?\n- add_virtual_bone: Add virtual bone. Params: skeletonPath, sourceBone, targetBone\n- remove_virtual_bone: Remove virtual bone. Params: skeletonPath, virtualBoneName\n- create_composite: Create AnimComposite. Params: name, skeletonPath, packagePath?\n- list_modifiers: List applied animation modifiers. Params: assetPath\n- create_ik_retargeter: Create IKRetargeter asset and (default) initialize the UE 5.7 ops stack: assigns sourceRig+targetRig to all ops, runs AutoMapChains. Returns chainsMapped count. Params: name, packagePath?, sourceRig?, targetRig?, autoMapChains? (default true) (#246)\n- read_ik_retargeter: Read an IK Retargeter's source/target rigs and preview meshes, flattened and per-op chain mappings, typed op stack, and all named/current pose offsets when the compiled engine exposes them. Params: assetPath (#246)\n- configure_ik_retargeter: UE 5.8 only. Configure an existing IK Retargeter through UIKRetargeterController with the correct default-op and per-op rig assignment order, auto/manual chain mappings, named pose authoring, processor validation, native readback, transaction rollback, and checked save; older engines return unsupported_engine_version. Whole-pose auto-align resets that pose first: create a new pose or pass pose.reset=true to acknowledge replacement, then manual offsets are applied. Params: retargeterPath, sourceRig?, targetRig?, sourcePreviewMesh?, targetPreviewMesh?, ensureDefaultOps? (default true), autoMapMode? ('exact'|'fuzzy'|'clear'), forceRemap? (default false), chainMappings?: [{targetChain,sourceChain?:string|null}], pose?: {side,name,create?,reset?,autoAlign?,bones?,rotationOffsets?:[{bone,rotationQuaternion}],rootOffsetZ?,snapBoneToGround?}.\n- set_ik_rig_mesh: Set the preview/source skeletal mesh on an EXISTING IK Rig. Params: rigPath, meshPath (#701)\n- set_ik_retargeter_rig: Set the source or target IK Rig on an EXISTING IK Retargeter. Params: retargeterPath, rigPath, side? (source|target, default target) (#703)\n- auto_align_retarget_pose: Auto-align all bones of the source/target retarget pose (chain-to-chain) - fixes a retargeter that outputs a static reference pose. Params: retargeterPath, side? (source|target, default target) (#701)\n- reset_retarget_pose: Reset the current retarget pose (all bones) to the reference pose. Params: retargeterPath, side? (source|target, default target) (#701)\n- batch_retarget_animations: Bake validated source AnimSequences onto the target skeleton through an IK Retargeter (RunBatchRetarget), save every output, and roll back newly created outputs if the batch is incomplete or unsavable. Overwrite is rejected. Returns mapping completeness and every unmapped target chain so partial retargets are explicit; pass requireCompleteMapping=true only when the target should have no intentional extra chains. Params: retargeterPath, sourceMesh, targetMesh, animPaths[], outputPath? (default: alongside source), prefix?, suffix? (default _Retargeted), overwrite? (must be false), requireCompleteMapping? (default false) (#701)\n- set_anim_blueprint_skeleton: Set target skeleton on AnimBP. Params: assetPath, skeletonPath\n- read_bone_track: Read bone transform samples from AnimSequence. Params: assetPath, boneName, frames?: [int]\n- create_pose_search_database: Create a PoseSearchDatabase asset (motion matching). Params: name, packagePath?, schemaPath?\n- set_pose_search_schema: Set the Schema on an existing PoseSearchDatabase. Params: assetPath, schemaPath\n- add_pose_search_sequence: Append an AnimSequence/AnimComposite/AnimMontage/BlendSpace to a PoseSearchDatabase, with optional per-clip flags. Params: assetPath, sequencePath, mirror? ('original'|'mirrored'|'both'), disableReselection?, sampleStart?, sampleEnd?, enabled? (#684)\n- set_pose_search_clips: Author the whole clip list of a PoseSearchDatabase in one call (the 'duplicate a stock PSD, swap its clips' pipeline step). Replaces the list by default. Each clip carries per-entry flags. Params: assetPath, clips ([{sequencePath, mirror? ('original'|'mirrored'|'both'), disableReselection?, sampleStart?, sampleEnd?, enabled?}] - a bare string path also works), clearExisting? (default true). Follow with build_pose_search_index (#684)\n- build_pose_search_index: Build (or rebuild) the search index. Params: assetPath, wait? (default true)\n- read_pose_search_database: Inspect a PoseSearchDatabase: schema, animation entries, cost biases, tags. Params: assetPath\n- set_pose_search_database_settings: Tune a PoseSearchDatabase: cost biases, KD-tree neighbours, search mode, PCA components, normalization set. Params: assetPath, continuingPoseCostBias?, baseCostBias?, loopingCostBias?, kdTreeQueryNumNeighbors?, numberOfPrincipalComponents?, poseSearchMode? ('bruteforce'|'pcakdtree'|'vptree'|'eventonly'), normalizationSetPath? (motion matching)\n- create_pose_search_schema: Create a PoseSearchSchema (the feature definition a database indexes against). Binds a skeleton (and optional mirror table) and, by default, adds Trajectory+Pose default channels so the schema is immediately buildable. Refine with add_pose_search_schema_*_channel. Params: name, skeletonPath, packagePath?, mirrorDataTablePath?, sampleRate?, addDefaultChannels? (default true) (motion matching)\n- add_pose_search_schema_pose_channel: Add a Pose feature channel to a schema (samples named bones for velocity/position/rotation/phase). Params: schemaPath, bones ([{bone, flags?:['velocity','position','rotation','phase'], weight?}] - a bare bone-name string defaults to position), weight? (motion matching)\n- add_pose_search_schema_trajectory_channel: Add a Trajectory feature channel to a schema (past/future motion samples). Params: schemaPath, samples ([{offset (seconds; negative=history, positive=prediction), flags?:['position','velocity','facingDirection','velocityDirection', ...XY variants], weight?}]), weight? (motion matching)\n- read_pose_search_schema: Inspect a PoseSearchSchema: skeleton(s), mirror table, sample rate, feature channels. Params: schemaPath (motion matching)\n- create_mirror_data_table: Create a MirrorDataTable for a skeleton (needed for mirrored poses in motion matching / mirror nodes). Auto-derives bone-pair rows from find/replace expressions (defaults to UE mannequin _l/_r suffix swap). Params: name, skeletonPath, packagePath?, expressions? ([{find, replace, method?:'suffix'|'prefix'|'regex'}]), mirrorAxis? (X|Y|Z, default X), mirrorRootMotion? (default true)\n- read_mirror_data_table: Inspect a MirrorDataTable: skeleton and bone-pair rows (name -> mirroredName). Params: assetPath (motion matching)\n- create_pose_search_normalization_set: Create a PoseSearchNormalizationSet grouping databases so they normalize their cost space together (consistent blending across a locomotion set). Assign it via set_pose_search_database_settings(normalizationSetPath). Params: name, packagePath?, databases? ([PoseSearchDatabase paths]) (motion matching)\n- add_motion_matching_node: Add a Motion Matching node to an AnimBP AnimGraph and point it at a PoseSearchDatabase (the runtime node that searches the database each frame). Connects its output to the Output Pose by default. For chooser-driven database selection, bind an anim-node function that calls SetDatabasesToSearch. Params: assetPath (AnimBP), databasePath, graphName? (default AnimGraph), connectToOutput? (default true), blendTime? (motion matching)\n- add_pose_history_node: Add a Pose History (PoseSearchHistoryCollector) node to an AnimBP AnimGraph - the Motion Matching node needs it in the graph to query pose/trajectory history. Defaults to self-generated trajectory (no external trajectory pin needed) and inserts itself into the pose chain feeding the Output Pose. Params: assetPath (AnimBP), graphName? (default AnimGraph), poseCount?, samplingInterval?, generateTrajectory? (default true), trajectoryHistoryCount?, trajectoryPredictionCount?, insertBeforeOutput? (default true) (motion matching)\n- set_motion_matching_chooser: Drive the Motion Matching node's Database from a ChooserTable so the database is selected at runtime by character state. Wires a thread-safe EvaluateChooser (result typed to PoseSearchDatabase) into the MM node's Database pin. contextSource selects what the chooser reads its columns from: 'self' (default, the anim instance - choosers branching on AnimBP variables) or 'pawn' (the owning pawn via TryGetPawnOwner - choosers branching on character/pawn state). Params: assetPath (AnimBP), chooserPath (ChooserTable), graphName? (default AnimGraph), contextSource? ('self'|'pawn') (motion matching)\n- add_sequence_evaluator: Add a Sequence Evaluator node (explicit-time player) to an AnimBP graph - the node distance matching drives by setting its ExplicitTime each frame. graphName can be the top-level AnimGraph or a state's inner graph (pass the state name). Defaults bTeleportToExplicitTime=false so time advances and root motion extracts. Connects to the Output Pose by default. Returns nodeGuid for bind_anim_node_function. Params: assetPath (AnimBP), sequencePath? (AnimSequence to evaluate), graphName? (default AnimGraph), explicitTime?, shouldLoop?, teleportToExplicitTime? (default false), connectToOutput? (default true) (#713)\n- bind_anim_node_function: Bind a thread-safe anim-node function to an anim graph node's update slot - the mechanism distance matching uses to advance a Sequence Evaluator's explicit time each frame (function calls AnimDistanceMatchingLibrary::DistanceMatchToTarget / AdvanceTimeByDistanceMatching). The function must already exist on the AnimBP (create it as a BlueprintThreadSafe function first). Identify the node by nodeGuid (from add_sequence_evaluator / add_*_node). Params: assetPath (AnimBP), nodeGuid, functionName, graphName? (default AnimGraph), binding? ('update' (default)|'becomeRelevant'|'initialUpdate') (#713)\n- set_sequence_properties: Batch-set properties on AnimSequence assets. If a path is a Montage and resolveFromMontages is true (default), resolves to its first AnimSequence. Params: assetPaths[], properties{enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?}, resolveFromMontages?\n- bake_root_motion_from_bone: Bake delta translation from a source bone (e.g. pelvis) onto the root bone across the whole sequence; compensates the source bone so world-space position is unchanged. Params: assetPath, sourceBone, rootBone? (default 'root'), axes? (default ['x','y']), interpolation? ('linear'|'per_frame', default 'linear')\n- get_bone_transform: Read a bone or socket transform on a live actor's SkeletalMeshComponent. Wraps GetBoneTransform / GetSocketTransform. Params: actorLabel, boneName (or socket name), componentName? (default: CharacterMesh0 / Mesh / first SK component), world? (auto|pie|game|editor, default auto), space? (world|component|local, default world). Returns location, rotation, scale (#420)\n- list_bones: List bones in a live actor's SkeletalMeshComponent ref skeleton (name, index, parent). Params: actorLabel, componentName?, world? (auto|pie|game|editor, default auto) (#420)\n- rebind_leader_pose: Re-bind every secondary SkeletalMeshComponent on an actor to a body component (default CharacterMesh0 / Mesh). One-call fix for the 'character explodes after rotating the actor' failure mode. Params: actorLabel, bodyComponent? (#419)\n- preview_animation: Toggle bUpdateAnimationInEditor + VisibilityBasedAnimTickOption=AlwaysTickPoseAndRefreshBones on every SkeletalMeshComponent of an actor. Bypasses the 'cannot be edited on templates' guard for level instances. Params: actorLabel, enabled (#419/#420)\n\nEpic 5.8 toolset actions (341): the epic_* actions above wrap Unreal's native ToolsetRegistry tools for this domain. Pass tool arguments via 'input'. A top-level parameter named by the wrapped tool's own schema is folded into 'input' for you, as is this category's canonical asset path when the tool takes a single asset reference. A call that is still missing a required argument is refused with the exact shape to send, instead of being dispatched (#798).",
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "additionalProperties": false,
@@ -63,9 +63,15 @@
               "list_montage_segments",
               "create_ik_rig",
               "read_ik_rig",
+              "configure_ik_rig",
               "list_control_rig_variables",
               "read_control_rig_graph",
               "read_control_rig_hierarchy",
+              "begin_control_rig_edit",
+              "read_control_rig_edit",
+              "apply_control_rig_edits",
+              "bake_control_rig_edit",
+              "analyze_animation",
               "set_root_motion",
               "add_virtual_bone",
               "remove_virtual_bone",
@@ -73,6 +79,7 @@
               "list_modifiers",
               "create_ik_retargeter",
               "read_ik_retargeter",
+              "configure_ik_retargeter",
               "set_ik_rig_mesh",
               "set_ik_retargeter_rig",
               "auto_align_retarget_pose",
@@ -493,6 +500,23 @@
             "description": "create_ik_retargeter: assign rigs to ops + AutoMapChains after creation (default true)",
             "type": "boolean"
           },
+          "autoMapMode": {
+            "description": "configure_ik_retargeter: native chain auto-map mode",
+            "enum": [
+              "exact",
+              "fuzzy",
+              "clear"
+            ],
+            "type": "string"
+          },
+          "autoSetup": {
+            "description": "configure_ik_rig: optional native rig setup pass",
+            "enum": [
+              "retarget",
+              "full_body"
+            ],
+            "type": "string"
+          },
           "axes": {
             "description": "Axes to bake ('x','y','z') for bake_root_motion_from_bone",
             "items": {
@@ -531,6 +555,11 @@
           },
           "binding": {
             "description": "bind_anim_node_function: 'update' (default), 'becomeRelevant', or 'initialUpdate'",
+            "type": "string"
+          },
+          "bindingTag": {
+            "description": "Stable Control Rig edit-session natural key used by begin/read/apply/bake.",
+            "minLength": 1,
             "type": "string"
           },
           "blendDuration": {
@@ -575,21 +604,54 @@
             "description": "add_pose_search_schema_pose_channel: [{bone, flags?, weight?}] or bone-name strings; also add_pose_search_schema_trajectory_channel reuses 'samples'",
             "type": "array"
           },
+          "chainMappings": {
+            "description": "configure_ik_retargeter: explicit target-to-source chain overrides; null or omitted source clears",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "sourceChain": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "targetChain": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "targetChain"
+              ],
+              "type": "object"
+            },
+            "maxItems": 10000,
+            "type": "array"
+          },
           "chains": {
-            "description": "IK retarget chains for create_ik_rig",
+            "description": "IK retarget chains for create_ik_rig or configure_ik_rig",
             "items": {
               "additionalProperties": false,
               "properties": {
                 "endBone": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "goal": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "name": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "startBone": {
+                  "minLength": 1,
                   "type": "string"
                 }
               },
@@ -600,6 +662,7 @@
               ],
               "type": "object"
             },
+            "maxItems": 256,
             "type": "array"
           },
           "chooserPath": {
@@ -630,6 +693,24 @@
             "description": "set_pose_search_database_settings: bias to keep playing the current clip",
             "type": "number"
           },
+          "controlNames": {
+            "description": "read_control_rig_edit: optional controls to sample; omit to read every control.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "controlRigPath": {
+            "description": "begin_control_rig_edit: verified baseline ControlRigBlueprint asset path for this target character; required when rigMode='asset'. Create and validate the rig first when the project/character has none.",
+            "type": "string"
+          },
+          "createLink": {
+            "const": false,
+            "description": "bake_control_rig_edit: Sequencer links are not supported yet; omit or pass false.",
+            "type": "boolean"
+          },
           "curveName": {
             "description": "Curve name for add_curve",
             "type": "string"
@@ -656,6 +737,11 @@
             "description": "PoseSearch clip: disallow reselecting poses from the same asset",
             "type": "boolean"
           },
+          "displayRate": {
+            "description": "begin_control_rig_edit: optional LevelSequence display rate in frames per second.",
+            "exclusiveMinimum": 0,
+            "type": "number"
+          },
           "enableRootMotion": {
             "type": "boolean"
           },
@@ -663,9 +749,39 @@
             "description": "preview_animation: toggle on/off",
             "type": "boolean"
           },
+          "endFrame": {
+            "description": "begin_control_rig_edit: optional exclusive edit range end frame.",
+            "type": "integer"
+          },
           "endPos": {
             "description": "add_montage_segment: trim end inside the source animation (default: source play length)",
             "type": "number"
+          },
+          "ensureDefaultOps": {
+            "description": "configure_ik_retargeter: ensure the complete UE 5.8 default operation stack; defaults true",
+            "type": "boolean"
+          },
+          "exclusions": {
+            "description": "configure_ik_rig: desired per-bone solver exclusions",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "bone": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "excluded": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "bone",
+                "excluded"
+              ],
+              "type": "object"
+            },
+            "maxItems": 2048,
+            "type": "array"
           },
           "explicitTime": {
             "description": "add_sequence_evaluator: initial ExplicitTime",
@@ -675,14 +791,19 @@
             "description": "create_mirror_data_table: [{find, replace, method?}] find/replace bone-name rules",
             "type": "array"
           },
+          "forceRemap": {
+            "description": "configure_ik_retargeter: replace existing mappings during auto-map; defaults false",
+            "type": "boolean"
+          },
           "forceRootLock": {
             "type": "boolean"
           },
           "frameRate": {
+            "description": "Frames per second for create_sequence or bake_control_rig_edit.",
             "type": "number"
           },
           "frames": {
-            "description": "Specific frames to sample for read_bone_track",
+            "description": "Frames to read/sample. Used by read_bone_track, read_control_rig_edit, and analyze_animation.",
             "items": {
               "type": "number"
             },
@@ -690,6 +811,80 @@
           },
           "fromState": {
             "type": "string"
+          },
+          "fullBodyIK": {
+            "additionalProperties": false,
+            "description": "configure_ik_rig: Full Body IK solver and desired goal/effector settings",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "goals": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "bone": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "chainDepth": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "pinRotation": {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "positionAlpha": {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "pullChainAlpha": {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "rotationAlpha": {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "strengthAlpha": {
+                      "maximum": 1,
+                      "minimum": 0,
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "bone"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 256,
+                "minItems": 1,
+                "type": "array"
+              },
+              "rootBone": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "solverIndex": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "rootBone",
+              "goals"
+            ],
+            "type": "object"
           },
           "functionName": {
             "description": "bind_anim_node_function: thread-safe anim-node function name to bind",
@@ -946,6 +1141,10 @@
             },
             "type": "array"
           },
+          "layered": {
+            "description": "begin_control_rig_edit: keep the source animation track active under the Control Rig layer; defaults false.",
+            "type": "boolean"
+          },
           "limit": {
             "description": "read_control_rig_graph: max nodes reported per graph (default 200) (#774)",
             "type": "number"
@@ -953,6 +1152,10 @@
           "linkedSection": {
             "description": "Next section name to link to",
             "type": "string"
+          },
+          "loop": {
+            "description": "analyze_animation: include end-to-start loop continuity metrics.",
+            "type": "boolean"
           },
           "loopCount": {
             "description": "add_montage_segment: how many times the segment repeats (default 1)",
@@ -1025,7 +1228,395 @@
             "type": "number"
           },
           "onConflict": {
-            "description": "Asset-creation conflict policy: skip (default) | error | overwrite",
+            "description": "Conflict policy. Existing asset actions use skip|error|overwrite; Control Rig begin/bake use skip|error and never overwrite.",
+            "type": "string"
+          },
+          "operations": {
+            "description": "apply_control_rig_edits: typed transform/bool/float/int edit operations, including quaternion set_keys.",
+            "items": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "control": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "integer"
+                    },
+                    "frames": {
+                      "items": {
+                        "type": "integer"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "op": {
+                      "const": "set",
+                      "type": "string"
+                    },
+                    "space": {
+                      "enum": [
+                        "local",
+                        "global"
+                      ],
+                      "type": "string"
+                    },
+                    "transform": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "rotationDegrees": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "pitch": {
+                              "type": "number"
+                            },
+                            "roll": {
+                              "type": "number"
+                            },
+                            "yaw": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "pitch",
+                            "yaw",
+                            "roll"
+                          ],
+                          "type": "object"
+                        },
+                        "scale": {
+                          "$ref": "#/properties/operations/items/anyOf/0/properties/transform/properties/translation"
+                        },
+                        "translation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            },
+                            "z": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y",
+                            "z"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "translation",
+                        "rotationDegrees",
+                        "scale"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "control",
+                    "transform"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "control": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "keys": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "frame": {
+                            "type": "integer"
+                          },
+                          "transform": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "rotationQuaternion": {
+                                "$ref": "#/properties/pose/properties/rotationOffsets/items/properties/rotationQuaternion"
+                              },
+                              "scale": {
+                                "$ref": "#/properties/operations/items/anyOf/0/properties/transform/properties/translation"
+                              },
+                              "translation": {
+                                "$ref": "#/properties/operations/items/anyOf/0/properties/transform/properties/translation"
+                              }
+                            },
+                            "required": [
+                              "translation",
+                              "rotationQuaternion",
+                              "scale"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "frame",
+                          "transform"
+                        ],
+                        "type": "object"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "op": {
+                      "const": "set_keys",
+                      "type": "string"
+                    },
+                    "space": {
+                      "enum": [
+                        "local",
+                        "global"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "control",
+                    "keys"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blendInFrames": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "blendOutFrames": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "control": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "endFrame": {
+                      "type": "integer"
+                    },
+                    "op": {
+                      "const": "offset",
+                      "type": "string"
+                    },
+                    "rotationDegrees": {
+                      "$ref": "#/properties/operations/items/anyOf/0/properties/transform/properties/rotationDegrees"
+                    },
+                    "scaleMultiplier": {
+                      "$ref": "#/properties/operations/items/anyOf/0/properties/transform/properties/translation"
+                    },
+                    "space": {
+                      "enum": [
+                        "local",
+                        "global"
+                      ],
+                      "type": "string"
+                    },
+                    "startFrame": {
+                      "type": "integer"
+                    },
+                    "translationCm": {
+                      "$ref": "#/properties/operations/items/anyOf/0/properties/transform/properties/translation"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "control",
+                    "startFrame",
+                    "endFrame"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blendInFrames": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "blendOutFrames": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "control": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "drivenReference": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "endFrame": {
+                      "type": "integer"
+                    },
+                    "op": {
+                      "const": "contact_lock",
+                      "type": "string"
+                    },
+                    "positionToleranceCm": {
+                      "exclusiveMinimum": 0,
+                      "maximum": 100,
+                      "type": "number"
+                    },
+                    "rotationToleranceDegrees": {
+                      "exclusiveMinimum": 0,
+                      "maximum": 180,
+                      "type": "number"
+                    },
+                    "stabilizeControls": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "maxItems": 8,
+                      "type": "array"
+                    },
+                    "startFrame": {
+                      "type": "integer"
+                    },
+                    "target": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "rotationQuaternion": {
+                          "$ref": "#/properties/pose/properties/rotationOffsets/items/properties/rotationQuaternion"
+                        },
+                        "translation": {
+                          "$ref": "#/properties/operations/items/anyOf/0/properties/transform/properties/translation"
+                        }
+                      },
+                      "required": [
+                        "translation"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "control",
+                    "startFrame",
+                    "endFrame",
+                    "target"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "control": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "integer"
+                    },
+                    "frames": {
+                      "items": {
+                        "type": "integer"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "op": {
+                      "const": "set_bool",
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "control",
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "control": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "integer"
+                    },
+                    "frames": {
+                      "items": {
+                        "type": "integer"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "op": {
+                      "const": "set_float",
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "control",
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "control": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "integer"
+                    },
+                    "frames": {
+                      "items": {
+                        "type": "integer"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "op": {
+                      "const": "set_int",
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "control",
+                    "value"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "outputAssetPath": {
+            "description": "bake_control_rig_edit: required destination AnimSequence asset path.",
+            "type": "string"
+          },
+          "outputDirectory": {
+            "description": "analyze_animation: optional directory under Project/Saved/Codex/AnimationQA for deterministic artifacts; relative values resolve under that root.",
             "type": "string"
           },
           "outputPath": {
@@ -1046,6 +1637,100 @@
           "playRate": {
             "description": "add_montage_segment: segment play rate, negative plays in reverse (default 1)",
             "type": "number"
+          },
+          "pose": {
+            "additionalProperties": false,
+            "description": "configure_ik_retargeter: named source or target pose authoring",
+            "properties": {
+              "autoAlign": {
+                "enum": [
+                  "chain_to_chain",
+                  "mesh_to_mesh",
+                  "local_axes",
+                  "global_axes"
+                ],
+                "type": "string"
+              },
+              "bones": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 10000,
+                "type": "array"
+              },
+              "create": {
+                "type": "boolean"
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "reset": {
+                "type": "boolean"
+              },
+              "rootOffsetZ": {
+                "type": "number"
+              },
+              "rotationOffsets": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "bone": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "rotationQuaternion": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "w": {
+                          "type": "number"
+                        },
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        },
+                        "z": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "z",
+                        "w"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "bone",
+                    "rotationQuaternion"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 10000,
+                "type": "array"
+              },
+              "side": {
+                "enum": [
+                  "source",
+                  "target"
+                ],
+                "type": "string"
+              },
+              "snapBoneToGround": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "side",
+              "name"
+            ],
+            "type": "object"
           },
           "poseCount": {
             "description": "add_pose_history_node: number of history poses to retain",
@@ -1088,6 +1773,15 @@
           "recursive": {
             "type": "boolean"
           },
+          "reduceKeys": {
+            "const": false,
+            "description": "bake_control_rig_edit: key reduction is not supported yet; omit or pass false.",
+            "type": "boolean"
+          },
+          "requireCompleteMapping": {
+            "description": "batch_retarget_animations: reject any unmapped target chain; default false",
+            "type": "boolean"
+          },
           "resolveFromMontages": {
             "description": "Resolve AnimMontage inputs to first anim reference (default true)",
             "type": "boolean"
@@ -1100,12 +1794,25 @@
             "description": "IK Retargeter path (#701/#703)",
             "type": "string"
           },
+          "rigMode": {
+            "description": "begin_control_rig_edit: use 'asset' with the verified baseline controlRigPath; use 'fk' only when generated raw FK controls are the intended editing surface.",
+            "enum": [
+              "fk",
+              "asset"
+            ],
+            "type": "string"
+          },
           "rigPath": {
             "description": "IK Rig path for set_ik_rig_mesh / set_ik_retargeter_rig (#701/#703)",
             "type": "string"
           },
           "rootBone": {
             "description": "Root bone name for bake_root_motion_from_bone (default 'root')",
+            "type": "string"
+          },
+          "rootMotionBone": {
+            "description": "configure_ik_rig: root-motion bone name",
+            "minLength": 1,
             "type": "string"
           },
           "rootMotionRootLock": {
@@ -1121,7 +1828,7 @@
             "type": "number"
           },
           "sampleRate": {
-            "description": "create_pose_search_schema: schema sample rate (default 30)",
+            "description": "Sample rate. create_pose_search_schema: schema rate (default 30); analyze_animation: optional analysis sampling rate.",
             "type": "number"
           },
           "sampleStart": {
@@ -1160,7 +1867,7 @@
             "type": "number"
           },
           "sequencePath": {
-            "description": "Animation asset path to add to a PoseSearchDatabase",
+            "description": "Animation path for PoseSearch graph actions, or LevelSequence path for the UE 5.8 Control Rig edit workflow.",
             "type": "string"
           },
           "shouldLoop": {
@@ -1172,7 +1879,7 @@
             "type": "string"
           },
           "skeletalMeshPath": {
-            "description": "Path to skeletal mesh for create_ik_rig / compare_curves_to_morph_targets (#656)",
+            "description": "SkeletalMesh asset path. Used by IK Rig creation, curve/morph comparison, Control Rig edit setup, and animation analysis.",
             "type": "string"
           },
           "skeletonPath": {
@@ -1185,6 +1892,10 @@
             "description": "Slot name for set_montage_slot. add_montage_segment: target slot, created when absent. remove_montage_segment / list_montage_segments / add_montage_section: target slot (#826)",
             "type": "string"
           },
+          "sourceAnimationPath": {
+            "description": "begin_control_rig_edit: source AnimSequence asset path (required).",
+            "type": "string"
+          },
           "sourceBone": {
             "type": "string"
           },
@@ -1192,13 +1903,22 @@
             "description": "batch_retarget_animations: source skeletal mesh (#701)",
             "type": "string"
           },
+          "sourcePreviewMesh": {
+            "description": "configure_ik_retargeter: source preview SkeletalMesh path",
+            "minLength": 1,
+            "type": "string"
+          },
           "sourceRig": {
             "description": "Source IKRig path for create_ik_retargeter",
             "type": "string"
           },
           "space": {
-            "description": "Bone-space frame. get_bone_transforms (ref skeleton): 'local' (default) | 'component'. get_bone_transform (live actor): 'world' (default) | 'component' | 'local'",
+            "description": "Transform space. Control Rig edit actions: 'local'|'global'. get_bone_transforms: 'local'|'component'. get_bone_transform: 'world'|'component'|'local'.",
             "type": "string"
+          },
+          "startFrame": {
+            "description": "begin_control_rig_edit: optional inclusive edit range start frame.",
+            "type": "integer"
           },
           "startPos": {
             "description": "add_montage_segment: trim start inside the source animation (default 0)",
@@ -1225,6 +1945,11 @@
             "description": "batch_retarget_animations: target skeletal mesh (#701)",
             "type": "string"
           },
+          "targetPreviewMesh": {
+            "description": "configure_ik_retargeter: target preview SkeletalMesh path",
+            "minLength": 1,
+            "type": "string"
+          },
           "targetRig": {
             "description": "Target IKRig path for create_ik_retargeter",
             "type": "string"
@@ -1239,6 +1964,11 @@
           },
           "toState": {
             "type": "string"
+          },
+          "tolerance": {
+            "description": "bake_control_rig_edit: key-reduction tolerance.",
+            "minimum": 0,
+            "type": "number"
           },
           "trackIndex": {
             "description": "Slot track index (default: 0)",

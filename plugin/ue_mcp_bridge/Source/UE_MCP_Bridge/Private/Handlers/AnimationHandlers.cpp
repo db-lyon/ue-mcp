@@ -131,6 +131,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// IK Rig (#93)
 	Registry.RegisterHandler(TEXT("create_ik_rig"), &CreateIKRig);
 	Registry.RegisterHandler(TEXT("read_ik_rig"), &ReadIKRig);
+	Registry.RegisterHandler(TEXT("configure_ik_rig"), &ConfigureIKRig);
 	// #701/#703: IK authoring tail + batch retarget.
 	Registry.RegisterHandler(TEXT("set_ik_rig_mesh"), &SetIKRigMesh);
 	Registry.RegisterHandler(TEXT("set_ik_retargeter_rig"), &SetIKRetargeterRig);
@@ -142,6 +143,11 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_control_rig_variables"), &ListControlRigVariables);
 	Registry.RegisterHandler(TEXT("read_control_rig_graph"), &ReadControlRigGraph);
 	Registry.RegisterHandler(TEXT("read_control_rig_hierarchy"), &ReadControlRigHierarchy);
+	Registry.RegisterHandler(TEXT("begin_control_rig_edit"), &BeginControlRigEdit);
+	Registry.RegisterHandler(TEXT("read_control_rig_edit"), &ReadControlRigEdit);
+	Registry.RegisterHandler(TEXT("apply_control_rig_edits"), &ApplyControlRigEdits);
+	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit);
+	Registry.RegisterHandler(TEXT("analyze_animation"), &AnalyzeAnimation);
 
 	// v0.7.11 - depth
 	Registry.RegisterHandler(TEXT("set_root_motion_settings"), &SetRootMotionSettings);
@@ -153,6 +159,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// v0.7.11 - issue fixes
 	Registry.RegisterHandler(TEXT("create_ik_retargeter"), &CreateIKRetargeter);
 	Registry.RegisterHandler(TEXT("read_ik_retargeter"), &ReadIKRetargeter);
+	Registry.RegisterHandler(TEXT("configure_ik_retargeter"), &ConfigureIKRetargeter);
 	Registry.RegisterHandler(TEXT("set_anim_blueprint_skeleton"), &SetAnimBlueprintSkeleton);
 	Registry.RegisterHandler(TEXT("read_bone_track"), &ReadBoneTrack);
 

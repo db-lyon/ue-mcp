@@ -155,3 +155,32 @@ describe("start and restart without a loaded project", () => {
     expect(findInteractiveEditors).not.toHaveBeenCalled();
   });
 });
+
+describe("native editor shutdown", () => {
+  it("uses MainFrame so standalone asset editors close before subsystem teardown", () => {
+    const source = fs.readFileSync(
+      new URL(
+        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/EditorHandlers.cpp",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const buildRules = fs.readFileSync(
+      new URL(
+        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/UE_MCP_Bridge.Build.cs",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const shutdownHandler = source.slice(
+      source.indexOf("FEditorHandlers::RequestEditorShutdown"),
+      source.indexOf("FEditorHandlers::FocusViewportOnActor"),
+    );
+
+    expect(source).toContain('#include "Interfaces/IMainFrameModule.h"');
+    expect(buildRules).toContain('"MainFrame",');
+    expect(shutdownHandler).toContain("FModuleManager::LoadModuleChecked<IMainFrameModule>");
+    expect(shutdownHandler).toContain("MainFrameModule.RequestCloseEditor()");
+    expect(shutdownHandler).not.toContain("UKismetSystemLibrary::QuitEditor()");
+  });
+});

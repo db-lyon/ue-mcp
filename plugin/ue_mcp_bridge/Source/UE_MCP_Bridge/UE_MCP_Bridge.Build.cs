@@ -10,6 +10,11 @@ public class UE_MCP_Bridge : ModuleRules
 	// file list and will not pick up a new .cpp until this file changes.
 	// Private/BridgeStateFiles.cpp, Private/BridgeParamEcho.cpp and
 	// Private/Tests/BridgeProtocolTests.cpp: same reason.
+	// Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp,
+	// Private/Handlers/AnimationHandlers_Validation.cpp,
+	// Private/Handlers/AnimationHandlers_IKRigAuthoring.cpp and
+	// Private/Handlers/AnimationHandlers_IKRetargeterAuthoring.cpp plus
+	// Private/Tests/AnimationControlRigTimelineTests.cpp: same reason.
 	public UE_MCP_Bridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -31,8 +36,10 @@ public class UE_MCP_Bridge : ModuleRules
 			{
 				"AIModule",
 				"MessageLog",
+				"AnimationCore",
 				"AnimGraph",
 				"AnimationEditor",
+				"AnimationBlueprintLibrary",
 				"AnimationModifiers",
 				"AssetRegistry",
 				"AssetTools",
@@ -51,6 +58,7 @@ public class UE_MCP_Bridge : ModuleRules
 				"ContentBrowser",
 				"ControlRig",
 				"ControlRigDeveloper",
+				"ControlRigEditor",
 				"RigVMDeveloper",
 				"DataValidation",
 				"EditorScriptingUtilities",
@@ -74,6 +82,7 @@ public class UE_MCP_Bridge : ModuleRules
 				"LevelEditor",
 				"LevelSequence",
 				"LevelSequenceEditor",
+				"MainFrame",
 				"MaterialEditor",
 				"MovieScene",
 				"MovieSceneTracks",

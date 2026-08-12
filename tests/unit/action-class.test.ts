@@ -73,7 +73,7 @@ describe("action classification", () => {
   });
 
   it("treats an arbitrary payload as unknown, and gates it like a mutation", () => {
-    for (const key of ["epic.call_tool", "editor.invoke_object_function"]) {
+    for (const key of ["epic.call_tool", "editor.invoke_object_function", "animation.analyze_animation"]) {
       const cls = classifyTaskClass(key);
       expect(cls.class, key).toBe("unknown");
       expect(requiresExplicitEditor(cls.class)).toBe(true);
@@ -83,10 +83,17 @@ describe("action classification", () => {
   });
 
   it("lets plain reads through", () => {
-    for (const key of ["project.get_status", "asset.list", "level.get_outliner", "reflection.reflect_class"]) {
+    for (const key of [
+      "project.get_status",
+      "asset.list",
+      "level.get_outliner",
+      "reflection.reflect_class",
+      "animation.read_control_rig_edit",
+    ]) {
       expect(classifyTaskClass(key).class, key).toBe("read");
       expect(requiresExplicitEditor("read")).toBe(false);
     }
+    expect(classifyTaskClass("animation.read_control_rig_edit").source).toBe("override");
   });
 
   it("reads a mutate verb anywhere in the name, not only at the front", () => {

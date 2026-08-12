@@ -153,15 +153,17 @@ inline bool MCPIsProtectedAssetPath(const FString& Path)
 	FString Normalized = Path;
 	Normalized.TrimStartAndEndInline();
 	if (Normalized.IsEmpty()) return false;
+	Normalized = FPackageName::ExportTextPathToObjectPath(Normalized);
+	Normalized.TrimStartAndEndInline();
 	// Tolerate the surface form, which may arrive without a leading slash.
 	if (!Normalized.StartsWith(TEXT("/"))) Normalized = TEXT("/") + Normalized;
 	const FString Lower = Normalized.ToLower();
-	if (Lower.StartsWith(TEXT("/engine/"))) return true;
-	if (Lower.StartsWith(TEXT("/memory/"))) return true;
-	if (Lower.StartsWith(TEXT("/temp/"))) return true;
+	if (Lower == TEXT("/engine") || Lower.StartsWith(TEXT("/engine/"))) return true;
+	if (Lower == TEXT("/memory") || Lower.StartsWith(TEXT("/memory/"))) return true;
+	if (Lower == TEXT("/temp") || Lower.StartsWith(TEXT("/temp/"))) return true;
 	// Verse runtime objects surface as /Script/CoreUObject.* etc, so /Script/
 	// is rejected wherever it appears, not just as a prefix.
-	if (Lower.Contains(TEXT("/script/"))) return true;
+	if (Lower == TEXT("/script") || Lower.Contains(TEXT("/script/"))) return true;
 	return false;
 }
 

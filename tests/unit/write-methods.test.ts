@@ -82,4 +82,50 @@ describe("classifyWrite", () => {
     const r = classifyWrite("save_asset", { assetPath: 123 });
     expect(r.writes).toBe(false);
   });
+
+  it("extracts the actual Control Rig edit outputs", () => {
+    expect(classifyWrite("begin_control_rig_edit", { sequencePath: "/Game/Edit/LS_A" }).contentPaths)
+      .toEqual(["/Game/Edit/LS_A"]);
+    expect(classifyWrite("apply_control_rig_edits", { sequencePath: "/Game/Edit/LS_A" }).contentPaths)
+      .toEqual(["/Game/Edit/LS_A"]);
+    expect(classifyWrite("bake_control_rig_edit", {
+      sequencePath: "/Game/Edit/LS_A",
+      outputAssetPath: "/Game/Edit/A_Result",
+    }).contentPaths).toEqual(["/Game/Edit/A_Result"]);
+  });
+
+  it("extracts the edited IK or retargeter asset, not referenced inputs", () => {
+    const cases: Array<[string, Record<string, unknown>, string]> = [
+      ["configure_ik_rig", {
+        rigPath: "/Game/Rigs/IK_A",
+        skeletalMeshPath: "/Game/Characters/SK_A",
+      }, "/Game/Rigs/IK_A"],
+      ["configure_ik_retargeter", {
+        retargeterPath: "/Game/Rigs/RTG_A",
+        sourceRig: "/Game/Rigs/IK_Source",
+        targetRig: "/Game/Rigs/IK_Target",
+      }, "/Game/Rigs/RTG_A"],
+      ["set_ik_rig_mesh", {
+        rigPath: "/Game/Rigs/IK_A",
+        meshPath: "/Game/Characters/SK_A",
+      }, "/Game/Rigs/IK_A"],
+      ["set_ik_retargeter_rig", {
+        retargeterPath: "/Game/Rigs/RTG_A",
+        rigPath: "/Game/Rigs/IK_Target",
+      }, "/Game/Rigs/RTG_A"],
+      ["auto_align_retarget_pose", {
+        retargeterPath: "/Game/Rigs/RTG_A",
+      }, "/Game/Rigs/RTG_A"],
+      ["reset_retarget_pose", {
+        retargeterPath: "/Game/Rigs/RTG_A",
+      }, "/Game/Rigs/RTG_A"],
+    ];
+
+    for (const [method, params, expectedPath] of cases) {
+      expect(classifyWrite(method, params), method).toEqual({
+        writes: true,
+        contentPaths: [expectedPath],
+      });
+    }
+  });
 });
