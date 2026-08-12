@@ -1950,6 +1950,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ResetRetargetPose(const TSharedPtr<FJ
 // ─── #701 batch_retarget_animations ─────────────────────────────────
 TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TSharedPtr<FJsonObject>& Params)
 {
+#if !(ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), false);
+	Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
+	Result->SetStringField(TEXT("error"), TEXT("batch_retarget_animations requires Unreal Engine 5.8 or newer"));
+	return MCPResult(Result);
+#else
 	FString RetargeterPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("retargeterPath"), TEXT("assetPath"), RetargeterPath)) return Err;
 	FString SourceMeshPath, TargetMeshPath;
@@ -1963,18 +1970,36 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 	USkeletalMesh* TargetMesh = LoadObject<USkeletalMesh>(nullptr, *TargetMeshPath);
 	if (!TargetMesh) return MCPError(FString::Printf(TEXT("Target mesh not found: %s"), *TargetMeshPath));
 
+	bool bMappingInspectionAvailable = false;
+	int32 TargetChainCount = 0;
+	int32 MappedChainCount = 0;
+	TArray<TSharedPtr<FJsonValue>> UnmappedTargetChains;
+	if (UIKRetargeterController* Controller = UIKRetargeterController::GetController(Retargeter))
+	{
+		if (const UIKRigDefinition* TargetRig = Controller->GetIKRig(ERetargetSourceOrTarget::Target))
+		{
+			bMappingInspectionAvailable = true;
+			for (const FBoneChain& TargetChain : TargetRig->GetRetargetChains())
+			{
+				++TargetChainCount;
+				if (Controller->GetSourceChain(TargetChain.ChainName).IsNone())
+				{
+					UnmappedTargetChains.Add(MakeShared<FJsonValueString>(TargetChain.ChainName.ToString()));
+				}
+				else
+				{
+					++MappedChainCount;
+				}
+			}
+		}
+	}
+
 	const TArray<TSharedPtr<FJsonValue>>* AnimArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("animPaths"), AnimArr) || !AnimArr || AnimArr->Num() == 0)
 	{
 		return MCPError(TEXT("Missing 'animPaths' (array of AnimSequence paths to retarget)"));
 	}
 
-	// The FIKRetargetBatchOperationInputs / UIKRetargetBatchOperation::RunBatchRetarget
-	// batch API is UE 5.8+. The 5.7 batch-retarget API differs; rather than a
-	// partial reimplementation, return a clear error below 5.8.
-#if !(ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
-	return MCPError(TEXT("batch_retarget_animations requires UE 5.8+ (the FIKRetargetBatchOperationInputs / RunBatchRetarget API is unavailable in this engine version)."));
-#else
 	FIKRetargetBatchOperationInputs Inputs;
 	Inputs.SourceMesh = SourceMesh;
 	Inputs.TargetMesh = TargetMesh;
@@ -2010,6 +2035,20 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BatchRetargetAnimations(const TShared
 	Result->SetNumberField(TEXT("requested"), Loaded);
 	Result->SetNumberField(TEXT("createdCount"), OutPaths.Num());
 	Result->SetArrayField(TEXT("createdAssets"), OutPaths);
+	Result->SetBoolField(TEXT("mappingInspectionAvailable"), bMappingInspectionAvailable);
+	if (bMappingInspectionAvailable)
+	{
+		Result->SetNumberField(TEXT("targetChainCount"), TargetChainCount);
+		Result->SetNumberField(TEXT("mappedChainCount"), MappedChainCount);
+		Result->SetArrayField(TEXT("unmappedTargetChains"), UnmappedTargetChains);
+		Result->SetBoolField(TEXT("mappingComplete"), UnmappedTargetChains.IsEmpty());
+		if (!UnmappedTargetChains.IsEmpty())
+		{
+			Result->SetStringField(TEXT("mappingWarning"), FString::Printf(
+				TEXT("Retarget completed with %d unmapped target chain(s); inspect deformation and compare sampled poses before accepting the output"),
+				UnmappedTargetChains.Num()));
+		}
+	}
 	return MCPResult(Result);
 #endif
 }

@@ -28,6 +28,7 @@
 #include "Framework/Docking/TabManager.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "ISettingsModule.h"
+#include "Interfaces/IMainFrameModule.h"
 #include "Modules/ModuleManager.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/ConfigContext.h"
@@ -1956,7 +1957,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::RequestEditorShutdown(const TSharedPtr<F
 			{
 				return true;
 			}
-			UKismetSystemLibrary::QuitEditor();
+			IMainFrameModule& MainFrameModule = FModuleManager::LoadModuleChecked<IMainFrameModule>(TEXT("MainFrame"));
+			MainFrameModule.RequestCloseEditor();
 			return false;
 		}),
 		1.0f);

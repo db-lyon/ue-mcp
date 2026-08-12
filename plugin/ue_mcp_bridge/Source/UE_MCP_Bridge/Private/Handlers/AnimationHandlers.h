@@ -104,6 +104,14 @@ private:
 	// #619 per-element Control Rig hierarchy metadata (name, type, index, parent)
 	static TSharedPtr<FJsonValue> ReadControlRigHierarchy(const TSharedPtr<FJsonObject>& Params);
 
+	// UE 5.8 Control Rig editing in Sequencer. Source AnimSequences are read-only;
+	// edits live in a LevelSequence until explicitly baked to a new AnimSequence.
+	static TSharedPtr<FJsonValue> BeginControlRigEdit(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadControlRigEdit(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ApplyControlRigEdits(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BakeControlRigEdit(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AnalyzeAnimation(const TSharedPtr<FJsonObject>& Params);
+
 	// v0.7.11 - depth
 	static TSharedPtr<FJsonValue> SetRootMotionSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddVirtualBone(const TSharedPtr<FJsonObject>& Params);

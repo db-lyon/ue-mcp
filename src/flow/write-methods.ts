@@ -55,6 +55,18 @@ function strArray(v: unknown): string[] {
  * lookup. Keyed by bare bridge method name.
  */
 const EXPLICIT: Record<string, Extractor> = {
+  begin_control_rig_edit: (p) => {
+    const path = str(p.sequencePath);
+    return path ? [path] : [];
+  },
+  apply_control_rig_edits: (p) => {
+    const path = str(p.sequencePath);
+    return path ? [path] : [];
+  },
+  bake_control_rig_edit: (p) => {
+    const path = str(p.outputAssetPath);
+    return path ? [path] : [];
+  },
   // Batch rename: each entry is {sourcePath, destinationPath} or {assetPath, newName}.
   bulk_rename_assets: (p) => {
     const out: string[] = [];

@@ -142,6 +142,11 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_control_rig_variables"), &ListControlRigVariables);
 	Registry.RegisterHandler(TEXT("read_control_rig_graph"), &ReadControlRigGraph);
 	Registry.RegisterHandler(TEXT("read_control_rig_hierarchy"), &ReadControlRigHierarchy);
+	Registry.RegisterHandler(TEXT("begin_control_rig_edit"), &BeginControlRigEdit);
+	Registry.RegisterHandler(TEXT("read_control_rig_edit"), &ReadControlRigEdit);
+	Registry.RegisterHandler(TEXT("apply_control_rig_edits"), &ApplyControlRigEdits);
+	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit);
+	Registry.RegisterHandler(TEXT("analyze_animation"), &AnalyzeAnimation);
 
 	// v0.7.11 - depth
 	Registry.RegisterHandler(TEXT("set_root_motion_settings"), &SetRootMotionSettings);

@@ -2,6 +2,119 @@ import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { Vec3, Quat } from "../schemas.js";
 
+// Keep the Control Rig operation schema self-contained so adding it does not
+// redirect JSON-schema references used by older animation actions.
+const ControlRigVec3 = z.object({ x: z.number(), y: z.number(), z: z.number() }).strict();
+const ControlRigRotator = z.object({ pitch: z.number(), yaw: z.number(), roll: z.number() }).strict();
+const ControlRigQuaternion = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  z: z.number().finite(),
+  w: z.number().finite(),
+}).strict().refine(
+  (rotation) => Math.abs(Math.hypot(rotation.x, rotation.y, rotation.z, rotation.w) - 1) <= 1e-3,
+  { message: "rotationQuaternion must be normalized" },
+);
+
+const ControlRigKeyTransform = z.object({
+  translation: ControlRigVec3,
+  rotationDegrees: ControlRigRotator,
+  scale: ControlRigVec3,
+}).strict();
+
+const ControlRigSetEdit = z.object({
+  op: z.literal("set"),
+  control: z.string().min(1),
+  frame: z.number().int().optional(),
+  frames: z.array(z.number().int()).min(1).optional(),
+  transform: ControlRigKeyTransform,
+  space: z.enum(["local", "global"]).optional(),
+}).strict().refine(
+  (edit) => (edit.frame === undefined) !== (edit.frames === undefined),
+  { message: "set operations require exactly one of frame or frames" },
+);
+
+const ControlRigTransformKey = z.object({
+  frame: z.number().int(),
+  transform: z.object({
+    translation: ControlRigVec3,
+    rotationQuaternion: ControlRigQuaternion,
+    scale: ControlRigVec3,
+  }).strict(),
+}).strict();
+
+const ControlRigSetKeysEdit = z.object({
+  op: z.literal("set_keys"),
+  control: z.string().min(1),
+  keys: z.array(ControlRigTransformKey).min(1),
+  space: z.enum(["local", "global"]).optional(),
+}).strict().refine(
+  (edit) => edit.keys.every((key, index) => index === 0 || key.frame > edit.keys[index - 1].frame),
+  { message: "set_keys frames must be strictly increasing" },
+);
+
+const ControlRigOffsetEdit = z.object({
+  op: z.literal("offset"),
+  control: z.string().min(1),
+  startFrame: z.number().int(),
+  endFrame: z.number().int(),
+  translationCm: ControlRigVec3.optional(),
+  rotationDegrees: ControlRigRotator.optional(),
+  scaleMultiplier: ControlRigVec3.optional(),
+  space: z.enum(["local", "global"]).optional(),
+  blendInFrames: z.number().int().nonnegative().optional(),
+  blendOutFrames: z.number().int().nonnegative().optional(),
+}).strict()
+  .refine((edit) => edit.endFrame >= edit.startFrame, {
+    message: "offset endFrame must be greater than or equal to startFrame",
+  })
+  .refine(
+    (edit) => edit.translationCm !== undefined || edit.rotationDegrees !== undefined || edit.scaleMultiplier !== undefined,
+    { message: "offset operations require translationCm, rotationDegrees, or scaleMultiplier" },
+  );
+
+const ControlRigSetBoolEdit = z.object({
+  op: z.literal("set_bool"),
+  control: z.string().min(1),
+  frame: z.number().int().optional(),
+  frames: z.array(z.number().int()).min(1).optional(),
+  value: z.boolean(),
+}).strict().refine(
+  (edit) => (edit.frame === undefined) !== (edit.frames === undefined),
+  { message: "set_bool operations require exactly one of frame or frames" },
+);
+
+const ControlRigSetFloatEdit = z.object({
+  op: z.literal("set_float"),
+  control: z.string().min(1),
+  frame: z.number().int().optional(),
+  frames: z.array(z.number().int()).min(1).optional(),
+  value: z.number().finite(),
+}).strict().refine(
+  (edit) => (edit.frame === undefined) !== (edit.frames === undefined),
+  { message: "set_float operations require exactly one of frame or frames" },
+);
+
+const ControlRigSetIntEdit = z.object({
+  op: z.literal("set_int"),
+  control: z.string().min(1),
+  frame: z.number().int().optional(),
+  frames: z.array(z.number().int()).min(1).optional(),
+  value: z.number().int(),
+}).strict().refine(
+  (edit) => (edit.frame === undefined) !== (edit.frames === undefined),
+  { message: "set_int operations require exactly one of frame or frames" },
+);
+
+const ControlRigEditOperation = z.union([
+  ControlRigSetEdit,
+  ControlRigSetKeysEdit,
+  ControlRigOffsetEdit,
+  ControlRigSetBoolEdit,
+  ControlRigSetFloatEdit,
+  ControlRigSetIntEdit,
+]);
+
 export const animationTool: ToolDef = categoryTool(
   "animation",
   "Animation assets, skeletons, montages, blendspaces, anim blueprints, physics assets.",
@@ -55,6 +168,11 @@ export const animationTool: ToolDef = categoryTool(
     list_control_rig_variables: bp("List ControlRig variables and hierarchy. Params: assetPath", "list_control_rig_variables"),
     read_control_rig_graph: bp("Read a Control Rig's RigVM models: every graph with its nodes (name, node path, class), each node's pins (name, pin path, cppType, direction, execute flag, default value, nested sub-pins) and the links between them, plus full member-variable metadata (type, subtype, array-ness, default, public/read-only). list_control_rig_variables only ever reported a node COUNT, which is not enough to verify solver wiring (#774). Params: assetPath, graphName? (substring filter), includePins? (default true), includeDefaults? (default true), includeLinks? (default true), limit? (nodes per graph, default 200)", "read_control_rig_graph", (p) => ({ assetPath: p.assetPath, graphName: p.graphName, includePins: p.includePins, includeDefaults: p.includeDefaults, includeLinks: p.includeLinks, limit: p.limit })),
     read_control_rig_hierarchy: bp("Read a Control Rig's per-element hierarchy metadata: each element's name, type (Bone|Control|Null|Curve...), index, and parent. Params: assetPath (#619)", "read_control_rig_hierarchy", (p) => ({ assetPath: p.assetPath })),
+    begin_control_rig_edit: bp("UE 5.8 only. Create a Sequencer Control Rig editing session over a source AnimSequence; native returns unsupported_engine_version on older engines. Baseline first: before this call, reuse or create a Control Rig for the target character, bind/import the exact target skeleton, add the intended controls, author Forward Solve, add Backward/Inverse Solve, verify it with read_control_rig_hierarchy/read_control_rig_graph, and pass an unchanged source round-trip. For a new baseline, the bundled Epic 5.8 controlrig actions include epic_create, epic_import_bones_from_asset, epic_add_control, and epic_add_backward_solve_graph; epic_create alone is not a usable rig. There is no silent fallback to raw bone-key authoring. rigMode='fk' uses UFKControlRig only when generated FK controls are sufficient; rigMode='asset' requires the verified controlRigPath and rejects rigs without inverse execution. bindingTag is the stable natural key for replay. onConflict is skip|error (default error); existing sessions are never modified. layered defaults false. startFrame is inclusive and endFrame is exclusive. Params: sequencePath, skeletalMeshPath, sourceAnimationPath, rigMode ('fk'|'asset'), controlRigPath?, layered?, startFrame?, endFrame?, displayRate?, bindingTag?, onConflict?. Returns the resolved bindingTag/binding GUID, rig, frame range, controls and created/existed status.", "begin_control_rig_edit", (p) => ({ sequencePath: p.sequencePath, skeletalMeshPath: p.skeletalMeshPath, sourceAnimationPath: p.sourceAnimationPath, rigMode: p.rigMode, controlRigPath: p.controlRigPath, layered: p.layered, startFrame: p.startFrame, endFrame: p.endFrame, displayRate: p.displayRate, bindingTag: p.bindingTag, onConflict: p.onConflict })),
+    read_control_rig_edit: bp("UE 5.8 only. Read transform, bool, float/scale-float, and integer/enum controls from a Control Rig editing session without changing editor state; native returns unsupported_engine_version on older engines and has no silent fallback. Params: sequencePath, bindingTag, controlNames?, frames?, space? ('local'|'global'). Scalar samples return value instead of transform. Control metadata includes native controlType, animatable, and enum path/options where applicable. Returns session identity, layered mode, range/rate, filtered control metadata, and requested frame samples.", "read_control_rig_edit", (p) => ({ sequencePath: p.sequencePath, bindingTag: p.bindingTag, controlNames: p.controlNames, frames: p.frames, space: p.space })),
+    apply_control_rig_edits: bp("UE 5.8 only. Apply typed Control Rig edits in one transaction; native returns unsupported_engine_version on older engines. There is no silent fallback to raw bone tracks. set_keys writes strictly ordered full per-frame transforms from normalized quaternions and preserves shortest-arc quaternion continuity. A set operation writes one full absolute transform at frame or frames. An offset operation applies translation/rotation/scale deltas across an inclusive frame range with optional edge blends. set_bool, set_float, and set_int key matching scalar controls; enum controls use set_int with one of the integer values reported in enumOptions. Params: sequencePath, bindingTag, operations[] where set_keys={op:'set_keys',control,keys:[{frame,transform:{translation,rotationQuaternion,scale}}],space?}, set={op:'set',control,frame|frames,transform:{translation,rotationDegrees,scale},space?}, offset={op:'offset',control,startFrame,endFrame,translationCm?,rotationDegrees?,scaleMultiplier?,space?,blendInFrames?,blendOutFrames?}, set_bool={op:'set_bool',control,frame|frames,value}, set_float={op:'set_float',control,frame|frames,value}, or set_int={op:'set_int',control,frame|frames,value}. Sequencer's current interpolation mode is retained. Returns per-operation counts and affected controls/frames; a failed batch is undone.", "apply_control_rig_edits", (p) => ({ sequencePath: p.sequencePath, bindingTag: p.bindingTag, operations: p.operations })),
+    bake_control_rig_edit: bp("UE 5.8 only. Bake the evaluated Control Rig session to a new AnimSequence asset; native returns unsupported_engine_version on older engines and has no raw-track fallback. The source LevelSequence remains unchanged. outputAssetPath is the output natural key; onConflict is skip|error (default error), never overwrite. Key reduction and Sequencer links are not supported yet, so reduceKeys/createLink must be false or omitted. Params: sequencePath, bindingTag, outputAssetPath, frameRate?, reduceKeys?, tolerance?, createLink?, onConflict?. Returns output asset metadata, frame/rate counts, status, and delete-created-asset rollback.", "bake_control_rig_edit", (p) => ({ sequencePath: p.sequencePath, bindingTag: p.bindingTag, outputAssetPath: p.outputAssetPath, frameRate: p.frameRate, reduceKeys: p.reduceKeys, tolerance: p.tolerance, createLink: p.createLink, onConflict: p.onConflict })),
+    analyze_animation: bp("Cross-version, data-driven AnimSequence inspection using the native animation APIs available in the compiled engine. Samples an AnimSequence and reports deterministic numeric motion diagnostics without Python or viewport inference. Params: assetPath (required AnimSequence), skeletalMeshPath?, boneNames?, frames?, sampleRate?, loop?, outputDirectory? (must resolve under Project/Saved/Codex/AnimationQA and must not already contain artifacts). Returns source/rate/range metadata, sampled local/component transforms, root-motion and continuity metrics, and any written analysis artifacts.", "analyze_animation", (p) => ({ assetPath: p.assetPath, skeletalMeshPath: p.skeletalMeshPath, boneNames: p.boneNames, frames: p.frames, sampleRate: p.sampleRate, loop: p.loop, outputDirectory: p.outputDirectory })),
     set_root_motion:    bp("Set root motion settings on AnimSequence. Params: assetPath, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?", "set_root_motion_settings", (p) => ({ path: p.assetPath, enableRootMotion: p.enableRootMotion, forceRootLock: p.forceRootLock, useNormalizedRootMotionScale: p.useNormalizedRootMotionScale, rootMotionRootLock: p.rootMotionRootLock })),
     add_virtual_bone:   bp("Add virtual bone. Params: skeletonPath, sourceBone, targetBone", "add_virtual_bone"),
     remove_virtual_bone: bp("Remove virtual bone. Params: skeletonPath, virtualBoneName", "remove_virtual_bone"),
@@ -66,7 +184,7 @@ export const animationTool: ToolDef = categoryTool(
     set_ik_retargeter_rig: bp("Set the source or target IK Rig on an EXISTING IK Retargeter. Params: retargeterPath, rigPath, side? (source|target, default target) (#703)", "set_ik_retargeter_rig", (p) => ({ retargeterPath: p.retargeterPath, rigPath: p.rigPath, side: p.side })),
     auto_align_retarget_pose: bp("Auto-align all bones of the source/target retarget pose (chain-to-chain) - fixes a retargeter that outputs a static reference pose. Params: retargeterPath, side? (source|target, default target) (#701)", "auto_align_retarget_pose", (p) => ({ retargeterPath: p.retargeterPath, side: p.side })),
     reset_retarget_pose:  bp("Reset the current retarget pose (all bones) to the reference pose. Params: retargeterPath, side? (source|target, default target) (#701)", "reset_retarget_pose", (p) => ({ retargeterPath: p.retargeterPath, side: p.side })),
-    batch_retarget_animations: bp("Bake a set of source AnimSequences onto the target skeleton through an IK Retargeter (RunBatchRetarget). Params: retargeterPath, sourceMesh, targetMesh, animPaths[], outputPath? (default: alongside source), prefix?, suffix? (default _Retargeted), overwrite? (#701)", "batch_retarget_animations", (p) => ({ retargeterPath: p.retargeterPath, sourceMesh: p.sourceMesh, targetMesh: p.targetMesh, animPaths: p.animPaths, outputPath: p.outputPath, prefix: p.prefix, suffix: p.suffix, overwrite: p.overwrite })),
+    batch_retarget_animations: bp("Bake a set of source AnimSequences onto the target skeleton through an IK Retargeter (RunBatchRetarget). Returns mapping completeness and every unmapped target chain so partial retargets are explicit. Params: retargeterPath, sourceMesh, targetMesh, animPaths[], outputPath? (default: alongside source), prefix?, suffix? (default _Retargeted), overwrite? (#701)", "batch_retarget_animations", (p) => ({ retargeterPath: p.retargeterPath, sourceMesh: p.sourceMesh, targetMesh: p.targetMesh, animPaths: p.animPaths, outputPath: p.outputPath, prefix: p.prefix, suffix: p.suffix, overwrite: p.overwrite })),
     set_anim_blueprint_skeleton: bp("Set target skeleton on AnimBP. Params: assetPath, skeletonPath", "set_anim_blueprint_skeleton"),
     read_bone_track:    bp("Read bone transform samples from AnimSequence. Params: assetPath, boneName, frames?: [int]", "read_bone_track"),
     create_pose_search_database: bp("Create a PoseSearchDatabase asset (motion matching). Params: name, packagePath?, schemaPath?", "create_pose_search_database"),
@@ -166,7 +284,7 @@ export const animationTool: ToolDef = categoryTool(
     blendIn: z.number().optional(),
     blendOut: z.number().optional(),
     numFrames: z.number().optional(),
-    frameRate: z.number().optional(),
+    frameRate: z.number().optional().describe("Frames per second for create_sequence or bake_control_rig_edit."),
     boneName: z.string().optional(),
     boneNames: z.array(z.string()).optional(),
     parentClass: z.string().optional().describe("Parent AnimInstance class name for create_anim_blueprint"),
@@ -207,7 +325,7 @@ export const animationTool: ToolDef = categoryTool(
     startTime: z.number().optional().describe("Start time for montage section"),
     linkedSection: z.string().optional().describe("Next section name to link to"),
     // IK Rig params (#93)
-    skeletalMeshPath: z.string().optional().describe("Path to skeletal mesh for create_ik_rig / compare_curves_to_morph_targets (#656)"),
+    skeletalMeshPath: z.string().optional().describe("SkeletalMesh asset path. Used by IK Rig creation, curve/morph comparison, Control Rig edit setup, and animation analysis."),
     animPath: z.string().optional().describe("compare_curves_to_morph_targets: AnimSequence or PoseAsset path (#656)"),
     nodeClass: z.string().optional().describe("inspect_anim_nodes: node class substring filter, e.g. PoseDriver (#657)"),
     enableRootMotion: z.boolean().optional(),
@@ -232,8 +350,25 @@ export const animationTool: ToolDef = categoryTool(
     overwrite: z.boolean().optional().describe("batch_retarget_animations: overwrite existing outputs (#701)"),
     outputPath: z.string().optional().describe("batch_retarget_animations: destination folder for baked assets (#701)"),
     autoMapChains: z.boolean().optional().describe("create_ik_retargeter: assign rigs to ops + AutoMapChains after creation (default true)"),
-    onConflict: z.string().optional().describe("Asset-creation conflict policy: skip (default) | error | overwrite"),
-    frames: z.array(z.number()).optional().describe("Specific frames to sample for read_bone_track"),
+    onConflict: z.string().optional().describe("Conflict policy. Existing asset actions use skip|error|overwrite; Control Rig begin/bake use skip|error and never overwrite."),
+    frames: z.array(z.number()).optional().describe("Frames to read/sample. Used by read_bone_track, read_control_rig_edit, and analyze_animation."),
+    // UE 5.8 Control Rig + data-driven animation editing workflow.
+    sourceAnimationPath: z.string().optional().describe("begin_control_rig_edit: source AnimSequence asset path (required)."),
+    controlRigPath: z.string().optional().describe("begin_control_rig_edit: verified baseline ControlRigBlueprint asset path for this target character; required when rigMode='asset'. Create and validate the rig first when the project/character has none."),
+    rigMode: z.enum(["fk", "asset"]).optional().describe("begin_control_rig_edit: use 'asset' with the verified baseline controlRigPath; use 'fk' only when generated raw FK controls are the intended editing surface."),
+    layered: z.boolean().optional().describe("begin_control_rig_edit: keep the source animation track active under the Control Rig layer; defaults false."),
+    startFrame: z.number().int().optional().describe("begin_control_rig_edit: optional inclusive edit range start frame."),
+    endFrame: z.number().int().optional().describe("begin_control_rig_edit: optional exclusive edit range end frame."),
+    displayRate: z.number().positive().optional().describe("begin_control_rig_edit: optional LevelSequence display rate in frames per second."),
+    bindingTag: z.string().min(1).optional().describe("Stable Control Rig edit-session natural key used by begin/read/apply/bake."),
+    controlNames: z.array(z.string().min(1)).min(1).optional().describe("read_control_rig_edit: optional controls to sample; omit to read every control."),
+    operations: z.array(ControlRigEditOperation).min(1).optional().describe("apply_control_rig_edits: typed transform/bool/float/int edit operations, including quaternion set_keys."),
+    outputAssetPath: z.string().optional().describe("bake_control_rig_edit: required destination AnimSequence asset path."),
+    reduceKeys: z.literal(false).optional().describe("bake_control_rig_edit: key reduction is not supported yet; omit or pass false."),
+    tolerance: z.number().nonnegative().optional().describe("bake_control_rig_edit: key-reduction tolerance."),
+    createLink: z.literal(false).optional().describe("bake_control_rig_edit: Sequencer links are not supported yet; omit or pass false."),
+    loop: z.boolean().optional().describe("analyze_animation: include end-to-start loop continuity metrics."),
+    outputDirectory: z.string().optional().describe("analyze_animation: optional directory under Project/Saved/Codex/AnimationQA for deterministic artifacts; relative values resolve under that root."),
     chains: z.array(z.object({
       name: z.string(),
       startBone: z.string(),
@@ -258,7 +393,7 @@ export const animationTool: ToolDef = categoryTool(
     save: z.boolean().optional().describe("bake_keyframes_batch: save the asset after baking (default true)"),
     // PoseSearch (v0.7.15)
     schemaPath: z.string().optional().describe("Path to a UPoseSearchSchema asset"),
-    sequencePath: z.string().optional().describe("Animation asset path to add to a PoseSearchDatabase"),
+    sequencePath: z.string().optional().describe("Animation path for PoseSearch graph actions, or LevelSequence path for the UE 5.8 Control Rig edit workflow."),
     wait: z.boolean().optional().describe("build_pose_search_index: block until the async build resolves (default true)"),
     // #684 per-clip flags + bulk clip authoring
     mirror: z.string().optional().describe("PoseSearch clip mirror option: 'original' | 'mirrored' | 'both'"),
@@ -267,7 +402,7 @@ export const animationTool: ToolDef = categoryTool(
     sampleEnd: z.number().optional().describe("PoseSearch clip sampling range end (seconds); [0,0] = whole clip"),
     clips: z.array(z.any()).optional().describe("set_pose_search_clips: array of clip entries ({sequencePath, mirror?, disableReselection?, sampleStart?, sampleEnd?, enabled?}) or bare path strings"),
     // Motion Matching content pipeline (schema / mirror / normalization / tuning)
-    sampleRate: z.number().optional().describe("create_pose_search_schema: schema sample rate (default 30)"),
+    sampleRate: z.number().optional().describe("Sample rate. create_pose_search_schema: schema rate (default 30); analyze_animation: optional analysis sampling rate."),
     addDefaultChannels: z.boolean().optional().describe("create_pose_search_schema: add Trajectory+Pose default channels (default true)"),
     mirrorDataTablePath: z.string().optional().describe("create_pose_search_schema: optional MirrorDataTable to bind"),
     bones: z.array(z.any()).optional().describe("add_pose_search_schema_pose_channel: [{bone, flags?, weight?}] or bone-name strings; also add_pose_search_schema_trajectory_channel reuses 'samples'"),
@@ -301,7 +436,7 @@ export const animationTool: ToolDef = categoryTool(
     rootBone: z.string().optional().describe("Root bone name for bake_root_motion_from_bone (default 'root')"),
     axes: z.array(z.string()).optional().describe("Axes to bake ('x','y','z') for bake_root_motion_from_bone"),
     interpolation: z.string().optional().describe("bake_root_motion_from_bone: 'linear' (default) or 'per_frame'"),
-    space: z.string().optional().describe("Bone-space frame. get_bone_transforms (ref skeleton): 'local' (default) | 'component'. get_bone_transform (live actor): 'world' (default) | 'component' | 'local'"),
+    space: z.string().optional().describe("Transform space. Control Rig edit actions: 'local'|'global'. get_bone_transforms: 'local'|'component'. get_bone_transform: 'world'|'component'|'local'."),
     world: z.string().optional().describe("World scope for live actor skeletal queries: auto (default, prefer PIE), pie/game, or editor"),
     animation: z.string().optional().describe("AnimSequence path for add_blend_sample / set_blend_sample"),
     sampleIndex: z.number().optional().describe("BlendSpace sample index for set_blend_sample"),

@@ -153,6 +153,9 @@ const OVERRIDES: Readonly<Record<string, ActionClass>> = {
   // engine surface uses it as one (mirror_selected_controls), and a mutate verb
   // anywhere in the name wins, which is wrong for exactly this action.
   "animation.read_mirror_data_table": "read",
+  // Reads animation data, but optionally writes validation artifacts under
+  // the addressed project's Saved directory.
+  "animation.analyze_animation": "unknown",
   // Reads whose first segment is not a verb at all.
   "level.line_trace": "read",
   "level.nav_project_point": "read",

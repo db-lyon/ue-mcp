@@ -82,4 +82,15 @@ describe("classifyWrite", () => {
     const r = classifyWrite("save_asset", { assetPath: 123 });
     expect(r.writes).toBe(false);
   });
+
+  it("extracts the actual Control Rig edit outputs", () => {
+    expect(classifyWrite("begin_control_rig_edit", { sequencePath: "/Game/Edit/LS_A" }).contentPaths)
+      .toEqual(["/Game/Edit/LS_A"]);
+    expect(classifyWrite("apply_control_rig_edits", { sequencePath: "/Game/Edit/LS_A" }).contentPaths)
+      .toEqual(["/Game/Edit/LS_A"]);
+    expect(classifyWrite("bake_control_rig_edit", {
+      sequencePath: "/Game/Edit/LS_A",
+      outputAssetPath: "/Game/Edit/A_Result",
+    }).contentPaths).toEqual(["/Game/Edit/A_Result"]);
+  });
 });

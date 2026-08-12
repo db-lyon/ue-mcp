@@ -73,7 +73,7 @@ describe("action classification", () => {
   });
 
   it("treats an arbitrary payload as unknown, and gates it like a mutation", () => {
-    for (const key of ["epic.call_tool", "editor.invoke_object_function"]) {
+    for (const key of ["epic.call_tool", "editor.invoke_object_function", "animation.analyze_animation"]) {
       const cls = classifyTaskClass(key);
       expect(cls.class, key).toBe("unknown");
       expect(requiresExplicitEditor(cls.class)).toBe(true);
