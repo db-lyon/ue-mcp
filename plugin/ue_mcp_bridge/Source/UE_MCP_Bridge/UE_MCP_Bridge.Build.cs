@@ -8,6 +8,7 @@ public class UE_MCP_Bridge : ModuleRules
 	// new .cpp until this file changes.
 	// Private/Handlers/AssetHandlers_BulkUpsert.cpp: UBT caches the module's
 	// file list and will not pick up a new .cpp until this file changes.
+	// Private/Handlers/LevelHandlers_Inspection.cpp and its focused test: same reason.
 	// Private/BridgeStateFiles.cpp, Private/BridgeParamEcho.cpp and
 	// Private/Tests/BridgeProtocolTests.cpp: same reason.
 	public UE_MCP_Bridge(ReadOnlyTargetRules Target) : base(Target)

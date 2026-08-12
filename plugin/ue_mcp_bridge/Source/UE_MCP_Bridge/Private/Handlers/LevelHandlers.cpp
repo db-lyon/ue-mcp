@@ -120,6 +120,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_fog_properties"), &SetFogProperties);
 	Registry.RegisterHandler(TEXT("get_actors_by_class"), &GetActorsByClass);
 	Registry.RegisterHandler(TEXT("get_actors_by_component_class"), &GetActorsByComponentClass);
+	Registry.RegisterHandler(TEXT("summarize_static_mesh_usage"), &SummarizeStaticMeshUsage);
 	Registry.RegisterHandler(TEXT("count_actors_by_class"), &CountActorsByClass);
 	Registry.RegisterHandler(TEXT("get_runtime_virtual_texture_summary"), &GetRVTSummary);
 	Registry.RegisterHandler(TEXT("set_water_body_property"), &SetWaterBodyProperty);
