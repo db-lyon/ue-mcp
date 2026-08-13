@@ -116,6 +116,10 @@ private:
 	// #697: update or remove a single instance on an ISMC/HISMC by index.
 	static TSharedPtr<FJsonValue> UpdateInstanceTransform(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveInstance(const TSharedPtr<FJsonObject>& Params);
+	// Preview or commit a bounded batch of ISMC/HISMC instances snapped to a
+	// filtered collision surface. Defaults to dryRun=true and preflights every
+	// trace before one transactional mutation.
+	static TSharedPtr<FJsonValue> SnapInstancesToSurface(const TSharedPtr<FJsonObject>& Params);
 	// #696: enable + force-build Nanite on a UStaticMesh asset, or read its
 	// current Nanite state.
 	static TSharedPtr<FJsonValue> SetNaniteSettings(const TSharedPtr<FJsonObject>& Params);

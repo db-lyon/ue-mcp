@@ -139,6 +139,11 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("get_instance_transforms"), &GetInstanceTransforms);
 	Registry.RegisterHandler(TEXT("update_instance_transform"), &UpdateInstanceTransform);
 	Registry.RegisterHandler(TEXT("remove_instance"), &RemoveInstance);
+	// Native bridge method only in this plugin-scoped change. It appears in
+	// get_bridge_capabilities.actions and can be called directly over JSON-RPC
+	// (or a UeMcpTask bridge.call). A first-class category action also requires a
+	// server schema wrapper, which intentionally lives outside this plugin.
+	Registry.RegisterHandlerWithTimeout(TEXT("snap_instances_to_surface"), &SnapInstancesToSurface, 300.0f);
 	// #696: enable + force-build Nanite on a static mesh.
 	Registry.RegisterHandler(TEXT("set_nanite_settings"), &SetNaniteSettings);
 	Registry.RegisterHandler(TEXT("get_nanite_info"), &GetNaniteInfo);
