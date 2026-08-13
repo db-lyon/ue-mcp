@@ -254,6 +254,8 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_bone_transforms"), &ReadBoneTransforms);
 	Registry.RegisterHandler(TEXT("teleport_runtime_actor"), &TeleportRuntimeActor);
 	Registry.RegisterHandler(TEXT("set_movement_mode"), &SetMovementMode);
+	Registry.RegisterHandler(TEXT("set_runtime_visibility"), &SetRuntimeVisibility);
+	Registry.RegisterHandler(TEXT("restore_runtime_visibility"), &RestoreRuntimeVisibility);
 	// #802: resolve a live instance path, and write to a live instance.
 	Registry.RegisterHandler(TEXT("find_object"), &FindLiveObjects);
 	Registry.RegisterHandler(TEXT("set_object_property"), &SetObjectProperty);

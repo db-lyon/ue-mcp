@@ -154,6 +154,9 @@ private:
 	static TSharedPtr<FJsonValue> ReadBoneTransforms(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> TeleportRuntimeActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMovementMode(const TSharedPtr<FJsonObject>& Params);
+	// Bounded, reversible visibility changes on live PIE actors/components.
+	static TSharedPtr<FJsonValue> SetRuntimeVisibility(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RestoreRuntimeVisibility(const TSharedPtr<FJsonObject>& Params);
 	// #802: locate live UObject instances, and write to one.
 	static TSharedPtr<FJsonValue> FindLiveObjects(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetObjectProperty(const TSharedPtr<FJsonObject>& Params);

@@ -628,6 +628,20 @@ bool FMCPBridgeCapabilitiesTest::RunTest(const FString& Parameters)
 	double ActionCount = 0.0;
 	TestTrue(TEXT("the registered action count is reported"), Payload->TryGetNumberField(TEXT("actionCount"), ActionCount));
 	TestTrue(TEXT("the binary registered some actions"), ActionCount > 0);
+	const TArray<TSharedPtr<FJsonValue>>* Actions = nullptr;
+	TestTrue(TEXT("the registered actions are reported"), Payload->TryGetArrayField(TEXT("actions"), Actions));
+	if (Actions)
+	{
+		TSet<FString> ActionNames;
+		for (const TSharedPtr<FJsonValue>& Value : *Actions)
+		{
+			ActionNames.Add(Value->AsString());
+		}
+		TestTrue(TEXT("runtime visibility set is advertised"),
+			ActionNames.Contains(TEXT("set_runtime_visibility")));
+		TestTrue(TEXT("runtime visibility restore is advertised"),
+			ActionNames.Contains(TEXT("restore_runtime_visibility")));
+	}
 
 	// Advertised whether or not it is recording, so a caller can tell a bridge
 	// that cannot from a bridge that is switched off.
