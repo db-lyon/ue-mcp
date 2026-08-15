@@ -227,6 +227,7 @@ UE-MCP exposes **<!-- count:tools -->24<!-- /count --> category tools** covering
 | `reparent_component` | Reparent an SCS component under a new parent (#115). Params: `assetPath, componentName, newParent` |
 | `reparent` | Change a Blueprint's ParentClass and recompile (#138). Params: `assetPath, parentClass (short name or full path)` |
 | `flush_ich` | Flush orphaned InheritableComponentHandler override records (invalid component-override entries invisible to read/remove_component). Recompiles + saves. Params: `assetPath` |
+| `flush_component_templates` | Flush orphaned UBlueprint::ComponentTemplates left by deleted Add Component nodes using Unreal's native maintenance routine. Live Add Component templates are preserved. Recompiles + saves only when changed. Params: `assetPath` |
 | `set_actor_tick_settings` | Set actor CDO tick settings (#116). Params: `assetPath, bCanEverTick?, bStartWithTickEnabled?, TickInterval?` |
 | `export_nodes_t3d` | Export graph nodes as T3D text (Ctrl+C equivalent) for bulk round-trip (#130). Params: `assetPath, graphName?, nodeIds? (omit = whole graph)` |
 | `import_nodes_t3d` | Paste a T3D node blob into a graph (Ctrl+V equivalent) for bulk authoring (#130). Params: `assetPath, graphName?, t3d, posX?, posY?` |

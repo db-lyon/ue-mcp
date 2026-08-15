@@ -10,6 +10,12 @@ public:
 	// Register all level handlers
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 
+	// Shared by the handler and its focused native automation test.
+	static int32 ClearBlueprintGraphNodes(
+		class UBlueprint* Blueprint,
+		bool bDryRun,
+		TArray<TSharedPtr<FJsonValue>>& OutGraphs);
+
 private:
 	// Handler implementations
 	static TSharedPtr<FJsonValue> GetOutliner(const TSharedPtr<FJsonObject>& Params);
@@ -41,6 +47,7 @@ private:
 	// #426: symmetric inverse of add_component_to_actor.
 	static TSharedPtr<FJsonValue> RemoveComponentFromActor(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> LoadLevel(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ClearLevelScript(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetComponentProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetComponentDetails(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetVolumeProperties(const TSharedPtr<FJsonObject>& Params);
