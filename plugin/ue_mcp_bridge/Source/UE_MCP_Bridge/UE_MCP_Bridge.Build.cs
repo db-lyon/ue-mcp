@@ -139,4 +139,4 @@ public class UE_MCP_Bridge : ModuleRules
 	}
 }
 
-// Rescan trigger: round 2 added handler translation units.
+// Rescan trigger: level-script handler automation coverage added.

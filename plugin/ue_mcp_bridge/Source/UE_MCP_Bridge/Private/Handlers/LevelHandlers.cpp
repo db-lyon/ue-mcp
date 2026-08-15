@@ -86,6 +86,12 @@
 #include "Engine/SkeletalMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "HandlerJsonProperty.h"
+#include "Engine/Blueprint.h"
+#include "Engine/LevelScriptBlueprint.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphNode.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "Kismet2/KismetEditorUtilities.h"
 
 void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -111,6 +117,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_component_to_actor"), &AddComponentToActor);
 	Registry.RegisterHandler(TEXT("remove_component_from_actor"), &RemoveComponentFromActor);
 	Registry.RegisterHandler(TEXT("load_level"), &LoadLevel);
+	Registry.RegisterHandler(TEXT("clear_level_script"), &ClearLevelScript);
 	Registry.RegisterHandler(TEXT("set_component_property"), &SetComponentProperty);
 	Registry.RegisterHandler(TEXT("get_component_details"), &GetComponentDetails);
 	Registry.RegisterHandler(TEXT("set_actor_material"), &SetActorMaterial);
@@ -1315,6 +1322,168 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 	Result->SetStringField(TEXT("levelPath"), LevelPath);
 	Result->SetBoolField(TEXT("endedPlaySession"), bEndedPIE);
 
+	return MCPResult(Result);
+}
+
+int32 FLevelHandlers::ClearBlueprintGraphNodes(
+	UBlueprint* Blueprint,
+	bool bDryRun,
+	TArray<TSharedPtr<FJsonValue>>& OutGraphs)
+{
+	if (!Blueprint)
+	{
+		return 0;
+	}
+
+	TArray<UEdGraph*> Graphs;
+	Blueprint->GetAllGraphs(Graphs);
+	int32 NodeCount = 0;
+
+	for (UEdGraph* Graph : Graphs)
+	{
+		if (!Graph || Graph->Nodes.IsEmpty())
+		{
+			continue;
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Nodes;
+		TArray<UEdGraphNode*> GraphNodes;
+		GraphNodes.Reserve(Graph->Nodes.Num());
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			GraphNodes.Add(Node);
+		}
+		if (!bDryRun)
+		{
+			Graph->Modify();
+		}
+		for (UEdGraphNode* Node : GraphNodes)
+		{
+			if (!Node)
+			{
+				continue;
+			}
+
+			auto NodeJson = MakeShared<FJsonObject>();
+			NodeJson->SetStringField(TEXT("name"), Node->GetName());
+			NodeJson->SetStringField(TEXT("classPath"), Node->GetClass()->GetPathName());
+			Nodes.Add(MakeShared<FJsonValueObject>(NodeJson));
+			++NodeCount;
+
+			if (!bDryRun)
+			{
+				Node->Modify();
+				FBlueprintEditorUtils::RemoveNode(Blueprint, Node, /*bDontRecompile*/ true);
+			}
+		}
+
+		auto GraphJson = MakeShared<FJsonObject>();
+		GraphJson->SetStringField(TEXT("name"), Graph->GetName());
+		GraphJson->SetNumberField(TEXT("nodeCount"), Nodes.Num());
+		GraphJson->SetArrayField(TEXT("nodes"), Nodes);
+		OutGraphs.Add(MakeShared<FJsonValueObject>(GraphJson));
+	}
+
+	return NodeCount;
+}
+
+TSharedPtr<FJsonValue> FLevelHandlers::ClearLevelScript(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor)
+	{
+		return MCPError(TEXT("GEditor not available"));
+	}
+
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	if (!World || !World->PersistentLevel)
+	{
+		return MCPError(TEXT("No persistent editor level is loaded"));
+	}
+
+	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), true);
+	const bool bSave = OptionalBool(Params, TEXT("save"), false);
+	if (!bDryRun && bSave && World->GetOutermost()->IsDirty())
+	{
+		return MCPError(TEXT("Current level already has unsaved changes; save or discard them before clear_level_script with save=true"));
+	}
+	ULevelScriptBlueprint* LevelScript =
+		World->PersistentLevel->GetLevelScriptBlueprint(/*bDontCreate*/ true);
+
+	TArray<TSharedPtr<FJsonValue>> Graphs;
+	TArray<TSharedPtr<FJsonValue>> Variables;
+	int32 NodeCount = 0;
+	int32 VariableCount = 0;
+	bool bCompileSucceeded = true;
+	bool bSaved = false;
+
+	if (LevelScript)
+	{
+		TArray<FName> VariableNames;
+		VariableNames.Reserve(LevelScript->NewVariables.Num());
+		for (const FBPVariableDescription& Variable : LevelScript->NewVariables)
+		{
+			VariableNames.Add(Variable.VarName);
+			Variables.Add(MakeShared<FJsonValueString>(Variable.VarName.ToString()));
+		}
+		VariableCount = VariableNames.Num();
+
+		if (bDryRun)
+		{
+			NodeCount = ClearBlueprintGraphNodes(LevelScript, true, Graphs);
+		}
+		else
+		{
+			const FScopedTransaction Transaction(
+				NSLOCTEXT("UEMCPBridge", "ClearLevelScript", "MCP clear level script"));
+			World->Modify();
+			World->PersistentLevel->Modify();
+			LevelScript->Modify();
+			NodeCount = ClearBlueprintGraphNodes(LevelScript, false, Graphs);
+			for (const FName VariableName : VariableNames)
+			{
+				FBlueprintEditorUtils::RemoveMemberVariable(LevelScript, VariableName);
+			}
+
+			if (NodeCount > 0 || VariableCount > 0)
+			{
+				FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(LevelScript);
+				FKismetEditorUtilities::CompileBlueprint(LevelScript);
+				bCompileSucceeded = LevelScript->Status != BS_Error;
+				World->MarkPackageDirty();
+				if (!bCompileSucceeded)
+				{
+					return MCPError(TEXT("Level script nodes were cleared but compilation failed; the level was not saved and the change can be undone"));
+				}
+			}
+
+			if (bSave && (NodeCount > 0 || VariableCount > 0))
+			{
+				ULevelEditorSubsystem* LevelEditorSubsystem =
+					GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
+				if (!LevelEditorSubsystem)
+				{
+					return MCPError(TEXT("LevelEditorSubsystem not available; level was changed but not saved"));
+				}
+				bSaved = LevelEditorSubsystem->SaveCurrentLevel();
+				if (!bSaved)
+				{
+					return MCPError(TEXT("Level script was cleared and compiled, but the current level could not be saved"));
+				}
+			}
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("levelPath"), World->GetOutermost()->GetName());
+	Result->SetBoolField(TEXT("dryRun"), bDryRun);
+	Result->SetBoolField(TEXT("hasLevelScript"), LevelScript != nullptr);
+	Result->SetNumberField(TEXT("graphCount"), Graphs.Num());
+	Result->SetNumberField(TEXT("nodeCount"), NodeCount);
+	Result->SetArrayField(TEXT("graphs"), Graphs);
+	Result->SetNumberField(TEXT("variableCount"), VariableCount);
+	Result->SetArrayField(TEXT("variables"), Variables);
+	Result->SetBoolField(TEXT("compileSucceeded"), bCompileSucceeded);
+	Result->SetBoolField(TEXT("saved"), bSaved);
 	return MCPResult(Result);
 }
 

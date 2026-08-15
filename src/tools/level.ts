@@ -22,6 +22,7 @@ export const levelTool: ToolDef = categoryTool(
     get_component_details: bp("Read a placed actor's component transforms. With componentName returns that component's relative+world location/rotation/scale, class, and attach parent; without it lists every component. With includeValues=true also dumps arbitrary UPROPERTY values (custom fields, CharacterMovement MaxWalkSpeed, etc.); world='pie' reads the live PIE instance (#539/#584). Params: actorLabel, componentName?, includeValues?, propertyNames? (filter), world? (editor|pie)", "get_component_details", (p) => ({ actorLabel: p.actorLabel, componentName: p.componentName, includeValues: p.includeValues, propertyNames: p.propertyNames, world: p.world, pieInstance: p.pieInstance })),
     get_current:        bp("Get current level name and path", "get_current_level"),
     load:               bp("Load level. Params: levelPath", "load_level"),
+    clear_level_script: bp("Preview or remove every node and member variable from the currently loaded persistent level's Level Blueprint. Defaults to dryRun=true. Actors are untouched; save=true saves only the current level after a successful compile. Params: dryRun?, save?", "clear_level_script", (p) => ({ dryRun: p.dryRun, save: p.save })),
     save:               bp("Save current level", "save_current_level"),
     list:               bp("List levels. Params: directory?, recursive?", "list_levels"),
     create:             bp("Create new level. Params: levelPath?, templateLevel?", "create_new_level"),
@@ -174,7 +175,8 @@ export const levelTool: ToolDef = categoryTool(
     tag: z.string().optional(),
     pieInstance: z.number().optional().describe("Which PIE world to target when world='pie': 0 = server/primary, 1..N = clients. See editor(list_pie_instances) (#778)"),
     tags: z.array(z.string()).optional(),
-    dryRun: z.boolean().optional().describe("delete_actors / set_actor_folder_path: report matches without writing. delete_exact_labeled_actors_in_levels: same, but defaults to true"),
+    dryRun: z.boolean().optional().describe("clear_level_script / delete_actors / set_actor_folder_path: report matches without writing. clear_level_script and delete_exact_labeled_actors_in_levels default to true"),
+    save: z.boolean().optional().describe("clear_level_script: save only the current level after clearing and compiling (default false)"),
     levels: z.array(z.object({
       levelPath: z.string().describe("Long package name of the .umap, e.g. /Game/Maps/Arena"),
       actorLabels: z.array(z.string()).describe("Exact editor labels to delete in that map (max 256, no duplicates)"),
