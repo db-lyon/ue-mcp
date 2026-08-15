@@ -49,6 +49,8 @@
 #include "Handlers/StateTreeHandlers.h"
 #include "Handlers/ChooserHandlers.h"
 #include "Handlers/EpicHandlers.h"
+#include "Handlers/MassHandlers.h"
+#include "Handlers/SkeletalMeshHandlers.h"
 #include "Handlers/FabHandlers.h"
 #include "Handlers/LockHandlers.h"
 #include "Handlers/DiffHandlers.h"
@@ -152,6 +154,8 @@ FMCPBridgeServer::FMCPBridgeServer(int32 Port, const FString& InPortSource, bool
 	FStateTreeHandlers::RegisterHandlers(HandlerRegistry);
 	FChooserHandlers::RegisterHandlers(HandlerRegistry);
 	FEpicHandlers::RegisterHandlers(HandlerRegistry);
+	FMassHandlers::RegisterHandlers(HandlerRegistry);
+	FSkeletalMeshHandlers::RegisterHandlers(HandlerRegistry);
 	FFabHandlers::RegisterHandlers(HandlerRegistry);
 	FLockHandlers::RegisterHandlers(HandlerRegistry);
 	FDiffHandlers::RegisterHandlers(HandlerRegistry);

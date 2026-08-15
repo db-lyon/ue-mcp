@@ -458,9 +458,26 @@ TSharedPtr<FJsonObject> FStateTreeHandlers::SerializeStateHierarchy(const UState
 		if (Trans.State.ID.IsValid())
 		{
 			TransObj->SetStringField(TEXT("targetStateId"), GuidToString(Trans.State.ID));
+			const UStateTreeEditorData* EditorData =
+				Cast<UStateTreeEditorData>(State->GetTypedOuter<UStateTreeEditorData>());
+			if (EditorData)
+			{
+				if (const UStateTreeState* TargetState =
+					EditorData->GetStateByID(Trans.State.ID))
+				{
+					TransObj->SetStringField(
+						TEXT("targetStatePath"),
+						GetStatePath(TargetState));
+				}
+			}
 		}
 
 		TransObj->SetBoolField(TEXT("bEnabled"), Trans.bTransitionEnabled);
+		TransObj->SetBoolField(TEXT("bDelayTransition"), Trans.bDelayTransition);
+		TransObj->SetNumberField(TEXT("delayDuration"), Trans.DelayDuration);
+		TransObj->SetNumberField(
+			TEXT("delayRandomVariance"),
+			Trans.DelayRandomVariance);
 
 		TArray<TSharedPtr<FJsonValue>> TransCondArr;
 		for (const FStateTreeEditorNode& TCond : Trans.Conditions)
@@ -685,7 +702,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadStateTree(const TSharedPtr<FJsonO
 
 	if (EditorData->Schema)
 	{
-		Result->SetStringField(TEXT("schemaClass"), EditorData->Schema->GetClass()->GetPathName());
+		const FString SchemaPath = EditorData->Schema->GetClass()->GetPathName();
+		Result->SetStringField(TEXT("schemaClass"), SchemaPath);
+		Result->SetStringField(TEXT("schemaPath"), SchemaPath);
 	}
 
 	// SubTrees (state hierarchy)
@@ -2403,6 +2422,17 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ValidateStateTree(const TSharedPtr<FJ
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
 	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), ST->GetPathName());
+	if (UStateTreeEditorData* EditorData = GetEditorData(ST))
+	{
+		if (EditorData->Schema)
+		{
+			const FString SchemaPath =
+				EditorData->Schema->GetClass()->GetPathName();
+			Result->SetStringField(TEXT("schemaClass"), SchemaPath);
+			Result->SetStringField(TEXT("schemaPath"), SchemaPath);
+		}
+	}
 	Result->SetBoolField(TEXT("validated"), true);
 	return MCPResult(Result);
 }

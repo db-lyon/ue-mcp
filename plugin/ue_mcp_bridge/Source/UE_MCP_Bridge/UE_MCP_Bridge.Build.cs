@@ -90,6 +90,7 @@ public class UE_MCP_Bridge : ModuleRules
 				"PythonScriptPlugin",
 				"Sequencer",
 				"Settings",
+				"SkeletalMeshEditor",
 				"Slate",
 				"SlateCore",
 				"StateTreeModule",
@@ -139,4 +140,4 @@ public class UE_MCP_Bridge : ModuleRules
 	}
 }
 
-// Rescan trigger: round 2 added handler translation units.
+// Rescan trigger: Mass and skeletal-mesh handler translation units.

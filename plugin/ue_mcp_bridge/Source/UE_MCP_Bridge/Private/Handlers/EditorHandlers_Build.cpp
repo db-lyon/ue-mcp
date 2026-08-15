@@ -19,6 +19,8 @@
 #include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformFile.h"
 #include "Modules/ModuleManager.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/ARFilter.h"
 #if PLATFORM_WINDOWS
 #include "ILiveCodingModule.h"
 #endif
@@ -26,6 +28,96 @@
 #include "EditorValidatorSubsystem.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+
++namespace
+{
+	static FString MCPDataValidationResultToString(const EDataValidationResult Result)
+	{
+		switch (Result)
+		{
+		case EDataValidationResult::Valid:
+			return TEXT("valid");
+		case EDataValidationResult::Invalid:
+			return TEXT("invalid");
+		case EDataValidationResult::NotValidated:
+		default:
+			return TEXT("notValidated");
+		}
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> MCPValidationTextArray(const TArray<FText>& Texts)
+	{
+		TArray<TSharedPtr<FJsonValue>> Values;
+		Values.Reserve(Texts.Num());
+		for (const FText& Text : Texts)
+		{
+			Values.Add(MakeShared<FJsonValueString>(Text.ToString()));
+		}
+		return Values;
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> MCPValidationMessageArray(const TArray<TSharedRef<FTokenizedMessage>>& Messages)
+	{
+		TArray<TSharedPtr<FJsonValue>> Values;
+		Values.Reserve(Messages.Num());
+		for (const TSharedRef<FTokenizedMessage>& Message : Messages)
+		{
+			Values.Add(MakeShared<FJsonValueString>(Message->ToText().ToString()));
+		}
+		return Values;
+	}
+
+	static bool MCPResolveExplicitValidationAsset(
+		IAssetRegistry& AssetRegistry,
+		const FString& RequestedPath,
+		FAssetData& OutAsset,
+		FString& OutError)
+	{
+		const FString TrimmedPath = RequestedPath.TrimStartAndEnd();
+		if (TrimmedPath.IsEmpty())
+		{
+			OutError = TEXT("asset path is empty");
+			return false;
+		}
+
+		if (TrimmedPath.Contains(TEXT(".")) || TrimmedPath.Contains(TEXT(":")))
+		{
+			OutAsset = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(TrimmedPath));
+			if (!OutAsset.IsValid())
+			{
+				OutError = FString::Printf(TEXT("asset object path was not found: %s"), *TrimmedPath);
+				return false;
+			}
+			return true;
+		}
+
+		TArray<FAssetData> PackageAssets;
+		AssetRegistry.GetAssetsByPackageName(FName(*TrimmedPath), PackageAssets);
+		PackageAssets.Sort([](const FAssetData& A, const FAssetData& B)
+		{
+			return A.GetObjectPathString() < B.GetObjectPathString();
+		});
+
+		if (PackageAssets.Num() == 0)
+		{
+			OutError = FString::Printf(TEXT("asset package path was not found: %s"), *TrimmedPath);
+			return false;
+		}
+		if (PackageAssets.Num() != 1)
+		{
+			OutError = FString::Printf(TEXT("asset package path is ambiguous (%d assets): %s"), PackageAssets.Num(), *TrimmedPath);
+			return false;
+		}
+
+		OutAsset = PackageAssets[0];
+		if (!OutAsset.IsValid())
+		{
+			OutError = FString::Printf(TEXT("asset package path resolved to invalid asset data: %s"), *TrimmedPath);
+			return false;
+		}
+		return true;
+	}
+}
 
 TSharedPtr<FJsonValue> FEditorHandlers::BuildLighting(const TSharedPtr<FJsonObject>& Params)
 {
@@ -83,46 +175,177 @@ TSharedPtr<FJsonValue> FEditorHandlers::BuildAll(const TSharedPtr<FJsonObject>& 
 
 TSharedPtr<FJsonValue> FEditorHandlers::ValidateAssets(const TSharedPtr<FJsonObject>& Params)
 {
-	FString Directory = OptionalString(Params, TEXT("directory"), TEXT("/Game/"));
-
-	// Try to use the EditorValidatorSubsystem if available
-	UEditorValidatorSubsystem* ValidatorSubsystem = GEditor ? GEditor->GetEditorSubsystem<UEditorValidatorSubsystem>() : nullptr;
-
-	if (ValidatorSubsystem)
+	if (!GEditor)
 	{
-		// Use the DataValidation console command for broad validation
-		if (GEditor && GEditor->GetEditorWorldContext().World())
+		return MCPError(TEXT("Editor not available"));
+	}
+
+	UEditorValidatorSubsystem* ValidatorSubsystem = GEditor->GetEditorSubsystem<UEditorValidatorSubsystem>();
+	if (!ValidatorSubsystem)
+	{
+		return MCPError(TEXT("EditorValidatorSubsystem is not available"));
+	}
+
+	const bool bHasAssetPaths = Params->HasField(TEXT("assetPaths"));
+	const bool bHasAssetPath = Params->HasField(TEXT("assetPath"));
+	const bool bHasDirectory = Params->HasField(TEXT("directory"));
+	if ((bHasAssetPaths || bHasAssetPath) && bHasDirectory)
+	{
+		return MCPError(TEXT("Specify either assetPaths/assetPath or directory, not both"));
+	}
+	if (bHasAssetPaths && bHasAssetPath)
+	{
+		return MCPError(TEXT("Specify only one of assetPaths or assetPath"));
+	}
+
+	FAssetRegistryModule* AssetRegistryModule = FModuleManager::LoadModulePtr<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	if (!AssetRegistryModule || !AssetRegistryModule->IsValid())
+	{
+		return MCPError(TEXT("AssetRegistry is not available"));
+	}
+	IAssetRegistry* AssetRegistry = AssetRegistryModule->TryGet();
+	if (!AssetRegistry)
+	{
+		return MCPError(TEXT("AssetRegistry is shutting down"));
+	}
+
+	TArray<FAssetData> AssetDataList;
+	FString SelectionMode;
+	FString Selection;
+	if (bHasAssetPaths || bHasAssetPath)
+	{
+		TArray<FString> RequestedPaths;
+		if (bHasAssetPaths)
 		{
-			FString Command = FString::Printf(TEXT("DataValidation.ValidateAssets %s"), *Directory);
-			UKismetSystemLibrary::ExecuteConsoleCommand(
-				GEditor->GetEditorWorldContext().World(),
-				Command,
-				nullptr
-			);
+			const TArray<TSharedPtr<FJsonValue>>* PathValues = nullptr;
+			if (!Params->TryGetArrayField(TEXT("assetPaths"), PathValues) || !PathValues || PathValues->Num() == 0)
+			{
+				return MCPError(TEXT("assetPaths must be a non-empty array of exact asset paths"));
+			}
+			RequestedPaths.Reserve(PathValues->Num());
+			for (const TSharedPtr<FJsonValue>& PathValue : *PathValues)
+			{
+				FString RequestedPath;
+				if (!PathValue.IsValid() || !PathValue->TryGetString(RequestedPath) || RequestedPath.TrimStartAndEnd().IsEmpty())
+				{
+					return MCPError(TEXT("Every assetPaths entry must be a non-empty string"));
+				}
+				RequestedPaths.Add(RequestedPath);
+			}
+		}
+		else
+		{
+			FString RequestedPath;
+			if (!Params->TryGetStringField(TEXT("assetPath"), RequestedPath) || RequestedPath.TrimStartAndEnd().IsEmpty())
+			{
+				return MCPError(TEXT("assetPath must be a non-empty exact package or object path"));
+			}
+			RequestedPaths.Add(RequestedPath);
 		}
 
-		auto Result = MCPSuccess();
-		Result->SetStringField(TEXT("directory"), Directory);
-		Result->SetStringField(TEXT("message"), TEXT("Asset validation triggered via EditorValidatorSubsystem"));
-		return MCPResult(Result);
+		TSet<FString> SeenObjectPaths;
+		for (const FString& RequestedPath : RequestedPaths)
+		{
+			FAssetData ResolvedAsset;
+			FString ResolveError;
+			if (!MCPResolveExplicitValidationAsset(*AssetRegistry, RequestedPath, ResolvedAsset, ResolveError))
+			{
+				return MCPError(ResolveError);
+			}
+
+			const FString ObjectPath = ResolvedAsset.GetObjectPathString();
+			if (!SeenObjectPaths.Contains(ObjectPath))
+			{
+				SeenObjectPaths.Add(ObjectPath);
+				AssetDataList.Add(ResolvedAsset);
+			}
+		}
+		SelectionMode = TEXT("explicit");
+		Selection = FString::Join(RequestedPaths, TEXT(","));
 	}
 	else
 	{
-		// Fallback: trigger via console command
-		if (GEditor && GEditor->GetEditorWorldContext().World())
+		const FString Directory = OptionalString(Params, TEXT("directory"), TEXT("/Game/")).TrimStartAndEnd();
+		if (Directory.IsEmpty() || !Directory.StartsWith(TEXT("/")))
 		{
-			UKismetSystemLibrary::ExecuteConsoleCommand(
-				GEditor->GetEditorWorldContext().World(),
-				TEXT("DataValidation.ValidateAssets"),
-				nullptr
-			);
+			return MCPError(TEXT("directory must be a non-empty package path such as /Game/"));
 		}
 
-		auto Result = MCPSuccess();
-		Result->SetStringField(TEXT("directory"), Directory);
-		Result->SetStringField(TEXT("message"), TEXT("Asset validation triggered via console command"));
-		return MCPResult(Result);
+		FARFilter Filter;
+		Filter.PackagePaths.Add(FName(*Directory));
+		Filter.bRecursivePaths = true;
+		if (!AssetRegistry->GetAssets(Filter, AssetDataList))
+		{
+			return MCPError(FString::Printf(TEXT("AssetRegistry could not enumerate directory: %s"), *Directory));
+		}
+		SelectionMode = TEXT("directory");
+		Selection = Directory;
 	}
+
+	AssetDataList.Sort([](const FAssetData& A, const FAssetData& B)
+	{
+		return A.GetObjectPathString() < B.GetObjectPathString();
+	});
+
+	FValidateAssetsSettings Settings;
+	Settings.ValidationUsecase = IsRunningCommandlet() ? EDataValidationUsecase::Commandlet : EDataValidationUsecase::Manual;
+	Settings.bCollectPerAssetDetails = true;
+	Settings.bShowIfNoFailures = false;
+	Settings.bSilent = true;
+	FValidateAssetsResults ValidationResults;
+	ValidatorSubsystem->ValidateAssetsWithSettings(AssetDataList, Settings, ValidationResults);
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("selectionMode"), SelectionMode);
+	Result->SetStringField(TEXT("selection"), Selection);
+	if (SelectionMode == TEXT("directory"))
+	{
+		// Preserve the legacy response field for { directory: ... } callers.
+		Result->SetStringField(TEXT("directory"), Selection);
+	}
+	Result->SetStringField(TEXT("validationUsecase"), Settings.ValidationUsecase == EDataValidationUsecase::Commandlet ? TEXT("commandlet") : TEXT("manual"));
+	Result->SetNumberField(TEXT("requested"), ValidationResults.NumRequested);
+	Result->SetNumberField(TEXT("checked"), ValidationResults.NumChecked);
+	Result->SetNumberField(TEXT("valid"), ValidationResults.NumValid);
+	Result->SetNumberField(TEXT("invalid"), ValidationResults.NumInvalid);
+	Result->SetNumberField(TEXT("skipped"), ValidationResults.NumSkipped);
+	Result->SetNumberField(TEXT("warnings"), ValidationResults.NumWarnings);
+	Result->SetNumberField(TEXT("unableToValidate"), ValidationResults.NumUnableToValidate);
+	Result->SetNumberField(TEXT("externalObjects"), ValidationResults.NumExternalObjects);
+	Result->SetBoolField(TEXT("assetLimitReached"), ValidationResults.bAssetLimitReached);
+	const FString OverallResult = ValidationResults.NumInvalid > 0
+		? TEXT("invalid")
+		: (ValidationResults.NumUnableToValidate > 0 || ValidationResults.NumRequested == 0 || ValidationResults.NumChecked == 0
+			? TEXT("notValidated")
+			: (ValidationResults.NumWarnings > 0 ? TEXT("warning") : TEXT("valid")));
+	Result->SetStringField(TEXT("result"), OverallResult);
+
+	TArray<FString> DetailKeys;
+	ValidationResults.AssetsDetails.GetKeys(DetailKeys);
+	DetailKeys.Sort();
+	TArray<TSharedPtr<FJsonValue>> DetailsArray;
+	DetailsArray.Reserve(DetailKeys.Num());
+	for (const FString& DetailKey : DetailKeys)
+	{
+		const FValidateAssetsDetails* Details = ValidationResults.AssetsDetails.Find(DetailKey);
+		if (!Details)
+		{
+			continue;
+		}
+		auto DetailObject = MakeShared<FJsonObject>();
+		DetailObject->SetStringField(TEXT("objectPath"), DetailKey);
+		DetailObject->SetStringField(TEXT("packageName"), Details->PackageName.ToString());
+		DetailObject->SetStringField(TEXT("assetName"), Details->AssetName.ToString());
+		DetailObject->SetStringField(TEXT("result"), MCPDataValidationResultToString(Details->Result));
+		DetailObject->SetArrayField(TEXT("errors"), MCPValidationTextArray(Details->ValidationErrors));
+		DetailObject->SetArrayField(TEXT("warnings"), MCPValidationTextArray(Details->ValidationWarnings));
+		DetailObject->SetArrayField(TEXT("messages"), MCPValidationMessageArray(Details->ValidationMessages));
+		DetailsArray.Add(MakeShared<FJsonValueObject>(DetailObject));
+	}
+	Result->SetArrayField(TEXT("assets"), DetailsArray);
+	Result->SetArrayField(TEXT("validatorMessages"), MCPValidationMessageArray(ValidationResults.ValidatorMessages));
+	Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Validated %d assets"), ValidationResults.NumRequested));
+	return MCPResult(Result);
 }
 
 
