@@ -3196,9 +3196,28 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 	const FString Tag = OptionalString(Params, TEXT("tag"));
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
 
-	if (LabelPrefix.IsEmpty() && ClassName.IsEmpty() && Tag.IsEmpty())
+	TArray<FString> ClassPathNeedles;
+	const FString ClassPathContains = OptionalString(Params, TEXT("classPathContains"));
+	if (!ClassPathContains.IsEmpty())
 	{
-		return MCPError(TEXT("Provide at least one filter: labelPrefix, className, or tag"));
+		ClassPathNeedles.Add(ClassPathContains);
+	}
+	const TArray<TSharedPtr<FJsonValue>>* ClassPathAny = nullptr;
+	if (Params.IsValid() && Params->TryGetArrayField(TEXT("classPathContainsAny"), ClassPathAny) && ClassPathAny)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *ClassPathAny)
+		{
+			FString Needle;
+			if (Value.IsValid() && Value->TryGetString(Needle) && !Needle.IsEmpty())
+			{
+				ClassPathNeedles.Add(Needle);
+			}
+		}
+	}
+
+	if (LabelPrefix.IsEmpty() && ClassName.IsEmpty() && Tag.IsEmpty() && ClassPathNeedles.Num() == 0)
+	{
+		return MCPError(TEXT("Provide at least one filter: labelPrefix, className, tag, classPathContains, or classPathContainsAny"));
 	}
 
 	TArray<AActor*> Matches;
@@ -3213,13 +3232,29 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 			if (!CName.Contains(ClassName)) continue;
 		}
 		if (!Tag.IsEmpty() && !A->ActorHasTag(FName(*Tag))) continue;
+		if (ClassPathNeedles.Num() > 0)
+		{
+			const FString ClassPath = A->GetClass()->GetPathName();
+			bool bPathMatch = false;
+			for (const FString& Needle : ClassPathNeedles)
+			{
+				if (ClassPath.Contains(Needle, ESearchCase::IgnoreCase))
+				{
+					bPathMatch = true;
+					break;
+				}
+			}
+			if (!bPathMatch) continue;
+		}
 		Matches.Add(A);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Labels;
+	TArray<TSharedPtr<FJsonValue>> ClassPaths;
 	for (AActor* A : Matches)
 	{
 		Labels.Add(MakeShared<FJsonValueString>(A->GetActorLabel()));
+		ClassPaths.Add(MakeShared<FJsonValueString>(A->GetClass()->GetPathName()));
 	}
 
 	int32 Deleted = 0;
@@ -3246,6 +3281,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 	Result->SetNumberField(TEXT("matched"), Matches.Num());
 	Result->SetNumberField(TEXT("deleted"), Deleted);
 	Result->SetArrayField(TEXT("labels"), Labels);
+	Result->SetArrayField(TEXT("classPaths"), ClassPaths);
 	return MCPResult(Result);
 }
 
