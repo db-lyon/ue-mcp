@@ -133,8 +133,11 @@ namespace
 		int32 OperationIndex = INDEX_NONE;
 		FName Control;
 		FName DrivenReference;
+		FName TargetReference;
 		ERigControlType ControlType = ERigControlType::Transform;
 		bool bHasDrivenReference = false;
+		bool bHasTargetReference = false;
+		bool bCapturedRelativeTarget = false;
 		bool bUsedFkRotationChain = false;
 		bool bCheckRotation = false;
 		int32 FullWeightFrameCount = 0;
@@ -930,6 +933,17 @@ namespace
 		return Result;
 	}
 
+	FTransform ControlRigSequencerComposeContactTarget(
+		const FTransform& RelativeTarget,
+		const FTransform& Reference,
+		const FVector& SubjectScale)
+	{
+		FTransform Result = RelativeTarget * Reference;
+		Result.SetScale3D(SubjectScale);
+		Result.NormalizeRotation();
+		return Result;
+	}
+
 	bool ControlRigSequencerSolveRotationChain(
 		const TArray<FTransform>& SourceGlobals,
 		const FTransform& TargetEnd,
@@ -1036,7 +1050,7 @@ namespace
 		}
 		if (!Component->DoesSocketExist(Reference))
 		{
-			OutError = FString::Printf(TEXT("Driven bone or socket was not found: %s"), *Reference.ToString());
+			OutError = FString::Printf(TEXT("Bone or socket reference was not found: %s"), *Reference.ToString());
 			return false;
 		}
 		UMovieSceneSkeletalAnimationSection* SourceSection = nullptr;
@@ -1084,7 +1098,7 @@ namespace
 			if (OutTransforms[Index].ContainsNaN())
 			{
 				OutError = FString::Printf(
-					TEXT("Driven reference %s evaluated to an invalid component-space transform"),
+					TEXT("Bone or socket reference %s evaluated to an invalid component-space transform"),
 					*Reference.ToString());
 				return false;
 			}
@@ -1196,6 +1210,43 @@ bool FUEMCPControlRigContactRotationChainTest::RunTest(const FString& Parameters
 		TEXT("Second local bone translation remains unchanged"),
 		SolvedGlobals[2].GetRelativeTransform(SolvedGlobals[1]).GetTranslation().Equals(
 			SourceGlobals[2].GetRelativeTransform(SourceGlobals[1]).GetTranslation(), 0.001));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUEMCPControlRigMovingReferenceTest,
+	"UE_MCP.Animation.ControlRig.MovingContactReference",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUEMCPControlRigMovingReferenceTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+	const FTransform InitialReference(
+		FQuat(FVector::UpVector, FMath::DegreesToRadians(35.0)),
+		FVector(40.0, -15.0, 90.0));
+	const FTransform InitialRelative(
+		FQuat(FVector::ForwardVector, FMath::DegreesToRadians(20.0)),
+		FVector(0.0, 18.0, 4.0));
+	const FTransform InitialSubject = ControlRigSequencerComposeContactTarget(
+		InitialRelative, InitialReference, FVector(1.0, 1.0, 1.0));
+	const FTransform CapturedRelative = InitialSubject.GetRelativeTransform(InitialReference);
+	const FTransform MovedReference(
+		FQuat(FVector::UpVector, FMath::DegreesToRadians(80.0)),
+		FVector(65.0, 12.0, 110.0));
+	const FTransform MovedSubject = ControlRigSequencerComposeContactTarget(
+		CapturedRelative, MovedReference, FVector(2.0, 2.0, 2.0));
+
+	TestTrue(
+		TEXT("Moving target preserves the captured relative translation"),
+		MovedSubject.GetRelativeTransform(MovedReference).GetTranslation().Equals(
+			InitialRelative.GetTranslation(), 0.001));
+	TestTrue(
+		TEXT("Moving target preserves the captured relative rotation"),
+		MovedSubject.GetRelativeTransform(MovedReference).GetRotation().Equals(
+			InitialRelative.GetRotation(), 0.001));
+	TestTrue(
+		TEXT("Moving target preserves the subject scale"),
+		MovedSubject.GetScale3D().Equals(FVector(2.0, 2.0, 2.0), 0.001));
 	return true;
 }
 #endif
@@ -2019,20 +2070,43 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 			if (bContactOperation)
 			{
 				const TSharedPtr<FJsonObject>* TargetObject = nullptr;
-				if (!Operation->TryGetObjectField(TEXT("target"), TargetObject)
-					|| !TargetObject || !TargetObject->IsValid())
+				const bool bHasTargetField = Operation->HasField(TEXT("target"));
+				const bool bHasTarget = Operation->TryGetObjectField(TEXT("target"), TargetObject)
+					&& TargetObject && TargetObject->IsValid();
+				if (bHasTargetField && !bHasTarget)
 				{
 					return MCPError(FString::Printf(TEXT("operations[%d].target must be an object"), OperationIndex));
 				}
-				const bool bTargetRotation = (*TargetObject)->HasField(TEXT("rotationQuaternion"));
-				if (!(*TargetObject)->HasField(TEXT("translation"))
-					|| (*TargetObject)->Values.Num() != (bTargetRotation ? 2 : 1))
+				FString TargetReferenceString;
+				const bool bHasTargetReference = Operation->HasField(TEXT("targetReference"));
+				if (bHasTargetReference
+					&& (!Operation->TryGetStringField(TEXT("targetReference"), TargetReferenceString)
+						|| TargetReferenceString.IsEmpty()))
+				{
+					return MCPError(FString::Printf(
+						TEXT("operations[%d].targetReference must be a non-empty bone or socket name"),
+						OperationIndex));
+				}
+				if (!bHasTarget && !bHasTargetReference)
+				{
+					return MCPError(FString::Printf(
+						TEXT("operations[%d] requires target or targetReference"), OperationIndex));
+				}
+				const bool bCaptureRelativeTarget = bHasTargetReference && !bHasTarget;
+				const bool bExplicitTargetRotation = bHasTarget
+					&& (*TargetObject)->HasField(TEXT("rotationQuaternion"));
+				const bool bTargetRotation = bExplicitTargetRotation
+					|| (bCaptureRelativeTarget
+						&& ControlRigSequencerControlHasRotation(Control->Settings.ControlType));
+				if (bHasTarget
+					&& (!(*TargetObject)->HasField(TEXT("translation"))
+						|| (*TargetObject)->Values.Num() != ((*TargetObject)->HasField(TEXT("rotationQuaternion")) ? 2 : 1)))
 				{
 					return MCPError(FString::Printf(
 						TEXT("operations[%d].target must contain translation and optional rotationQuaternion only"),
 						OperationIndex));
 				}
-				if (bTargetRotation && !ControlRigSequencerControlHasRotation(Control->Settings.ControlType))
+				if (bExplicitTargetRotation && !ControlRigSequencerControlHasRotation(Control->Settings.ControlType))
 				{
 					return MCPError(FString::Printf(
 						TEXT("contact_lock driver control must support rotation when target.rotationQuaternion is set: %s"),
@@ -2041,11 +2115,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 
 				FVector TargetTranslation;
 				FQuat TargetRotation = FQuat::Identity;
-				if (!ControlRigSequencerReadVector(*TargetObject, TEXT("translation"), TargetTranslation, Error)
-					|| (bTargetRotation && !ControlRigSequencerReadNormalizedQuaternion(*TargetObject, TargetRotation, Error)))
+				if (bHasTarget
+					&& (!ControlRigSequencerReadVector(*TargetObject, TEXT("translation"), TargetTranslation, Error)
+						|| (bExplicitTargetRotation
+							&& !ControlRigSequencerReadNormalizedQuaternion(*TargetObject, TargetRotation, Error))))
 				{
 					return MCPError(FString::Printf(TEXT("operations[%d].target: %s"), OperationIndex, *Error));
 				}
+				const FName TargetReference(*TargetReferenceString);
 
 				auto ReadNonNegativeFrameCount = [&](const TCHAR* Field, int32& OutValue) -> bool
 				{
@@ -2381,12 +2458,31 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 					return MCPError(FString::Printf(TEXT("operations[%d]: %s"), OperationIndex, *Error));
 				}
 
+				TArray<FTransform> TargetReferenceTransforms;
+				if (bHasTargetReference
+					&& !ControlRigSequencerSampleReferenceTransforms(
+						Session, TargetReference, Write.Frames, TargetReferenceTransforms, Error))
+				{
+					return MCPError(FString::Printf(TEXT("operations[%d]: %s"), OperationIndex, *Error));
+				}
+				FTransform RelativeTarget = FTransform::Identity;
+				if (bHasTargetReference)
+				{
+					RelativeTarget = bCaptureRelativeTarget
+						? SubjectBefore[0].GetRelativeTransform(TargetReferenceTransforms[0])
+						: FTransform(TargetRotation, TargetTranslation, FVector::OneVector);
+					RelativeTarget.NormalizeRotation();
+				}
+
 				FControlRigPreparedContactQA ContactQA;
 				ContactQA.OperationIndex = OperationIndex;
 				ContactQA.Control = ControlName;
 				ContactQA.DrivenReference = DrivenReference;
+				ContactQA.TargetReference = TargetReference;
 				ContactQA.ControlType = Control->Settings.ControlType;
 				ContactQA.bHasDrivenReference = bHasDrivenReference;
+				ContactQA.bHasTargetReference = bHasTargetReference;
+				ContactQA.bCapturedRelativeTarget = bCaptureRelativeTarget;
 				ContactQA.bCheckRotation = bTargetRotation;
 				ContactQA.PositionToleranceCm = PositionToleranceCm;
 				ContactQA.RotationToleranceDegrees = RotationToleranceDegrees;
@@ -2403,8 +2499,18 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 					if (Weight >= 1.0 - UE_DOUBLE_SMALL_NUMBER) ++ContactQA.FullWeightFrameCount;
 
 					FTransform SubjectTarget = SubjectBefore[Index];
-					SubjectTarget.SetTranslation(TargetTranslation);
-					if (bTargetRotation) SubjectTarget.SetRotation(TargetRotation);
+					if (bHasTargetReference)
+					{
+						const FTransform ComposedTarget = ControlRigSequencerComposeContactTarget(
+							RelativeTarget, TargetReferenceTransforms[Index], SubjectBefore[Index].GetScale3D());
+						SubjectTarget.SetTranslation(ComposedTarget.GetTranslation());
+						if (bTargetRotation) SubjectTarget.SetRotation(ComposedTarget.GetRotation());
+					}
+					else
+					{
+						SubjectTarget.SetTranslation(TargetTranslation);
+						if (bTargetRotation) SubjectTarget.SetRotation(TargetRotation);
+					}
 					ContactQA.ExpectedSubject[Index] = ControlRigSequencerBlendContactTransform(
 						SubjectBefore[Index], SubjectTarget, Weight, bTargetRotation);
 
@@ -2937,6 +3043,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 					TEXT("preBakePrediction"),
 					ControlRigSequencerContactMetricsJson(Contact.Metrics, true, Contact.bCheckRotation));
 			}
+		}
+		if (Contact.bHasTargetReference)
+		{
+			Object->SetStringField(TEXT("targetReference"), Contact.TargetReference.ToString());
+			Object->SetStringField(
+				TEXT("targetMode"),
+				Contact.bCapturedRelativeTarget ? TEXT("captured_relative") : TEXT("explicit_relative"));
 		}
 		Object->SetNumberField(TEXT("frameCount"), Contact.Frames.Num());
 		Object->SetNumberField(TEXT("fullWeightFrameCount"), Contact.FullWeightFrameCount);

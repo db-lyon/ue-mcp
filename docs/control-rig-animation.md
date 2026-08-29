@@ -293,7 +293,8 @@ global/component anatomical targets before baking.
 ### Contact constraints
 
 Use `contact_lock` when a known Control Rig driver must hold a control, bone, or
-socket at a fixed mesh-component-space transform across an inclusive interval:
+socket at a fixed or moving mesh-component-space transform across an inclusive
+interval. A fixed target looks like this:
 
 ```json
 {
@@ -321,6 +322,30 @@ measures the bone/socket offset from the driver, and solves dense
 component-space driver keys. Smooth edge weights blend into and out of the
 lock, and at least one frame must remain fully constrained.
 
+To follow a moving source-animation bone or socket, pass `targetReference`.
+Omit `target` to capture and preserve the subject's relative position and, when
+the driver exposes rotation, orientation at the first constrained frame:
+
+```json
+{
+  "op": "contact_lock",
+  "control": "<follower_ik_driver>",
+  "drivenReference": "<follower_bone_or_socket>",
+  "targetReference": "<moving_bone_or_socket>",
+  "startFrame": 12,
+  "endFrame": 38,
+  "blendInFrames": 4,
+  "blendOutFrames": 4
+}
+```
+
+This is the narrow primitive for a second hand following the first, a hand
+following a moving prop socket, or another relationship already present in the
+source motion. Supply `target` as well to author an explicit transform relative
+to `targetReference`; its translation and optional rotation are interpreted in
+the reference's space. The result reports `targetMode=captured_relative` or
+`explicit_relative`.
+
 FK bones commonly use skeleton translation retargeting, which discards their
 authored translation keys during AnimSequence playback. For an FK
 `drivenReference` contact on such a bone, the bridge instead resolves the
@@ -337,10 +362,11 @@ The apply call transactionally reads back the driver and stabilizer keys. With
 `drivenReference`, `contactQa.verification` is
 `bake_and_analyze_required`: the composed layered bone/socket result is not
 claimed before export. Bake to a new AnimSequence, run `analyze_animation` on
-every constrained frame, and compare the driven reference with the target. If
-it exceeds the motion's acceptance tolerance, reject that output and revise the
-driver, stabilizers, or rig mapping. Without `drivenReference`, the driver
-itself is constrained and its residual is checked during apply.
+every constrained frame, and compare the driven reference with the fixed or
+moving target. If it exceeds the motion's acceptance tolerance, reject that
+output and revise the driver, stabilizers, or rig mapping. Without
+`drivenReference`, the driver itself is constrained and its residual is checked
+during apply.
 
 This is deliberately a generic contact primitive, not a foot-specific macro.
 It works for hands on props, planted feet, held tools, mechanical linkages, and
