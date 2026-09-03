@@ -89,7 +89,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@db-lyon/flowkit": "^0.17.0",
+    "@db-lyon/flowkit": "^0.17.1",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "js-yaml": "^4.1.0",
     "ws": "^8.18.0",

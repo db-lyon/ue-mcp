@@ -79,16 +79,17 @@ export function createFlowTool(
         + "skip? (step names or numbers), params? (runtime options merged into every step's options, "
         + "highest priority), rollback_on_failure? (invoke inverse tasks in reverse order when a "
         + "later step fails). A step whose handler reports success:false FAILS the step and stops the "
-        + "run, and the inverses collected from the steps BEFORE it are what rollback_on_failure "
+        + "run, and the inverses collected up to and including it are what rollback_on_failure "
         + "unwinds. A step whose failure is EXPECTED says so itself, in the YAML, with "
         + "ignore_failure: true - the run walks on, and the step is still recorded as failed with its "
         + "error and its data, marked ignoredFailure. That is how stop, build, start survives an editor "
         + "that was already stopped, instead of editor(stop_editor) reporting a success it did not "
-        + "achieve. The failing step's OWN inverse, which a few handlers attach after a partial write, "
-        + "is reported rather than replayed: it arrives verbatim on steps[i].unappliedRollback and in "
-        + "that step's error text, ready to run as its own step, and in a nested flow it arrives in the "
-        + "nested step's error text. Returns a summary, every step's data, "
-        + "and the runId.",
+        + "achieve. The failing step's OWN inverse, which a few handlers attach after a partial write, is "
+        + "collected like every other: under rollback_on_failure it is replayed FIRST, ahead of the steps "
+        + "before it, so the partial write is undone before they unwind. It arrives verbatim on "
+        + "steps[i].partialWriteRollback, whose replayed flag says whether the runner ran it or it is yours "
+        + "to run, and in that step's error text. A nested flow's steps arrive on steps[i].nestedSteps, "
+        + "reported on the same terms. Returns a summary, every step's data, and the runId.",
       handler: async (ctx, params) => runFlow(registryFor(ctx), configFor(ctx), ctx, params),
     },
     plan: {
@@ -429,49 +430,89 @@ function stoppingStep(result: FlowRunResult): string | undefined {
   return result.steps.find((s) => s.result?.success === false && !s.ignoredFailure)?.name;
 }
 
+/**
+ * Whether the runner actually invoked the inverses it collected.
+ *
+ * `FlowRunResult.rollback` is set only on the run that reached
+ * `performRollback`, which needs a failure, `rollback_on_failure`, and at least
+ * one record. So its presence answers the one question a partial-write report
+ * turns on: from flowkit 0.17.1 a failing step's own inverse is harvested like
+ * any other, and this says whether the harvest was replayed or was never armed.
+ */
+function rollbackRan(result: FlowRunResult): boolean {
+  return result.rollback !== undefined;
+}
+
+/**
+ * One step rendered into the summary, and its children under it.
+ *
+ * A `flow` step carries the child's own step results from 0.17.1 onward, and a
+ * child's partial write is undone or handed back on exactly the same terms as a
+ * main step's, so it is rendered on the same terms too - one level deeper.
+ */
+function formatStepLines(
+  s: FlowStepResult,
+  lines: string[],
+  replayed: boolean,
+  depth: number,
+): void {
+  const pad = "  ".repeat(depth);
+  const detail = `${pad}      `;
+  const stepIcon = s.skipped ? "○" : s.result?.success ? "✓" : s.ignoredFailure ? "!" : "✗";
+  // "FAILED (ignored)" and not "ok": the step failed, the flow said in
+  // advance that it would tolerate this one, and both halves have to be
+  // visible or the run reads as though the step passed.
+  const status = s.skipped
+    ? "skipped"
+    : s.result?.success
+      ? formatDuration(s.duration)
+      : s.ignoredFailure
+        ? "FAILED (ignored)"
+        : "FAILED";
+  const attempts = s.attempts && s.attempts > 1 ? ` [${s.attempts} attempts]` : "";
+  lines.push(`${pad}  ${stepIcon} ${s.stepNumber}. ${s.name} (${s.type}) - ${status}${attempts}`);
+
+  if (s.result?.error) {
+    lines.push(`${detail}${s.result.error.message}`);
+  }
+
+  // A step that failed AFTER writing part of its change attaches its own
+  // inverse. Under rollback_on_failure the runner replays it first, ahead of
+  // the steps before it; otherwise nothing replays it and printing it is what
+  // keeps it from being discarded in silence. See flow/handler-outcome.ts.
+  if (s.result && s.result.success === false && s.result.rollback) {
+    lines.push(
+      replayed
+        ? `${detail}Undo for the part that applied (replayed by rollback_on_failure):`
+        : `${detail}Undo for the part that applied (NOT run automatically):`,
+    );
+    lines.push(`${detail}${unappliedRollbackCall(s.result.rollback)}`);
+  }
+
+  if (s.result?.data?.output && typeof s.result.data.output === "string") {
+    const output = s.result.data.output;
+    if (output.length > 0) {
+      const truncated = output.length > 500 ? output.slice(-500) + "\n      ..." : output;
+      for (const line of truncated.split("\n")) {
+        lines.push(`${detail}${line}`);
+      }
+    }
+  }
+
+  for (const child of s.nestedSteps ?? []) {
+    formatStepLines(child, lines, replayed, depth + 1);
+  }
+}
+
 function formatFlowResult(result: FlowRunResult): Record<string, unknown> {
   const lines: string[] = [];
   const icon = result.success ? "✓" : "✗";
   lines.push(`${icon} Flow ${result.success ? "completed" : "failed"} in ${formatDuration(result.duration)}`);
   lines.push("");
 
+  const replayed = rollbackRan(result);
   for (const s of result.steps) {
-    const stepIcon = s.skipped ? "○" : s.result?.success ? "✓" : s.ignoredFailure ? "!" : "✗";
-    // "FAILED (ignored)" and not "ok": the step failed, the flow said in
-    // advance that it would tolerate this one, and both halves have to be
-    // visible or the run reads as though the step passed.
-    const status = s.skipped
-      ? "skipped"
-      : s.result?.success
-        ? formatDuration(s.duration)
-        : s.ignoredFailure
-          ? "FAILED (ignored)"
-          : "FAILED";
-    const attempts = s.attempts && s.attempts > 1 ? ` [${s.attempts} attempts]` : "";
-    lines.push(`  ${stepIcon} ${s.stepNumber}. ${s.name} (${s.type}) - ${status}${attempts}`);
-
-    if (s.result?.error) {
-      lines.push(`      ${s.result.error.message}`);
-    }
-
-    // A step that failed AFTER writing part of its change attaches its own
-    // inverse. The runner harvests an inverse only from a step that SUCCEEDED,
-    // so this one is never replayed by anything - printing it is what keeps it
-    // from being discarded in silence. See flow/handler-outcome.ts.
-    if (s.result && s.result.success === false && s.result.rollback) {
-      lines.push(`      Undo for the part that applied (NOT run automatically):`);
-      lines.push(`      ${unappliedRollbackCall(s.result.rollback)}`);
-    }
-
-    if (s.result?.data?.output && typeof s.result.data.output === "string") {
-      const output = s.result.data.output;
-      if (output.length > 0) {
-        const truncated = output.length > 500 ? output.slice(-500) + "\n      ..." : output;
-        for (const line of truncated.split("\n")) {
-          lines.push(`      ${line}`);
-        }
-      }
-    }
+    formatStepLines(s, lines, replayed, 0);
   }
 
   if (result.error && !result.steps.some((s) => s.result?.error)) {
@@ -520,39 +561,54 @@ function formatFlowResult(result: FlowRunResult): Record<string, unknown> {
     // arrive, and it was dropping it too: a flow that read anything returned a
     // summary line and nothing else, so the same action was strictly less
     // useful inside a flow than called directly.
-    steps: result.steps.map((s) => ({
-      stepNumber: s.stepNumber,
-      name: s.name,
-      type: s.type,
-      skipped: s.skipped,
-      success: s.result?.success ?? false,
-      // Declared in the flow, reported on the step: this one failed and was
-      // tolerated. Absent on every other step, so a reader never has to guess
-      // which failure was expected.
-      ignoredFailure: s.ignoredFailure ? true : undefined,
-      duration: s.duration,
-      attempts: s.attempts,
-      error: s.result?.error
-        ? { message: s.result.error.message, name: s.result.error.name }
-        : undefined,
-      data: s.result?.data,
-      // The failing step's own inverse, verbatim and replayable. Reported
-      // rather than replayed: `rollback` above lists the inverses the runner
-      // DID invoke, which are the ones from steps that succeeded.
-      unappliedRollback: s.result && s.result.success === false && s.result.rollback
-        ? {
-            record: s.result.rollback,
-            step: unappliedRollbackCall(s.result.rollback),
-            replayed: false,
-            note:
-              "This step applied part of its change before failing. The flow runner replays inverses only from " +
-              "steps that succeeded, so this one was reported and not run. Run it as the step shown, or call the " +
-              "bridge method in `record.payload.method` with the rest of the payload.",
-          }
-        : undefined,
-    })),
+    steps: result.steps.map((s) => reportStep(s, replayed)),
     rollback: result.rollback,
     hookErrors: result.hookErrors,
+  };
+}
+
+/**
+ * One step, and the child flow's steps under it, as the caller reads them.
+ */
+function reportStep(s: FlowStepResult, replayed: boolean): Record<string, unknown> {
+  return {
+    stepNumber: s.stepNumber,
+    name: s.name,
+    type: s.type,
+    skipped: s.skipped,
+    success: s.result?.success ?? false,
+    // Declared in the flow, reported on the step: this one failed and was
+    // tolerated. Absent on every other step, so a reader never has to guess
+    // which failure was expected.
+    ignoredFailure: s.ignoredFailure ? true : undefined,
+    duration: s.duration,
+    attempts: s.attempts,
+    error: s.result?.error
+      ? { message: s.result.error.message, name: s.result.error.name }
+      : undefined,
+    data: s.result?.data,
+    // The inverse a FAILING step carried for the part of its write that landed,
+    // verbatim and replayable either way. `replayed` is the whole question: the
+    // runner harvests this record like any other, so `rollback_on_failure`
+    // decides whether it already ran or is the caller's to run.
+    partialWriteRollback: s.result && s.result.success === false && s.result.rollback
+      ? {
+          record: s.result.rollback,
+          step: unappliedRollbackCall(s.result.rollback),
+          replayed,
+          note: replayed
+            ? "This step applied part of its change before failing. rollback_on_failure was on, so the runner " +
+              "replayed this inverse FIRST, ahead of the inverses from the steps before it. Check " +
+              "`rollback.errors` for the ones that did not succeed."
+            : "This step applied part of its change before failing. rollback_on_failure was not armed for this " +
+              "run, so nothing replayed this inverse. Run it as the step shown, or call the bridge method in " +
+              "`record.payload.method` with the rest of the payload.",
+        }
+      : undefined,
+    // A `flow` step's child steps, from flowkit 0.17.1. Before it, a nested
+    // step was summarised to `data.stepCount` and everything else about the
+    // child was reachable only by reading its run error as prose.
+    nestedSteps: s.nestedSteps?.map((child) => reportStep(child, replayed)),
   };
 }
 

@@ -331,26 +331,33 @@ A handler that did the work it was asked for reports `success: true` with a mark
 
 ### The failing step's own inverse
 
-`rollback_on_failure` unwinds the steps **before** the failure. The failing step's own inverse is **reported, not replayed**.
+`rollback_on_failure` unwinds the steps before the failure **and** the failing step itself, and the failing step's own inverse goes **first**.
 
-A few handlers attach a rollback record to a `success: false` body on purpose, because the mutation partly applied: `asset(rename)` on a World that moved some external actor packages before the rename gave up, the hygiene fixer's already-applied moves, the lightmap UV builder's changed settings, the mesh fracturer's written pieces. The runner collects an inverse only from a step that succeeded, so nothing downstream would ever invoke that record.
+A few handlers attach a rollback record to a `success: false` body on purpose, because the mutation partly applied: `asset(rename)` on a World that moved some external actor packages before the rename gave up, the hygiene fixer's already-applied moves, the lightmap UV builder's changed settings, the mesh fracturer's written pieces. The runner collects that record like any other and invokes the collection in reverse, so the partial write is undone before the steps around it unwind. That order is the point: undoing an earlier step while the half-applied change is still in place is what leaves the inconsistent state behind.
 
-Rather than discard it, the run hands it back:
+Either way the record is reported on the step that emitted it:
 
 ```
-steps[i].unappliedRollback = {
+steps[i].partialWriteRollback = {
   record: { taskName, payload },        # the record the handler emitted
   step: '{ task: "ue-mcp.bridge", options: { method: ..., ... } }',
-  replayed: false,
+  replayed: true | false,
   note: ...
 }
 ```
 
-The same call is appended to that step's `error.message` and printed under the step in the summary. Run it as its own flow step, or call the bridge method named in `record.payload.method` with the rest of the payload. Every other step's inverse is unaffected and still runs automatically.
+`replayed` is the whole question, and it is `rollback_on_failure` that answers it:
 
-A step carrying `ignore_failure: true` is no different here. It failed, so the runner's harvest gate (`taskResult.success && taskResult.rollback`) skips its record exactly as it skips any failing step's: the inverse is reported on the step and never replayed, and the run carries on without it. What the flag does change is what happens next - the ignored step does not stop the run, so a LATER real failure is what arms `rollback_on_failure`, and that unwinds the successful steps before it as usual.
+- **Armed.** The runner already ran the undo, ahead of every other inverse. `rollback.attempted` counts it, and `rollback.errors` says whether it worked.
+- **Not armed.** Nothing replayed it. Run it as the step shown, or call the bridge method named in `record.payload.method` with the rest of the payload.
 
-A **nested** flow behaves the same way, and reports it in one place rather than two: a nested step is summarised to its step count, so the child's step results never reach the parent's `steps` array, and the undo call arrives in the nested step's `error.message`. That is the reason it is written into the message and not only into a field.
+The same call is appended to that step's `error.message` and printed under the step in the summary, because a message survives a summary line and a journal entry where a field does not. A task cannot see `rollback_on_failure`, so the message names both outcomes and the `replayed` flag says which one happened.
+
+A step carrying `ignore_failure: true` contributes its record on the same terms. The flag says the run may walk past that failure, not that what the step half-wrote should survive a rollback. Because an ignored step does not stop the run, a LATER real failure is what arms `rollback_on_failure`, and the unwind then covers the ignored step's partial write alongside the successful steps before it.
+
+A **nested** flow behaves the same way. Its records bubble to the parent, so arming rollback on the outer flow reaches a partial write made inside a child, and the child's own steps arrive on `steps[i].nestedSteps`, each reported exactly like a top-level step. The child's run error still carries the undo call in its text as well.
+
+Requires `@db-lyon/flowkit` 0.17.1 or newer. Up to 0.17.0 the runner harvested an inverse only from a step that succeeded, so a failing step's record was discarded on every run and `replayed` was always `false`.
 
 Conventions for handlers - natural keys, the `onConflict: skip|update|error` option, and rollback record shape - live in [docs/handler-conventions.md](handler-conventions.md).
 

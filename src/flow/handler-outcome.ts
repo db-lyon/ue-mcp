@@ -72,21 +72,25 @@ export function inFlowRun(ctx: TaskContext): boolean {
  * the mesh fracturer all do the same for the moves, settings and assets they
  * did write.
  *
- * The runner cannot replay it. `flow/runner.js` harvests an inverse only when
- * `taskResult.success && taskResult.rollback`, so the record on a failing step
- * is never collected and never invoked; and the step is the one that stops the
- * run, so there is no later failure to trip it either. The nested-flow bubble
- * carries the same gate, so a child flow's failing step loses its inverse the
- * same way. Both were re-read on 0.17.0 and are unchanged. Which leaves exactly
- * two possibilities: the record is discarded silently, or it is handed to the
- * caller. This makes it the second. `flow/flow-tool.ts` puts the same record on
- * the step it came from. Widening the harvest so the runner replays it is a
- * change to the runner, in its own package, on its own release cycle.
+ * Whether the runner replays that record is `rollback_on_failure`, and nothing
+ * else. From flowkit 0.17.1 `flow/runner.js` harvests an inverse from every
+ * step carrying one, failed or not, marks the ones off a failed step
+ * `fromFailedStep`, and invokes the array in reverse - so the failing step's
+ * own inverse, pushed last, is the FIRST one run, and the steps before it
+ * unwind behind it. The nested-flow bubble harvests on the same terms, so a
+ * child flow's failing step keeps its inverse too. Up to 0.17.0 the harvest
+ * was gated on `taskResult.success`, which discarded exactly the record that a
+ * partial write makes worth the most.
+ *
+ * A flow that did not ask for `rollback_on_failure` still replays nothing, and
+ * that is the case this string exists for: the record is handed to the caller
+ * to run rather than dropped in silence. A task cannot tell the two apart -
+ * `TaskContext` carries no flow options - so the text names both outcomes and
+ * `flow/flow-tool.ts`, which can see whether rollback ran, reports which one
+ * happened.
  *
  * The call goes in the error MESSAGE as well as in a field, because the message
- * is the only thing that crosses a nesting boundary: a nested step is
- * summarised to its step count and the child's step results are discarded, so
- * the child's run error is all a parent ever sees of it.
+ * survives every reader: a summary line, a journal entry, a terminal.
  *
  * The string is the flow step that runs it, because the record already names
  * the generic bridge task and carries the bridge method in its payload, so
@@ -106,13 +110,15 @@ export function unappliedRollbackCall(record: RollbackRecord): string {
  * `formatFlowResult` puts in `steps[].data` for the caller to read.
  *
  * The record on a failing step is named in the error text as well, for the
- * reason `unappliedRollbackCall` gives: nothing downstream replays it, and an
- * inverse to a partial write that only exists in a field nobody prints is the
- * same as no inverse at all. Everything a flow failure already arms does fire
- * on this class of failure for the first time - the steps BEFORE it are rolled
- * back, the `on_failure` hook runs, and the opt-in git snapshot is restored,
- * none of which used to happen because the run reported success. It is only
- * this step's own inverse that is reported rather than replayed.
+ * reason `unappliedRollbackCall` gives: an inverse to a partial write that
+ * only exists in a field nobody prints is the same as no inverse at all.
+ * Everything a flow failure arms fires on this class of failure - the steps
+ * BEFORE it are rolled back, the `on_failure` hook runs, and the opt-in git
+ * snapshot is restored, none of which used to happen because the run reported
+ * success.
+ *
+ * The text names both outcomes because a task cannot see `rollback_on_failure`
+ * and so cannot know which one it is about to get.
  */
 export function applyHandlerOutcome(
   ctx: TaskContext,
@@ -124,9 +130,10 @@ export function applyHandlerOutcome(
   result.success = false;
   result.error = new Error(
     result.rollback
-      ? `${failure} This step wrote part of its change before it stopped, and carries its own inverse, which the ` +
-        `flow runner does NOT replay - only the steps before it are unwound. Run the undo yourself: ` +
-        unappliedRollbackCall(result.rollback)
+      ? `${failure} This step wrote part of its change before it stopped, and carries its own inverse for the ` +
+        `part that landed: ${unappliedRollbackCall(result.rollback)}. Under rollback_on_failure the runner ` +
+        `replays it first, ahead of the steps before it. Without rollback_on_failure nothing runs it and the ` +
+        `undo is yours to run.`
       : failure,
   );
   return result;

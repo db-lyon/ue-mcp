@@ -106,23 +106,26 @@ function flowConfig(flows: Record<string, unknown>, tasks?: Record<string, unkno
   return FlowConfigSchema.parse({ "ue-mcp": { version: 1 }, flows, ...(tasks ? { tasks } : {}) });
 }
 
+interface StepResponse {
+  name: string;
+  success: boolean;
+  ignoredFailure?: boolean;
+  error?: { message: string };
+  data?: Record<string, unknown>;
+  partialWriteRollback?: {
+    record: { taskName: string; payload: Record<string, unknown> };
+    step: string;
+    replayed: boolean;
+    note: string;
+  };
+  nestedSteps?: StepResponse[];
+}
+
 interface RunResponse {
   success: boolean;
   summary: string;
   failedStep?: string;
-  steps: Array<{
-    name: string;
-    success: boolean;
-    ignoredFailure?: boolean;
-    error?: { message: string };
-    data?: Record<string, unknown>;
-    unappliedRollback?: {
-      record: { taskName: string; payload: Record<string, unknown> };
-      step: string;
-      replayed: boolean;
-      note: string;
-    };
-  }>;
+  steps: StepResponse[];
   rollback?: { attempted: number; succeeded: number; errors: unknown[] };
 }
 
@@ -264,14 +267,17 @@ describe("a handler that reports its own failure", () => {
  * RenameWorldWithExternals, FixAssetHygiene, GenerateLightmapUvs and
  * FractureMesh; the first states the contract in its own comment.
  *
- * flowkit harvests an inverse only from a step that SUCCEEDED
- * (`taskResult.success && taskResult.rollback` in `flow/runner.js`), and the
- * failing step is also the one that stops the run, so nothing downstream can
- * ever invoke that record. Making these steps fail therefore has to hand the
- * record to the caller, or it destroys it. These tests pin the handing back.
+ * From flowkit 0.17.1 the runner harvests an inverse from every step carrying
+ * one, and invokes the array in reverse, so the failing step's record - pushed
+ * last - is the FIRST one replayed and the steps before it unwind behind it.
+ * `rollback_on_failure` is the whole switch. Armed, the undo already ran;
+ * unarmed, nothing replayed it and the record is handed to the caller rather
+ * than destroyed. These tests pin both halves, because reporting an undo as
+ * pending when it already ran is the same class of error as losing it.
  *
- * `plans/flowkit-failed-step-rollback.md` is the prepared runner change that
- * would replay it instead; until that ships, `replayed: false` is the truth.
+ * Up to 0.17.0 the harvest was gated on `taskResult.success`, so this record
+ * was discarded on every run. `plans/flowkit-failed-step-rollback.md` is the
+ * proposal that became 0.17.1.
  */
 describe("the inverse a FAILING step carries", () => {
   const PARTIAL = {
@@ -289,20 +295,77 @@ describe("the inverse a FAILING step carries", () => {
 
     const step = body.steps[0];
     expect(step.success).toBe(false);
-    expect(step.unappliedRollback).toBeTruthy();
-    expect(step.unappliedRollback!.replayed).toBe(false);
+    expect(step.partialWriteRollback).toBeTruthy();
+    // This flow never asked for rollback_on_failure, so the runner collected
+    // the record and then had nothing to invoke it from. Handing it back is
+    // the only thing left that is not silence.
+    expect(step.partialWriteRollback!.replayed).toBe(false);
+    expect(body.rollback).toBeUndefined();
+    expect(bridge.calls.some((c) => c.method === "rename_asset")).toBe(false);
     // The record routes through the generic bridge task with the method in the
     // payload, which is what makes it runnable without translation.
-    expect(step.unappliedRollback!.record).toEqual({
+    expect(step.partialWriteRollback!.record).toEqual({
       taskName: "ue-mcp.bridge",
       payload: { assetPath: "/Game/New/L", newName: "L_Old", method: "rename_asset" },
     });
-    expect(step.unappliedRollback!.step).toBe(
+    expect(step.partialWriteRollback!.step).toBe(
       '{ task: "ue-mcp.bridge", options: {"method":"rename_asset","assetPath":"/Game/New/L","newName":"L_Old"} }',
     );
   });
 
+  it("replays it FIRST when rollback_on_failure is armed, and says so on the step", async () => {
+    // The 0.17.1 harvest. The undo for the part that landed has to run before
+    // the inverses of the steps around it: unwinding an earlier step while the
+    // half-applied change is still in place is what leaves the inconsistent
+    // state behind.
+    const bridge = fakeBridge({
+      wipe_the_thing: PARTIAL,
+      rename_asset: { success: true },
+    });
+    const body = await runFlow(probeTool(ACCEPTED), bridge, {
+      partial: {
+        description: "a partial write, with rollback armed",
+        rollback_on_failure: true,
+        steps: { "1": { task: "probe.wipe" } },
+      },
+    }, "partial");
+
+    const step = body.steps[0];
+    expect(step.success).toBe(false);
+    expect(step.partialWriteRollback!.replayed).toBe(true);
+    expect(step.partialWriteRollback!.note).toContain("replayed this inverse FIRST");
+    expect(body.rollback).toMatchObject({ attempted: 1, succeeded: 1 });
+    expect(bridge.calls.map((c) => c.method)).toEqual(["wipe_the_thing", "rename_asset"]);
+    expect(bridge.calls[1].params).toMatchObject({ assetPath: "/Game/New/L", newName: "L_Old" });
+    expect(body.summary).toContain("replayed by rollback_on_failure");
+  });
+
+  it("reports a refused undo as a failed rollback rather than as one that ran", async () => {
+    const bridge = fakeBridge({
+      wipe_the_thing: PARTIAL,
+      rename_asset: { success: false, error: "the source name is taken again" },
+    });
+    const body = await runFlow(probeTool(ACCEPTED), bridge, {
+      partial: {
+        description: "a partial write whose own undo also fails",
+        rollback_on_failure: true,
+        steps: { "1": { task: "probe.wipe" } },
+      },
+    }, "partial");
+
+    expect(body.rollback).toMatchObject({ attempted: 1, succeeded: 0 });
+    expect(body.rollback!.errors).toHaveLength(1);
+    // The step still says the undo was replayed, because it was. Whether it
+    // WORKED is the run-level rollback block's answer, and the note sends the
+    // reader there rather than guessing on the step.
+    expect(body.steps[0].partialWriteRollback!.replayed).toBe(true);
+    expect(body.steps[0].partialWriteRollback!.note).toContain("rollback.errors");
+  });
+
   it("puts the same call in the error text, which is what a terminal actually shows", async () => {
+    // The message is written by the task, which cannot see rollback_on_failure
+    // - `TaskContext` carries no flow options - so it names both outcomes and
+    // leaves the verdict to the step's `replayed` flag.
     const bridge = fakeBridge({ wipe_the_thing: PARTIAL });
     const body = await runFlow(probeTool(ACCEPTED), bridge, {
       partial: { description: "a partial write", steps: { "1": { task: "probe.wipe" } } },
@@ -310,17 +373,19 @@ describe("the inverse a FAILING step carries", () => {
 
     const message = body.steps[0].error!.message;
     expect(message).toContain("the rename failed partway through the batch");
-    expect(message).toContain("does NOT replay");
+    expect(message).toContain("Under rollback_on_failure the runner replays it first");
+    expect(message).toContain("Without rollback_on_failure nothing runs it");
     expect(message).toContain('{ task: "ue-mcp.bridge", options: {"method":"rename_asset"');
     expect(body.summary).toContain("NOT run automatically");
     expect(body.summary).toContain('"method":"rename_asset"');
   });
 
-  it("still unwinds the steps BEFORE it, and does not count its own inverse as one that ran", async () => {
+  it("unwinds the steps BEFORE it too, and its own inverse leads", async () => {
     const bridge = fakeBridge({
       touch_the_thing: { success: true, rollback: { method: "untouch_the_thing", payload: { id: 7 } } },
       wipe_the_thing: PARTIAL,
       untouch_the_thing: { success: true },
+      rename_asset: { success: true },
     });
     const body = await runFlow(probeTool(ACCEPTED), bridge, {
       guarded: {
@@ -330,38 +395,34 @@ describe("the inverse a FAILING step carries", () => {
       },
     }, "guarded");
 
-    // Exactly one inverse ran: step 1's. The failing step's own is reported.
-    expect(body.rollback).toMatchObject({ attempted: 1, succeeded: 1 });
+    // Two inverses ran, and the ORDER is the assertion: the failing step's own
+    // undo goes first, then step 1 unwinds behind it.
+    expect(body.rollback).toMatchObject({ attempted: 2, succeeded: 2 });
     expect(bridge.calls.map((c) => c.method)).toEqual([
       "touch_the_thing",
       "wipe_the_thing",
+      "rename_asset",
       "untouch_the_thing",
     ]);
-    expect(bridge.calls.some((c) => c.method === "rename_asset")).toBe(false);
-    expect(body.steps[1].unappliedRollback?.replayed).toBe(false);
+    expect(body.steps[1].partialWriteRollback?.replayed).toBe(true);
   });
 
-  it("says nothing about an unapplied inverse when the failing step carried none", async () => {
+  it("says nothing about a partial-write inverse when the failing step carried none", async () => {
     const bridge = fakeBridge({ wipe_the_thing: { success: false, error: "boom" } });
     const body = await runFlow(probeTool(ACCEPTED), bridge, {
       plain: { description: "a failure with no record", steps: { "1": { task: "probe.wipe" } } },
     }, "plain");
 
-    expect(body.steps[0].unappliedRollback).toBeUndefined();
+    expect(body.steps[0].partialWriteRollback).toBeUndefined();
     expect(body.steps[0].error!.message).toBe("boom");
     expect(body.summary).not.toContain("NOT run automatically");
   });
 
-  it("carries a NESTED flow's failing inverse up in the nested step's error", async () => {
-    // The runner bubbles a child flow's records to the parent through the same
-    // success gate (dist/flow/runner.js:459 in 0.17.0), so a nested failure
-    // loses its own inverse exactly the way a top-level one does. It also
-    // summarises a nested step to a stepCount and discards the child's step
-    // array, which is why nothing this repo owns can put a structured
-    // `unappliedRollback` on the parent: the child's step results never reach
-    // it. The child's run error DOES, and the undo call travels in that text -
-    // which is the reason it is written into the message and not only into a
-    // field.
+  it("reports a NESTED flow's failing inverse on the child step, and in the nested error", async () => {
+    // A `flow` step carries the child's own step results from 0.17.1, so the
+    // child's partial write is reported structurally rather than only as prose
+    // inside the child's run error. The error text still carries the call,
+    // because that is what survives a summary line and a journal entry.
     const bridge = fakeBridge({ wipe_the_thing: PARTIAL });
     const body = await runFlow(probeTool(ACCEPTED), bridge, {
       child: { description: "the inner flow", steps: { "1": { task: "probe.wipe" } } },
@@ -371,8 +432,36 @@ describe("the inverse a FAILING step carries", () => {
     expect(body.success).toBe(false);
     const nested = body.steps[0];
     expect(nested.success).toBe(false);
-    expect(nested.error!.message).toContain("does NOT replay");
+    expect(nested.error!.message).toContain("Under rollback_on_failure the runner replays it first");
     expect(nested.error!.message).toContain('{ task: "ue-mcp.bridge", options: {"method":"rename_asset"');
+
+    const childStep = nested.nestedSteps![0];
+    expect(childStep.name).toBe("probe.wipe");
+    expect(childStep.partialWriteRollback!.replayed).toBe(false);
+    expect(childStep.partialWriteRollback!.record.payload).toMatchObject({
+      method: "rename_asset",
+      assetPath: "/Game/New/L",
+    });
+    expect(bridge.calls.some((c) => c.method === "rename_asset")).toBe(false);
+  });
+
+  it("replays a NESTED flow's failing inverse when the parent arms rollback", async () => {
+    // The child's records bubble to the parent on the same terms a main step's
+    // do, so arming rollback on the outer flow reaches a partial write made two
+    // levels down.
+    const bridge = fakeBridge({ wipe_the_thing: PARTIAL, rename_asset: { success: true } });
+    const body = await runFlow(probeTool(ACCEPTED), bridge, {
+      child: { description: "the inner flow", steps: { "1": { task: "probe.wipe" } } },
+      parent: {
+        description: "the outer flow, with rollback armed",
+        rollback_on_failure: true,
+        steps: { "1": { flow: "child" } },
+      },
+    }, "parent");
+
+    expect(body.success).toBe(false);
+    expect(bridge.calls.map((c) => c.method)).toContain("rename_asset");
+    expect(body.steps[0].nestedSteps![0].partialWriteRollback!.replayed).toBe(true);
   });
 
   it("leaves a SUCCEEDING step's record alone: that one is replayed, not reported", async () => {
@@ -389,7 +478,7 @@ describe("the inverse a FAILING step carries", () => {
       },
     }, "guarded");
 
-    expect(body.steps[0].unappliedRollback).toBeUndefined();
+    expect(body.steps[0].partialWriteRollback).toBeUndefined();
     expect(body.rollback).toMatchObject({ attempted: 1, succeeded: 1 });
   });
 });
@@ -644,13 +733,12 @@ describe("a step that declares its own failure expected", () => {
     expect(body.steps[1].ignoredFailure).toBeUndefined();
   });
 
-  it("leaves rollback where it was: prior inverses unwind, the ignored step contributes none", async () => {
-    // The interaction worth pinning. An ignored failure is still a failure, so
-    // flowkit's harvest gate (`taskResult.success && taskResult.rollback`)
-    // skips its record exactly as it skips any failing step's - the step's own
-    // inverse is reported on the step, never replayed. And because the ignored
-    // step does not set flowError, rollback is armed by the LATER real failure,
-    // which unwinds the successful steps before it.
+  it("unwinds an ignored step's partial write too, once a later failure arms rollback", async () => {
+    // The interaction worth pinning. `ignore_failure` says the run may walk
+    // past this failure, not that what it half-wrote should survive a rollback:
+    // the record is harvested like any other, and a LATER real failure is what
+    // arms it. Order follows the step order in reverse, so step 2's inverse
+    // runs before step 1's.
     const bridge = fakeBridge({
       wipe_the_thing: {
         success: false,
@@ -662,6 +750,7 @@ describe("a step that declares its own failure expected", () => {
         rollback: { method: "untouch_the_thing", payload: { id: 7 } },
       },
       untouch_the_thing: { success: true },
+      undo_the_half: { success: true },
     });
     const body = await runFlow(probeTool(REFUSED), bridge, {
       mixed: {
@@ -678,17 +767,21 @@ describe("a step that declares its own failure expected", () => {
     expect(body.success).toBe(false);
     expect(body.failedStep).toBe("probe.refuse");
 
-    // Step 1's own inverse was never replayed, and it is handed back instead.
+    // Step 1 stays marked as an expected failure, and its inverse is now one of
+    // the two that ran.
     expect(body.steps[0].ignoredFailure).toBe(true);
-    expect(body.steps[0].unappliedRollback?.replayed).toBe(false);
-    expect(body.steps[0].unappliedRollback?.record.payload).toMatchObject({
+    expect(body.steps[0].partialWriteRollback?.replayed).toBe(true);
+    expect(body.steps[0].partialWriteRollback?.record.payload).toMatchObject({
       method: "undo_the_half",
       id: 9,
     });
-    expect(bridge.calls.map((c) => c.method)).not.toContain("undo_the_half");
 
-    // Step 2's inverse DID run, armed by step 3's failure.
-    expect(body.rollback).toMatchObject({ attempted: 1, succeeded: 1 });
-    expect(bridge.calls.map((c) => c.method)).toContain("untouch_the_thing");
+    expect(body.rollback).toMatchObject({ attempted: 2, succeeded: 2 });
+    expect(bridge.calls.map((c) => c.method)).toEqual([
+      "wipe_the_thing",
+      "touch_the_thing",
+      "untouch_the_thing",
+      "undo_the_half",
+    ]);
   });
 });
