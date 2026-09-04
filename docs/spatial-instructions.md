@@ -102,9 +102,10 @@ the target. It does not read or guess the player/editor camera:
 | below | -Z | up | negative |
 
 Counterclockwise reverses the sign. The native tests project all twelve cases
-into camera right/up axes. In particular, clockwise from above is
-`axisRotation={axis:"up",degrees:15}` under Unreal's quaternion convention;
-the earlier negative-angle example was incorrect.
+into camera right/up axes. Under Unreal's quaternion convention a positive
+angle about `up` carries +X toward +Y, which a viewer above reads as clockwise,
+so clockwise from above is `axisRotation={axis:"up",degrees:15}`. Reach for
+`viewRotation` and let the engine pick the sign.
 
 `viewRotation` and signed `axisRotation` are mutually exclusive. Magnitudes in
 `viewRotation` must be finite and greater than zero. `frame=parent` uses the
