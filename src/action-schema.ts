@@ -203,7 +203,8 @@ function valueSchema(schema: z.ZodTypeAny, depth = 0): ValueSchema {
     type: typeName(inner), required: !schema.isOptional(), description,
     enumValues: enumValues(inner), default: dflt,
   };
-  // ponytail: bound recursive discovery; deeper shapes remain runtime-validated.
+  // Bound the recursion so one deeply nested parameter cannot dominate a
+  // discovery response. Deeper shapes are still validated at call time.
   if (depth >= 6) return { ...result, truncated: true };
   if (inner instanceof z.ZodObject) {
     result.properties = Object.fromEntries(Object.entries(inner.shape).map(([name, child]) =>
