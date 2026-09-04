@@ -19,6 +19,9 @@ private:
 	// change and writes only on commit, so the lifecycle is explicit the way
 	// begin/apply/bake_control_rig_edit already is.
 	static TSharedPtr<FJsonValue> BeginSkeletonEdit(const TSharedPtr<FJsonObject>& Params);
+	// Creates a real USkeleton through USkeletonFactory and therefore assigns it
+	// to the source mesh as the engine's Create Skeleton asset flow does.
+	static TSharedPtr<FJsonValue> CreateSkeleton(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> EditSkeletonBones(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CommitSkeletonEdit(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CancelSkeletonEdit(const TSharedPtr<FJsonObject>& Params);
