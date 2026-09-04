@@ -35,7 +35,11 @@ jobs:
         working-directory: ue-mcp-landing
         run: |
           git config user.name "db-lyon"
-          git config user.email "david@bingham.me"
+          # Must match a verified email on the Vercel account that owns the
+          # landing project. Vercel Hobby only deploys commits whose author is
+          # the team owner, so an address it does not recognise blocks the
+          # deploy and the docs sync lands without ever shipping.
+          git config user.email "david.bingham@nimbasolutions.com"
           if [[ -z "$(git status --porcelain content/docs)" ]]; then
             echo "No doc changes to sync."
             exit 0
