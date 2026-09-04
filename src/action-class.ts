@@ -279,6 +279,8 @@ const OVERRIDES: Readonly<Record<string, ActionClass>> = {
   // ── Writes whose verb reads as a read ───────────────────────────────
   // Drives the editor's preview: it plays an animation in a viewport.
   "animation.preview_animation": "mutate",
+  // Replaces a running component's transient post-process AnimBP override.
+  "animation.set_live_post_process_anim_blueprint": "mutate",
   // Renders to a file on disk.
   "material.render_preview": "mutate",
   "asset.export": "mutate",

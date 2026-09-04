@@ -3,7 +3,7 @@
 	"Version": 1,
 	"VersionName": "1.3.1-beta.2",
 	"FriendlyName": "UE MCP Bridge",
-	"Description": "C++ WebSocket bridge for UE-MCP, providing 1029+ editor actions over the MCP protocol",
+	"Description": "C++ WebSocket bridge for UE-MCP, providing 1030+ editor actions over the MCP protocol",
 	"Category": "Developer Tools",
 	"CreatedBy": "UE-MCP",
 	"CreatedByURL": "",

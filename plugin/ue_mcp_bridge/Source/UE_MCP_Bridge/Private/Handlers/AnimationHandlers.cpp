@@ -210,6 +210,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_bones"), &ListBones);
 	Registry.RegisterHandler(TEXT("rebind_leader_pose"), &RebindLeaderPose);
 	Registry.RegisterHandler(TEXT("preview_animation"), &PreviewAnimation);
+	Registry.RegisterHandler(TEXT("set_live_post_process_anim_blueprint"), &SetLivePostProcessAnimBlueprint);
 
 	// #922/#923/#926 - evaluated pose reads (live component, and asset sampling)
 	Registry.RegisterHandler(TEXT("get_live_bone_transforms"), &GetLiveBoneTransforms);
