@@ -9,6 +9,56 @@
 #include "EngineUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "ScopedTransaction.h"
+#include "UObject/UnrealType.h"
+
+namespace
+{
+	static bool ReadFiniteNumber(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field, double& OutValue)
+	{
+		return Object.IsValid() && Object->TryGetNumberField(Field, OutValue) && FMath::IsFinite(OutValue);
+	}
+
+	static bool ReadPointVector(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field, FVector& OutValue)
+	{
+		const TSharedPtr<FJsonObject>* VectorObject = nullptr;
+		if (!Object.IsValid() || !Object->TryGetObjectField(Field, VectorObject) || !VectorObject || !VectorObject->IsValid())
+		{
+			return false;
+		}
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		if (!ReadFiniteNumber(*VectorObject, TEXT("x"), X) || !ReadFiniteNumber(*VectorObject, TEXT("y"), Y) || !ReadFiniteNumber(*VectorObject, TEXT("z"), Z))
+		{
+			return false;
+		}
+		OutValue = FVector(X, Y, Z);
+		return !OutValue.ContainsNaN();
+	}
+
+	static bool ParseSplinePointType(const FString& TypeName, ESplinePointType::Type& OutType)
+	{
+		if (TypeName == TEXT("Linear")) OutType = ESplinePointType::Linear;
+		else if (TypeName == TEXT("Curve")) OutType = ESplinePointType::Curve;
+		else if (TypeName == TEXT("CurveClamped")) OutType = ESplinePointType::CurveClamped;
+		else if (TypeName == TEXT("Constant")) OutType = ESplinePointType::Constant;
+		else if (TypeName == TEXT("CurveCustomTangent")) OutType = ESplinePointType::CurveCustomTangent;
+		else return false;
+		return true;
+	}
+
+	static FString SplinePointTypeName(ESplinePointType::Type Type)
+	{
+		switch (Type)
+		{
+		case ESplinePointType::Linear: return TEXT("Linear");
+		case ESplinePointType::Curve: return TEXT("Curve");
+		case ESplinePointType::CurveClamped: return TEXT("CurveClamped");
+		case ESplinePointType::Constant: return TEXT("Constant");
+		case ESplinePointType::CurveCustomTangent: return TEXT("CurveCustomTangent");
+		default: return TEXT("Unknown");
+		}
+	}
+}
 
 void FSplineHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
@@ -145,6 +195,21 @@ TSharedPtr<FJsonValue> FSplineHandlers::ReadSpline(const TSharedPtr<FJsonObject>
 
 TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonObject>& Params)
 {
+	// Preserve typed point fields through older category schemas that expose input.
+	if (Params->HasField(TEXT("input")))
+	{
+		const TSharedPtr<FJsonObject>* Extra = nullptr;
+		if (!Params->TryGetObjectField(TEXT("input"), Extra)) return MCPError(TEXT("input must be an object"));
+		auto Expanded = MakeShared<FJsonObject>(); Expanded->Values = Params->Values; Expanded->RemoveField(TEXT("input"));
+		for (const auto& Pair : (*Extra)->Values)
+		{
+			if (Pair.Key != TEXT("points") && Pair.Key != TEXT("componentName") && Pair.Key != TEXT("closedLoop") && Pair.Key != TEXT("loopPositionOverride") && Pair.Key != TEXT("loopPosition"))
+				return MCPError(TEXT("Unsupported field inside spline input"));
+			if (Expanded->HasField(Pair.Key)) return MCPError(TEXT("Spline field supplied both at top level and inside input"));
+			Expanded->SetField(Pair.Key, Pair.Value);
+		}
+		return SetSplinePoints(Expanded);
+	}
 	FString ActorLabel;
 	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
 
@@ -155,21 +220,156 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 	}
 
 	REQUIRE_EDITOR_WORLD(World);
+	if (Params->HasField(TEXT("componentName")) && (!Params->TryGetField(TEXT("componentName")).IsValid() || Params->TryGetField(TEXT("componentName"))->Type != EJson::String))
+		return MCPError(TEXT("componentName must be a string"));
 
 	TSharedPtr<FJsonValue> ActorErr;
 	AActor* Actor = MCPResolveActor(World, Params, ActorErr);
 	if (!Actor) return ActorErr;
 	ActorLabel = Actor->GetActorLabel();
 
-	// Find spline component
-	USplineComponent* SplineComp = Actor->FindComponentByClass<USplineComponent>();
+	// A named component is an exact component-name lookup; never silently fall back
+	// to another spline when the caller has identified one.
+	USplineComponent* SplineComp = nullptr;
+	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
+	if (Params->HasField(TEXT("componentName")) && ComponentName.IsEmpty()) return MCPError(TEXT("componentName cannot be empty"));
+	if (!ComponentName.IsEmpty())
+	{
+		TArray<USplineComponent*> Components;
+		Actor->GetComponents<USplineComponent>(Components);
+		for (USplineComponent* Candidate : Components)
+		{
+			if (Candidate && Candidate->GetName() == ComponentName) { SplineComp = Candidate; break; }
+		}
+	}
+	else
+	{
+		SplineComp = Actor->FindComponentByClass<USplineComponent>();
+	}
 	if (!SplineComp)
 	{
-		return MCPError(FString::Printf(TEXT("Actor '%s' does not have a SplineComponent"), *ActorLabel));
+		return MCPError(FString::Printf(TEXT("Actor '%s' has no matching SplineComponent%s"), *ActorLabel,
+			ComponentName.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" named '%s'"), *ComponentName)));
+	}
+	if (SplineComp->GetSplinePointsMetadata())
+		return MCPError(TEXT("This spline has subclass metadata and requires its specialized authoring API"));
+
+	struct FValidatedPoint
+	{
+		FVector Location = FVector::ZeroVector;
+		FVector ArriveTangent = FVector::ZeroVector;
+		FVector LeaveTangent = FVector::ZeroVector;
+		FRotator Rotation = FRotator::ZeroRotator;
+		FVector Scale = FVector::OneVector;
+		float InputKey = 0.0f;
+		bool bHasInputKey = false;
+		bool bHasRotation = false;
+		bool bHasTangents = false;
+		ESplinePointType::Type Type = ESplinePointType::Curve;
+	};
+	TArray<FValidatedPoint> NewPoints;
+	NewPoints.Reserve(PointsArray->Num());
+	for (int32 Index = 0; Index < PointsArray->Num(); ++Index)
+	{
+		const TSharedPtr<FJsonObject>* PointObject = nullptr;
+		if (!(*PointsArray)[Index].IsValid() || !(*PointsArray)[Index]->TryGetObject(PointObject) || !PointObject || !PointObject->IsValid())
+		{
+			return MCPError(FString::Printf(TEXT("points[%d] must be an object with finite x, y, z"), Index));
+		}
+		FValidatedPoint Point;
+		int32 CoordinateForms = 0;
+		for (const TCHAR* Form : { TEXT("location"), TEXT("position"), TEXT("worldLocation") })
+		{
+			if (!(*PointObject)->HasField(Form)) continue;
+			++CoordinateForms; FVector Checked;
+			if (!ReadPointVector(*PointObject, Form, Checked)) return MCPError(FString::Printf(TEXT("points[%d] has malformed coordinate object"), Index));
+		}
+		if (CoordinateForms > 1 || (CoordinateForms && ((*PointObject)->HasField(TEXT("x")) || (*PointObject)->HasField(TEXT("y")) || (*PointObject)->HasField(TEXT("z")))))
+			return MCPError(FString::Printf(TEXT("points[%d] must use one coordinate representation"), Index));
+		if (!ReadPointVector(*PointObject, TEXT("location"), Point.Location))
+		{
+			if (!ReadPointVector(*PointObject, TEXT("position"), Point.Location) && !ReadPointVector(*PointObject, TEXT("worldLocation"), Point.Location))
+			{
+				double X = 0.0, Y = 0.0, Z = 0.0;
+				if (!ReadFiniteNumber(*PointObject, TEXT("x"), X) || !ReadFiniteNumber(*PointObject, TEXT("y"), Y) || !ReadFiniteNumber(*PointObject, TEXT("z"), Z))
+					return MCPError(FString::Printf(TEXT("points[%d] must contain finite x, y, z"), Index));
+				Point.Location = FVector(X, Y, Z);
+				if (Point.Location.ContainsNaN())
+					return MCPError(FString::Printf(TEXT("points[%d] coordinates are outside the finite float range"), Index));
+			}
+		}
+		double InputKey = 0.0;
+		if ((*PointObject)->HasField(TEXT("inputKey")))
+		{
+			if (!ReadFiniteNumber(*PointObject, TEXT("inputKey"), InputKey) || !FMath::IsFinite(static_cast<float>(InputKey)))
+				return MCPError(FString::Printf(TEXT("points[%d] inputKey must be finite"), Index));
+			Point.InputKey = static_cast<float>(InputKey);
+			Point.bHasInputKey = true;
+		}
+		FVector RotationVector;
+		if ((*PointObject)->HasField(TEXT("rotation")))
+		{
+			Point.bHasRotation = true;
+			if (!ReadPointVector(*PointObject, TEXT("rotation"), RotationVector))
+				return MCPError(FString::Printf(TEXT("points[%d] rotation must contain finite x, y, z"), Index));
+			Point.Rotation = FRotator(RotationVector.X, RotationVector.Y, RotationVector.Z);
+		}
+		if ((*PointObject)->HasField(TEXT("scale")) && !ReadPointVector(*PointObject, TEXT("scale"), Point.Scale))
+			return MCPError(FString::Printf(TEXT("points[%d] scale must contain finite x, y, z"), Index));
+		FString TypeName = TEXT("Curve");
+		if ((*PointObject)->HasField(TEXT("pointType")) && (!(*PointObject)->TryGetField(TEXT("pointType")).IsValid() || (*PointObject)->TryGetField(TEXT("pointType"))->Type != EJson::String))
+			return MCPError(FString::Printf(TEXT("points[%d] pointType must be a string"), Index));
+		(*PointObject)->TryGetStringField(TEXT("pointType"), TypeName);
+		if (!ParseSplinePointType(TypeName, Point.Type))
+			return MCPError(FString::Printf(TEXT("points[%d] has unsupported pointType '%s'"), Index, *TypeName));
+		const bool bHasArrive = ReadPointVector(*PointObject, TEXT("arriveTangent"), Point.ArriveTangent);
+		const bool bHasLeave = ReadPointVector(*PointObject, TEXT("leaveTangent"), Point.LeaveTangent);
+		if ((*PointObject)->HasField(TEXT("arriveTangent")) != (*PointObject)->HasField(TEXT("leaveTangent")))
+			return MCPError(FString::Printf(TEXT("points[%d] must provide both arriveTangent and leaveTangent"), Index));
+		if (((*PointObject)->HasField(TEXT("arriveTangent")) && !bHasArrive) || ((*PointObject)->HasField(TEXT("leaveTangent")) && !bHasLeave))
+			return MCPError(FString::Printf(TEXT("points[%d] tangents must contain finite x, y, z"), Index));
+		Point.bHasTangents = bHasArrive && bHasLeave;
+		if (Point.Type == ESplinePointType::CurveCustomTangent && (!bHasArrive || !bHasLeave))
+			return MCPError(FString::Printf(TEXT("points[%d] CurveCustomTangent requires arriveTangent and leaveTangent"), Index));
+		NewPoints.Add(Point);
+	}
+	bool bClosedLoop = false;
+	const bool bHasClosedLoop = Params->HasField(TEXT("closedLoop"));
+	if (bHasClosedLoop)
+	{
+		if (!Params->TryGetField(TEXT("closedLoop")).IsValid() || Params->TryGetField(TEXT("closedLoop"))->Type != EJson::Boolean)
+			return MCPError(TEXT("closedLoop must be a boolean"));
+		Params->TryGetBoolField(TEXT("closedLoop"), bClosedLoop);
+	}
+	float PreviousInputKey = -TNumericLimits<float>::Max();
+	for (int32 Index = 0; Index < NewPoints.Num(); ++Index)
+	{
+		const float EffectiveInputKey = NewPoints[Index].bHasInputKey ? NewPoints[Index].InputKey : static_cast<float>(Index);
+		if (!FMath::IsFinite(EffectiveInputKey) || (Index > 0 && (EffectiveInputKey <= PreviousInputKey || FMath::IsNearlyEqual(EffectiveInputKey, PreviousInputKey))))
+			return MCPError(FString::Printf(TEXT("points[%d] inputKey values must be finite and strictly increasing"), Index));
+		PreviousInputKey = EffectiveInputKey;
 	}
 
-	// Capture previous spline points for rollback
+	const FBoolProperty* LoopOverrideProperty = FindFProperty<FBoolProperty>(USplineComponent::StaticClass(), TEXT("bLoopPositionOverride"));
+	const FFloatProperty* LoopPositionProperty = FindFProperty<FFloatProperty>(USplineComponent::StaticClass(), TEXT("LoopPosition"));
+	const bool PreviousLoopOverride = LoopOverrideProperty && LoopOverrideProperty->GetPropertyValue_InContainer(SplineComp);
+	const float PreviousLoopPosition = LoopPositionProperty ? LoopPositionProperty->GetPropertyValue_InContainer(SplineComp) : 0.f;
+	bool RequestedLoopOverride = bHasClosedLoop ? false : PreviousLoopOverride;
+	double RequestedLoopPosition = PreviousLoopPosition;
+	if (Params->HasField(TEXT("loopPositionOverride")) && !Params->TryGetBoolField(TEXT("loopPositionOverride"), RequestedLoopOverride))
+		return MCPError(TEXT("loopPositionOverride must be a boolean"));
+	if (Params->HasField(TEXT("loopPosition")) && (!Params->TryGetNumberField(TEXT("loopPosition"), RequestedLoopPosition) || !FMath::IsFinite(RequestedLoopPosition) || !FMath::IsFinite(static_cast<float>(RequestedLoopPosition))))
+		return MCPError(TEXT("loopPosition must be a finite float"));
+	if (RequestedLoopOverride && (!((bHasClosedLoop && bClosedLoop) || (!bHasClosedLoop && SplineComp->IsClosedLoop())) || NewPoints.IsEmpty() || static_cast<float>(RequestedLoopPosition) <= PreviousInputKey || FMath::IsNearlyEqual(static_cast<float>(RequestedLoopPosition), PreviousInputKey)))
+		return MCPError(TEXT("An overridden loop position requires a closed nonempty spline and a key after the final point"));
+
+	// Point state is portable through MCP; Undo additionally captures complete component state.
 	TArray<TSharedPtr<FJsonValue>> PrevPoints;
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+	const FSplineCurves PreviousCurves = SplineComp->GetSplineCurves();
+#else
+	const FSplineCurves PreviousCurves = SplineComp->SplineCurves;
+#endif
 	for (int32 i = 0; i < SplineComp->GetNumberOfSplinePoints(); ++i)
 	{
 		FVector P = SplineComp->GetLocationAtSplinePoint(i, ESplineCoordinateSpace::World);
@@ -177,39 +377,58 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 		PObj->SetNumberField(TEXT("x"), P.X);
 		PObj->SetNumberField(TEXT("y"), P.Y);
 		PObj->SetNumberField(TEXT("z"), P.Z);
+		PObj->SetObjectField(TEXT("arriveTangent"), MCPVec3ToJsonObject(SplineComp->GetArriveTangentAtSplinePoint(i, ESplineCoordinateSpace::World)));
+		PObj->SetObjectField(TEXT("leaveTangent"), MCPVec3ToJsonObject(SplineComp->GetLeaveTangentAtSplinePoint(i, ESplineCoordinateSpace::World)));
+		PObj->SetStringField(TEXT("pointType"), SplinePointTypeName(SplineComp->GetSplinePointType(i)));
+		PObj->SetNumberField(TEXT("inputKey"), PreviousCurves.Position.Points[i].InVal);
+		const FRotator StoredWorldRotation = (SplineComp->GetComponentQuat() * PreviousCurves.Rotation.Points[i].OutVal).Rotator();
+		PObj->SetObjectField(TEXT("rotation"), MCPVec3ToJsonObject(FVector(StoredWorldRotation.Pitch, StoredWorldRotation.Yaw, StoredWorldRotation.Roll)));
+		PObj->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(PreviousCurves.Scale.Points[i].OutVal));
 		PrevPoints.Add(MakeShared<FJsonValueObject>(PObj));
 	}
 	const bool bPrevClosedLoop = SplineComp->IsClosedLoop();
 
-	// Clear existing points and add new ones
+	FScopedTransaction Transaction(FText::FromString(TEXT("Set Spline Points")));
+	Actor->SetFlags(RF_Transactional);
+	SplineComp->SetFlags(RF_Transactional);
+	Actor->Modify();
+	SplineComp->Modify();
 	SplineComp->ClearSplinePoints(false);
-
-	for (int32 i = 0; i < PointsArray->Num(); ++i)
+	for (int32 i = 0; i < NewPoints.Num(); ++i)
 	{
-		const TSharedPtr<FJsonObject>* PointObj = nullptr;
-		if ((*PointsArray)[i]->TryGetObject(PointObj))
-		{
-			FVector Point = FVector::ZeroVector;
-			(*PointObj)->TryGetNumberField(TEXT("x"), Point.X);
-			(*PointObj)->TryGetNumberField(TEXT("y"), Point.Y);
-			(*PointObj)->TryGetNumberField(TEXT("z"), Point.Z);
-			SplineComp->AddSplinePoint(Point, ESplineCoordinateSpace::World, false);
-		}
+		const FTransform ComponentTransform = SplineComp->GetComponentTransform();
+		const FVector LocalLocation = ComponentTransform.InverseTransformPosition(NewPoints[i].Location);
+		const FVector LocalArrive = ComponentTransform.InverseTransformVector(NewPoints[i].ArriveTangent);
+		const FVector LocalLeave = ComponentTransform.InverseTransformVector(NewPoints[i].LeaveTangent);
+		const FQuat LocalRotationQuat = NewPoints[i].bHasRotation ? ComponentTransform.GetRotation().Inverse() * NewPoints[i].Rotation.Quaternion() : FQuat::Identity;
+		FSplinePoint NewPoint(NewPoints[i].bHasInputKey ? NewPoints[i].InputKey : static_cast<float>(i), LocalLocation,
+			LocalArrive, LocalLeave, LocalRotationQuat.Rotator(), NewPoints[i].Scale, NewPoints[i].Type);
+		SplineComp->AddPoint(NewPoint, false);
+		if (NewPoints[i].bHasTangents)
+			SplineComp->SetTangentsAtSplinePoint(i, NewPoints[i].ArriveTangent, NewPoints[i].LeaveTangent, ESplineCoordinateSpace::World, false);
+		// SetTangentsAtSplinePoint promotes the point to CurveCustomTangent;
+		// apply the requested type last so the public result is exact.
+		SplineComp->SetSplinePointType(i, NewPoints[i].Type, false);
 	}
 
 	// Optionally set closed loop
-	bool bClosedLoop = false;
-	if (Params->TryGetBoolField(TEXT("closedLoop"), bClosedLoop))
+	if (RequestedLoopOverride)
 	{
-		SplineComp->SetClosedLoop(bClosedLoop);
+		SplineComp->SetClosedLoopAtPosition(true, static_cast<float>(RequestedLoopPosition), false);
+	}
+	else if (bHasClosedLoop || Params->HasField(TEXT("loopPositionOverride")))
+	{
+		SplineComp->SetClosedLoop(bHasClosedLoop ? bClosedLoop : bPrevClosedLoop, false);
 	}
 
 	SplineComp->UpdateSpline();
+	SplineComp->GetPackage()->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	Result->SetStringField(TEXT("componentName"), SplineComp->GetName());
 	Result->SetNumberField(TEXT("splinePointCount"), SplineComp->GetNumberOfSplinePoints());
 	Result->SetBoolField(TEXT("closedLoop"), SplineComp->IsClosedLoop());
 	Result->SetNumberField(TEXT("splineLength"), SplineComp->GetSplineLength());
@@ -219,7 +438,12 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Payload->SetArrayField(TEXT("points"), PrevPoints);
 	Payload->SetBoolField(TEXT("closedLoop"), bPrevClosedLoop);
+	Payload->SetBoolField(TEXT("loopPositionOverride"), PreviousLoopOverride);
+	Payload->SetNumberField(TEXT("loopPosition"), PreviousLoopPosition);
+	Payload->SetStringField(TEXT("componentName"), SplineComp->GetName());
 	MCPSetRollback(Result, TEXT("set_spline_points"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	Result->SetStringField(TEXT("rollbackNote"), TEXT("MCP rollback preserves authored point positions, types, tangents, rotations, scales, keys and loop endpoint. Use editor Undo to restore any custom rotation/scale-curve interpolation and ancillary component state."));
 
 	return MCPResult(Result);
 }
