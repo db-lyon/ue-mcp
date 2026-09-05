@@ -417,18 +417,65 @@ export function hasSummary(preamble) {
     .some((l) => l.trim() !== "");
 }
 
+/**
+ * The four top-level sections a release body is made of, in reading order.
+ * Merged prerelease sections land under one of them by heading, so a section
+ * a late beta introduced cannot end up printed after the internals.
+ */
+export const TOP_SECTIONS = ["Features", "Fixes", "Mentions", "Contributions"];
+
+const FIX_HEADING = /\b(fix|fixes|bug|bugs|regression|correctness|stability|crash|dialog)/i;
+const MENTION_HEADING =
+  /\b(breaking|internal|internals|deprecat|upgrade|migration|known|engine range|follow-up)/i;
+
+/**
+ * Which top-level section a merged heading belongs under. Fixes are tested
+ * first so "Bug fixes" does not read as a mention, and anything unrecognised
+ * is a feature, because that is what a new category section is.
+ */
+export function classifySection(heading) {
+  const h = String(heading ?? "");
+  if (FIX_HEADING.test(h)) return "Fixes";
+  if (MENTION_HEADING.test(h)) return "Mentions";
+  return "Features";
+}
+
+/** The thanks line, in the shape every large repo writes it. */
+export function renderContributions(logins) {
+  const unique = [...new Set((logins ?? []).filter(Boolean))];
+  const links = unique.map((l) => `[@${l}](https://github.com/${l})`);
+  const noun = unique.length === 1 ? "contributor" : "contributors";
+  return `Thanks to ${unique.length} ${noun}: ${links.join(", ")}.`;
+}
+
 /** Renders the composed notes file, frontmatter first. */
-export function renderBody({ version, headline, preamble, sections }) {
+export function renderBody({ version, headline, preamble, sections, contributors = [] }) {
   const out = ["---", "headline:"];
   for (const item of headline) out.push(`  - ${item}`);
   out.push("---", "");
   out.push(retitle(preamble, version), "");
+
+  const grouped = new Map(TOP_SECTIONS.map((name) => [name, []]));
   for (const section of sections) {
     if (!section.lead && section.bullets.length === 0) continue;
-    out.push(`### ${section.heading}`, "");
-    if (section.lead) out.push(section.lead, "");
-    for (const bullet of section.bullets) out.push(bullet);
-    out.push("");
+    grouped.get(classifySection(section.heading)).push(section);
+  }
+
+  for (const name of TOP_SECTIONS) {
+    if (name === "Contributions") continue;
+    const inSection = grouped.get(name);
+    if (inSection.length === 0) continue;
+    out.push(`## ${name}`, "");
+    for (const section of inSection) {
+      out.push(`### ${section.heading}`, "");
+      if (section.lead) out.push(section.lead, "");
+      for (const bullet of section.bullets) out.push(bullet);
+      out.push("");
+    }
+  }
+
+  if ((contributors ?? []).length > 0) {
+    out.push("## Contributions", "", renderContributions(contributors), "");
   }
   return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
 }
@@ -447,7 +494,7 @@ export function renderBody({ version, headline, preamble, sections }) {
  * With no prereleases there is nothing to accumulate, so the local file is the
  * answer as written and is returned unchanged.
  */
-export function composeReleaseNotes({ version, prereleases = [], localNotes = null }) {
+export function composeReleaseNotes({ version, prereleases = [], localNotes = null, contributors = [] }) {
   parseVersion(version);
   if (parseVersion(version).prerelease !== null) {
     throw new ComposeError(
@@ -480,16 +527,16 @@ export function composeReleaseNotes({ version, prereleases = [], localNotes = nu
 
   const { sections, duplicates } = mergeBodies(inputs);
 
-  // The summary belongs to the release being cut, so a local file's summary
-  // wins. Falling back to the newest prerelease keeps a body that reads, but
-  // that text was written about a beta and wants a human eye.
+  // The summary belongs to the release being cut. A local file's summary wins.
+  // Inheriting the newest prerelease's used to keep the body reading, but that
+  // text was written about one beta and describes it, so a stable cut carried a
+  // sentence about three fixes over a release with hundreds of changes. With no
+  // local summary the heading stands alone and the run says so.
   const localPreamble = localBody === null ? "" : parseSections(localBody).preamble;
   const newest = prereleases[prereleases.length - 1];
   const usingLocal = hasSummary(localPreamble);
-  const preamble = usingLocal
-    ? localPreamble
-    : parseSections(stripFrontmatter(newest.body)).preamble;
-  const preambleFrom = usingLocal ? "local notes" : newest.tag;
+  const preamble = usingLocal ? localPreamble : `## v${version}`;
+  const preambleFrom = usingLocal ? "local notes" : null;
 
   const headline = mergeHeadlines([
     ...prereleases.map((r) => r.headline ?? []),
@@ -502,7 +549,7 @@ export function composeReleaseNotes({ version, prereleases = [], localNotes = nu
     );
   }
 
-  const body = renderBody({ version, headline: headline.items, preamble, sections });
+  const body = renderBody({ version, headline: headline.items, preamble, sections, contributors });
   validateBody(body);
   return {
     body,
@@ -511,6 +558,7 @@ export function composeReleaseNotes({ version, prereleases = [], localNotes = nu
     duplicates,
     headline,
     preambleFrom,
+    contributors,
     newestTag: newest.tag,
   };
 }
@@ -582,6 +630,52 @@ function currentRepo(run = gh) {
   return JSON.parse(run(["repo", "view", "--json", "nameWithOwner"])).nameWithOwner;
 }
 
+/**
+ * GitHub logins that landed a commit between two tags, maintainers dropped.
+ *
+ * Reads the compare API rather than `git log`, because a release credits
+ * handles and a commit only carries an email. A tag that does not exist yet,
+ * or an API that will not answer, yields nobody rather than failing the cut.
+ */
+export function contributorsBetween(repo, base, head, { exclude = [], run = gh } = {}) {
+  let payload;
+  try {
+    payload = JSON.parse(run(["api", `repos/${repo}/compare/${base}...${head}`, "--paginate"]));
+  } catch {
+    return [];
+  }
+  const skip = new Set(exclude.map((s) => String(s).toLowerCase()));
+  const seen = [];
+  for (const commit of payload.commits ?? []) {
+    const login = commit?.author?.login;
+    if (!login || skip.has(login.toLowerCase())) continue;
+    if (!seen.some((l) => l.toLowerCase() === login.toLowerCase())) seen.push(login);
+  }
+  return seen;
+}
+
+/** The stable release immediately before `version`, or null when it is the first. */
+export function previousStableTag(repo, version, run = gh) {
+  const listed = JSON.parse(
+    run(["release", "list", "--repo", repo, "--limit", "200", "--json", "tagName,isDraft"])
+  );
+  const stables = listed
+    .filter((r) => !r.isDraft)
+    .map((r) => r.tagName)
+    .map((tag) => {
+      try {
+        const v = versionOfTag(tag);
+        return parseVersion(v).prerelease === null ? { tag, v } : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .filter((e) => compareVersions(e.v, version) < 0)
+    .sort((a, b) => compareVersions(a.v, b.v));
+  return stables.length ? stables[stables.length - 1].tag : null;
+}
+
 /* ------------------------------------------------------------------ *
  * CLI
  * ------------------------------------------------------------------ */
@@ -618,7 +712,13 @@ function main() {
     const slug = repo ?? currentRepo();
     const prereleases = fetchPrereleases(slug, version);
     const localNotes = notesFile === null ? null : fs.readFileSync(notesFile, "utf8");
-    const result = composeReleaseNotes({ version, prereleases, localNotes });
+    // Handles come from the commit range, so the section cannot be written
+    // from memory and cannot quietly omit somebody who landed a PR.
+    const previous = previousStableTag(slug, version);
+    const contributors = previous
+      ? contributorsBetween(slug, previous, "HEAD", { exclude: [slug.split("/")[0]] })
+      : [];
+    const result = composeReleaseNotes({ version, prereleases, localNotes, contributors });
 
     const target =
       out ??
@@ -666,9 +766,15 @@ function report(version, notesFile, target, result) {
     }
     if (result.preambleFrom !== "local notes") {
       console.log(
-        `  Summary paragraph came from ${result.preambleFrom}; reread it, it was written about a prerelease.`
+        "  No summary written. The body opens on its version heading alone; " +
+          "pass --notes-file with an opening paragraph to give it one."
       );
     }
+    console.log(
+      result.contributors.length
+        ? `  Contributors: ${result.contributors.map((c) => `@${c}`).join(", ")}`
+        : "  Contributors: none found in the range."
+    );
   }
   console.log(`NOTES_PATH=${target}`);
 }
