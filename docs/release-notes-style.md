@@ -20,6 +20,11 @@ buckets by heading, so a section a late beta introduced cannot print after the
 internals. `classifySection` is the rule; extend its patterns rather than
 hand-sorting a composed body.
 
+Feature sections of twelve lines or more render inside a `<details>` block with
+the category name in the summary, so the fixes and the breaking changes stay
+above the fold instead of below four hundred lines of tables. Short sections
+stay open, and fixes and mentions are never collapsed.
+
 ## The opening
 
 A compatibility line, an install block, and at most one plain sentence of scale.
