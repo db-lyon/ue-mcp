@@ -16,7 +16,6 @@ import {
   contributorsBetween,
   previousStableTag,
   renderSection,
-  COLLAPSE_MIN_LINES,
   renderContributions,
   retitle,
   classifySection,
@@ -343,7 +342,7 @@ describe("composeReleaseNotes", () => {
 
     const tops = [...strippedBody.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
     expect(tops).toEqual(["v1.2.0", "Features", "Fixes", "Mentions"]);
-    const headings = [...strippedBody.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
+    const headings = [...strippedBody.matchAll(/^<summary><b>(.+?)<\/b><\/summary>$/gm)].map((m) => m[1]);
     // Grouped, not in merge order: the features lead, the internals trail.
     expect(headings).toEqual(["Multi-editor", "Server", "Bug fixes", "Internals"]);
 
@@ -483,7 +482,7 @@ describe("top-level section grouping", () => {
     expect(features).toBeGreaterThan(-1);
     expect(mentions).toBeGreaterThan(-1);
     expect(features).toBeLessThan(mentions);
-    expect(body.indexOf("### Server")).toBeLessThan(body.indexOf("### Internals"));
+    expect(body.indexOf("<b>Server</b>")).toBeLessThan(body.indexOf("<b>Internals</b>"));
     expect(TOP_SECTIONS).toEqual(["Features", "Fixes", "Mentions", "Contributions"]);
   });
 });
@@ -594,13 +593,13 @@ describe("reading contributors off the range", () => {
 });
 
 
-describe("collapsing the long feature tables", () => {
+describe("collapsing sections", () => {
   const rows = Array.from({ length: 20 }, (_, i) => `| a${i} | does a thing |`);
   const long = { heading: "landscape (20 new)", lead: "", bullets: rows };
   const short = { heading: "reflection (1 new)", lead: "", bullets: ["| x | one |"] };
 
-  it("puts a long feature section behind a disclosure, keeping its name visible", () => {
-    const out = renderSection(long, true);
+  it("puts a section behind a disclosure, keeping its name visible", () => {
+    const out = renderSection(long);
     expect(out[0]).toBe("<details>");
     expect(out[1]).toBe("<summary><b>landscape (20 new)</b></summary>");
     // GitHub renders markdown inside details only when a blank line follows
@@ -609,16 +608,13 @@ describe("collapsing the long feature tables", () => {
     expect(out.at(-2)).toBe("</details>");
   });
 
-  it("leaves a short section open, because collapsing it saves nothing", () => {
-    expect(renderSection(short, true)[0]).toBe("### reflection (1 new)");
-    expect(rows.length).toBeGreaterThanOrEqual(COLLAPSE_MIN_LINES);
+  it("collapses a short section too, so nothing is left half open", () => {
+    const out = renderSection(short);
+    expect(out[0]).toBe("<details>");
+    expect(out[1]).toBe("<summary><b>reflection (1 new)</b></summary>");
   });
 
-  it("never collapses fixes or mentions", () => {
-    expect(renderSection(long, false)[0]).toBe("### landscape (20 new)");
-  });
-
-  it("collapses inside Features and leaves the rest open end to end", () => {
+  it("leaves no bare h3 anywhere in a composed body", () => {
     const beta = [
       "## v9.9.9-beta.1",
       "",
@@ -630,14 +626,24 @@ describe("collapsing the long feature tables", () => {
       "",
       "- Fixed a thing.",
       "",
+      "### Internals",
+      "",
+      "- Reworked a thing.",
+      "",
     ].join("\n");
     const { body } = composeReleaseNotes({
       version: "9.9.9",
       prereleases: [release("v9.9.9-beta.1", beta, ["First"])],
     });
-    expect(body).toContain("<summary><b>landscape (20 new)</b></summary>");
-    expect(body).toContain("### Bug fixes");
-    expect(body.indexOf("<details>")).toBeGreaterThan(body.indexOf("## Features"));
-    expect(body.indexOf("<details>")).toBeLessThan(body.indexOf("## Fixes"));
+    expect(body).not.toMatch(/^### /m);
+    expect(body.match(/<details>/g)).toHaveLength(3);
+    expect(body.match(/<\/details>/g)).toHaveLength(3);
+    // The four top-level headings stay open; only the sections fold.
+    expect([...body.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual([
+      "v9.9.9",
+      "Features",
+      "Fixes",
+      "Mentions",
+    ]);
   });
 });

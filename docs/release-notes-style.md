@@ -20,10 +20,12 @@ buckets by heading, so a section a late beta introduced cannot print after the
 internals. `classifySection` is the rule; extend its patterns rather than
 hand-sorting a composed body.
 
-Feature sections of twelve lines or more render inside a `<details>` block with
-the category name in the summary, so the fixes and the breaking changes stay
-above the fold instead of below four hundred lines of tables. Short sections
-stay open, and fixes and mentions are never collapsed.
+Every section renders inside a `<details>` block with its name in the summary.
+Folded, a release is its four headings and one line per section; a stable cut
+composed from six prereleases is otherwise 460 lines of tables with the
+breaking changes at the bottom. Nothing is left half open: a reader deciding
+what to expand should not have to work out which parts were judged worth
+hiding.
 
 ## The opening
 

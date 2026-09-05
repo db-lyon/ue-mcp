@@ -441,24 +441,18 @@ export function classifySection(heading) {
 }
 
 /**
- * A section long enough that leaving it open buries what follows it. Twelve
- * lines is about a screen of table once GitHub has rendered it.
+ * One section, behind a disclosure. Every section collapses: a body made of
+ * per-category action tables is unreadable open, and a reader who has to
+ * expand one thing should not have to guess which parts were worth hiding.
+ *
+ * GitHub renders markdown inside `<details>` only when a blank line follows
+ * the summary, so the blanks here are load-bearing.
  */
-export const COLLAPSE_MIN_LINES = 12;
-
-/**
- * One section, collapsed behind a disclosure when it is allowed to be and long
- * enough to be worth it. GitHub renders markdown inside `<details>` only when a
- * blank line follows the summary, so the blanks here are load-bearing.
- */
-export function renderSection(section, collapsible) {
+export function renderSection(section) {
   const inner = [];
   if (section.lead) inner.push(section.lead, "");
   for (const bullet of section.bullets) inner.push(bullet);
   const body = inner.join("\n").trim();
-  if (!collapsible || body.split("\n").length < COLLAPSE_MIN_LINES) {
-    return [`### ${section.heading}`, "", body, ""];
-  }
   return ["<details>", `<summary><b>${section.heading}</b></summary>`, "", body, "", "</details>", ""];
 }
 
@@ -488,10 +482,7 @@ export function renderBody({ version, headline, preamble, sections, contributors
     const inSection = grouped.get(name);
     if (inSection.length === 0) continue;
     out.push(`## ${name}`, "");
-    // Features carry the per-category action tables, which are most of the
-    // body's length and the least of its reading. Fixes and mentions stay
-    // open: they are short, and they are what a reader came to scan.
-    for (const section of inSection) out.push(...renderSection(section, name === "Features"));
+    for (const section of inSection) out.push(...renderSection(section));
   }
 
   if ((contributors ?? []).length > 0) {
