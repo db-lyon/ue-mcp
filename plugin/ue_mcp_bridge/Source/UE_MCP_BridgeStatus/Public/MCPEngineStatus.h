@@ -60,6 +60,16 @@ public:
 	/** Thread-safe. Never touches the game thread. */
 	TSharedPtr<FJsonObject> Snapshot() const;
 
+	/**
+	 * The modal blocking the editor right now, read off the snapshot rather
+	 * than by walking Slate, so it is safe on the socket thread. The snapshot
+	 * is refreshed from the modal-loop tick, which is the one tick that keeps
+	 * firing while a modal is up, so this is current rather than stale.
+	 *
+	 * Returns false and leaves the outputs alone when nothing is modal.
+	 */
+	bool GetActiveModal(FString& OutTitle, FString& OutMessage, TArray<FString>& OutButtons) const;
+
 	/** Coarse lifecycle label ("config init", "modules loaded", "ready"). */
 	void SetPhase(const FString& InPhase);
 
