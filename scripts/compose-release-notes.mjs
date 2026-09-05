@@ -440,6 +440,28 @@ export function classifySection(heading) {
   return "Features";
 }
 
+/**
+ * A section long enough that leaving it open buries what follows it. Twelve
+ * lines is about a screen of table once GitHub has rendered it.
+ */
+export const COLLAPSE_MIN_LINES = 12;
+
+/**
+ * One section, collapsed behind a disclosure when it is allowed to be and long
+ * enough to be worth it. GitHub renders markdown inside `<details>` only when a
+ * blank line follows the summary, so the blanks here are load-bearing.
+ */
+export function renderSection(section, collapsible) {
+  const inner = [];
+  if (section.lead) inner.push(section.lead, "");
+  for (const bullet of section.bullets) inner.push(bullet);
+  const body = inner.join("\n").trim();
+  if (!collapsible || body.split("\n").length < COLLAPSE_MIN_LINES) {
+    return [`### ${section.heading}`, "", body, ""];
+  }
+  return ["<details>", `<summary><b>${section.heading}</b></summary>`, "", body, "", "</details>", ""];
+}
+
 /** The thanks line, in the shape every large repo writes it. */
 export function renderContributions(logins) {
   const unique = [...new Set((logins ?? []).filter(Boolean))];
@@ -466,12 +488,10 @@ export function renderBody({ version, headline, preamble, sections, contributors
     const inSection = grouped.get(name);
     if (inSection.length === 0) continue;
     out.push(`## ${name}`, "");
-    for (const section of inSection) {
-      out.push(`### ${section.heading}`, "");
-      if (section.lead) out.push(section.lead, "");
-      for (const bullet of section.bullets) out.push(bullet);
-      out.push("");
-    }
+    // Features carry the per-category action tables, which are most of the
+    // body's length and the least of its reading. Fixes and mentions stay
+    // open: they are short, and they are what a reader came to scan.
+    for (const section of inSection) out.push(...renderSection(section, name === "Features"));
   }
 
   if ((contributors ?? []).length > 0) {

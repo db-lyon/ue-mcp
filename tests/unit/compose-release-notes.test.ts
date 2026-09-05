@@ -15,6 +15,8 @@ import {
   prereleaseTagsFor,
   contributorsBetween,
   previousStableTag,
+  renderSection,
+  COLLAPSE_MIN_LINES,
   renderContributions,
   retitle,
   classifySection,
@@ -588,5 +590,54 @@ describe("reading contributors off the range", () => {
       throw new Error("network");
     };
     expect(contributorsBetween("o/r", "a", "b", { run: boom })).toEqual([]);
+  });
+});
+
+
+describe("collapsing the long feature tables", () => {
+  const rows = Array.from({ length: 20 }, (_, i) => `| a${i} | does a thing |`);
+  const long = { heading: "landscape (20 new)", lead: "", bullets: rows };
+  const short = { heading: "reflection (1 new)", lead: "", bullets: ["| x | one |"] };
+
+  it("puts a long feature section behind a disclosure, keeping its name visible", () => {
+    const out = renderSection(long, true);
+    expect(out[0]).toBe("<details>");
+    expect(out[1]).toBe("<summary><b>landscape (20 new)</b></summary>");
+    // GitHub renders markdown inside details only when a blank line follows
+    // the summary, so this one is load-bearing rather than cosmetic.
+    expect(out[2]).toBe("");
+    expect(out.at(-2)).toBe("</details>");
+  });
+
+  it("leaves a short section open, because collapsing it saves nothing", () => {
+    expect(renderSection(short, true)[0]).toBe("### reflection (1 new)");
+    expect(rows.length).toBeGreaterThanOrEqual(COLLAPSE_MIN_LINES);
+  });
+
+  it("never collapses fixes or mentions", () => {
+    expect(renderSection(long, false)[0]).toBe("### landscape (20 new)");
+  });
+
+  it("collapses inside Features and leaves the rest open end to end", () => {
+    const beta = [
+      "## v9.9.9-beta.1",
+      "",
+      "### landscape (20 new)",
+      "",
+      ...rows,
+      "",
+      "### Bug fixes",
+      "",
+      "- Fixed a thing.",
+      "",
+    ].join("\n");
+    const { body } = composeReleaseNotes({
+      version: "9.9.9",
+      prereleases: [release("v9.9.9-beta.1", beta, ["First"])],
+    });
+    expect(body).toContain("<summary><b>landscape (20 new)</b></summary>");
+    expect(body).toContain("### Bug fixes");
+    expect(body.indexOf("<details>")).toBeGreaterThan(body.indexOf("## Features"));
+    expect(body.indexOf("<details>")).toBeLessThan(body.indexOf("## Fixes"));
   });
 });
