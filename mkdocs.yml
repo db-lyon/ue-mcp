@@ -63,6 +63,7 @@ nav:
   - Spatial Instructions: spatial-instructions.md
   - Native Tools: native-tools.md
   - Handler Conventions: handler-conventions.md
+  - Release Notes Style: release-notes-style.md
   - Widgets:
     - widgets.md
     - Parameter Contract: widget-parameters.md
