@@ -184,19 +184,22 @@ For example, a plugin that declares `uePluginDependency: SomePlugin` will report
 
 Everything the server injects at session start - the `initialize` instructions plus the whole `tools/list` payload (names, descriptions, and parameter schemas) - is the "context tax". Three strategies trade that seed cost against how many discovery round-trips an agent makes. Measure the tax on your own project with `npm run context-tax` (set `ANTHROPIC_API_KEY` for exact token counts).
 
-| Strategy | Seed size | What's advertised | Cost to use |
+| Strategy | Seed (test project) | What's advertised | Cost to use |
 |----------|--------------------|-------------------|-------------|
-| **`full`** (default) | measure locally | all <!-- count:tools -->24<!-- /count --> category tools, every action + parameter inline | zero discovery calls |
-| **`lean`** | measure locally | the same <!-- count:tools -->24<!-- /count --> tools with their validated `action` enums, but descriptions collapsed to a summary; a `catalog` tool (`search` / `describe` / `list_categories`) and a per-category `describe` action serve the details on demand | ~1 round-trip to learn a category |
-| **`micro`** | measure locally | a single `tools` gateway - `search`, `list_categories`, `describe`, and `call` - fronting every category | discovery for everything |
+| **`full`** (default) | ~45k tokens | all <!-- count:tools -->24<!-- /count --> category tools, every action + parameter inline | zero discovery calls |
+| **`lean`** | ~23k tokens | the same <!-- count:tools -->24<!-- /count --> tools with their validated `action` enums, but descriptions collapsed to a summary; a `catalog` tool (`search` / `describe` / `list_categories`) and a per-category `describe` action serve the details on demand | ~1 round-trip to learn a category |
+| **`micro`** | ~1k tokens | a single `tools` gateway - `search`, `list_categories`, `describe`, and `call` - fronting every category | discovery for everything |
 
 - **full** is best when the agent should see the entire surface up front and you are not token-constrained.
 - **lean** keeps action names visible (so the model can often call directly, and unknown actions are still rejected up front) while dropping the prose. A solid middle ground.
-- **micro** offers `tools(action="search", query="rotate clockwise")`, then `tools(action="describe", category="level", method="nudge_component")`, then `tools(action="call", category="level", method="nudge_component", args={ ... })`. Omit `method` from describe to list a whole category. Lean supports the same search and single-action describe through `catalog`. Both reuse full-mode intent ranking and expose nested argument fields from the declared schemas.
+- **micro** mirrors the native MCP toolset gateway (`list_toolsets` / `describe_toolset` / `call_tool`): the agent calls `tools(action="search", query="rotate clockwise")`, then `tools(action="describe", category="level", method="nudge_component")`, then `tools(action="call", category="level", method="nudge_component", args={ ... })`. Omit `method` from describe to list a whole category. Smallest possible seed, most discovery traffic.
+- Lean reaches the same search and single-action describe through `catalog`. Both compact modes rank with the full-mode intent search and read nested argument fields off the declared schemas, so a narrow lookup never costs a whole category dump.
 
-All three modes retain the same short spatial interpretation and verification
-guidance. Smaller startup context does not imply better task performance:
-measure discovery calls and the complete session as well as the seed size.
+The seed figures are measured on this repo's test project and move with the
+plugins and Epic toolsets you have enabled - `npm run context-tax` reports
+yours. A smaller seed is not automatically a cheaper session: count the
+discovery round-trips as well. All three modes carry the same short spatial
+interpretation and verification guidance.
 
 Set the strategy with the standalone command (writes `ue-mcp.yml` for you):
 
