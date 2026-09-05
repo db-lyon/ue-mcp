@@ -404,15 +404,18 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 	Result->SetStringField(TEXT("world"), WorldScope);
 	Result->SetStringField(TEXT("worldName"), World->GetName());
 	Result->SetStringField(TEXT("worldPath"), World->GetPathName());
-	int32 ActualPieInstance = INDEX_NONE;
+	// Only a PIE world has an instance index. An editor world reported -1 here,
+	// which is a valid-looking instance number to anything reading the field.
 	if (GEngine)
 	{
 		if (const FWorldContext* WorldContext = GEngine->GetWorldContextFromWorld(World))
 		{
-			ActualPieInstance = WorldContext->PIEInstance;
+			if (WorldContext->WorldType == EWorldType::PIE)
+			{
+				Result->SetNumberField(TEXT("pieInstance"), WorldContext->PIEInstance);
+			}
 		}
 	}
-	Result->SetNumberField(TEXT("pieInstance"), ActualPieInstance);
 	Result->SetObjectField(TEXT("attachment"), Attachment);
 	Result->SetBoolField(TEXT("absoluteLocation"), Component->IsUsingAbsoluteLocation());
 	Result->SetBoolField(TEXT("absoluteRotation"), Component->IsUsingAbsoluteRotation());
@@ -424,7 +427,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 	if (bHasRotation)
 	{
 		Result->SetStringField(TEXT("rotationAxis"), RotationAxis);
-		Result->SetNumberField(TEXT("resolvedSignedDegrees"), RotationDegrees);
+		// Signed in the selected frame, whether the caller gave the sign as
+		// axisRotation.degrees or named a viewpoint and let this resolve it.
 		Result->SetNumberField(TEXT("rotationDegrees"), RotationDegrees);
 		Result->SetObjectField(TEXT("resolvedRotationAxisWorld"), MCPVec3ToJsonObject(RotationAxisWorld));
 		if (Params->HasField(TEXT("viewRotation")))
@@ -750,8 +754,8 @@ bool FLevelSpatialComponentNudgeTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("no-delta dry-run returns the current transform"), Inspection->HasField(TEXT("before")));
 	TestTrue(TEXT("no-delta dry-run reports absolute transform flags"),
 		Inspection->HasField(TEXT("absoluteLocation")) && Inspection->HasField(TEXT("absoluteRotation")) && Inspection->HasField(TEXT("absoluteScale")));
-	TestTrue(TEXT("no-delta dry-run reports exact world identity and PIE instance"),
-		Inspection->HasField(TEXT("worldPath")) && Inspection->HasField(TEXT("pieInstance")));
+	TestTrue(TEXT("no-delta dry-run reports exact world identity"), Inspection->HasField(TEXT("worldPath")));
+	TestFalse(TEXT("no-delta dry-run omits pieInstance for an editor world"), Inspection->HasField(TEXT("pieInstance")));
 	TestTrue(TEXT("no-delta dry-run does not change the relative transform"), Child->GetRelativeTransform().Equals(BeforeDryRun, 1.e-6));
 	TestEqual(TEXT("no-delta dry-run does not dirty its package"), TestWorldScope.GetPackage()->IsDirty(), bPackageDirtyBeforeDryRun);
 	if (Trans)
