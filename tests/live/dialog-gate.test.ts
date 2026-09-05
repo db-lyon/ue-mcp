@@ -13,7 +13,13 @@ const target = await liveTarget();
 let server: LiveServer;
 
 beforeAll(async () => {
-  server = await LiveServer.start({ projects: [target.uproject] });
+  // Pinned to auto: this client advertises no elicitation, so the default
+  // would be defer, and defer withholds the press calls on purpose. The defer
+  // case has its own server at the bottom of the file.
+  server = await LiveServer.start({
+    projects: [target.uproject],
+    env: { UE_MCP_DIALOG_MODE: "auto" },
+  });
 }, 240_000);
 
 afterAll(async () => {
@@ -72,8 +78,11 @@ describe("a modal blocks every action, whatever raised it", () => {
       // An editor-bound read. The plugin's gate catches this one.
       const outliner = resultJson<any>(await server.call("level", { action: "get_outliner", limit: 1 }));
       expect(outliner.dialogBlocking).toBe(true);
-      expect(outliner.refusedMethod).toBe("get_world_outliner");
+      // Named the way the caller invoked it, not by the bridge method behind
+      // it, and identically whichever half of the gate caught the call.
+      expect(outliner.refusedMethod).toBe("level.get_outliner");
       expect(outliner.dialogTitle).toBe("Save Content");
+      expect(outliner.dialogMode).toBe("auto");
       expect(outliner.buttons).toContain("Don't Save");
       expect(outliner.choices.some((c: any) => c.respondWith.includes("respond_to_dialog"))).toBe(true);
 
@@ -131,4 +140,42 @@ describe("a modal blocks every action, whatever raised it", () => {
     const status = resultJson<any>(await server.call("project", { action: "get_status" }));
     expect(status.editorConnected).toBe(true);
   }, 180_000);
+});
+
+describe("the mode governs an ordinary call, not just the lifecycle actions", () => {
+  it("defer withholds the press calls on a plain asset read", async () => {
+    const deferred = await LiveServer.start({
+      projects: [target.uproject],
+      env: { UE_MCP_DIALOG_MODE: "defer" },
+    });
+    try {
+      resultJson<any>(await deferred.call("level", {
+        action: "place_actor",
+        actorClass: "StaticMeshActor",
+        label: `DeferProbe_${Date.now()}`,
+        staticMesh: "/Engine/BasicShapes/Cube.Cube",
+      }));
+      resultJson<any>(await deferred.call("editor", {
+        action: "request_editor_shutdown",
+        requireClean: false,
+      }));
+      await waitForDialogs("some");
+
+      const refused = resultJson<any>(await deferred.call("asset", {
+        action: "list",
+        directory: "/Game",
+        limit: 1,
+      }));
+      expect(refused.dialogBlocking).toBe(true);
+      expect(refused.dialogMode).toBe("defer");
+      // Recognition, not actuation: the buttons are named, the calls are not.
+      expect(refused.buttons).toContain("Cancel");
+      expect(refused.choices).toBeUndefined();
+      expect(refused.error).toContain("Unreal Editor window");
+    } finally {
+      await deferred.call("editor", { action: "respond_to_dialog", buttonLabel: "Cancel" });
+      await waitForDialogs("none");
+      await deferred.close();
+    }
+  }, 240_000);
 });

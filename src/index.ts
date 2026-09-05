@@ -32,7 +32,14 @@ import {
   type ProgressUpdate,
 } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
-import { gateForDialog, noteDialogBlocking, clearDialogBlocking, isDialogRefusal } from "./dialog-gate.js";
+import {
+  gateForDialog,
+  reshapeDialogRefusal,
+  noteDialogBlocking,
+  clearDialogBlocking,
+  isDialogRefusal,
+} from "./dialog-gate.js";
+import { resolveDialogMode, clientAdvertisesElicitation } from "./editor-control.js";
 import { info, warn, debug } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
@@ -636,8 +643,17 @@ async function main() {
       // THE DIALOG GATE, server half. The plugin refuses anything that needs
       // the editor while a modal is up; this covers what never reaches it, so
       // there is no action anywhere that quietly works around a stuck editor.
-      const gated = await gateForDialog(session, taskName, () =>
-        session.guarded.call("list_dialogs", {}));
+      //
+      // The dialog handling mode is resolved HERE, per call, so it governs the
+      // whole surface rather than the two lifecycle actions that used to be
+      // the only things that consulted it.
+      const canElicit = clientAdvertisesElicitation(ctx.elicit);
+      const gated = await gateForDialog(session, taskName, {
+        mode: resolveDialogMode({ projectDir: session.projectDir, canElicit }).mode,
+        probe: () => session.guarded.call("list_dialogs", {}),
+        press: (buttonLabel) => session.guarded.call("respond_to_dialog", { buttonLabel }),
+        elicit: canElicit ? ctx.elicit : undefined,
+      });
       if (gated) {
         return {
           content: withUpgradeNotice([
@@ -749,6 +765,63 @@ async function main() {
             content: withUpgradeNotice([
               { type: "text" as const, text: `Error [TASK_FAILED]: ${msg}` },
               ...machineErrorBlock(result.error),
+              ...attribution(session),
+            ]),
+            isError: true,
+          };
+        }
+
+        // The plugin's own gate refuses anything needing the editor, and it
+        // does not know this machine's dialog mode. Reshaping its refusal here
+        // is what stops the mode applying to some calls and not others: the
+        // first blocked call would otherwise get the plugin's wording and the
+        // next one, caught by the latch, would get the mode's.
+        if (isDialogRefusal(result.data)) {
+          const info = {
+            dialogTitle: String(result.data.dialogTitle ?? ""),
+            dialogMessage: String(result.data.dialogMessage ?? ""),
+            buttons: Array.isArray(result.data.buttons) ? (result.data.buttons as string[]) : [],
+            choices: Array.isArray(result.data.choices)
+              ? (result.data.choices as Array<{ buttonLabel: string; respondWith: string }>)
+              : [],
+          };
+          noteDialogBlocking(session, info);
+          const reshaped = await reshapeDialogRefusal(session, taskName, info, {
+            mode: resolveDialogMode({ projectDir: session.projectDir, canElicit }).mode,
+            probe: () => session.guarded.call("list_dialogs", {}),
+            press: (buttonLabel) => session.guarded.call("respond_to_dialog", { buttonLabel }),
+            elicit: canElicit ? ctx.elicit : undefined,
+          });
+          if (reshaped) {
+            return {
+              content: withUpgradeNotice([
+                { type: "text" as const, text: JSON.stringify(reshaped, null, 2) },
+                ...attribution(session),
+              ]),
+              isError: true,
+            };
+          }
+          // Answered through the elicitation form, so the dialog is gone and
+          // the caller is told to make the call again rather than being handed
+          // a refusal that is no longer true.
+          return {
+            content: withUpgradeNotice([
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    success: false,
+                    dialogAnswered: true,
+                    dialogTitle: info.dialogTitle,
+                    retry: taskName,
+                    note:
+                      "The blocking dialog was answered by the user, so the editor is running "
+                      + `again. '${taskName}' did not run; call it again.`,
+                  },
+                  null,
+                  2,
+                ),
+              },
               ...attribution(session),
             ]),
             isError: true,
