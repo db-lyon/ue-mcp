@@ -15,6 +15,7 @@ import type { BridgeTarget, IBridge } from "../bridge.js";
 import type { EditorSession } from "../session.js";
 import { explainEditorDownWithEvidence } from "../offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
+import { isDialogRefusal, noteDialogBlocking, clearDialogBlocking } from "../dialog-gate.js";
 
 export type { ResolveExistingFile } from "./guard.js";
 
@@ -27,6 +28,22 @@ export class GuardedBridge implements IBridge {
      *  they are guarding rather than assuming the process has only one. */
     private readonly session?: EditorSession,
   ) {}
+
+  /**
+   * Arm or clear the dialog latch from what the editor just said.
+   *
+   * Every bridge call funnels through here, so the latch is set by the first
+   * refusal the plugin's gate emits rather than by a poll. Anything that comes
+   * back normally proves the game thread is running again, which is what
+   * clears it: an agent that answers the dialog does not then have to tell the
+   * server it did.
+   */
+  private noteDialogState<T>(result: T): T {
+    if (!this.session) return result;
+    if (isDialogRefusal(result)) noteDialogBlocking(this.session, result);
+    else clearDialogBlocking(this.session);
+    return result;
+  }
 
   get isConnected(): boolean {
     return this.inner.isConnected;
@@ -54,7 +71,7 @@ export class GuardedBridge implements IBridge {
       // the context is not free and every bridge call lands here. Most servers run
       // with no guards at all, so skip the allocation outright.
       if (this.registry.size === 0) {
-        return await this.inner.call(method, params, timeoutMs);
+        return this.noteDialogState(await this.inner.call(method, params, timeoutMs));
       }
 
       const ctx = makeCallContext(
@@ -65,7 +82,9 @@ export class GuardedBridge implements IBridge {
         this.resolveExistingFile,
         this.session,
       );
-      return await runGuarded(ctx, this.registry, () => this.inner.call(method, params, timeoutMs));
+      return this.noteDialogState(
+        await runGuarded(ctx, this.registry, () => this.inner.call(method, params, timeoutMs)),
+      );
     } catch (e) {
       // Every route into the editor comes through here (an MCP tool call, a
       // flow step, the micro gateway), so this is the one place a missing

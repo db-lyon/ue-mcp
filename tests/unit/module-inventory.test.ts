@@ -32,6 +32,7 @@ const srcDir = join(here, "..", "..", "src");
 /** Handed a session, a project or a bridge, or holding state keyed by one. */
 const PER_SESSION: Record<string, string> = {
   "bridge.ts": "One socket, port and lockfile per editor.",
+  "dialog-gate.ts": "Latches the modal blocking ONE editor, so a dialog in project A cannot gate project B.",
   "session.ts": "The registry of editors itself.",
   "session-surface.ts": "One tool graph per editor, and the union advertised from them.",
   "session-env.ts": "Reports which environment variables flatten the registered editors.",
