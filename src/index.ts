@@ -32,6 +32,7 @@ import {
   type ProgressUpdate,
 } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
+import { gateForDialog, noteDialogBlocking, clearDialogBlocking, isDialogRefusal } from "./dialog-gate.js";
 import { info, warn, debug } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
@@ -632,6 +633,20 @@ async function main() {
           isError: true,
         };
       }
+      // THE DIALOG GATE, server half. The plugin refuses anything that needs
+      // the editor while a modal is up; this covers what never reaches it, so
+      // there is no action anywhere that quietly works around a stuck editor.
+      const gated = await gateForDialog(session, taskName, () =>
+        session.guarded.call("list_dialogs", {}));
+      if (gated) {
+        return {
+          content: withUpgradeNotice([
+            { type: "text" as const, text: JSON.stringify(gated, null, 2) },
+          ]),
+          isError: true,
+        };
+      }
+
       const { action: _, ...taskParams } = params;
       const flowCtx: FlowContext = {
         bridge: session.guarded,

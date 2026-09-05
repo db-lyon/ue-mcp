@@ -249,6 +249,10 @@ public:
 	 * timestamp, this instance's identity, and the action list the running
 	 * binary actually registered.
 	 */
+	/** The refusal every non-modal-safe method gets while a modal is up. */
+	TSharedPtr<FJsonObject> BuildDialogGateRefusal(
+		const FString& Method, const FString& Title, const FString& Message, const TArray<FString>& Buttons);
+
 	TSharedPtr<FJsonObject> BuildCapabilitiesPayload();
 
 	// ── Framing ──────────────────────────────────────────────────────────────
