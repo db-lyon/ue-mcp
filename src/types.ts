@@ -81,6 +81,8 @@ export interface ToolContext {
    *  `plugins` introspection category. Session-scoped for the same reason
    *  as getFlows: `plugins:` is per project. */
   getPlugins?: (forSession?: EditorSession) => PluginInfo[];
+  /** Enabled source categories for the addressed editor, including injected actions. */
+  getToolGraph?: (forSession?: EditorSession) => ToolDef[];
   /** The per-call timeout budget the caller asked for, in milliseconds (#989).
    *  Set by the category dispatcher when a call carried `timeoutMs`. A handler
    *  that makes its own bridge calls should pass it through; one that does not
@@ -558,7 +560,7 @@ function stripAction(params: Record<string, unknown>): Record<string, unknown> {
  * another project's editor.
  */
 export function sessionContext(ctx: ToolContext, session: EditorSession): ToolContext {
-  const { getFlows, getPlugins } = ctx;
+  const { getFlows, getPlugins, getToolGraph } = ctx;
   return {
     ...ctx,
     bridge: session.guarded,
@@ -569,6 +571,7 @@ export function sessionContext(ctx: ToolContext, session: EditorSession): ToolCo
     // flows and plugins under another editor's name.
     getFlows: getFlows ? () => getFlows(session) : undefined,
     getPlugins: getPlugins ? () => getPlugins(session) : undefined,
+    getToolGraph: getToolGraph ? (forSession) => getToolGraph(forSession ?? session) : undefined,
   };
 }
 

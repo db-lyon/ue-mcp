@@ -19,6 +19,8 @@
  * agent session six weeks later.
  */
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
+import { categoryTool, bp } from "../../src/types.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { requiresExplicitEditor } from "../../src/action-class.js";
 import {
@@ -248,6 +250,38 @@ describe("forwardedParams", () => {
 });
 
 describe("actionSchema", () => {
+  it("preserves nested fields, array items, enums, defaults and required nullable values", () => {
+    const tool = categoryTool("example", "Example", {
+      inspect: bp("Inspect. Params: request", "inspect"),
+    }, undefined, {
+      request: z.object({
+        targets: z.array(z.object({
+          name: z.string().nullable(),
+          axis: z.enum(["forward", "right", "up"]),
+          amount: z.number().default(5),
+        })),
+        mode: z.union([z.literal("preview"), z.literal("apply")]).optional(),
+      }).optional(),
+    });
+    const request = actionSchema(tool, "inspect").params.find((p) => p.name === "request")!;
+    expect(request.required).toBe(true);
+    const fields = request.properties!.targets.items!.properties!;
+    expect(fields.name.required).toBe(true);
+    expect(fields.axis.enumValues).toEqual(["forward", "right", "up"]);
+    expect(fields.amount).toMatchObject({ required: false, default: 5 });
+    expect(request.properties!.mode).toMatchObject({ required: false, enumValues: ["preview", "apply"] });
+  });
+
+  it("bounds nested discovery and explicitly marks omitted detail", () => {
+    let nested: z.ZodTypeAny = z.string();
+    for (let i = 0; i < 10; i++) nested = z.object({ child: nested });
+    const tool = categoryTool("example", "Example", { inspect: bp("Inspect. Params: request", "inspect") }, undefined, { request: nested });
+    let result = actionSchema(tool, "inspect").params.find((p) => p.name === "request")!;
+    for (let i = 0; i < 6; i++) result = result.properties!.child as typeof result;
+    expect(result.truncated).toBe(true);
+    expect(result.properties).toBeUndefined();
+  });
+
   it("reports the bridge method and required parameters of a real action", () => {
     const asset = ALL_TOOLS.find((t) => t.name === "asset")!;
     const schema = actionSchema(asset, "set_property");

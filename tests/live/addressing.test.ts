@@ -130,6 +130,26 @@ describe("gating beyond one editor", () => {
 });
 
 describe("the union surface", () => {
+  it("keeps disabled categories out of lean catalog discovery", async () => {
+    const lean = await LiveServer.start({ projects: [target.uproject, second.uproject], env: { UE_MCP_CONTEXT_STRATEGY: "lean" } });
+    try {
+      const search = resultJson<any>(await lean.call("catalog", { action: "search", query: "niagara", editor: SECOND }));
+      expect(search.results.some((hit: any) => hit.category === "niagara")).toBe(false);
+      const schema = resultJson<any>(await lean.call("catalog", { action: "describe", category: "niagara", editor: SECOND }));
+      expect(schema.error).toContain("Unknown category");
+    } finally { await lean.close(); }
+  }, 240_000);
+
+  it("discovers only actions enabled in the addressed session", async () => {
+    for (const editor of [LIVE, SECOND]) {
+      const search = resultJson<any>(await server.call("project", { action: "search_tools", query: "niagara", editor }));
+      expect(search.results.some((hit: any) => hit.tool === "niagara")).toBe(editor === LIVE);
+      const schema = await server.call("project", { action: "describe_action", category: "niagara", editor });
+      expect(!!schema.isError).toBe(editor === SECOND);
+      if (editor === SECOND) expect(schema.text).toContain("Unknown category");
+    }
+  }, 120_000);
+
   it("advertises the live editor's toolsets even though the other project has none", async () => {
     const tools = await server.listTools();
     const names = tools.map((t) => t.name);

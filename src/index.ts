@@ -264,9 +264,10 @@ async function main() {
       // Keep every category task in the registry so flows still resolve.
       load.registryTools = [gateway, ...load.surface.tools];
     } else if (contextStrategy === "lean") {
-      const leaned = applyLeanContext(load.surface.tools);
-      load.advertisedTools = leaned.filter((t) => !load.surface.disabled.has(t.name));
-      load.registryTools = leaned;
+      const leaned = applyLeanContext(enabled);
+      load.advertisedTools = leaned;
+      // Discovery describes callable categories; internal flows retain the full registry.
+      load.registryTools = [...leaned, ...load.surface.tools.filter((t) => load.surface.disabled.has(t.name))];
     } else {
       load.advertisedTools = enabled;
       load.registryTools = load.surface.tools;
@@ -374,6 +375,10 @@ async function main() {
   // registry starts empty (pass-through) and is populated once the task
   // registry exists, below.
   const guardedBridge = primary.guarded;
+  const getToolGraph = (forSession: EditorSession = primary): ToolDef[] => {
+    const load = perSession.get(forSession);
+    return load ? load.surface.tools.filter((t) => !load.surface.disabled.has(t.name)) : [];
+  };
   const ctx: ToolContext = {
     bridge: guardedBridge,
     project,
@@ -381,6 +386,7 @@ async function main() {
     sessions,
     getFlows,
     getPlugins,
+    getToolGraph,
   };
 
   // Per-asset locking for concurrent agents. Opt-in; when off, withAssetLocks
@@ -422,6 +428,7 @@ async function main() {
       sessions,
       getFlows: () => getFlows(load.surface.session),
       getPlugins: () => getPlugins(load.surface.session),
+      getToolGraph: (forSession) => getToolGraph(forSession ?? load.surface.session),
     };
     for (const g of discoverTaskGuards(load.registry!, guardCtx, load.surface.session.bridge)) {
       load.surface.session.guards.register(g);
@@ -622,6 +629,7 @@ async function main() {
         sessions,
         getFlows: () => getFlows(session),
         getPlugins: () => getPlugins(session),
+        getToolGraph: (forSession) => getToolGraph(forSession ?? session),
         elicit: ctx.elicit,
         onProgress: makeProgressReporter(extra),
         client: server.server.getClientVersion(),

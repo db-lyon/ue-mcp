@@ -8,6 +8,8 @@ import {
   applyLeanContext,
   buildMicroGateway,
 } from "../../src/lean-context.js";
+import { searchToolGraph } from "../../src/tool-search.js";
+import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO } from "../../src/instructions.js";
 
 function fixtureTools(): ToolDef[] {
   return [
@@ -175,10 +177,10 @@ describe("buildMicroGateway", () => {
   const invoke = (gw: ToolDef, params: Record<string, unknown>) =>
     gw.actions.call.handler!(ctxB, { action: "call", ...params });
 
-  it("exposes exactly the three gateway actions", () => {
+  it("exposes search alongside the three gateway actions", () => {
     const gw = buildMicroGateway(microFixture());
     expect(gw.name).toBe("tools");
-    expect(Object.keys(gw.actions)).toEqual(["list_categories", "describe", "call"]);
+    expect(Object.keys(gw.actions)).toEqual(["search", "list_categories", "describe", "call"]);
   });
 
   it("list_categories returns every category with a summary", async () => {
@@ -214,5 +216,46 @@ describe("buildMicroGateway", () => {
     const gw = buildMicroGateway(microFixture());
     await expect(invoke(gw, { category: "nope", method: "create" })).rejects.toThrow(/Unknown category/);
     await expect(invoke(gw, { category: "blueprint", method: "nope" })).rejects.toThrow(/Unknown action/);
+  });
+});
+
+describe("compact discovery for spatial requests", () => {
+  const tools = [categoryTool("level", "Spatial tools", {
+    nudge_component: bp("Adjust a component. Params: componentName, axisRotation?", "nudge_component"),
+    irrelevant: bp("Something else. Params: none", "irrelevant"),
+  }, undefined, {
+    componentName: z.string().optional(),
+    axisRotation: z.object({ axis: z.enum(["forward", "right", "up"]), degrees: z.number() }).optional(),
+  })];
+
+  it("uses the same intent ranking in full, lean and micro, without losing plugins", async () => {
+    const expected = searchToolGraph(tools, "clockwise").map(({ tool, action, description }) =>
+      ({ category: tool, action, description }),
+    );
+    expect(expected[0].action).toBe("nudge_component");
+    for (const discovery of [buildCatalogTool(tools), buildMicroGateway(tools)]) {
+      expect(await runAction(discovery, "search", { query: "clockwise" })).toMatchObject({ results: expected });
+    }
+    expect(await runAction(buildMicroGateway(tools), "search", { query: "absent_word" })).toMatchObject({ count: 0, results: [] });
+  });
+
+  it("describes one action with nested arguments without dumping the category", async () => {
+    for (const discovery of [buildCatalogTool(tools), buildMicroGateway(tools)]) {
+      const result = await runAction(discovery, "describe", { category: "level", method: "nudge_component" }) as any;
+      expect(result.action).toBe("nudge_component");
+      expect(result.actions).toBeUndefined();
+      expect(result.params.find((p: any) => p.name === "axisRotation").properties.axis).toMatchObject({
+        required: true, enumValues: ["forward", "right", "up"],
+      });
+      await expect(runAction(discovery, "describe", { category: "level", method: "missing" })).rejects.toThrow("Unknown action");
+    }
+  });
+
+  it("retains spatial interpretation and verification guidance in every context mode", () => {
+    for (const instructions of [SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO]) {
+      expect(instructions).toContain("dryRun=true");
+      expect(instructions).toContain("viewRotation");
+      expect(instructions).toContain("not visual verification");
+    }
   });
 });

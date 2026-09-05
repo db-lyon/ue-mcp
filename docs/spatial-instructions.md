@@ -18,7 +18,7 @@ transform is unambiguous.
 
 | Field | Answers | Example |
 |---|---|---|
-| Target | Which actor, and which component on it | `Player` / `LeatherHood` |
+| Target | Which actor, and which component on it | `Player` / `HeadMesh` |
 | Frame | Whose axes | `actor` |
 | Viewpoint | Looking from where | looking down |
 | Operation | Translate, rotate, or scale | rotate about up |
@@ -76,19 +76,59 @@ attached or socketed component from drifting on axes that were never mentioned.
 ```text
 level(action="nudge_component",
       actorLabel="Player",
-      componentName="LeatherHood",
+      componentName="HeadMesh",
       frame="actor",
-      axisRotation={ axis: "up", degrees: -15 },
+      viewRotation={ viewFrom: "above", direction: "clockwise", degrees: 15 },
+      dryRun=true,
       world="editor")
 ```
 
-It reports both the relative and the world transform afterwards, so the result
-can be checked rather than assumed.
+This previews the requested inputs without moving anything. It returns the exact
+component path, attachment/socket, absolute transform flags, current bounds,
+relative/world transforms with quaternions, and the selected frame's world axes.
+`operationApplied=false` means inspection or preview, never a completed edit.
+Omit the deltas to use `dryRun=true` as a spatial inspection call.
+
+`viewFrom` names the observer's side **in the selected frame**, looking toward
+the target. It does not read or guess the player/editor camera:
+
+| View from | Observer side | Rotation axis | Clockwise signed degrees |
+|---|---|---|---|
+| front | +X | forward | positive |
+| back | -X | forward | negative |
+| right | +Y | right | positive |
+| left | -Y | right | negative |
+| above | +Z | up | positive |
+| below | -Z | up | negative |
+
+Counterclockwise reverses the sign. The native tests project all twelve cases
+into camera right/up axes. In particular, clockwise from above is
+`axisRotation={axis:"up",degrees:15}` under Unreal's quaternion convention;
+the earlier negative-angle example was incorrect.
+
+`viewRotation` and signed `axisRotation` are mutually exclusive. Magnitudes in
+`viewRotation` must be finite and greater than zero. `frame=parent` uses the
+parent component's orientation; the attachment socket is reported separately.
+
+Echo the resolved target, frame, viewpoint and amount in ordinary language.
+If these agree with the user's request, make the same call with `dryRun=false`.
+No additional confirmation is required for an already authorized edit. The
+preview reports **requested setter inputs**, not a guaranteed final transform:
+socket attachment, absolute flags, scale, physics and construction can affect
+the result. Read the applied call's `after` transform and rollback data.
 
 Translation is in centimetres along the frame's forward, right and up. Scale is a
 uniform multiplier. Rotation is an axis and an angle, never three Euler numbers.
 
 ## Verifying
+
+Keep `capture_scene_png`'s `captureMetadata` beside each image. It contains the
+actual camera location/rotation/basis, FOV, image dimensions, world/PIE identity,
+world time, texture-loading setting and resolved focus actor/bounds. These are
+measurements of this capture, not a claim that its lighting or pose was suitable.
+`get_viewport_state`, `set_viewport_exposure` and `hit_test_viewport_pixel` refer
+to the editor viewport, not this separate SceneCapture2D. Do not use the live
+viewport's pixel hit test to locate a point in a headless capture.
 
 A spatial change is only done when someone can see that it is done. Read the
 returned transform, and for anything a human will look at, capture an image.

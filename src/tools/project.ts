@@ -26,7 +26,7 @@ import {
 } from "../engine-analysis.js";
 import { readDeployedBridgeApiVersion } from "../plugin/bridge-api.js";
 import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../bridge.js";
-import { searchTools, type ToolSearchHit } from "../tool-search.js";
+import { searchTools, searchToolGraph, type ToolSearchHit } from "../tool-search.js";
 import { actionSchema, resolveActionRef, suggestActions } from "../action-schema.js";
 import { availabilityReport } from "../offline.js";
 import { inspectInstall } from "../install-check.js";
@@ -719,7 +719,9 @@ export const projectTool: ToolDef = categoryTool(
       handler: async (_ctx, p) => {
         const query = (p.query as string) ?? "";
         if (!query.trim()) throw new Error("Missing 'query'");
-        const results = await searchTools(query, (p.limit as number) ?? 20);
+        const graph = _ctx.getToolGraph?.();
+        const limit = (p.limit as number) ?? 20;
+        const results = graph ? searchToolGraph(graph, query, limit) : await searchTools(query, limit);
         return {
           query,
           resultCount: results.length,
@@ -745,10 +747,7 @@ export const projectTool: ToolDef = categoryTool(
         + "Params: name (required), category? (return every action of one category instead of one action)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const { getLiveToolGraph } = await import("../tools.js");
-        // The advertised graph, which is the union across every registered
-        // editor: exactly the set of actions the connected client is able to
-        // call, so a schema is never reported for something it cannot reach.
-        const graph: ToolDef[] = getLiveToolGraph();
+        const graph: ToolDef[] = ctx.getToolGraph?.() ?? getLiveToolGraph();
 
         const category = (p.category as string | undefined)?.trim();
         if (category) {

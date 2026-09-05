@@ -24,8 +24,8 @@ import { z } from "zod";
 import type { ActionSpec, ToolDef } from "./types.js";
 import { classifyActionClass, type ActionClass } from "./action-class.js";
 
-export interface ParamSchema {
-  name: string;
+/** A readable schema summary, not a substitute for runtime validation. */
+export interface ValueSchema {
   /** Wire type, unwrapped through optional/default/nullable. */
   type: string;
   required: boolean;
@@ -34,6 +34,15 @@ export interface ParamSchema {
   enumValues?: string[];
   /** Default applied by the schema when the caller omits the parameter. */
   default?: unknown;
+  properties?: Record<string, ValueSchema>;
+  items?: ValueSchema;
+  variants?: ValueSchema[];
+  /** Deeper fields were omitted to bound discovery output. */
+  truncated?: boolean;
+}
+
+export interface ParamSchema extends ValueSchema {
+  name: string;
   /**
    * Where this name was found. A parameter missing `declared` is stripped
    * before the handler sees it, whatever the description promises.
@@ -185,6 +194,29 @@ function enumValues(schema: z.ZodTypeAny): string[] | undefined {
     return literals.length > 0 ? literals : undefined;
   }
   return undefined;
+}
+
+/** Reuse the declared shape so nested argument names never become another catalog. */
+function valueSchema(schema: z.ZodTypeAny, depth = 0): ValueSchema {
+  const { inner, description, default: dflt } = unwrap(schema);
+  const result: ValueSchema = {
+    type: typeName(inner), required: !schema.isOptional(), description,
+    enumValues: enumValues(inner), default: dflt,
+  };
+  // ponytail: bound recursive discovery; deeper shapes remain runtime-validated.
+  if (depth >= 6) return { ...result, truncated: true };
+  if (inner instanceof z.ZodObject) {
+    result.properties = Object.fromEntries(Object.entries(inner.shape).map(([name, child]) =>
+      [name, valueSchema(child as z.ZodTypeAny, depth + 1)],
+    ));
+  } else if (inner instanceof z.ZodArray) {
+    result.items = valueSchema(inner.element, depth + 1);
+  } else if (inner instanceof z.ZodRecord) {
+    result.items = valueSchema(inner.valueSchema, depth + 1);
+  } else if (inner instanceof z.ZodUnion) {
+    result.variants = inner.options.map((option: z.ZodTypeAny) => valueSchema(option, depth + 1));
+  }
+  return result;
 }
 
 /* ── description parsing ───────────────────────────────────────────── */
@@ -702,6 +734,7 @@ export function actionSchema(tool: ToolDef, action: string): ActionSchema {
     if (!doc && !forwards.has(name) && !ROUTING_PARAMS.has(name)) continue;
     covered.add(name);
     params.push({
+      ...valueSchema(schema),
       name,
       type: typeName(inner),
       // The description's `?` marker wins: it is per-action, whereas the
