@@ -377,7 +377,18 @@ async function main() {
   const guardedBridge = primary.guarded;
   const getToolGraph = (forSession: EditorSession = primary): ToolDef[] => {
     const load = perSession.get(forSession);
-    return load ? load.surface.tools.filter((t) => !load.surface.disabled.has(t.name)) : [];
+    // D1 again. A session whose surface failed to build has no graph of its
+    // own, and answering from the union would name another project's actions.
+    // Returning nothing instead reads as "no action matched", which sends the
+    // caller to execute_python for something the editor does in fact provide.
+    if (!load) {
+      throw new McpError(
+        ErrorCode.NOT_FOUND,
+        `Editor '${forSession.name}' has no tool surface built, so its actions cannot be searched or described. `
+        + "Re-register it with project(add_editor); discovery does not fall back to another editor's graph.",
+      );
+    }
+    return load.surface.tools.filter((t) => !load.surface.disabled.has(t.name));
   };
   const ctx: ToolContext = {
     bridge: guardedBridge,
