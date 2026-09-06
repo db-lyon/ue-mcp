@@ -212,6 +212,16 @@ export class DialogGuard {
     return this.blocking;
   }
 
+  /** How this machine wants a blocking dialog handled, before elicitation. */
+  get mode(): DialogMode {
+    return this.deps.mode();
+  }
+
+  /** Whether there is anybody to put an elicitation form in front of. */
+  get canElicit(): boolean {
+    return this.deps.elicit?.() !== undefined;
+  }
+
   /** Record a dialog. Called by the watcher, a probe, or a plugin refusal. */
   note(dialog: BlockingDialog): void {
     this.blocking = dialog;
@@ -420,13 +430,23 @@ export class DialogGuard {
     try {
       answered = await this.deps.probe();
     } catch {
-      // The editor did not answer.
+      // The editor did not answer, and getting here means the socket was UP:
+      // the disconnected case returned above. A live socket that will not
+      // answer is an editor whose game thread is not running, which is the
+      // exact condition this guard exists for. So keep what is known and never
+      // clear.
       //
-      // A dialog is a statement about a RUNNING editor. If it will not answer
-      // and nothing is refreshing its status file, there is no editor to be
-      // blocked, and holding the latch refuses every action forever with no
-      // way back: the two calls the refusal names cannot run either.
-      if (this.staleStatus || this.deps.readSnapshot === undefined) {
+      // Clearing here on a missing status file was a permanent miss rather
+      // than a race: a project whose editor has not published a snapshot yet
+      // is the steady state right after launch, so the latch was dropped every
+      // time instead of occasionally.
+      //
+      // With no isConnected to consult there is no way to tell a parked editor
+      // from a dead one, and then a stale or absent snapshot is the only
+      // evidence available: clearing on it is what keeps a dead editor from
+      // refusing every action forever, including the two the refusal names.
+      const socketUp = this.deps.isConnected?.() === true;
+      if (!socketUp && (this.staleStatus || this.deps.readSnapshot === undefined)) {
         this.clear();
         this.lastAsked = null;
         return null;
@@ -671,11 +691,35 @@ export function withoutDialogActuation<T extends IBridge>(session: EditorSession
       if (prop !== "call") return Reflect.get(target, prop, receiver);
       return async (method: string, params?: Record<string, unknown>, timeoutMs?: number) => {
         const armsAPolicy = method === "set_dialog_policy" || method === "clear_dialog_policy";
-        if (armsAPolicy && existingGuard(session)?.current) {
+        if (!armsAPolicy) return target.call(method, params, timeoutMs);
+
+        // This is the ONLY thing standing in front of an unattended button
+        // press: the plugin serves both methods during a modal on purpose, so
+        // whatever this lets through presses a button on the dialog already on
+        // screen. It therefore fails CLOSED, the same way refuseIfBlocked does
+        // at the other boundary, and it asks rather than reading a latch that
+        // may never have been armed.
+        //
+        // Reading `current` alone was not a race: with no readable snapshot
+        // the latch is empty in the steady state, so a live modal was missed
+        // every time rather than occasionally.
+        const guard = existingGuard(session);
+        if (!guard) {
           return {
             success: false,
             dialogBlocking: true,
             refusedMethod: method,
+            error:
+              `'${method}' was refused because this editor has no dialog guard, so whether a `
+              + "modal is on screen cannot be established, and an armed policy presses the "
+              + "buttons of whatever is. Re-register the editor with project(add_editor).",
+          };
+        }
+        await guard.refresh();
+        const dialog = guard.current;
+        if (dialog) {
+          return {
+            ...DialogGuard.describeRefusal(method, dialog, guard.mode, guard.canElicit),
             error:
               `'${method}' was refused: a modal dialog is on screen and an armed policy presses `
               + "its buttons. Arm a policy before a dialog appears, or answer this one with "

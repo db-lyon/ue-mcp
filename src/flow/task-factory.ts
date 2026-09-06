@@ -5,6 +5,43 @@ import { prepareCall, finishCall, type CallPreparation } from "../call-pipeline.
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
+import { DialogGuard, existingGuard } from "../dialog-guard.js";
+
+/**
+ * Refuse a flow step while a modal is up, through the one guard.
+ *
+ * The bridge-backed steps are covered at the bridge boundary. An in-process
+ * handler never goes near it, so without this the gate simply was not on that
+ * route: a modal raised mid-run was missed by every remaining step.
+ *
+ * Returns the refusal to report, or null to run the step.
+ */
+async function refuseStepIfBlocked(
+  ctx: FlowContext,
+  taskName: string,
+  options: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  const session = ctx.session;
+  if (!session) return null;
+  // The micro gateway arrives as one task carrying the real category and
+  // method in its options. Asking the allowlist about the wrapper refused
+  // respond_to_dialog, which is the single call that clears the dialog, so the
+  // gateway could never escape one.
+  const subject = taskName === "tools.call"
+    ? `${String(options.category ?? "")}.${String(options.method ?? "")}`
+    : taskName;
+  if (DialogGuard.actionAllowed(subject)) return null;
+  const guard = existingGuard(session);
+  if (!guard) return null;
+  const decision = await guard.check(subject, "action");
+  return decision.allow ? null : (decision.refusal ?? null);
+}
+
+/** The error a refused step reports, worded by the refusal itself. */
+function refusalError(taskName: string, refusal: Record<string, unknown>): Error {
+  const said = typeof refusal.error === "string" ? refusal.error : undefined;
+  return new Error(said ?? `'${taskName}' was refused: a modal dialog is blocking the editor.`);
+}
 
 /**
  * Create a TaskConstructor for a bridge-delegation action.
@@ -97,6 +134,19 @@ export function handlerTaskClass(
       const ctx = pipeline.timeoutMs === undefined
         ? this.ctx
         : { ...this.ctx, callTimeoutMs: pipeline.timeoutMs };
+      // A flow is a minutes-long run, and a modal can appear at any point in
+      // it. The tool route checks once, before flow.run starts; without this,
+      // a dialog raised at step 3 was missed by every later step, which
+      // includes the editor lifecycle handlers. Checking per step is what
+      // makes "any process, at any point" true of flows as well.
+      const refusal = await refuseStepIfBlocked(
+        this.ctx,
+        name,
+        this.options as Record<string, unknown>,
+      );
+      if (refusal) {
+        return { success: false, data: refusal, error: refusalError(name, refusal) };
+      }
       const answered = await fn(ctx, pipeline.params);
       const data = finishCall(answered, pipeline);
       // Same defect as the bridge class had, from the same hardcoded `true`:

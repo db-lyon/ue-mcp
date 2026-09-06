@@ -489,6 +489,45 @@ describe("one dialog, one ask, however many callers", () => {
   });
 });
 
+describe("an editor that is up but not answering is still blocked", () => {
+  it("keeps the dialog when the socket is up and the probe times out", async () => {
+    // The parked editor. The socket is established, so the disconnected branch
+    // does not apply, but the game thread is not running so the probe never
+    // comes back. Clearing on a missing status file here was a permanent miss,
+    // not a race: a project whose editor has not published a snapshot yet is
+    // the steady state right after launch.
+    const guard = make({
+      isConnected: () => true,
+      probe: async () => {
+        throw new Error("ETIMEDOUT");
+      },
+    });
+    guard.note(DIALOG);
+    const decision = await guard.check("level.get_outliner", "action");
+    expect(decision.allow, "a parked editor let everything through").toBe(false);
+    expect(guard.current).not.toBeNull();
+  });
+
+  it("still clears once the watcher proves the editor is gone", async () => {
+    const guard = make({
+      isConnected: () => true,
+      readSnapshot: () => null,
+      probe: async () => {
+        throw new Error("ETIMEDOUT");
+      },
+    });
+    guard.note(DIALOG);
+    guard.startWatching(20);
+    try {
+      await new Promise((r) => setTimeout(r, 80));
+      expect(guard.current, "the dialog outlived the editor").toBeNull();
+      expect((await guard.check("level.get_outliner", "action")).allow).toBe(true);
+    } finally {
+      guard.stopWatching();
+    }
+  });
+});
+
 describe("a disconnected editor is not probed", () => {
   it("skips the probe entirely rather than burning a connection attempt", async () => {
     // Every gated call probes twice, once at the preflight and once at the
