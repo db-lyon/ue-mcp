@@ -127,7 +127,7 @@ The feedback approval mode (`interactive` / `auto-approve` / `defer`) is intenti
 
 ### Dialog handling mode
 
-A modal dialog blocks Unreal's game thread, so every action is refused until it is answered. This mode decides what happens next.
+A modal dialog blocks Unreal's game thread, so every action is refused until it is answered. One guard per editor enforces that, and every route to the editor passes it, including each step of a running flow and the first call the server makes. This mode decides what happens next.
 
 It lives with the feedback mode and for the same reason: whether somebody is at the keyboard to answer a modal is a property of your machine, not project policy a collaborator should inherit.
 
