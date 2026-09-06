@@ -309,7 +309,7 @@ export function isLiveTestProjectDir(reportedDir, allowed = liveTestProjectDirs(
 }
 
 /**
- * Hard guard for the live tier, with the same contract as
+ * Hard guard for the live tests, with the same contract as
  * `assertTestProjectDir`: nothing is sent to an editor that has any project
  * but this repository's test project open.
  */
@@ -319,7 +319,7 @@ export function assertLiveTestProjectDir(reportedDir, allowed = liveTestProjectD
     "Aborting: the connected editor is not this repository's test project.\n" +
     `  Expected : ${allowed.join("\n             ")}\n` +
     `  Reported : ${reportedDir ?? "(unknown, is the Python plugin enabled?)"}\n` +
-    "The live tier drives a real editor, so it only ever talks to tests/ue_mcp. Nothing was sent.",
+    "The live tests drives a real editor, so it only ever talks to tests/ue_mcp. Nothing was sent.",
   );
 }
 

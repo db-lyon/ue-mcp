@@ -1,7 +1,7 @@
 /**
- * Shared plumbing for the live tier (#817, plan items 1.10 and 7.3).
+ * Shared plumbing for the live tests (#817, plan items 1.10 and 7.3).
  *
- * The live tier is the only tier that talks to a real Unreal editor. Two rules
+ * The live tests is the only tier that talks to a real Unreal editor. Two rules
  * follow from that and both are enforced here rather than left to each test:
  *
  *  1. **It only ever drives `tests/ue_mcp`.** The editor is asked which project
@@ -62,7 +62,7 @@ export interface LiveCapabilities {
 
 const HOST = process.env.UE_MCP_LIVE_HOST ?? process.env.UE_MCP_TEST_HOST ?? "127.0.0.1";
 
-/** Port hint published by `scripts/live-tier.mjs` after its own preflight. */
+/** Port hint published by `scripts/live-tests.mjs` after its own preflight. */
 const PORT_HINT = Number.parseInt(process.env.UE_MCP_LIVE_PORT ?? "", 10);
 
 let discovered: LiveTarget | null = null;
@@ -74,7 +74,7 @@ const bridges: EditorBridge[] = [];
  *
  * Never returns a target it could not verify: a bridge that answers on a
  * candidate port with some other project open aborts the run outright, since a
- * live tier that quietly retargets is exactly the failure the guard exists for.
+ * live tests that quietly retargets is exactly the failure the guard exists for.
  */
 export async function liveTarget(): Promise<LiveTarget> {
   if (discovered) return discovered;
@@ -88,7 +88,7 @@ async function discover(): Promise<LiveTarget> {
   const allowed = liveTestProjectDirs();
   if (allowed.length === 0) {
     throw new Error(
-      "No tests/ue_mcp project found in this checkout. The live tier drives that project and nothing else.",
+      "No tests/ue_mcp project found in this checkout. The live tests drives that project and nothing else.",
     );
   }
 
@@ -147,7 +147,7 @@ async function discover(): Promise<LiveTarget> {
       lockfile: lastLockfile as never,
       lastError,
     }) +
-      "\n\nThe live tier needs an editor already running on tests/ue_mcp. Start one, then re-run" +
+      "\n\nThe live tests needs an editor already running on tests/ue_mcp. Start one, then re-run" +
       "\n    npm run test:live",
   );
 }

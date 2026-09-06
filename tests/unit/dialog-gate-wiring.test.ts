@@ -4,7 +4,7 @@
  * tests/unit/dialog-gate.test.ts drives runWithDialogGate directly with a fake
  * `run`, so it proves the gate's logic and nothing about whether anything calls
  * it. Deleting the call from src/index.ts left that suite green, tsc clean and
- * the golden baseline unchanged: only the live tier caught it, and the live
+ * the golden baseline unchanged: only the live tests caught it, and the live
  * tier needs a running Unreal editor and does not run in CI.
  *
  * So this starts the real server over stdio against a stub bridge that answers

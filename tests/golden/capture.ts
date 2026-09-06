@@ -10,7 +10,7 @@
  *   - `editor-down.json`, with nothing listening. Needs only Node, so it is
  *     guarded by `tests/unit/golden-editor-down.test.ts` in the unit tier.
  *   - `editor-connected.json`, with a real editor answering. Guarded by
- *     `tests/live/golden-connected.test.ts` in the live tier.
+ *     `tests/live/golden-connected.test.ts` in the live tests.
  *
  * One recorder produces both. A second implementation of the capture would
  * make the two baselines prove that the two recorders agree with each other
@@ -496,7 +496,7 @@ export async function captureEditorDownSurface(): Promise<GoldenRecording> {
 
 /**
  * The connected half. `port` is the port a verified editor is answering on;
- * the live tier discovers it and refuses anything but the test project before
+ * the live tests discovers it and refuses anything but the test project before
  * this is called.
  */
 export async function captureEditorConnectedSurface(

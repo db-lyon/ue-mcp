@@ -204,7 +204,7 @@ describe.skipIf(echoUnavailable !== null)("the client consumes the routing key, 
     const load = loadFlowConfig(ALL_TOOLS, live.project.projectDir ?? undefined);
     const registry = buildFlowRegistry(ALL_TOOLS);
     const flowTool = createFlowTool(registry, () => load.config);
-    const started = startFlowHttpServer(flowTool, ctx, { port: 0, token: "live-tier-token" });
+    const started = startFlowHttpServer(flowTool, ctx, { port: 0, token: "live-tests-token" });
     await new Promise<void>((resolve) => started.server.once("listening", () => resolve()));
     const address = started.server.address();
     const port = typeof address === "object" && address !== null ? address.port : 0;

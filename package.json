@@ -55,7 +55,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:multi-editor": "vitest run tests/multi-editor",
-    "test:live": "node scripts/live-tier.mjs",
+    "test:live": "node scripts/live-tests.mjs",
     "golden:record": "node scripts/record-golden.mjs",
     "release:notes": "node scripts/compose-release-notes.mjs",
     "audit:docs": "node scripts/audit-docs.mjs && node scripts/audit-params.mjs",

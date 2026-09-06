@@ -6,7 +6,7 @@
  * legitimately changes the surface between those two states and one baseline
  * cannot tell a regression apart from a cold start. The editor-down half needs
  * nothing but Node, so it is recorded here and it gates merges. The connected
- * half needs a running editor and lives in the live tier
+ * half needs a running editor and lives in the live tests
  * (`tests/live/golden-connected.test.ts`, `npm run test:live`), which also
  * re-verifies this one.
  *

@@ -72,11 +72,11 @@ describe("the 7.3 matrix", () => {
     }
   });
 
-  it("puts live references in the live tier and engine-free ones outside it", () => {
+  it("puts live references in the live tests and engine-free ones outside it", () => {
     for (const testCase of ALL_CASES) {
       for (const ref of testCase.coverage) {
         if (ref.kind === "live") {
-          expect(ref.file.startsWith("tests/live/"), `case '${testCase.id}': ${ref.file} is not in the live tier`).toBe(true);
+          expect(ref.file.startsWith("tests/live/"), `case '${testCase.id}': ${ref.file} is not in the live tests`).toBe(true);
         }
         if (ref.kind === "engine-free") {
           expect(

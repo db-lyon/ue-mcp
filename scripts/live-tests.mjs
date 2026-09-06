@@ -77,7 +77,7 @@ async function preflight() {
   assertLoopbackHost(HOST);
   const allowed = liveTestProjectDirs();
   if (allowed.length === 0) {
-    throw new Error("No tests/ue_mcp project in this checkout. The live tier drives that project and nothing else.");
+    throw new Error("No tests/ue_mcp project in this checkout. The live tests drives that project and nothing else.");
   }
 
   let lastError = null;
@@ -112,7 +112,7 @@ async function preflight() {
   throw new Error(
     `${describeMissingBridge({ host: HOST, candidates: lastCandidates, lockfile: lastLockfile, lastError })}\n\n` +
       `Project directories searched:\n  ${allowed.join("\n  ")}\n\n` +
-      "The live tier attaches to an editor that is already running and never starts one itself.",
+      "The live tests attaches to an editor that is already running and never starts one itself.",
   );
 }
 

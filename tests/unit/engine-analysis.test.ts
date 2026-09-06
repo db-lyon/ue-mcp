@@ -15,7 +15,7 @@
  * says "nothing calls this" when the truth is "this install cannot answer
  * that", and the two call for opposite next steps.
  *
- * The end-to-end behaviour against a real engine is asserted in the live tier.
+ * The end-to-end behaviour against a real engine is asserted in the live tests.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";

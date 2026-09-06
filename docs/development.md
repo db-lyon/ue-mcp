@@ -190,7 +190,7 @@ pin the port for unusual setups, and neither weakens the project check above.
 
 ### Live Tier
 
-The live tier drives a real editor through the shipped server: the advertised
+The live tests drives a real editor through the shipped server: the advertised
 surface with an editor attached, per-path dispatch, addressing, gating, and the
 records the bridge publishes.
 

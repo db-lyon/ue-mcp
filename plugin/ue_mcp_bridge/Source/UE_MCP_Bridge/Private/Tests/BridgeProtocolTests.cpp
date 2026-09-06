@@ -32,7 +32,7 @@
  * handler blocks the game thread) and 0.6 (shutdown with a client attached)
  * are both statements about two threads and a live socket, and a test that
  * stood one up inside the editor would be asserting on the editor it is hosted
- * by. Those belong to the live tier in Phase 7.
+ * by. Those belong to the live tests in Phase 7.
  */
 
 namespace

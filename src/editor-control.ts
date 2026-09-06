@@ -552,7 +552,7 @@ export async function startEditor(
     dialogPolicy?: string;
 
     /**
-     * Arm the bridge's parameter echo for this editor. The live tier's leak
+     * Arm the bridge's parameter echo for this editor. The live tests' leak
      * assertions, which prove a routing key never reaches an editor, can only
      * run when the editor was LAUNCHED with it: it is read at startup, so
      * turning it on over the socket afterwards is too late, exactly like the
