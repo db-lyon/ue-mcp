@@ -15,7 +15,7 @@ import type { BridgeTarget, IBridge } from "../bridge.js";
 import type { EditorSession } from "../session.js";
 import { explainEditorDownWithEvidence } from "../offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
-import { isDialogRefusal, noteDialogBlocking, clearDialogBlocking } from "../dialog-gate.js";
+import { DialogGuard, existingGuard } from "../dialog-guard.js";
 
 export type { ResolveExistingFile } from "./guard.js";
 
@@ -38,10 +38,39 @@ export class GuardedBridge implements IBridge {
    * clears it: an agent that answers the dialog does not then have to tell the
    * server it did.
    */
-  private noteDialogState<T>(result: T): T {
-    if (!this.session) return result;
-    if (isDialogRefusal(result)) noteDialogBlocking(this.session, result);
-    else clearDialogBlocking(this.session);
+  /**
+   * The dialog guard, at the boundary every route to the editor shares.
+   *
+   * A tool action, a flow step, a nested flow, a handler making its own calls:
+   * they all arrive here, so refusing here is what makes the guarantee hold
+   * without a second copy of the rule anywhere else. The plugin refuses too,
+   * and agrees, but it cannot see a call that never reaches it and it does not
+   * know this machine's dialog mode.
+   */
+  private async guardCall(method: string): Promise<Record<string, unknown> | null> {
+    if (!this.session) return null;
+    if (DialogGuard.bridgeAllowed(method)) return null;
+    const guard = existingGuard(this.session);
+    if (!guard) {
+      // No guard means no way to know whether a modal is up. The HTTP route
+      // already refuses in this state; failing open here while that failed
+      // closed meant the same condition had two opposite answers.
+      return {
+        success: false,
+        dialogBlocking: true,
+        refusedMethod: method,
+        error:
+          `'${method}' was refused because this editor has no dialog guard, so whether a modal `
+          + "is blocking it cannot be established. Re-register the editor with project(add_editor).",
+      };
+    }
+    const decision = await guard.check(method, "bridge");
+    return decision.allow ? null : decision.refusal;
+  }
+
+  /** Feed the reply back to the guard, which decides what it proves. */
+  private observe<T>(method: string, result: T): T {
+    if (this.session) existingGuard(this.session)?.observe(method, result);
     return result;
   }
 
@@ -71,7 +100,9 @@ export class GuardedBridge implements IBridge {
       // the context is not free and every bridge call lands here. Most servers run
       // with no guards at all, so skip the allocation outright.
       if (this.registry.size === 0) {
-        return this.noteDialogState(await this.inner.call(method, params, timeoutMs));
+        const blocked = await this.guardCall(method);
+        if (blocked) return blocked;
+        return this.observe(method, await this.inner.call(method, params, timeoutMs));
       }
 
       const ctx = makeCallContext(
@@ -82,7 +113,10 @@ export class GuardedBridge implements IBridge {
         this.resolveExistingFile,
         this.session,
       );
-      return this.noteDialogState(
+      const blocked = await this.guardCall(method);
+      if (blocked) return blocked;
+      return this.observe(
+        method,
         await runGuarded(ctx, this.registry, () => this.inner.call(method, params, timeoutMs)),
       );
     } catch (e) {

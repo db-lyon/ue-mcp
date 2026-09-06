@@ -85,3 +85,19 @@ export function loadBakedCatalog(): EpicCatalog | null {
   }
   return null;
 }
+
+/**
+ * A toolset catalog, or null when the editor refused to produce one.
+ *
+ * A modal refuses `epic_list_toolsets` like anything else, and the refusal has
+ * no `toolsets`, so it read as "this editor advertises none" and the surface
+ * silently fell back to a cache. That is the difference between an editor with
+ * no Epic tools and an editor that could not be asked.
+ */
+export function catalogOrRefusal(
+  raw: unknown,
+): { catalog: EpicCatalog | null; refusedByDialog: boolean } {
+  const refused = typeof raw === "object" && raw !== null
+    && (raw as Record<string, unknown>).dialogBlocking === true;
+  return { catalog: refused ? null : (raw as EpicCatalog | null), refusedByDialog: refused };
+}

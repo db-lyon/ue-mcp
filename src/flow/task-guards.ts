@@ -30,6 +30,7 @@ import type { FlowContext } from "./context.js";
 import { writeScope, type BridgeGuard, type CallContext, type ResolveExistingFile } from "./guard.js";
 import { McpError, ErrorCode } from "../errors.js";
 import { debug, info } from "../log.js";
+import { withoutDialogActuation } from "../dialog-guard.js";
 
 /** Adapts flowkit's logger to this server's `guard`-component logging. */
 const GUARD_LOGGER: Logger = {
@@ -69,9 +70,18 @@ export function discoverTaskGuards(
     // bridge happened to be built first. cc.bridge is the RAW bridge of the
     // session serving this call, so a guard can neither recurse through the
     // pipeline nor act on another project's editor.
+    // The raw bridge, minus the ability to press a dialog button. Raw is
+    // deliberate (a guard task must not re-enter the pipeline running it), but
+    // set_dialog_policy is modal-safe in the plugin, so without this a guard
+    // task could arm a policy that answers the modal already on screen.
     contextFor: (cc): FlowContext =>
       cc.session
-        ? { ...ctx, bridge: cc.bridge, project: cc.session.project, session: cc.session }
+        ? {
+            ...ctx,
+            bridge: withoutDialogActuation(cc.session, cc.bridge),
+            project: cc.session.project,
+            session: cc.session,
+          }
         : { ...ctx, bridge: rawBridge },
 
     optionsFor: (cc, result) => ({

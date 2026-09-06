@@ -30,6 +30,7 @@
  */
 import type { ActionSpec, ToolDef } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
+import { STATUS_STALE_AFTER_MS } from "./dialog-guard.js";
 
 /**
  * Whether an action can run with no editor attached.
@@ -421,8 +422,17 @@ export async function explainEditorDownWithEvidence(
     // phase would turn "no editor has ever run here" into "it is starting".
     const fromLog = logState.phase === "unknown" ? undefined : logState.phase;
     phase = snapshot?.phase ?? fromLog;
-    blocking = logState.blocking || Boolean(snapshot?.modal);
-    modal = snapshot?.modal?.title;
+    // A status file outlives the editor that wrote it, so a modal recorded in
+    // a stale one is not a live modal. Claiming otherwise told a caller "an
+    // editor IS running and is blocked" in the same breath as the guard
+    // correctly refusing to say so, from the same file, under two policies.
+    const snapshotIsFresh =
+      snapshot !== null
+      && (snapshot.ageSeconds === undefined
+        || snapshot.ageSeconds * 1000 <= STATUS_STALE_AFTER_MS);
+    const liveModal = snapshotIsFresh ? snapshot?.modal : undefined;
+    blocking = logState.blocking || Boolean(liveModal);
+    modal = liveModal?.title;
   } catch {
     // No log, no snapshot, no project. The message degrades to the generic
     // "start one" branch, which is still the right advice.
