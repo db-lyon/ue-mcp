@@ -4,7 +4,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "src");
-const index = fs.readFileSync(path.join(SRC, "index.ts"), "utf8");
+
+// Normalised: the working tree checks out with CRLF on Windows, so a match
+// written with a bare newline passes on the machine that wrote the file and
+// fails everywhere else, including on the same machine after a checkout.
+const index = fs.readFileSync(path.join(SRC, "index.ts"), "utf8").split("\r\n").join("\n");
 
 /**
  * The Epic catalog call is the FIRST thing this server says to an editor. It
@@ -24,8 +28,11 @@ describe("the startup catalog call is gated like everything else", () => {
   });
 
   it("creates the guard before the surface is built, not after", () => {
-    const guardInLoop = index.indexOf("dialogGuardFor(session);\n    const load = await buildSessionLoad");
-    expect(guardInLoop, "no guard is created before buildSessionLoad").toBeGreaterThan(-1);
+    const guardThenLoad = /dialogGuardFor\(session\);\s*\n\s*const load = await buildSessionLoad/;
+    expect(
+      guardThenLoad.test(index),
+      "no guard is created before buildSessionLoad, so the first call has none behind it",
+    ).toBe(true);
   });
 
   it("keeps dialogGuardFor hoisted, so it can be called before its definition", () => {
