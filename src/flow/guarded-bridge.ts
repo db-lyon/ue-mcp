@@ -19,6 +19,97 @@ import { DialogGuard, existingGuard } from "../dialog-guard.js";
 
 export type { ResolveExistingFile } from "./guard.js";
 
+/**
+ * The dialog gate, at the boundary every route to the editor shares.
+ *
+ * A tool action, a flow step, a nested flow, a guard task making its own
+ * calls: they all arrive here, so refusing here is what makes the guarantee
+ * hold without a second copy of the rule anywhere else. The plugin refuses too,
+ * and agrees, but it cannot see a call that never reaches it and it does not
+ * know this machine's dialog mode.
+ *
+ * Returns the refusal to send back, or null to let the call through.
+ */
+export async function refuseIfBlocked(
+  session: EditorSession | undefined,
+  method: string,
+): Promise<Record<string, unknown> | null> {
+  if (!session) return null;
+  if (DialogGuard.bridgeAllowed(method)) return null;
+  const guard = existingGuard(session);
+  if (!guard) {
+    // No guard means no way to know whether a modal is up. The HTTP route
+    // already refuses in this state; failing open here while that failed
+    // closed meant the same condition had two opposite answers.
+    return {
+      success: false,
+      dialogBlocking: true,
+      refusedMethod: method,
+      error:
+        `'${method}' was refused because this editor has no dialog guard, so whether a modal `
+        + "is blocking it cannot be established. Re-register the editor with project(add_editor).",
+    };
+  }
+  const decision = await guard.check(method, "bridge");
+  return decision.allow ? null : decision.refusal;
+}
+
+/**
+ * Arm or clear the dialog latch from what the editor just said.
+ *
+ * Every bridge call funnels through here, so the latch is set by the first
+ * refusal the plugin's gate emits rather than by a poll. Anything that comes
+ * back normally proves the game thread is running again, which is what clears
+ * it: an agent that answers the dialog does not then have to tell the server
+ * it did.
+ */
+export function observeReply<T>(session: EditorSession | undefined, method: string, result: T): T {
+  if (session) existingGuard(session)?.observe(method, result);
+  return result;
+}
+
+/**
+ * The dialog gate alone, with no flow pipeline around it.
+ *
+ * A guard task runs on the RAW bridge on purpose, so that a guard which itself
+ * calls the editor cannot re-enter the pipeline that is running it. That is a
+ * statement about the flow registry, not about dialogs: raw also meant those
+ * calls were the one route that reached a parked game thread unrefused, where
+ * they hung until they timed out. This restores the gate and nothing else.
+ */
+export class DialogGatedBridge implements IBridge {
+  constructor(
+    private readonly inner: IBridge,
+    private readonly session: EditorSession,
+  ) {}
+
+  get isConnected(): boolean {
+    return this.inner.isConnected;
+  }
+
+  connect(timeoutMs?: number): Promise<void> {
+    return this.inner.connect(timeoutMs);
+  }
+
+  retargetProject(uprojectPath: string, configPort?: number): BridgeTarget {
+    return this.inner.retargetProject(uprojectPath, configPort);
+  }
+
+  getTarget(): BridgeTarget {
+    return this.inner.getTarget();
+  }
+
+  async call(
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs?: number,
+  ): Promise<unknown> {
+    const blocked = await refuseIfBlocked(this.session, method);
+    if (blocked) return blocked;
+    return observeReply(this.session, method, await this.inner.call(method, params, timeoutMs));
+  }
+}
+
 export class GuardedBridge implements IBridge {
   constructor(
     private readonly inner: IBridge,
@@ -29,49 +120,13 @@ export class GuardedBridge implements IBridge {
     private readonly session?: EditorSession,
   ) {}
 
-  /**
-   * Arm or clear the dialog latch from what the editor just said.
-   *
-   * Every bridge call funnels through here, so the latch is set by the first
-   * refusal the plugin's gate emits rather than by a poll. Anything that comes
-   * back normally proves the game thread is running again, which is what
-   * clears it: an agent that answers the dialog does not then have to tell the
-   * server it did.
-   */
-  /**
-   * The dialog guard, at the boundary every route to the editor shares.
-   *
-   * A tool action, a flow step, a nested flow, a handler making its own calls:
-   * they all arrive here, so refusing here is what makes the guarantee hold
-   * without a second copy of the rule anywhere else. The plugin refuses too,
-   * and agrees, but it cannot see a call that never reaches it and it does not
-   * know this machine's dialog mode.
-   */
-  private async guardCall(method: string): Promise<Record<string, unknown> | null> {
-    if (!this.session) return null;
-    if (DialogGuard.bridgeAllowed(method)) return null;
-    const guard = existingGuard(this.session);
-    if (!guard) {
-      // No guard means no way to know whether a modal is up. The HTTP route
-      // already refuses in this state; failing open here while that failed
-      // closed meant the same condition had two opposite answers.
-      return {
-        success: false,
-        dialogBlocking: true,
-        refusedMethod: method,
-        error:
-          `'${method}' was refused because this editor has no dialog guard, so whether a modal `
-          + "is blocking it cannot be established. Re-register the editor with project(add_editor).",
-      };
-    }
-    const decision = await guard.check(method, "bridge");
-    return decision.allow ? null : decision.refusal;
+  private guardCall(method: string): Promise<Record<string, unknown> | null> {
+    return refuseIfBlocked(this.session, method);
   }
 
   /** Feed the reply back to the guard, which decides what it proves. */
   private observe<T>(method: string, result: T): T {
-    if (this.session) existingGuard(this.session)?.observe(method, result);
-    return result;
+    return observeReply(this.session, method, result);
   }
 
   get isConnected(): boolean {
