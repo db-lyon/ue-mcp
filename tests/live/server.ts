@@ -1,5 +1,5 @@
 /**
- * A real ue-mcp server, driven over stdio, for the live tier (#817, plan 7.3).
+ * A real ue-mcp server, driven over stdio, for the live tests (#817, plan 7.3).
  *
  * The engine-free multi-editor tier asserts routing by calling the routing
  * functions. That is the right level for a tier with no engine, and it leaves
@@ -54,7 +54,7 @@ export class LiveServer {
 
     const env: NodeJS.ProcessEnv = {};
     for (const [key, value] of Object.entries(process.env)) {
-      // A live tier that inherited the shell's UE_MCP_* settings would be
+      // A live tests that inherited the shell's UE_MCP_* settings would be
       // testing this machine's configuration rather than the server.
       if (key.startsWith("UE_MCP_")) continue;
       env[key] = value;
@@ -70,7 +70,7 @@ export class LiveServer {
     env.UE_MCP_LOG_LEVEL = "error";
     Object.assign(env, options.env ?? {});
 
-    const client = new Client({ name: "ue-mcp-live-tier", version: "1.0.0" }, { capabilities: {} });
+    const client = new Client({ name: "ue-mcp-live-tests", version: "1.0.0" }, { capabilities: {} });
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), ...options.projects],

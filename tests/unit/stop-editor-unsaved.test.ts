@@ -336,7 +336,10 @@ describe("stop_editor refuses rather than discarding unsaved work", () => {
   });
 
   it("refuses when the plugin build cannot say what is dirty, rather than guessing clean", async () => {
-    const bridge = await startFakeBridge(() => null);
+    // Answers the dialog question, answers nothing else: this case is about
+    // an unknown DIRTY state, and a bridge that answers nothing at all is the
+    // separate unknown-dialog-state refusal.
+    const bridge = await startFakeBridge((method) => (method === "list_dialogs" ? NO_DIALOGS : null));
     openBridges.push(bridge);
 
     const result = await stopEditor(makeProject(bridge.port));
@@ -348,11 +351,12 @@ describe("stop_editor refuses rather than discarding unsaved work", () => {
   });
 
   it("refuses on the dirty list from an older plugin build too", async () => {
-    const bridge = await startFakeBridge((method) =>
-      method === "list_dirty_packages"
+    const bridge = await startFakeBridge((method) => {
+      if (method === "list_dialogs") return NO_DIALOGS;
+      return method === "list_dirty_packages"
         ? { success: true, content: [{ package: "/Game/Blueprints/BP_Door" }], maps: [] }
-        : null,
-    );
+        : null;
+    });
     openBridges.push(bridge);
 
     const result = await stopEditor(makeProject(bridge.port));
@@ -377,6 +381,16 @@ describe("stop_editor reports a blocking dialog in full", () => {
 
     expect(result.success).toBe(false);
     expect(result.refusedReason).toBe("blocking-dialog");
+    // The SAME shape every other route hands back, not just the one flag. This
+    // used to assemble its own object, so refusedMethod, dialogTitle,
+    // dialogMessage and error were undefined here and defined everywhere else,
+    // depending on which route did the refusing.
+    expect(result.dialogBlocking).toBe(true);
+    expect(result.refusedMethod).toBe("editor.stop_editor");
+    expect(result.dialogTitle).toBe("Save Content");
+    expect(typeof result.dialogMessage).toBe("string");
+    expect(Array.isArray(result.buttons)).toBe(true);
+    expect(String(result.error)).toContain("was refused without running");
     expect(result.blockingDialog?.title).toBe("Save Content");
     // The WHOLE message, every line of it.
     expect(result.blockingDialog?.message).toBe(SAVE_CONTENT_MESSAGE);
@@ -1322,5 +1336,156 @@ describe("a state.json that parses to something that is not a state object", () 
 
     expect(result.refusedReason).toBe("blocking-dialog");
     expect(result.dialogMode).toBe("defer");
+  });
+});
+
+describe("stop_editor defers the mode decision instead of pre-judging it", () => {
+  it("consults the guard in auto too, not only in interactive", async () => {
+    // The call to the guard used to be gated on `mode === "interactive" &&
+    // canElicit`, which is a second copy of the decision decideFor already
+    // makes. The two could disagree, and did.
+    const { DialogGuard } = await import("../../src/dialog-guard.js");
+    for (const mode of ["auto", "defer", "interactive"] as const) {
+      const guard = new DialogGuard({
+        mode: () => mode,
+        probe: async () => ({ dialogs: [] }),
+        press: async () => ({ success: true, answered: true }),
+        // A channel to a person, so interactive stays interactive: with none,
+        // it correctly falls back to defer.
+        elicit: () => (async () => ({ action: "decline" })) as never,
+      });
+      const decision = await guard.decideFor("editor.stop_editor", {
+        title: "Save Content",
+        message: "m",
+        buttons: ["Cancel"],
+        choices: [{ buttonLabel: "Cancel", respondWith: "x" }],
+      });
+      // Every mode reaches a decision, and only defer withholds the calls.
+      expect(decision.allow, mode).toBe(false);
+      const refusal = (decision as { refusal: Record<string, unknown> }).refusal;
+      expect(refusal.choices === undefined, mode).toBe(mode === "defer");
+    }
+  });
+
+  it("takes the press-call rule from the guard rather than recomputing it", async () => {
+    const { DialogGuard } = await import("../../src/dialog-guard.js");
+    // One rule, one place. stop_editor computed `mode !== "defer"` itself, so
+    // the same decision existed twice and the renderings disagreed about what
+    // defer strips.
+    expect(DialogGuard.handsOverPressCalls("auto")).toBe(true);
+    expect(DialogGuard.handsOverPressCalls("interactive")).toBe(true);
+    expect(DialogGuard.handsOverPressCalls("defer")).toBe(false);
+  });
+
+  it("withholds the press calls under interactive when nobody can be asked", async () => {
+    const { DialogGuard } = await import("../../src/dialog-guard.js");
+    // interactive with no channel to a person is not interactive: handing the
+    // buttons over is auto's behaviour under a mode that promises a person
+    // chooses. auto is unaffected, because it exists for exactly that caller.
+    expect(DialogGuard.handsOverPressCalls("interactive", false)).toBe(false);
+    expect(DialogGuard.effectiveMode("interactive", false)).toBe("defer");
+    expect(DialogGuard.handsOverPressCalls("auto", false)).toBe(true);
+    expect(DialogGuard.effectiveMode("auto", false)).toBe("auto");
+    expect(DialogGuard.effectiveMode("interactive", true)).toBe("interactive");
+  });
+});
+
+describe("the lifecycle actions share the editor's one guard", () => {
+  it("restart forwards the guard it was given to the stop half", async () => {
+    // Without forwarding, the stop half fell back to constructing a second
+    // DialogGuard with its own ask-once record, so a restart asked the person
+    // again about a dialog already put to them and pressed a second button.
+    const { DialogGuard } = await import("../../src/dialog-guard.js");
+    const { restartEditor } = await import("../../src/editor-control.js");
+    let asks = 0;
+    const guard = new DialogGuard({
+      mode: () => "interactive",
+      probe: async () => ({ dialogs: [] }),
+      press: async () => ({ success: true, answered: true }),
+      elicit: () => (async () => {
+        asks += 1;
+        return { action: "decline" };
+      }) as never,
+    });
+    // Already asked about this dialog through the session guard.
+    await guard.decideFor("editor.stop_editor", {
+      title: "Save Content", message: "m", buttons: ["Cancel"], choices: [],
+    });
+    expect(asks).toBe(1);
+
+    // A restart with no project refuses before touching an editor; what is
+    // being checked is that the guard is threaded, not the restart itself.
+    const res = await restartEditor(
+      { projectPath: null, projectDir: null } as never,
+      undefined,
+      { guard },
+    );
+    expect(res.success).toBe(false);
+    // The one guard was reused, so nothing asked a second time.
+    expect(asks).toBe(1);
+  });
+});
+
+describe("stop_editor will not quit an editor it could not question", () => {
+  it("refuses when the bridge does not answer the dialog question at all", async () => {
+    // The detector folded silence, a socket error and an 8s timeout into "no
+    // dialog", and the caller acts on that by sending a quit. A slow reply
+    // from an editor sitting on a modal was therefore enough to close it,
+    // under every mode including defer.
+    const bridge = await startFakeBridge((method) => (method === "list_dialogs" ? null : { success: true }));
+    openBridges.push(bridge);
+
+    const result = await stopEditor(makeProject(bridge.port));
+
+    expect(result.success).toBe(false);
+    expect(result.refusedReason).toBe("unknown-dialog-state");
+    expect(result.message).toContain("cannot be established");
+    expect(bridge.methods(), "a quit went out on an unanswered question").not.toContain(
+      "request_editor_shutdown",
+    );
+    expect(bridge.methods()).not.toContain("execute_python");
+  });
+});
+
+describe("a restart refused by a dialog is recognisable as one", () => {
+  it("carries the refusal fields through from the stop half", async () => {
+    const { restartDialogAccount } = await import("../../src/editor-control.js");
+    const { isDialogRefusal } = await import("../../src/dialog-guard.js");
+    // The forwarding copied only the account of WHAT HAPPENED (mode, source,
+    // the dialog itself), dropping dialogBlocking and the rest, so a restart
+    // refused by a dialog was invisible to isDialogRefusal and to every client
+    // branching on that flag.
+    const account = restartDialogAccount({
+      success: false,
+      message: "blocked",
+      dialogBlocking: true,
+      refusedReason: "blocking-dialog",
+      refusedMethod: "editor.stop_editor",
+      dialogTitle: "Save Content",
+      dialogMessage: "Select Content to Save",
+      buttons: ["Cancel", "Don't Save"],
+      choices: [{ buttonLabel: "Cancel", respondWith: "Cancel" }],
+      error: "A modal dialog is blocking the editor",
+      dialogMode: "defer",
+      dialogModeSource: "default",
+    });
+
+    expect(isDialogRefusal(account), "a refused restart must read as refused").toBe(true);
+    expect(account.refusedMethod).toBe("editor.stop_editor");
+    expect(account.dialogTitle).toBe("Save Content");
+    expect(account.dialogMessage).toBe("Select Content to Save");
+    expect(account.buttons).toEqual(["Cancel", "Don't Save"]);
+    expect(account.choices).toEqual([{ buttonLabel: "Cancel", respondWith: "Cancel" }]);
+    expect(account.error).toBe("A modal dialog is blocking the editor");
+    expect(account.refusedReason).toBe("blocking-dialog");
+    expect(account.dialogMode).toBe("defer");
+  });
+
+  it("says nothing about a dialog when the stop never met one", async () => {
+    const { restartDialogAccount } = await import("../../src/editor-control.js");
+    const { isDialogRefusal } = await import("../../src/dialog-guard.js");
+    const account = restartDialogAccount({ success: true, message: "stopped" });
+    expect(isDialogRefusal(account)).toBe(false);
+    expect(Object.keys(account)).toEqual([]);
   });
 });

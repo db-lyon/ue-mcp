@@ -5,6 +5,7 @@ import { sessionContext, EDITOR_TARGET_PARAM, type ToolContext } from "../types.
 import { refuseUntargetedCall } from "../editor-gate.js";
 import { info, warn, error as logError } from "../log.js";
 import { subscribeFlowEvents, type FlowEvent } from "./events.js";
+import { existingGuard } from "../dialog-guard.js";
 
 type FlowTool = ReturnType<typeof createFlowTool>;
 
@@ -95,15 +96,57 @@ export function startFlowHttpServer(
       const activeContext = (): ToolContext =>
         ctx.sessions ? sessionContext(ctx, ctx.sessions.active) : ctx;
 
+      /**
+       * The HTTP routes are a third way into the editor and use the same
+       * guard object as the MCP surface. Steps are refused at the guarded
+       * bridge; this covers a run STARTED while a modal is up, and list/plan,
+       * which never touch the bridge.
+       *
+       * There is no person on an HTTP request, so interactive cannot elicit
+       * and degrades to reporting the dialog, which is what defer does.
+       */
+      const gatedFlow = async (
+        toolCtx: ToolContext,
+        params: Record<string, unknown>,
+        taskName: string,
+      ): Promise<{ refused: Record<string, unknown> } | { value: unknown }> => {
+        const session = toolCtx.session ?? ctx.session;
+        const guard = session ? existingGuard(session) : undefined;
+        if (!guard) {
+          // No guard means no way to know whether a modal is up, and running
+          // anyway is the exception this design does not have. Refuse instead
+          // of falling through: a route that cannot be checked is closed.
+          return {
+            refused: {
+              success: false,
+              dialogBlocking: true,
+              refusedMethod: taskName,
+              error:
+                `'${taskName}' was refused because no editor session is attached to this request, `
+                + "so whether a modal is blocking the editor cannot be established.",
+            },
+          };
+        }
+        // No person on an HTTP request, so this route never elicits. Without
+        // saying so it used the shared guard's deps, which were last set by an
+        // MCP client, and a curl raised a form in that client's UI.
+        const decision = await guard.check(taskName, "action", { canElicit: false });
+        if (!decision.allow) return { refused: decision.refusal };
+        return { value: await flowTool.handler(toolCtx, params) };
+      };
+
       if (method === "GET" && (pathname === "/" || pathname === "/flows")) {
-        const result = await flowTool.handler(activeContext(), { action: "list" });
-        return send(200, result);
+        const listed = await gatedFlow(activeContext(), { action: "list" }, "flow.list");
+        if ("refused" in listed) return send(409, listed.refused);
+        return send(200, listed.value);
       }
 
       const planMatch = pathname.match(/^\/flows\/([^/]+)\/plan$/);
       if (method === "GET" && planMatch) {
         const flowName = decodeURIComponent(planMatch[1]);
-        const result = await flowTool.handler(activeContext(), { action: "plan", flowName });
+        const planned = await gatedFlow(activeContext(), { action: "plan", flowName }, "flow.plan");
+        if ("refused" in planned) return send(409, planned.refused);
+        const result = planned.value;
         return send(200, result);
       }
 
@@ -150,7 +193,9 @@ export function startFlowHttpServer(
           });
           if (refusal) return send(400, { error: refusal });
         }
-        const result = await flowTool.handler(runCtx, params);
+        const ran = await gatedFlow(runCtx, params, "flow.run");
+        if ("refused" in ran) return send(409, ran.refused);
+        const result = ran.value;
         return send(200, result);
       }
 

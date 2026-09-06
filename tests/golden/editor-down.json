@@ -6810,7 +6810,7 @@
             "type": "string"
           },
           "paramEcho": {
-            "description": "start_editor: arm the bridge parameter echo for the launched editor. It is read at startup, so it cannot be turned on over the socket afterwards. The live tier's leak assertions skip without it",
+            "description": "start_editor: arm the bridge parameter echo for the launched editor. It is read at startup, so it cannot be turned on over the socket afterwards. The live tests' leak assertions skip without it",
             "type": "boolean"
           },
           "paths": {

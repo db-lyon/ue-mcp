@@ -30,6 +30,8 @@ import type { FlowContext } from "./context.js";
 import { writeScope, type BridgeGuard, type CallContext, type ResolveExistingFile } from "./guard.js";
 import { McpError, ErrorCode } from "../errors.js";
 import { debug, info } from "../log.js";
+import { withoutDialogActuation } from "../dialog-guard.js";
+import { DialogGatedBridge } from "./guarded-bridge.js";
 
 /** Adapts flowkit's logger to this server's `guard`-component logging. */
 const GUARD_LOGGER: Logger = {
@@ -69,9 +71,23 @@ export function discoverTaskGuards(
     // bridge happened to be built first. cc.bridge is the RAW bridge of the
     // session serving this call, so a guard can neither recurse through the
     // pipeline nor act on another project's editor.
+    // The raw bridge, gated. Raw is deliberate and stays: a guard task must
+    // not re-enter the flow pipeline that is running it. That is a statement
+    // about the registry, not about dialogs, and taking it to mean both left
+    // guard tasks as the one route that reached a parked game thread
+    // unrefused, where every call hung until it timed out. DialogGatedBridge
+    // puts the gate back with no pipeline attached, and
+    // withoutDialogActuation stays on top because set_dialog_policy is
+    // modal-safe in the plugin, so a guard task could otherwise arm a policy
+    // that answers the modal already on screen.
     contextFor: (cc): FlowContext =>
       cc.session
-        ? { ...ctx, bridge: cc.bridge, project: cc.session.project, session: cc.session }
+        ? {
+            ...ctx,
+            bridge: withoutDialogActuation(cc.session, new DialogGatedBridge(cc.bridge, cc.session)),
+            project: cc.session.project,
+            session: cc.session,
+          }
         : { ...ctx, bridge: rawBridge },
 
     optionsFor: (cc, result) => ({

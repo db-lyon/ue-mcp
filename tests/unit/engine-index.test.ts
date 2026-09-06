@@ -7,7 +7,7 @@
  * against an installed engine, so they run in CI on a machine with no Unreal
  * on it and so a failure points at a rule rather than at a 31,000-file scan.
  *
- * The end-to-end behaviour against a real engine is asserted in the live tier.
+ * The end-to-end behaviour against a real engine is asserted in the live tests.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";

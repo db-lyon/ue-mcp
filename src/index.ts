@@ -32,13 +32,14 @@ import {
   type ProgressUpdate,
 } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
+import * as nodePath from "node:path";
 import {
-  gateForDialog,
-  reshapeDialogRefusal,
-  noteDialogBlocking,
-  clearDialogBlocking,
+  DialogGuard,
+  guardFor,
+  existingGuard,
   isDialogRefusal,
-} from "./dialog-gate.js";
+  stampBlockedEditor,
+} from "./dialog-guard.js";
 import { resolveDialogMode, clientAdvertisesElicitation } from "./editor-control.js";
 import { info, warn, debug } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
@@ -61,7 +62,13 @@ import { ALL_TOOLS, setLiveToolGraph } from "./tools.js";
 import { nearestActions } from "./action-schema.js";
 import { enrichToolsWithEpicCatalog, type EpicCatalog } from "./epic-enrich.js";
 import { checkPluginFreshness } from "./plugin-freshness.js";
-import { saveCatalogCache, loadCatalogCache, loadBakedCatalog } from "./epic-cache.js";
+import { readEngineSnapshot } from "./engine-observer.js";
+import {
+  saveCatalogCache,
+  loadCatalogCache,
+  loadBakedCatalog,
+  catalogOrRefusal,
+} from "./epic-cache.js";
 import {
   baseGraphFor,
   unionSurface,
@@ -224,6 +231,13 @@ async function main() {
   const surfaces: SessionSurface[] = [];
   const perSession = new Map<EditorSession, SessionLoad>();
   for (const session of sessions.list()) {
+    // BEFORE the surface build, which calls epic_list_toolsets on the editor.
+    // Creating guards afterwards meant the first call this server ever makes
+    // was the one call with no guard behind it: a modal refused it, the
+    // refusal has no toolsets, and the surface silently fell back to a cached
+    // one with nothing latched. startWatching is idempotent, so the later
+    // pass over sessions.list() stays harmless.
+    dialogGuardFor(session);
     const load = await buildSessionLoad(session, pkg.version, sessions.size > 1);
     perSession.set(session, load);
     surfaces.push(load.surface);
@@ -383,6 +397,37 @@ async function main() {
   // registry starts empty (pass-through) and is populated once the task
   // registry exists, below.
   const guardedBridge = primary.guarded;
+  /**
+   * The dialog guard for one editor, created on first use and kept.
+   *
+   * Watching starts with the guard, so a modal raised while the session sits
+   * idle is known before anything is called: the plugin refreshes its status
+   * file from the modal-loop tick, which is the tick that keeps running while
+   * the game thread is parked.
+   */
+  function dialogGuardFor(forSession: EditorSession, canElicit = false): DialogGuard {
+    const guard = guardFor(forSession, {
+      mode: () => resolveDialogMode({ projectDir: forSession.projectDir, canElicit }).mode,
+      probe: () => forSession.guarded.call("list_dialogs", {}),
+      press: (buttonLabel: string) =>
+        forSession.guarded.call("respond_to_dialog", { buttonLabel }),
+      elicit: () => (canElicit ? ctx.elicit : undefined),
+      isConnected: () => forSession.bridge.isConnected,
+      // The instance-aware reader, not a second one: it prefers
+      // status.<pid>.json over the shared file two editors of one project take
+      // turns writing, and it reports how old the snapshot is so a leftover
+      // from a crashed editor is not mistaken for a live modal.
+      readSnapshot: () => {
+        const proj = forSession.project.projectPath
+          ?? forSession.bridge.getTarget().projectPath
+          ?? null;
+        return proj ? readEngineSnapshot(proj) : null;
+      },
+    });
+    guard.startWatching();
+    return guard;
+  }
+
   const getToolGraph = (forSession: EditorSession = primary): ToolDef[] => {
     const load = perSession.get(forSession);
     // D1 again. A session whose surface failed to build has no graph of its
@@ -454,6 +499,10 @@ async function main() {
     }
   };
   for (const load of loads) discoverGuardsFor(load);
+  // A guard per registered editor, so a modal in the DESTINATION of a
+  // cross-editor call is seen by that editor's own guard rather than by
+  // whichever session happened to originate the call.
+  for (const s of sessions.list()) dialogGuardFor(s);
 
   /**
    * The dispatch surface for one session, built on demand (D1).
@@ -498,6 +547,10 @@ async function main() {
   // its own surface exists.
   sessions.prepareSession = async (session) => {
     await ensureSessionLoad(session);
+    // Its own guard and its own watcher, before it is addressable. Without
+    // this an editor added at runtime had nothing watching it, so a modal
+    // there was never detected at all until a call happened to be routed in.
+    dialogGuardFor(session);
   };
   for (const session of sessions.list()) {
     if (session.guards.size === 0) continue;
@@ -640,24 +693,18 @@ async function main() {
           isError: true,
         };
       }
-      // THE DIALOG GATE, server half. The plugin refuses anything that needs
-      // the editor while a modal is up; this covers what never reaches it, so
-      // there is no action anywhere that quietly works around a stuck editor.
-      //
-      // The dialog handling mode is resolved HERE, per call, so it governs the
-      // whole surface rather than the two lifecycle actions that used to be
-      // the only things that consulted it.
+      // One guard per editor, shared by every route. The mode is read per
+      // call, so changing it takes effect without restarting anything.
       const canElicit = clientAdvertisesElicitation(ctx.elicit);
-      const gated = await gateForDialog(session, taskName, {
-        mode: resolveDialogMode({ projectDir: session.projectDir, canElicit }).mode,
-        probe: () => session.guarded.call("list_dialogs", {}),
-        press: (buttonLabel) => session.guarded.call("respond_to_dialog", { buttonLabel }),
-        elicit: canElicit ? ctx.elicit : undefined,
-      });
-      if (gated) {
+      const guard = dialogGuardFor(session, canElicit);
+
+      // Actions served in this process never reach the bridge, so the bridge
+      // boundary cannot refuse them. Same guard, same decision.
+      const preflight = await guard.check(effectiveTaskName(tool, params), "action");
+      if (!preflight.allow) {
         return {
           content: withUpgradeNotice([
-            { type: "text" as const, text: JSON.stringify(gated, null, 2) },
+            { type: "text" as const, text: JSON.stringify(preflight.refusal, null, 2) },
           ]),
           isError: true,
         };
@@ -748,10 +795,12 @@ async function main() {
 
       try {
         const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
-        // Locks are acquired in the editor the call runs in, so they must be
-        // taken on that session's bridge rather than the process default.
+        // Locks are acquired in the editor the call runs in, and through the
+        // GUARDED bridge, so a lock request made while a modal is up is
+        // refused as a dialog rather than reported as somebody else holding
+        // the asset.
         const result = await withAssetLocks(
-          session.bridge,
+          session.guarded,
           lockingCfg,
           taskName,
           taskParams,
@@ -759,7 +808,23 @@ async function main() {
           session.lockOwnerId,
         );
 
-        if (!result.success) {
+        // A handler that makes several bridge calls can swallow a refusal and
+        // still report success, so ask the guard what it learned rather than
+        // trusting the shape. Nothing is re-run: the call already applied
+        // whatever it applied, and replaying it would double-apply.
+
+        // A task that failed for its own reasons reports that, not a dialog.
+        //
+        // But a failure DURING a modal is usually caused by it: the game thread
+        // is parked, so the call times out and the error says the editor was
+        // busy and suggests a bigger timeoutMs, which is the retry loop this
+        // gate exists to end. The task runner returns no data on a throw, so
+        // the refusal cannot be recognised from the result: ask the guard.
+        const failedUnderDialog = !result.success
+          && !isDialogRefusal(result.data)
+          && !DialogGuard.actionAllowed(effectiveTaskName(tool, params))
+          && (await guard.check(effectiveTaskName(tool, params), "action")).allow === false;
+        if (!result.success && !isDialogRefusal(result.data) && !failedUnderDialog) {
           const msg = result.error?.message ?? `Task ${taskName} failed`;
           return {
             content: withUpgradeNotice([
@@ -771,61 +836,75 @@ async function main() {
           };
         }
 
-        // The plugin's own gate refuses anything needing the editor, and it
-        // does not know this machine's dialog mode. Reshaping its refusal here
-        // is what stops the mode applying to some calls and not others: the
-        // first blocked call would otherwise get the plugin's wording and the
-        // next one, caught by the latch, would get the mode's.
-        if (isDialogRefusal(result.data)) {
-          const info = {
-            dialogTitle: String(result.data.dialogTitle ?? ""),
-            dialogMessage: String(result.data.dialogMessage ?? ""),
-            buttons: Array.isArray(result.data.buttons) ? (result.data.buttons as string[]) : [],
-            choices: Array.isArray(result.data.choices)
-              ? (result.data.choices as Array<{ buttonLabel: string; respondWith: string }>)
-              : [],
-          };
-          noteDialogBlocking(session, info);
-          const reshaped = await reshapeDialogRefusal(session, taskName, info, {
-            mode: resolveDialogMode({ projectDir: session.projectDir, canElicit }).mode,
-            probe: () => session.guarded.call("list_dialogs", {}),
-            press: (buttonLabel) => session.guarded.call("respond_to_dialog", { buttonLabel }),
-            elicit: canElicit ? ctx.elicit : undefined,
-          });
-          if (reshaped) {
+        // An allow-listed read still SAYS a dialog is up. get_status is the
+        // first call every client makes, and reporting a healthy editor while
+        // the game thread is parked is the one answer it must never give.
+        if (DialogGuard.actionAllowed(effectiveTaskName(tool, params))) {
+          // respond_to_dialog may have just cleared it. Nothing re-probes for
+          // an allow-listed bridge method (guardCall returns before check, and
+          // observe refuses to clear on a modal-safe reply), so this call came
+          // back stamped as blocked and told the caller to make the call it had
+          // just made.
+          if (effectiveTaskName(tool, params) === "editor.respond_to_dialog" && result.success) {
+            // refresh, NOT check. check applies the mode, so in interactive it
+            // raised a form for whatever prompt this answer surfaced and
+            // pressed a button on it, unasked, and then threw the decision
+            // away. Only the state needs correcting here.
+            await guard.refresh();
+          }
+          const seen = guard.current;
+          if (result.success) stampBlockedEditor(result.data, seen);
+        }
+
+        // Whatever the route, the caller gets ONE refusal shape, built here.
+        //
+        // A modal appearing between the preflight and the inner call means the
+        // plugin refuses, and its payload lands in result.data. Passing that
+        // through handed the caller a second shape with no dialogMode and, in
+        // defer, the very press calls defer exists to withhold.
+        //
+        // Actions allowed through a modal are exempt: reading the dialog and
+        // answering it must not come back refused because of the dialog they
+        // are about.
+        if (!DialogGuard.actionAllowed(effectiveTaskName(tool, params))) {
+          const fromPlugin = isDialogRefusal(result.data)
+            ? (result.data as Record<string, unknown>)
+            : null;
+          if (fromPlugin) guard.observe("__refused__", fromPlugin);
+          const blocking = guard.current;
+          if (blocking) {
+            // A refusal means nothing ran. Anything else means the call had
+            // already started when the dialog appeared, so it may have applied
+            // part of its work; say so rather than implying it did nothing.
+            const started = fromPlugin === null;
             return {
               content: withUpgradeNotice([
-                { type: "text" as const, text: JSON.stringify(reshaped, null, 2) },
+                {
+                  type: "text" as const,
+                  text: JSON.stringify(
+                    started
+                      ? {
+                          ...guard.refusal(effectiveTaskName(tool, params), blocking),
+                          partiallyApplied: true,
+                          note:
+                            `'${taskName}' had already started when the dialog appeared, so it may `
+                            + "have applied some of its changes. Answer the dialog, then read the "
+                            + "state back before deciding whether to run it again.",
+                          // Whatever it did manage to return, kept rather than
+                          // dropped: a mutation that completed still has the
+                          // path it created in here.
+                          partialResult: result.data ?? null,
+                        }
+                      : guard.refusal(effectiveTaskName(tool, params), blocking),
+                    null,
+                    2,
+                  ),
+                },
                 ...attribution(session),
               ]),
               isError: true,
             };
           }
-          // Answered through the elicitation form, so the dialog is gone and
-          // the caller is told to make the call again rather than being handed
-          // a refusal that is no longer true.
-          return {
-            content: withUpgradeNotice([
-              {
-                type: "text" as const,
-                text: JSON.stringify(
-                  {
-                    success: false,
-                    dialogAnswered: true,
-                    dialogTitle: info.dialogTitle,
-                    retry: taskName,
-                    note:
-                      "The blocking dialog was answered by the user, so the editor is running "
-                      + `again. '${taskName}' did not run; call it again.`,
-                  },
-                  null,
-                  2,
-                ),
-              },
-              ...attribution(session),
-            ]),
-            isError: true,
-          };
         }
 
         const stringify = (v: unknown) =>
@@ -857,6 +936,26 @@ async function main() {
           ]),
         };
       } catch (e) {
+        // A refusal can arrive as a throw: acquiring an asset lock is a bridge
+        // call, so it is refused like any other, and locking reports failure by
+        // throwing. Shaped through the guard so a caller gets the same payload
+        // whether the refusal came back as a result or as an exception.
+        const thrownRefusal = e instanceof McpError && isDialogRefusal(e.details)
+          ? (e.details as unknown as Record<string, unknown>)
+          : null;
+        if (thrownRefusal) {
+          guard.observe("__refused__", thrownRefusal);
+          const blocking = guard.current;
+          if (blocking) {
+            return {
+              content: withUpgradeNotice([
+                { type: "text" as const, text: JSON.stringify(guard.refusal(effectiveTaskName(tool, params), blocking), null, 2) },
+                ...attribution(session),
+              ]),
+              isError: true,
+            };
+          }
+        }
         const msg = e instanceof Error ? e.message : String(e);
         const code = e instanceof McpError ? e.code : "UNKNOWN";
         return {
@@ -947,6 +1046,24 @@ async function main() {
         };
       }
 
+      // The flow tool reaches the editor through the same guarded bridge, so
+      // its steps are refused individually. This covers the run being STARTED
+      // while a modal is already up, and flow(list)/flow(plan), which are
+      // in-process and never touch the bridge at all.
+      const flowGuard = dialogGuardFor(session, clientAdvertisesElicitation(ctx.elicit));
+      const flowCheck = await flowGuard.check(
+        `${flowTool.name}.${String(params.action ?? "")}`,
+        "action",
+      );
+      if (!flowCheck.allow) {
+        return {
+          content: withUpgradeNotice([
+            { type: "text" as const, text: JSON.stringify(flowCheck.refusal, null, 2) },
+            ...attribution(session),
+          ]),
+          isError: true,
+        };
+      }
       const result = await flowTool.handler(sessionContext(ctx, session), params);
       const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
       return { content: withUpgradeNotice([{ type: "text" as const, text }, ...attribution(session)]) };
@@ -1068,12 +1185,32 @@ async function buildSessionLoad(
       // its own.
       let catalog: EpicCatalog | null = null;
       let source = "";
-      const bridge = session.bridge;
-      if (!bridge.isConnected) {
-        await bridge.connect(2000).catch(() => {});
+      // The guarded bridge, not the raw one. This is the first call the server
+      // makes against an editor, so sending it raw meant a modal was met by
+      // the one route with no gate on it: the refusal came back, the surface
+      // fell back to a cache, and nothing was latched for the calls that
+      // followed.
+      const bridge = session.guarded;
+      if (!session.bridge.isConnected) {
+        await session.bridge.connect(2000).catch(() => {});
       }
-      if (bridge.isConnected) {
+      if (session.bridge.isConnected) {
         catalog = (await bridge.call("epic_list_toolsets", { includeSchemas: true }, 20000)) as EpicCatalog;
+        // A modal refuses this like anything else, and the refusal has no
+        // toolsets, so it read as "this editor advertises none" and the surface
+        // silently fell back to a cache. Say what actually happened, and let
+        // the guard learn from it rather than swallowing the evidence.
+        const read = catalogOrRefusal(catalog);
+        if (read.refusedByDialog) {
+          existingGuard(session)?.observe("epic_list_toolsets", catalog);
+          warn(
+            "epic",
+            `${session.name}: the Epic toolset list was refused because a modal dialog is blocking `
+            + "the editor, so its tools are being taken from the cache. Answer the dialog and "
+            + "re-register the editor to pick up the live set.",
+          );
+        }
+        catalog = read.catalog;
         if (catalog?.toolsets?.length) {
           saveCatalogCache(configDir, catalog, project.engineAssociation);
           source = "live editor";

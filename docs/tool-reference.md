@@ -71,13 +71,17 @@ The field only appears when something was repaired, and only on an object result
 
 ### Dialog handling modes
 
-A modal dialog blocking the Unreal Editor is a question, and who answers it is your choice. The **dialog handling mode** decides that, in the same three-value shape the feedback category uses for its approval mode.
+A modal dialog blocks Unreal's game thread, so nothing else runs until it is answered. Every action is refused while one is up and the refusal carries the dialog's title, message and buttons.
+
+The **dialog handling mode** decides what happens next.
 
 | Mode | What happens to a blocking dialog |
 |------|-----------------------------------|
-| `interactive` | The dialog is put to you in an MCP elicitation form carrying its exact title, its complete message, its real buttons as the choices, and an option to leave the dialog open. Only the button you pick is pressed, and the call that was blocked then runs. Declining or leaving it open reports the dialog instead. The default when your MCP client advertises the elicitation capability. |
-| `auto` | The refused call returns the dialog in full (exact title, complete message, every button in order, and the exact `editor(action='respond_to_dialog')` call for each) and the agent decides which to press. The server presses nothing on its own; the name describes who decides, not that anything is answered without a call. Reachable only by naming it. |
-| `defer` | Suspend. Nothing is pressed and nothing is elicited, and the dialog is reported **for recognition rather than actuation**: exact title, complete untruncated message, and every button label in the order the dialog lays them out, so you can identify the window in front of you and answer it in the Unreal Editor yourself. The per-button `respond_to_dialog` calls are deliberately absent, from the prose and from `blockingDialog.choices` alike; handing them over would leave defer differing from `auto` in wording only. The default when your client does not advertise elicitation. |
+| `interactive` | You get an elicitation form with the dialog's buttons as the choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. Decline or leave it open and you get the refusal instead. Default when your client advertises elicitation. |
+| `auto` | The refusal includes the `editor(action='respond_to_dialog')` call for each button. The agent picks one and makes that call. Nothing is pressed until it does. Only applies if you name it. |
+| `defer` | The refusal names the dialog and its buttons but not the calls that press them. Answer it in the Unreal Editor window. Default when your client does not advertise elicitation. |
+
+**Armed policies are the exception.** `editor(set_dialog_policy)` arms a pattern, and a dialog matching it is answered immediately, under every mode, with no elicitation and no refusal. That is the point of it: you decide the answer in advance. Nothing else presses a button on its own, and there are no built-in policies, so the list is empty until you put something in it.
 
 **Setting it.** One key, read in this order (highest wins):
 
@@ -94,9 +98,9 @@ Mode is not read from `ue-mcp.yml`, for the reason the feedback mode is not: whe
 
 **The gate, which is not the mode.** Whatever the mode says, a modal blocking the editor stops everything else. Every action is refused while one is up, whatever raised it and whichever category is calling, and the refusal carries `dialogBlocking: true`, the dialog's exact title and complete message, its buttons in the dialog's own order, and the `editor(action='respond_to_dialog')` call for each. The refusal is identical on every action, so the only way forward is through the dialog.
 
-The refusal comes from two places, which between them leave no gap. The bridge refuses anything that needs the editor at its dispatch point, so a call no longer queues behind the parked game thread and dies on a timeout that reads like a slow editor. The server refuses the rest, the actions it serves in-process and the few the bridge answers without the game thread, which used to keep working and let a caller carry on without ever learning the editor was stuck.
+One guard per editor decides this, and every route to that editor passes it: an MCP tool call, a step inside a flow, a nested flow, the HTTP flow surface, a plugin guard task, and the catalog call the server makes before it has served anything. The bridge refuses anything that needs the editor at its dispatch point, so a call no longer queues behind the parked game thread and dies on a timeout that reads like a slow editor. The in-process actions are refused by the same guard, rather than carrying on while the editor is stuck. A flow is checked at every step and not only when it starts, because a modal can appear in the middle of a run that takes minutes.
 
-Five actions stay reachable throughout, or the dialog could never be answered: `list_dialogs`, `respond_to_dialog`, and the three `*_dialog_policy` actions. `project(get_status)` and `editor(get_engine_state)` stay reachable too, so a caller can always see where it stands. Nothing in the gate presses a button or ranks one.
+Five actions stay reachable throughout, or the dialog could never be answered: `list_dialogs`, `respond_to_dialog`, and the three `*_dialog_policy` actions. `project(get_status)` and `editor(get_engine_state)` stay reachable too, so a caller can always see where it stands, and `start_editor`, `stop_editor` and `restart_editor` stay reachable because they are how you get out of an editor that is stuck. Every one of those still reports the dialog: an allowed action is not a blind one, and a successful result taken while a modal is up is stamped `editorBlockedByDialog`. Nothing in the gate presses a button or ranks one.
 
 The gate is per editor. A modal in one project does not refuse calls addressed to another.
 
@@ -108,7 +112,7 @@ Answering through the elicitation form frees the editor, so the call that trippe
 
 In defer, `stop_editor` and `restart_editor` withhold the press calls on every path they report a dialog on: the check before the quit, a dialog that comes up behind the quit, a dialog seen while the bridge is unreachable, and (for `restart_editor`) one raised while the editor is starting back up. To answer one from here after all, read it with `editor(list_dialogs)` and press with `editor(respond_to_dialog)`, which is a decision you make rather than one the payload makes for you.
 
-Two blocking-dialog reports are mode-independent, carry no `dialogMode`, and press nothing under every mode: a dialog raised during `editor(start_editor)`, where the bridge is not answering yet so there is no socket to deliver an answer on (`dialogPolicy` is the parameter for that case, and a caller arms it deliberately, in advance), and a dialog seen from outside while the bridge is unreachable, where `respond_to_dialog` cannot be delivered at all. A direct `editor(start_editor)` call carries the press calls whatever the mode, because it has no client capability to consult and therefore no mode to resolve; the start half of a `restart_editor` does consult it, and follows defer.
+Two blocking-dialog reports are mode-independent, carry no `dialogMode`, and press nothing under every mode: a dialog raised during `editor(start_editor)`, where the bridge is not answering yet so there is no socket to deliver an answer on (`dialogPolicy` is the parameter for that case, and a caller arms it deliberately, in advance), and a dialog seen from outside while the bridge is unreachable, where `respond_to_dialog` cannot be delivered at all. `editor(start_editor)` resolves the mode like everything else and follows defer when that is what applies, as does the start half of a `restart_editor`.
 
 Nothing outside these modes ever answers a dialog by itself. `editor(set_dialog_policy)` still exists for a caller who wants a matching prompt pre-answered and dismissed without seeing it, and every policy in effect is one somebody armed deliberately.
 

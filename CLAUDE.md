@@ -59,9 +59,9 @@ The merge style follows the commit count, and writing five commits only to squas
 - **Re-record intentionally** with `npm run golden:record`, then review the diff before committing it. Never edit the JSON by hand.
 - The recording is hermetic: a throwaway project in a temp directory, `UE_MCP_PORT=1` so nothing can be listening, every inherited `UE_MCP_*` variable dropped, and the user-scoped config/state/auth files redirected. Absolute paths are rewritten before serialization and asserted absent, so the file verifies on any machine.
 - The `epic_*` actions enrichment injects are **sorted in the recording**, alongside the path, port and timestamp rewrites. Unreal's toolset registry promises the set of tools, not the sequence, and a restart that reshuffles it would otherwise report a surface change on a healthy editor. Only the snapshot is normalised; the server advertises exactly what it always did. A category's own actions keep their declared order, which is authored and does carry meaning.
-- The editor-connected half (`tests/golden/editor-connected.json`) is the same recording made with a live editor attached, guarded by `tests/live/golden-connected.test.ts` in the live tier because it needs a running editor. Re-record it with `npm run golden:record -- --connected`. The recorder asserts the surface really was enriched from the live editor rather than a cache or the baked snapshot, so the two baselines cannot be recorded from the same source by accident.
+- The editor-connected half (`tests/golden/editor-connected.json`) is the same recording made with a live editor attached, guarded by `tests/live/golden-connected.test.ts` in the live tests because it needs a running editor. Re-record it with `npm run golden:record -- --connected`. The recorder asserts the surface really was enriched from the live editor rather than a cache or the baked snapshot, so the two baselines cannot be recorded from the same source by accident.
 
-### Live tier
+### Live tests
 
 `npm run test:live` runs `tests/live/` against an editor that is **already running**, through the shipped server: the connected golden baseline, per-path dispatch and leak assertions, addressing, gating, the union surface, and the records the bridge publishes. It never starts or stops an editor.
 
@@ -177,7 +177,7 @@ npm run up:build        # Stop editor, build plugin, relaunch
 npm run build           # Build the UE C++ plugin only
 npx tsc --noEmit        # Type-check TS
 npm run test:smoke      # Live smoke tests (tests/ue_mcp only)
-npm run test:live       # Live tier against a running editor (tests/ue_mcp only)
+npm run test:live       # Live tests against a running editor (tests/ue_mcp only)
 npm run golden:record   # Re-record tests/golden/editor-down.json (review the diff)
 npm run release:notes   # Compose cumulative stable notes from a version's prereleases
 npm test                # Vitest unit tests

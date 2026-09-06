@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
+import { isDialogRefusal } from "./dialog-guard.js";
 import type { IBridge } from "./bridge.js";
-import { McpError, ErrorCode } from "./errors.js";
+import { McpError, ErrorCode, type McpErrorDetails } from "./errors.js";
 import { debug } from "./log.js";
 
 // Per-asset exclusive locking, orchestrated from the dispatch layer. The lock
@@ -181,6 +182,24 @@ export async function withAssetLocks<T>(
       debug("lock", `acquire_lock unavailable for ${p}; running unlocked`, e);
       await releaseAll(bridge, held, ownerId);
       return run();
+    }
+    // A modal refuses the lock request itself. Reporting that as "another
+    // session holds this asset" is false and tells the caller to retry, which
+    // is the loop this whole mechanism exists to prevent. Hand the refusal up
+    // unchanged so the guard shapes it.
+    if (isDialogRefusal(res)) {
+      // Release first: the sibling branch below does, and not doing it here
+      // stranded every lock already taken for this call until its TTL expired.
+      await releaseAll(bridge, held, ownerId);
+      // An McpError carrying the refusal as details, so the dispatcher can
+      // recognise it. A bare Error reached the caller with no dialogBlocking
+      // flag, which is the one field a client branches on, and machineErrorBlock
+      // dropped the payload entirely because it only reads McpError.
+      throw new McpError(
+        ErrorCode.NOT_FOUND,
+        String((res as Record<string, unknown>).error ?? "A modal dialog is blocking the editor."),
+        res as unknown as McpErrorDetails,
+      );
     }
     if (!res?.acquired) {
       await releaseAll(bridge, held, ownerId);

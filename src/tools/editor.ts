@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, directive, type ToolDef, type ToolContext } from "../types.js";
-import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEditor, clientAdvertisesElicitation } from "../editor-control.js";
+import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEditor, clientAdvertisesElicitation, resolveDialogMode } from "../editor-control.js";
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../engine-observer.js";
 import { progressRenderingNote } from "../client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
@@ -9,6 +9,7 @@ import { evaluateGate, gateRefusalMessage } from "../python-gate.js";
 import { Vec3, Rotator } from "../schemas.js";
 import { FunctionArgs, normalizeFunctionArgs, normalizePythonArgs } from "../function-args.js";
 import { CURSOR_PARAM, paged } from "../pagination.js";
+import { existingGuard, DialogGuard } from "../dialog-guard.js";
 
 /** Where a caller declares a standing opt-in to the Blueprint-error bypass.
  *  Rides the normal global < project < env < local config cascade, so a
@@ -26,7 +27,23 @@ export const editorTool: ToolDef = categoryTool(
         const timeout = typeof p?.timeout === "number" && p.timeout > 0 ? p.timeout : 300;
         const dialogPolicy = typeof p?.dialogPolicy === "string" && p.dialogPolicy.trim() !== "" ? p.dialogPolicy.trim() : undefined;
         const paramEcho = p?.paramEcho === true;
-        const result = await startEditor(ctx.project, timeout, ctx.onProgress, { dialogPolicy, paramEcho });
+        // The mode decides whether a startup dialog comes back with the calls
+        // that press its buttons. Passing nothing defaulted to handing them
+        // over under every mode, including defer, whose whole contract is that
+        // nothing presses anything without a person. restart_editor remembered
+        // to pass this; the direct action did not.
+        const startMode = resolveDialogMode({
+          projectDir: ctx.project.projectDir ?? null,
+          canElicit: clientAdvertisesElicitation(ctx.elicit),
+        });
+        const result = await startEditor(ctx.project, timeout, ctx.onProgress, {
+          dialogPolicy,
+          paramEcho,
+          pressCalls: DialogGuard.handsOverPressCalls(
+            startMode.mode,
+            clientAdvertisesElicitation(ctx.elicit),
+          ),
+        });
 
         // The call blocks for as long as the editor takes, so when its progress
         // is not visible the user is left to conclude the tool hung. Say which
@@ -78,13 +95,21 @@ export const editorTool: ToolDef = categoryTool(
     stop_editor: {
       description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill). Acts only on the editor for the loaded project, resolved from the port lockfile that editor published at <project>/Saved/UE_MCP_Bridge/port.json. With no lockfile there is no port to aim at and the call refuses, naming the file it checked, rather than probing a default port that another project's editor could answer on (#819). It never discards unsaved work and it never presses a button nobody named. With no editor of this project running there is nothing to quit, and the call fails saying so, with alreadyStopped=true marking that reason apart from a running editor that cannot be reached or refuses on unsaved work. A flow that stops the editor before building sets ignore_failure: true on the stop step, which records the failure and walks on. Two questions are asked before anything is sent: is a modal dialog blocking the editor, and is any package unsaved. Unsaved work refuses in under a second, names every dirty package, and sends no quit, so nothing hangs and nothing is lost; save them with editor(save_dirty), or close the editor yourself and answer its prompt by hand. There is deliberately no flag that discards. What happens to a blocking dialog is the dialog handling mode's decision, resolved from UE_MCP_DIALOG_MODE, then ~/.ue-mcp/state.json, then the default (interactive when the client advertised MCP elicitation, otherwise defer, never auto). interactive puts the dialog to the person over elicitation with its own buttons as the choices and presses only the button THEY pick. auto hands the dialog back whole, every button paired with the exact respond_to_dialog call, and the agent decides; the server presses nothing. defer presses nothing and asks nothing, quoting the dialog for recognition only (title, whole message, buttons in order, no press calls) so a person answers it in the editor. The same mode governs a dialog raised behind the quit. Every result that met a dialog reports dialogMode, dialogModeSource, and dialogAnsweredByUser when the user answered one. Params: none",
       handler: async (ctx: ToolContext) => {
-        return stopEditor(ctx.project.projectDir ?? undefined, { elicit: ctx.elicit });
+        return stopEditor(ctx.project.projectDir ?? undefined, {
+          elicit: ctx.elicit,
+          // The editor's own guard, so this route does not build a second.
+          guard: ctx.session ? existingGuard(ctx.session) : undefined,
+        });
       },
     },
     restart_editor: {
       description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages or a blocking dialog and reports them rather than acting on either, and an editor that was already down is not a reason to refuse the start. Params: none",
       handler: async (ctx: ToolContext) => {
-        return restartEditor(ctx.project, ctx.bridge, { elicit: ctx.elicit });
+        return restartEditor(ctx.project, ctx.bridge, {
+          elicit: ctx.elicit,
+          // The editor's own guard, so the stop half does not build a second.
+          guard: ctx.session ? existingGuard(ctx.session) : undefined,
+        });
       },
     },
     build_project: {
@@ -447,7 +472,7 @@ export const editorTool: ToolDef = categoryTool(
     timeout: z.number().optional().describe("start_editor: seconds to wait for the bridge (default 120) (#758)"),
     probeWindows: z.boolean().optional().describe("get_engine_state: also enumerate native windows to catch pre-Slate dialogs (default true, costs ~2s)"),
     dialogPolicy: z.string().optional().describe("start_editor: semicolon-separated pattern=response pairs armed before the bridge is listening, so a prompt raised during startup is answered from the first frame (e.g. \"Restore=no\"). Same effect as set_dialog_policy and the same warning: an armed pattern presses the button, so the user never sees that prompt. Responses are the ones set_dialog_policy takes (#968)"),
-    paramEcho: z.boolean().optional().describe("start_editor: arm the bridge parameter echo for the launched editor. It is read at startup, so it cannot be turned on over the socket afterwards. The live tier's leak assertions skip without it"),
+    paramEcho: z.boolean().optional().describe("start_editor: arm the bridge parameter echo for the launched editor. It is read at startup, so it cannot be turned on over the socket afterwards. The live tests' leak assertions skip without it"),
     requireClean: z.boolean().optional().describe("request_editor_shutdown: refuse to close while any content or map package is dirty (default true)"),
     endPIE: z.boolean().optional().describe("request_editor_shutdown: end an active PIE/SIE session before closing (default true); false refuses to close while play is running"),
     pieInstance: z.number().optional().describe("Select which PIE world to target: 0 = server/primary, 1..N = clients. See list_pie_instances (#778)"),
