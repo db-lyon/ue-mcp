@@ -703,18 +703,7 @@ export function withoutDialogActuation<T extends IBridge>(session: EditorSession
         // Reading `current` alone was not a race: with no readable snapshot
         // the latch is empty in the steady state, so a live modal was missed
         // every time rather than occasionally.
-        const guard = existingGuard(session);
-        if (!guard) {
-          return {
-            success: false,
-            dialogBlocking: true,
-            refusedMethod: method,
-            error:
-              `'${method}' was refused because this editor has no dialog guard, so whether a `
-              + "modal is on screen cannot be established, and an armed policy presses the "
-              + "buttons of whatever is. Re-register the editor with project(add_editor).",
-          };
-        }
+        const guard = await ensureGuard(session);
         await guard.refresh();
         const dialog = guard.current;
         if (dialog) {
@@ -762,6 +751,40 @@ export function stampBlockedEditor(data: unknown, dialog: BlockingDialog | null)
 
 /** One guard per editor. */
 const guards = new WeakMap<EditorSession, DialogGuard>();
+
+/**
+ * The guard for a session, created from the session itself if it has none.
+ *
+ * The gate fails closed: no guard means the boundary cannot establish whether
+ * a modal is up, so it refuses. That is only safe if every session HAS one,
+ * and guards were created in one startup pass, so a session registered any
+ * other way had none and was refused everything it ever tried.
+ *
+ * Every dependency here is derivable from the session, so there is no reason
+ * for that gap to exist. What startup adds on top is the client's elicitation
+ * capability, which is not knowable here; guardFor replaces the deps, so that
+ * pass upgrades this guard rather than competing with it.
+ */
+export async function ensureGuard(session: EditorSession): Promise<DialogGuard> {
+  const existing = guards.get(session);
+  if (existing) return existing;
+  // Dynamic, because editor-control imports this module: a static import here
+  // would close the cycle.
+  const { resolveDialogMode } = await import("./editor-control.js");
+  const { readEngineSnapshot } = await import("./engine-observer.js");
+  const guard = guardFor(session, {
+    mode: () => resolveDialogMode({ projectDir: session.projectDir, canElicit: false }).mode,
+    probe: () => session.guarded.call("list_dialogs", {}),
+    press: (buttonLabel: string) => session.guarded.call("respond_to_dialog", { buttonLabel }),
+    isConnected: () => session.bridge.isConnected,
+    readSnapshot: () => {
+      const proj = session.project.projectPath ?? session.bridge.getTarget().projectPath ?? null;
+      return proj ? readEngineSnapshot(proj) : null;
+    },
+  });
+  guard.startWatching();
+  return guard;
+}
 
 export function guardFor(session: EditorSession, deps: GuardDeps): DialogGuard {
   const existing = guards.get(session);

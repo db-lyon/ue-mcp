@@ -15,7 +15,7 @@ import type { BridgeTarget, IBridge } from "../bridge.js";
 import type { EditorSession } from "../session.js";
 import { explainEditorDownWithEvidence } from "../offline.js";
 import { GuardRegistry, makeCallContext, type ResolveExistingFile } from "./guard.js";
-import { DialogGuard, existingGuard } from "../dialog-guard.js";
+import { DialogGuard, ensureGuard, existingGuard } from "../dialog-guard.js";
 
 export type { ResolveExistingFile } from "./guard.js";
 
@@ -36,20 +36,11 @@ export async function refuseIfBlocked(
 ): Promise<Record<string, unknown> | null> {
   if (!session) return null;
   if (DialogGuard.bridgeAllowed(method)) return null;
-  const guard = existingGuard(session);
-  if (!guard) {
-    // No guard means no way to know whether a modal is up. The HTTP route
-    // already refuses in this state; failing open here while that failed
-    // closed meant the same condition had two opposite answers.
-    return {
-      success: false,
-      dialogBlocking: true,
-      refusedMethod: method,
-      error:
-        `'${method}' was refused because this editor has no dialog guard, so whether a modal `
-        + "is blocking it cannot be established. Re-register the editor with project(add_editor).",
-    };
-  }
+  // Built from the session when it has none, rather than refused for not
+  // having one. Failing closed is right, but only because no session can reach
+  // this without a guard: they were created in one startup pass, so a session
+  // registered any other way was refused every call it ever made.
+  const guard = await ensureGuard(session);
   const decision = await guard.check(method, "bridge");
   return decision.allow ? null : decision.refusal;
 }

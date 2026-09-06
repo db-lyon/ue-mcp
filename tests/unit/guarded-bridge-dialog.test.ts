@@ -106,19 +106,38 @@ describe("guardCall, the boundary a flow step crosses", () => {
     }
   });
 
-  it("fails closed when the editor has no guard at all", async () => {
-    const session = {} as unknown as EditorSession;
+  it("builds a guard for a session that has none, rather than refusing it forever", async () => {
+    // The gate fails closed, which is only safe because no session can reach
+    // it without a guard. Guards used to be created in one startup pass, so a
+    // session registered any other way had none and every call it ever made
+    // was refused. Now the boundary makes one from the session itself.
+    const { forgetGuard: forget, existingGuard: existing } = await import("../../src/dialog-guard.js");
     const inner = {
       isConnected: true,
       call: vi.fn(async () => ({ success: true })),
       connect: async () => {},
       retargetProject: () => ({}) as never,
-      getTarget: () => ({ projectPath: "p", port: 1, portSource: "test" }) as never,
+      getTarget: () => ({ projectPath: null, port: 1, portSource: "test" }) as never,
     } as unknown as IBridge;
-    const bridge = new GuardedBridge(inner, new GuardRegistry(), async () => null, session);
-    const result = await bridge.call("spawn_actor", {});
-    expect(result).toMatchObject({ dialogBlocking: true });
-    expect(inner.call).not.toHaveBeenCalled();
+    const session = {
+      projectDir: null,
+      project: { projectPath: null },
+      bridge: inner,
+      guarded: inner,
+    } as unknown as EditorSession;
+    try {
+      expect(existing(session), "started with a guard, so this proves nothing").toBeUndefined();
+      const bridge = new GuardedBridge(inner, new GuardRegistry(), async () => null, session);
+      const result = await bridge.call("spawn_actor", {});
+      // Nothing is blocking, so the call runs; what matters is that it was
+      // decided by a guard rather than refused for the lack of one.
+      expect(result).toMatchObject({ success: true });
+      expect(inner.call).toHaveBeenCalled();
+      expect(existing(session), "no guard was created for the session").toBeDefined();
+    } finally {
+      existing(session)?.stopWatching();
+      forget(session);
+    }
   });
 
   it("does not let a modal-safe reply clear the guard", async () => {

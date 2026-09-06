@@ -5,7 +5,7 @@ import { prepareCall, finishCall, type CallPreparation } from "../call-pipeline.
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
-import { DialogGuard, existingGuard } from "../dialog-guard.js";
+import { DialogGuard, ensureGuard } from "../dialog-guard.js";
 
 /**
  * Refuse a flow step while a modal is up, through the one guard.
@@ -31,8 +31,7 @@ async function refuseStepIfBlocked(
     ? `${String(options.category ?? "")}.${String(options.method ?? "")}`
     : taskName;
   if (DialogGuard.actionAllowed(subject)) return null;
-  const guard = existingGuard(session);
-  if (!guard) return null;
+  const guard = await ensureGuard(session);
   const decision = await guard.check(subject, "action");
   return decision.allow ? null : (decision.refusal ?? null);
 }
