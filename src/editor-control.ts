@@ -1074,11 +1074,17 @@ export function resolveDialogMode(opts: {
  * of having them, so each says that plainly rather than leaving the reader to
  * infer it from a mode name.
  */
-function dialogModeGuidance(
+export function dialogModeGuidance(
   resolved: ResolvedDialogMode,
   canElicit: boolean,
   opts: { quitSent?: boolean } = {},
 ): string {
+  // What the mode MEANS is the guard's answer, not a second reading of it
+  // here. This branched on the configured mode and re-derived the "interactive
+  // with nobody to ask behaves as defer" rule inline, which is one more place
+  // for it to drift away from the rule the refusal is actually built from.
+  const effective = DialogGuard.effectiveMode(resolved.mode, canElicit);
+  const downgraded = effective !== resolved.mode;
   const applied = `Dialog handling mode: ${resolved.mode} (${resolved.source}).`;
   // Whether a quit went out is a fact about the call, and this text is reused
   // on both sides of it: before the quit, where nothing was asked to close, and
@@ -1086,28 +1092,28 @@ function dialogModeGuidance(
   const quitState = opts.quitSent
     ? "The quit went out before this dialog appeared and the editor has not closed."
     : "The editor was not asked to quit.";
-  if (resolved.mode === "auto") {
+  const again = "then call editor(action='stop_editor') again.";
+
+  if (effective === "auto") {
     return (
       `${applied} Nothing was pressed for you: in auto mode the whole dialog is handed back and the ` +
-      "choice is yours. Press the button you choose with the call listed beside it, then call " +
-      "editor(action='stop_editor') again."
+      `choice is yours. Press the button you choose with the call listed beside it, ${again}`
     );
   }
-  if (resolved.mode === "interactive" && !canElicit) {
+  if (effective === "interactive") {
+    return `${applied} ${quitState} Answer the dialog, ${again}`;
+  }
+  if (downgraded) {
     return (
       `${applied} Interactive mode shows this dialog to the user in an MCP elicitation form, and this ` +
       "client did not advertise that capability, so no form could be shown and nothing was pressed. " +
       "Answer the dialog in the Unreal Editor window, or set UE_MCP_DIALOG_MODE=auto to answer it from " +
-      "here with editor(action='respond_to_dialog'), then call editor(action='stop_editor') again."
+      `here with editor(action='respond_to_dialog'), ${again}`
     );
-  }
-  if (resolved.mode === "interactive") {
-    return `${applied} ${quitState} Answer the dialog, then call editor(action='stop_editor') again.`;
   }
   return (
     `${applied} Nothing was pressed and nothing was asked of you: in defer mode a blocking dialog is ` +
-    "left alone. Go to the Unreal Editor window and answer the dialog quoted above yourself, then call " +
-    "editor(action='stop_editor') again."
+    `left alone. Go to the Unreal Editor window and answer the dialog quoted above yourself, ${again}`
   );
 }
 
