@@ -231,6 +231,13 @@ async function main() {
   const surfaces: SessionSurface[] = [];
   const perSession = new Map<EditorSession, SessionLoad>();
   for (const session of sessions.list()) {
+    // BEFORE the surface build, which calls epic_list_toolsets on the editor.
+    // Creating guards afterwards meant the first call this server ever makes
+    // was the one call with no guard behind it: a modal refused it, the
+    // refusal has no toolsets, and the surface silently fell back to a cached
+    // one with nothing latched. startWatching is idempotent, so the later
+    // pass over sessions.list() stays harmless.
+    dialogGuardFor(session);
     const load = await buildSessionLoad(session, pkg.version, sessions.size > 1);
     perSession.set(session, load);
     surfaces.push(load.surface);
@@ -398,7 +405,7 @@ async function main() {
    * file from the modal-loop tick, which is the tick that keeps running while
    * the game thread is parked.
    */
-  const dialogGuardFor = (forSession: EditorSession, canElicit = false): DialogGuard => {
+  function dialogGuardFor(forSession: EditorSession, canElicit = false): DialogGuard {
     const guard = guardFor(forSession, {
       mode: () => resolveDialogMode({ projectDir: forSession.projectDir, canElicit }).mode,
       probe: () => forSession.guarded.call("list_dialogs", {}),
@@ -419,7 +426,7 @@ async function main() {
     });
     guard.startWatching();
     return guard;
-  };
+  }
 
   const getToolGraph = (forSession: EditorSession = primary): ToolDef[] => {
     const load = perSession.get(forSession);
@@ -1178,11 +1185,16 @@ async function buildSessionLoad(
       // its own.
       let catalog: EpicCatalog | null = null;
       let source = "";
-      const bridge = session.bridge;
-      if (!bridge.isConnected) {
-        await bridge.connect(2000).catch(() => {});
+      // The guarded bridge, not the raw one. This is the first call the server
+      // makes against an editor, so sending it raw meant a modal was met by
+      // the one route with no gate on it: the refusal came back, the surface
+      // fell back to a cache, and nothing was latched for the calls that
+      // followed.
+      const bridge = session.guarded;
+      if (!session.bridge.isConnected) {
+        await session.bridge.connect(2000).catch(() => {});
       }
-      if (bridge.isConnected) {
+      if (session.bridge.isConnected) {
         catalog = (await bridge.call("epic_list_toolsets", { includeSchemas: true }, 20000)) as EpicCatalog;
         // A modal refuses this like anything else, and the refusal has no
         // toolsets, so it read as "this editor advertises none" and the surface
