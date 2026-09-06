@@ -336,7 +336,10 @@ describe("stop_editor refuses rather than discarding unsaved work", () => {
   });
 
   it("refuses when the plugin build cannot say what is dirty, rather than guessing clean", async () => {
-    const bridge = await startFakeBridge(() => null);
+    // Answers the dialog question, answers nothing else: this case is about
+    // an unknown DIRTY state, and a bridge that answers nothing at all is the
+    // separate unknown-dialog-state refusal.
+    const bridge = await startFakeBridge((method) => (method === "list_dialogs" ? NO_DIALOGS : null));
     openBridges.push(bridge);
 
     const result = await stopEditor(makeProject(bridge.port));
@@ -348,11 +351,12 @@ describe("stop_editor refuses rather than discarding unsaved work", () => {
   });
 
   it("refuses on the dirty list from an older plugin build too", async () => {
-    const bridge = await startFakeBridge((method) =>
-      method === "list_dirty_packages"
+    const bridge = await startFakeBridge((method) => {
+      if (method === "list_dialogs") return NO_DIALOGS;
+      return method === "list_dirty_packages"
         ? { success: true, content: [{ package: "/Game/Blueprints/BP_Door" }], maps: [] }
-        : null,
-    );
+        : null;
+    });
     openBridges.push(bridge);
 
     const result = await stopEditor(makeProject(bridge.port));
@@ -1419,6 +1423,27 @@ describe("the lifecycle actions share the editor's one guard", () => {
     expect(res.success).toBe(false);
     // The one guard was reused, so nothing asked a second time.
     expect(asks).toBe(1);
+  });
+});
+
+describe("stop_editor will not quit an editor it could not question", () => {
+  it("refuses when the bridge does not answer the dialog question at all", async () => {
+    // The detector folded silence, a socket error and an 8s timeout into "no
+    // dialog", and the caller acts on that by sending a quit. A slow reply
+    // from an editor sitting on a modal was therefore enough to close it,
+    // under every mode including defer.
+    const bridge = await startFakeBridge((method) => (method === "list_dialogs" ? null : { success: true }));
+    openBridges.push(bridge);
+
+    const result = await stopEditor(makeProject(bridge.port));
+
+    expect(result.success).toBe(false);
+    expect(result.refusedReason).toBe("unknown-dialog-state");
+    expect(result.message).toContain("cannot be established");
+    expect(bridge.methods(), "a quit went out on an unanswered question").not.toContain(
+      "request_editor_shutdown",
+    );
+    expect(bridge.methods()).not.toContain("execute_python");
   });
 });
 

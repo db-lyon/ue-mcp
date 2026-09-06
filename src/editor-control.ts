@@ -899,12 +899,27 @@ function respondCallFor(label: string): string {
     : `editor(action='respond_to_dialog', buttonLabel='${label}')`;
 }
 
-/** The dialog blocking this editor, or null when nothing is. */
-async function readBlockingDialog(port: number, host: string): Promise<BlockingDialog | null> {
+/**
+ * What is blocking this editor: a dialog, nothing, or no answer at all.
+ *
+ * The third case used to be folded into the second. Silence, a socket error
+ * and an 8s timeout were all reported as "no dialog", and the caller acts on
+ * that answer by sending a quit, so a slow reply from an editor sitting on a
+ * modal was enough to send one anyway. The guard treats identical silence as
+ * "not evidence"; two readings of one question with opposite failure
+ * semantics, on the route where being wrong closes an editor.
+ *
+ * Callers must handle `unreadable`. Nothing may be quit on the strength of it.
+ */
+type DialogRead = { dialog: BlockingDialog | null; readable: boolean };
+
+const UNREADABLE: DialogRead = { dialog: null, readable: false };
+
+async function readBlockingDialog(port: number, host: string): Promise<DialogRead> {
   const reply = await callBridgeOnce(port, "list_dialogs", {}, host);
-  if (!accepted(reply) || !reply.result) return null;
+  if (!accepted(reply) || !reply.result) return UNREADABLE;
   const dialogs = reply.result.dialogs;
-  if (!Array.isArray(dialogs) || dialogs.length === 0) return null;
+  if (!Array.isArray(dialogs) || dialogs.length === 0) return { dialog: null, readable: true };
 
   const first = dialogs[0] as Record<string, unknown>;
   const buttons = Array.isArray(first.buttons)
@@ -919,10 +934,13 @@ async function readBlockingDialog(port: number, host: string): Promise<BlockingD
     };
   });
   return {
-    title: typeof first.title === "string" ? first.title : "",
-    message: typeof first.message === "string" ? first.message : "",
-    buttons,
-    choices,
+    readable: true,
+    dialog: {
+      title: typeof first.title === "string" ? first.title : "",
+      message: typeof first.message === "string" ? first.message : "",
+      buttons,
+      choices,
+    },
   };
 }
 
@@ -1391,7 +1409,7 @@ export interface StopEditorResult {
    */
   alreadyStopped?: boolean;
   /** Why the stop refused, for a caller that would rather branch than parse. */
-  refusedReason?: "unsaved-work" | "blocking-dialog" | "unknown-dirty-state";
+  refusedReason?: "unsaved-work" | "blocking-dialog" | "unknown-dirty-state" | "unknown-dialog-state";
   /**
    * The guard's refusal fields, so a caller gets the SAME shape here as from
    * every other route. This used to assemble its own object carrying only
@@ -1480,7 +1498,7 @@ export interface RestartEditorResult {
    * dialog was unrecognisable to isDialogRefusal.
    */
   dialogBlocking?: true;
-  refusedReason?: "unsaved-work" | "blocking-dialog" | "unknown-dirty-state";
+  refusedReason?: "unsaved-work" | "blocking-dialog" | "unknown-dirty-state" | "unknown-dialog-state";
   refusedMethod?: string;
   dialogTitle?: string;
   dialogMessage?: string;
@@ -1671,7 +1689,23 @@ export async function stopEditor(
   // while the game thread is parked inside the modal loop, which is exactly the
   // state where sending a quit would time out and teach nobody anything. Ask
   // before sending, and report the whole question rather than acting on it.
-  let dialog = await readBlockingDialog(port, host);
+  const firstRead = await readBlockingDialog(port, host);
+  if (!firstRead.readable) {
+    // The same rule readDirtyPackages already follows: a question that cannot
+    // be answered is not an answer of "clean". Sending a quit here is how an
+    // editor sitting on a modal got one anyway, under every mode including
+    // defer, because a slow reply was reported as no dialog at all.
+    return {
+      success: false,
+      refusedReason: "unknown-dialog-state",
+      message:
+        "The editor's bridge did not answer when asked whether a dialog is blocking it, so whether "
+        + "one is on screen cannot be established and stopping could dismiss it. Nothing was asked "
+        + "to quit. Read it with editor(action='list_dialogs'), or close the editor yourself and "
+        + "answer whatever it asks.",
+    };
+  }
+  let dialog = firstRead.dialog;
   let answeredByUser: string | undefined;
   /** A press that went out with no answer. Not an answer, and not silence. */
   let unconfirmedPress: string | undefined;
@@ -1711,7 +1745,11 @@ export async function stopEditor(
         // Their choice may have raised the next one, and on the unconfirmed
         // path this read is also the only evidence available about whether the
         // press landed. Look again rather than assuming the editor is clear.
-        dialog = await readBlockingDialog(port, host);
+        // Unreadable here keeps the dialog rather than dropping it: this read
+        // is the only evidence about whether the press landed, and treating
+        // silence as success is what would report a clear editor.
+        const after = await readBlockingDialog(port, host);
+        dialog = after.readable ? after.dialog : dialog;
       }
     }
     if (dialog) {
@@ -1834,7 +1872,8 @@ export async function stopEditor(
   // It was clean and unblocked when the quit went out, so whatever is holding
   // it started afterwards. Say what that is, in full.
   let blockedState = await readEngineState(projectPath, { probeWindows: false });
-  let late = await readBlockingDialog(port, host);
+  const lateRead = await readBlockingDialog(port, host);
+  let late = lateRead.dialog;
   if (late) dialogSeen = true;
 
   // The same mode governs a dialog that came up behind the quit. Interactive
@@ -1865,7 +1904,8 @@ export async function stopEditor(
           };
         }
       }
-      late = await readBlockingDialog(port, host);
+      const lateAfter = await readBlockingDialog(port, host);
+      late = lateAfter.readable ? lateAfter.dialog : late;
       // The snapshot above was taken BEFORE the elicitation, so it still holds
       // the modal the user has since answered. Rendering it after the press is
       // how one message came to quote a dialog that no longer exists, hand back
