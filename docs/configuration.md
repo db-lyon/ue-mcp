@@ -362,6 +362,14 @@ editor stopped. That is the case that matters: UnrealBuildTool cannot link while
 an editor holds the module DLLs, so a full rebuild has to happen with the editor
 down.
 
+### Build parallelism
+
+UnrealBuildTool compiles one file per physical core by default, and each of those processes maps Unreal's precompiled header, which costs several GB. On a machine with fewer GB than cores, the compiler does not wait for room: it fails with `C3859` or `C1076` several minutes in, and the message names a paging file, so it reads as a broken machine rather than a default that does not fit it.
+
+ue-mcp computes a safe number from the machine's memory and core count and passes it to every build, including `ue-mcp build`, `ue-mcp update --build` and `editor(build_project)`. The cap is applied only when it is below what UnrealBuildTool would have chosen, so a machine with headroom builds exactly as before. There is nothing to configure.
+
+Set `UE_MCP_MAX_PARALLEL_ACTIONS` to a positive integer to override it, for a machine where the estimate is wrong in either direction. A build that runs out of room anyway reports what happened and what to change, rather than leaving the compiler's wording as the only explanation.
+
 ## Which Engine A Project Uses
 
 The engine is resolved once, and the same answer drives the build tool, the
