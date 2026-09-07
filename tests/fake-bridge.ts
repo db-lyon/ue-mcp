@@ -80,7 +80,7 @@ export class FakeBridge {
 
         // The lock registry is the one piece of editor state this stands in
         // for rather than stubs, because per-editor lock ownership is exactly
-        // what the multi-editor tier is asserting. It lives in the bridge in
+        // what the multi-editor tests is asserting. It lives in the bridge in
         // production too, so one registry per fake bridge is faithful.
         const lockReply = this.serveLock(msg.method, params);
         if (lockReply !== undefined) {

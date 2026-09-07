@@ -350,6 +350,19 @@ function defaultFlows(): Record<string, unknown> {
   // asset domain is a real one (/Game/VFX/Fire); override name/packagePath via
   // runtime params. The last step is the verify gate - the run surfaces whether
   // the system actually emits, catching the empty-shell failure.
+  //
+  // WHAT A GOOD FIRE ACTUALLY IS, from reading a production reference system:
+  // layered emitters, not one. A convincing fire is roughly four:
+  //   - two flame emitters on sprite renderers, doubled for depth
+  //   - a light emitter, so the fire lights its surroundings
+  //   - a heat-distortion emitter
+  // Colour and size are curve-driven over particle age rather than constant,
+  // which is what stops it reading as a flat billboard. Every module involved is
+  // a stock engine script under /Niagara/Modules/.
+  //
+  // This flow builds ONE emitter, which is the honest 0-to-1 starting point and
+  // not the finished look. Extending it toward the shape above is the obvious
+  // next move, and the reason that shape is written down here.
   const FIRE_PKG = "/Game/VFX/Fire";
   const fireSteps: Record<string, unknown> = {
     1: { task: "niagara.create_emitter", options: { name: "E_Flame", packagePath: FIRE_PKG } },

@@ -52,6 +52,8 @@ Then talk to your AI in plain English:
 npx ue-mcp doctor
 ```
 
+Documentation lives at **https://ue-mcp.com/docs/**, one page per file in `docs/`, published automatically on release. Link there rather than to a file in this repository.
+
 Most first-run failures are one of three things: the editor hasn't been restarted since `init`, the bridge plugin failed to compile (check the editor's Output Log for `UE_MCP_Bridge`), or the editor is open on a different project than the one configured. See [Troubleshooting](https://ue-mcp.com/docs/troubleshooting/).
 
 ### Manual Configuration

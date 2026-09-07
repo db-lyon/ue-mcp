@@ -45,7 +45,8 @@ import { info, warn, debug } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
 import { GuardRegistry } from "./flow/guard.js";
-import { discoverTaskGuards } from "./flow/task-guards.js";
+import { buildGuards } from "./flow/guards.js";
+import type { GuardDeclarations } from "./flow/guard-schema.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
@@ -464,7 +465,7 @@ async function main() {
   // The registry is the dispatch layer, so it has to be built from the graph
   // the addressed session actually has. Sharing one registry is what made a
   // second editor dispatch the first editor's plugin tasks (#817).
-  const buildRegistryFor = (load: SessionLoad): void => {
+  const buildRegistryFor = async (load: SessionLoad): Promise<void> => {
     const sessionRegistry = buildFlowRegistry(load.registryTools);
     for (const { name, ctor } of load.pluginLoad.taskRegistrations) {
       sessionRegistry.register(name, ctor);
@@ -474,17 +475,22 @@ async function main() {
     }
     load.registry = sessionRegistry;
   };
-  for (const load of loads) buildRegistryFor(load);
+  for (const load of loads) await buildRegistryFor(load);
   const registry = primaryLoad.registry!;
   const taskCount = registry.listRegistered().length;
 
   // Populate the guard pipeline: any plugin-supplied `guard.<name>.<phase>` task
   // becomes a BridgeGuard. Each guard task runs with the RAW bridge in its
-  // context so a guard cannot recurse through the pipeline. See flow/task-guards.ts.
-  // Guards are discovered per session, from that session's own registry and
-  // against that session's own raw bridge, so a guard declared by one project's
-  // plugins cannot veto another project's calls.
-  const discoverGuardsFor = (load: SessionLoad): void => {
+  // context so a guard cannot recurse through the pipeline. See flow/guards.ts.
+  // Guards are built per session, from that session's own declarations and
+  // against that session's own raw bridge, so a guard declared by one project
+  // cannot veto another project's calls.
+  //
+  // Two sources declare them in the same shape: each plugin's manifest, and the
+  // project's own ue-mcp.yml. Both are built here into pipeline guards. There
+  // is no naming convention any more: a guard is declared as a guard, so a
+  // misspelling is an error rather than something registered and never run.
+  const buildGuardsFor = async (load: SessionLoad): Promise<void> => {
     const guardCtx: ToolContext = {
       bridge: load.surface.session.guarded,
       project: load.surface.session.project,
@@ -494,11 +500,35 @@ async function main() {
       getPlugins: () => getPlugins(load.surface.session),
       getToolGraph: (forSession) => getToolGraph(forSession ?? load.surface.session),
     };
-    for (const g of discoverTaskGuards(load.registry!, guardCtx, load.surface.session.bridge)) {
-      load.surface.session.guards.register(g);
+    const deps = {
+      registry: load.registry!,
+      ctx: guardCtx,
+      rawBridge: load.surface.session.bridge,
+    };
+
+    const projectConfig = loadFlowConfig(load.surface.tools, load.configDir, {
+      tasks: load.pluginLoad.taskDefs,
+      flows: load.pluginLoad.flowDefs,
+    }).config;
+
+    const sources: Array<{ label: string; guards: GuardDeclarations }> = [
+      ...load.pluginLoad.guardsByPlugin.map((g) => ({ label: g.plugin, guards: g.guards })),
+      { label: "ue-mcp.yml", guards: (projectConfig.guards ?? {}) as GuardDeclarations },
+    ];
+
+    let count = 0;
+    for (const source of sources) {
+      if (Object.keys(source.guards).length === 0) continue;
+      for (const guard of await buildGuards(source.guards, deps, { label: source.label })) {
+        load.surface.session.guards.register(guard);
+        count++;
+      }
+    }
+    if (count > 0) {
+      console.error(`[ue-mcp] ${load.surface.session.name}: ${count} guard(s) registered`);
     }
   };
-  for (const load of loads) discoverGuardsFor(load);
+  for (const load of loads) await buildGuardsFor(load);
   // A guard per registered editor, so a modal in the DESTINATION of a
   // cross-editor call is seen by that editor's own guard rather than by
   // whichever session happened to originate the call.
@@ -530,10 +560,10 @@ async function main() {
     const build = (async () => {
       const load = await buildSessionLoad(session, pkg.version, true);
       applyContextStrategy(load);
-      buildRegistryFor(load);
+      await buildRegistryFor(load);
       perSession.set(session, load);
       surfaces.push(load.surface);
-      discoverGuardsFor(load);
+      await buildGuardsFor(load);
       // The union is what explainMissingAction refuses from, so it has to know
       // about this editor before the first call is routed to it.
       refreshDispatchUnion();

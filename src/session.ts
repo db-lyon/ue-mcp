@@ -25,7 +25,7 @@ import { EditorBridge } from "./bridge.js";
 import { ProjectContext } from "./project.js";
 import { GuardedBridge } from "./flow/guarded-bridge.js";
 import { GuardRegistry } from "./flow/guard.js";
-import { makeResolveExistingFile } from "./flow/task-guards.js";
+import { makeResolveExistingFile } from "./flow/guard.js";
 import { normalizeProjectRoot } from "./port.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { warn } from "./log.js";

@@ -8,7 +8,7 @@
  * corpus is recorded twice:
  *
  *   - `editor-down.json`, with nothing listening. Needs only Node, so it is
- *     guarded by `tests/unit/golden-editor-down.test.ts` in the unit tier.
+ *     guarded by `tests/unit/golden-editor-down.test.ts` in the unit tests.
  *   - `editor-connected.json`, with a real editor answering. Guarded by
  *     `tests/live/golden-connected.test.ts` in the live tests.
  *

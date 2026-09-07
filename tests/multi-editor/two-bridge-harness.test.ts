@@ -8,7 +8,7 @@
  * two actually received a call.
  *
  * No engine is involved, which is deliberate: CI runners have no Unreal
- * install, so a tier that needs one cannot gate merges. Everything that a
+ * install, so a suite that needs one cannot gate merges. Everything that a
  * second engine would add is behind the handler; everything routing depends on
  * (port discovery, socket identity, per-session dispatch) is real here.
  */

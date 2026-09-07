@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { GuardsSchema } from "../flow/guard-schema.js";
 import * as path from "node:path";
 import { z } from "zod";
 import yaml from "js-yaml";
@@ -144,6 +145,7 @@ export const PluginManifestSchema = z.object({
   knowledge: z.record(z.string()).default({}),
   tasks: z.record(TaskEntrySchema).default({}),
   flows: z.record(FlowEntrySchema).default({}),
+  guards: GuardsSchema,
 });
 
 export type PluginManifest = z.infer<typeof PluginManifestSchema>;

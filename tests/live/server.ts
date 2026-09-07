@@ -1,8 +1,8 @@
 /**
  * A real ue-mcp server, driven over stdio, for the live tests (#817, plan 7.3).
  *
- * The engine-free multi-editor tier asserts routing by calling the routing
- * functions. That is the right level for a tier with no engine, and it leaves
+ * The engine-free multi-editor tests asserts routing by calling the routing
+ * functions. That is the right level for a suite with no engine, and it leaves
  * one thing unproven: that the SERVER wires those functions together the way
  * the tests assume. A live case that matters (a leaked routing parameter, a
  * refusal that never fires, a union that advertises what dispatch cannot

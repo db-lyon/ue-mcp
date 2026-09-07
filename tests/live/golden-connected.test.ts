@@ -7,7 +7,7 @@
  * package. The surface legitimately differs between those states, so one
  * baseline cannot tell a regression from a cold start.
  *
- * This is the connected half, and it is the reason the tier exists: the
+ * This is the connected half, and it is the reason the suite exists: the
  * recording only means anything if the server it recorded really did enrich
  * from a live editor. That is asserted, not assumed. The recorder pins a
  * throwaway project that has never been enriched, so there is no cache for the
@@ -15,7 +15,7 @@
  * narrated at startup. A recording that fell through to the baked snapshot
  * fails here rather than being committed as evidence of something it is not.
  *
- * Both halves run in this tier (plan 7.3), so a change that moves the surface
+ * Both halves run in this suite (plan 7.3), so a change that moves the surface
  * only when an editor is attached, or only when it is not, has one place that
  * catches either.
  *
@@ -174,7 +174,7 @@ describe("golden baseline: single editor, editor connected", () => {
 describe("golden baseline: the editor-down half, with an editor running", () => {
   it("still matches the committed baseline", async () => {
     // Recorded against a privileged port, so it is the cold surface even
-    // though an editor is up. Running it here as well as in the unit tier is
+    // though an editor is up. Running it here as well as in the unit tests is
     // what plan 7.3 means by "both golden baselines": the two files have to
     // hold at the same moment, or a surface change has been split across them.
     const down = await captureEditorDownSurface();

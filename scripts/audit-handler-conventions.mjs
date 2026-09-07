@@ -19,7 +19,7 @@
  * This is a source-level audit, not a runtime one: it reads each handler's
  * function body out of the .cpp and looks for the markers. That cannot prove a
  * rollback is CORRECT, only that one is emitted. Correctness is what the live
- * tier is for. Catching the omissions is still most of the value, because the
+ * suite is for. Catching the omissions is still most of the value, because the
  * common failure is not a wrong rollback, it is no rollback at all.
  *
  * ## Two things it gets right that it used to get wrong

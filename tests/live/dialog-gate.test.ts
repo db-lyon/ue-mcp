@@ -3,7 +3,7 @@
  *
  * The modal is raised the way a user hits it in practice: a dirty map plus a
  * shutdown request. "Cancel" on that prompt aborts the shutdown, so the editor
- * is still there for the rest of the tier.
+ * is still there for the rest of the suite.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LiveServer, resultJson } from "./server.js";

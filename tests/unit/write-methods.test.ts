@@ -124,6 +124,9 @@ describe("classifyWrite", () => {
     for (const [method, params, expectedPath] of cases) {
       expect(classifyWrite(method, params), method).toEqual({
         writes: true,
+        // Every one of these is also a mutation, which is the wider question a
+        // guard scoped to mutations asks.
+        mutates: true,
         contentPaths: [expectedPath],
       });
     }
