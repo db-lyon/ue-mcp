@@ -189,7 +189,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("editor_toolset.toolsets.material_instance.MaterialInstanceTools", "editor_toolset.toolsets.material_instance.MaterialInstanceTools.get_vector_parameter", S_epic_get_vector_parameter, p),
   ),
   epic_layout_expressions: bp(
-    "unknown",
+    "mutate",
     "[Epic editor_toolset.toolsets.material.MaterialTools] Automatically arranges all expression nodes in a Material or MaterialFunction graph. Params: material_or_function",
     "epic_call_tool",
     (p) => epicToolCall("editor_toolset.toolsets.material.MaterialTools", "editor_toolset.toolsets.material.MaterialTools.layout_expressions", S_epic_layout_expressions, p),

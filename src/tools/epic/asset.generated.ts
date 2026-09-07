@@ -158,7 +158,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.duplicate", S_epic_duplicate, p),
   ),
   epic_exists: bp(
-    "unknown",
+    "read",
     "[Epic editor_toolset.toolsets.asset.AssetTools] Determines if a folder or asset exists. Params: path",
     "epic_call_tool",
     (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.exists", S_epic_exists, p),
@@ -488,7 +488,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("editor_toolset.toolsets.asset.AssetTools", "editor_toolset.toolsets.asset.AssetTools.save_assets", S_epic_save_assets, p),
   ),
   epic_search: bp(
-    "mutate",
+    "read",
     "[Epic SemanticSearchToolset.SemanticSearchToolset] Run a semantic search over the Content Browser assets indexed by the SemanticSearch plugin. Params: query, classFilter, pathRegexes, k?",
     "epic_call_tool",
     (p) => epicToolCall("SemanticSearchToolset.SemanticSearchToolset", "SemanticSearchToolset.SemanticSearchToolset.Search", S_epic_search, p),

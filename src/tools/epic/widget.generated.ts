@@ -71,7 +71,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.BindToEventProperty", S_epic_bind_to_event_property, p),
   ),
   epic_click: bp(
-    "unknown",
+    "mutate",
     "[Epic SlateInspectorToolset.SlateInspectorToolset] Click a Slate widget identified by its ref. Params: ref, button?, doubleClick?, modifiers?",
     "epic_call_tool",
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Click", S_epic_click, p),
@@ -89,13 +89,13 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.CreateWidgetBlueprint", S_epic_create_widget_blueprint, p),
   ),
   epic_drag: bp(
-    "unknown",
+    "mutate",
     "[Epic SlateInspectorToolset.SlateInspectorToolset] Drag from one Slate widget to another (mouse down, move, release). Params: startRef, endRef, modifiers?",
     "epic_call_tool",
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Drag", S_epic_drag, p),
   ),
   epic_fill_form: bp(
-    "unknown",
+    "mutate",
     "[Epic SlateInspectorToolset.SlateInspectorToolset] Fill multiple Slate form fields at once. Params: fields",
     "epic_call_tool",
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.FillForm", S_epic_fill_form, p),
@@ -131,7 +131,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.GetWidgets", S_epic_get_widgets, p),
   ),
   epic_hover: bp(
-    "unknown",
+    "mutate",
     "[Epic SlateInspectorToolset.SlateInspectorToolset] Hover over a Slate widget, triggering any hover state or tooltip. Params: ref",
     "epic_call_tool",
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Hover", S_epic_hover, p),
@@ -173,7 +173,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Observe", S_epic_observe, p),
   ),
   epic_press_key: bp(
-    "unknown",
+    "mutate",
     "[Epic SlateInspectorToolset.SlateInspectorToolset] Press and release a keyboard key on the currently focused Slate widget. Supports modifier prefixes: \"Ctrl+C\", \"Shift+1\". Params: key",
     "epic_call_tool",
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.PressKey", S_epic_press_key, p),
@@ -215,7 +215,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.ReplaceWidgetWithTemplate", S_epic_replace_widget_with_template, p),
   ),
   epic_screenshot: bp(
-    "unknown",
+    "mutate",
     "[Epic SlateInspectorToolset.SlateInspectorToolset] Screenshot a Slate widget or the active editor window. Prefer this over SceneTools.take_screenshot for Editor UI; use SceneTools only for 3D viewport. Params: ref",
     "epic_call_tool",
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Screenshot", S_epic_screenshot, p),
@@ -245,7 +245,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.ToggleWidgetAsVariable", S_epic_toggle_widget_as_variable, p),
   ),
   epic_type: bp(
-    "unknown",
+    "mutate",
     "[Epic SlateInspectorToolset.SlateInspectorToolset] Type text into a Slate text input widget. Focuses the widget first, then sends one key event per character. Params: ref, text, submit?",
     "epic_call_tool",
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Type", S_epic_type, p),
@@ -263,13 +263,13 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.WaitFor", S_epic_wait_for, p),
   ),
   epic_windows: bp(
-    "read",
+    "unknown",
     "[Epic SlateInspectorToolset.SlateInspectorToolset] List, select, or close top-level Slate editor windows. Params: action?, index?",
     "epic_call_tool",
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Windows", S_epic_windows, p),
   ),
   epic_wrap_widgets: bp(
-    "unknown",
+    "mutate",
     "[Epic UMGToolSet.UMGToolSet] Wraps one or more widgets in a new panel widget of the specified class. Only the root-most widgets in the selection are wrapped - children of other selected widgets are skipped because their parent will be wrapped. Returns info for each newly created wrapper. Use ObjectTools.list_properties on each returned Widget and Slot to discover property names before calling set_properties (padding, alignment, anchors, etc. vary per panel class). Params: widgetBlueprint, widgets, wrapperClass",
     "epic_call_tool",
     (p) => epicToolCall("UMGToolSet.UMGToolSet", "UMGToolSet.UMGToolSet.WrapWidgets", S_epic_wrap_widgets, p),

@@ -231,13 +231,13 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("editor_toolset.toolsets.scene.SceneTools", "editor_toolset.toolsets.scene.SceneTools.load_level", S_epic_load_level, p),
   ),
   epic_look_at: bp(
-    "read",
+    "mutate",
     "[Epic editor_toolset.toolsets.actor.ActorTools] Rotates an actor so its forward vector points at a world-space position. Params: actor, target",
     "epic_call_tool",
     (p) => epicToolCall("editor_toolset.toolsets.actor.ActorTools", "editor_toolset.toolsets.actor.ActorTools.look_at", S_epic_look_at, p),
   ),
   epic_merge_actors: bp(
-    "unknown",
+    "mutate",
     "[Epic editor_toolset.toolsets.scene.SceneTools] Merges multiple StaticMesh actors into a single mesh asset and actor. Params: actors, output_path, name, destroy_source_actors?",
     "epic_call_tool",
     (p) => epicToolCall("editor_toolset.toolsets.scene.SceneTools", "editor_toolset.toolsets.scene.SceneTools.merge_actors", S_epic_merge_actors, p),

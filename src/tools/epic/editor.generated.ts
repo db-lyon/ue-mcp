@@ -41,19 +41,19 @@ const S_epic_world_pos_to_screen_coords = {"properties":{"position":{"type":"obj
 /** 25 wrapped engine tools routed to the `editor` category. */
 export const actions: Record<string, ActionSpec> = {
   epic_capture_asset_image: bp(
-    "read",
+    "mutate",
     "[Epic EditorToolset.EditorAppToolset] Renders a thumbnail for the specified asset (e.g. static meshes, skeletal meshes, skeletons, animations, montages, materials, textures). Params: assetPath",
     "epic_call_tool",
     (p) => epicToolCall("EditorToolset.EditorAppToolset", "EditorToolset.EditorAppToolset.CaptureAssetImage", S_epic_capture_asset_image, p),
   ),
   epic_capture_editor_image: bp(
-    "read",
+    "mutate",
     "[Epic EditorToolset.EditorAppToolset] Captures an image of the entire editor application as the user sees it. Params: none",
     "epic_call_tool",
     (p) => epicToolCall("EditorToolset.EditorAppToolset", "EditorToolset.EditorAppToolset.CaptureEditorImage", S_epic_capture_editor_image, p),
   ),
   epic_capture_viewport: bp(
-    "read",
+    "mutate",
     "[Epic EditorToolset.EditorAppToolset] Captures the level viewport with optional annotations. Annotations rendering overlays a projected 3D world-space grid plus name + position labels on visible actors. The grid is drawn at a configurable ground-plane Z and projected through the camera, with coordinate numbers at intersections (shown in meters). Each labeled actor gets a crosshair at its projected screen position with a leader-line callout placed to avoid overlap. This gives a vision-capable agent spatial awareness: it can reference grid coordinates to direct placement and identify scene contents by label. Params: captureTransform?, annotations?, bShowUI?",
     "epic_call_tool",
     (p) => epicToolCall("EditorToolset.EditorAppToolset", "EditorToolset.EditorAppToolset.CaptureViewport", S_epic_capture_viewport, p),

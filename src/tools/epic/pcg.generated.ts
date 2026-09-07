@@ -173,7 +173,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("PCGToolset.PCGToolset", "PCGToolset.PCGToolset.RemoveNode", S_epic_remove_node, p),
   ),
   epic_reposition_node: bp(
-    "unknown",
+    "mutate",
     "[Epic PCGToolset.PCGToolset] Change the position of node. Params: node, xPositionIdx, yPositionIdx",
     "epic_call_tool",
     (p) => epicToolCall("PCGToolset.PCGToolset", "PCGToolset.PCGToolset.RepositionNode", S_epic_reposition_node, p),

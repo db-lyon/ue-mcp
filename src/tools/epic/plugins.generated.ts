@@ -178,7 +178,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("PluginToolset.PluginToolset", "PluginToolset.PluginToolset.UpdatePluginDescriptor", S_epic_update_plugin_descriptor, p),
   ),
   epic_validate_new_plugin_name_and_location: bp(
-    "unknown",
+    "read",
     "[Epic PluginToolset.PluginToolset] Validates that PluginName and RelativePluginLocation are acceptable for a new plugin. Params: pluginName, relativePluginLocation, bPlaceInEngine, templateInfo",
     "epic_call_tool",
     (p) => epicToolCall("PluginToolset.PluginToolset", "PluginToolset.PluginToolset.ValidateNewPluginNameAndLocation", S_epic_validate_new_plugin_name_and_location, p),

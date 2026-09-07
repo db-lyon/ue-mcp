@@ -141,7 +141,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("editor_toolset.toolsets.blueprint.BlueprintTools", "editor_toolset.toolsets.blueprint.BlueprintTools.arrange_nodes", S_epic_arrange_nodes, p),
   ),
   epic_break_pins: bp(
-    "unknown",
+    "mutate",
     "[Epic editor_toolset.toolsets.blueprint.BlueprintTools] Breaks the connection between two pins. Params: output_pin, input_pin",
     "epic_call_tool",
     (p) => epicToolCall("editor_toolset.toolsets.blueprint.BlueprintTools", "editor_toolset.toolsets.blueprint.BlueprintTools.break_pins", S_epic_break_pins, p),

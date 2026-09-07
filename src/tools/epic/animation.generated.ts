@@ -573,7 +573,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.bake_transform", S_epic_bake_transform, p),
   ),
   epic_blend_values_on_selected: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools] Perform a blend operation on selected keys or controls. Params: sequence, operation, blend_value",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.blend_values_on_selected", S_epic_blend_values_on_selected, p),
@@ -585,7 +585,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools", "animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools.change_actor_template_class", S_epic_change_actor_template_class, p),
   ),
   epic_change_variable_type: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig.ControlRigTools] Change the type of an existing variable. Params: control_rig, name, new_type",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig.ControlRigTools", "animation_toolset.toolsets.controlrig.ControlRigTools.change_variable_type", S_epic_change_variable_type, p),
@@ -627,7 +627,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.close_sequence", S_epic_close_sequence, p),
   ),
   epic_collapse_anim_layers: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools] Collapse all sections and layers on a Control Rig track into one section. Params: sequence, control_rig_asset_path, reduce_keys?, tolerance?",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.collapse_anim_layers", S_epic_collapse_anim_layers, p),
@@ -639,19 +639,19 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.controlrig.ControlRigTools", "animation_toolset.toolsets.controlrig.ControlRigTools.connect_pins", S_epic_connect_pins, p),
   ),
   epic_convert_to_custom_binding: bp(
-    "read",
+    "mutate",
     "[Epic animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools] Convert a binding to a custom binding type. Params: binding, binding_type_class",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools", "animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools.convert_to_custom_binding", S_epic_convert_to_custom_binding, p),
   ),
   epic_convert_to_possessable: bp(
-    "read",
+    "mutate",
     "[Epic animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools] Convert a spawnable binding to a possessable. Params: binding",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools", "animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools.convert_to_possessable", S_epic_convert_to_possessable, p),
   ),
   epic_convert_to_spawnable: bp(
-    "read",
+    "mutate",
     "[Epic animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools] Convert a possessable binding to a spawnable. Params: binding",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools", "animation_toolset.toolsets.custom_bindings.SequencerCustomBindingTools.convert_to_spawnable", S_epic_convert_to_spawnable, p),
@@ -819,7 +819,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.find_tracks_by_type", S_epic_find_tracks_by_type, p),
   ),
   epic_fix_actor_references: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.sequencer.SequencerTools] Attempt to auto-fix broken actor references in the current sequence. Params: none",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.fix_actor_references", S_epic_fix_actor_references, p),
@@ -837,13 +837,13 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.focus_sub_sequence", S_epic_focus_sub_sequence, p),
   ),
   epic_force_evaluate: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.sequencer.SequencerTools] Force the Sequencer to evaluate and update the viewport. Params: none",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.force_evaluate", S_epic_force_evaluate, p),
   ),
   epic_frame_selection: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools] Frame the viewport to the current Control Rig control selection. Params: none",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.frame_selection", S_epic_frame_selection, p),
@@ -1599,7 +1599,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.has_section_start_frame", S_epic_has_section_start_frame, p),
   ),
   epic_hide_all_controls: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools] Hide all controls on a Control Rig section (mask everything). Params: section",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.hide_all_controls", S_epic_hide_all_controls, p),
@@ -1689,13 +1689,13 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.is_track_filter_active", S_epic_is_track_filter_active, p),
   ),
   epic_key_controls: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools] Key the specified controls on the section at the current Sequencer time. Params: section, control_names",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.key_controls", S_epic_key_controls, p),
   ),
   epic_key_controls_at_frames: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools] Key the specified controls at specific frame numbers. Params: section, control_names, frames",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.key_controls_at_frames", S_epic_key_controls_at_frames, p),
@@ -1737,7 +1737,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.load_anim_into_rig", S_epic_load_anim_into_rig, p),
   ),
   epic_merge_anim_layers: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools] Merge specified animation layers into one. Merges onto the layer with the lowest index. Params: indices",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.merge_anim_layers", S_epic_merge_anim_layers, p),
@@ -1791,7 +1791,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.paste_tracks", S_epic_paste_tracks, p),
   ),
   epic_pause: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.sequencer.SequencerTools] Pause playback of the current sequence. Params: none",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.pause", S_epic_pause, p),
@@ -1803,13 +1803,13 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.play", S_epic_play, p),
   ),
   epic_play_to: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.sequencer.SequencerTools] Play from the current position to a specific frame, then stop. Params: frame",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.play_to", S_epic_play_to, p),
   ),
   epic_rebind_component: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.sequencer.SequencerTools] Rebind component bindings to a named component. Params: component_bindings, component_name",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.rebind_component", S_epic_rebind_component, p),
@@ -2361,19 +2361,19 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.set_world_transform", S_epic_set_world_transform, p),
   ),
   epic_show_all_controls: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools] Show all controls on a Control Rig section (unmask everything). Params: section",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.show_all_controls", S_epic_show_all_controls, p),
   ),
   epic_show_curve: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.keyframing.SequencerKeyframingTools] Show or hide a curve in the Curve Editor. Params: channel, show",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.keyframing.SequencerKeyframingTools", "animation_toolset.toolsets.keyframing.SequencerKeyframingTools.show_curve", S_epic_show_curve, p),
   ),
   epic_snap_control_rig: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools] Snap Control Rig controls to a target actor over a frame range. Params: sequence, control_rig_asset_path, control_names, target_actor_name, start_frame, end_frame, keep_offset?, snap_position?, snap_rotation?, snap_scale?",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.snap_control_rig", S_epic_snap_control_rig, p),
@@ -2385,7 +2385,7 @@ export const actions: Record<string, ActionSpec> = {
     (p) => epicToolCall("animation_toolset.toolsets.sequencer.SequencerTools", "animation_toolset.toolsets.sequencer.SequencerTools.tag_binding", S_epic_tag_binding, p),
   ),
   epic_tween_control_rig: bp(
-    "unknown",
+    "mutate",
     "[Epic animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools] Perform a tween operation on a Control Rig at the current Sequencer time. The tween blends between the previous and next keyframe values. Params: sequence, control_rig_asset_path, tween_value",
     "epic_call_tool",
     (p) => epicToolCall("animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools", "animation_toolset.toolsets.controlrig_sequencer.SequencerControlRigTools.tween_control_rig", S_epic_tween_control_rig, p),
