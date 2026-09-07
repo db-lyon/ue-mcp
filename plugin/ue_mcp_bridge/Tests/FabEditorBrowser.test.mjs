@@ -42,6 +42,10 @@ test('purchases are blocked', async () => {
   const f = fixture('Buy now'); await f.inspect(); const r = await f.act();
   assert.equal(r.success, false); assert.equal(f.node.clicked, 0);
 });
+test('the real Purchases library navigation is not a purchase action', async () => {
+  const f = fixture('Purchases', 'A', {href:'https://www.fab.com/plugins/ue5/library'}); await f.inspect(); const r = await f.act();
+  assert.equal(r.success, true); assert.equal(f.node.clicked, 1);
+});
 test('engine installation is blocked', async () => {
   const f = fixture('Install to engine'); await f.inspect(); const r = await f.act('download');
   assert.equal(r.success, false); assert.equal(f.node.clicked, 0);

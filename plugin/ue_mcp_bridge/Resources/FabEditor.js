@@ -17,6 +17,8 @@ async function runFabEditor(args) {
     } catch { return ''; }
   };
   const fingerprint = node => [node.tagName, node.getAttribute('role') || '', text(node), node.getAttribute('href') || ''].join('|');
+  const libraryNavigation = node => node.tagName === 'A' && text(node) === 'Purchases' &&
+    /\/plugins\/ue5\/library\/?$/.test(safeHref(node));
   const forbidden = /buy|purchase|checkout|cart|wishlist|favorite|favourite|subscribe|follow|place order|payment|install to engine|add to (my )?library|claim|delete|remove|sign out|log out/i;
   const downloadLabel = /^(add to project|download|download now|import|\+)$/i;
   try {
@@ -28,15 +30,27 @@ async function runFabEditor(args) {
         return node.type === 'search' || /search/i.test(node.getAttribute('placeholder') || node.getAttribute('aria-label') || '');
       }).slice(0, 300);
       const snapshotId = args.nonce;
+      const requests = typeof performance === 'undefined' ? [] : performance.getEntriesByType('resource')
+        .filter(entry => ['fetch', 'xmlhttprequest'].includes(entry.initiatorType))
+        .map(entry => {
+          try {
+            const url = new URL(entry.name);
+            if (!['fab.com', 'www.fab.com'].includes(url.hostname) || !/^\/(i|e)\//.test(url.pathname)) return null;
+            const values = new Set(['is_owned', 'isOwned', 'in', 'view', 'count', 'limit', 'offset', 'sort_by', 'q', 'query', 'asset_formats', 'distribution_method']);
+            return { path: url.pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}|[0-9a-f]{32}/gi, '{id}'),
+              parameters: Object.fromEntries([...url.searchParams].map(([key,value]) => [key, values.has(key) ? value.slice(0,128) : '[present]'])),
+              status: entry.responseStatus || null };
+          } catch { return null; }
+        }).filter(Boolean).slice(-40);
       window.__ueMcpFabSnapshot = { snapshotId, url: location.href, nodes, fingerprints: nodes.map(fingerprint), at: Date.now() };
       const elements = nodes.map((node, index) => ({
         elementId: String(index), tag: node.tagName.toLowerCase(), role: node.getAttribute('role') || '',
         label: text(node).slice(0, 250), disabled: !!node.disabled || node.getAttribute('aria-disabled') === 'true',
         href: node.tagName === 'A' ? safeHref(node) : undefined,
         options: node.tagName === 'SELECT' ? [...node.options].slice(0, 100).map(option => ({ value: option.value, label: option.label })) : undefined,
-        requiresDownloadAuthorization: downloadLabel.test(text(node)), blocked: forbidden.test(text(node))
+        requiresDownloadAuthorization: downloadLabel.test(text(node)), blocked: forbidden.test(text(node)) && !libraryNavigation(node)
       }));
-      return respond({ success: true, snapshotId, url: location.origin + location.pathname, elements,
+      return respond({ success: true, snapshotId, url: location.origin + location.pathname, elements, requests,
         text: (document.querySelector('main') || document.body).innerText.slice(0, 16000),
         progress: [...document.querySelectorAll('[role="progressbar"],progress')].filter(visible).slice(0, 30).map(node => ({ label: text(node).slice(0, 200), value: node.getAttribute('aria-valuenow') || node.getAttribute('value'), max: node.getAttribute('aria-valuemax') || node.getAttribute('max') })),
         note: 'UI evidence only. Ownership comes exclusively from the native authenticated library result.' });
@@ -49,7 +63,7 @@ async function runFabEditor(args) {
     if (!node || !visible(node) || fingerprint(node) !== snapshot.fingerprints[index]) return fail('The target changed. Inspect again before interacting.');
     if (node.disabled || node.getAttribute('aria-disabled') === 'true') return fail('The selected Fab control is disabled.');
     const label = text(node);
-    if (forbidden.test(label)) return fail('Purchases, acquisition, account changes, and engine installation are not supported by this tool.');
+    if (forbidden.test(label) && !libraryNavigation(node)) return fail('Purchases, acquisition, account changes, and engine installation are not supported by this tool.');
     if (args.operation === 'set_search') {
       if (node.tagName !== 'INPUT' || !(node.type === 'search' || /search/i.test(node.getAttribute('placeholder') || node.getAttribute('aria-label') || '')))
         return fail('set_search only accepts a search input returned by inspect.');

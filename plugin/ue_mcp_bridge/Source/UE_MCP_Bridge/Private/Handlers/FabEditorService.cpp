@@ -6,9 +6,6 @@
 #include "Containers/Ticker.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/PlatformTime.h"
-#include "GenericPlatform/GenericPlatformHttp.h"
-#include "HttpModule.h"
-#include "Interfaces/IHttpResponse.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/Base64.h"
 #include "Misc/FileHelper.h"
@@ -35,12 +32,11 @@ namespace Detail
 		double Started = FPlatformTime::Seconds();
 		double Deadline = Started + 30.0;
 		int32 Pages = 0;
-		int32 BatchSize = 500;
+		int64 BytesReceived = 0;
 		TSet<FString> Cursors;
 		TSet<FString> AssetIds;
 		TArray<TSharedPtr<FJsonObject>> Items;
 		TSharedPtr<FJsonObject> Result;
-		FHttpRequestPtr Request;
 		TWeakPtr<SWebBrowser> Browser;
 		TStrongObjectPtr<UMCPFabBrowserReply> Reply;
 	};
@@ -72,7 +68,8 @@ namespace Detail
 	{
 		Op.State = TEXT("failed");
 		Op.Error = Error;
-		Op.Request.Reset();
+		if (Op.Kind == TEXT("refresh_library")) if (auto Browser = Op.Browser.Pin())
+			Browser->ExecuteJavascript(TEXT("window.__ueMcpFabLibraryRequests?.get('") + Op.Id + TEXT("')?.abort();"));
 		ReleaseBrowser(Op);
 	}
 
@@ -83,9 +80,7 @@ namespace Detail
 			FOperation& Op = *Pair.Value;
 			if (Op.State == TEXT("running") && FPlatformTime::Seconds() > Op.Deadline)
 			{
-				auto Request = Op.Request;
 				Fail(Op, TEXT("Timed out. A submitted UI action may already have taken effect. Inspect Fab before retrying; sign-in or verification may need your attention."));
-				if (Request) { Request->OnProcessRequestComplete().Unbind(); Request->CancelRequest(); }
 			}
 		}
 	}
@@ -117,6 +112,7 @@ namespace Detail
 		Res->SetBoolField(TEXT("async"), Op.State == TEXT("running"));
 		Res->SetBoolField(TEXT("outcomeUnknown"), Op.State == TEXT("failed") && Op.Kind != TEXT("refresh_library") && Op.Kind != TEXT("inspect") && Op.Error.StartsWith(TEXT("Timed out")));
 		Res->SetNumberField(TEXT("pagesReceived"), Op.Pages);
+		Res->SetNumberField(TEXT("itemsReceived"), Op.AssetIds.Num());
 		if (!Op.Error.IsEmpty()) { Res->SetBoolField(TEXT("success"), false); Res->SetStringField(TEXT("error"), Op.Error); }
 		if (Op.Result) Res->SetObjectField(TEXT("result"), Op.Result);
 		return MCPResult(Res);
@@ -174,58 +170,6 @@ namespace Detail
 		return true;
 	}
 
-	static void FetchPage(const TSharedPtr<FOperation>& Op, const FString& Cursor)
-	{
-		FString Token, Account, Error;
-		if (!Auth(Token, Account, Error) || Account != Op->Account)
-		{ Fail(*Op, Error.IsEmpty() ? TEXT("Fab account changed during the refresh.") : Error); return; }
-		if (Op->Pages >= 200 || Op->Items.Num() >= 100000)
-		{ Fail(*Op, TEXT("Library safety limit reached; no partial ownership inventory was published.")); return; }
-		FString Url = FString::Printf(TEXT("https://fab.com/e/accounts/%s/ue/library?count=%d"), *Account, Op->BatchSize);
-		if (!Cursor.IsEmpty()) Url += TEXT("&cursor=") + FGenericPlatformHttp::UrlEncode(TEXT("\"") + Cursor + TEXT("\""));
-		auto Request = FHttpModule::Get().CreateRequest();
-		Op->Request = Request;
-		Request->SetVerb(TEXT("GET")); Request->SetURL(Url);
-		Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
-		Request->SetHeader(TEXT("Authorization"), TEXT("Bearer ") + Token);
-		Token.Reset(); Request->SetTimeout(25.0f);
-		Request->OnProcessRequestComplete().BindLambda([Weak = TWeakPtr<FOperation>(Op)](FHttpRequestPtr, FHttpResponsePtr Response, bool Ok)
-		{
-			auto Current = Weak.Pin(); if (!Current || Current->State != TEXT("running")) return;
-			if (!Ok || !Response || Response->GetResponseCode() != 200)
-			{ Fail(*Current, FString::Printf(TEXT("Fab library request failed (HTTP %d). No owned results were published."), Response ? Response->GetResponseCode() : 0)); return; }
-			if (Response->GetContent().Num() > 16 * 1024 * 1024)
-			{ Fail(*Current, TEXT("Fab library response exceeds the safety limit.")); return; }
-			TSharedPtr<FJsonObject> Page; FString Next, Error;
-			TArray<TSharedPtr<FJsonObject>> Items;
-			if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Response->GetContentAsString()), Page) || !ParseLibraryPage(Page, Items, Next, Error))
-			{ Fail(*Current, Error.IsEmpty() ? TEXT("Fab returned invalid library JSON.") : Error); return; }
-			for (auto& Item : Items)
-			{
-				const FString Id = Item->GetStringField(TEXT("assetId"));
-				if (!Current->AssetIds.Contains(Id)) { Current->AssetIds.Add(Id); Current->Items.Add(Item); }
-			}
-			++Current->Pages;
-			if (!Next.IsEmpty())
-			{
-				if (Current->Cursors.Contains(Next)) { Fail(*Current, TEXT("Fab repeated a pagination cursor; refresh rejected.")); return; }
-				Current->Cursors.Add(Next); FetchPage(Current, Next); return;
-			}
-			if (Current->Items.IsEmpty()) { Fail(*Current, TEXT("Fab returned an empty library; ownership could not be verified.")); return; }
-			FString Token, Account, AuthError;
-			if (!Auth(Token, Account, AuthError) || Account != Current->Account)
-			{ Fail(*Current, TEXT("Fab account changed or signed out during refresh.")); return; }
-			Library = MoveTemp(Current->Items); LibraryAccount = Account;
-			LibraryRevision = Current->Id; LibraryUsable = true; LibraryFetchedAt = FPlatformTime::Seconds();
-			Current->Result = MakeShared<FJsonObject>();
-			Current->Result->SetNumberField(TEXT("count"), Library.Num());
-			Current->Result->SetBoolField(TEXT("complete"), true);
-			Current->Result->SetStringField(TEXT("source"), TEXT("authenticated_fab_ue_library"));
-			Current->State = TEXT("completed"); Current->Request.Reset();
-		});
-		if (!Request->ProcessRequest()) Fail(*Op, TEXT("Fab library request could not start."));
-	}
-
 	static void FindBrowsers(const TSharedRef<SWidget>& Widget, int32 Depth, int32& Budget)
 	{
 		if (--Budget < 0 || Depth > 80) return;
@@ -247,7 +191,41 @@ namespace Detail
 	{
 		if (!FSlateApplication::IsInitialized()) return;
 		int32 Budget = 50000;
-		for (const auto& Window : FSlateApplication::Get().GetTopLevelWindows()) FindBrowsers(Window, 0, Budget);
+		// Detached Fab tabs are owned child windows, not top-level Slate windows.
+		TArray<TSharedRef<SWindow>> Windows;
+		FSlateApplication::Get().GetAllVisibleWindowsOrdered(Windows);
+		for (const auto& Window : Windows) FindBrowsers(Window, 0, Budget);
+	}
+
+	static TSharedPtr<SWebBrowser> SelectBrowser(const TSharedPtr<FJsonObject>& Params, FString& Error)
+	{
+		DiscoverBrowsers();
+		TSharedPtr<SWebBrowser> Browser;
+		const int32 Id = OptionalInt(Params, TEXT("browserId"), -1);
+		if (Id >= 0) { if (Browsers.IsValidIndex(Id)) Browser = Browsers[Id].Pin(); }
+		else for (const auto& Candidate : Browsers) if (auto Tab = Candidate.Pin(); Tab && IsFabUrl(Tab->GetUrl()))
+		{
+			if (Browser) { Error = TEXT("Multiple Fab tabs are open. Supply browserId from status."); return nullptr; }
+			Browser = Tab;
+		}
+		if (!Browser || !IsFabUrl(Browser->GetUrl()) || !Browser->IsLoaded())
+		{ Error = TEXT("Open Fab and wait for its editor browser to finish loading."); return nullptr; }
+		return Browser;
+	}
+
+	static bool StartBrowserRequest(const TSharedPtr<FOperation>& Op, const TSharedPtr<SWebBrowser>& Browser,
+		const TSharedRef<FJsonObject>& Args, const TCHAR* Resource)
+	{
+		const auto Plugin = IPluginManager::Get().FindPlugin(TEXT("UE_MCP_Bridge"));
+		FString Script;
+		if (!Plugin || !FFileHelper::LoadFileToString(Script, *(Plugin->GetBaseDir() / Resource)))
+		{ Fail(*Op, TEXT("The Fab script resource is missing from the bridge plugin.")); return false; }
+		Op->Browser = Browser;
+		Op->Reply.Reset(NewObject<UMCPFabBrowserReply>()); Op->Reply->OperationId = Op->Id;
+		Args->SetStringField(TEXT("nonce"), Op->Id);
+		Browser->BindUObject(TEXT("uemcpfab"), Op->Reply.Get(), false);
+		Browser->ExecuteJavascript(TEXT("(") + Script + TEXT(")(") + JsonString(Args) + TEXT(");"));
+		return true;
 	}
 
 	static TSharedPtr<FJsonObject> FindOwned(const FString& Id)
@@ -306,44 +284,104 @@ bool ParseLibraryPage(const TSharedPtr<FJsonObject>& Page, TArray<TSharedPtr<FJs
 	if (!Page || !Page->TryGetArrayField(TEXT("results"), Results) || !Page->TryGetObjectField(TEXT("cursors"), Cursors))
 	{ OutError = TEXT("Fab library response is missing results/cursors; no ownership was inferred."); return false; }
 	const auto Next = (*Cursors)->TryGetField(TEXT("next"));
-	if (Next && Next->Type != EJson::Null && (!Next->TryGetString(OutCursor) || OutCursor.Len() > 4096))
+	if (!Next || (Next->Type != EJson::Null && (!Next->TryGetString(OutCursor) || OutCursor.Len() > 4096)))
 	{ OutError = TEXT("Fab returned an invalid next cursor."); return false; }
+	auto CopyText = [](const TSharedPtr<FJsonObject>& From, const TCHAR* Key, const TSharedPtr<FJsonObject>& To, const TCHAR* Target)
+	{ FString Text; if (From->TryGetStringField(Key, Text)) To->SetStringField(Target, Text.Left(8000)); };
+	auto CopyStrings = [](const TSharedPtr<FJsonObject>& From, const TCHAR* Key, const TSharedPtr<FJsonObject>& To, const TCHAR* Target)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		TArray<TSharedPtr<FJsonValue>> Strings;
+		if (From->TryGetArrayField(Key, Values)) for (const auto& Value : *Values)
+		{ FString Text; if (Value && Value->TryGetString(Text) && Text.Len() <= 256 && Strings.Num() < 100) Strings.Add(MakeShared<FJsonValueString>(Text)); }
+		To->SetArrayField(Target, Strings);
+	};
 	for (const auto& Value : *Results)
 	{
-		const TSharedPtr<FJsonObject>* Source = nullptr; FString Id, Title;
-		if (!Value || !Value->TryGetObject(Source) || !(*Source)->TryGetStringField(TEXT("assetId"), Id) ||
-			Id.IsEmpty() || Id.Len() > 128 || !(*Source)->TryGetStringField(TEXT("title"), Title) || Title.IsEmpty())
-		{ OutError = TEXT("Fab returned a malformed owned-library item."); OutItems.Reset(); return false; }
+		const TSharedPtr<FJsonObject>* Entry = nullptr;
+		const TSharedPtr<FJsonObject>* Listing = nullptr;
+		FString Source, Id, Title;
+		FGuid Guid;
+		if (!Value || !Value->TryGetObject(Entry) || !(*Entry)->TryGetStringField(TEXT("source"), Source) || Source != TEXT("acquired") ||
+			!(*Entry)->TryGetObjectField(TEXT("listing"), Listing) || !(*Listing)->TryGetStringField(TEXT("uid"), Id) ||
+			!FGuid::Parse(Id, Guid) || !(*Listing)->TryGetStringField(TEXT("title"), Title) || Title.IsEmpty())
+		{ OutError = TEXT("Fab returned a malformed or non-acquired My Library record."); OutItems.Reset(); return false; }
 		auto Item = MakeShared<FJsonObject>();
-		for (const TCHAR* Key : {TEXT("assetId"), TEXT("title"), TEXT("description"), TEXT("seller"), TEXT("listingType"), TEXT("assetNamespace"), TEXT("source"), TEXT("distributionMethod")})
-		{ FString Text; if ((*Source)->TryGetStringField(Key, Text)) Item->SetStringField(Key, Text.Left(16000)); }
-		FString Url;
-		if ((*Source)->TryGetStringField(TEXT("url"), Url) && IsFabUrl(Url))
-		{ int32 Cut; if (Url.FindChar('?', Cut)) Url.LeftInline(Cut); if (Url.FindChar('#', Cut)) Url.LeftInline(Cut); Item->SetStringField(TEXT("url"), Url); }
-		const TArray<TSharedPtr<FJsonValue>>* Versions = nullptr;
-		TArray<TSharedPtr<FJsonValue>> SafeVersions;
-		if ((*Source)->TryGetArrayField(TEXT("projectVersions"), Versions)) for (const auto& Version : *Versions)
-		{
-			const TSharedPtr<FJsonObject>* Record = nullptr;
-			if (!Version || !Version->TryGetObject(Record) || SafeVersions.Num() >= 100) continue;
-			auto Safe = MakeShared<FJsonObject>();
-			for (const TCHAR* Key : {TEXT("engineVersions"), TEXT("targetPlatforms"), TEXT("buildVersions")})
-			{
-				const TArray<TSharedPtr<FJsonValue>>* Values = nullptr; TArray<TSharedPtr<FJsonValue>> Strings;
-				if ((*Record)->TryGetArrayField(Key, Values)) for (const auto& VersionValue : *Values)
-				{ FString Text; if (VersionValue && VersionValue->TryGetString(Text) && Text.Len() <= 256 && Strings.Num() < 100) Strings.Add(MakeShared<FJsonValueString>(Text)); }
-				Safe->SetArrayField(Key, Strings);
-			}
-			SafeVersions.Add(MakeShared<FJsonValueObject>(Safe));
-		}
-		Item->SetArrayField(TEXT("projectVersions"), SafeVersions);
+		Item->SetStringField(TEXT("assetId"), Id);
+		Item->SetStringField(TEXT("title"), Title.Left(1000));
+		Item->SetStringField(TEXT("source"), Source);
+		Item->SetStringField(TEXT("url"), TEXT("https://www.fab.com/listings/") + Id);
 		Item->SetBoolField(TEXT("owned"), true);
-		Item->SetStringField(TEXT("ownershipSource"), TEXT("authenticated_fab_ue_library"));
+		Item->SetStringField(TEXT("ownershipSource"), TEXT("authenticated_fab_browser_library"));
+		CopyText(*Entry, TEXT("uid"), Item, TEXT("libraryEntryId"));
+		CopyText(*Entry, TEXT("createdAt"), Item, TEXT("acquiredAt"));
+		CopyText(*Listing, TEXT("listingType"), Item, TEXT("listingType"));
+		bool Active = false;
+		if ((*Listing)->TryGetBoolField(TEXT("isActiveInLive"), Active)) Item->SetBoolField(TEXT("available"), Active);
+		const TSharedPtr<FJsonObject>* Publisher = nullptr;
+		if ((*Listing)->TryGetObjectField(TEXT("publisher"), Publisher)) CopyText(*Publisher, TEXT("sellerName"), Item, TEXT("seller"));
+		const TSharedPtr<FJsonObject>* Entitlement = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* LicenseValues = nullptr;
+		TArray<TSharedPtr<FJsonValue>> Licenses;
+		if ((*Entry)->TryGetObjectField(TEXT("entitlement"), Entitlement) && (*Entitlement)->TryGetArrayField(TEXT("licenses"), LicenseValues))
+			for (const auto& LicenseValue : *LicenseValues)
+			{
+				const TSharedPtr<FJsonObject>* License = nullptr;
+				if (!LicenseValue || !LicenseValue->TryGetObject(License) || Licenses.Num() >= 20) continue;
+				auto Safe = MakeShared<FJsonObject>(); CopyText(*License, TEXT("name"), Safe, TEXT("name")); CopyText(*License, TEXT("slug"), Safe, TEXT("slug"));
+				Licenses.Add(MakeShared<FJsonValueObject>(Safe));
+			}
+		Item->SetArrayField(TEXT("licenses"), Licenses);
+		const TArray<TSharedPtr<FJsonValue>>* FormatValues = nullptr;
+		TArray<TSharedPtr<FJsonValue>> Formats, Versions;
+		FString Delivery = TEXT("unknown");
+		bool HasUnreal = false, HasSourceFormat = false;
+		if ((*Listing)->TryGetArrayField(TEXT("assetFormats"), FormatValues)) for (const auto& FormatValue : *FormatValues)
+		{
+			const TSharedPtr<FJsonObject>* Format = nullptr;
+			const TSharedPtr<FJsonObject>* Type = nullptr;
+			const TSharedPtr<FJsonObject>* Specs = nullptr;
+			FString Code, Method;
+			if (!FormatValue || !FormatValue->TryGetObject(Format) || !(*Format)->TryGetObjectField(TEXT("assetFormatType"), Type) ||
+				!(*Type)->TryGetStringField(TEXT("code"), Code) || Formats.Num() >= 30) continue;
+			auto Safe = MakeShared<FJsonObject>(); Safe->SetStringField(TEXT("code"), Code);
+			FString FormatDelivery = TEXT("unknown");
+			if (Code == TEXT("fbx") || Code == TEXT("gltf") || Code == TEXT("glb") || Code == TEXT("converted-files"))
+			{ HasSourceFormat = true; FormatDelivery = TEXT("source_files"); }
+			if ((*Format)->TryGetObjectField(TEXT("technicalSpecs"), Specs))
+			{
+				(*Specs)->TryGetStringField(TEXT("unrealEngineDistributionMethod"), Method);
+				Safe->SetStringField(TEXT("distributionMethod"), Method);
+				CopyStrings(*Specs, TEXT("unrealEngineEngineVersions"), Safe, TEXT("engineVersions"));
+				CopyStrings(*Specs, TEXT("unrealEngineTargetPlatforms"), Safe, TEXT("targetPlatforms"));
+				if (!Item->HasField(TEXT("description"))) CopyText(*Specs, TEXT("technicalDetails"), Item, TEXT("description"));
+				if (Code == TEXT("unreal-engine"))
+				{
+					HasUnreal = true;
+					if (Method == TEXT("asset_pack")) FormatDelivery = TEXT("add_to_project");
+					else if (Method == TEXT("complete_project")) FormatDelivery = TEXT("create_project");
+					else if (Method == TEXT("code_plugin")) FormatDelivery = TEXT("install_plugin");
+					Delivery = FormatDelivery;
+					Item->SetStringField(TEXT("distributionMethod"), Method);
+					auto Version = MakeShared<FJsonObject>();
+					CopyStrings(*Specs, TEXT("unrealEngineEngineVersions"), Version, TEXT("engineVersions"));
+					CopyStrings(*Specs, TEXT("unrealEngineTargetPlatforms"), Version, TEXT("targetPlatforms"));
+					Versions.Add(MakeShared<FJsonValueObject>(Version));
+				}
+			}
+			if (Code == TEXT("unreal-engine")) HasUnreal = true;
+			Safe->SetStringField(TEXT("deliveryMode"), FormatDelivery);
+			Formats.Add(MakeShared<FJsonValueObject>(Safe));
+		}
+		if (!HasUnreal && HasSourceFormat) Delivery = TEXT("source_files");
+		Item->SetStringField(TEXT("deliveryMode"), Delivery);
+		Item->SetBoolField(TEXT("deliveryModeVerified"), Delivery != TEXT("unknown"));
+		Item->SetArrayField(TEXT("formats"), Formats);
+		Item->SetArrayField(TEXT("projectVersions"), Versions);
 		OutItems.Add(Item);
 	}
 	return true;
 }
-
 TSharedPtr<FJsonValue> Execute(const TSharedPtr<FJsonObject>& Params)
 {
 	using namespace Detail;
@@ -360,11 +398,15 @@ TSharedPtr<FJsonValue> Execute(const TSharedPtr<FJsonObject>& Params)
 		}
 		else if (Key == TEXT("confirmDownload"))
 		{ bool Value; if (!Pair.Value || !Pair.Value->TryGetBool(Value)) return MCPError(TEXT("confirmDownload must be boolean.")); }
-		else if (Key == TEXT("operation") || Key == TEXT("operationId") || Key == TEXT("assetId") || Key == TEXT("query") || Key == TEXT("snapshotId") || Key == TEXT("elementId") || Key == TEXT("value"))
+		else if (Key == TEXT("operation") || Key == TEXT("operationId") || Key == TEXT("assetId") || Key == TEXT("query") || Key == TEXT("snapshotId") || Key == TEXT("elementId") || Key == TEXT("value") || Key == TEXT("deliveryMode"))
 		{ FString Value; if (!Pair.Value || !Pair.Value->TryGetString(Value) || Value.Len() > 512) return MCPError(Key + TEXT(" must be a string of at most 512 characters.")); }
 		else return MCPError(TEXT("Unknown Fab parameter: ") + Key);
 	}
 	const FString Action = OptionalString(Params, TEXT("operation"), TEXT("status"));
+	const FString RequestedMode = OptionalString(Params, TEXT("deliveryMode"));
+	if (!RequestedMode.IsEmpty() && RequestedMode != TEXT("add_to_project") && RequestedMode != TEXT("create_project") &&
+		RequestedMode != TEXT("install_plugin") && RequestedMode != TEXT("source_files") && RequestedMode != TEXT("unknown"))
+		return MCPError(TEXT("deliveryMode must be add_to_project, create_project, install_plugin, source_files, or unknown."));
 	if (Action == TEXT("operation_status") || Action == TEXT("cancel_operation"))
 	{
 		const auto* Found = Operations.Find(OptionalString(Params, TEXT("operationId")));
@@ -374,9 +416,10 @@ TSharedPtr<FJsonValue> Execute(const TSharedPtr<FJsonObject>& Params)
 		{
 			if (Op->Kind != TEXT("refresh_library") && Op->Kind != TEXT("inspect"))
 				return MCPError(TEXT("A queued UI interaction cannot safely be recalled. Inspect Fab and check this operation instead; do not retry the click automatically."));
-			Op->State = TEXT("cancelled"); ReleaseBrowser(*Op);
-			if (Op->Request) { Op->Request->OnProcessRequestComplete().Unbind(); Op->Request->CancelRequest(); }
-			Op->Request.Reset();
+			Op->State = TEXT("cancelled");
+			if (Op->Kind == TEXT("refresh_library")) if (auto Browser = Op->Browser.Pin())
+				Browser->ExecuteJavascript(TEXT("window.__ueMcpFabLibraryRequests?.get('") + Op->Id + TEXT("')?.abort();"));
+			ReleaseBrowser(*Op);
 		}
 		return OperationResult(*Op);
 	}
@@ -398,11 +441,17 @@ TSharedPtr<FJsonValue> Execute(const TSharedPtr<FJsonObject>& Params)
 	{
 		FString Token, Account, Error; if (!Auth(Token, Account, Error)) return MCPError(Error);
 		if (const auto* Existing = Operations.Find(RefreshId); Existing && (*Existing)->State == TEXT("running")) return OperationResult(**Existing);
-		const double Count = OptionalNumber(Params, TEXT("batchSize"), 500);
+		const double Count = OptionalNumber(Params, TEXT("batchSize"), 24);
 		if (!FMath::IsFinite(Count) || Count < 1 || Count > 1000 || Count != FMath::FloorToDouble(Count)) return MCPError(TEXT("batchSize must be an integer from 1 to 1000."));
+		auto Browser = SelectBrowser(Params, Error); if (!Browser) return MCPError(Error);
+		for (const auto& Pair : Operations) if (Pair.Value->State == TEXT("running") && Pair.Value->Browser.Pin() == Browser)
+			return MCPError(TEXT("Wait for the current operation on this Fab tab."));
 		auto Op = NewOperation(Action); if (!Op) return MCPError(TEXT("Too many running Fab operations."));
-		Op->Account = Account; Op->BatchSize = static_cast<int32>(Count); Op->Deadline = Op->Started + 300;
-		RefreshId = Op->Id; LibraryUsable = false; FetchPage(Op, TEXT("")); return OperationResult(*Op);
+		Op->Account = Account; Op->Deadline = Op->Started + 300;
+		RefreshId = Op->Id; LibraryUsable = false;
+		auto Args = MakeShared<FJsonObject>(); Args->SetStringField(TEXT("expectedAccount"), Account);
+		StartBrowserRequest(Op, Browser, Args, TEXT("Resources/FabLibrary.js"));
+		return OperationResult(*Op);
 	}
 	if (Action == TEXT("search_library") || Action == TEXT("get_owned_asset"))
 	{
@@ -416,6 +465,8 @@ TSharedPtr<FJsonValue> Execute(const TSharedPtr<FJsonObject>& Params)
 		for (const auto& Item : Library)
 		{
 			if (!Id.IsEmpty() && Item->GetStringField(TEXT("assetId")) != Id) continue;
+			const FString Mode = OptionalString(Params, TEXT("deliveryMode"));
+			if (!Mode.IsEmpty() && Item->GetStringField(TEXT("deliveryMode")) != Mode) continue;
 			FString Search;
 			for (const TCHAR* Key : {TEXT("title"), TEXT("description"), TEXT("seller"), TEXT("listingType")}) { FString Text; Item->TryGetStringField(Key, Text); Search += Text + TEXT(" "); }
 			bool Match = true; for (const FString& Term : Terms) if (!Search.Contains(Term)) Match = false;
@@ -425,7 +476,7 @@ TSharedPtr<FJsonValue> Execute(const TSharedPtr<FJsonObject>& Params)
 		if (Action == TEXT("get_owned_asset") && Matches.IsEmpty()) return MCPError(TEXT("Asset is not in the verified owned library."));
 		auto Res = MCPSuccess(); Res->SetArrayField(TEXT("items"), Matches); Res->SetNumberField(TEXT("totalMatches"), Total);
 		Res->SetNumberField(TEXT("nextOffset"), Offset + Matches.Num()); Res->SetBoolField(TEXT("hasMore"), Offset + Matches.Num() < Total);
-		Res->SetStringField(TEXT("revision"), LibraryRevision); Res->SetStringField(TEXT("source"), TEXT("authenticated_fab_ue_library")); return MCPResult(Res);
+		Res->SetStringField(TEXT("revision"), LibraryRevision); Res->SetStringField(TEXT("source"), TEXT("authenticated_fab_browser_library")); return MCPResult(Res);
 	}
 	if (Action == TEXT("get_imported_assets"))
 	{
@@ -457,7 +508,7 @@ TSharedPtr<FJsonValue> Execute(const TSharedPtr<FJsonObject>& Params)
 	}
 	if (Action == TEXT("open"))
 	{
-		FString Url = TEXT("https://fab.com/plugins/ue5");
+		FString Url = TEXT("https://www.fab.com/plugins/ue5/library");
 		const FString Id = OptionalString(Params, TEXT("assetId"));
 		if (!Id.IsEmpty())
 		{
@@ -466,7 +517,7 @@ TSharedPtr<FJsonValue> Execute(const TSharedPtr<FJsonObject>& Params)
 			if (!Item || !Item->TryGetStringField(TEXT("url"), ListingUrl)) return MCPError(TEXT("Owned asset has no verified Fab listing URL."));
 			const FString Path = ListingPath(ListingUrl);
 			if (Path.IsEmpty()) return MCPError(TEXT("Unsupported Fab listing URL."));
-			Url += Path;
+			Url = TEXT("https://www.fab.com/plugins/ue5") + Path;
 		}
 		DiscoverBrowsers(); TSharedPtr<SWebBrowser> Existing;
 		const int32 Selected = OptionalInt(Params, TEXT("browserId"), -1);
@@ -483,6 +534,7 @@ TSharedPtr<FJsonValue> Execute(const TSharedPtr<FJsonObject>& Params)
 				if (Pair.Value->State == TEXT("running") && Pair.Value->Browser.Pin() == Existing)
 					return MCPError(TEXT("Wait for the current Fab browser operation before navigating this tab."));
 			if (!Id.IsEmpty()) Existing->LoadURL(Url);
+			else if (!Existing->GetUrl().Contains(TEXT("/library"))) Existing->LoadURL(Url);
 			auto Res = MCPSuccess(); Res->SetStringField(TEXT("state"), Id.IsEmpty() ? TEXT("open") : TEXT("opening")); return MCPResult(Res);
 		}
 		UClass* Class = FindObject<UClass>(nullptr, TEXT("/Script/Fab.FabBrowserApi"));
@@ -504,6 +556,10 @@ TSharedPtr<FJsonValue> Execute(const TSharedPtr<FJsonObject>& Params)
 		FString Error; if (!RequireLibrary(Error)) return MCPError(Error);
 		auto Item = FindOwned(OptionalString(Params, TEXT("assetId"))); FString Url;
 		if (!Item || !Item->TryGetStringField(TEXT("url"), Url)) return MCPError(TEXT("Download target is not a verified owned listing."));
+		const FString Mode = Item->GetStringField(TEXT("deliveryMode"));
+		if (Mode == TEXT("create_project")) return MCPError(TEXT("This is a Create Project product. Create an approved separate staging project through Fab/Launcher, then migrate selected dependencies; do not add it into the current project."));
+		if (Mode == TEXT("install_plugin")) return MCPError(TEXT("This product installs a code plugin and requires separate plugin-installation approval."));
+		if (Mode == TEXT("unknown")) return MCPError(TEXT("Delivery mode is unknown. Inspect Fab/Launcher before choosing Add to Project versus Create Project."));
 		const FString Expected = ListingPath(Url);
 		if (Expected.IsEmpty() || ListingPath(Browser->GetUrl()) != Expected) return MCPError(TEXT("Open the exact owned listing before submitting its download."));
 	}
@@ -527,14 +583,59 @@ void CompleteBrowser(const FString& OperationId, const FString& Nonce, const FSt
 	const auto* Found = Operations.Find(OperationId);
 	if (!Found || Nonce != OperationId || (*Found)->State != TEXT("running")) return;
 	auto Op = *Found;
-	if (Json.Len() > 131072 || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Op->Result) || !Op->Result)
+	const bool IsLibrary = Op->Kind == TEXT("refresh_library");
+	TSharedPtr<FJsonObject> Body;
+	if (Json.Len() > (IsLibrary ? 4 * 1024 * 1024 : 131072) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Body) || !Body)
 	{ Fail(*Op, TEXT("Fab browser returned an invalid or oversized response.")); return; }
 	bool Success = false;
-	if (!Op->Result->TryGetBoolField(TEXT("success"), Success) || !Success)
-	{ FString Error; Op->Result->TryGetStringField(TEXT("error"), Error); Fail(*Op, Error.Left(1000)); return; }
+	if (!Body->TryGetBoolField(TEXT("success"), Success) || !Success)
+	{ FString Error; Body->TryGetStringField(TEXT("error"), Error); Fail(*Op, Error.IsEmpty() ? TEXT("Fab request failed.") : Error.Left(1000)); return; }
+	if (IsLibrary)
+	{
+		FString Event, Endpoint, Token, Account, Error, Next;
+		double PageIndex = 0;
+		const TSharedPtr<FJsonObject>* Page = nullptr;
+		if (!Body->TryGetStringField(TEXT("event"), Event) || Event != TEXT("library_page") ||
+			!Body->TryGetStringField(TEXT("endpoint"), Endpoint) || Endpoint != TEXT("/i/library/search") ||
+			!Body->TryGetNumberField(TEXT("pageIndex"), PageIndex) || PageIndex != Op->Pages + 1 || Op->Pages >= 200 ||
+			!Body->TryGetObjectField(TEXT("page"), Page))
+		{ Fail(*Op, TEXT("Unexpected Fab library response sequence.")); return; }
+		if (!Auth(Token, Account, Error) || Account != Op->Account)
+		{ Fail(*Op, TEXT("Fab account changed or signed out during refresh.")); return; }
+		Op->BytesReceived += static_cast<int64>(Json.Len()) * sizeof(TCHAR);
+		if (Op->BytesReceived > 64 * 1024 * 1024)
+		{ Fail(*Op, TEXT("Fab library exceeds the metadata memory limit; no partial inventory was published.")); return; }
+		TArray<TSharedPtr<FJsonObject>> Items;
+		if (!ParseLibraryPage(*Page, Items, Next, Error)) { Fail(*Op, Error); return; }
+		if (!Next.IsEmpty() && Op->Cursors.Contains(Next))
+		{ Fail(*Op, TEXT("Fab repeated a library cursor; no partial inventory was published.")); return; }
+		for (const auto& Item : Items)
+		{
+			const FString Id = Item->GetStringField(TEXT("assetId"));
+			if (!Op->AssetIds.Contains(Id)) { Op->AssetIds.Add(Id); Op->Items.Add(Item); }
+		}
+		++Op->Pages;
+		if (Op->Items.Num() > 100000) { Fail(*Op, TEXT("Fab library exceeds the item limit.")); return; }
+		if (!Next.IsEmpty()) { Op->Cursors.Add(Next); return; }
+		if (Op->Items.IsEmpty()) { Fail(*Op, TEXT("Fab returned an empty library; ownership could not be verified.")); return; }
+		Library = MoveTemp(Op->Items); LibraryAccount = Account; LibraryRevision = Op->Id;
+		LibraryFetchedAt = FPlatformTime::Seconds(); LibraryUsable = true;
+		Op->Result = MakeShared<FJsonObject>();
+		Op->Result->SetNumberField(TEXT("count"), Library.Num());
+		Op->Result->SetBoolField(TEXT("complete"), true);
+		Op->Result->SetStringField(TEXT("source"), TEXT("authenticated_fab_browser_library"));
+		Op->Result->SetStringField(TEXT("scope"), TEXT("purchases_ue_and_3d_compatible_formats"));
+		Op->Result->SetStringField(TEXT("endpoint"), TEXT("/i/library/search"));
+		Op->Result->SetStringField(TEXT("note"), TEXT("Fab controls page size. Every cursor was followed; no catalog/cache fallback was used."));
+		TMap<FString, int32> Counts;
+		for (const auto& Item : Library) ++Counts.FindOrAdd(Item->GetStringField(TEXT("deliveryMode")));
+		auto Modes = MakeShared<FJsonObject>();
+		for (const auto& Pair : Counts) Modes->SetNumberField(Pair.Key, Pair.Value);
+		Op->Result->SetObjectField(TEXT("deliveryModes"), Modes);
+	}
+	else Op->Result = Body;
 	Op->State = TEXT("completed"); ReleaseBrowser(*Op);
 }
-
 void Register()
 {
 	// The companion package owns the optional MCP tool surface. Register via
@@ -550,8 +651,9 @@ void Shutdown()
 	if (Detail::ExpiryTicker.IsValid()) { FTSTicker::GetCoreTicker().RemoveTicker(Detail::ExpiryTicker); Detail::ExpiryTicker.Reset(); }
 	for (auto& Pair : Detail::Operations)
 	{
+		if (Pair.Value->Kind == TEXT("refresh_library")) if (auto Browser = Pair.Value->Browser.Pin())
+			Browser->ExecuteJavascript(TEXT("window.__ueMcpFabLibraryRequests?.get('") + Pair.Value->Id + TEXT("')?.abort();"));
 		Detail::ReleaseBrowser(*Pair.Value);
-		if (auto Request = Pair.Value->Request) { Request->OnProcessRequestComplete().Unbind(); Request->CancelRequest(); }
 	}
 	Detail::Operations.Reset(); Detail::Library.Reset(); Detail::Browsers.Reset();
 	Detail::LibraryUsable = false; Detail::LibraryAccount.Reset(); Detail::RefreshId.Reset();

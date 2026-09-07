@@ -16,7 +16,8 @@ provides:
           operationId: {type: string, description: ID returned by an asynchronous operation.}
           assetId: {type: string, description: Exact ID returned by the authenticated owned library.}
           query: {type: string, description: Case-insensitive terms matched against owned title/description/seller/type.}
-          batchSize: {type: number, description: Library page size from 1 to 1000.}
+          batchSize: {type: number, description: Compatibility hint from 1 to 1000; the Fab frontend controls actual page size.}
+          deliveryMode: {type: string, description: Optional search filter - add_to_project, create_project, install_plugin, source_files, or unknown.}
           limit: {type: number, description: Search page size from 1 to 100.}
           offset: {type: number, description: Search result offset.}
           browserId: {type: number, description: Tab identifier from status; required if multiple Fab tabs exist.}

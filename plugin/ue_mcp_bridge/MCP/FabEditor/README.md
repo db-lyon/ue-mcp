@@ -34,12 +34,37 @@ dispatch and schemas only; all editor operations run in native C++.
 4. `search_library`: query title, description, seller and listing type. All words
    must match. Use `limit` and `offset`. `get_owned_asset` selects an exact asset ID.
 
+The reader uses the live editor frontend's same-origin /i/library/search request
+with source=acquired, not the experimental TEDS /e/accounts route. Cookies stay
+inside the Fab webview. The /i/users/me response is checked against the native
+editor account before reading and again at completion; no credentials are returned.
+
 The index is memory-only, account-scoped and valid for 30 minutes. It publishes
-only after a successful complete refresh. Empty/malformed/failed responses never
-fall back to public results or cache files. A failed refresh retains the old
-snapshot internally but does not serve it as current ownership evidence.
-The library endpoint and token envelope are compatibility-sensitive Fab internals;
-unsupported versions fail explicitly. No tokens are returned or written to files.
+only after following every cursor successfully. The scope is My Library purchases
+usable by UE, including the frontend's 3D-compatible formats. Fab controls actual
+page size; batchSize is retained as a compatibility hint, not a completeness limit.
+Empty/malformed/failed responses never fall back to public results or cache files.
+A failed refresh retains the old snapshot internally but does not serve it as
+current ownership evidence. Frontend changes require a new live contract check,
+not just compilation or mocked tests.
+
+### Product delivery modes
+
+Each result includes the listing ID (distinct from the library-entry ID), formats,
+engine versions, platforms, licenses when available, raw distributionMethod and
+normalized deliveryMode. Search can filter deliveryMode.
+
+- asset_pack: add_to_project. Confirm the exact existing destination before adding.
+- complete_project: create_project. Use an approved separate staging project,
+  then migrate selected content and dependencies through Unreal.
+- code_plugin: install_plugin. Requires separate plugin-installation approval.
+- Source model formats: source_files. Use the format's supported import workflow.
+- Missing distribution metadata: unknown. Inspect it; do not guess from the title.
+
+The download operation refuses complete projects, code-plugin installations and
+unknown delivery modes. It does not create projects or copy template configuration
+into the current project. Where Fab requires the Epic Games Launcher for Create
+Project, use that supported route after product/destination approval.
 
 ## Editor interaction
 
@@ -79,7 +104,7 @@ destination before authorizing it. No automatic retry of a click is performed.
 ## Verification
 
 - Native tests: `UE.MCP.FabEditor.LibraryContract` (no network or world mutations).
-- Browser policy tests: `node --test Tests/FabEditorBrowser.test.mjs` from the
+- Browser/paging policy tests: `node --test Tests/FabEditorBrowser.test.mjs Tests/FabLibrary.test.mjs` from the
   UE-MCP bridge plugin directory.
 - Authenticated integration test, separately authorized: refresh one signed-in
   library, search for a known owned listing, open it, inspect its controls and
