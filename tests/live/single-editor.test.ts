@@ -14,8 +14,8 @@
  *
  * Three rows cannot be asserted here and say so where they sit: a restart
  * inside TIME_WAIT, a pinned self-launched editor, and the stop-failure branch
- * of restart all need an editor to be started or stopped, and this tier
- * attaches to one somebody else owns. They belong to the C++ automation tier
+ * of restart all need an editor to be started or stopped, and this suite
+ * attaches to one somebody else owns. They belong to the C++ automation suite
  * (plan item 0.9), which can drive a process of its own.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

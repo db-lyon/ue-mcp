@@ -15,7 +15,7 @@
  *
  * Everything runs in Play-In-Editor, because the editor world has no AI system
  * at all. PIE is started in beforeAll and stopped in afterAll; the editor process
- * itself is never started or stopped, which is this tier's rule.
+ * itself is never started or stopped, which is this suite's rule.
  *
  * Everything is created under /Game/MCPAILive and removed afterwards.
  */

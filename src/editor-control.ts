@@ -558,7 +558,7 @@ export async function startEditor(
      * run when the editor was LAUNCHED with it: it is read at startup, so
      * turning it on over the socket afterwards is too late, exactly like the
      * dialog policy above. Without it those cases skip and say why, which
-     * leaves the sharpest part of the tier unexercised by default.
+     * leaves the sharpest part of the suite unexercised by default.
      */
     paramEcho?: boolean;
 
@@ -1562,6 +1562,7 @@ function unsavedWorkRefusal(dirty: string[], answeredByUser?: string, unconfirme
 
 /**
  * Stop the editor by asking it to quit ITSELF through the bridge. ue-mcp NEVER
+ * lint-prose-allow: no-kill  this comment states what the code refuses to do
  * issues an OS kill: `taskkill /IM UnrealEditor.exe` matches by image name and
  * would also close the user's other editors (e.g. their real project).
  * Success is confirmed by the project's own bridge port going quiet, so it is

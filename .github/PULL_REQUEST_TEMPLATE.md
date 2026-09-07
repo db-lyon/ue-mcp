@@ -16,7 +16,7 @@
 - [ ] `npm run build` (required for any change under `plugin/`)
 - [ ] `npm run test:smoke`
 - [ ] `npm run test:live`
-- [ ] `npm run audit:em-dash` / `audit:unity` / docs / params
+- [ ] `npm run audit` (prose, config, flows, unity, docs, params)
 
 ## Notes for the release
 

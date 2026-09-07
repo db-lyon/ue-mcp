@@ -7,7 +7,7 @@
  * contain the test it names. Renaming a test therefore breaks this list rather
  * than quietly emptying a row of the matrix.
  *
- * This is the one file in the tier that needs no editor. It is the inventory,
+ * This is the one file in the suite that needs no editor. It is the inventory,
  * not an assertion about the engine.
  */
 import * as fs from "node:fs";
@@ -81,7 +81,7 @@ describe("the 7.3 matrix", () => {
         if (ref.kind === "engine-free") {
           expect(
             ref.file.startsWith("tests/unit/") || ref.file.startsWith("tests/multi-editor/"),
-            `case '${testCase.id}': ${ref.file} is claimed to need no engine but is not in an engine-free tier`,
+            `case '${testCase.id}': ${ref.file} is claimed to need no engine but is not in an engine-free tests`,
           ).toBe(true);
         }
       }
@@ -116,7 +116,7 @@ describe("the 7.3 matrix", () => {
     }
     lines.push(
       `\n${ALL_CASES.length} cases: ${live} live assertions, ${engineFree} referenced engine-free, ` +
-        `${cpp} owned by the plugin's automation tier, ${pending} pending on unshipped work.`,
+        `${cpp} owned by the plugin's automation suite, ${pending} pending on unshipped work.`,
     );
     console.log(lines.join("\n"));
     expect(live).toBeGreaterThan(0);

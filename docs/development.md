@@ -188,7 +188,7 @@ file was in (missing, malformed, or stale with a dead pid), and every port it
 tried. `--port` on the runner and `UE_MCP_TEST_PORT` for the Vitest suites still
 pin the port for unusual setups, and neither weakens the project check above.
 
-### Live Tier
+### Live tests
 
 The live tests drives a real editor through the shipped server: the advertised
 surface with an editor attached, per-path dispatch, addressing, gating, and the

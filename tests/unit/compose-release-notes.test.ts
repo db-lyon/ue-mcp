@@ -303,9 +303,9 @@ describe("composeReleaseNotes", () => {
       "",
       "### Internals",
       "",
-      "- A new test tier.",
+      "- A new test suite.",
     ].join("\n"),
-    ["Multi-editor sessions", "Two-bridge test tier"]
+    ["Multi-editor sessions", "Two-bridge test suite"]
   );
 
   const LOCAL = [
@@ -334,7 +334,7 @@ describe("composeReleaseNotes", () => {
 
     const { headline, strippedBody } = processBody(result.body);
     expect(headline).toBe(
-      "Multi-editor sessions · Struct-keyed TMap safety · Two-bridge test tier · Landed after the betas"
+      "Multi-editor sessions · Struct-keyed TMap safety · Two-bridge test suite · Landed after the betas"
     );
     expect(strippedBody).toContain("## v1.2.0\n");
     expect(strippedBody).not.toContain("v1.2.0-beta");

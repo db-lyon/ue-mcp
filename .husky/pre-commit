@@ -4,16 +4,13 @@
 # turned a two-second check into a fifteen-minute wait on a release. They are
 # cheap enough to run here, on the way in.
 
-staged=$(git diff --cached --name-only --diff-filter=ACMR)
-
-# Em dashes, scoped to what is actually staged.
-if [ -n "$staged" ]; then
-  # shellcheck disable=SC2086
-  node scripts/check-em-dashes.mjs --files $staged || exit 1
-fi
+# --staged reads the CONTENT git is about to commit, not the working copy.
+# Passing paths and reading them from disk let a violation be staged and then
+# edited away in the working tree, so the hook passed and the bad line landed.
+node scripts/lint-prose.mjs --staged || exit 1
 
 # Duplicate file-local helpers, which the unity build turns into a redefinition
 # on somebody else's machine. Only worth running when plugin sources changed.
-if echo "$staged" | grep -q '^plugin/.*\.cpp$'; then
+if git diff --cached --name-only --diff-filter=ACMR | grep -q '^plugin/.*\.cpp$'; then
   node scripts/audit-unity-collisions.mjs || exit 1
 fi

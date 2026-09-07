@@ -182,7 +182,7 @@ function applyCountMarkers(text: string, counts: Counts): string {
     .replace(/<!--\s*count:tools\s*-->[^<]*<!--\s*\/count\s*-->/g, `<!-- count:tools -->${counts.tools}<!-- /count -->`)
     .replace(/<!--\s*count:actions\s*-->[^<]*<!--\s*\/count\s*-->/g, `<!-- count:actions -->${counts.actions}+<!-- /count -->`)
     // The actions that dispatch to the C++ bridge, which is what the smoke
-    // tier exercises and therefore the number CLAUDE.md quotes for it.
+    // suite exercises and therefore the number CLAUDE.md quotes for it.
     .replace(
       /<!--\s*count:bridgeActions\s*-->[^<]*<!--\s*\/count\s*-->/g,
       `<!-- count:bridgeActions -->${counts.bridgeActions}<!-- /count -->`,

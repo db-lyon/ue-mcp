@@ -9,7 +9,7 @@
  * throwaway project whose editor is not running, and every assertion about
  * "beyond one editor" is made with a real editor on one side of it.
  *
- * What that buys over the engine-free tier: these run through the shipped
+ * What that buys over the engine-free tests: these run through the shipped
  * entry point rather than through the routing functions directly, so a refusal
  * that is never wired in, a union that advertises what dispatch cannot serve,
  * or an attribution block that never reaches the client all fail here.
