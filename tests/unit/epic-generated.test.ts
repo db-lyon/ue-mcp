@@ -142,11 +142,14 @@ describe("the committed modules match their inputs", () => {
     // The load-bearing one. A generated module edited by hand, or left behind
     // when the catalog or the effects file moved, is caught here and nowhere
     // else: every other test in this file would pass against a forgery.
+    // Compared with line endings normalised. The generator writes LF and git
+    // checks these files out as CRLF on Windows, so raw bytes differ on a
+    // fresh clone for a reason that has nothing to do with whether the content
+    // matches its inputs, which is the only thing this is asserting.
+    const read = (f: string) => fs.readFileSync(path.join(GEN_DIR, f), "utf8").replace(/\r\n/g, "\n");
     const before = new Map<string, string>();
     for (const f of fs.readdirSync(GEN_DIR)) {
-      if (f.endsWith(".generated.ts") || f === "index.ts") {
-        before.set(f, fs.readFileSync(path.join(GEN_DIR, f), "utf8"));
-      }
+      if (f.endsWith(".generated.ts") || f === "index.ts") before.set(f, read(f));
     }
 
     execFileSync(process.execPath, [path.join(ROOT, "scripts", "generate-epic-actions.mjs")], {
@@ -156,7 +159,7 @@ describe("the committed modules match their inputs", () => {
 
     const changed: string[] = [];
     for (const [name, contents] of before) {
-      if (fs.readFileSync(path.join(GEN_DIR, name), "utf8") !== contents) changed.push(name);
+      if (read(name) !== contents) changed.push(name);
     }
     expect(
       changed,
