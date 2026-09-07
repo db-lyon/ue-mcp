@@ -75,6 +75,8 @@ export interface PluginLoadResult {
    * distinguishable rather than one silently replacing the other.
    */
   guardsByPlugin: Array<{ plugin: string; guards: GuardDeclarations }>;
+  /** Task names per plugin, so a name that used to mean "guard" can be refused. */
+  taskNamesByPlugin: Array<{ plugin: string; taskNames: string[] }>;
   /** Per-category markdown to append to AI-facing docs. */
   knowledgeByCategory: Record<string, string[]>;
 }
@@ -87,6 +89,7 @@ const EMPTY_RESULT: PluginLoadResult = {
   taskDefs: {},
   flowDefs: {},
   guardsByPlugin: [],
+  taskNamesByPlugin: [],
   knowledgeByCategory: {},
 };
 
@@ -121,6 +124,7 @@ export async function loadPlugins(
   const taskDefs: Record<string, TaskDefinition> = {};
   const flowDefs: Record<string, FlowDefinition> = {};
   const guardsByPlugin: Array<{ plugin: string; guards: GuardDeclarations }> = [];
+  const taskNamesByPlugin: Array<{ plugin: string; taskNames: string[] }> = [];
   const knowledgeByCategory: Record<string, string[]> = {};
   // For each category, accumulate injection plans across all plugins.
   const plansByCategory = new Map<string, InjectionPlan[]>();
@@ -161,6 +165,7 @@ export async function loadPlugins(
     if (Object.keys(manifest.guards).length > 0) {
       guardsByPlugin.push({ plugin: pkg.name, guards: manifest.guards });
     }
+    taskNamesByPlugin.push({ plugin: pkg.name, taskNames: Object.keys(manifest.tasks) });
 
     // Merge plugin-supplied flows, filtered by the user's group toggles. A flow
     // whose group is disabled in `ue-mcp.pluginConfig.<slug>.groups` is dropped
@@ -336,6 +341,7 @@ export async function loadPlugins(
     taskDefs,
     flowDefs,
     guardsByPlugin,
+    taskNamesByPlugin,
     knowledgeByCategory,
   };
 }

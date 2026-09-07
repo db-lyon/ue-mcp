@@ -217,3 +217,49 @@ export async function buildGuards(
 
   return guards;
 }
+
+/** The dead naming convention: a task called `guard.<name>.<phase>`. */
+const LEGACY_GUARD_TASK = /^guard\.[^.]+\.(before|after)[A-Za-z0-9]*$/;
+
+/**
+ * Refuse to start when a task is still named like a guard.
+ *
+ * Before guards were declared, a task with this name WAS a guard. Under the
+ * declaration model nothing discovers it, so it becomes an ordinary task
+ * nobody calls: a source-control write guard would keep appearing in the
+ * config and stop gating anything, silently.
+ *
+ * That is the exact failure the declaration model exists to prevent, so the
+ * migration must not reintroduce it. A leftover name is fatal and says what to
+ * write instead.
+ */
+export function assertNoLegacyGuardTasks(
+  taskNames: string[],
+  source: GuardSource,
+): void {
+  const legacy = taskNames.filter((n) => LEGACY_GUARD_TASK.test(n));
+  if (legacy.length === 0) return;
+
+  const examples = legacy.slice(0, 3).map((name) => {
+    const [, guardName, phase] = /^guard\.([^.]+)\.(.+)$/.exec(name)!;
+    const scope = /Write$/.test(phase) ? "writes" : "all";
+    const hook = phase.startsWith("after") ? "after" : "before";
+    return (
+      `  ${name}\n`
+      + "    becomes:\n"
+      + "      guards:\n"
+      + `        ${guardName}:\n`
+      + `          scope: ${scope}\n`
+      + `          ${hook}:\n`
+      + "            class_path: <the class_path that task had>"
+    );
+  });
+
+  throw new Error(
+    `${source.label} declares ${legacy.length} task(s) named like a guard, which no longer makes `
+    + "them one. A guard is declared in a `guards:` section now, so these are ordinary tasks that "
+    + "nothing calls: whatever they were gating is ungated while the config still says it is "
+    + `guarded.\n\n${examples.join("\n\n")}\n\n`
+    + "See the guards documentation for the full shape, including order and the after hook.",
+  );
+}

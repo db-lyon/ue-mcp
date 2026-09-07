@@ -45,7 +45,7 @@ import { info, warn, debug } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
 import { GuardRegistry } from "./flow/guard.js";
-import { buildGuards } from "./flow/guards.js";
+import { assertNoLegacyGuardTasks, buildGuards } from "./flow/guards.js";
 import type { GuardDeclarations } from "./flow/guard-schema.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
@@ -515,6 +515,14 @@ async function main() {
       ...load.pluginLoad.guardsByPlugin.map((g) => ({ label: g.plugin, guards: g.guards })),
       { label: "ue-mcp.yml", guards: (projectConfig.guards ?? {}) as GuardDeclarations },
     ];
+
+    // A task still named like a guard is fatal, whoever declared it: under the
+    // declaration model nothing discovers it, so it would sit in the config
+    // gating nothing.
+    assertNoLegacyGuardTasks(Object.keys(projectConfig.tasks ?? {}), { label: "ue-mcp.yml" });
+    for (const { plugin, taskNames } of load.pluginLoad.taskNamesByPlugin) {
+      assertNoLegacyGuardTasks(taskNames, { label: plugin });
+    }
 
     let count = 0;
     for (const source of sources) {
