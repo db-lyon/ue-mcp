@@ -184,12 +184,43 @@ function trimBlank(lines) {
 export function parseSections(body) {
   const preamble = [];
   let current = null;
+  let top = null;
   const sections = [];
   for (const line of toLines(body)) {
-    const m = line.match(/^###\s+(.+?)\s*$/);
-    if (m) {
-      current = { heading: m[1], lines: [] };
+    // A disclosure opens a section, because that is what renderSection writes.
+    // Reading only `###` meant this could not parse its own output, nor the
+    // notes this project has published since it started collapsing sections:
+    // every section fell into the preamble and was dropped, so composing a
+    // stable release from its betas kept the headline and lost the content.
+    const summary = line.match(/^\s*<summary>\s*(?:<b>)?(.+?)(?:<\/b>)?\s*<\/summary>\s*$/i);
+    if (summary) {
+      current = { heading: summary[1], lines: [], top };
       sections.push(current);
+      continue;
+    }
+    // The wrapper is structure, not content.
+    if (/^\s*<\/?details>\s*$/i.test(line)) continue;
+
+    const hashed = line.match(/^###\s+(.+?)\s*$/);
+    if (hashed) {
+      current = { heading: hashed[1], lines: [], top };
+      sections.push(current);
+      continue;
+    }
+
+    // A top-level heading ends the section it follows: the next one belongs to
+    // whatever comes after, not to the last disclosure. The four the composer
+    // emits itself are dropped rather than kept, or every merge would stack
+    // another copy of them into the preamble.
+    const heading = line.match(/^##\s+(\S.*?)\s*$/);
+    if (heading) {
+      current = null;
+      const name = heading[1].trim();
+      // Remember which of the four this belongs to. The input already says,
+      // and guessing from a subsection's own name gets it wrong: "Editor
+      // lifecycle" and "Packaging" are fixes and read like features.
+      top = TOP_SECTIONS.includes(name) ? name : null;
+      if (top === null) preamble.push(line);
       continue;
     }
     (current ? current.lines : preamble).push(line);
@@ -198,6 +229,10 @@ export function parseSections(body) {
     preamble: trimBlank(preamble).join("\n"),
     sections: sections.map((s) => ({
       heading: s.heading,
+      // Which of the four top sections the input filed this under, when it
+      // said. Dropping it left the classifier guessing from the subsection's
+      // own name, which files "Editor lifecycle" and "Packaging" as features.
+      top: s.top ?? null,
       body: trimBlank(s.lines).join("\n"),
     })),
   };
@@ -275,11 +310,12 @@ export function mergeBodies(inputs) {
       const key = section.heading.trim().toLowerCase();
       let bucket = buckets.get(key);
       if (!bucket) {
-        bucket = { heading: section.heading.trim(), lead: "", bullets: [] };
+        bucket = { heading: section.heading.trim(), top: section.top ?? null, lead: "", bullets: [] };
         buckets.set(key, bucket);
         order.push(key);
       }
       const { lead, bullets } = parseBullets(section.body);
+      if (!bucket.top && section.top) bucket.top = section.top;
       if (!bucket.lead && lead) bucket.lead = lead;
 
       for (const bullet of bullets) {
@@ -325,6 +361,7 @@ export function mergeBodies(inputs) {
       const bucket = buckets.get(key);
       return {
         heading: bucket.heading,
+        top: bucket.top,
         lead: bucket.lead,
         bullets: bucket.bullets.map((e) => e.text),
       };
@@ -433,7 +470,10 @@ const MENTION_HEADING =
  * first so "Bug fixes" does not read as a mention, and anything unrecognised
  * is a feature, because that is what a new category section is.
  */
-export function classifySection(heading) {
+export function classifySection(heading, top = null) {
+  // What the input said, when it said anything. The heuristic below is a
+  // fallback for notes that carry no top-level headings at all.
+  if (top && TOP_SECTIONS.includes(top)) return top;
   const h = String(heading ?? "");
   if (FIX_HEADING.test(h)) return "Fixes";
   if (MENTION_HEADING.test(h)) return "Mentions";
@@ -474,7 +514,7 @@ export function renderBody({ version, headline, preamble, sections, contributors
   const grouped = new Map(TOP_SECTIONS.map((name) => [name, []]));
   for (const section of sections) {
     if (!section.lead && section.bullets.length === 0) continue;
-    grouped.get(classifySection(section.heading)).push(section);
+    grouped.get(classifySection(section.heading, section.top)).push(section);
   }
 
   for (const name of TOP_SECTIONS) {
