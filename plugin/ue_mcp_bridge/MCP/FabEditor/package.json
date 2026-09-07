@@ -1,0 +1,9 @@
+{
+  "name": "ue-mcp-fab-editor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Native Fab editor interaction and verified owned-library queries for UE-MCP",
+  "peerDependencies": { "ue-mcp": ">=1.1.33" },
+  "scripts": { "test": "node --test ../../Tests/FabEditorBrowser.test.mjs" }
+}

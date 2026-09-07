@@ -4,6 +4,7 @@
 #include "EngineStatusHooks.h"
 #include "MCPEngineStatus.h"
 #include "Handlers/DialogHandlers.h"
+#include "Handlers/FabEditorService.h"
 #include "Editor.h"
 #include "Editor/EditorEngine.h"
 #include "HAL/PlatformMisc.h"
@@ -114,6 +115,7 @@ namespace
 
 void FUE_MCP_BridgeModule::StartupModule()
 {
+	MCPFabEditor::Register();
 	// Create and start bridge server. The base port is derived per-worktree
 	// from the project root path, unless something pins it: -MCPPort,
 	// UE_MCP_PORT, or `bridge.port` in the project's ue-mcp.yml layers, in the
@@ -202,6 +204,7 @@ void FUE_MCP_BridgeModule::StartupModule()
 
 void FUE_MCP_BridgeModule::ShutdownModule()
 {
+	MCPFabEditor::Shutdown();
 	FDialogHandlers::RemoveDialogHook();
 	// The snapshot itself outlives this module (its own module owns it and
 	// keeps publishing until PostConfigInit teardown); only the Slate and

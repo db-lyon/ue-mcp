@@ -1,0 +1,28 @@
+actionPrefix: fabeditor
+minServerVersion: 1.1.33
+uePluginDependency: UE_MCP_Bridge
+tasks:
+  request:
+    class_path: FabEditorTask
+provides:
+  fab_editor:
+    description: Native interaction with Fab inside Unreal Editor. Search verified owned assets, open listings, inspect controls, choose options, and explicitly submit authorized downloads without external browser automation.
+    actions:
+      run:
+        task: request
+        description: "Operations: status; open (optional verified assetId); refresh_library; search_library; get_owned_asset; inspect; activate; set_search; select_option; download; get_imported_assets; operation_status; cancel_operation. Poll operationId for async results. Inspect returns snapshotId and elementIds, required for interaction. Download requires an exact owned assetId and confirmDownload=true after user authorization. Submission is not download completion. No purchases or engine installation."
+        schema:
+          operation: {type: string, required: true, description: Operation from the documented list.}
+          operationId: {type: string, description: ID returned by an asynchronous operation.}
+          assetId: {type: string, description: Exact ID returned by the authenticated owned library.}
+          query: {type: string, description: Case-insensitive terms matched against owned title/description/seller/type.}
+          batchSize: {type: number, description: Library page size from 1 to 1000.}
+          limit: {type: number, description: Search page size from 1 to 100.}
+          offset: {type: number, description: Search result offset.}
+          browserId: {type: number, description: Tab identifier from status; required if multiple Fab tabs exist.}
+          snapshotId: {type: string, description: Fresh inspect snapshot identifier.}
+          elementId: {type: string, description: Control identifier from the same snapshot.}
+          value: {type: string, description: Search text or an exact select option value from inspect.}
+          confirmDownload: {type: boolean, description: Explicit authorization to submit the current owned listing download.}
+knowledge:
+  fab-editor: README.md
