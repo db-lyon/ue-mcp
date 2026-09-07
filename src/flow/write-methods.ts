@@ -31,16 +31,6 @@ export interface WriteClassification {
    * anything".
    */
   writes: boolean;
-  /**
-   * Whether this call changes editor state at all.
-   *
-   * Separate from `writes` because most mutations are not asset writes: a call
-   * that spawns an actor, sets a live property or starts a play session
-   * changes the world and names no content path. A guard asked to stand in
-   * front of every mutation needs this one; a guard checking files out of
-   * source control needs `writes`.
-   */
-  mutates: boolean;
   /** UE content paths the call modifies. Empty when nothing is guardable. */
   contentPaths: string[];
 }
@@ -48,18 +38,6 @@ export interface WriteClassification {
 /** Method-name prefixes that denote a mutation. Read verbs are excluded. */
 const WRITE_VERB =
   /^(save|set|create|add|delete|remove|import|rename|move|duplicate|reparent|compile|apply|assign|modify|bake|generate|build)_/;
-
-/**
- * Verbs that change editor state without naming an asset.
- *
- * Spawning an actor, starting a play session, pressing a dialog button and
- * launching a build all change something somebody could care about, and none
- * of them writes a content path. A guard standing in front of "everything that
- * mutates" has to see these, which is why `mutates` is a wider question than
- * `writes`.
- */
-const MUTATING_VERB =
-  /^(spawn|destroy|attach|detach|possess|eject|start|stop|restart|launch|play|pause|resume|simulate|inject|press|respond|execute|run|trigger|invoke|arm|clear|reset|undo|redo|snap|nudge|align|focus|select|deselect|open|close|connect|disconnect|enable|disable|toggle|refresh|reload|deploy|sync|upload|download|install|uninstall|publish)_/;
 
 /** Single-value params that carry an asset content path. */
 const PATH_KEYS = ["assetPath", "sourcePath", "destinationPath", "packagePath", "path"];
@@ -152,20 +130,14 @@ const EXPLICIT: Record<string, Extractor> = {
  * `writes: false` when the call is not a guardable write.
  */
 export function classifyWrite(method: string, params: Record<string, unknown>): WriteClassification {
-  // A method is a mutation because of what it does, not because of whether it
-  // happened to name a path this call can resolve.
-  const mutates = EXPLICIT[method] !== undefined
-    || WRITE_VERB.test(method)
-    || MUTATING_VERB.test(method);
-
   const explicit = EXPLICIT[method];
   if (explicit) {
     const contentPaths = dedupe(explicit(params));
-    return { writes: contentPaths.length > 0, mutates, contentPaths };
+    return { writes: contentPaths.length > 0, contentPaths };
   }
 
   if (!WRITE_VERB.test(method)) {
-    return { writes: false, mutates, contentPaths: [] };
+    return { writes: false, contentPaths: [] };
   }
 
   const contentPaths: string[] = [];
@@ -178,7 +150,7 @@ export function classifyWrite(method: string, params: Record<string, unknown>): 
   }
 
   const deduped = dedupe(contentPaths);
-  return { writes: deduped.length > 0, mutates, contentPaths: deduped };
+  return { writes: deduped.length > 0, contentPaths: deduped };
 }
 
 function dedupe(xs: string[]): string[] {
