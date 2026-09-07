@@ -97,14 +97,14 @@ describe("offline classification stays level with the dispatched graph", () => {
   });
 
   it("classifies a bridge action from its own declaration, with the method named", () => {
-    const verdict = classifyAction("asset", "list", { bridge: "list_assets" });
+    const verdict = classifyAction("asset", "list", { kind: "bridge", effect: "read", bridge: "list_assets" });
     expect(verdict.availability).toBe("editor");
     expect(verdict.bridgeMethod).toBe("list_assets");
     expect(verdict.reason).toContain("list_assets");
   });
 
   it("reports an unclassified local action as unknown rather than as offline", () => {
-    const verdict = classifyAction("someplugin", "do_a_thing", { handler: async () => ({}) });
+    const verdict = classifyAction("someplugin", "do_a_thing", { kind: "handler", effect: "read", handler: async () => ({}) });
     expect(verdict.availability).toBe("unknown");
     expect(verdict.reason).toContain("plugin");
   });

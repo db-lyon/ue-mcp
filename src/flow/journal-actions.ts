@@ -126,6 +126,8 @@ function resolveRun(
 
 export const journalActions: Record<string, ActionSpec> = {
   journal_start: {
+    kind: "handler",
+    effect: "mutate",
     description:
       "Open a journal run: a named unit of work whose notes, artifacts and outcome are recorded "
       + "under ~/.ue-mcp/journal, keyed by this project, so it survives a server restart and never "
@@ -137,6 +139,8 @@ export const journalActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => journalStart(ctx, params),
   },
   journal_note: {
+    kind: "handler",
+    effect: "mutate",
     description:
       "Append a note to a journal run: what you decided, what surprised you, what the next session "
       + "needs to know. Notes accumulate and are never rewritten, so a correction is another note. "
@@ -145,6 +149,8 @@ export const journalActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => journalNote(ctx, params),
   },
   journal_attach: {
+    kind: "handler",
+    effect: "mutate",
     description:
       "Record something a run produced: a content path, a file on disk, a URL. Idempotent per run on "
       + "artifactPath, so re-attaching the same path reports existed=true instead of duplicating it. "
@@ -153,6 +159,8 @@ export const journalActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => journalAttach(ctx, params),
   },
   journal_finish: {
+    kind: "handler",
+    effect: "mutate",
     description:
       "Close a journal run with a verdict. Idempotent: a run that already ended keeps its first "
       + "verdict and reports existed=true, so the first answer about a run is the one that stands. "
@@ -161,6 +169,8 @@ export const journalActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => journalFinish(ctx, params),
   },
   journal_cancel: {
+    kind: "handler",
+    effect: "mutate",
     description:
       "Close a journal run as cancelled, for work abandoned rather than finished. Same idempotency as "
       + "journal_finish. Params: reason? (why it was abandoned), runId? (defaults to the open run). "
@@ -168,6 +178,8 @@ export const journalActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => journalCancel(ctx, params),
   },
   journal_list: {
+    kind: "handler",
+    effect: "read",
     description:
       "List this project's journal runs, newest first, with every filter applied together. Params: "
       + "status? (active|completed|failed|cancelled), flowName? (only runs of that flow), tag? (one tag "
@@ -178,6 +190,8 @@ export const journalActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => journalList(ctx, params),
   },
   journal_get: {
+    kind: "handler",
+    effect: "read",
     description:
       "Read one journal run in full: every note, every artifact, the outcome, and the per-step record "
       + "if it was a flow run. This is the handover call - give the next session a runId and it can "
@@ -185,6 +199,8 @@ export const journalActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => journalGet(ctx, params),
   },
   journal_delete: {
+    kind: "handler",
+    effect: "mutate",
     description:
       "Delete journal runs, rewriting the file without their records. The granularity is the run: "
       + "notes and artifacts are append-only by design, and a correction is another note. Reports how "
@@ -194,6 +210,8 @@ export const journalActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => journalDelete(ctx, params),
   },
   journal_status: {
+    kind: "handler",
+    effect: "read",
     description:
       "Where this project's journal lives, whether it is recording, how much is in it, and which run "
       + "is open. There is no initialise step: the file is created on the first write and read fresh on "

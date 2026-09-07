@@ -264,10 +264,12 @@ export function readCategory(file) {
  *
  * Three shapes ship:
  *
- *   bp(<description>, "bridge_method", ...)      the description is arg one
- *   { ...bp(<description>, ...), timeoutMs: N }  the same call, spread into an
- *                                                object that overrides a field
- *   { description: <expr>, handler }             a local action, named field
+ *   bp("effect", <description>, "bridge_method", ...)  effect first, then the
+ *                                                      description
+ *   { ...bp("effect", <description>, ...), timeoutMs: N }  the same call,
+ *                                                spread into an object that
+ *                                                overrides a field
+ *   { kind, effect, description: <expr>, handler }  a local action, named field
  *
  * The middle one is why `bp(` is looked for anywhere in the value rather than
  * only at its start. Reading only the leading form left every action carrying
@@ -283,8 +285,14 @@ function describeAction(src, masked, start, end) {
   const bp = head.match(/(?:^|[^\w$])bp\s*\(/);
   if (bp) {
     const args = topLevelArgs(masked, start + bp.index + bp[0].length - 1);
-    if (args && args.length > 0) return concatenatedLiterals(src, masked, args[0][0], args[0][1]);
-    return "";
+    if (!args || args.length === 0) return "";
+    // The effect is the first argument and is never the description. It is
+    // always one of three bare literals, so it is recognised by value rather
+    // than by position.
+    const first = src.slice(args[0][0], args[0][1]).trim();
+    const i = /^"(?:read|mutate|unknown)"$/.test(first) ? 1 : 0;
+    if (i >= args.length) return "";
+    return concatenatedLiterals(src, masked, args[i][0], args[i][1]);
   }
   const field = head.match(/(?:^|[{,])\s*description\s*:/);
   if (field) {

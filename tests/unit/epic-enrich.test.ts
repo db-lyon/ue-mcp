@@ -8,9 +8,9 @@ import {
 
 function fixtureTools(): ToolDef[] {
   return [
-    categoryTool("gas", "GAS", { grant_ability: bp("grant", "grant_ability") }, undefined, {}),
-    categoryTool("niagara", "Niagara", { spawn: bp("spawn", "spawn_system") }, undefined, {}),
-    categoryTool("epic", "Epic gateway", { status: bp("status", "epic_status") }, undefined, {}),
+    categoryTool("gas", "GAS", { grant_ability: bp("read", "grant", "grant_ability") }, undefined, {}),
+    categoryTool("niagara", "Niagara", { spawn: bp("read", "spawn", "spawn_system") }, undefined, {}),
+    categoryTool("epic", "Epic gateway", { status: bp("read", "status", "epic_status") }, undefined, {}),
   ];
 }
 
@@ -250,8 +250,8 @@ describe("deterministic collision suffixes (#875)", () => {
   };
 
   const assetTools = (): ToolDef[] => [
-    categoryTool("asset", "Assets", { list: bp("list", "list_assets") }, undefined, {}),
-    categoryTool("epic", "Epic gateway", { status: bp("status", "epic_status") }, undefined, {}),
+    categoryTool("asset", "Assets", { list: bp("read", "list", "list_assets") }, undefined, {}),
+    categoryTool("epic", "Epic gateway", { status: bp("read", "status", "epic_status") }, undefined, {}),
   ];
 
   /** Every permutation of the three toolsets, as injected action names. */

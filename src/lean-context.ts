@@ -67,6 +67,8 @@ function leanTool(tool: ToolDef): ToolDef {
   if (!actions.describe) {
     const lines = actionLines(tool);
     actions.describe = {
+      kind: "handler",
+      effect: "read",
       description: `List every action in the ${tool.name} category with its description (lean-mode discovery).`,
       handler: async () => ({ category: tool.name, count: lines.length, actions: lines }),
     };
@@ -106,6 +108,8 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
 
   const actions: Record<string, ActionSpec> = {
     search: {
+      kind: "handler",
+      effect: "read",
       description: 'Rank actions across every category by keyword. Params: query (string), limit (default 20).',
       handler: async (_ctx, p) => {
         const query = typeof p.query === "string" ? p.query : "";
@@ -118,6 +122,8 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
       },
     },
     describe: {
+      kind: "handler",
+      effect: "read",
       description: "List a category, or return one action's parameter schema. Params: category (string), method? (action name).",
       handler: async (_ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
@@ -131,6 +137,8 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
       },
     },
     list_categories: {
+      kind: "handler",
+      effect: "read",
       description: "List all category tools with their one-line summaries.",
       handler: async () => ({ count: summaries.length, categories: summaries }),
     },
@@ -189,6 +197,8 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
 
   const actions: Record<string, ActionSpec> = {
     search: {
+      kind: "handler",
+      effect: "read",
       description: "Find actions by keyword or intent without listing whole categories. Params: query, limit? (default 20).",
       handler: async (_ctx, p) => {
         const query = typeof p.query === "string" ? p.query : "";
@@ -199,6 +209,8 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
       },
     },
     list_categories: {
+      kind: "handler",
+      effect: "read",
       description: "List every category with a one-line summary.",
       handler: async () => ({
         count: summaries.length,
@@ -207,6 +219,8 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
       }),
     },
     describe: {
+      kind: "handler",
+      effect: "read",
       description: "List a category's actions, or return one action's parameter schema. Params: category, method? (action name).",
       handler: async (_ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
@@ -223,6 +237,8 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
       },
     },
     call: {
+      kind: "handler",
+      effect: "unknown",
       description: "Invoke any action. Params: category, method (the action name), args (object of the action's params).",
       handler: async (ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";

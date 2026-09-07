@@ -101,7 +101,7 @@ describe("shapes that used to be rejected wrongly", () => {
     ['path.join(binDir, "UnrealEditor-UE_MCP_Bridge.dll")', "src/x.ts"],
     ["const binDirUnrealEditor = x;", "src/x.ts"],
     ["process.kill(pid, 0);", "src/x.ts"],
-    ['hot_reload: bp("Hot reload C++", "hot_reload"),', "src/tools/editor.ts"],
+    ['hot_reload: bp("read", "Hot reload C++", "hot_reload"),', "src/tools/editor.ts"],
     ["Each editor session gets its own port. See claude.ai/ for the client.", "docs/x.md"],
     ["Works with chatgpt.com/ and other MCP clients across a session.", "docs/x.md"],
     ["Assets land under /Game/scratch/ during a run.", "docs/x.md"],

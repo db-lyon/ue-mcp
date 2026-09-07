@@ -6,6 +6,8 @@ export const pluginsTool: ToolDef = categoryTool(
   "Introspect npm-distributed plugins that contribute actions into other categories. Read-only.",
   {
     list: {
+      kind: "handler",
+      effect: "read",
       description: "Every plugin loaded from ue-mcp.yml: name, version, prefix, status, and injected actions. Params: none",
       handler: async (ctx) => {
         const all = ctx.getPlugins?.() ?? [];
@@ -17,6 +19,8 @@ export const pluginsTool: ToolDef = categoryTool(
       },
     },
     describe: {
+      kind: "handler",
+      effect: "read",
       description: "Full detail for one plugin including knowledge files and flows. Params: name",
       handler: async (ctx, p) => {
         const target = p.name as string;

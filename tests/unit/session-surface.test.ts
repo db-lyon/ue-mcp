@@ -22,10 +22,10 @@ import { ALL_TOOLS } from "../../src/tools.js";
 function graph(): ToolDef[] {
   return [
     categoryTool("alpha", "Alpha category", {
-      list: bp("List things", "alpha_list"),
+      list: bp("read", "List things", "alpha_list"),
     }),
     categoryTool("beta", "Beta category", {
-      read: bp("Read a thing", "beta_read"),
+      read: bp("read", "Read a thing", "beta_read"),
     }),
   ];
 }
@@ -70,6 +70,8 @@ describe("cloneToolGraph", () => {
     const copy = cloneToolGraph(original);
     const calls: string[] = [];
     copy[0].actions.only_on_copy = {
+      kind: "handler",
+      effect: "read",
       handler: async () => {
         calls.push("copy");
         return "ok";

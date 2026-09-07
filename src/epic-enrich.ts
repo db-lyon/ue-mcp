@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { actionEnum, categoryTool, type ToolDef, type ActionSpec } from "./types.js";
+import { inferActionEffect } from "./action-class.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { coerceAssetPathValue } from "./asset-path.js";
 
@@ -313,7 +314,11 @@ export function enrichToolsWithEpicCatalog(
     if (existing) return existing;
     const summary = EPIC_ONLY_DOMAINS[cat];
     if (summary === undefined) return undefined;
-    const created = categoryTool(cat, summary, { [SEED]: { bridge: SEED } });
+    const created = categoryTool(cat, summary, {
+      // Deleted on the next line, so its effect is never read by anything.
+      // `unknown` is what an action nobody can describe is called here.
+      [SEED]: { kind: "bridge", effect: "unknown", bridge: SEED },
+    });
     delete created.actions[SEED];
     byName.set(cat, created);
     tools.push(created);
@@ -368,6 +373,14 @@ export function enrichToolsWithEpicCatalog(
       );
 
       const spec: ActionSpec = {
+        kind: "bridge",
+        // The one place a name still decides an effect, and the only place it
+        // can: these actions are read out of a live registry at startup, from
+        // toolsets this package has never seen, so there is no declaration to
+        // read. The guess is recorded as a guess rather than passed off as one
+        // of ue-mcp's own answers.
+        effect: inferActionEffect(target.name, key),
+        effectSource: "inferred",
         description: desc,
         bridge: "epic_call_tool",
         mapParams: (p: Record<string, unknown>) => ({

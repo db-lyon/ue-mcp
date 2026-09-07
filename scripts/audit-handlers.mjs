@@ -32,12 +32,17 @@ function tsBridgeMethods() {
       const src = fs.readFileSync(full, "utf8");
       const rel = path.relative(path.join(ROOT, "src"), full).replace(/\\/g, "/");
 
-      // bp("desc", "method_name", ...) - the dominant pattern in tools/*.ts.
-      // The 2nd string arg is the C++ bridge method. The description must be
-      // matched with escape awareness: a naive "[^"]*" stops at the first \"
-      // inside the prose, so any action whose description quotes something
-      // (parentPath=\"None\") was reported as an unbridged handler.
-      for (const m of src.matchAll(/\bbp\(\s*"(?:[^"\\]|\\.)*"\s*,\s*"([a-z_][a-z0-9_]*)"/g)) {
+      // bp("effect", "desc", "method_name", ...) - the dominant pattern in
+      // tools/*.ts. The effect leads, the description is optional, and the
+      // bridge method is the bare lowercase literal after them. The
+      // description must be matched with escape awareness: a naive "[^"]*"
+      // stops at the first \" inside the prose, so any action whose
+      // description quotes something (parentPath=\"None\") was reported as an
+      // unbridged handler. It can also be a paged(...) wrapper rather than a
+      // literal, so that shape is spelled out too.
+      const BP_CALL =
+        /\bbp\(\s*"(?:read|mutate|unknown)"\s*,\s*(?:(?:"(?:[^"\\]|\\.)*"|paged\((?:[^()]|\([^()]*\))*\))\s*,\s*)?"([a-z_][a-z0-9_]*)"/g;
+      for (const m of src.matchAll(BP_CALL)) {
         const method = m[1];
         if (!methods.has(method)) methods.set(method, []);
         methods.get(method).push({ file: rel });

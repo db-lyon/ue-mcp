@@ -321,7 +321,7 @@ describe("SessionRegistry", () => {
 
 describe("per-call editor targeting", () => {
   const build = () =>
-    categoryTool("demoCategory", "summary", { ping: { description: "d", bridge: "ping" } }, undefined, {
+    categoryTool("demoCategory", "summary", { ping: { kind: "bridge", effect: "read", description: "d", bridge: "ping" } }, undefined, {
       assetPath: z.string().optional(),
     });
 
@@ -340,7 +340,7 @@ describe("per-call editor targeting", () => {
   });
 
   it("refuses to shadow a tool that declares its own editor parameter", () => {
-    const tool = categoryTool("plugged", "summary", { ping: { bridge: "ping" } }, undefined, {
+    const tool = categoryTool("plugged", "summary", { ping: { kind: "bridge", effect: "read", bridge: "ping" } }, undefined, {
       editor: z.string().optional(),
     });
     const outcome = injectEditorTarget(tool, ["Alpha", "Beta"]);
