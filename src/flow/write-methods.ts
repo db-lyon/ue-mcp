@@ -9,8 +9,19 @@
  * Two layers:
  *   1. An explicit map for methods whose path lives under an unusual param
  *      shape (batches, rename descriptors).
- *   2. A verb+param heuristic for the common case: a method named with a write
- *      verb (`save_`, `set_`, ...) carrying a recognizable asset-path param.
+ *   2. The method's DECLARED effect plus a recognizable asset-path param. A
+ *      declared read writes nothing whatever path it was handed; anything else
+ *      is a candidate.
+ *
+ * Layer two used to be a hand-written list of write verbs matched against the
+ * method NAME, and the list is gone rather than kept as a fallback: there is
+ * nothing left for it to answer. `bridgeMethodEffect` has no undefined case,
+ * so every method reaching here has an effect from the actions that forward to
+ * it, from the table of methods a handler calls directly, or from the default
+ * that treats an unrecognised method as a change. The list was also wrong in
+ * the expensive direction: `unwrap_uvs` rewrites a mesh's UV layout in place
+ * and `mesh_boolean` overwrites a StaticMesh package, and neither matched it,
+ * so neither was ever checked out before the write reached disk.
  *
  * Classification returns UE content paths (e.g. "/Game/Foo"). Resolving those to
  * on-disk files, and deciding which already exist (modify -> checkout) versus do
@@ -36,19 +47,6 @@ export interface WriteClassification {
   /** UE content paths the call modifies. Empty when nothing is guardable. */
   contentPaths: string[];
 }
-
-/**
- * Method-name prefixes that denote a mutation, for a method no action declares.
- *
- * This used to be the whole test, and it is a hand-written list matched against
- * a name: `unwrap_uvs` rewrites a mesh's UV layout in place and never matched
- * it, `mesh_boolean` overwrites a StaticMesh package and never matched it, and
- * every bare verb (`save`, `build`) was missed by the trailing underscore. It
- * is now the fallback for the bridge calls a HANDLER makes on its own, which
- * belong to no ActionSpec and so have no effect to read.
- */
-const WRITE_VERB =
-  /^(save|set|create|add|delete|remove|import|rename|move|duplicate|reparent|compile|apply|assign|modify|bake|generate|build)_/;
 
 /** Single-value params that carry an asset content path. */
 const PATH_KEYS = ["assetPath", "sourcePath", "destinationPath", "packagePath", "path"];
@@ -148,11 +146,9 @@ export function classifyWrite(method: string, params: Record<string, unknown>): 
   }
 
   // A declared read writes no content, whatever path it was handed. Anything
-  // else is a candidate, whatever its name looks like: `unwrap_uvs` rewrites a
-  // mesh in place and `mesh_boolean` overwrites a package, and the verb list
-  // below recognises neither. `unknown` is a candidate for the same reason it
-  // gates like a mutation everywhere else, and an unnecessary checkout is the
-  // cheap side of this decision.
+  // else is a candidate, whatever its name looks like. `unknown` is a
+  // candidate for the same reason it gates like a mutation everywhere else,
+  // and an unnecessary checkout is the cheap side of this decision.
   if (bridgeMethodEffect(method).effect === "read") {
     return { writes: false, contentPaths: [] };
   }
