@@ -8,10 +8,38 @@ describe("classifyWrite", () => {
     expect(r.contentPaths).toEqual(["/Game/Foo"]);
   });
 
-  it("does not classify read verbs as writes", () => {
-    for (const m of ["read_asset", "list_assets", "get_asset_properties", "search_assets", "find_references"]) {
+  it("does not classify declared reads as writes", () => {
+    // Real bridge methods, whose actions declare `read`. Two of the five names
+    // this used to use (`get_asset_properties`, `find_references`) are not
+    // bridge methods at all, so the case was asserting that a verb list liked
+    // the look of a name nothing dispatches.
+    for (const m of ["read_asset", "list_assets", "get_world_outliner", "bulk_read_asset_properties"]) {
       expect(classifyWrite(m, { assetPath: "/Game/Foo" }).writes).toBe(false);
     }
+  });
+
+  it("does not classify a read a HANDLER makes on its own as a write", () => {
+    // No ActionSpec forwards to these, so nothing about the graph covers them.
+    // They are enumerated as reads rather than defaulted to changes.
+    expect(classifyWrite("search_assets", { assetPath: "/Game/Foo" }).writes).toBe(false);
+    expect(classifyWrite("get_engine_state", { assetPath: "/Game/Foo" }).writes).toBe(false);
+  });
+
+  it("classifies a declared mutation whose name no verb list matched", () => {
+    // `unwrap_uvs` rewrites a mesh's UV layout in place and `mesh_boolean`
+    // overwrites a StaticMesh package. Neither matches WRITE_VERB, so neither
+    // was ever checked out before a write reached disk.
+    expect(classifyWrite("unwrap_uvs", { assetPath: "/Game/SM_Rock" })).toEqual({
+      writes: true,
+      contentPaths: ["/Game/SM_Rock"],
+    });
+    expect(classifyWrite("mesh_boolean", { assetPath: "/Game/SM_Cut" }).writes).toBe(true);
+  });
+
+  it("treats a method this server does not carry as a candidate write", () => {
+    // A plugin calling the bridge with a method of its own. Nothing vouches
+    // for it, and an unnecessary checkout is the cheap side of the decision.
+    expect(classifyWrite("vendor_frobnicate", { assetPath: "/Game/Foo" }).writes).toBe(true);
   });
 
   it("extracts source and destination for a move", () => {

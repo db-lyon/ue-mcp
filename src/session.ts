@@ -29,7 +29,7 @@ import { makeResolveExistingFile } from "./flow/guard.js";
 import { normalizeProjectRoot } from "./port.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { warn } from "./log.js";
-import { newLockOwnerId } from "./locking.js";
+import { newLockOwnerId } from "./lock-owner.js";
 import { withoutDialogActuation } from "./dialog-guard.js";
 
 /** Key used for the session that has no project bound. */

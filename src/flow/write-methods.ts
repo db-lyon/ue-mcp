@@ -9,8 +9,19 @@
  * Two layers:
  *   1. An explicit map for methods whose path lives under an unusual param
  *      shape (batches, rename descriptors).
- *   2. A verb+param heuristic for the common case: a method named with a write
- *      verb (`save_`, `set_`, ...) carrying a recognizable asset-path param.
+ *   2. The method's DECLARED effect plus a recognizable asset-path param. A
+ *      declared read writes nothing whatever path it was handed; anything else
+ *      is a candidate.
+ *
+ * Layer two used to be a hand-written list of write verbs matched against the
+ * method NAME, and the list is gone rather than kept as a fallback: there is
+ * nothing left for it to answer. `bridgeMethodEffect` has no undefined case,
+ * so every method reaching here has an effect from the actions that forward to
+ * it, from the table of methods a handler calls directly, or from the default
+ * that treats an unrecognised method as a change. The list was also wrong in
+ * the expensive direction: `unwrap_uvs` rewrites a mesh's UV layout in place
+ * and `mesh_boolean` overwrites a StaticMesh package, and neither matched it,
+ * so neither was ever checked out before the write reached disk.
  *
  * Classification returns UE content paths (e.g. "/Game/Foo"). Resolving those to
  * on-disk files, and deciding which already exist (modify -> checkout) versus do
@@ -22,6 +33,8 @@
  * not silent corruption. The cost of a false positive is an unnecessary
  * checkout, which takes a lock. We bias toward not over-locking.
  */
+import { bridgeMethodEffect } from "../action-effects.js";
+
 
 export interface WriteClassification {
   /**
@@ -34,10 +47,6 @@ export interface WriteClassification {
   /** UE content paths the call modifies. Empty when nothing is guardable. */
   contentPaths: string[];
 }
-
-/** Method-name prefixes that denote a mutation. Read verbs are excluded. */
-const WRITE_VERB =
-  /^(save|set|create|add|delete|remove|import|rename|move|duplicate|reparent|compile|apply|assign|modify|bake|generate|build)_/;
 
 /** Single-value params that carry an asset content path. */
 const PATH_KEYS = ["assetPath", "sourcePath", "destinationPath", "packagePath", "path"];
@@ -136,7 +145,13 @@ export function classifyWrite(method: string, params: Record<string, unknown>): 
     return { writes: contentPaths.length > 0, contentPaths };
   }
 
-  if (!WRITE_VERB.test(method)) {
+  // A declared read writes no content, whatever path it was handed. Anything
+  // else is a candidate, whatever its name looks like. `unknown` is a
+  // candidate for the same reason it gates like a mutation everywhere else,
+  // and an unnecessary checkout is the cheap side of this decision.
+  // With the parameters, so a wrapped engine tool is judged by which tool it
+  // is rather than by the one method all 830 of them share.
+  if (bridgeMethodEffect(method, params).effect === "read") {
     return { writes: false, contentPaths: [] };
   }
 

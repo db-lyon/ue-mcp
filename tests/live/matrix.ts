@@ -209,7 +209,11 @@ export const MATRIX_CASES: MatrixCase[] = [
     id: "both-golden-baselines",
     text: "Both golden baselines.",
     coverage: [
-      { kind: "live", file: LIVE_GOLDEN, title: "was recorded from the live editor, not from a cache or the baked snapshot" },
+      // This case asked for the surface recorded in both states because it
+      // used to differ between them. It no longer can: every action is
+      // declared, so the two recordings are identical and their equality is
+      // what the connected half asserts.
+      { kind: "live", file: LIVE_GOLDEN, title: "advertises exactly what it advertises with no editor attached" },
       { kind: "live", file: LIVE_GOLDEN, title: "matches the committed baseline" },
       { kind: "live", file: LIVE_GOLDEN, title: "still matches the committed baseline" },
       { kind: "live", file: LIVE_GOLDEN, title: "records the same bytes from a catalog enumerated in a different order" },

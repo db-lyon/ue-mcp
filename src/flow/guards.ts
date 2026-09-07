@@ -14,7 +14,14 @@ import type { TaskRegistry } from "@db-lyon/flowkit";
 import type { IBridge } from "../bridge.js";
 import type { ToolContext } from "../types.js";
 import type { FlowContext } from "./context.js";
-import { mutationScope, writeScope, type BridgeGuard, type CallContext } from "./guard.js";
+import {
+  mutationScope,
+  readScope,
+  unknownScope,
+  writeScope,
+  type BridgeGuard,
+  type CallContext,
+} from "./guard.js";
 import { withoutDialogActuation } from "../dialog-guard.js";
 import { DialogGatedBridge } from "./guarded-bridge.js";
 import { McpError, ErrorCode } from "../errors.js";
@@ -155,6 +162,8 @@ export async function buildGuards(
       // and a pipeline of guards that all ask pays once.
       ...(decl.scope === "writes" ? { appliesTo: (cc: CallContext) => writeScope(cc) } : {}),
       ...(decl.scope === "mutations" ? { appliesTo: (cc: CallContext) => mutationScope(cc) } : {}),
+      ...(decl.scope === "reads" ? { appliesTo: (cc: CallContext) => readScope(cc) } : {}),
+      ...(decl.scope === "unknown" ? { appliesTo: (cc: CallContext) => unknownScope(cc) } : {}),
 
       ...(decl.before
         ? {

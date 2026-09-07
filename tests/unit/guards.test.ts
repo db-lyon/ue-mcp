@@ -135,8 +135,8 @@ describe("a declaration becomes a guard", () => {
       deps(registry),
       SOURCE,
     );
-    // A read verb is not a write.
-    expect(await guard.appliesTo!(callCtx("get_asset", { assetPath: "/Game/Foo" }))).toBe(false);
+    // A declared read is not a write.
+    expect(await guard.appliesTo!(callCtx("read_asset", { assetPath: "/Game/Foo" }))).toBe(false);
     // A write to a path that does not exist yet creates rather than modifies.
     expect(await guard.appliesTo!(callCtx("save_asset", { assetPath: "/Other/New" }))).toBe(false);
     // A write to an existing asset is what the scope claims.
@@ -192,7 +192,10 @@ describe("standing in front of every mutation", () => {
       SOURCE,
     );
 
-    for (const read of ["get_asset", "list_assets", "get_outliner", "describe_action"]) {
+    // Real bridge methods whose actions declare read. The names matter now:
+    // the verdict is what the action forwarding to each one declared, so a
+    // method nothing declares is not a read however it is spelled.
+    for (const read of ["read_asset", "list_assets", "get_world_outliner", "get_actor_details"]) {
       expect(await guard.appliesTo!(callCtx(read, {})), read).toBe(false);
     }
   });
@@ -239,6 +242,146 @@ describe("standing in front of every mutation", () => {
     }
   });
 
+  it("fails closed on a method that only LOOKS like a read", async () => {
+    // The half the read-verb rule could not do. Inverting the guess closed the
+    // direction where a mutating verb was missing from a list, and left this
+    // one wide open: a method nothing in this server declares was waved
+    // through on the strength of its first word. A plugin calling the bridge
+    // with a method of its own, or a flow step naming one, is exactly that
+    // case, and "get" at the front of it vouches for nothing.
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ freeze: { scope: "mutations", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    for (const m of ["get_something_nobody_declared", "list_vendor_widgets", "read_remote_state"]) {
+      expect(await guard.appliesTo!(callCtx(m, {})), m).toBe(true);
+    }
+  });
+
+  it("scopes to the reads alone, which is the complement", async () => {
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ audit: { scope: "reads", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    expect(await guard.appliesTo!(callCtx("read_asset", {}))).toBe(true);
+    expect(await guard.appliesTo!(callCtx("get_world_outliner", {}))).toBe(true);
+    expect(await guard.appliesTo!(callCtx("save_asset", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("spawn_actor", {}))).toBe(false);
+    // A method nothing declares counts as a change, so it is NOT a read. This
+    // is the direction that matters: a mutation slipping into this scope is
+    // one the guard was told to ignore.
+    expect(await guard.appliesTo!(callCtx("vendor_get_thing", {}))).toBe(false);
+    // `unknown` is not a read either.
+    expect(await guard.appliesTo!(callCtx("execute_python", {}))).toBe(false);
+  });
+
+  it("scopes to the escape hatches alone, which no verb list could name", async () => {
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ approve: { scope: "unknown", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    // Arbitrary code, arbitrary console commands, a wrapped third-party tool,
+    // and reflected invocation. What they do is decided by an argument.
+    for (const m of [
+      "execute_python", "execute_command", "epic_call_tool",
+      "invoke_object_function", "invoke_function", "invoke_static_function",
+    ]) {
+      expect(await guard.appliesTo!(callCtx(m, {})), m).toBe(true);
+    }
+    // An ordinary edit is not an escape hatch, which is the point: this scope
+    // exists so a project can gate the calls that can do anything without
+    // gating the ones that do a known thing.
+    expect(await guard.appliesTo!(callCtx("save_asset", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("spawn_actor", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("read_asset", {}))).toBe(false);
+    // Nor is a method nobody declares: unrecognised is a change, not an
+    // unknowable. Conflating the two would put every plugin's own bridge call
+    // in front of a human-approval gate.
+    expect(await guard.appliesTo!(callCtx("vendor_frobnicate", {}))).toBe(false);
+  });
+
+  it("keeps the escape hatches inside the mutations scope too", async () => {
+    // `unknown` gates as a change everywhere, so a project that guards
+    // mutations does not have to also remember to guard unknown.
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ freeze: { scope: "mutations", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+    expect(await guard.appliesTo!(callCtx("execute_python", {}))).toBe(true);
+    expect(await guard.appliesTo!(callCtx("epic_call_tool", {}))).toBe(true);
+  });
+
+  it("tells one wrapped engine tool from another, though they share a method", async () => {
+    // All 830 wrapped tools dispatch through `epic_call_tool`, because the
+    // plugin registers one reflective handler for Unreal's whole registry
+    // rather than one per tool. Judging the method alone made every scope
+    // wrong about 830 of the 1920 actions on this surface: `mutations` fired
+    // on every wrapped read, `reads` matched none of them, and `unknown`
+    // matched all of them, so a guard meant to put a person in front of
+    // arbitrary code stopped `epic_list_attributes` too.
+    const registry = registryWith({ check: ALLOW });
+    const [mutations] = await buildGuards(
+      declare({ freeze: { scope: "mutations", before: { class_path: "check" } } }), deps(registry), SOURCE,
+    );
+    const [reads] = await buildGuards(
+      declare({ audit: { scope: "reads", before: { class_path: "check" } } }), deps(registry), SOURCE,
+    );
+    const [hatches] = await buildGuards(
+      declare({ approve: { scope: "unknown", before: { class_path: "check" } } }), deps(registry), SOURCE,
+    );
+    const call = (tool: string) => callCtx("epic_call_tool", { toolset: "X", tool });
+
+    const read = call("GASToolsets.AttributeSetToolset.ListAttributes");
+    expect(await mutations.appliesTo!(read)).toBe(false);
+    expect(await reads.appliesTo!(read)).toBe(true);
+    expect(await hatches.appliesTo!(read), "a wrapped read is not an escape hatch").toBe(false);
+
+    const write = call("UMGToolSet.UMGToolSet.AddWidget");
+    expect(await mutations.appliesTo!(write)).toBe(true);
+    expect(await reads.appliesTo!(write)).toBe(false);
+    expect(await hatches.appliesTo!(write)).toBe(false);
+
+    // Arbitrary code stays unknown: its deciding argument is a program.
+    const python = callCtx("execute_python", { code: "x" });
+    expect(await hatches.appliesTo!(python)).toBe(true);
+
+    // A tool name this build does not carry falls back to the method, which
+    // has no single effect, so it is treated as a change.
+    const stranger = call("SomeFutureToolset.SomeFutureToolset.Whatever");
+    expect(await mutations.appliesTo!(stranger)).toBe(true);
+    expect(await reads.appliesTo!(stranger)).toBe(false);
+  });
+
+  it("lets through the reads a HANDLER makes on its own", async () => {
+    // These belong to no ActionSpec: a handler calls them directly, so the
+    // index of declared actions cannot see them and the default above would
+    // put both in front of every mutation guard. They are enumerated instead,
+    // which is the whole reason that table exists.
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ freeze: { scope: "mutations", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    expect(await guard.appliesTo!(callCtx("search_assets", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("get_engine_state", {}))).toBe(false);
+    // The mutating half of the same table still counts.
+    expect(await guard.appliesTo!(callCtx("acquire_lock", {}))).toBe(true);
+    expect(await guard.appliesTo!(callCtx("execute_python", {}))).toBe(true);
+  });
+
   it("still lets a shaped read through", async () => {
     const registry = registryWith({ check: ALLOW });
     const [guard] = await buildGuards(
@@ -247,9 +390,13 @@ describe("standing in front of every mutation", () => {
       SOURCE,
     );
 
-    // "bulk" and "batch" describe the shape of a call, not what it does.
-    expect(await guard.appliesTo!(callCtx("bulk_read_properties", {}))).toBe(false);
-    expect(await guard.appliesTo!(callCtx("batch_get_actors", {}))).toBe(false);
+    // "bulk" describes the shape of a call, not what it does, and both of
+    // these declare read. Under the old verb rule this worked by accident: the
+    // rule looked past "bulk" to the next segment, so it happened to agree
+    // here and would have been wrong for any shaped read whose second segment
+    // was not itself a read verb.
+    expect(await guard.appliesTo!(callCtx("bulk_read_asset_properties", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("bulk_line_trace", {}))).toBe(false);
   });
 
   it("blocks one end to end, through the bridge a call actually takes", async () => {
@@ -266,8 +413,8 @@ describe("standing in front of every mutation", () => {
     const bridge = new GuardedBridge(inner, guardRegistry, resolveExisting);
 
     await expect(bridge.call("spawn_actor", {})).rejects.toThrow(/blocked \(spawn_actor\)/);
-    await expect(bridge.call("get_asset", { assetPath: "/Game/Foo" })).resolves.toEqual({ ok: true });
-    expect(inner.calls, "only the read should have reached the editor").toEqual(["get_asset"]);
+    await expect(bridge.call("read_asset", { assetPath: "/Game/Foo" })).resolves.toEqual({ ok: true });
+    expect(inner.calls, "only the read should have reached the editor").toEqual(["read_asset"]);
   });
 });
 
@@ -516,8 +663,8 @@ describe("through the bridge a call actually takes", () => {
     const inner = fakeBridge();
     const bridge = new GuardedBridge(inner, guardRegistry, resolveExisting);
 
-    await expect(bridge.call("get_asset", { assetPath: "/Game/Foo" })).resolves.toEqual({ ok: true });
-    expect(inner.calls).toEqual(["get_asset"]);
+    await expect(bridge.call("read_asset", { assetPath: "/Game/Foo" })).resolves.toEqual({ ok: true });
+    expect(inner.calls).toEqual(["read_asset"]);
   });
 });
 

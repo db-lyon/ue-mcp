@@ -353,7 +353,7 @@ describe("flow runs journal themselves", () => {
       "probe",
       "Test-only category.",
       {
-        ping: { description: "Answer. Params: none", handler: async () => ({ pong: true }) },
+        ping: { kind: "handler", effect: "read", description: "Answer. Params: none", handler: async () => ({ pong: true }) },
         boom: {
           description: "Fail. Params: none",
           handler: async () => {

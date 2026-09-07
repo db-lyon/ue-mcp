@@ -38,9 +38,16 @@
  * requires an explicit target, so the honest label costs nothing at the gate
  * and stops a guess from being recorded as fact.
  */
-import { MUTATE_PREFIXES, READ_PREFIXES } from "./locking.js";
+import { MUTATE_PREFIXES, READ_PREFIXES } from "./action-verbs.js";
+import type { ActionEffect } from "./types.js";
 
-export type ActionClass = "read" | "mutate" | "unknown";
+/**
+ * The same three values as `ActionEffect`, kept as a separate name because
+ * this module answers about a NAME and that one is a declaration. An alias
+ * rather than a parallel definition, so the two can never come to mean
+ * different things.
+ */
+export type ActionClass = ActionEffect;
 
 /** Where a classification came from. `unresolved` is what the drift guard fails on. */
 export type ActionClassSource = "override" | "lexicon" | "epic-default" | "unresolved";
@@ -419,6 +426,23 @@ export function classifyActionClass(tool: string, action: string): ActionClassif
 export function classifyTaskClass(taskName: string): ActionClassification {
   const { tool, action } = splitTaskName(taskName);
   return classifyActionClass(tool, action);
+}
+
+/**
+ * The lexicon's answer for an action nobody declared, as an `ActionEffect`.
+ *
+ * This is the ONLY entry point runtime injection uses, and the only reason the
+ * verb lists above still exist. Everything ue-mcp itself declares carries its
+ * effect on the ActionSpec; what remains are actions this package cannot see
+ * at build time: Epic's wrapped engine tools, read out of a live registry that
+ * can carry toolsets no release has shipped against, and a plugin action whose
+ * manifest did not say what it does.
+ *
+ * Callers record the result as `effectSource: "inferred"`, so a guess is never
+ * read back later as a declaration.
+ */
+export function inferActionEffect(tool: string, action: string): ActionEffect {
+  return classifyActionClass(tool, action).class;
 }
 
 /**

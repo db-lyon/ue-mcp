@@ -61,15 +61,9 @@ import yaml from "js-yaml";
 
 import { ALL_TOOLS, setLiveToolGraph } from "./tools.js";
 import { nearestActions } from "./action-schema.js";
-import { enrichToolsWithEpicCatalog, type EpicCatalog } from "./epic-enrich.js";
+import { applyNativeToolsConfig } from "./epic-surface.js";
 import { checkPluginFreshness } from "./plugin-freshness.js";
 import { readEngineSnapshot } from "./engine-observer.js";
-import {
-  saveCatalogCache,
-  loadCatalogCache,
-  loadBakedCatalog,
-  catalogOrRefusal,
-} from "./epic-cache.js";
 import {
   baseGraphFor,
   unionSurface,
@@ -1202,81 +1196,32 @@ async function buildSessionLoad(
   );
   const tools = pluginLoad.tools;
 
-  // ── Epic 5.8 native toolset surfacing (best-effort, startup) ─────
-  // If this session's bridge is reachable now, pull Epic's live toolset
-  // catalog and inject each tool as a first-class action into the matching
-  // ue-mcp category (GAS tools into `gas`, Niagara into `niagara`, etc.).
-  // This must run before the flow registry and MCP tool registration so the
-  // injected actions are dispatchable and advertised. When the editor is not
-  // up yet, the `epic` gateway still works; a server restart picks up
-  // enrichment.
+  // ── Unreal's wrapped engine tools ────────────────────────────────
+  // They are DECLARED in ALL_TOOLS now, generated from a recorded catalog
+  // and a reviewed effect for each one, so nothing is read from the editor
+  // here and nothing is injected. All that is left is honouring the user's
+  // `nativeTools:` config, which now means removing what it excludes.
+  //
+  // What this replaces: a startup call that pulled the live catalog, fell
+  // back to a project cache and then to a baked snapshot, and invented an
+  // effect for each tool from its NAME. 356 of the 830 rode a default nobody
+  // had reviewed, none of their parameters were declared so the MCP layer
+  // stripped every one before dispatch, and the surface differed depending on
+  // whether an editor happened to be up when the server started.
   const nativeCfg = project.config.nativeTools ?? {};
-  if (nativeCfg.enabled === false) {
-    console.error(`[ue-mcp] ${label}Native Epic tools disabled via ue-mcp.yml (nativeTools.enabled=false); epic gateway still available`);
-  } else {
-    try {
-      // Source priority: live editor (most current, refreshes the cache) ->
-      // project cache (last-seen) -> baked snapshot shipped with the package
-      // (deterministic default so the surface appears on first cold startup
-      // and matches the generated docs). First available wins. The cache is
-      // already keyed by project directory, so each session reads and writes
-      // its own.
-      let catalog: EpicCatalog | null = null;
-      let source = "";
-      // The guarded bridge, not the raw one. This is the first call the server
-      // makes against an editor, so sending it raw meant a modal was met by
-      // the one route with no gate on it: the refusal came back, the surface
-      // fell back to a cache, and nothing was latched for the calls that
-      // followed.
-      const bridge = session.guarded;
-      if (!session.bridge.isConnected) {
-        await session.bridge.connect(2000).catch(() => {});
-      }
-      if (session.bridge.isConnected) {
-        catalog = (await bridge.call("epic_list_toolsets", { includeSchemas: true }, 20000)) as EpicCatalog;
-        // A modal refuses this like anything else, and the refusal has no
-        // toolsets, so it read as "this editor advertises none" and the surface
-        // silently fell back to a cache. Say what actually happened, and let
-        // the guard learn from it rather than swallowing the evidence.
-        const read = catalogOrRefusal(catalog);
-        if (read.refusedByDialog) {
-          existingGuard(session)?.observe("epic_list_toolsets", catalog);
-          warn(
-            "epic",
-            `${session.name}: the Epic toolset list was refused because a modal dialog is blocking `
-            + "the editor, so its tools are being taken from the cache. Answer the dialog and "
-            + "re-register the editor to pick up the live set.",
-          );
-        }
-        catalog = read.catalog;
-        if (catalog?.toolsets?.length) {
-          saveCatalogCache(configDir, catalog, project.engineAssociation);
-          source = "live editor";
-        }
-      }
-      if (!catalog?.toolsets?.length) {
-        catalog = loadCatalogCache(configDir);
-        if (catalog?.toolsets?.length) source = "project cache";
-      }
-      if (!catalog?.toolsets?.length) {
-        catalog = loadBakedCatalog();
-        if (catalog?.toolsets?.length) source = "baked snapshot";
-      }
-      if (catalog?.toolsets?.length) {
-        const enriched = enrichToolsWithEpicCatalog(tools, catalog, {
-          excludeCategories: nativeCfg.exclude,
-        });
-        if (enriched.injected > 0) {
-          const summary = Object.entries(enriched.byCategory).map(([c, n]) => `${c}:${n}`).join(", ");
-          console.error(`[ue-mcp] ${label}Epic 5.8 toolsets (${source}): surfaced ${enriched.injected} tools (${summary})`);
-          if (enriched.createdCategories.length) {
-            console.error(`[ue-mcp] ${label}Epic-only categories added: ${enriched.createdCategories.join(", ")}`);
-          }
-        }
-      }
-    } catch (e) {
-      console.error(`[ue-mcp] ${label}Epic toolset enrichment skipped: ${e instanceof Error ? e.message : e}`);
-    }
+  const epicSurface = applyNativeToolsConfig(tools, nativeCfg);
+  if (epicSurface.removed > 0) {
+    const why = nativeCfg.enabled === false
+      ? "nativeTools.enabled=false"
+      : `nativeTools.exclude=[${(nativeCfg.exclude ?? []).join(", ")}]`;
+    console.error(
+      `[ue-mcp] ${label}Wrapped engine tools withheld (${why}): ${epicSurface.removed} actions; `
+      + "epic(call_tool) still reaches every one of them.",
+    );
+  }
+  for (const name of epicSurface.droppedCategories) {
+    const i = tools.findIndex((t) => t.name === name);
+    if (i >= 0) tools.splice(i, 1);
   }
 
   return {

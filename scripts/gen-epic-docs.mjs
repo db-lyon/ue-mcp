@@ -4,12 +4,15 @@
  * (docs/native-tools.md) listing every official Epic ToolsetRegistry tool that
  * ue-mcp wraps and surfaces as first-class actions.
  *
- * Source of truth: assets/epic-catalog.snapshot.json (trimmed snapshot of the
- * live ToolsetRegistry catalog, refreshed on engine bumps).
+ * Source of truth: ALL_TOOLS itself. The wrapped engine tools are declared
+ * actions now, generated into src/tools/epic/*.generated.ts from a recorded
+ * catalog and a reviewed effect for each one, so the page is read off the
+ * surface the server actually advertises rather than reproduced from a
+ * snapshot alongside it.
  *
- * Zero-drift: we run the SAME enrichToolsWithEpicCatalog used at runtime over
- * stub categories, then document exactly the actions/descriptions it produces,
- * so the page matches the surfaced tools by construction.
+ * Zero-drift by construction, and now literally: the rows ARE the actions.
+ * Nothing here re-derives a description, a parameter list or an effect, so
+ * there is no second implementation to fall out of step.
  *
  * This page is OWNED entirely by this script. It deliberately does NOT touch
  * docs/tool-reference.md (which generate-tool-metadata regenerates from the
@@ -22,38 +25,42 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { enrichToolsWithEpicCatalog, routedCategories } from "../dist/epic-enrich.js";
-import { categoryTool } from "../dist/types.js";
 import { ALL_TOOLS } from "../dist/tools.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SNAPSHOT = path.join(ROOT, "assets", "epic-catalog.snapshot.json");
+const CATALOG = path.join(ROOT, "tests", "golden", "epic-catalog.json");
 const DOC = path.join(ROOT, "docs", "native-tools.md");
 
-// Derived, never hand-listed. A hardcoded list silently rots the moment a new
-// routing rule lands: enrichment falls back to the `epic` umbrella for any
-// category with no stub, so the docs would claim a tool lives somewhere it
-// does not. Epic-only domains are created by enrichment itself, so they need
-// no stub here.
-const CATS = [...new Set([...ALL_TOOLS.map((t) => t.name), ...routedCategories()])];
+// The advertised order, so the page reads in the same order as the surface.
+const CATS = ALL_TOOLS.map((t) => t.name);
 
-/** Run the real enrichment over stubs so documented actions == surfaced actions. */
-function enrichedByCategory(catalog) {
-  const stubs = CATS.map((c) => categoryTool(c, "", { _seed: { bridge: "_seed" } }, undefined, {}));
-  enrichToolsWithEpicCatalog(stubs, catalog);
+/**
+ * The wrapped engine tools, straight off the advertised surface.
+ *
+ * Nothing is re-derived here. The rows ARE the declared actions, with the
+ * description and effect they carry, so the page cannot drift from what a
+ * client is handed. The `epic` category is excluded: its four actions are
+ * ue-mcp's own gateway into the registry, not wrapped tools.
+ */
+function wrappedByCategory() {
   const out = {};
-  for (const t of stubs) {
+  for (const t of ALL_TOOLS) {
+    if (t.name === "epic") continue;
     const rows = Object.entries(t.actions)
       .filter(([k]) => k.startsWith("epic_"))
-      .map(([k, spec]) => ({ action: k, description: (spec.description ?? "").replace(/\s+/g, " ").trim() }));
+      .map(([k, spec]) => ({
+        action: k,
+        effect: spec.effect,
+        description: (spec.description ?? "").replace(/\s+/g, " ").trim(),
+      }));
     if (rows.length) out[t.name] = rows.sort((a, b) => a.action.localeCompare(b.action));
   }
   return out;
 }
 
 function main() {
-  const catalog = JSON.parse(fs.readFileSync(SNAPSHOT, "utf8"));
-  const byCat = enrichedByCategory(catalog);
+  const catalog = JSON.parse(fs.readFileSync(CATALOG, "utf8"));
+  const byCat = wrappedByCategory();
   const total = Object.values(byCat).reduce((n, r) => n + r.length, 0);
   const toolsetCount = catalog.toolsets?.length ?? 0;
 
@@ -66,10 +73,11 @@ function main() {
   lines.push('!!! note "Official - Unreal Engine 5.8"');
   lines.push(
     "    The actions on this page wrap Unreal's native AI Toolset Registry (the plugin behind Unreal's own MCP " +
-    "server). ue-mcp reaches the registry in-process and surfaces each official tool as a first-class action inside " +
-    "the matching ue-mcp category, so you call them like any other action - passing the tool's arguments via " +
-    "`input`. Requires UE 5.8+ with the `ToolsetRegistry` plugin (and the toolset plugins you want) enabled. Use " +
-    "the `epic` category to discover them at runtime (`status` / `list_toolsets` / `describe_toolset` / `call_tool`).",
+    "server). Each one is a declared ue-mcp action inside the matching category: it states what it does to the " +
+    "editor, declares its own parameters, and goes through the same guards, locks and dispatch as every other " +
+    "action here. Pass a tool's arguments as ordinary top-level parameters, or as `input` when you prefer. " +
+    "Requires UE 5.8+ with the `ToolsetRegistry` plugin (and the toolset plugins you want) enabled. The `epic` " +
+    "category discovers the live registry (`status` / `list_toolsets` / `describe_toolset` / `call_tool`).",
   );
   lines.push("");
   lines.push(

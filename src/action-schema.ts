@@ -21,8 +21,8 @@
  * and a unit test gates the whole surface on it.
  */
 import { z } from "zod";
-import type { ActionSpec, ToolDef } from "./types.js";
-import { classifyActionClass, type ActionClass } from "./action-class.js";
+import type { ActionEffectSource, ActionSpec, ToolDef } from "./types.js";
+import type { ActionClass } from "./action-class.js";
 
 /** A readable schema summary, not a substitute for runtime validation. */
 export interface ValueSchema {
@@ -67,7 +67,7 @@ export interface ActionSchema {
   /** Longer wait this action declares for itself, in milliseconds. */
   timeoutMs?: number;
   /**
-   * Whether this observes the editor or changes it (#817's taxonomy).
+   * Whether this observes the editor or changes it, as the action DECLARES it.
    *
    * MCP's own readOnlyHint is per TOOL, and every tool here is a category
    * holding both reads and mutations, so the manifest cannot carry this. A
@@ -78,8 +78,21 @@ export interface ActionSchema {
    *   mutate  may change the editor, its project on disk, or its process
    *   unknown decided by a parameter (an arbitrary python string, a wrapped
    *           tool name), and therefore gated exactly like mutate
+   *
+   * Read straight off the ActionSpec. It used to be recomputed here from the
+   * action's name, which meant this field could disagree with the gate that
+   * actually stops the call.
    */
   class: ActionClass;
+  /**
+   * Where that answer came from. `declared` is a person's, written at the
+   * declaration. `inferred` is the verb lexicon's, and appears only on the
+   * actions this package does not declare: Epic's wrapped engine tools and a
+   * plugin action whose manifest did not say. A caller building its own
+   * approval policy should treat `inferred` reads with more suspicion than
+   * declared ones.
+   */
+  classSource: ActionEffectSource;
   params: ParamSchema[];
   /**
    * Choices the action offers, when it offers any.
@@ -774,7 +787,8 @@ export function actionSchema(tool: ToolDef, action: string): ActionSchema {
     bridge: spec.bridge,
     local: !spec.bridge,
     timeoutMs: spec.timeoutMs,
-    class: classifyActionClass(tool.name, action).class,
+    class: spec.effect,
+    classSource: spec.effectSource ?? "declared",
     params,
     alternatives: alternatives.length > 0 ? alternatives : undefined,
     drift,

@@ -67,9 +67,9 @@ function probeTool(handlerAnswer: () => Promise<unknown>): ToolDef {
     "probe",
     "Test-only category standing in for a bridge-backed one.",
     {
-      wipe: { description: "A destructive bridge action.", bridge: "wipe_the_thing" },
-      touch: { description: "A benign bridge action.", bridge: "touch_the_thing" },
-      list: { description: "A read that answers without a success key.", bridge: "list_the_things" },
+      wipe: { kind: "bridge", effect: "read", description: "A destructive bridge action.", bridge: "wipe_the_thing" },
+      touch: { kind: "bridge", effect: "read", description: "A benign bridge action.", bridge: "touch_the_thing" },
+      list: { kind: "bridge", effect: "read", description: "A read that answers without a success key.", bridge: "list_the_things" },
       refuse: { description: "A direct handler that refuses by returning.", handler: handlerAnswer },
     },
     undefined,

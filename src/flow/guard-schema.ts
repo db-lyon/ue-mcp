@@ -22,12 +22,26 @@ import { z } from "zod";
  *   mutations  every call that changes editor state, whether or not it names
  *              an asset. This is what "block everything that mutates" means:
  *              spawning an actor and starting a play session are in, reads are
- *              out.
+ *              out. Includes `unknown`, which is gated as a change everywhere.
  *   writes     calls that modify content already on disk. Narrower than
  *              mutations on purpose: it is the source-control question, and a
  *              call that creates something new modifies nothing yet.
+ *   reads      only the calls that observe. For auditing what an agent looked
+ *              at without the noise of everything it did.
+ *   unknown    only the calls whose effect a PARAMETER decides: an arbitrary
+ *              python string, a console command, a wrapped Epic tool, a
+ *              reflected function invocation. The escape hatches, and the
+ *              narrowest useful scope for "make somebody approve this".
+ *
+ * Every one of them is answered from what the action DECLARED. Until that
+ * existed, `reads` and `unknown` could not be offered at all: the answer came
+ * from matching the call's name against a list of verbs, which can approximate
+ * "not a read" and cannot pick out the set whose effect is genuinely unknowable
+ * from the name.
  */
-export const GuardScopeSchema = z.enum(["all", "mutations", "writes"]).default("all");
+export const GuardScopeSchema = z
+  .enum(["all", "mutations", "writes", "reads", "unknown"])
+  .default("all");
 
 /** One hook: the task to run, and the options it is built with. */
 export const GuardHookSchema = z.object({
