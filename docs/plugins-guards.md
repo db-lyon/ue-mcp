@@ -10,7 +10,7 @@ A guard is declared, not named into existence. The same shape works in a plugin 
 guards:
   sandbox:                          # the guard's name
     description: Block writes outside the sandbox
-    scope: writes                   # writes | all   (default: all)
+    scope: writes                   # all | mutations | writes | reads | unknown  (default: all)
     order: 10                       # lower runs first before, last after
     before:
       class_path: my.tasks.SandboxCheck
@@ -20,17 +20,38 @@ guards:
       class_path: my.tasks.SandboxAudit
 ```
 
-Three scopes, from widest to narrowest:
+Five scopes:
 
 | Scope | Sees |
 |-------|------|
 | `all` | every call, reads included. For audit and rate limiting. |
 | `mutations` | every call that changes editor state, whether or not it names an asset. This is what "block everything that mutates" means. |
 | `writes` | calls that modify content already on disk. The source-control question. |
+| `reads` | only the calls that observe. For auditing what an agent looked at. |
+| `unknown` | only the calls whose effect a parameter decides: the escape hatches. |
 
 `mutations` and `writes` are different questions, and the difference matters. Spawning an actor, starting a play session or answering a dialog all change something and name no content path, so `writes` never sees them. A call that creates a new asset modifies nothing that exists yet, so `writes` does not see that either. If the rule is "nothing may change until X", the scope is `mutations`.
 
-`mutations` fails closed: a call counts unless its leading verb is a known read. A guard asked to stand in front of everything has to be exhaustive, and a list of mutating verbs is open-ended, so every verb missing from such a list would be a mutation nobody guarded. The read vocabulary is shared with asset locking, so the two cannot drift into disagreeing about what a read is.
+### Where the answer comes from
+
+Every action declares what it does to the editor, as `read`, `mutate` or `unknown`, and the scopes are read off that declaration. Nothing here matches an action's name against a list of verbs.
+
+That is worth stating because it used to. `mutations` was once "a call counts unless its leading verb is a known read", which is a guess, and it was wrong in both directions: reads whose names do not open with a read verb (`metasound_get_graph`, `line_trace`, `hit_test_viewport_pixel`) were guarded for nothing, and before that inversion a hand-written list of mutating verbs had let `write_cpp_file`, `build`, `sculpt`, `place_actor` and every bare verb like `save` and `create` straight through. A list of verbs is open-ended; the set of actions is not.
+
+A call this server does not recognise at all - a plugin reaching the bridge with a method of its own - counts as a change. Nothing vouches for it, so `mutations` sees it and `reads` does not.
+
+`unknown` is the scope the declaration made possible rather than merely made correct. It is the set whose behaviour is decided by an argument instead of by the action: `editor(execute_python)`, `editor(execute_command)`, every wrapped Epic tool reached through `epic(call_tool)`, and the reflected `invoke_*` family. Those are the calls that can do anything, and a verb list cannot pick them out, because `unknown` is not a property of a name. If the rule is "a person approves the escape hatches, and ordinary edits go through", that is one guard:
+
+```yaml
+guards:
+  approve_escape_hatches:
+    description: Arbitrary code and wrapped third-party tools need a human
+    scope: unknown
+    before:
+      class_path: tasks/AskFirst
+```
+
+`mutations` includes `unknown`, since a call that might change something is treated as one everywhere in this server.
 
 Both narrower scopes are computed lazily, so a read pays nothing and a pipeline of guards that all ask pays once.
 

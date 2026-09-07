@@ -261,6 +261,67 @@ describe("standing in front of every mutation", () => {
     }
   });
 
+  it("scopes to the reads alone, which is the complement", async () => {
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ audit: { scope: "reads", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    expect(await guard.appliesTo!(callCtx("read_asset", {}))).toBe(true);
+    expect(await guard.appliesTo!(callCtx("get_world_outliner", {}))).toBe(true);
+    expect(await guard.appliesTo!(callCtx("save_asset", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("spawn_actor", {}))).toBe(false);
+    // A method nothing declares counts as a change, so it is NOT a read. This
+    // is the direction that matters: a mutation slipping into this scope is
+    // one the guard was told to ignore.
+    expect(await guard.appliesTo!(callCtx("vendor_get_thing", {}))).toBe(false);
+    // `unknown` is not a read either.
+    expect(await guard.appliesTo!(callCtx("execute_python", {}))).toBe(false);
+  });
+
+  it("scopes to the escape hatches alone, which no verb list could name", async () => {
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ approve: { scope: "unknown", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    // Arbitrary code, arbitrary console commands, a wrapped third-party tool,
+    // and reflected invocation. What they do is decided by an argument.
+    for (const m of [
+      "execute_python", "execute_command", "epic_call_tool",
+      "invoke_object_function", "invoke_function", "invoke_static_function",
+    ]) {
+      expect(await guard.appliesTo!(callCtx(m, {})), m).toBe(true);
+    }
+    // An ordinary edit is not an escape hatch, which is the point: this scope
+    // exists so a project can gate the calls that can do anything without
+    // gating the ones that do a known thing.
+    expect(await guard.appliesTo!(callCtx("save_asset", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("spawn_actor", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("read_asset", {}))).toBe(false);
+    // Nor is a method nobody declares: unrecognised is a change, not an
+    // unknowable. Conflating the two would put every plugin's own bridge call
+    // in front of a human-approval gate.
+    expect(await guard.appliesTo!(callCtx("vendor_frobnicate", {}))).toBe(false);
+  });
+
+  it("keeps the escape hatches inside the mutations scope too", async () => {
+    // `unknown` gates as a change everywhere, so a project that guards
+    // mutations does not have to also remember to guard unknown.
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ freeze: { scope: "mutations", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+    expect(await guard.appliesTo!(callCtx("execute_python", {}))).toBe(true);
+    expect(await guard.appliesTo!(callCtx("epic_call_tool", {}))).toBe(true);
+  });
+
   it("lets through the reads a HANDLER makes on its own", async () => {
     // These belong to no ActionSpec: a handler calls them directly, so the
     // index of declared actions cannot see them and the default above would

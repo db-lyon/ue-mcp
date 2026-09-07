@@ -90,6 +90,35 @@ export function mutationScope(ctx: CallContext): boolean {
   return mayChangeState(bridgeMethodEffect(ctx.method).effect);
 }
 
+/**
+ * Only the calls that observe.
+ *
+ * The complement of `mutationScope`, for auditing what an agent looked at
+ * without the noise of everything it did. It could not be offered while the
+ * answer came from a verb list: "not a read" tolerates a wrong guess in the
+ * safe direction, and "IS a read" does not, because a mutation that slipped
+ * into this scope is a mutation the guard was told to ignore.
+ */
+export function readScope(ctx: CallContext): boolean {
+  return bridgeMethodEffect(ctx.method).effect === "read";
+}
+
+/**
+ * Only the calls whose effect a PARAMETER decides.
+ *
+ * `editor(execute_python)`, `editor(execute_command)`, the wrapped Epic tools
+ * behind `epic_call_tool`, and the reflected `invoke_*` family. The escape
+ * hatches: the calls that can do anything, named as a set rather than
+ * enumerated by hand in every project that wants to gate them.
+ *
+ * This is the scope that the declaration made possible rather than merely made
+ * correct. A verb list cannot produce this set at all - `unknown` is not a
+ * property of the name, it is the absence of one.
+ */
+export function unknownScope(ctx: CallContext): boolean {
+  return bridgeMethodEffect(ctx.method).effect === "unknown";
+}
+
 /** Build the per-call context, wiring the lazy write-enrichment helpers. */
 export function makeCallContext(
   method: string,
