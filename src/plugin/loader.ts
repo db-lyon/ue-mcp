@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import type { GuardDeclarations } from "../flow/guard-schema.js";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { TaskConstructor, TaskDefinition, FlowDefinition } from "@db-lyon/flowkit";
@@ -66,6 +67,14 @@ export interface PluginLoadResult {
   taskDefs: Record<string, TaskDefinition>;
   /** Plugin-contributed flow definitions to merge into the FlowConfig. */
   flowDefs: Record<string, FlowDefinition>;
+  /**
+   * Guards each plugin declared, keyed by the plugin that declared them.
+   *
+   * Kept per plugin rather than merged, so a guard that cannot be built names
+   * the manifest to open, and so two plugins choosing the same guard name are
+   * distinguishable rather than one silently replacing the other.
+   */
+  guardsByPlugin: Array<{ plugin: string; guards: GuardDeclarations }>;
   /** Per-category markdown to append to AI-facing docs. */
   knowledgeByCategory: Record<string, string[]>;
 }
@@ -77,6 +86,7 @@ const EMPTY_RESULT: PluginLoadResult = {
   classPathRegistrations: [],
   taskDefs: {},
   flowDefs: {},
+  guardsByPlugin: [],
   knowledgeByCategory: {},
 };
 
@@ -110,6 +120,7 @@ export async function loadPlugins(
   const classPathRegistrations: Array<{ classPath: string; ctor: TaskConstructor }> = [];
   const taskDefs: Record<string, TaskDefinition> = {};
   const flowDefs: Record<string, FlowDefinition> = {};
+  const guardsByPlugin: Array<{ plugin: string; guards: GuardDeclarations }> = [];
   const knowledgeByCategory: Record<string, string[]> = {};
   // For each category, accumulate injection plans across all plugins.
   const plansByCategory = new Map<string, InjectionPlan[]>();
@@ -143,6 +154,12 @@ export async function loadPlugins(
         group: pkg.name,
         options: {},
       };
+    }
+
+    // Guards this plugin declares. They are not tasks and are not registered
+    // as tasks: they are built into pipeline guards directly.
+    if (Object.keys(manifest.guards).length > 0) {
+      guardsByPlugin.push({ plugin: pkg.name, guards: manifest.guards });
     }
 
     // Merge plugin-supplied flows, filtered by the user's group toggles. A flow
@@ -318,6 +335,7 @@ export async function loadPlugins(
     classPathRegistrations,
     taskDefs,
     flowDefs,
+    guardsByPlugin,
     knowledgeByCategory,
   };
 }

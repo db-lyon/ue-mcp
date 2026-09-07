@@ -20,7 +20,9 @@ import {
   type Guard,
   type GuardContext,
 } from "@db-lyon/flowkit/guard";
+import * as fs from "node:fs";
 import type { IBridge } from "../bridge.js";
+import type { ProjectContext } from "../project.js";
 import type { EditorSession } from "../session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";
 
@@ -61,6 +63,20 @@ export function writeScope(ctx: CallContext): boolean {
   return ctx.writeFiles().length > 0;
 }
 
+/**
+ * Every call that changes editor state.
+ *
+ * Wider than `writeScope`, and deliberately so. That one asks which existing
+ * files a call modifies, which is the question a source-control guard has. A
+ * guard told to stand in front of everything that mutates has a different
+ * question: spawning an actor, starting a play session or pressing a dialog
+ * button all change something and name no asset, so they are invisible to the
+ * narrower scope while being exactly what "block every mutation" means.
+ */
+export function mutationScope(ctx: CallContext): boolean {
+  return ctx.write().mutates;
+}
+
 /** Build the per-call context, wiring the lazy write-enrichment helpers. */
 export function makeCallContext(
   method: string,
@@ -88,4 +104,22 @@ export function makeCallContext(
   });
 
   return Object.assign(ctx, { write, writeFiles });
+}
+
+/**
+ * Turn a content path into the file on disk it names, or null.
+ *
+ * This is what lets a guard scoped to writes see which existing files a call
+ * would modify. It is deliberately null-returning rather than throwing: a path
+ * that resolves to nothing is a call that creates something, not an error.
+ */
+export function makeResolveExistingFile(project: ProjectContext): ResolveExistingFile {
+  return (contentPath: string): string | null => {
+    try {
+      const abs = project.resolveContentPath(contentPath);
+      return fs.existsSync(abs) ? abs : null;
+    } catch {
+      return null;
+    }
+  };
 }
