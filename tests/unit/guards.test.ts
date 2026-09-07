@@ -206,20 +206,50 @@ describe("standing in front of every mutation", () => {
     );
 
     for (const m of [
-      "spawn_actor",
-      "destroy_actor",
-      "save_asset",
-      "delete_asset",
-      "set_actor_property",
-      "start_pie",
-      "stop_editor",
-      "execute_python",
-      "respond_to_dialog",
-      "import_fbx",
-      "compile_blueprint",
+      // Named-asset writes.
+      "save_asset", "delete_asset", "import_fbx", "compile_blueprint",
+      // Mutations that name no asset, which the writes scope cannot see.
+      "spawn_actor", "destroy_actor", "set_actor_property", "start_pie",
+      "stop_editor", "execute_python", "respond_to_dialog",
+      // Bare verbs. A rule matching a trailing underscore missed every one.
+      "save", "create", "compile", "duplicate", "load", "sculpt",
+      // Verbs a hand-written list did not think of.
+      "write_cpp_file", "write_source_file", "build", "use_editor",
+      "drop_editor", "bulk_rename", "batch_translate", "edit_user_defined_enum",
+      "reorder_enum_values", "metasound_author", "place_actor", "unlock",
+      "force_reload", "update_datatable_row", "reimport", "request_editor_shutdown",
     ]) {
       expect(await guard.appliesTo!(callCtx(m, {})), m).toBe(true);
     }
+  });
+
+  it("fails closed on a verb nobody has seen before", async () => {
+    // The point of the scope is to be exhaustive. Listing mutating verbs was
+    // the wrong way round: the list is open-ended, and every verb missing from
+    // it was a mutation nobody guarded.
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ freeze: { scope: "mutations", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    for (const m of ["frobnicate_widget", "teleport_pawn", "zzz_unknown_operation"]) {
+      expect(await guard.appliesTo!(callCtx(m, {})), m).toBe(true);
+    }
+  });
+
+  it("still lets a shaped read through", async () => {
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ freeze: { scope: "mutations", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    // "bulk" and "batch" describe the shape of a call, not what it does.
+    expect(await guard.appliesTo!(callCtx("bulk_read_properties", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("batch_get_actors", {}))).toBe(false);
   });
 
   it("blocks one end to end, through the bridge a call actually takes", async () => {

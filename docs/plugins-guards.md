@@ -30,6 +30,8 @@ Three scopes, from widest to narrowest:
 
 `mutations` and `writes` are different questions, and the difference matters. Spawning an actor, starting a play session or answering a dialog all change something and name no content path, so `writes` never sees them. A call that creates a new asset modifies nothing that exists yet, so `writes` does not see that either. If the rule is "nothing may change until X", the scope is `mutations`.
 
+`mutations` fails closed: a call counts unless its leading verb is a known read. A guard asked to stand in front of everything has to be exhaustive, and a list of mutating verbs is open-ended, so every verb missing from such a list would be a mutation nobody guarded. The read vocabulary is shared with asset locking, so the two cannot drift into disagreeing about what a read is.
+
 Both narrower scopes are computed lazily, so a read pays nothing and a pipeline of guards that all ask pays once.
 
 `before` may deny: returning `success: false`, or throwing, stops the call and the caller gets a `WRITE_BLOCKED` error carrying the message. `after` runs on a call that already happened, so it cannot deny; returning `data` replaces the result, and a failure or a throw is logged and the call stands.

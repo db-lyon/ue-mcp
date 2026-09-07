@@ -25,6 +25,7 @@ import type { IBridge } from "../bridge.js";
 import type { ProjectContext } from "../project.js";
 import type { EditorSession } from "../session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";
+import { READ_PREFIXES } from "../locking.js";
 
 /** Resolve a UE content path to an absolute on-disk file, or null if it does not exist. */
 export type ResolveExistingFile = (contentPath: string) => string | null;
@@ -64,17 +65,34 @@ export function writeScope(ctx: CallContext): boolean {
 }
 
 /**
- * Every call that changes editor state.
+ * Every call that is not provably a read.
  *
  * Wider than `writeScope`, and deliberately so. That one asks which existing
- * files a call modifies, which is the question a source-control guard has. A
- * guard told to stand in front of everything that mutates has a different
- * question: spawning an actor, starting a play session or pressing a dialog
- * button all change something and name no asset, so they are invisible to the
- * narrower scope while being exactly what "block every mutation" means.
+ * files a call modifies, which is the source-control question: it answers
+ * "no" whenever it cannot extract a content path, and a call with no asset
+ * path in its parameters is still a mutation of the editor.
+ *
+ * This one FAILS CLOSED. A guard told to stand in front of everything that
+ * mutates is asked to be exhaustive, so anything whose verb is not a known
+ * read counts. Listing mutating verbs instead was the wrong way round: the
+ * list is open-ended, and every verb missing from it was a mutation nobody
+ * guarded. The read lexicon is the same one asset locking uses, so the two
+ * cannot drift into disagreeing about what a read is.
  */
 export function mutationScope(ctx: CallContext): boolean {
-  return ctx.write().mutates;
+  return !isReadVerb(ctx.method);
+}
+
+/** Whether a method's leading verb is a known read. Shared with asset locking. */
+function isReadVerb(method: string): boolean {
+  const segments = String(method).toLowerCase().split(/[._]/);
+  let verb = segments[0] ?? "";
+  // "bulk" and "batch" describe the shape of a call, not what it does, so the
+  // verb after one is the answer: `bulk_read_properties` only looks.
+  if ((verb === "bulk" || verb === "batch") && segments.length > 1) {
+    verb = segments[1];
+  }
+  return (READ_PREFIXES as readonly string[]).includes(verb);
 }
 
 /** Build the per-call context, wiring the lazy write-enrichment helpers. */
