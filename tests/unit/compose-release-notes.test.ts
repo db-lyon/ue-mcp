@@ -1,26 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  ComposeError,
-  bulletKey,
-  comparePrereleaseIds,
-  compareVersions,
-  composeReleaseNotes,
-  fetchHeadline,
-  fetchPrereleases,
-  issueRefs,
-  mergeBodies,
-  mergeHeadlines,
-  parseBullets,
-  parseSections,
-  prereleaseTagsFor,
-  contributorsBetween,
-  previousStableTag,
-  renderSection,
-  renderContributions,
-  retitle,
-  classifySection,
-  TOP_SECTIONS,
-} from "../../scripts/compose-release-notes.mjs";
+import { ComposeError, bulletKey, comparePrereleaseIds, compareVersions, composeReleaseNotes, fetchHeadline, fetchPrereleases, issueRefs, mergeBodies, mergeHeadlines, parseBullets, parseSections, prereleaseTagsFor, contributorsBetween, previousStableTag, renderSection, renderContributions, retitle, classifySection, TOP_SECTIONS } from "../../scripts/compose-release-notes.mjs";
 import { processBody } from "../../scripts/release-headline.mjs";
 
 /** A published prerelease body, frontmatter already stripped by CI. */
@@ -645,5 +624,83 @@ describe("collapsing sections", () => {
       "Fixes",
       "Mentions",
     ]);
+  });
+});
+
+/**
+ * The composer writes sections as disclosures and used to read only markdown
+ * subheadings, so it could not parse its own output nor the notes this project
+ * publishes. Every section fell into the preamble and was dropped: composing a
+ * stable release from its betas kept the headline and lost the content.
+ */
+describe("reading the notes this project actually writes", () => {
+  const beta = [
+    "## v1.3.6-beta.1",
+    "",
+    "Unreal Engine 5.4 to 5.8.",
+    "",
+    "## Features",
+    "",
+    "<details>",
+    "<summary><b>Guards</b></summary>",
+    "",
+    "| Feature | What |",
+    "|---|---|",
+    "| `guards:` | Declared, not named. |",
+    "",
+    "</details>",
+    "",
+    "## Fixes",
+    "",
+    "<details>",
+    "<summary><b>Editor lifecycle</b></summary>",
+    "",
+    "| Fix | |",
+    "|---|---|",
+    "| Building closed every editor | It asks now. |",
+    "",
+    "</details>",
+  ].join("\n");
+
+  it("finds a section behind a disclosure", () => {
+    const { sections } = parseSections(beta);
+    expect(sections.map((s) => s.heading)).toEqual(["Guards", "Editor lifecycle"]);
+  });
+
+  it("keeps a table, which is what these sections are made of", () => {
+    const { sections } = parseSections(beta);
+    expect(sections[0].body).toContain("| `guards:` | Declared, not named. |");
+  });
+
+  it("remembers which top section the input filed each under", () => {
+    const { sections } = parseSections(beta);
+    expect(sections.map((s) => s.top)).toEqual(["Features", "Fixes"]);
+  });
+
+  it("files them by what the input said, not by guessing at the name", () => {
+    // "Editor lifecycle" reads like a feature and is a fix. The input says so.
+    expect(classifySection("Editor lifecycle", "Fixes")).toBe("Fixes");
+    expect(classifySection("Packaging", "Fixes")).toBe("Fixes");
+    // With nothing said, the heuristic still applies.
+    expect(classifySection("Correctness", null)).toBe("Fixes");
+    expect(classifySection("Breaking changes", null)).toBe("Mentions");
+  });
+
+  it("drops the four headings it re-emits, so a merge cannot stack copies", () => {
+    const { preamble } = parseSections(beta);
+    expect(preamble).toContain("## v1.3.6-beta.1");
+    expect(preamble).not.toContain("## Features");
+    expect(preamble).not.toContain("## Fixes");
+  });
+
+  it("round-trips: what renderSection writes, parseSections reads", () => {
+    const rendered = renderSection({
+      heading: "Guards",
+      lead: "| A | B |\n|---|---|\n| x | y |",
+      bullets: [],
+    }).join("\n");
+    const { sections } = parseSections(rendered);
+    expect(sections.map((s) => s.heading)).toEqual(["Guards"]);
+    expect(sections[0].body).toContain("| x | y |");
   });
 });
