@@ -25,7 +25,7 @@ import type { IBridge } from "../bridge.js";
 import type { ProjectContext } from "../project.js";
 import type { EditorSession } from "../session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";
-import { READ_PREFIXES } from "../locking.js";
+import { bridgeMethodEffect, mayChangeState } from "../action-effects.js";
 
 /** Resolve a UE content path to an absolute on-disk file, or null if it does not exist. */
 export type ResolveExistingFile = (contentPath: string) => string | null;
@@ -65,34 +65,29 @@ export function writeScope(ctx: CallContext): boolean {
 }
 
 /**
- * Every call that is not provably a read.
+ * Every call that is not a declared read.
  *
  * Wider than `writeScope`, and deliberately so. That one asks which existing
  * files a call modifies, which is the source-control question: it answers
  * "no" whenever it cannot extract a content path, and a call with no asset
  * path in its parameters is still a mutation of the editor.
  *
- * This one FAILS CLOSED. A guard told to stand in front of everything that
- * mutates is asked to be exhaustive, so anything whose verb is not a known
- * read counts. Listing mutating verbs instead was the wrong way round: the
- * list is open-ended, and every verb missing from it was a mutation nobody
- * guarded. The read lexicon is the same one asset locking uses, so the two
- * cannot drift into disagreeing about what a read is.
+ * The guard pipeline sits on `IBridge.call`, so what it is handed is a bridge
+ * METHOD name rather than a `category.action`. `bridgeMethodEffect` is what
+ * turns one into the other, and it has no undefined answer: the effects the
+ * forwarding actions declared, or the table of methods a handler calls
+ * directly, or `mutate` for a method this server does not recognise.
+ *
+ * It still FAILS CLOSED, and now it does so by declaration rather than by not
+ * finding a verb in a list. Listing mutating verbs was the wrong way round:
+ * that list is open-ended, and every verb missing from it was a mutation
+ * nobody guarded. Inverting it to a read list was the same guess pointed the
+ * other way, and it put every read whose name does not open with a read verb
+ * (`metasound_get_graph`, `line_trace`, `hit_test_viewport_pixel`) in front of
+ * a guard that had no business seeing it.
  */
 export function mutationScope(ctx: CallContext): boolean {
-  return !isReadVerb(ctx.method);
-}
-
-/** Whether a method's leading verb is a known read. Shared with asset locking. */
-function isReadVerb(method: string): boolean {
-  const segments = String(method).toLowerCase().split(/[._]/);
-  let verb = segments[0] ?? "";
-  // "bulk" and "batch" describe the shape of a call, not what it does, so the
-  // verb after one is the answer: `bulk_read_properties` only looks.
-  if ((verb === "bulk" || verb === "batch") && segments.length > 1) {
-    verb = segments[1];
-  }
-  return (READ_PREFIXES as readonly string[]).includes(verb);
+  return mayChangeState(bridgeMethodEffect(ctx.method).effect);
 }
 
 /** Build the per-call context, wiring the lazy write-enrichment helpers. */

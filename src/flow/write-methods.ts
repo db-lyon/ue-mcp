@@ -22,6 +22,8 @@
  * not silent corruption. The cost of a false positive is an unnecessary
  * checkout, which takes a lock. We bias toward not over-locking.
  */
+import { bridgeMethodEffect } from "../action-effects.js";
+
 
 export interface WriteClassification {
   /**
@@ -35,7 +37,16 @@ export interface WriteClassification {
   contentPaths: string[];
 }
 
-/** Method-name prefixes that denote a mutation. Read verbs are excluded. */
+/**
+ * Method-name prefixes that denote a mutation, for a method no action declares.
+ *
+ * This used to be the whole test, and it is a hand-written list matched against
+ * a name: `unwrap_uvs` rewrites a mesh's UV layout in place and never matched
+ * it, `mesh_boolean` overwrites a StaticMesh package and never matched it, and
+ * every bare verb (`save`, `build`) was missed by the trailing underscore. It
+ * is now the fallback for the bridge calls a HANDLER makes on its own, which
+ * belong to no ActionSpec and so have no effect to read.
+ */
 const WRITE_VERB =
   /^(save|set|create|add|delete|remove|import|rename|move|duplicate|reparent|compile|apply|assign|modify|bake|generate|build)_/;
 
@@ -136,7 +147,13 @@ export function classifyWrite(method: string, params: Record<string, unknown>): 
     return { writes: contentPaths.length > 0, contentPaths };
   }
 
-  if (!WRITE_VERB.test(method)) {
+  // A declared read writes no content, whatever path it was handed. Anything
+  // else is a candidate, whatever its name looks like: `unwrap_uvs` rewrites a
+  // mesh in place and `mesh_boolean` overwrites a package, and the verb list
+  // below recognises neither. `unknown` is a candidate for the same reason it
+  // gates like a mutation everywhere else, and an unnecessary checkout is the
+  // cheap side of this decision.
+  if (bridgeMethodEffect(method).effect === "read") {
     return { writes: false, contentPaths: [] };
   }
 

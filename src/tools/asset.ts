@@ -2,7 +2,7 @@ import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { PAGINATION_SCHEMA, paged } from "../pagination.js";
 import { Vec3, Rotator } from "../schemas.js";
-import { SESSION_ID } from "../locking.js";
+import { SESSION_ID } from "../lock-owner.js";
 import { McpError, ErrorCode } from "../errors.js";
 import type { EditorSession } from "../session.js";
 import type { ToolContext } from "../types.js";

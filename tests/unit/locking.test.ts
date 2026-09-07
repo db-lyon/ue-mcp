@@ -45,8 +45,31 @@ describe("classifyAction", () => {
     expect(c.paths).toEqual([]);
   });
 
-  it("fails open on unknown verbs", () => {
-    expect(classifyAction("asset.frobnicate", { assetPath: "/Game/Foo" }).mutates).toBe(false);
+  it("locks an action this server does not carry, rather than failing open on its verb", () => {
+    // This used to answer `false`, because "frobnicate" was in neither verb
+    // list. The verdict is the action's declared effect now, and a name no
+    // action in this server declares gets the same `mutate` default every
+    // other gate gives it: nothing vouches for it, so it is treated as a
+    // change. The path is what keeps this narrow, not the verdict.
+    expect(classifyAction("asset.frobnicate", { assetPath: "/Game/Foo" }).mutates).toBe(true);
+    expect(classifyAction("asset.frobnicate", { assetPath: "/Game/Foo" }).paths).toEqual(["/Game/Foo"]);
+    // With no asset path to lock it still runs unlocked, which is what stops a
+    // conservative verdict from serialising the whole surface.
+    expect(classifyAction("asset.frobnicate", { name: "X" }).paths).toEqual([]);
+  });
+
+  it("locks a declared mutation whose verb no list ever had", () => {
+    // `unwrap_uvs` rewrites a mesh's UV layout in place and `fixup_redirectors`
+    // loads, rewrites and saves every referencing package. Neither verb was in
+    // MUTATE_PREFIXES, so neither ever took a lock.
+    expect(classifyAction("asset.unwrap_uvs", { assetPath: "/Game/SM_Rock" }).mutates).toBe(true);
+    expect(classifyAction("asset.fixup_redirectors", { assetPath: "/Game/Props" }).mutates).toBe(true);
+  });
+
+  it("does not lock a declared read whose name opens with a mutating verb", () => {
+    // "bulk" is a mutate verb because most bulk_* actions write. This one only
+    // reads, and says so.
+    expect(classifyAction("asset.bulk_read_properties", { assetPath: "/Game/Foo" }).mutates).toBe(false);
   });
 
   it("does not lock the explicit lock/unlock actions themselves", () => {

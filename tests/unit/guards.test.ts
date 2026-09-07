@@ -135,8 +135,8 @@ describe("a declaration becomes a guard", () => {
       deps(registry),
       SOURCE,
     );
-    // A read verb is not a write.
-    expect(await guard.appliesTo!(callCtx("get_asset", { assetPath: "/Game/Foo" }))).toBe(false);
+    // A declared read is not a write.
+    expect(await guard.appliesTo!(callCtx("read_asset", { assetPath: "/Game/Foo" }))).toBe(false);
     // A write to a path that does not exist yet creates rather than modifies.
     expect(await guard.appliesTo!(callCtx("save_asset", { assetPath: "/Other/New" }))).toBe(false);
     // A write to an existing asset is what the scope claims.
@@ -192,7 +192,10 @@ describe("standing in front of every mutation", () => {
       SOURCE,
     );
 
-    for (const read of ["get_asset", "list_assets", "get_outliner", "describe_action"]) {
+    // Real bridge methods whose actions declare read. The names matter now:
+    // the verdict is what the action forwarding to each one declared, so a
+    // method nothing declares is not a read however it is spelled.
+    for (const read of ["read_asset", "list_assets", "get_world_outliner", "get_actor_details"]) {
       expect(await guard.appliesTo!(callCtx(read, {})), read).toBe(false);
     }
   });
@@ -239,6 +242,44 @@ describe("standing in front of every mutation", () => {
     }
   });
 
+  it("fails closed on a method that only LOOKS like a read", async () => {
+    // The half the read-verb rule could not do. Inverting the guess closed the
+    // direction where a mutating verb was missing from a list, and left this
+    // one wide open: a method nothing in this server declares was waved
+    // through on the strength of its first word. A plugin calling the bridge
+    // with a method of its own, or a flow step naming one, is exactly that
+    // case, and "get" at the front of it vouches for nothing.
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ freeze: { scope: "mutations", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    for (const m of ["get_something_nobody_declared", "list_vendor_widgets", "read_remote_state"]) {
+      expect(await guard.appliesTo!(callCtx(m, {})), m).toBe(true);
+    }
+  });
+
+  it("lets through the reads a HANDLER makes on its own", async () => {
+    // These belong to no ActionSpec: a handler calls them directly, so the
+    // index of declared actions cannot see them and the default above would
+    // put both in front of every mutation guard. They are enumerated instead,
+    // which is the whole reason that table exists.
+    const registry = registryWith({ check: ALLOW });
+    const [guard] = await buildGuards(
+      declare({ freeze: { scope: "mutations", before: { class_path: "check" } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    expect(await guard.appliesTo!(callCtx("search_assets", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("get_engine_state", {}))).toBe(false);
+    // The mutating half of the same table still counts.
+    expect(await guard.appliesTo!(callCtx("acquire_lock", {}))).toBe(true);
+    expect(await guard.appliesTo!(callCtx("execute_python", {}))).toBe(true);
+  });
+
   it("still lets a shaped read through", async () => {
     const registry = registryWith({ check: ALLOW });
     const [guard] = await buildGuards(
@@ -247,9 +288,13 @@ describe("standing in front of every mutation", () => {
       SOURCE,
     );
 
-    // "bulk" and "batch" describe the shape of a call, not what it does.
-    expect(await guard.appliesTo!(callCtx("bulk_read_properties", {}))).toBe(false);
-    expect(await guard.appliesTo!(callCtx("batch_get_actors", {}))).toBe(false);
+    // "bulk" describes the shape of a call, not what it does, and both of
+    // these declare read. Under the old verb rule this worked by accident: the
+    // rule looked past "bulk" to the next segment, so it happened to agree
+    // here and would have been wrong for any shaped read whose second segment
+    // was not itself a read verb.
+    expect(await guard.appliesTo!(callCtx("bulk_read_asset_properties", {}))).toBe(false);
+    expect(await guard.appliesTo!(callCtx("bulk_line_trace", {}))).toBe(false);
   });
 
   it("blocks one end to end, through the bridge a call actually takes", async () => {
@@ -266,8 +311,8 @@ describe("standing in front of every mutation", () => {
     const bridge = new GuardedBridge(inner, guardRegistry, resolveExisting);
 
     await expect(bridge.call("spawn_actor", {})).rejects.toThrow(/blocked \(spawn_actor\)/);
-    await expect(bridge.call("get_asset", { assetPath: "/Game/Foo" })).resolves.toEqual({ ok: true });
-    expect(inner.calls, "only the read should have reached the editor").toEqual(["get_asset"]);
+    await expect(bridge.call("read_asset", { assetPath: "/Game/Foo" })).resolves.toEqual({ ok: true });
+    expect(inner.calls, "only the read should have reached the editor").toEqual(["read_asset"]);
   });
 });
 
@@ -516,8 +561,8 @@ describe("through the bridge a call actually takes", () => {
     const inner = fakeBridge();
     const bridge = new GuardedBridge(inner, guardRegistry, resolveExisting);
 
-    await expect(bridge.call("get_asset", { assetPath: "/Game/Foo" })).resolves.toEqual({ ok: true });
-    expect(inner.calls).toEqual(["get_asset"]);
+    await expect(bridge.call("read_asset", { assetPath: "/Game/Foo" })).resolves.toEqual({ ok: true });
+    expect(inner.calls).toEqual(["read_asset"]);
   });
 });
 

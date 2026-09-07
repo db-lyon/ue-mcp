@@ -18,7 +18,8 @@
  * name rides along in the same machine-readable block shape the error and
  * directive envelopes already use.
  */
-import { classifyActionClass, requiresExplicitEditor, splitTaskName, type ActionClass } from "./action-class.js";
+import { requiresExplicitEditor, type ActionClass } from "./action-class.js";
+import { taskEffect } from "./action-effects.js";
 import { EDITOR_TARGET_PARAM, stripEditorTarget, type ToolDef } from "./types.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL } from "./lean-context.js";
 import type { EditorSession, SessionRegistry } from "./session.js";
@@ -41,7 +42,10 @@ export interface UntargetedCall {
  * between, so there is nothing to refuse.
  */
 export function refuseUntargetedCall(call: UntargetedCall): string | null {
-  const { class: cls } = classifyActionClass(...toPair(call.taskName));
+  // The action's own declaration, not a reading of its name. A name is only
+  // consulted for a task the tool graph does not carry, and the answer there
+  // is a flat `mutate` rather than a second opinion about the name.
+  const { effect: cls } = taskEffect(call.taskName);
   if (!requiresExplicitEditor(cls)) return null;
 
   const others = call.editors.filter((n) => n !== call.activeEditor);
@@ -52,11 +56,6 @@ export function refuseUntargetedCall(call: UntargetedCall): string | null {
     `Re-send it with ${call.targetParam}="<name>". ` +
     `project(action='list_editors') reports what each one is. Reads do not need this.`
   );
-}
-
-function toPair(taskName: string): [string, string] {
-  const { tool, action } = splitTaskName(taskName);
-  return [tool, action];
 }
 
 function describeWhy(taskName: string, cls: ActionClass): string {

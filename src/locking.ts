@@ -1,8 +1,9 @@
-import crypto from "node:crypto";
 import { isDialogRefusal } from "./dialog-guard.js";
 import type { IBridge } from "./bridge.js";
 import { McpError, ErrorCode, type McpErrorDetails } from "./errors.js";
 import { debug } from "./log.js";
+import { taskEffect } from "./action-effects.js";
+import { SESSION_ID } from "./lock-owner.js";
 
 // Per-asset exclusive locking, orchestrated from the dispatch layer. The lock
 // registry itself lives in the C++ bridge (the one editor every agent shares);
@@ -17,21 +18,11 @@ import { debug } from "./log.js";
 // work regardless of this setting.
 
 /**
- * Stable id for this server process, and the fallback owner for a lock op with
- * no editor session behind it.
- *
- * Locks live in the bridge, which is per editor, so the owner of a lock has to
- * be per editor too (#817). Two editors sharing one owner id makes a lock taken
- * in one look re-entrant in the other, which is the opposite of what locking is
- * for. Sessions carry their own id and pass it in; this stays as the answer for
- * a caller with no session, which is what a single-editor server had.
+ * The lock owner ids, re-exported for callers that still import them here.
+ * They live in `lock-owner.ts`, a leaf, for the same reason the verb lexicon
+ * does: this module now imports the tool graph.
  */
-export const SESSION_ID = crypto.randomUUID();
-
-/** Mint an owner id for one editor session. */
-export function newLockOwnerId(): string {
-  return crypto.randomUUID();
-}
+export { SESSION_ID, newLockOwnerId } from "./lock-owner.js";
 
 export interface LockingConfig {
   enabled: boolean;
@@ -45,26 +36,15 @@ export function resolveLockingConfig(cfg?: { enabled?: boolean; ttlSeconds?: num
   };
 }
 
-// Action-name prefixes that mutate an asset. Matched against the action segment
-// of a task name ("asset.create_data_asset" -> "create_data_asset"). Read verbs
-// are excluded first, so an unrecognized action falls through to "not mutating"
-// and is never locked (fail-open - locking never blocks a call we can't
-// confidently classify).
-// Exported because the routing gate (#817, action-class.ts) classifies the same
-// surface for a different question and seeds itself from this lexicon rather
-// than restating it. Its own matching rule is stricter; the lists are shared so
-// a verb added for one is never missing from the other.
-export const READ_PREFIXES = [
-  "list", "search", "read", "get", "describe", "reflect", "find", "has", "status",
-  "exists", "inspect", "preview", "validate", "count", "resolve", "diff",
-];
-export const MUTATE_PREFIXES = [
-  "create", "set", "add", "remove", "delete", "rename", "move", "duplicate",
-  "import", "reimport", "save", "update", "connect", "disconnect", "spawn",
-  "compile", "apply", "assign", "insert", "replace", "clear", "reset", "modify",
-  "write", "recenter", "bulk", "batch", "attach", "detach", "enable", "disable",
-  "bake", "generate", "build",
-];
+/**
+ * The verb lexicon this module used to own, re-exported for the callers that
+ * still import it from here.
+ *
+ * It moved to `action-verbs.ts` when locking started reading an action's
+ * DECLARED effect: a lexicon underneath `locking.ts` closes an import cycle the
+ * moment locking imports the tool graph.
+ */
+export { READ_PREFIXES, MUTATE_PREFIXES } from "./action-verbs.js";
 
 /** Keys whose string value is an in-editor asset path (not a filesystem source). */
 const PATH_KEYS = [
@@ -78,36 +58,45 @@ export interface ActionClassification {
   paths: string[];
 }
 
-function firstSegmentVerb(action: string): string {
-  // "create_data_asset" -> "create"; "bulk_rename" -> "bulk".
-  const segments = action.toLowerCase().split(/[._]/);
-  const first = segments[0] ?? action.toLowerCase();
-  // "bulk" and "batch" describe the SHAPE of a call, not what it does, and
-  // both are in MUTATE_PREFIXES because every batch action there has been so
-  // far was a write. `bulk_read_properties` is not, and taking an asset lock
-  // for a read would block a human's checkout on a call that only looks. When
-  // the shape word is followed by a read verb, that verb is the answer.
-  if ((first === "bulk" || first === "batch") && segments[1] && READ_PREFIXES.includes(segments[1])) {
-    return segments[1];
-  }
-  return first;
-}
-
 function looksLikeAssetPath(v: unknown): v is string {
   return typeof v === "string" && v.length > 0 && v.includes("/");
 }
 
 /**
+ * The lock-management actions themselves, which must never take a lock.
+ *
+ * They change the editor's lock registry, so they declare `mutate` and the
+ * routing gate is right to treat them as one. Locking is a different question:
+ * taking an asset lock around `asset(lock)` would have this module acquire a
+ * lock in order to acquire a lock. The exclusion was invisible before because
+ * "lock" and "unlock" simply were not in the verb list; it is stated here
+ * rather than left to an omission nobody could see.
+ */
+const NEVER_LOCKED = new Set(["asset.lock", "asset.unlock", "asset.unlock_all", "asset.list_locks"]);
+
+/**
  * Decide whether a task mutates an asset and which asset path(s) it touches.
- * Conservative: unknown verbs and unextractable paths yield mutates=false /
- * empty paths so the caller runs unlocked.
+ *
+ * The mutation half is the action's DECLARED effect, and `unknown` counts: an
+ * action whose effect its parameters decide may well write the asset it names,
+ * and being wrong costs one serialised call rather than two agents writing the
+ * same package.
+ *
+ * This module used to answer from a verb list of its own and fail OPEN, so an
+ * unrecognised verb ran unlocked. That was the right call while the answer was
+ * a guess, and it is why `unwrap_uvs` and `fixup_redirectors` never took a
+ * lock: neither verb was in the list, and nothing said so out loud. The answer
+ * is not a guess any more, so there is nothing left to fail open about, and a
+ * name this server does not carry gets the same `mutate` default every other
+ * gate gives it.
+ *
+ * An unextractable path still yields an empty list, so a declared mutation that
+ * names no asset runs unlocked exactly as before. That is what keeps this from
+ * locking the world: the path, not the verdict, is the narrow part.
  */
 export function classifyAction(taskName: string, params: Record<string, unknown>): ActionClassification {
-  const action = taskName.includes(".") ? taskName.slice(taskName.indexOf(".") + 1) : taskName;
-  const verb = firstSegmentVerb(action);
-
-  if (READ_PREFIXES.includes(verb)) return { mutates: false, paths: [] };
-  if (!MUTATE_PREFIXES.includes(verb)) return { mutates: false, paths: [] };
+  if (NEVER_LOCKED.has(taskName)) return { mutates: false, paths: [] };
+  if (taskEffect(taskName).effect === "read") return { mutates: false, paths: [] };
 
   const paths = new Set<string>();
   for (const key of PATH_KEYS) {

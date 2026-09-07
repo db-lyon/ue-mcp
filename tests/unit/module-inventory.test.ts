@@ -103,7 +103,10 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
-  "action-class.ts": "A static classification of the action surface; the same answer in every editor.",
+  "action-class.ts": "The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.",
+  "action-verbs.ts": "The verb lists themselves. A leaf with no imports and no state.",
+  "action-effects.ts": "Indexes whichever tool graph is published for the whole server; the union across sessions is what it reads, and an action's effect does not change with the editor it runs in.",
+  "lock-owner.ts": "The process-wide fallback lock owner id. A session mints its own through this and holds it itself.",
   "offline.ts": "Classifies whichever tool graph it is handed as offline or editor-bound, and builds the editor-down message from a context handed to it; holds nothing per editor.",
   "action-schema.ts": "Derives one action's parameter schema from whichever tool graph it is handed; holds nothing of its own.",
   "bridge-timeouts.ts": "The call budget table and its resolution; the same answer for every editor.",

@@ -38,7 +38,7 @@
  * requires an explicit target, so the honest label costs nothing at the gate
  * and stops a guess from being recorded as fact.
  */
-import { MUTATE_PREFIXES, READ_PREFIXES } from "./locking.js";
+import { MUTATE_PREFIXES, READ_PREFIXES } from "./action-verbs.js";
 import type { ActionEffect } from "./types.js";
 
 /**
@@ -431,12 +431,14 @@ export function classifyTaskClass(taskName: string): ActionClassification {
 /**
  * The lexicon's answer for an action nobody declared, as an `ActionEffect`.
  *
- * Used at CONSTRUCTION time by the two things that inject actions this package
- * never declares: Epic enrichment, which reads wrapped engine tools out of a
- * live registry that can carry toolsets no release has shipped against, and
- * plugin injection, for an action whose manifest did not say what it does.
+ * This is the ONLY entry point runtime injection uses, and the only reason the
+ * verb lists above still exist. Everything ue-mcp itself declares carries its
+ * effect on the ActionSpec; what remains are actions this package cannot see
+ * at build time: Epic's wrapped engine tools, read out of a live registry that
+ * can carry toolsets no release has shipped against, and a plugin action whose
+ * manifest did not say what it does.
  *
- * Both record the result as `effectSource: "inferred"`, so a guess is never
+ * Callers record the result as `effectSource: "inferred"`, so a guess is never
  * read back later as a declaration.
  */
 export function inferActionEffect(tool: string, action: string): ActionEffect {
