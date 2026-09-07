@@ -2,6 +2,7 @@ import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { Vec3 } from "../schemas.js";
 import { PAGINATION_SCHEMA, paged } from "../pagination.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/pcg.generated.js";
 
 export const pcgTool: ToolDef = categoryTool(
   "pcg",
@@ -26,9 +27,11 @@ export const pcgTool: ToolDef = categoryTool(
     add_volume:           bp("mutate", "Place PCG volume. Idempotent by editor label when one is given. Params: graphPath, location?, extent?, label?, onConflict? (skip|error)", "add_pcg_volume"),
     import_graph:         bp("mutate", "Bulk-author a PCG graph from JSON. Params: assetPath, nodes=[{name,class,posX?,posY?,settings?}], connections=[{from,fromPin?,to,toPin?}], replace? (default false). One call replaces N add_node + M connect_nodes + K set_node_settings (#213).", "import_pcg_graph", (p) => ({ assetPath: p.assetPath, nodes: p.nodes, connections: p.connections, replace: p.replace })),
     export_graph:         bp("read", "Export a PCG graph as JSON. Params: assetPath, includeSettings? (default true). Round-trip safe with import_graph (#213).", "export_pcg_graph", (p) => ({ assetPath: p.assetPath, includeSettings: p.includeSettings })),
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     assetPath: z.string().optional(), actorLabel: z.string().optional(),
     actorPath: z.string().optional().describe("Full actor object path. The unambiguous selector, and it wins over actorLabel when both are given. Editor labels are NOT unique, and a label matching several actors is refused with the candidates rather than resolved at random (#983)"),
     name: z.string().optional(), packagePath: z.string().optional(),

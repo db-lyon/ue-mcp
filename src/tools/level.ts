@@ -2,6 +2,7 @@ import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { Vec3, Rotator, Color } from "../schemas.js";
 import { PAGINATION_SCHEMA, paged } from "../pagination.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/level.generated.js";
 
 export const levelTool: ToolDef = categoryTool(
   "level",
@@ -225,9 +226,11 @@ export const levelTool: ToolDef = categoryTool(
     snap_instances_to_surface: bp("mutate", "Project ISMC/HISMC instances down onto surface geometry, preserving each instance's rotation and scale. Dry-run by default: preflights every requested instance and reports what would move before anything does, then applies successful projections in one transaction with rollback. Filter the surfaces traced against with surfaceActorClass/surfaceActorLabels so instances do not snap onto each other. onMiss controls whether a miss aborts the batch or is skipped. Does not save packages. Params: actorLabel OR actorPath, componentName?, instanceIndices? (omit for all), maxInstances?, traceStartOffset?, traceDistance?, surfaceOffset?, channel?, traceComplex?, surfaceActorClass?, surfaceActorLabels?, onMiss? ('error'|'skip', default error), dryRun? (default true) (#905)", "snap_instances_to_surface", (p) => ({ actorLabel: p.actorLabel, actorPath: p.actorPath, componentName: p.componentName, instanceIndices: p.instanceIndices, maxInstances: p.maxInstances, traceStartOffset: p.traceStartOffset, traceDistance: p.traceDistance, surfaceOffset: p.surfaceOffset, channel: p.channel, traceComplex: p.traceComplex, surfaceActorClass: p.surfaceActorClass, surfaceActorLabels: p.surfaceActorLabels, onMiss: p.onMiss, dryRun: p.dryRun })),
     summarize_static_mesh_usage: bp("read", "Read-only inventory of which static meshes are actually placed in the loaded world, aggregated in one game-thread scan instead of walking every actor and component. This is the action for placement counts, and query_components is not a substitute for it: grouping there only increments, so one HISM holding 5,000 instances counts as 1, while this SUMS real ISM/HISM instances and counts distinct actors per mesh, and it sorts every aggregate before truncating so the top N is the true top N with an exact totalUniqueMeshes. Distinguishes actors, components and placements. Results are bounded; full-scan totals are preserved alongside the truncated rows. Loads nothing and saves nothing. Params: world? (editor|pie), maxResults?, includeOccurrences?, maxOccurrences? (#903)", "summarize_static_mesh_usage", (p) => ({ world: p.world, maxResults: p.maxResults, includeOccurrences: p.includeOccurrences, maxOccurrences: p.maxOccurrences })),
     snap_actor_to_floor: bp("mutate", "Snap an actor's bounds-bottom to the first downward line-trace hit. Equivalent of the End-key shortcut, works on arbitrary geometry (not just Landscape). The actor lookup and the downward trace both run in the world named by world, so a PIE snap measures against PIE geometry (#933). Params: actorLabel OR actorPath, floorOffset? (added to impact Z, default 0), maxDistance? (default 100000), world? (editor|pie), pieInstance? (#419, #933)", "snap_actor_to_floor", (p) => ({ actorLabel: p.actorLabel, actorPath: p.actorPath, floorOffset: p.floorOffset, maxDistance: p.maxDistance, world: p.world, pieInstance: p.pieInstance })),
+    ...epicActions,
   },
   undefined,  // actionDocs auto-generated from descriptions
   {
+    ...epicSchema,
     actorLabel: z.string().optional(), actorLabels: z.array(z.string()).optional(),
     actorClass: z.string().optional(), label: z.string().optional(),
     location: Vec3.optional(),

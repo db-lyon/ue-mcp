@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/gas.generated.js";
 
 export const gasTool: ToolDef = categoryTool(
   "gas",
@@ -61,9 +62,11 @@ export const gasTool: ToolDef = categoryTool(
     compare_gas_states:  bp("read", "Diff two GAS snapshots and name each change rather than handing back two blobs. Every entry in changes[] carries a kind (ability_granted, ability_revoked, ability_level_changed, ability_input_changed, ability_activated, ability_ended, effect_applied, effect_removed, effect_stack_changed, effect_level_changed, effect_inhibition_changed, attribute_changed, attribute_added, attribute_removed, tag_gained, tag_lost, tag_count_changed, ability_block_added, ability_block_removed, asc_initialized), the subject it happened to, the before and after rows, and a sentence saying what it means - an attribute whose current value moved while its base did not is reported as a modifier rather than as a failed write. Time is not counted as a change: effects present in both come back under stillActiveEffects with their remaining time on each side, and the gap is reported once as timeElapsedSeconds. Comparing two different actors is allowed and flagged. A pure read over snapshots you already have; to take the later reading and diff it in one call use capture_gas_state with compareWith. Params: beforeId OR beforeSnapshot, afterId OR afterSnapshot", "compare_gas_states", (p) => ({ beforeId: p.beforeId, beforeSnapshot: p.beforeSnapshot, afterId: p.afterId, afterSnapshot: p.afterSnapshot })),
     list_gas_snapshots:  bp("read", "List the GAS snapshots this editor session holds, oldest first, with the actor, world, capture time and per-section counts. Pass actorPath to narrow to one actor, or includeSnapshots to get the full bodies back. Params: actorPath?, includeSnapshots?", "list_gas_snapshots", (p) => ({ actorPath: p.actorPath, includeSnapshots: p.includeSnapshots })),
     delete_gas_snapshot: bp("mutate", "Drop one stored GAS snapshot, returning its contents first so nothing is lost: the returned object can be passed straight back to compare_gas_states as beforeSnapshot. Idempotent: an id that is not stored reports alreadyDeleted=true. Params: snapshotId", "delete_gas_snapshot", (p) => ({ snapshotId: p.snapshotId })),
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     blueprintPath: z.string().optional(),
     name: z.string().optional(),
     packagePath: z.string().optional(),

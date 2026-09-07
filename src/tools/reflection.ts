@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { PAGINATION_SCHEMA, paged } from "../pagination.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/reflection.generated.js";
 
 export const reflectionTool: ToolDef = categoryTool(
   "reflection",
@@ -19,9 +20,11 @@ export const reflectionTool: ToolDef = categoryTool(
     is_module_loaded: bp("read", "Report whether a named module is currently loaded. Params: moduleName (#689)", "is_module_loaded", (p) => ({ moduleName: p.moduleName })),
     list_loaded_modules: bp("read", paged("Enumerate modules with runtime load state. Params: filter? (case-insensitive substring), loadedOnly? (default false). Returns modules[{name, loaded, gameModule}] + totalLoaded/totalModules (#689)"), "list_loaded_modules", (p) => ({ filter: p.filter, loadedOnly: p.loadedOnly, cursor: p.cursor, limit: p.limit })),
     inspect_save_game: bp("read", "Load a SaveGame slot read-only and return its reflected UPROPERTY(SaveGame) values. Non-serializable properties are listed in skippedProperties instead of failing the call. Params: slotName, userIndex? (default 0)", "inspect_save_game", (p) => ({ slotName: p.slotName, userIndex: p.userIndex })),
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     className: z.string().optional(),
     moduleName: z.string().optional().describe("is_module_loaded: module name (#689)"),
     loadedOnly: z.boolean().optional().describe("list_loaded_modules: only loaded modules (#689)"),

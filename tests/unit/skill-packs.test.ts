@@ -157,11 +157,23 @@ describe("checking a pack", () => {
     expect(checkSkillPacks(readSkillRoot(packRoot, "packaged"), ALL_TOOLS).problemCount).toEqual(0);
   });
 
-  it("sets an epic_ reference aside rather than calling the pack broken", () => {
+  it("resolves a wrapped engine tool like any other action", () => {
+    // This case used to assert the opposite: an `epic_` reference was set
+    // aside as unverifiable, because those actions only existed once a live
+    // 5.8 editor had been read at startup, so a pack teaching one could not be
+    // checked against anything. They are declared now, so the reference
+    // resolves and the pack is held to it like every other call it teaches.
     writePack(packRoot, "epic", { body: 'Call `blueprint(action="epic_write_graph_dsl")`.\n' });
     const result = checkSkillPacks(readSkillRoot(packRoot, "packaged"), ALL_TOOLS);
     expect(result.problemCount).toEqual(0);
-    expect(result.enrichmentOnly).toEqual(["blueprint.epic_write_graph_dsl"]);
+    expect(result.enrichmentOnly).toEqual([]);
+  });
+
+  it("flags a wrapped engine tool that does not exist, which it could not before", () => {
+    writePack(packRoot, "epic-typo", { body: 'Call `blueprint(action="epic_write_graph_dsel")`.\n' });
+    const result = checkSkillPacks(readSkillRoot(packRoot, "packaged"), ALL_TOOLS);
+    expect(result.problems.map((p) => p.kind)).toContain("unknown_action");
+    expect(result.problems[0].didYouMean).toContain("blueprint.epic_write_graph_dsl");
   });
 
   it("flags a missing description, which is what decides whether a pack is loaded at all", () => {

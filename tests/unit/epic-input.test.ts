@@ -8,13 +8,12 @@
  * to send rather than dispatched.
  */
 import { describe, expect, it, vi } from "vitest";
-import { enrichToolsWithEpicCatalog, resolveEpicToolInput, type EpicTool } from "../../src/epic-enrich.js";
+import { resolveEpicToolInput, type EpicInputSchema } from "../../src/epic-input.js";
 import { widgetTool } from "../../src/tools/widget.js";
-import type { ToolContext, ToolDef } from "../../src/types.js";
+import type { ToolContext } from "../../src/types.js";
 
-const GET_WIDGETS: EpicTool = {
-  name: "UMGToolSet.UMGToolSet.GetWidgets",
-  inputSchema: {
+const GET_WIDGETS_NAME = "UMGToolSet.UMGToolSet.GetWidgets";
+const GET_WIDGETS: EpicInputSchema = {
     properties: {
       widgetBlueprint: {
         type: "object",
@@ -23,13 +22,11 @@ const GET_WIDGETS: EpicTool = {
         required: ["refPath"],
       },
     },
-    required: ["widgetBlueprint"],
-  },
+  required: ["widgetBlueprint"],
 };
 
-const ADD_WIDGET: EpicTool = {
-  name: "UMGToolSet.UMGToolSet.AddWidget",
-  inputSchema: {
+const ADD_WIDGET_NAME = "UMGToolSet.UMGToolSet.AddWidget";
+const ADD_WIDGET: EpicInputSchema = {
     properties: {
       widgetBlueprint: {
         type: "object",
@@ -41,40 +38,39 @@ const ADD_WIDGET: EpicTool = {
       widgetDisplayName: { type: "string" },
       childIndex: { type: "integer" },
     },
-    required: ["widgetBlueprint", "widgetClass"],
-  },
+  required: ["widgetBlueprint", "widgetClass"],
 };
 
 const ASSET = "/Game/_Project/UI/Computer/Core/WBP_ComputerTaskbar";
 
 describe("wrapped engine tool input envelope", () => {
   it("fills the tool's single asset reference from the canonical assetPath", () => {
-    expect(resolveEpicToolInput(GET_WIDGETS, { assetPath: ASSET })).toEqual({
+    expect(resolveEpicToolInput(GET_WIDGETS_NAME, GET_WIDGETS, { assetPath: ASSET })).toEqual({
       input: { widgetBlueprint: { refPath: ASSET } },
     });
   });
 
   it("accepts the asset reference spelled as a plain string or as JSON", () => {
-    expect(resolveEpicToolInput(GET_WIDGETS, { widgetBlueprint: ASSET })).toEqual({
+    expect(resolveEpicToolInput(GET_WIDGETS_NAME, GET_WIDGETS, { widgetBlueprint: ASSET })).toEqual({
       input: { widgetBlueprint: { refPath: ASSET } },
     });
-    expect(resolveEpicToolInput(GET_WIDGETS, { widgetBlueprint: JSON.stringify({ refPath: ASSET }) })).toEqual({
+    expect(resolveEpicToolInput(GET_WIDGETS_NAME, GET_WIDGETS, { widgetBlueprint: JSON.stringify({ refPath: ASSET }) })).toEqual({
       input: { widgetBlueprint: { refPath: ASSET } },
     });
   });
 
   it("leaves an explicit input untouched and lets it win over a top-level value", () => {
     const explicit = { widgetBlueprint: { refPath: "/Game/UI/WBP_Explicit" } };
-    expect(resolveEpicToolInput(GET_WIDGETS, { input: explicit, assetPath: ASSET })).toEqual({ input: explicit });
+    expect(resolveEpicToolInput(GET_WIDGETS_NAME, GET_WIDGETS, { input: explicit, assetPath: ASSET })).toEqual({ input: explicit });
   });
 
   it("passes a raw inputJson straight through", () => {
     const raw = JSON.stringify({ widgetBlueprint: { refPath: ASSET } });
-    expect(resolveEpicToolInput(GET_WIDGETS, { inputJson: raw, assetPath: ASSET })).toEqual({ inputJson: raw });
+    expect(resolveEpicToolInput(GET_WIDGETS_NAME, GET_WIDGETS, { inputJson: raw, assetPath: ASSET })).toEqual({ inputJson: raw });
   });
 
   it("folds every top-level parameter the tool's own schema names", () => {
-    const resolved = resolveEpicToolInput(ADD_WIDGET, {
+    const resolved = resolveEpicToolInput(ADD_WIDGET_NAME, ADD_WIDGET, {
       assetPath: ASSET,
       parentWidget: "HorizontalBox_59",
       widgetClass: "/Script/UMG.Button",
@@ -93,28 +89,26 @@ describe("wrapped engine tool input envelope", () => {
   });
 
   it("refuses a call it cannot complete, naming the missing arguments and the shape", () => {
-    expect(() => resolveEpicToolInput(ADD_WIDGET, { assetPath: ASSET }))
+    expect(() => resolveEpicToolInput(ADD_WIDGET_NAME, ADD_WIDGET, { assetPath: ASSET }))
       .toThrow(/missing required argument\(s\): widgetClass/);
-    expect(() => resolveEpicToolInput(GET_WIDGETS, {}))
+    expect(() => resolveEpicToolInput(GET_WIDGETS_NAME, GET_WIDGETS, {}))
       .toThrow(/"widgetBlueprint": \{ "refPath": "\/Game\/UI\/WBP_Example" \}/);
   });
 
   it("reports top-level parameters that are not arguments of the tool", () => {
-    expect(() => resolveEpicToolInput(GET_WIDGETS, { widgetName: "StartButton" }))
+    expect(() => resolveEpicToolInput(GET_WIDGETS_NAME, GET_WIDGETS, { widgetName: "StartButton" }))
       .toThrow(/not arguments of this tool|not arguments|were not sent: widgetName/);
   });
 
   it("keeps passing input through for a tool that publishes no schema", () => {
-    const bare: EpicTool = { name: "Some.Toolset.Tool" };
-    expect(resolveEpicToolInput(bare, { input: { a: 1 } })).toEqual({ input: { a: 1 }, inputJson: undefined });
+    const bare: EpicInputSchema | undefined = undefined;
+    expect(resolveEpicToolInput("Some.Toolset.Tool", bare, { input: { a: 1 } })).toEqual({ input: { a: 1 }, inputJson: undefined });
   });
 
   it("reaches the bridge with the envelope built, end to end through the widget category", async () => {
-    const tools = [widgetTool] as ToolDef[];
-    enrichToolsWithEpicCatalog(tools, {
-      toolsets: [{ name: "UMGToolSet.UMGToolSet", tools: [GET_WIDGETS] }],
-    });
-
+    // The REAL declared action, not a synthetic one injected for the test.
+    // `widget(epic_get_widgets)` is generated from the recorded catalog and
+    // lives in ALL_TOOLS, so this exercises the surface a client actually gets.
     const call = vi.fn().mockResolvedValue({ success: true });
     const ctx = { bridge: { call } } as unknown as ToolContext;
     await widgetTool.handler(ctx, { action: "epic_get_widgets", assetPath: `${ASSET}.uasset` });
@@ -128,7 +122,5 @@ describe("wrapped engine tool input envelope", () => {
       },
       undefined,
     );
-
-    delete widgetTool.actions.epic_get_widgets;
   });
 });

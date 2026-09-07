@@ -36,6 +36,7 @@ import { readLogState, readEngineSnapshot } from "../engine-observer.js";
 import { switchProject, isTargetDiverged } from "../project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../project.js";
 import { CURSOR_PARAM, paged } from "../pagination.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/project.generated.js";
 
 /**
  * The environment variables flattening every registered editor into one, right
@@ -1621,9 +1622,11 @@ export const projectTool: ToolDef = categoryTool(
         };
       },
     },
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     projectPath: z.string().optional().describe("For set_project / add_editor / check_install: path to .uproject"),
     editorName: z.string().optional().describe("For add_editor: name to address the new session by (default the project name) (#817)"),
     editorTarget: z.string().optional().describe("For use_editor / drop_editor: session name, project name, or .uproject path (#817)"),

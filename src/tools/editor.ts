@@ -10,6 +10,7 @@ import { Vec3, Rotator } from "../schemas.js";
 import { FunctionArgs, normalizeFunctionArgs, normalizePythonArgs } from "../function-args.js";
 import { CURSOR_PARAM, paged } from "../pagination.js";
 import { existingGuard, DialogGuard } from "../dialog-guard.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 
 /** Where a caller declares a standing opt-in to the Blueprint-error bypass.
  *  Rides the normal global < project < env < local config cascade, so a
@@ -460,9 +461,11 @@ export const editorTool: ToolDef = categoryTool(
           : result;
       },
     },
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     command: z.string().optional(),
     code: z.string().optional(),
     resultVariable: z.string().optional().describe("execute_python/run_python_file: name of a top-level Python variable to return as `result`, separate from print()/log output (#732)"),

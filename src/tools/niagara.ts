@@ -2,6 +2,7 @@ import { z } from "zod";
 import { categoryTool, bp, type ActionSpec, type ToolDef } from "../types.js";
 import { Vec3, Rotator } from "../schemas.js";
 import { PAGINATION_SCHEMA, paged } from "../pagination.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/niagara.generated.js";
 
 /**
  * set_module_input takes a string on the bridge, so scalars are stringified
@@ -141,9 +142,11 @@ export const niagaraTool: ToolDef = categoryTool(
         return { results, stoppedAt: null };
       },
     },
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     dynamicInputScript: z.string().optional().describe("set_dynamic_input: the dynamic-input NiagaraScript to wire in"),
     enabled: z.boolean().optional().describe("add_simulation_stage: create the stage enabled (default true). set_module_enabled: the state to set"),
     stageName: z.string().optional().describe("add/remove_simulation_stage: the simulation stage name"),

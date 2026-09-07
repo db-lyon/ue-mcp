@@ -306,18 +306,31 @@ export interface SkillCheckResult {
   skillCount: number;
   problemCount: number;
   problems: SkillProblem[];
-  /** Actions a pack teaches that only exist once an editor enriches the
-   *  surface, so their absence here is a cold start rather than a defect. */
+  /**
+   * Actions a pack teaches that this build cannot verify either way.
+   *
+   * Empty in practice now. Unreal's wrapped tools used to land here, because
+   * they only existed once a live editor had been read at startup, so a pack
+   * teaching one could not be checked against anything. They are declared
+   * actions now and resolve like any other; the field stays because a plugin
+   * category that this session did not load is the same situation, and
+   * reporting "cannot say" has to remain distinct from reporting "wrong".
+   */
   enrichmentOnly: string[];
 }
 
 /**
- * Actions that come from Epic's toolset registry are injected into a category
- * at runtime on UE 5.8, so they are legitimately absent from the declared tool
- * graph. Reported separately rather than counted as defects.
+ * Whether an unresolved reference is one this build cannot judge.
+ *
+ * It used to be every `epic_` reference, because those actions were injected
+ * from a live catalog at startup and a cold check had nothing to hold them
+ * against. They are declared now, so an `epic_` name that does not resolve is
+ * a typo like any other and is reported as one. The category has to be absent
+ * entirely for a reference to be unverifiable, which is the plugin case.
  */
-function isEnrichmentOnly(ref: string): boolean {
-  return ref.includes(".epic_");
+function isUnverifiable(ref: string, categories: ReadonlySet<string>): boolean {
+  const [category] = splitRef(ref);
+  return !categories.has(category);
 }
 
 /**
@@ -393,7 +406,7 @@ export function checkSkillPacks(packs: SkillPack[], tools: ToolDef[]): SkillChec
     const claimed = new Set([...pack.declarations.actions, ...pack.referenced]);
     for (const ref of claimed) {
       if (actions.has(ref)) continue;
-      if (isEnrichmentOnly(ref)) {
+      if (isUnverifiable(ref, categories)) {
         enrichmentOnly.add(ref);
         continue;
       }
@@ -425,7 +438,7 @@ export function checkSkillPacks(packs: SkillPack[], tools: ToolDef[]): SkillChec
     for (const ref of pack.referenced) {
       if (pack.declarations.actions.length === 0) break;
       if (pack.declarations.actions.includes(ref)) continue;
-      if (isEnrichmentOnly(ref)) continue;
+      if (isUnverifiable(ref, categories)) continue;
       problems.push({
         skill: pack.name,
         source: pack.source,

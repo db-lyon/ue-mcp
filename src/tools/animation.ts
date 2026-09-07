@@ -2,6 +2,7 @@ import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { Vec3, Quat } from "../schemas.js";
 import { PAGINATION_SCHEMA, paged } from "../pagination.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/animation.generated.js";
 
 // Keep the Control Rig operation schema self-contained so adding it does not
 // redirect JSON-schema references used by older animation actions.
@@ -405,9 +406,11 @@ export const animationTool: ToolDef = categoryTool(
     get_live_bone_transforms: bp("read", "Read the EVALUATED pose off a live SkeletalMeshComponent in the editor world or PIE, for many bones at once. This is the read that tells 'standing' from 'prone' when the reference pose cannot (#922). Also returns componentTransform and an evaluation block (animationMode, animInstanceClass, componentSpaceTransformCount) so a clean component transform sitting on a dead anim instance is visible in one call. Params: actorLabel OR actorPath, componentName? (default CharacterMesh0 / Mesh), boneNames? (omit for every bone, max 1000), space? (world default | component | local), world? (auto|pie|game|editor) (#922/#926)", "get_live_bone_transforms", (p) => ({ actorLabel: p.actorLabel, actorPath: p.actorPath, componentName: p.componentName, boneNames: p.boneNames, space: p.space, world: p.world })),
     measure_natural_speed: bp("read", "Measure a locomotion clip's planted-foot speed, in cm/s, by evaluating the pose and tracking the lowest foot's horizontal travel while it is in contact. Every retarget changes natural speed by the target skeleton's leg-length ratio, so a BlendSpace built on retargeted clips has to re-measure per clip per character (#923). Params: assetPath, footBones[] (e.g. ['foot_l','foot_r']), contactThreshold? (contact height in cm; omit to derive it from the clip), skeletalMeshPath?, frames?/times?, blendPosition? (BlendSpace only). Returns naturalSpeed, plantedDistance, plantedTime, contactThreshold, per-foot breakdown", "measure_natural_speed", (p) => ({ assetPath: p.assetPath ?? p.path, footBones: p.footBones, contactThreshold: p.contactThreshold, skeletalMeshPath: p.skeletalMeshPath, frames: p.frames, times: p.times, blendPosition: p.blendPosition })),
     preview_animation: bp("mutate", "Toggle bUpdateAnimationInEditor + VisibilityBasedAnimTickOption=AlwaysTickPoseAndRefreshBones on every SkeletalMeshComponent of an actor. Bypasses the 'cannot be edited on templates' guard for level instances. Params: actorLabel OR actorPath, enabled (#419/#420)", "preview_animation", (p) => ({ actorLabel: p.actorLabel, actorPath: p.actorPath, enabled: p.enabled })),
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     assetPath: z.string().optional(),
     path: z.string().optional().describe("Alias for assetPath, accepted by sample_pose and measure_natural_speed"),
     force: z.boolean().optional().describe("edit_skeleton_bones: remove a bone despite dependents, which are listed in the refusal"),

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { PAGINATION_SCHEMA, paged } from "../pagination.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/statetree.generated.js";
 
 export const statetreeTool: ToolDef = categoryTool(
   "statetree",
@@ -54,9 +55,11 @@ export const statetreeTool: ToolDef = categoryTool(
     read_runtime:           bp("read", "Read a RUNNING StateTree in depth: run status, last tick status, the state change count, the active states, the execution frames and the pending event queue. gameplay(get_state_tree_runtime) answers the same question with active state names only, which cannot tell you whether the tree succeeded, failed or stopped, nor whether an event you sent is still waiting to be consumed. Needs a game world, so run it in PIE. Params: actorLabel OR actorPath, componentName?, world? (pie|auto|editor), pieInstance?, includeDebugStrings?", "read_state_tree_runtime"),
     send_event:             bp("mutate", "Send a gameplay event to a running StateTree, which is how an event-driven tree is meant to be driven from outside and had no route at all. The event is QUEUED and consumed on the tree's next tick, so the snapshot returned still shows the state before it is handled; read it again with read_runtime after a tick. Refuses an unregistered tag, since no transition could ever match one. Has no inverse: once queued it is consumed and whatever it triggered has run. Params: actorLabel OR actorPath, eventTag, componentName?, origin?, world? (pie|auto|editor), pieInstance?", "send_state_tree_event"),
     request_transition:     bp("mutate", "Force a running StateTree to transition to a named state, resolved through the COMPILED data - so a state added since the last compile is reported as missing rather than silently ignored. Queued like an event and resolved on the next tick against every other pending request by priority. Refuses when the tree is not Running, naming the status it is in. targetStateTag needs UE 5.8 or later; targetStateId works everywhere. Params: actorLabel OR actorPath, targetStateId OR targetStateTag, priority? (Low|Normal|Medium|High|Critical), fallback? (None|NextSelectableSibling), componentName?, world? (pie|auto|editor), pieInstance?", "request_state_tree_transition"),
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     assetPath: z.string().describe("StateTree asset path, e.g. /Game/Path/To/ST_Asset"),
     schema: z.string().optional().describe("set_schema: StateTree schema class path, e.g. /Script/GameplayStateTreeModule.StateTreeComponentSchema (#833)"),
     stateId: z.string().optional().describe("GUID of the target state (or parent state for add_state)"),

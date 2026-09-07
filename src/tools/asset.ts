@@ -6,6 +6,7 @@ import { SESSION_ID } from "../lock-owner.js";
 import { McpError, ErrorCode } from "../errors.js";
 import type { EditorSession } from "../session.js";
 import type { ToolContext } from "../types.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/asset.generated.js";
 
 /**
  * Who a lock belongs to: the addressed editor, or this process when there is
@@ -433,9 +434,11 @@ export const assetTool: ToolDef = categoryTool(
       }),
     },
     diff:                 bp("read", "Semantic structural diff between two assets, dispatching on the asset's class. Blueprints: parent class, variables, functions, components, per-graph node and connection deltas. Skeleton and SkeletalMesh: raw bone additions and removals, reparenting (bone, fromParent, toParent), raw-index changes (bone, fromIndex, toIndex), and declared virtual-bone additions and removals, with hierarchyCompatible and editorCompatible reported SEPARATELY. That separation is the point: it answers whether two skeletons are bone-compatible enough to register as Compatible Skeletons or whether a retarget is required, because appending bones (virtual ones especially) leaves the shared hierarchy intact while reparenting an existing bone does not (#879). Deliberately OUT of scope and reported as such: reference-pose transforms (referencePoseCompared=false), export names (exportNamesCompared=false), sockets and retarget sources; structureScope spells the boundary out in the result. Both paths must be the same class. Other asset types report that diffing is not supported yet rather than failing opaquely. Params: assetPath, otherPath", "diff_asset", (p) => ({ assetPath: p.assetPath ?? p.path, otherPath: p.otherPath })),
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     save: z.boolean().optional().describe("set_property / append_array_elements / create_subobject / import_stringtable_csv / bulk_set_properties / bulk_upsert_data_assets / import_texture_batch / set_mesh_materials_batch / fixup_redirectors: write the changed package to disk (default true). false leaves the change in memory only and reports persisted=false with the reason (#931)."),
     saveMapPackages: z.boolean().optional().describe("save_all_dirty: include map packages (default true)"),
     saveContentPackages: z.boolean().optional().describe("save_all_dirty: include content packages (default true)"),

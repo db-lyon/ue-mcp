@@ -2,6 +2,7 @@ import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { resolveCreateAssetPath } from "../asset-path.js";
 import { PAGINATION_SCHEMA, paged } from "../pagination.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/blueprint.generated.js";
 
 export const blueprintTool: ToolDef = categoryTool(
   "blueprint",
@@ -139,9 +140,11 @@ export const blueprintTool: ToolDef = categoryTool(
     set_struct_field_default: bp("mutate", "Set a UserDefinedStruct member's default value. A member is an FStructVariableDescription inside the struct's editor data, not a UPROPERTY on the asset, so asset(set_property) cannot reach it; the engine call also parses the text against the member's real property and recompiles the struct so every dependent default is repaired, which a raw write would skip. defaultValue is Unreal export text ('5', 'true', '(X=1.000000,Y=2.000000,Z=0.000000)'); an empty string clears it. Resolve the field by fieldName (display or internal name) or fieldGuid. Idempotent, with a rollback carrying the previous value. Params: assetPath, defaultValue, fieldName? OR fieldGuid?", "set_struct_field_default", (p) => ({ assetPath: p.assetPath, defaultValue: p.defaultValue, fieldName: p.fieldName, fieldGuid: p.fieldGuid })),
     reorder_struct_fields: bp("mutate", "Reorder a UserDefinedStruct's members. Member order decides the details-panel layout and the DataTable column order and is authored data with no property behind it. order is the COMPLETE list by display name, internal name or GUID; a partial list, an unknown entry or a repeat is refused before anything moves. Idempotent. A move the engine refuses mid-sequence is reported with complete=false and the count that landed, never as a plain success, and the rollback restores the original order by GUID. Params: assetPath, order", "reorder_struct_fields", (p) => ({ assetPath: p.assetPath, order: p.order })),
     edit_struct_metadata: bp("mutate", "Set a UserDefinedStruct's tooltip and its per-member tooltip, editableOnInstance, saveGame, multiLineText, widget3D and arbitrary metadata, in one batched call. All of these live in the struct's editor data rather than as UPROPERTYs, and each has an engine setter that recompiles the struct. fields is [{fieldName or fieldGuid, tooltip?, editableOnInstance?, saveGame?, multiLineText?, widget3D?, metadata?}]. Every member is resolved and every type-gated switch is checked (multiLineText needs a text-like member, widget3D a Vector or Transform) BEFORE the first write, so a refusal on entry nine leaves entries one through eight untouched. Idempotent; the rollback restores every value by GUID, and states the one thing it cannot: a metadata key that did not exist before is restored to an empty string rather than removed. Params: assetPath, tooltip?, fields?", "edit_struct_metadata", (p) => ({ assetPath: p.assetPath, tooltip: p.tooltip, fields: p.fields })),
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     assetPath: z.string().optional().describe("Blueprint asset path. Read/graph actions also accept a World/umap path (e.g. /Game/Maps/SomeLevel), resolved to that map's level script Blueprint (#942)"),
     // Declared so the transport cannot strip them before `create` folds them
     // into the canonical assetPath (#798).

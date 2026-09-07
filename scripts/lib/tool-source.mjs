@@ -188,6 +188,95 @@ export function concatenatedLiterals(src, masked, start, end) {
  * finding nothing, and conflating the two is how both audits came to pass
  * while blind.
  */
+/**
+ * The actions a spread inside a category's action record folds in.
+ *
+ * Only one shape exists: `...epicActions`, imported from
+ * `src/tools/epic/<category>.generated.ts`, which declares an `actions` object
+ * in the same `key: bp(...)` form a hand-written category uses. Reading it
+ * with the same walker is what puts the generated actions in front of the same
+ * audits as the rest.
+ *
+ * An unknown spread returns nothing rather than throwing: a category is free
+ * to grow another one, and an audit that fell over on it would be worse than
+ * one that reports the actions it can see. `spreadsOnly` still records that a
+ * spread was there.
+ */
+function resolveSpreadActions(categoryFile, spreadName) {
+  if (spreadName !== "epicActions") return [];
+  const category = path.basename(categoryFile, ".ts");
+  const generated = path.join(path.dirname(categoryFile), "epic", `${category}.generated.ts`);
+  if (!fs.existsSync(generated)) return [];
+
+  const src = fs.readFileSync(generated, "utf8");
+  const masked = maskLiterals(src);
+  const decl = masked.indexOf("export const actions");
+  if (decl === -1) return [];
+  const brace = masked.indexOf("{", decl);
+  if (brace === -1) return [];
+  const end = matchingBrace(masked, brace);
+  if (end === -1) return [];
+
+  return walkActionKeys(src, masked, brace, end).map((a) => ({
+    ...a,
+    description: describeAction(src, masked, a.start, a.end),
+    // Carried so a caller can tell a generated action from a hand-written one
+    // without re-deriving it from the name.
+    generated: true,
+  }));
+}
+
+/** Offset of the `}` closing the `{` at `open`, or -1. */
+function matchingBrace(masked, open) {
+  let depth = 0;
+  for (let i = open; i < masked.length; i++) {
+    if (masked[i] === "{") depth++;
+    else if (masked[i] === "}") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** `key: value` entries of an object literal, as name + value span. */
+function walkActionKeys(src, masked, brace, bodyEnd) {
+  const found = [];
+  let depth = 0;
+  let pending = null;
+  for (let i = brace; i < bodyEnd; i++) {
+    const ch = masked[i];
+    if (ch === "{" || ch === "(" || ch === "[") {
+      depth++;
+      if (depth === 1 && !pending) pending = { seeking: true };
+      continue;
+    }
+    if (ch === "}" || ch === ")" || ch === "]") {
+      depth--;
+      if (depth === 0 && pending && !pending.seeking) {
+        found.push({ name: pending.name, start: pending.start, end: i });
+        pending = null;
+      }
+      continue;
+    }
+    if (depth !== 1) continue;
+    if (ch === ",") {
+      if (pending && !pending.seeking) found.push({ name: pending.name, start: pending.start, end: i });
+      pending = { seeking: true };
+      continue;
+    }
+    if (!pending?.seeking || /\s/.test(ch)) continue;
+    const key = masked.slice(i, i + 120).match(/^([a-z_][a-z0-9_]*)\s*:/);
+    if (key) {
+      pending = { name: key[1], start: i + key[0].length };
+      i += key[0].length - 1;
+      continue;
+    }
+    pending.seeking = false;
+  }
+  return found;
+}
+
 export function readCategory(file) {
   const src = fs.readFileSync(file, "utf8");
   const masked = maskLiterals(src);
@@ -206,8 +295,10 @@ export function readCategory(file) {
   // Walk the actions object at depth 1, taking each key and the span of its
   // value up to the next top-level comma.
   const actions = [];
+  const spreads = [];
   let depth = 0;
   let pending = null;
+  let sawSpread = false;
   for (let i = brace; i < bodyEnd; i++) {
     const ch = masked[i];
     if (ch === "{" || ch === "(" || ch === "[") {
@@ -232,6 +323,22 @@ export function readCategory(file) {
       continue;
     }
     if (!pending?.seeking || /\s/.test(ch)) continue;
+    // A spread is not a key, but it is still a declaration. `...epicActions`
+    // folds in the generated engine-tool module for this category, and reading
+    // it as an action with an empty name made every category that has one
+    // report a phantom missing doc row. It is RESOLVED rather than skipped:
+    // those 830 actions are declared, advertised and documented like any
+    // other, so an audit that could not see them would be exempting the
+    // largest block of the surface from the checks everything else passes.
+    if (masked.startsWith("...", i)) {
+      sawSpread = true;
+      const spreadName = masked.slice(i + 3, i + 60).match(/^([A-Za-z_$][A-Za-z0-9_$]*)/);
+      if (spreadName) spreads.push(spreadName[1]);
+      pending = { seeking: true };
+      while (i < bodyEnd && masked[i] !== "," && masked[i] !== "}") i++;
+      i--;
+      continue;
+    }
     const key = masked.slice(i, i + 80).match(/^([a-z_][a-z0-9_]*)\s*:/);
     if (key) {
       pending = { name: key[1], start: i + key[0].length };
@@ -241,12 +348,24 @@ export function readCategory(file) {
     pending.seeking = false;
   }
 
+  for (const name of spreads) {
+    actions.push(...resolveSpreadActions(file, name));
+  }
+
   return {
     name: nameMatch[1],
     file,
+    /** True when every entry in the actions record was a spread. */
+    spreadsOnly: actions.length === 0 && sawSpread,
     actions: actions.map((a) => ({
       name: a.name,
-      description: describeAction(src, masked, a.start, a.end),
+      // A spread-resolved action's span points into the GENERATED module, not
+      // into this file, so its description was read there and is carried
+      // through. Re-deriving it here would read whatever happens to sit at
+      // that offset in the category source, which pairs an engine tool's name
+      // with a native action's prose.
+      description: a.generated ? a.description : describeAction(src, masked, a.start, a.end),
+      generated: a.generated === true,
       // `paged()` rewrites the description at runtime to add `cursor?, limit?`
       // to its Params clause, so the generated doc row lists two parameters the
       // literal in the source does not. Recorded as a fact about the action
@@ -254,7 +373,13 @@ export function readCategory(file) {
       // second place is a copy that would drift the first time the wrapper
       // changed, and the only thing a caller of this needs to know is that the
       // two names are expected.
-      paged: /(?:^|[^\w$])paged\s*\(/.test(masked.slice(a.start, a.end)),
+      // Same offset problem as the description: a spread-resolved action's
+      // span is into the generated module, so testing this file at those
+      // offsets reports whatever native action happens to sit there. A
+      // generated action never uses `paged()`, so the answer is simply no.
+      paged: a.generated
+        ? false
+        : /(?:^|[^\w$])paged\s*\(/.test(masked.slice(a.start, a.end)),
     })),
   };
 }
@@ -335,11 +460,22 @@ export function readCategories() {
     .sort();
   for (const file of files) {
     const parsed = readCategory(file);
-    if (!parsed || parsed.actions.length === 0) {
-      blind.push({
-        file: path.relative(ROOT, file),
-        reason: parsed ? "no action keys read" : "categoryTool call not parsed",
-      });
+    if (!parsed) {
+      blind.push({ file: path.relative(ROOT, file), reason: "categoryTool call not parsed" });
+      continue;
+    }
+    // A category whose actions come entirely from a generated module has no
+    // hand-written keys to read, and that is a fact about it rather than a
+    // failure to read it. `dataflow` and `conversation` are wrapped engine
+    // tools and nothing else. The distinction matters: reporting zero because
+    // there is nothing to see must stay different from reporting zero because
+    // the parser went blind, which is the whole reason this function
+    // distinguishes them at all.
+    if (parsed.actions.length === 0) {
+      if (!parsed.spreadsOnly) {
+        blind.push({ file: path.relative(ROOT, file), reason: "no action keys read" });
+        continue;
+      }
       continue;
     }
     categories.push(parsed);

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
 import { normalizeWidgetParams } from "./widget-params.js";
 import { CURSOR_PARAM, paged } from "../pagination.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/widget.generated.js";
 
 export const widgetTool: ToolDef = categoryTool(
   "widget",
@@ -80,9 +81,11 @@ export const widgetTool: ToolDef = categoryTool(
     get_runtime_delegates:    bp("read", "(#161) Read delegate binding state on a live PIE widget. Params: widgetName, className?. Returns array of {delegateName, isBound, numBindings}", "get_runtime_delegates"),
     add_to_viewport:          bp("mutate", "(#602) Instantiate a WidgetBlueprint and add it to the live PIE viewport for visual verification. Requires PIE running. Params: assetPath (WidgetBlueprint path), zOrder?", "add_to_viewport", (p) => ({ assetPath: p.assetPath, zOrder: p.zOrder })),
     invoke_runtime_function:  bp("unknown", "(#559/#812) Fire a UI interaction on a live PIE widget: a parameterless UFUNCTION (functionName) on the located UserWidget, OR drive an interactive child via childName - Button (click), CheckBox (value true/false/toggle), Slider and SpinBox (numeric value), EditableText/EditableTextBox/MultiLineEditableText/MultiLineEditableTextBox (string value), ComboBoxString (option string or index). The matching delegate is broadcast so bound Blueprint logic runs. functionName alongside childName picks the delegate (e.g. OnPressed, OnTextChanged). Locate the widget with widgetName or className. Params: widgetName?|className?, functionName?, childName?, value?, commitMethod?", "invoke_runtime_function", (p) => ({ widgetName: p.widgetName, className: p.className, functionName: p.functionName, childName: p.childName, value: p.value, commitMethod: p.commitMethod })),
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     assetPath: z.string().optional().describe("Canonical Widget Blueprint / Editor Utility asset path, e.g. /Game/UI/WBP_Example (#798)"),
     widgetName: z.string().optional().describe("Canonical name of a widget inside the tree (#798)"),
     includeSubtree: z.boolean().optional().describe("get_properties/inspect_runtime_instances: also dump descendant widgets (#547)"),
