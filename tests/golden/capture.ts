@@ -377,15 +377,6 @@ export interface GoldenRecording {
   sandbox: string;
   projectDir: string;
   repoRoot: string;
-  /**
-   * Where the recorded server's Epic catalog came from, as it reported at
-   * startup: "live editor", "project cache", "baked snapshot", or null when
-   * it surfaced nothing. The connected half is only evidence about the live
-   * path when this says so.
-   */
-  enrichmentSource: string | null;
-  /** Tool actions Epic enrichment injected, from the same startup log. */
-  enrichmentCount: number;
   /** Everything the recorded server wrote to stderr. Kept for diagnostics. */
   log: string;
 }
@@ -463,7 +454,6 @@ export async function captureSurface(options: CaptureOptions): Promise<GoldenRec
     );
 
     const log = fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf-8") : "";
-    const enrichment = readEnrichment(log);
 
     // The one ordering in the document that the recorded server did not choose:
     // the actions enrichment took from the editor's toolset registry.
@@ -475,8 +465,6 @@ export async function captureSurface(options: CaptureOptions): Promise<GoldenRec
       sandbox,
       projectDir,
       repoRoot: REPO_ROOT,
-      enrichmentSource: enrichment.source,
-      enrichmentCount: enrichment.count,
       log,
     };
   } finally {

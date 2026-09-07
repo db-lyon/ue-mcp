@@ -71,9 +71,14 @@ describe("golden baseline: single editor, editor down", () => {
 
   it("reached no editor, which is the whole point of this half", () => {
     // The scenario is a claim about where the surface came from. Port 1 is
-    // privileged, so a live editor cannot be behind it, and the startup log
-    // says which source enrichment used.
-    expect(recording.enrichmentSource).not.toBe("live editor");
+    // privileged, so nothing can be listening behind it, and the recorded log
+    // is where a server that somehow reached one would have said so.
+    //
+    // This used to read the enrichment source out of the startup log, because
+    // the surface was assembled from a live editor's toolset catalog. Nothing
+    // is read from an editor at startup now, so there is no source to check:
+    // what makes this half meaningful is that no bridge answered at all.
+    expect(recording.log).not.toMatch(/bridge connected|editor connected/i);
   });
 
   it("carries no directory from the recording machine", () => {
