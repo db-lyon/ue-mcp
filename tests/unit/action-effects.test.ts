@@ -83,6 +83,34 @@ describe("every action declares its effect", () => {
     expect(mutating.length).toBeGreaterThan(all.length / 2);
   });
 
+  it("answers for the actions a name would have got wrong", () => {
+    // Each of these was classified by a verb the name happens to contain, and
+    // each was wrong in the direction that verb pointed.
+    const cases: Array<[string, string, ActionEffect]> = [
+      // "post" and "edit" are mutating verbs. Both of these only read.
+      ["level", "get_post_process_settings", "read"],
+      ["level", "get_current_edit_level", "read"],
+      // "bulk" is a mutating verb because most bulk_* actions write.
+      ["asset", "bulk_read_properties", "read"],
+      ["level", "bulk_line_trace", "read"],
+      // No verb list had "unwrap", "fixup" or "mesh", so all three read as
+      // unclassified and none of them was ever locked or checked out.
+      ["asset", "unwrap_uvs", "mutate"],
+      ["asset", "fixup_redirectors", "mutate"],
+      ["asset", "mesh_boolean", "mutate"],
+      // A bare verb, which a rule anchored on a trailing underscore missed.
+      ["asset", "save", "mutate"],
+      ["project", "build", "mutate"],
+      // Writes a file under the project's Source tree.
+      ["project", "write_cpp_file", "mutate"],
+      // Decided by a parameter, which is what `unknown` is for.
+      ["epic", "call_tool", "unknown"],
+      ["editor", "execute_python", "unknown"],
+    ];
+    for (const [tool, action, effect] of cases) {
+      expect(declaredActionEffect(tool, action), `${tool}.${action}`).toBe(effect);
+    }
+  });
 });
 
 describe("what a name nobody claims is treated as", () => {
@@ -199,12 +227,16 @@ describe("the three gates agree, because they read one answer", () => {
     // being an omission from a verb list or a class override that made the
     // declaration lie to every other consumer.
     const NEVER_LOCKED = new Set(["asset.lock", "asset.unlock", "asset.unlock_all", "asset.list_locks"]);
+    const ADDRESSES_THE_SERVER = new Set([
+      "project.list_editors", "project.use_editor", "project.add_editor", "project.drop_editor",
+    ]);
     const disagreements: string[] = [];
 
     for (const { tool, action, spec } of everyAction()) {
       if (spec.effect === "read") continue;
       const key = `${tool}.${action}`;
-      if (refuseUntargetedCall({ taskName: key, ...TWO_EDITORS }) === null) {
+      if (!ADDRESSES_THE_SERVER.has(key)
+        && refuseUntargetedCall({ taskName: key, ...TWO_EDITORS }) === null) {
         disagreements.push(`${key}: routing gate lets a declared change run untargeted`);
       }
       if (NEVER_LOCKED.has(key)) continue;

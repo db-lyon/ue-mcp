@@ -424,8 +424,24 @@ describe("action class", () => {
     expect(requiresExplicitEditor(actionSchema(editor, "invoke_function").class)).toBe(true);
   });
 
-  it("gates arbitrary python as a mutation rather than leaving it unlabelled", () => {
+  it("calls arbitrary python unknown, and gates it as a mutation anyway", () => {
+    // It used to be labelled `mutate`, which was a guess dressed as a fact:
+    // the effect of running a python string is the string. `unknown` is what
+    // the declaration can honestly say, and it is gated identically, so the
+    // honest label costs nothing at the gate. Same for a console command.
     const editor = ALL_TOOLS.find((t) => t.name === "editor")!;
-    expect(actionSchema(editor, "execute_python").class).toBe("mutate");
+    for (const action of ["execute_python", "execute_command"]) {
+      expect(actionSchema(editor, action).class, action).toBe("unknown");
+      expect(requiresExplicitEditor(actionSchema(editor, action).class), action).toBe(true);
+    }
+  });
+
+  it("says whether an effect was declared or inferred", () => {
+    // Everything ue-mcp declares is a person's answer. `inferred` is reserved
+    // for Epic's runtime-injected tools and a silent plugin manifest, so a
+    // caller building an approval policy can tell the two apart.
+    const editor = ALL_TOOLS.find((t) => t.name === "editor")!;
+    expect(actionSchema(editor, "execute_python").classSource).toBe("declared");
+    expect(actionSchema(editor, "get_viewport").classSource).toBe("declared");
   });
 });

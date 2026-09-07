@@ -360,7 +360,7 @@ export const projectTool: ToolDef = categoryTool(
     },
     use_editor: {
       kind: "handler",
-      effect: "read",
+      effect: "mutate",
       description: "Make one editor session the default target for untargeted calls. Does not change the session set and never touches any editor process. Params: editorTarget (session name, project name, or .uproject path) (#817)",
       handler: async (ctx, p) => {
         if (!ctx.sessions) throw new Error("This server drives one editor; there is nothing to switch between.");
@@ -378,7 +378,7 @@ export const projectTool: ToolDef = categoryTool(
     },
     add_editor: {
       kind: "handler",
-      effect: "read",
+      effect: "mutate",
       description: "Register another project as an addressable editor session, with its own bridge connection and port. Optionally launch its editor. Every category then accepts editor=\"<name>\" to run a call there. Params: projectPath, editorName? (defaults to the project name), start? (launch the editor and wait for it to be ready), timeout? (seconds, default 300) (#817)",
       handler: async (ctx, p) => {
         if (!ctx.sessions) throw new Error("This server was built without a session registry.");
@@ -450,7 +450,7 @@ export const projectTool: ToolDef = categoryTool(
     },
     drop_editor: {
       kind: "handler",
-      effect: "read",
+      effect: "mutate",
       description: "Forget an editor session and close its bridge socket. The editor process is LEFT RUNNING and untouched - this detaches, it does not stop anything (use editor(stop_editor) for that). Params: editorTarget (#817)",
       handler: async (ctx, p) => {
         if (!ctx.sessions) throw new Error("This server drives one editor; there is nothing to drop.");
@@ -922,7 +922,7 @@ export const projectTool: ToolDef = categoryTool(
     },
     execute_python_report: {
       kind: "handler",
-      effect: "mutate",
+      effect: "read",
       description: "Measurement for #704: reads this session's execute_python calls and, for each, runs its taskSummary back through search_tools to flag calls that OVERLAPPED an existing dedicated action ('you used Python for X, but tool Y does X'). Returns totalCalls, overlapping[] and an overlapRate. Params: none (#704)",
       handler: async (ctx) => {
         const entries = getWorkarounds(ctx);

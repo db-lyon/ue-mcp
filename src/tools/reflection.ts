@@ -18,7 +18,7 @@ export const reflectionTool: ToolDef = categoryTool(
     is_class_loaded: bp("read", "Report whether a UClass is currently loaded in the editor (loaded), whether it exists/is loadable (exists), and its owning module + that module's load state. Distinguishes 'not loaded yet' from 'does not exist'. Params: className (short name, /Script/<Module>.<Class>, or BP class path) (#689)", "is_class_loaded", (p) => ({ className: p.className })),
     is_module_loaded: bp("read", "Report whether a named module is currently loaded. Params: moduleName (#689)", "is_module_loaded", (p) => ({ moduleName: p.moduleName })),
     list_loaded_modules: bp("read", paged("Enumerate modules with runtime load state. Params: filter? (case-insensitive substring), loadedOnly? (default false). Returns modules[{name, loaded, gameModule}] + totalLoaded/totalModules (#689)"), "list_loaded_modules", (p) => ({ filter: p.filter, loadedOnly: p.loadedOnly, cursor: p.cursor, limit: p.limit })),
-    inspect_save_game: bp("mutate", "Load a SaveGame slot read-only and return its reflected UPROPERTY(SaveGame) values. Non-serializable properties are listed in skippedProperties instead of failing the call. Params: slotName, userIndex? (default 0)", "inspect_save_game", (p) => ({ slotName: p.slotName, userIndex: p.userIndex })),
+    inspect_save_game: bp("read", "Load a SaveGame slot read-only and return its reflected UPROPERTY(SaveGame) values. Non-serializable properties are listed in skippedProperties instead of failing the call. Params: slotName, userIndex? (default 0)", "inspect_save_game", (p) => ({ slotName: p.slotName, userIndex: p.userIndex })),
   },
   undefined,
   {
