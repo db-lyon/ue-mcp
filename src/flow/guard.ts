@@ -26,6 +26,7 @@ import type { ProjectContext } from "../project.js";
 import type { EditorSession } from "../session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";
 import { bridgeMethodEffect, mayChangeState } from "../action-effects.js";
+import type { ActionEffect } from "../types.js";
 
 /** Resolve a UE content path to an absolute on-disk file, or null if it does not exist. */
 export type ResolveExistingFile = (contentPath: string) => string | null;
@@ -87,7 +88,23 @@ export function writeScope(ctx: CallContext): boolean {
  * a guard that had no business seeing it.
  */
 export function mutationScope(ctx: CallContext): boolean {
-  return mayChangeState(bridgeMethodEffect(ctx.method).effect);
+  return mayChangeState(effectOf(ctx));
+}
+
+/**
+ * What THIS call does, method and arguments together.
+ *
+ * The arguments matter for one reason and it is not a detail: all 830 wrapped
+ * engine tools dispatch through `epic_call_tool`, so the method alone is
+ * `unknown` and every scope below was wrong about 830 of the 1920 actions on
+ * this surface. `mutations` fired on every wrapped read, `reads` matched none
+ * of them, and `unknown` matched all of them, which made a guard meant to put
+ * a person in front of arbitrary code stop `epic_list_attributes` as well.
+ *
+ * `unknown` means an argument decides. The guard has the arguments.
+ */
+function effectOf(ctx: CallContext): ActionEffect {
+  return bridgeMethodEffect(ctx.method, ctx.params).effect;
 }
 
 /**
@@ -100,7 +117,7 @@ export function mutationScope(ctx: CallContext): boolean {
  * into this scope is a mutation the guard was told to ignore.
  */
 export function readScope(ctx: CallContext): boolean {
-  return bridgeMethodEffect(ctx.method).effect === "read";
+  return effectOf(ctx) === "read";
 }
 
 /**
@@ -116,7 +133,7 @@ export function readScope(ctx: CallContext): boolean {
  * property of the name, it is the absence of one.
  */
 export function unknownScope(ctx: CallContext): boolean {
-  return bridgeMethodEffect(ctx.method).effect === "unknown";
+  return effectOf(ctx) === "unknown";
 }
 
 /** Build the per-call context, wiring the lazy write-enrichment helpers. */

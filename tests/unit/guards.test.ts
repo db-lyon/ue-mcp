@@ -322,6 +322,47 @@ describe("standing in front of every mutation", () => {
     expect(await guard.appliesTo!(callCtx("epic_call_tool", {}))).toBe(true);
   });
 
+  it("tells one wrapped engine tool from another, though they share a method", async () => {
+    // All 830 wrapped tools dispatch through `epic_call_tool`, because the
+    // plugin registers one reflective handler for Unreal's whole registry
+    // rather than one per tool. Judging the method alone made every scope
+    // wrong about 830 of the 1920 actions on this surface: `mutations` fired
+    // on every wrapped read, `reads` matched none of them, and `unknown`
+    // matched all of them, so a guard meant to put a person in front of
+    // arbitrary code stopped `epic_list_attributes` too.
+    const registry = registryWith({ check: ALLOW });
+    const [mutations] = await buildGuards(
+      declare({ freeze: { scope: "mutations", before: { class_path: "check" } } }), deps(registry), SOURCE,
+    );
+    const [reads] = await buildGuards(
+      declare({ audit: { scope: "reads", before: { class_path: "check" } } }), deps(registry), SOURCE,
+    );
+    const [hatches] = await buildGuards(
+      declare({ approve: { scope: "unknown", before: { class_path: "check" } } }), deps(registry), SOURCE,
+    );
+    const call = (tool: string) => callCtx("epic_call_tool", { toolset: "X", tool });
+
+    const read = call("GASToolsets.AttributeSetToolset.ListAttributes");
+    expect(await mutations.appliesTo!(read)).toBe(false);
+    expect(await reads.appliesTo!(read)).toBe(true);
+    expect(await hatches.appliesTo!(read), "a wrapped read is not an escape hatch").toBe(false);
+
+    const write = call("UMGToolSet.UMGToolSet.AddWidget");
+    expect(await mutations.appliesTo!(write)).toBe(true);
+    expect(await reads.appliesTo!(write)).toBe(false);
+    expect(await hatches.appliesTo!(write)).toBe(false);
+
+    // Arbitrary code stays unknown: its deciding argument is a program.
+    const python = callCtx("execute_python", { code: "x" });
+    expect(await hatches.appliesTo!(python)).toBe(true);
+
+    // A tool name this build does not carry falls back to the method, which
+    // has no single effect, so it is treated as a change.
+    const stranger = call("SomeFutureToolset.SomeFutureToolset.Whatever");
+    expect(await mutations.appliesTo!(stranger)).toBe(true);
+    expect(await reads.appliesTo!(stranger)).toBe(false);
+  });
+
   it("lets through the reads a HANDLER makes on its own", async () => {
     // These belong to no ActionSpec: a handler calls them directly, so the
     // index of declared actions cannot see them and the default above would

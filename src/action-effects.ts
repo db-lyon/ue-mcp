@@ -29,6 +29,7 @@
 import { getLiveToolGraph } from "./tools.js";
 import { splitTaskName } from "./action-class.js";
 import { flowCategoryForCheck } from "./flow/skill-actions.js";
+import { EPIC_TOOL_EFFECTS } from "./tools/epic/effects.js";
 import type { ActionEffect, ActionEffectSource, ToolDef } from "./types.js";
 
 export interface ResolvedEffect {
@@ -183,18 +184,52 @@ export function declaredTaskEffect(taskName: string): ActionEffect | undefined {
 }
 
 /**
- * What a BRIDGE METHOD does.
+ * Methods whose effect one of their own ARGUMENTS decides, and how to read it.
  *
- * Three sources, in order: the effects declared by the actions that forward to
- * it, the hand-written table above for the ones a handler calls directly, and
- * `mutate` for a method this server does not recognise at all.
+ * `unknown` means exactly this: the action is not what settles the question, a
+ * parameter is. Where that parameter is legible, leaving the answer at
+ * `unknown` is not caution, it is refusing to look at evidence in hand.
+ *
+ * `epic_call_tool` is the case that matters. All 830 wrapped engine tools
+ * dispatch through it, so the METHOD has no effect of its own and collapses to
+ * `unknown` - which meant a guard scoped to mutations saw every wrapped read,
+ * and one scoped to reads saw none of them. The `tool` argument names which
+ * tool is being called, and that tool's effect was reviewed and is right here.
+ *
+ * `execute_python` and `execute_command` stay `unknown` and always will: their
+ * deciding argument is a program, and nothing short of running it answers.
+ */
+const ARGUMENT_DECIDES: Readonly<Record<string, (p: Record<string, unknown>) => ActionEffect | undefined>> = {
+  epic_call_tool: (p) => {
+    const tool = typeof p.tool === "string" ? p.tool : undefined;
+    return tool ? EPIC_TOOL_EFFECTS[tool] : undefined;
+  },
+};
+
+/**
+ * What a BRIDGE METHOD does, given the arguments it was called with.
+ *
+ * Four sources, in order: an argument that decides it, the effects declared by
+ * the actions that forward to the method, the hand-written table above for the
+ * ones a handler calls directly, and `mutate` for a method this server does not
+ * recognise at all.
  *
  * Never undefined. The guard pipeline and the source-control classifier both
  * ask this on every call and neither should be re-deriving a default of its
  * own, which is how three modules came to hold three different opinions in the
  * first place.
+ *
+ * `params` is optional so a caller asking about a method in the abstract still
+ * gets the method's own answer. Every caller on a live path has them.
  */
-export function bridgeMethodEffect(method: string): ResolvedEffect {
+export function bridgeMethodEffect(
+  method: string,
+  params?: Record<string, unknown>,
+): ResolvedEffect {
+  if (params) {
+    const decided = ARGUMENT_DECIDES[method]?.(params);
+    if (decided !== undefined) return { effect: decided, source: "declared" };
+  }
   const declared = current().byBridgeMethod.get(method);
   if (declared !== undefined) return { effect: declared, source: "declared" };
   const raw = RAW_BRIDGE_METHODS[method];

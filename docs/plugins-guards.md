@@ -40,7 +40,7 @@ That is worth stating because it used to. `mutations` was once "a call counts un
 
 A call this server does not recognise at all - a plugin reaching the bridge with a method of its own - counts as a change. Nothing vouches for it, so `mutations` sees it and `reads` does not.
 
-`unknown` is the scope the declaration made possible rather than merely made correct. It is the set whose behaviour is decided by an argument instead of by the action: `editor(execute_python)`, `editor(execute_command)`, every wrapped Epic tool reached through `epic(call_tool)`, and the reflected `invoke_*` family. Those are the calls that can do anything, and a verb list cannot pick them out, because `unknown` is not a property of a name. If the rule is "a person approves the escape hatches, and ordinary edits go through", that is one guard:
+`unknown` is the scope the declaration made possible rather than merely made correct. It is the set whose behaviour is decided by an argument instead of by the action: `editor(execute_python)`, `editor(execute_command)`, and the reflected `invoke_*` family. Those are the calls that can do anything, and a verb list cannot pick them out, because `unknown` is not a property of a name. If the rule is "a person approves the escape hatches, and ordinary edits go through", that is one guard:
 
 ```yaml
 guards:
@@ -52,6 +52,14 @@ guards:
 ```
 
 `mutations` includes `unknown`, since a call that might change something is treated as one everywhere in this server.
+
+### Unreal's wrapped tools are in these scopes like anything else
+
+The 830 actions wrapping Unreal's own toolsets all dispatch through one bridge method, `epic_call_tool`, because the plugin registers a single reflective handler for the whole registry rather than one per tool: Unreal discovers that registry at runtime and it varies with the engine plugins a project enables, so there is nothing to compile a handler against.
+
+That is invisible here. A scope is decided by what the CALL does, method and arguments together, and the argument names which tool is being invoked. `gas(epic_list_attributes)` is in `reads` and out of `mutations`; `widget(epic_add_widget)` is the reverse. Neither is in `unknown`, because their effects are declared, reviewed and known.
+
+`unknown` is reserved for the calls whose deciding argument is a program, which nothing short of running it can answer: `execute_python`, `execute_command`, `invoke_*`, and the single wrapped tool that takes a list-or-close switch.
 
 Both narrower scopes are computed lazily, so a read pays nothing and a pipeline of guards that all ask pays once.
 

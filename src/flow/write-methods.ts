@@ -149,7 +149,9 @@ export function classifyWrite(method: string, params: Record<string, unknown>): 
   // else is a candidate, whatever its name looks like. `unknown` is a
   // candidate for the same reason it gates like a mutation everywhere else,
   // and an unnecessary checkout is the cheap side of this decision.
-  if (bridgeMethodEffect(method).effect === "read") {
+  // With the parameters, so a wrapped engine tool is judged by which tool it
+  // is rather than by the one method all 830 of them share.
+  if (bridgeMethodEffect(method, params).effect === "read") {
     return { writes: false, contentPaths: [] };
   }
 
