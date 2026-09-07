@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import { BaseTask, TaskRegistry, type TaskResult, type TaskConstructor } from "@db-lyon/flowkit";
-import { buildGuards } from "../../src/flow/guards.js";
+import { assertNoLegacyGuardTasks, buildGuards } from "../../src/flow/guards.js";
 import { GuardsSchema } from "../../src/flow/guard-schema.js";
 import { GuardRegistry, makeCallContext, type CallContext } from "../../src/flow/guard.js";
 import { GuardedBridge } from "../../src/flow/guarded-bridge.js";
@@ -488,5 +488,54 @@ describe("through the bridge a call actually takes", () => {
 
     await expect(bridge.call("get_asset", { assetPath: "/Game/Foo" })).resolves.toEqual({ ok: true });
     expect(inner.calls).toEqual(["get_asset"]);
+  });
+});
+
+/**
+ * The migration must not reintroduce the failure the declaration model exists
+ * to prevent. A task still named like a guard is discovered by nothing, so it
+ * would sit in a config gating nothing while looking configured.
+ */
+describe("a task still named like a guard is fatal", () => {
+  it("refuses the old spelling and says what to write instead", () => {
+    expect(() =>
+      assertNoLegacyGuardTasks(["guard.sourcecontrol.beforeWrite", "deploy"], { label: "ue-mcp-perforce" }),
+    ).toThrow(/guards:/);
+  });
+
+  it("names the file or plugin that declared it", () => {
+    expect(() => assertNoLegacyGuardTasks(["guard.policy.before"], { label: "ue-mcp.yml" })).toThrow(
+      /ue-mcp\.yml/,
+    );
+  });
+
+  it("says what is at stake rather than only that it is wrong", () => {
+    expect(() => assertNoLegacyGuardTasks(["guard.policy.before"], { label: "x" })).toThrow(/ungated/);
+  });
+
+  it("translates the phase into the scope and hook it meant", () => {
+    let message = "";
+    try {
+      assertNoLegacyGuardTasks(["guard.sourcecontrol.beforeWrite"], { label: "x" });
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toContain("scope: writes");
+    expect(message).toContain("before:");
+
+    let after = "";
+    try {
+      assertNoLegacyGuardTasks(["guard.audit.after"], { label: "x" });
+    } catch (e) {
+      after = (e as Error).message;
+    }
+    expect(after).toContain("scope: all");
+    expect(after).toContain("after:");
+  });
+
+  it("says nothing about ordinary tasks", () => {
+    expect(() =>
+      assertNoLegacyGuardTasks(["deploy", "guardian", "guard_rail", "my.guard.helper"], { label: "x" }),
+    ).not.toThrow();
   });
 });
