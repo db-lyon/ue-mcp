@@ -124,7 +124,7 @@ Nothing outside these modes ever answers a dialog by itself. `editor(set_dialog_
 
 | Action | Description |
 |--------|-------------|
-| `get_status` | Check server mode and editor connection. Also reports pluginBuildStale when the compiled bridge is older than its source, which is the real cause of 'Unknown method' on handlers that do exist. Params: `none (#785)` |
+| `get_status` | Check server mode and editor connection. pluginBuildStale reports the compiled bridge being older than its source, read from disk. deployedPlugin is what the binary that answered says about itself: when it was built, and how many methods this server advertises that it does not register, which is what 'Unknown method' on a real action means. Params: `none (#785, #1002, #1021)` |
 | `set_project` | Switch project: moves both path resolution and the editor connection to the new .uproject. Params: `projectPath` |
 | `list_editors` | List every editor session this server drives: name, project, bridge port, whether the socket is connected, whether anything is answering on that port, and which session untargeted calls fall through to. Params: `none (#817)` |
 | `use_editor` | Make one editor session the default target for untargeted calls. Does not change the session set and never touches any editor process. Params: `editorTarget (session name, project name, or .uproject path) (#817)` |
