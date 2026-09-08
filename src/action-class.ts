@@ -243,6 +243,8 @@ const OVERRIDES: Readonly<Record<string, ActionClass>> = {
   // Reads Control Rig controls and keys from an edit session. The `edit`
   // segment names the session type; this action does not modify it.
   "animation.read_control_rig_edit": "read",
+  // Captures current in-memory Control Rig values without changing Sequencer.
+  "animation.capture_control_rig_pose": "read",
   // Reads animation data, but optionally writes validation artifacts under
   // the addressed project's Saved directory.
   "animation.analyze_animation": "unknown",

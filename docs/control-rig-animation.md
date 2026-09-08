@@ -17,7 +17,7 @@ so `ue-mcp init` can install them with the other bundled workflow skills.
 
 | Capability | Engine support |
 |------------|----------------|
-| `begin_control_rig_edit`, `read_control_rig_edit`, `apply_control_rig_edits`, `bake_control_rig_edit` | UE 5.8 only; older engines return `unsupported_engine_version` and do not fall back to raw bone tracks |
+| `begin_control_rig_edit`, `read_control_rig_edit`, `capture_control_rig_pose`, `apply_control_rig_edits`, `bake_control_rig_edit` | UE 5.8 only; older engines return `unsupported_engine_version` and do not fall back to raw bone tracks |
 | `analyze_animation` | Cross-version; it uses the native animation APIs available in the engine against which the bridge was compiled |
 | `configure_ik_rig`, `configure_ik_retargeter`, and `contact_lock` inside `apply_control_rig_edits` | UE 5.8 only; older engines return `unsupported_engine_version` |
 | Legacy IK Rig and IK Retargeter create/read actions | See each action in the [tool reference](tool-reference.md); their older-engine support is unchanged |
@@ -180,6 +180,50 @@ Control metadata reports:
 Never write a control with `animatable=false`. Use `set_bool`, `set_float`, or
 `set_int` for scalar controls. For an enum, pass an exact integer listed in
 `enumOptions`; do not infer it from the option's position or label.
+
+### Capture and propagate an accepted viewport pose
+
+`read_control_rig_edit` evaluates Sequencer, so do not use it after an unkeyed
+viewport adjustment that must be preserved. Keep the edit sequence focused and
+use this order instead:
+
+```text
+baseline = animation(action="capture_control_rig_pose", sequencePath=<session>,
+                     bindingTag=<tag>, controlNames=[...]).snapshot
+
+# Adjust the visible Control Rig shapes in the viewport without scrubbing.
+
+accepted = animation(action="capture_control_rig_pose", sequencePath=<session>,
+                     bindingTag=<tag>, controlNames=[...]).snapshot
+
+animation(action="apply_control_rig_edits", sequencePath=<session>, bindingTag=<tag>,
+  operations=[{op:"propagate_pose", baseline:<baseline>, accepted:<accepted>,
+    controls:[
+      {control:"finger_ctrl", mode:"fixed", donorFrames:[0, 1, 2]},
+      {control:"wrist_ctrl", mode:"local_delta", donorFrames:[0, 1, 2]}
+    ]}])
+
+animation(action="bake_control_rig_edit", sequencePath=<session>, bindingTag=<tag>,
+          outputAssetPath=<new-animation>)
+```
+
+Pass the same full editable `controlNames` set to both captures; the default
+selected-only capture is for single-selection work, not a multi-finger edit.
+Store both snapshots unchanged in the caller and compute the changed-control
+list before applying. Pass only those changed controls. `fixed` copies each accepted
+changed channel to the listed original donor keys. `local_delta` applies the
+captured local change at each donor key while retaining its motion. The native
+handler rejects mismatched sessions, rig instances, frames, control sets,
+types, non-finite values, unchanged requested controls, and moved playheads.
+Selection is recorded as provenance metadata; it may change while editing. The
+explicit propagation control list decides what gets keyed. The handler reads
+every keyed result before saving the edit sequence.
+
+Before handoff, verify the actual finger control shapes are visible and
+selectable in the viewport and that selecting one displays the rotation gizmo.
+Track or outliner presence alone is insufficient. A hidden host skeletal-mesh
+component also hides Control Rig shapes. For a driver overlay, disable its
+rendering passes instead of setting the host component's `bVisible` false.
 
 ### 4. Solve anatomy in component space
 

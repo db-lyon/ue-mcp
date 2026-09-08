@@ -161,6 +161,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("read_control_rig_hierarchy"), &ReadControlRigHierarchy);
 	Registry.RegisterHandler(TEXT("begin_control_rig_edit"), &BeginControlRigEdit);
 	Registry.RegisterHandler(TEXT("read_control_rig_edit"), &ReadControlRigEdit);
+	Registry.RegisterHandler(TEXT("capture_control_rig_pose"), &CaptureControlRigPose);
 	Registry.RegisterHandler(TEXT("apply_control_rig_edits"), &ApplyControlRigEdits);
 	Registry.RegisterHandler(TEXT("bake_control_rig_edit"), &BakeControlRigEdit);
 	Registry.RegisterHandler(TEXT("analyze_animation"), &AnalyzeAnimation);
