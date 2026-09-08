@@ -1,5 +1,5 @@
 import { checkPluginFreshness } from "../plugin-freshness.js";
-import { checkBridgeParity } from "../bridge-parity.js";
+import { checkBridgeParity, deployedPlugin } from "../bridge-parity.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
@@ -158,7 +158,7 @@ export const projectTool: ToolDef = categoryTool(
     get_status: {
       kind: "handler",
       effect: "read",
-      description: "Check server mode and editor connection. Also reports pluginBuildStale when the compiled bridge is older than its source, which is the real cause of 'Unknown method' on handlers that do exist. Params: none (#785)",
+      description: "Check server mode and editor connection. pluginBuildStale reports the compiled bridge being older than its source, read from disk. deployedPlugin is what the binary that answered says about itself: when it was built, and how many methods this server advertises that it does not register, which is what 'Unknown method' on a real action means. Params: none (#785, #1002, #1021)",
       handler: async (ctx) => {
         const flows = ctx.getFlows?.() ?? [];
         const bridgeApiVersion = ctx.project.projectDir
@@ -218,8 +218,12 @@ export const projectTool: ToolDef = categoryTool(
           // Absent when there is nothing to say, so a healthy session's status
           // is exactly what it was. Present, it names methods that will come
           // back "Unknown method" before one is called.
-          deployedPluginMissingActions: parity.missing.length > 0 ? parity.missing.length : undefined,
-          deployedPluginWarning: parity.message ?? undefined,
+          // What the binary that ANSWERED says about itself, as opposed to
+          // pluginBuildStale and bridgeApiVersion above, which are read off
+          // the source and the header on disk. architecture.md already draws
+          // that line; this is the running-binary side of it, in one place
+          // rather than as more sibling flags.
+          deployedPlugin: deployedPlugin(ctx.bridge.capabilities, parity),
           mode: ctx.bridge.isConnected ? "live" : "disconnected",
           editorConnected: ctx.bridge.isConnected,
           editorTarget: {

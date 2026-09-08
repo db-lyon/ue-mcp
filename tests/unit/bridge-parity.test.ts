@@ -12,7 +12,7 @@
  * old plugin that publishes no list being reported as having nothing missing.
  */
 import { describe, it, expect } from "vitest";
-import { checkBridgeParity, unadvertisedMethods } from "../../src/bridge-parity.js";
+import { checkBridgeParity, deployedPlugin, unadvertisedMethods } from "../../src/bridge-parity.js";
 import { categoryTool, bp, type ToolDef } from "../../src/types.js";
 import type { BridgeCapabilities } from "../../src/bridge.js";
 
@@ -92,6 +92,35 @@ describe("comparing the surface against the plugin that answered", () => {
     // The same plugin, with beta disabled for this session: nothing is missing.
     const narrowed = checkBridgeParity(graph().slice(0, 1), caps(["alpha_list", "alpha_save"]));
     expect(narrowed.missing).toEqual([]);
+  });
+
+  it("stays absent on a healthy session, so status only grows when there is something to say", () => {
+    const parity = checkBridgeParity(graph(), caps(["alpha_list", "alpha_save", "beta_read"]));
+    // No build time published and nothing missing: nothing to report.
+    expect(deployedPlugin(caps(["alpha_list", "alpha_save", "beta_read"]), parity)).toBeUndefined();
+    // Nothing answered at all.
+    expect(deployedPlugin(null, parity)).toBeUndefined();
+  });
+
+  it("reports the running binary's own account in one field", () => {
+    const c = { actions: ["alpha_list"], builtAt: "Aug 28 2026 11:04:12" } as unknown as BridgeCapabilities;
+    const reported = deployedPlugin(c, checkBridgeParity(graph(), c));
+    expect(reported?.builtAt).toBe("Aug 28 2026 11:04:12");
+    expect(reported?.missingActions).toBe(2);
+    expect(reported?.warning).toContain("alpha_save");
+  });
+
+  it("reports a build time even when every method is present", () => {
+    // The half parity cannot see: a handler that is there and old. #1002 was
+    // a fix that shipped three days before it was reported as broken, by a
+    // session whose deployed plugin predated it.
+    const c = {
+      actions: ["alpha_list", "alpha_save", "beta_read"],
+      builtAt: "Aug 01 2026 09:00:00",
+    } as unknown as BridgeCapabilities;
+    const reported = deployedPlugin(c, checkBridgeParity(graph(), c));
+    expect(reported?.builtAt).toBe("Aug 01 2026 09:00:00");
+    expect(reported?.missingActions).toBeUndefined();
   });
 
   it("can also report what the plugin has that nothing advertises", () => {

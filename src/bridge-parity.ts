@@ -95,6 +95,35 @@ function describe(missing: string[], advertised: number, registered: number): st
 }
 
 /**
+ * What the binary that answered says about itself, or undefined when nothing
+ * answered or it had nothing to add.
+ *
+ * `project(get_status)` already reports `pluginBuildStale` and
+ * `bridgeApiVersion`, and both are read off the SOURCE and the header on disk.
+ * `docs/architecture.md` states that distinction and it is the useful one, so
+ * the running binary's own account lives here as one field rather than as
+ * three more siblings next to them.
+ *
+ * Undefined on a healthy connected session, so a status payload only grows
+ * when there is something to say.
+ */
+export function deployedPlugin(
+  capabilities: BridgeCapabilities | null | undefined,
+  parity: BridgeParity,
+): { builtAt?: string; missingActions?: number; warning?: string } | undefined {
+  if (!capabilities) return undefined;
+  const missing = parity.missing.length > 0 ? parity.missing.length : undefined;
+  // The build time is the half that catches a handler which is PRESENT and
+  // old. #1002 was a DataTable resolution fix that shipped on 2026-08-28 and
+  // was reported as broken three days later by a session whose deployed plugin
+  // predated it, and nothing in reach said so: parity sees an absent method,
+  // not a stale one.
+  const builtAt = capabilities.builtAt;
+  if (!builtAt && missing === undefined) return undefined;
+  return { builtAt, missingActions: missing, warning: parity.message ?? undefined };
+}
+
+/**
  * The same comparison the other way: methods the plugin has that nothing
  * advertises.
  *
