@@ -307,6 +307,7 @@ void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("run_stat_command"), &RunStatCommand);
 	Registry.RegisterHandler(TEXT("set_scalability"), &SetScalability);
 	Registry.RegisterHandler(TEXT("set_cvars"), &SetCVars);
+	Registry.RegisterHandler(TEXT("get_cvars"), &GetCVars);
 	Registry.RegisterHandler(TEXT("build_geometry"), &BuildGeometry);
 	Registry.RegisterHandler(TEXT("build_hlod"), &BuildHlod);
 	Registry.RegisterHandler(TEXT("list_crashes"), &ListCrashes);
@@ -2906,6 +2907,129 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetScalability(const TSharedPtr<FJsonObj
 // #591 bulk console-variable setter. Accepts a {name: value} object (or array
 // of {name, value}) and applies each via the console manager with SetByConsole
 // priority. Returns per-cvar old/new values so callers can confirm the write.
+// #1006: read console variables. set_cvars could write one and nothing in the
+// surface could read it back, so confirming whether r.VolumetricCloud or
+// r.Substrate was actually on meant reading DefaultEngine.ini and inferring,
+// which says what the config asked for and not what the running editor has.
+// execute_command is no help either: typing a cvar name at the console prints
+// to the log and returns nothing to the caller.
+//
+// setBy is reported alongside the value because it is usually the answer to
+// the question behind the question. A cvar sitting at its default because a
+// scalability group pinned it there and one a device profile drove to the same
+// number read identically until you can see which source last wrote it.
+namespace
+{
+	static TSharedPtr<FJsonObject> DescribeCVar(const FString& Name, IConsoleVariable* CVar)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("name"), Name);
+		Row->SetStringField(TEXT("value"), CVar->GetString());
+		const FString DefaultValue = CVar->GetDefaultValue();
+		Row->SetStringField(TEXT("defaultValue"), DefaultValue);
+		Row->SetBoolField(TEXT("isDefault"), CVar->GetString() == DefaultValue);
+		const EConsoleVariableFlags SetBy =
+			static_cast<EConsoleVariableFlags>(CVar->GetFlags() & ECVF_SetByMask);
+		Row->SetStringField(TEXT("setBy"), GetConsoleVariableSetByName(SetBy));
+		const TCHAR* Type = TEXT("string");
+		if (CVar->IsVariableBool()) Type = TEXT("bool");
+		else if (CVar->IsVariableInt()) Type = TEXT("int");
+		else if (CVar->IsVariableFloat()) Type = TEXT("float");
+		Row->SetStringField(TEXT("type"), Type);
+		Row->SetBoolField(TEXT("cheat"), CVar->TestFlags(ECVF_Cheat));
+		Row->SetBoolField(TEXT("renderThreadSafe"), CVar->TestFlags(ECVF_RenderThreadSafe));
+		if (const TCHAR* Help = CVar->GetHelp())
+		{
+			// Console help runs to paragraphs for some variables and the caller
+			// asked for a value, not a manual.
+			FString HelpText(Help);
+			HelpText.ReplaceInline(TEXT("\n"), TEXT(" "));
+			HelpText.TrimStartAndEndInline();
+			if (HelpText.Len() > 400) HelpText = HelpText.Left(400) + TEXT("...");
+			if (!HelpText.IsEmpty()) Row->SetStringField(TEXT("help"), HelpText);
+		}
+		return Row;
+	}
+}
+
+TSharedPtr<FJsonValue> FEditorHandlers::GetCVars(const TSharedPtr<FJsonObject>& Params)
+{
+	TArray<FString> Names;
+	const TArray<TSharedPtr<FJsonValue>>* NameArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("names"), NameArr) && NameArr)
+	{
+		for (const TSharedPtr<FJsonValue>& Entry : *NameArr)
+		{
+			FString S;
+			if (Entry.IsValid() && Entry->TryGetString(S) && !S.IsEmpty()) Names.Add(S);
+		}
+	}
+	FString Single;
+	if (Params->TryGetStringField(TEXT("name"), Single) && !Single.IsEmpty()) Names.Add(Single);
+
+	FString Pattern;
+	Params->TryGetStringField(TEXT("pattern"), Pattern);
+	if (Names.Num() == 0 && Pattern.IsEmpty())
+	{
+		return MCPError(TEXT("Supply 'name', 'names' (array) or 'pattern' (substring match against every registered console variable)"));
+	}
+
+	IConsoleManager& CM = IConsoleManager::Get();
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	TArray<TSharedPtr<FJsonValue>> NotFound;
+
+	for (const FString& Name : Names)
+	{
+		IConsoleVariable* const CVar = CM.FindConsoleVariable(*Name);
+		if (!CVar)
+		{
+			NotFound.Add(MakeShared<FJsonValueString>(Name));
+			continue;
+		}
+		Rows.Add(MakeShared<FJsonValueObject>(DescribeCVar(Name, CVar)));
+	}
+
+	// A substring over the whole registry can match hundreds, and every row
+	// carries help text, so the cap is a real one rather than a formality. It is
+	// reported when it bites so a truncated answer never reads as a complete one.
+	int32 Limit = 100;
+	Params->TryGetNumberField(TEXT("limit"), Limit);
+	Limit = FMath::Clamp(Limit, 1, 1000);
+	int32 Matched = 0;
+	if (!Pattern.IsEmpty())
+	{
+		CM.ForEachConsoleObjectThatContains(
+			FConsoleObjectVisitor::CreateLambda([&](const TCHAR* Name, IConsoleObject* Object)
+			{
+				IConsoleVariable* const CVar = Object ? Object->AsVariable() : nullptr;
+				if (!CVar) return;
+				++Matched;
+				if (Rows.Num() >= Limit) return;
+				Rows.Add(MakeShared<FJsonValueObject>(DescribeCVar(FString(Name), CVar)));
+			}),
+			*Pattern);
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetArrayField(TEXT("cvars"), Rows);
+	Result->SetNumberField(TEXT("count"), Rows.Num());
+	if (NotFound.Num() > 0) Result->SetArrayField(TEXT("notFound"), NotFound);
+	if (!Pattern.IsEmpty())
+	{
+		Result->SetNumberField(TEXT("matchedCount"), Matched);
+		Result->SetBoolField(TEXT("truncated"), Matched > Rows.Num());
+		if (Matched > Rows.Num())
+		{
+			Result->SetStringField(TEXT("truncationNote"), FString::Printf(
+				TEXT("'%s' matches %d console variables and %d are listed. Raise 'limit' or narrow the pattern."),
+				*Pattern, Matched, Rows.Num()));
+		}
+	}
+	Result->SetStringField(TEXT("valueSourceNote"),
+		TEXT("Values are read from the running editor, so they reflect every write that has landed, not what a config file asked for. 'setBy' names the priority the current value was written at, and a cvar set at a higher priority ignores later writes from lower ones."));
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FEditorHandlers::SetCVars(const TSharedPtr<FJsonObject>& Params)
 {
 	// Collect requested (name, value) pairs from either shape.
