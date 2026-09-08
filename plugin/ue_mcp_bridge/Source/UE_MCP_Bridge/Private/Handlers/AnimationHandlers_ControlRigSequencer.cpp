@@ -1696,6 +1696,8 @@ bool FUEMCPControlRigMovingReferenceTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("Moving target preserves the subject scale"),
 		MovedSubject.GetScale3D().Equals(FVector(2.0, 2.0, 2.0), 0.001));
+	return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FUEMCPControlRigLivePosePropagationTest,
@@ -2380,7 +2382,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CaptureControlRigPose(const TSharedPt
 		}
 		else if (Control->Settings.ControlType == ERigControlType::Integer)
 		{
-			ControlObject->SetStringField(TEXT("valueType"), Control->Settings.ControlEnum.IsValid() ? TEXT("enum") : TEXT("int"));
+			ControlObject->SetStringField(TEXT("valueType"), Control->Settings.ControlEnum != nullptr ? TEXT("enum") : TEXT("int"));
 			ControlObject->SetNumberField(TEXT("value"), Value.Get<int32>());
 		}
 		else
