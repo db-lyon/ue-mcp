@@ -23,6 +23,8 @@ const SOURCE_MESH = "/Engine/EngineMeshes/SkeletalCube";
 const SOURCE_RIG = `${TEST_PREFIX}/IK_RetargetOpsSource`;
 const TARGET_RIG = `${TEST_PREFIX}/IK_RetargetOpsTarget`;
 const RETARGETER = `${TEST_PREFIX}/RTG_RetargetOps`;
+/** The one retarget chain the fixture defines, so chainSettings has a target. */
+const CHAIN = "Spine";
 
 type Op = {
   index?: number;
@@ -57,6 +59,15 @@ beforeAll(async () => {
       name,
       packagePath: TEST_PREFIX,
       skeletalMeshPath: SOURCE_MESH,
+      // A chain, so the FK Chains op has a ChainsToRetarget entry to merge
+      // into. Without one that array is empty and chainSettings cannot be
+      // exercised at all, which is how it shipped untested.
+      //
+      // Deliberately NO retargetRoot: it gives the retargeter a pelvis at the
+      // cube's ground plane, and configure_ik_retargeter's processor
+      // validation then rejects every write with "source pelvis bone is very
+      // near the ground plane" - masking whether the write itself worked.
+      chains: [{ name: CHAIN, startBone: "Bone01", endBone: "Bone02" }],
     });
     if (!rig.ok) {
       fixtureError = `create_ik_rig failed for ${path}: ${rig.error}`;
@@ -194,5 +205,156 @@ describe("writing the op settings (#1000/#1034)", () => {
     });
     const refused = !wrote.ok || (wrote.result as Record<string, unknown>)?.success === false;
     expect(refused).toBe(true);
+  });
+});
+
+describe("writing a named setting (#1000)", () => {
+  /** Read one op fresh, by name. */
+  const opNamed = async (match: RegExp): Promise<Op | undefined> =>
+    (await readOps()).find((op) => match.test(op.name ?? ""));
+
+  it("writes an enum setting and reads the new value back", async () => {
+    expect(fixtureError, fixtureError).toBe("");
+    const before = await opNamed(/root motion/i);
+    expect(before?.name, "no Root Motion op in the default stack").toBeTruthy();
+
+    // #1000 names root_motion_source specifically. The target is chosen from
+    // the current value so this always asks for a CHANGE.
+    const was = String((before!.settings ?? {}).rootMotionSource ?? "");
+    const want = was === "CopyFromSourceRoot" ? "GenerateFromTargetPelvis" : "CopyFromSourceRoot";
+
+    const wrote = await callBridge(bridge, "configure_ik_retargeter", {
+      retargeterPath: RETARGETER,
+      ensureDefaultOps: false,
+      ops: [{ name: before!.name, settings: { RootMotionSource: want } }],
+    });
+    expect(wrote.ok, wrote.error).toBe(true);
+
+    const after = await opNamed(/root motion/i);
+    expect(String((after!.settings ?? {}).rootMotionSource)).toBe(want);
+  });
+
+  it("writes a bool setting", async () => {
+    expect(fixtureError, fixtureError).toBe("");
+    const before = await opNamed(/root motion/i);
+    const was = Boolean((before!.settings ?? {}).bMaintainOffsetFromPelvis);
+
+    const wrote = await callBridge(bridge, "configure_ik_retargeter", {
+      retargeterPath: RETARGETER,
+      ensureDefaultOps: false,
+      ops: [{ name: before!.name, settings: { bMaintainOffsetFromPelvis: !was } }],
+    });
+    expect(wrote.ok, wrote.error).toBe(true);
+
+    const after = await opNamed(/root motion/i);
+    expect(Boolean((after!.settings ?? {}).bMaintainOffsetFromPelvis)).toBe(!was);
+  });
+
+  it("writes a float setting", async () => {
+    expect(fixtureError, fixtureError).toBe("");
+    const before = await opNamed(/pelvis/i);
+    expect(before?.name, "no Pelvis Motion op in the default stack").toBeTruthy();
+    const was = Number((before!.settings ?? {}).floorConstraintWeight ?? 0);
+    const want = was === 0.5 ? 0.25 : 0.5;
+
+    const wrote = await callBridge(bridge, "configure_ik_retargeter", {
+      retargeterPath: RETARGETER,
+      ensureDefaultOps: false,
+      ops: [{ name: before!.name, settings: { floorConstraintWeight: want } }],
+    });
+    expect(wrote.ok, wrote.error).toBe(true);
+
+    const after = await opNamed(/pelvis/i);
+    expect(Number((after!.settings ?? {}).floorConstraintWeight)).toBe(want);
+  });
+
+  it("refuses a value the enum does not have", async () => {
+    expect(fixtureError, fixtureError).toBe("");
+    const root = await opNamed(/root motion/i);
+    const wrote = await callBridge(bridge, "configure_ik_retargeter", {
+      retargeterPath: RETARGETER,
+      ensureDefaultOps: false,
+      ops: [{ name: root!.name, settings: { RootMotionSource: "NotAnEnumerator" } }],
+    });
+    const message = String(wrote.error ?? JSON.stringify(wrote.result));
+    // Naming the enum is what tells a caller their value was wrong rather
+    // than the property.
+    expect(message).toMatch(/unknown enum value/i);
+  });
+});
+
+describe("writing one chain's FK settings (#1034)", () => {
+  type Chain = { targetChainName?: string; rotationMode?: string; translationMode?: string };
+  const fkChains = async (): Promise<{ op?: Op; chains: Chain[] }> => {
+    const op = (await readOps()).find((o) => /fk chain/i.test(o.name ?? ""));
+    return { op, chains: ((op?.settings ?? {}).chainsToRetarget ?? []) as Chain[] };
+  };
+
+  it("has a chain to write to", async () => {
+    expect(fixtureError, fixtureError).toBe("");
+    const { chains } = await fkChains();
+    // Guards the rest: an empty array made every assertion below vacuous.
+    expect(chains.length).toBeGreaterThan(0);
+    expect(chains[0].targetChainName).toBe(CHAIN);
+  });
+
+  it("sets the named chain's rotation mode", async () => {
+    expect(fixtureError, fixtureError).toBe("");
+    const { op, chains } = await fkChains();
+    const was = String(chains[0].rotationMode ?? "");
+    const want = was === "OneToOne" ? "Interpolated" : "OneToOne";
+
+    const wrote = await callBridge(bridge, "configure_ik_retargeter", {
+      retargeterPath: RETARGETER,
+      ensureDefaultOps: false,
+      ops: [{ name: op!.name, chainSettings: [{ chain: CHAIN, RotationMode: want }] }],
+    });
+    expect(wrote.ok, wrote.error).toBe(true);
+
+    const after = await fkChains();
+    expect(String(after.chains[0].rotationMode)).toBe(want);
+  });
+
+  it("leaves the chain's other settings alone", async () => {
+    expect(fixtureError, fixtureError).toBe("");
+    const { op, chains } = await fkChains();
+    const translationWas = String(chains[0].translationMode ?? "");
+    const rotationWant = String(chains[0].rotationMode) === "OneToOne" ? "Interpolated" : "OneToOne";
+
+    await callBridge(bridge, "configure_ik_retargeter", {
+      retargeterPath: RETARGETER,
+      ensureDefaultOps: false,
+      ops: [{ name: op!.name, chainSettings: [{ chain: CHAIN, RotationMode: rotationWant }] }],
+    });
+
+    // The point of merging rather than replacing ChainsToRetarget: writing one
+    // property must not reset the ones the caller did not name.
+    const after = await fkChains();
+    expect(String(after.chains[0].translationMode)).toBe(translationWas);
+  });
+
+  it("names what it applied", async () => {
+    expect(fixtureError, fixtureError).toBe("");
+    const { op } = await fkChains();
+    const wrote = await callBridge(bridge, "configure_ik_retargeter", {
+      retargeterPath: RETARGETER,
+      ensureDefaultOps: false,
+      ops: [{ name: op!.name, chainSettings: [{ chain: CHAIN, RotationMode: "OneToOne" }] }],
+    });
+    expect(wrote.ok, wrote.error).toBe(true);
+    const configured = (resultArray(wrote.result, "opsConfigured") ?? []) as Array<{ settingsApplied?: string[] }>;
+    expect(configured[0]?.settingsApplied).toContain(`${CHAIN}.RotationMode`);
+  });
+
+  it("refuses a chain the op does not have", async () => {
+    expect(fixtureError, fixtureError).toBe("");
+    const { op } = await fkChains();
+    const wrote = await callBridge(bridge, "configure_ik_retargeter", {
+      retargeterPath: RETARGETER,
+      ensureDefaultOps: false,
+      ops: [{ name: op!.name, chainSettings: [{ chain: "NoSuchChain", RotationMode: "OneToOne" }] }],
+    });
+    const message = String(wrote.error ?? JSON.stringify(wrote.result));
+    expect(message).toMatch(/no retarget chain named/i);
   });
 });
