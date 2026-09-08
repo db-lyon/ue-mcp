@@ -339,6 +339,35 @@ If you still get a stub, the function name is the thing to check first. `bluepri
 nodeParams={"functionName": "MyFunction", "className": "/Script/MyModule.MyClass"}
 ```
 
+## Reimport Says It Worked but Read the Old File
+
+**Symptom:** `asset(action="reimport", assetPath=..., filePath=...)` reports success, and the asset still has the contents of the file it was originally imported from.
+
+`filePath` repoints an asset at a new source before rebuilding it, which only works if the asset has somewhere to record that path. When it did not, the path used to be dropped and the reimport re-read the original file - reporting success either way, so there was nothing to notice.
+
+That case is refused now. When a reimport does repoint an asset, the response says so:
+
+```
+sourceFileUpdated: true
+sourceFile: C:/path/to/the/new/file.png
+```
+
+`sourceFileUpdated: false` means the asset was rebuilt from the source it already had, which is what you want when you pass no `filePath` at all.
+
+## Reimport Made the Editor Stop Responding
+
+**Symptom:** a call to `asset(action="reimport")` times out, and so does every call after it.
+
+Reimport rebuilds an asset from the file it was imported from, so it only applies to imported assets. Asked to reimport something authored in the editor - a Blueprint, a material, a data asset - Unreal's reimport manager does not return, and because it blocks the game thread the whole bridge stops answering rather than just that one call.
+
+The bridge now checks whether anything can reimport the asset before handing it over, so this comes back immediately:
+
+```
+Nothing can reimport a Blueprint: '/Game/BP_Thing' has no registered reimport handler.
+```
+
+If you hit the hang on an older build, the editor has to be restarted; nothing over the bridge can recover a blocked game thread.
+
 ## Search Not Finding Assets
 
 If `asset(action="search")` misses assets in plugin directories:
