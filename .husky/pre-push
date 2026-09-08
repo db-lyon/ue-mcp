@@ -1,0 +1,7 @@
+# The whole tree, not just what one commit staged.
+#
+# A rule can be broken across two commits: the line that violates it lands in
+# one and the line that would have flagged it in another, and the per-commit
+# hook sees neither in full. This is the last gate before the work leaves the
+# machine, and it is a few seconds.
+node scripts/lint-prose.mjs || exit 1

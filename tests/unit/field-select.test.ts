@@ -154,8 +154,8 @@ describe("attachFieldReport", () => {
 describe("dispatch integration", () => {
   const ctx = {} as ToolContext;
   const tool = categoryTool("probe", "test", {
-    go: { description: "Params: none", handler: async () => TREE },
-    echo: { description: "Params: none", handler: async (_c, p) => ({ seen: Object.keys(p).sort() }) },
+    go: { kind: "handler", effect: "read", description: "Params: none", handler: async () => TREE },
+    echo: { kind: "handler", effect: "read", description: "Params: none", handler: async (_c, p) => ({ seen: Object.keys(p).sort() }) },
   });
 
   it("applies a selection to a handler result", async () => {
@@ -174,7 +174,7 @@ describe("dispatch integration", () => {
     // A select that does not name pathsRepaired must not filter away the
     // account of a parameter the server rewrote.
     const pathTool = categoryTool("probe", "test", {
-      go: { description: "Params: assetPath", handler: async (_c, p) => ({ used: p.assetPath, extra: 1 }) },
+      go: { kind: "handler", effect: "read", description: "Params: assetPath", handler: async (_c, p) => ({ used: p.assetPath, extra: 1 }) },
     });
     const out = await pathTool.handler(ctx, {
       action: "go",

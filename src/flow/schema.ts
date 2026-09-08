@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { EngineConfigSchema } from "@db-lyon/flowkit";
+import { GuardsSchema } from "./guard-schema.js";
 
 /**
  * The `ue-mcp:` block at the top of ue-mcp.yml. Hosts project-level config
@@ -54,6 +55,7 @@ export const FlowConfigSchema = EngineConfigSchema.extend({
   project: FlowProjectSchema,
   git_snapshot: GitSnapshotSchema,
   plugins: z.array(PluginEntrySchema).default([]),
+  guards: GuardsSchema,
 });
 
 export type FlowConfig = z.infer<typeof FlowConfigSchema>;

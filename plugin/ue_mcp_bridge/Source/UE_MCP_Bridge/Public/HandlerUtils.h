@@ -24,7 +24,7 @@
 
 #include <type_traits>
 
-// Engine API tiers. One macro per supported minor version, so a gate reads the
+// Engine API version gates. One macro per supported minor version, so a gate reads the
 // same everywhere and nobody writes a second scheme. The supported range is
 // UE 5.4 through 5.8; 5.4 is the floor, which is why UE_MCP_HAS_5_4_API is
 // true for every engine the plugin builds against and exists only so a gate
@@ -37,7 +37,7 @@
 // UPCGEditorGraphNodeBase, UIKRetargeterController::AssignIKRigToAllOps, etc.
 #define UE_MCP_HAS_5_5_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5))
 
-// True on UE 5.6+ (and any future 6.x). The tier between 5.5 and 5.7, kept so
+// True on UE 5.6+ (and any future 6.x). The gate between 5.5 and 5.7, kept so
 // an API that arrived in 5.6 is gated by name rather than by an open-coded
 // ENGINE_MINOR_VERSION test.
 #define UE_MCP_HAS_5_6_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
@@ -582,10 +582,10 @@ inline AActor* MCPFindActorByPath(UWorld* World, const FString& Path)
  *  is the same on every run rather than whatever the actor iterator happened
  *  to produce that time.
  *
- *  The tiers do not blend: a token that is one actor's label and another
+ *  The passes do not blend: a token that is one actor's label and another
  *  actor's internal name resolves to the label match alone, because the label
  *  is what the outliner shows and what a caller types. Name and path answer
- *  only when the label tier found nothing (#806). */
+ *  only when the label pass found nothing (#806). */
 inline void MCPCollectActorsByToken(
 	UWorld* World,
 	const FString& Token,
@@ -614,7 +614,7 @@ inline void MCPCollectActorsByToken(
 	});
 }
 
-/** Which tier of MCPCollectActorsByToken produced a match, for the message. */
+/** Which pass of MCPCollectActorsByToken produced a match, for the message. */
 inline const TCHAR* MCPDescribeActorMatchTier(const FString& Token, AActor* Match)
 {
 	if (Match && Match->GetActorLabel() == Token) return TEXT("editor label");
@@ -1829,6 +1829,7 @@ inline TSharedPtr<FJsonValue> MCPAssetLoadError(const FString& AssetPath, const 
  *  gets element 0 and nothing else, and the value reads as a plain scalar.
  *
  *  That is how #927 hid two thirds of RecastNavMesh's NavMeshResolutionParams:
+ *  lint-prose-allow: tier  RecastNavMesh's own name for its three generation tiers
  *  the Low tier was reported as if it were the whole property while the engine
  *  was generating from Default and High, so a navmesh diagnosis was performed
  *  against numbers the engine was not using.

@@ -32,11 +32,21 @@ import {
   type ProgressUpdate,
 } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
+import * as nodePath from "node:path";
+import {
+  DialogGuard,
+  guardFor,
+  existingGuard,
+  isDialogRefusal,
+  stampBlockedEditor,
+} from "./dialog-guard.js";
+import { resolveDialogMode, clientAdvertisesElicitation } from "./editor-control.js";
 import { info, warn, debug } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
 import { GuardRegistry } from "./flow/guard.js";
-import { discoverTaskGuards } from "./flow/task-guards.js";
+import { assertNoLegacyGuardTasks, buildGuards } from "./flow/guards.js";
+import type { GuardDeclarations } from "./flow/guard-schema.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
@@ -51,9 +61,9 @@ import yaml from "js-yaml";
 
 import { ALL_TOOLS, setLiveToolGraph } from "./tools.js";
 import { nearestActions } from "./action-schema.js";
-import { enrichToolsWithEpicCatalog, type EpicCatalog } from "./epic-enrich.js";
+import { applyNativeToolsConfig } from "./epic-surface.js";
 import { checkPluginFreshness } from "./plugin-freshness.js";
-import { saveCatalogCache, loadCatalogCache, loadBakedCatalog } from "./epic-cache.js";
+import { readEngineSnapshot } from "./engine-observer.js";
 import {
   baseGraphFor,
   unionSurface,
@@ -216,6 +226,13 @@ async function main() {
   const surfaces: SessionSurface[] = [];
   const perSession = new Map<EditorSession, SessionLoad>();
   for (const session of sessions.list()) {
+    // BEFORE the surface build, which calls epic_list_toolsets on the editor.
+    // Creating guards afterwards meant the first call this server ever makes
+    // was the one call with no guard behind it: a modal refused it, the
+    // refusal has no toolsets, and the surface silently fell back to a cached
+    // one with nothing latched. startWatching is idempotent, so the later
+    // pass over sessions.list() stays harmless.
+    dialogGuardFor(session);
     const load = await buildSessionLoad(session, pkg.version, sessions.size > 1);
     perSession.set(session, load);
     surfaces.push(load.surface);
@@ -264,9 +281,10 @@ async function main() {
       // Keep every category task in the registry so flows still resolve.
       load.registryTools = [gateway, ...load.surface.tools];
     } else if (contextStrategy === "lean") {
-      const leaned = applyLeanContext(load.surface.tools);
-      load.advertisedTools = leaned.filter((t) => !load.surface.disabled.has(t.name));
-      load.registryTools = leaned;
+      const leaned = applyLeanContext(enabled);
+      load.advertisedTools = leaned;
+      // Discovery describes callable categories; internal flows retain the full registry.
+      load.registryTools = [...leaned, ...load.surface.tools.filter((t) => load.surface.disabled.has(t.name))];
     } else {
       load.advertisedTools = enabled;
       load.registryTools = load.surface.tools;
@@ -374,6 +392,52 @@ async function main() {
   // registry starts empty (pass-through) and is populated once the task
   // registry exists, below.
   const guardedBridge = primary.guarded;
+  /**
+   * The dialog guard for one editor, created on first use and kept.
+   *
+   * Watching starts with the guard, so a modal raised while the session sits
+   * idle is known before anything is called: the plugin refreshes its status
+   * file from the modal-loop tick, which is the tick that keeps running while
+   * the game thread is parked.
+   */
+  function dialogGuardFor(forSession: EditorSession, canElicit = false): DialogGuard {
+    const guard = guardFor(forSession, {
+      mode: () => resolveDialogMode({ projectDir: forSession.projectDir, canElicit }).mode,
+      probe: () => forSession.guarded.call("list_dialogs", {}),
+      press: (buttonLabel: string) =>
+        forSession.guarded.call("respond_to_dialog", { buttonLabel }),
+      elicit: () => (canElicit ? ctx.elicit : undefined),
+      isConnected: () => forSession.bridge.isConnected,
+      // The instance-aware reader, not a second one: it prefers
+      // status.<pid>.json over the shared file two editors of one project take
+      // turns writing, and it reports how old the snapshot is so a leftover
+      // from a crashed editor is not mistaken for a live modal.
+      readSnapshot: () => {
+        const proj = forSession.project.projectPath
+          ?? forSession.bridge.getTarget().projectPath
+          ?? null;
+        return proj ? readEngineSnapshot(proj) : null;
+      },
+    });
+    guard.startWatching();
+    return guard;
+  }
+
+  const getToolGraph = (forSession: EditorSession = primary): ToolDef[] => {
+    const load = perSession.get(forSession);
+    // D1 again. A session whose surface failed to build has no graph of its
+    // own, and answering from the union would name another project's actions.
+    // Returning nothing instead reads as "no action matched", which sends the
+    // caller to execute_python for something the editor does in fact provide.
+    if (!load) {
+      throw new McpError(
+        ErrorCode.NOT_FOUND,
+        `Editor '${forSession.name}' has no tool surface built, so its actions cannot be searched or described. `
+        + "Re-register it with project(add_editor); discovery does not fall back to another editor's graph.",
+      );
+    }
+    return load.surface.tools.filter((t) => !load.surface.disabled.has(t.name));
+  };
   const ctx: ToolContext = {
     bridge: guardedBridge,
     project,
@@ -381,6 +445,7 @@ async function main() {
     sessions,
     getFlows,
     getPlugins,
+    getToolGraph,
   };
 
   // Per-asset locking for concurrent agents. Opt-in; when off, withAssetLocks
@@ -394,7 +459,7 @@ async function main() {
   // The registry is the dispatch layer, so it has to be built from the graph
   // the addressed session actually has. Sharing one registry is what made a
   // second editor dispatch the first editor's plugin tasks (#817).
-  const buildRegistryFor = (load: SessionLoad): void => {
+  const buildRegistryFor = async (load: SessionLoad): Promise<void> => {
     const sessionRegistry = buildFlowRegistry(load.registryTools);
     for (const { name, ctor } of load.pluginLoad.taskRegistrations) {
       sessionRegistry.register(name, ctor);
@@ -404,17 +469,22 @@ async function main() {
     }
     load.registry = sessionRegistry;
   };
-  for (const load of loads) buildRegistryFor(load);
+  for (const load of loads) await buildRegistryFor(load);
   const registry = primaryLoad.registry!;
   const taskCount = registry.listRegistered().length;
 
   // Populate the guard pipeline: any plugin-supplied `guard.<name>.<phase>` task
   // becomes a BridgeGuard. Each guard task runs with the RAW bridge in its
-  // context so a guard cannot recurse through the pipeline. See flow/task-guards.ts.
-  // Guards are discovered per session, from that session's own registry and
-  // against that session's own raw bridge, so a guard declared by one project's
-  // plugins cannot veto another project's calls.
-  const discoverGuardsFor = (load: SessionLoad): void => {
+  // context so a guard cannot recurse through the pipeline. See flow/guards.ts.
+  // Guards are built per session, from that session's own declarations and
+  // against that session's own raw bridge, so a guard declared by one project
+  // cannot veto another project's calls.
+  //
+  // Two sources declare them in the same shape: each plugin's manifest, and the
+  // project's own ue-mcp.yml. Both are built here into pipeline guards. There
+  // is no naming convention any more: a guard is declared as a guard, so a
+  // misspelling is an error rather than something registered and never run.
+  const buildGuardsFor = async (load: SessionLoad): Promise<void> => {
     const guardCtx: ToolContext = {
       bridge: load.surface.session.guarded,
       project: load.surface.session.project,
@@ -422,12 +492,49 @@ async function main() {
       sessions,
       getFlows: () => getFlows(load.surface.session),
       getPlugins: () => getPlugins(load.surface.session),
+      getToolGraph: (forSession) => getToolGraph(forSession ?? load.surface.session),
     };
-    for (const g of discoverTaskGuards(load.registry!, guardCtx, load.surface.session.bridge)) {
-      load.surface.session.guards.register(g);
+    const deps = {
+      registry: load.registry!,
+      ctx: guardCtx,
+      rawBridge: load.surface.session.bridge,
+    };
+
+    const projectConfig = loadFlowConfig(load.surface.tools, load.configDir, {
+      tasks: load.pluginLoad.taskDefs,
+      flows: load.pluginLoad.flowDefs,
+    }).config;
+
+    const sources: Array<{ label: string; guards: GuardDeclarations }> = [
+      ...load.pluginLoad.guardsByPlugin.map((g) => ({ label: g.plugin, guards: g.guards })),
+      { label: "ue-mcp.yml", guards: (projectConfig.guards ?? {}) as GuardDeclarations },
+    ];
+
+    // A task still named like a guard is fatal, whoever declared it: under the
+    // declaration model nothing discovers it, so it would sit in the config
+    // gating nothing.
+    assertNoLegacyGuardTasks(Object.keys(projectConfig.tasks ?? {}), { label: "ue-mcp.yml" });
+    for (const { plugin, taskNames } of load.pluginLoad.taskNamesByPlugin) {
+      assertNoLegacyGuardTasks(taskNames, { label: plugin });
+    }
+
+    let count = 0;
+    for (const source of sources) {
+      if (Object.keys(source.guards).length === 0) continue;
+      for (const guard of await buildGuards(source.guards, deps, { label: source.label })) {
+        load.surface.session.guards.register(guard);
+        count++;
+      }
+    }
+    if (count > 0) {
+      console.error(`[ue-mcp] ${load.surface.session.name}: ${count} guard(s) registered`);
     }
   };
-  for (const load of loads) discoverGuardsFor(load);
+  for (const load of loads) await buildGuardsFor(load);
+  // A guard per registered editor, so a modal in the DESTINATION of a
+  // cross-editor call is seen by that editor's own guard rather than by
+  // whichever session happened to originate the call.
+  for (const s of sessions.list()) dialogGuardFor(s);
 
   /**
    * The dispatch surface for one session, built on demand (D1).
@@ -455,10 +562,10 @@ async function main() {
     const build = (async () => {
       const load = await buildSessionLoad(session, pkg.version, true);
       applyContextStrategy(load);
-      buildRegistryFor(load);
+      await buildRegistryFor(load);
       perSession.set(session, load);
       surfaces.push(load.surface);
-      discoverGuardsFor(load);
+      await buildGuardsFor(load);
       // The union is what explainMissingAction refuses from, so it has to know
       // about this editor before the first call is routed to it.
       refreshDispatchUnion();
@@ -472,6 +579,10 @@ async function main() {
   // its own surface exists.
   sessions.prepareSession = async (session) => {
     await ensureSessionLoad(session);
+    // Its own guard and its own watcher, before it is addressable. Without
+    // this an editor added at runtime had nothing watching it, so a modal
+    // there was never detected at all until a call happened to be routed in.
+    dialogGuardFor(session);
   };
   for (const session of sessions.list()) {
     if (session.guards.size === 0) continue;
@@ -614,6 +725,23 @@ async function main() {
           isError: true,
         };
       }
+      // One guard per editor, shared by every route. The mode is read per
+      // call, so changing it takes effect without restarting anything.
+      const canElicit = clientAdvertisesElicitation(ctx.elicit);
+      const guard = dialogGuardFor(session, canElicit);
+
+      // Actions served in this process never reach the bridge, so the bridge
+      // boundary cannot refuse them. Same guard, same decision.
+      const preflight = await guard.check(effectiveTaskName(tool, params), "action");
+      if (!preflight.allow) {
+        return {
+          content: withUpgradeNotice([
+            { type: "text" as const, text: JSON.stringify(preflight.refusal, null, 2) },
+          ]),
+          isError: true,
+        };
+      }
+
       const { action: _, ...taskParams } = params;
       const flowCtx: FlowContext = {
         bridge: session.guarded,
@@ -622,6 +750,7 @@ async function main() {
         sessions,
         getFlows: () => getFlows(session),
         getPlugins: () => getPlugins(session),
+        getToolGraph: (forSession) => getToolGraph(forSession ?? session),
         elicit: ctx.elicit,
         onProgress: makeProgressReporter(extra),
         client: server.server.getClientVersion(),
@@ -698,10 +827,12 @@ async function main() {
 
       try {
         const task = await sessionRegistry.create(taskName, flowCtx, taskParams);
-        // Locks are acquired in the editor the call runs in, so they must be
-        // taken on that session's bridge rather than the process default.
+        // Locks are acquired in the editor the call runs in, and through the
+        // GUARDED bridge, so a lock request made while a modal is up is
+        // refused as a dialog rather than reported as somebody else holding
+        // the asset.
         const result = await withAssetLocks(
-          session.bridge,
+          session.guarded,
           lockingCfg,
           taskName,
           taskParams,
@@ -709,7 +840,23 @@ async function main() {
           session.lockOwnerId,
         );
 
-        if (!result.success) {
+        // A handler that makes several bridge calls can swallow a refusal and
+        // still report success, so ask the guard what it learned rather than
+        // trusting the shape. Nothing is re-run: the call already applied
+        // whatever it applied, and replaying it would double-apply.
+
+        // A task that failed for its own reasons reports that, not a dialog.
+        //
+        // But a failure DURING a modal is usually caused by it: the game thread
+        // is parked, so the call times out and the error says the editor was
+        // busy and suggests a bigger timeoutMs, which is the retry loop this
+        // gate exists to end. The task runner returns no data on a throw, so
+        // the refusal cannot be recognised from the result: ask the guard.
+        const failedUnderDialog = !result.success
+          && !isDialogRefusal(result.data)
+          && !DialogGuard.actionAllowed(effectiveTaskName(tool, params))
+          && (await guard.check(effectiveTaskName(tool, params), "action")).allow === false;
+        if (!result.success && !isDialogRefusal(result.data) && !failedUnderDialog) {
           const msg = result.error?.message ?? `Task ${taskName} failed`;
           return {
             content: withUpgradeNotice([
@@ -719,6 +866,77 @@ async function main() {
             ]),
             isError: true,
           };
+        }
+
+        // An allow-listed read still SAYS a dialog is up. get_status is the
+        // first call every client makes, and reporting a healthy editor while
+        // the game thread is parked is the one answer it must never give.
+        if (DialogGuard.actionAllowed(effectiveTaskName(tool, params))) {
+          // respond_to_dialog may have just cleared it. Nothing re-probes for
+          // an allow-listed bridge method (guardCall returns before check, and
+          // observe refuses to clear on a modal-safe reply), so this call came
+          // back stamped as blocked and told the caller to make the call it had
+          // just made.
+          if (effectiveTaskName(tool, params) === "editor.respond_to_dialog" && result.success) {
+            // refresh, NOT check. check applies the mode, so in interactive it
+            // raised a form for whatever prompt this answer surfaced and
+            // pressed a button on it, unasked, and then threw the decision
+            // away. Only the state needs correcting here.
+            await guard.refresh();
+          }
+          const seen = guard.current;
+          if (result.success) stampBlockedEditor(result.data, seen);
+        }
+
+        // Whatever the route, the caller gets ONE refusal shape, built here.
+        //
+        // A modal appearing between the preflight and the inner call means the
+        // plugin refuses, and its payload lands in result.data. Passing that
+        // through handed the caller a second shape with no dialogMode and, in
+        // defer, the very press calls defer exists to withhold.
+        //
+        // Actions allowed through a modal are exempt: reading the dialog and
+        // answering it must not come back refused because of the dialog they
+        // are about.
+        if (!DialogGuard.actionAllowed(effectiveTaskName(tool, params))) {
+          const fromPlugin = isDialogRefusal(result.data)
+            ? (result.data as Record<string, unknown>)
+            : null;
+          if (fromPlugin) guard.observe("__refused__", fromPlugin);
+          const blocking = guard.current;
+          if (blocking) {
+            // A refusal means nothing ran. Anything else means the call had
+            // already started when the dialog appeared, so it may have applied
+            // part of its work; say so rather than implying it did nothing.
+            const started = fromPlugin === null;
+            return {
+              content: withUpgradeNotice([
+                {
+                  type: "text" as const,
+                  text: JSON.stringify(
+                    started
+                      ? {
+                          ...guard.refusal(effectiveTaskName(tool, params), blocking),
+                          partiallyApplied: true,
+                          note:
+                            `'${taskName}' had already started when the dialog appeared, so it may `
+                            + "have applied some of its changes. Answer the dialog, then read the "
+                            + "state back before deciding whether to run it again.",
+                          // Whatever it did manage to return, kept rather than
+                          // dropped: a mutation that completed still has the
+                          // path it created in here.
+                          partialResult: result.data ?? null,
+                        }
+                      : guard.refusal(effectiveTaskName(tool, params), blocking),
+                    null,
+                    2,
+                  ),
+                },
+                ...attribution(session),
+              ]),
+              isError: true,
+            };
+          }
         }
 
         const stringify = (v: unknown) =>
@@ -750,6 +968,26 @@ async function main() {
           ]),
         };
       } catch (e) {
+        // A refusal can arrive as a throw: acquiring an asset lock is a bridge
+        // call, so it is refused like any other, and locking reports failure by
+        // throwing. Shaped through the guard so a caller gets the same payload
+        // whether the refusal came back as a result or as an exception.
+        const thrownRefusal = e instanceof McpError && isDialogRefusal(e.details)
+          ? (e.details as unknown as Record<string, unknown>)
+          : null;
+        if (thrownRefusal) {
+          guard.observe("__refused__", thrownRefusal);
+          const blocking = guard.current;
+          if (blocking) {
+            return {
+              content: withUpgradeNotice([
+                { type: "text" as const, text: JSON.stringify(guard.refusal(effectiveTaskName(tool, params), blocking), null, 2) },
+                ...attribution(session),
+              ]),
+              isError: true,
+            };
+          }
+        }
         const msg = e instanceof Error ? e.message : String(e);
         const code = e instanceof McpError ? e.code : "UNKNOWN";
         return {
@@ -840,6 +1078,24 @@ async function main() {
         };
       }
 
+      // The flow tool reaches the editor through the same guarded bridge, so
+      // its steps are refused individually. This covers the run being STARTED
+      // while a modal is already up, and flow(list)/flow(plan), which are
+      // in-process and never touch the bridge at all.
+      const flowGuard = dialogGuardFor(session, clientAdvertisesElicitation(ctx.elicit));
+      const flowCheck = await flowGuard.check(
+        `${flowTool.name}.${String(params.action ?? "")}`,
+        "action",
+      );
+      if (!flowCheck.allow) {
+        return {
+          content: withUpgradeNotice([
+            { type: "text" as const, text: JSON.stringify(flowCheck.refusal, null, 2) },
+            ...attribution(session),
+          ]),
+          isError: true,
+        };
+      }
       const result = await flowTool.handler(sessionContext(ctx, session), params);
       const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
       return { content: withUpgradeNotice([{ type: "text" as const, text }, ...attribution(session)]) };
@@ -940,61 +1196,32 @@ async function buildSessionLoad(
   );
   const tools = pluginLoad.tools;
 
-  // ── Epic 5.8 native toolset surfacing (best-effort, startup) ─────
-  // If this session's bridge is reachable now, pull Epic's live toolset
-  // catalog and inject each tool as a first-class action into the matching
-  // ue-mcp category (GAS tools into `gas`, Niagara into `niagara`, etc.).
-  // This must run before the flow registry and MCP tool registration so the
-  // injected actions are dispatchable and advertised. When the editor is not
-  // up yet, the `epic` gateway still works; a server restart picks up
-  // enrichment.
+  // ── Unreal's wrapped engine tools ────────────────────────────────
+  // They are DECLARED in ALL_TOOLS now, generated from a recorded catalog
+  // and a reviewed effect for each one, so nothing is read from the editor
+  // here and nothing is injected. All that is left is honouring the user's
+  // `nativeTools:` config, which now means removing what it excludes.
+  //
+  // What this replaces: a startup call that pulled the live catalog, fell
+  // back to a project cache and then to a baked snapshot, and invented an
+  // effect for each tool from its NAME. 356 of the 830 rode a default nobody
+  // had reviewed, none of their parameters were declared so the MCP layer
+  // stripped every one before dispatch, and the surface differed depending on
+  // whether an editor happened to be up when the server started.
   const nativeCfg = project.config.nativeTools ?? {};
-  if (nativeCfg.enabled === false) {
-    console.error(`[ue-mcp] ${label}Native Epic tools disabled via ue-mcp.yml (nativeTools.enabled=false); epic gateway still available`);
-  } else {
-    try {
-      // Source priority: live editor (most current, refreshes the cache) ->
-      // project cache (last-seen) -> baked snapshot shipped with the package
-      // (deterministic default so the surface appears on first cold startup
-      // and matches the generated docs). First available wins. The cache is
-      // already keyed by project directory, so each session reads and writes
-      // its own.
-      let catalog: EpicCatalog | null = null;
-      let source = "";
-      const bridge = session.bridge;
-      if (!bridge.isConnected) {
-        await bridge.connect(2000).catch(() => {});
-      }
-      if (bridge.isConnected) {
-        catalog = (await bridge.call("epic_list_toolsets", { includeSchemas: true }, 20000)) as EpicCatalog;
-        if (catalog?.toolsets?.length) {
-          saveCatalogCache(configDir, catalog, project.engineAssociation);
-          source = "live editor";
-        }
-      }
-      if (!catalog?.toolsets?.length) {
-        catalog = loadCatalogCache(configDir);
-        if (catalog?.toolsets?.length) source = "project cache";
-      }
-      if (!catalog?.toolsets?.length) {
-        catalog = loadBakedCatalog();
-        if (catalog?.toolsets?.length) source = "baked snapshot";
-      }
-      if (catalog?.toolsets?.length) {
-        const enriched = enrichToolsWithEpicCatalog(tools, catalog, {
-          excludeCategories: nativeCfg.exclude,
-        });
-        if (enriched.injected > 0) {
-          const summary = Object.entries(enriched.byCategory).map(([c, n]) => `${c}:${n}`).join(", ");
-          console.error(`[ue-mcp] ${label}Epic 5.8 toolsets (${source}): surfaced ${enriched.injected} tools (${summary})`);
-          if (enriched.createdCategories.length) {
-            console.error(`[ue-mcp] ${label}Epic-only categories added: ${enriched.createdCategories.join(", ")}`);
-          }
-        }
-      }
-    } catch (e) {
-      console.error(`[ue-mcp] ${label}Epic toolset enrichment skipped: ${e instanceof Error ? e.message : e}`);
-    }
+  const epicSurface = applyNativeToolsConfig(tools, nativeCfg);
+  if (epicSurface.removed > 0) {
+    const why = nativeCfg.enabled === false
+      ? "nativeTools.enabled=false"
+      : `nativeTools.exclude=[${(nativeCfg.exclude ?? []).join(", ")}]`;
+    console.error(
+      `[ue-mcp] ${label}Wrapped engine tools withheld (${why}): ${epicSurface.removed} actions; `
+      + "epic(call_tool) still reaches every one of them.",
+    );
+  }
+  for (const name of epicSurface.droppedCategories) {
+    const i = tools.findIndex((t) => t.name === name);
+    if (i >= 0) tools.splice(i, 1);
   }
 
   return {

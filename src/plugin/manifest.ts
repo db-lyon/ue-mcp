@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { GuardsSchema } from "../flow/guard-schema.js";
 import * as path from "node:path";
 import { z } from "zod";
 import yaml from "js-yaml";
@@ -26,9 +27,18 @@ const SchemaFieldSchema = z.object({
 
 export type ManifestSchemaField = z.infer<typeof SchemaFieldSchema>;
 
+/**
+ * What a plugin action does to the addressed editor, in the plugin author's
+ * own words. Optional because manifests written before this existed are still
+ * valid; a manifest that stays silent has its effect inferred from the action
+ * name, which is a guess and is recorded as one.
+ */
+export const ActionEffectSchema = z.enum(["read", "mutate", "unknown"]);
+
 const InjectActionSchema = z.object({
   task: z.string().min(1),
   description: z.string().optional(),
+  effect: ActionEffectSchema.optional(),
   schema: z.record(SchemaFieldSchema).optional(),
 });
 
@@ -42,6 +52,7 @@ export type ManifestInjectAction = z.infer<typeof InjectActionSchema>;
 const ProvidedActionSchema = z.object({
   task: z.string().min(1),
   description: z.string().optional(),
+  effect: ActionEffectSchema.optional(),
   schema: z.record(SchemaFieldSchema).optional(),
 });
 
@@ -144,6 +155,7 @@ export const PluginManifestSchema = z.object({
   knowledge: z.record(z.string()).default({}),
   tasks: z.record(TaskEntrySchema).default({}),
   flows: z.record(FlowEntrySchema).default({}),
+  guards: GuardsSchema,
 });
 
 export type PluginManifest = z.infer<typeof PluginManifestSchema>;

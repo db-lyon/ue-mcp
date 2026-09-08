@@ -72,6 +72,8 @@ export function createFlowTool(
 
   const actions: Record<string, ActionSpec> = {
     run: {
+      kind: "handler",
+      effect: "mutate",
       description:
         "Execute a named flow from ue-mcp.yml. The run is recorded in this project's workflow "
         + "journal automatically, under the flow's name, with its per-step outcome, so "
@@ -93,12 +95,16 @@ export function createFlowTool(
       handler: async (ctx, params) => runFlow(registryFor(ctx), configFor(ctx), ctx, params),
     },
     plan: {
+      kind: "handler",
+      effect: "read",
       description:
         "Show a flow's execution plan without running a step of it, and without journalling "
         + "anything. Params: flowName. Returns the ordered plan.",
       handler: async (ctx, params) => planFlow(registryFor(ctx), configFor(ctx), ctx, params),
     },
     list: {
+      kind: "handler",
+      effect: "read",
       description:
         "List the flows available to this project, merged from ue-mcp.yml, the user-global config "
         + "and any loaded plugin. Params: none",

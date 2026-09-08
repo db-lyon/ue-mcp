@@ -12,7 +12,7 @@
  *     first property is unobservable from outside, and a flow that reads
  *     anything returns a summary line and no data at all.
  *
- * The live tier asserts the same pair against a real editor
+ * The live tests asserts the same pair against a real editor
  * (tests/live/single-editor.test.ts, "hands a flow the whole context").
  */
 import { describe, expect, it } from "vitest";

@@ -410,7 +410,7 @@ inverse with those values, and reports `changedCount` against the exported form
 so `1` and `1.000000` do not read as a change.
 
 A caveat that has not changed: this audit is source-level. It proves a rollback
-is EMITTED, never that it is correct. Correctness is what the live tier is for.
+is EMITTED, never that it is correct. Correctness is what the live tests is for.
 
 `mutationsWithoutRollback` stays a number rather than a rule and stays non-zero
 on purpose. Not every change has an inverse, and a codebase where that count

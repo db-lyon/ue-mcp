@@ -10,8 +10,8 @@ function fakePcg(): ToolDef {
     "pcg",
     "Fake PCG tool for testing.",
     {
-      list_graphs: bp("pcg_list_graphs"),
-      add_node: bp("Add a node", "pcg_add_node"),
+      list_graphs: bp("read", "pcg_list_graphs"),
+      add_node: bp("read", "Add a node", "pcg_add_node"),
     },
     undefined,
     { graphPath: z.string().optional() },
@@ -73,7 +73,7 @@ describe("mergeInjectionsIntoTool", () => {
     };
     // Hand-craft a built-in named exactly `vpp_node` to provoke a collision.
     const builtin = categoryTool("pcg", "x", {
-      vpp_node: bp("collision target"),
+      vpp_node: bp("read", "collision target"),
     });
     const { added, skipped } = mergeInjectionsIntoTool(builtin, [plan]);
     expect(added).toEqual([]);

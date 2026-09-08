@@ -124,7 +124,7 @@ function main(): void {
     console.log("");
     console.log(`  ${BOLD}${CYAN}Context strategy${RESET}: ${color}${before}${RESET}`);
     console.log(`  ${DIM}${configPath}${RESET}`);
-    console.log(`  ${DIM}Options: full (default) | lean | micro   -> ue-mcp context <tier>${RESET}`);
+    console.log(`  ${DIM}Options: full (default) | lean | micro   -> ue-mcp context <strategy>${RESET}`);
     console.log("");
     return;
   }

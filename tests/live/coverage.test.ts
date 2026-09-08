@@ -7,7 +7,7 @@
  * contain the test it names. Renaming a test therefore breaks this list rather
  * than quietly emptying a row of the matrix.
  *
- * This is the one file in the tier that needs no editor. It is the inventory,
+ * This is the one file in the suite that needs no editor. It is the inventory,
  * not an assertion about the engine.
  */
 import * as fs from "node:fs";
@@ -72,16 +72,16 @@ describe("the 7.3 matrix", () => {
     }
   });
 
-  it("puts live references in the live tier and engine-free ones outside it", () => {
+  it("puts live references in the live tests and engine-free ones outside it", () => {
     for (const testCase of ALL_CASES) {
       for (const ref of testCase.coverage) {
         if (ref.kind === "live") {
-          expect(ref.file.startsWith("tests/live/"), `case '${testCase.id}': ${ref.file} is not in the live tier`).toBe(true);
+          expect(ref.file.startsWith("tests/live/"), `case '${testCase.id}': ${ref.file} is not in the live tests`).toBe(true);
         }
         if (ref.kind === "engine-free") {
           expect(
             ref.file.startsWith("tests/unit/") || ref.file.startsWith("tests/multi-editor/"),
-            `case '${testCase.id}': ${ref.file} is claimed to need no engine but is not in an engine-free tier`,
+            `case '${testCase.id}': ${ref.file} is claimed to need no engine but is not in an engine-free tests`,
           ).toBe(true);
         }
       }
@@ -116,7 +116,7 @@ describe("the 7.3 matrix", () => {
     }
     lines.push(
       `\n${ALL_CASES.length} cases: ${live} live assertions, ${engineFree} referenced engine-free, ` +
-        `${cpp} owned by the plugin's automation tier, ${pending} pending on unshipped work.`,
+        `${cpp} owned by the plugin's automation suite, ${pending} pending on unshipped work.`,
     );
     console.log(lines.join("\n"));
     expect(live).toBeGreaterThan(0);

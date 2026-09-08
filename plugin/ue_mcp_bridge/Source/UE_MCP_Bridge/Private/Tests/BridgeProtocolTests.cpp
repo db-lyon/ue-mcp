@@ -17,7 +17,7 @@
 /**
  * Phase 0 of the multi-editor plan (#817), scripted.
  *
- * The TypeScript tier drives the bridge through a socket and can therefore see
+ * The TypeScript suite drives the bridge through a socket and can therefore see
  * responses and nothing else. It cannot see a frame boundary, a file on disk
  * that no handler reads, or a parameter that arrived and was ignored, which is
  * exactly the set of things Phase 0 is about. This module is where those are
@@ -32,7 +32,7 @@
  * handler blocks the game thread) and 0.6 (shutdown with a client attached)
  * are both statements about two threads and a live socket, and a test that
  * stood one up inside the editor would be asserting on the editor it is hosted
- * by. Those belong to the live tier in Phase 7.
+ * by. Those belong to the live tests in Phase 7.
  */
 
 namespace

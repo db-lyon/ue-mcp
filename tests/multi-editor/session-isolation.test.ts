@@ -17,6 +17,19 @@ import { withAssetLocks, SESSION_ID } from "../../src/locking.js";
 import { assetTool } from "../../src/tools/asset.js";
 import type { ToolContext } from "../../src/types.js";
 
+/**
+ * What a session actually sent, minus the dialog guard's own probe.
+ *
+ * Every gated call asks `list_dialogs` first, because whether a modal is up is
+ * decided per call rather than assumed. That probe is the gate working and is
+ * not traffic these tests are about; the assertion that no probe reaches the
+ * OTHER editor is left strict, since that is the isolation claim.
+ */
+function sent(methods: string[]): string[] {
+  return methods.filter((m) => m !== "list_dialogs");
+}
+
+
 let root: string;
 let alpha: FakeBridge;
 let beta: FakeBridge;
@@ -128,7 +141,7 @@ describe("guard pipelines", () => {
 
     await expect(a.guarded.call("place_actor", {})).rejects.toThrow(/vetoed by alpha's guard/);
     await expect(b.guarded.call("place_actor", {})).resolves.toBeDefined();
-    expect(beta.methods).toEqual(["place_actor"]);
+    expect(sent(beta.methods)).toEqual(["place_actor"]);
     expect(alpha.methods).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as fs from "node:fs";
+import { EPIC_CATEGORIES } from "./tools/epic/index.js";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import yaml from "js-yaml";
@@ -306,12 +307,11 @@ async function init() {
   ]);
   const nativeEnabled = nativeEnableStates[0];
 
-  // Categories that receive Epic tools (mirrors routeToolset targets). Only
-  // offer ones the user hasn't already disabled above.
-  const ENRICHABLE = [
-    "gas", "niagara", "pcg", "widget", "statetree", "animation",
-    "gameplay", "material", "landscape", "foliage", "level", "asset", "blueprint",
-  ];
+  // Categories that carry wrapped engine tools, read from the generated
+  // modules rather than restated. The hand-written list this replaced had
+  // drifted: it offered landscape and foliage, which carry none, and omitted
+  // editor, project, plugins, reflection, dataflow and conversation, which do.
+  const ENRICHABLE = Object.keys(EPIC_CATEGORIES).sort();
   let nativeExclude: string[] = [];
   if (nativeEnabled) {
     const existingExclude = new Set(existingNative.exclude ?? []);

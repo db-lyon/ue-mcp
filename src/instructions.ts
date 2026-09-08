@@ -40,6 +40,14 @@ function categoryList(): string {
 
 const CATEGORIES = categoryList();
 
+const SPATIAL_GUIDANCE = `For spatial edits, resolve target + frame + viewpoint + operation + amount + constraints.
+Character left/right uses actor axes; screen left/right needs the camera viewpoint.
+Use nudge_component with dryRun=true to inspect or preview without changing the scene.
+For clockwise/counterclockwise use viewRotation with an explicit viewFrom; do not guess a signed Euler angle.
+Echo the resolved interpretation. Ask only for missing context that changes the result.
+After applying, check readback and matching, lit close views with the pose held fixed.
+A successful transform write is not visual verification. Do not infer 3D contact from one image.`;
+
 export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) - ${CATEGORY_COUNT} category tools covering ${ACTION_COUNT} actions, plus 830 official Unreal 5.8 tools wrapped in-process (UE 5.8+; see the epic category).
 
 Every tool takes an "action" parameter that selects the operation. Call project(action="get_status") first.
@@ -70,6 +78,10 @@ ${CATEGORIES}.
 • editor(action="hot_reload") triggers Live Coding compilation without restarting the editor.
 • editor(action="focus_on_actor", actorLabel="MyActor") snaps the viewport to any actor.
 • Log output: editor(action="get_log", category="LogMCPBridge") to see bridge-specific logs.
+• project(action="describe_action", name="level.nudge_component") returns that action's parameters, including nested fields.
+
+═══ SPATIAL EDITS ═══
+${SPATIAL_GUIDANCE}
 
 ═══ FLOWS - READ BEFORE ACTING ═══
 
@@ -137,10 +149,14 @@ Every tool takes an "action" parameter that selects the operation. Start with pr
 ═══ DISCOVER ACTIONS ═══
 Tool descriptions are trimmed in lean mode. Find the action you need with:
 - catalog(action="search", query="spawn actor") - rank matching actions across every category
+- catalog(action="describe", category="level", method="nudge_component") - one action's parameters, including nested fields
 - catalog(action="list_categories") - the ${CATEGORY_COUNT} categories with one-line summaries
 - <category>(action="describe") - every action in one category (e.g. blueprint(action="describe"))
 
 Each category's "action" parameter is still a validated enum, so unknown actions are rejected up front. Call describe/search first when you are unsure of the exact action name.
+
+═══ SPATIAL EDITS ═══
+${SPATIAL_GUIDANCE}
 
 ═══ CATEGORIES ═══
 ${CATEGORIES}.
@@ -165,12 +181,18 @@ context.strategy: lean in ue-mcp.yml or UE_MCP_CONTEXT_STRATEGY=lean.
 export const SERVER_INSTRUCTIONS_MICRO = `UE-MCP (micro mode): Unreal Engine editor bridge (C++ plugin). The entire surface (${CATEGORY_COUNT} categories, ${ACTION_COUNT} actions) is reached through a single gateway tool to keep context tiny.
 
 ═══ HOW TO USE ═══
+- tools(action="search", query="rotate clockwise") - find actions by intent
 - tools(action="list_categories") - list every category with a one-line summary
 - tools(action="describe", category="blueprint") - list a category's actions and how to call them
+- tools(action="describe", category="level", method="nudge_component") - one action's parameters, including nested fields
 - tools(action="call", category="blueprint", method="create", args={ ... }) - invoke any action
 
 \`method\` is the action name; \`args\` is the object of that action's parameters.
 Start with: tools(action="call", category="project", method="get_status").
+
+═══ SPATIAL EDITS ═══
+${SPATIAL_GUIDANCE}
+In micro mode invoke it through tools(action="call", category="level", method="nudge_component", args={ ... }).
 
 ═══ CATEGORIES ═══
 ${CATEGORIES}.

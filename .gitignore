@@ -158,7 +158,7 @@ venv/
 **/*.xcuserdata
 
 # Test-generated assets (should not be tracked - tests create/cleanup these)
-# Fixtures built by the live tier and by probes. Every live test creates its
+# Fixtures built by the live tests and by probes. Every live test creates its
 # own assets under an MCP-prefixed content path and deletes them in afterAll;
 # a run that dies partway leaves them behind. A stray .uasset reaching the
 # index also trips the em-dash pre-commit hook, which scans staged files as
@@ -200,5 +200,5 @@ bench/
 # Agent scratch space, never committed.
 .scratch/
 
-# Engine symbol index cache for the live tier (rebuilt on demand).
+# Engine symbol index cache for the live tests (rebuilt on demand).
 .engine-index-cache/

@@ -1,5 +1,5 @@
 /**
- * The live test tier (#817, plan items 1.10 and 7.3).
+ * The live tests (#817, plan items 1.10 and 7.3).
  *
  *     npm run test:live
  *
@@ -7,11 +7,11 @@
  * and it only ever drives this repository's own test project. This script is
  * the preflight for both of those facts: it finds the bridge, proves the
  * editor has tests/ue_mcp open, prints what it found, and only then hands over
- * to vitest. A tier that discovered the editor inside the tests would report
+ * to vitest. A suite that discovered the editor inside the tests would report
  * "no editor" as a wall of failed assertions; this reports it as one message
  * with the ports it tried and the lockfile it read.
  *
- * It never starts or stops an editor. The tier attaches to one somebody else
+ * It never starts or stops an editor. The suite attaches to one somebody else
  * owns and leaves it as it found it.
  *
  * Flags:
@@ -22,8 +22,8 @@
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import WebSocket from "ws";
 import {
+  askOnce,
   assertLiveTestProjectDir,
   assertLoopbackHost,
   bridgePortCandidates,
@@ -44,40 +44,11 @@ const HOST = process.env.UE_MCP_LIVE_HOST ?? "127.0.0.1";
 const CONNECT_TIMEOUT_MS = 5000;
 const CALL_TIMEOUT_MS = 60_000;
 
-/** One request/response over a fresh socket, so nothing is left open. */
-function askOnce(url, method, params, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
-    const timer = setTimeout(() => {
-      ws.terminate();
-      reject(new Error(`${method} on ${url} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    const done = (fn, value) => {
-      clearTimeout(timer);
-      try { ws.close(); } catch { /* already closing */ }
-      fn(value);
-    };
-    ws.on("error", (err) => done(reject, err));
-    ws.on("open", () => ws.send(JSON.stringify({ id: "preflight", method, params: params ?? {} })));
-    ws.on("message", (data) => {
-      let message;
-      try {
-        message = JSON.parse(data.toString());
-      } catch {
-        return;
-      }
-      if (message.id !== "preflight") return;
-      if (message.error) return done(reject, new Error(message.error.message ?? "bridge error"));
-      done(resolve, message.result);
-    });
-  });
-}
-
 async function preflight() {
   assertLoopbackHost(HOST);
   const allowed = liveTestProjectDirs();
   if (allowed.length === 0) {
-    throw new Error("No tests/ue_mcp project in this checkout. The live tier drives that project and nothing else.");
+    throw new Error("No tests/ue_mcp project in this checkout. The live tests drives that project and nothing else.");
   }
 
   let lastError = null;
@@ -112,7 +83,7 @@ async function preflight() {
   throw new Error(
     `${describeMissingBridge({ host: HOST, candidates: lastCandidates, lockfile: lastLockfile, lastError })}\n\n` +
       `Project directories searched:\n  ${allowed.join("\n  ")}\n\n` +
-      "The live tier attaches to an editor that is already running and never starts one itself.",
+      "The live tests attaches to an editor that is already running and never starts one itself.",
   );
 }
 

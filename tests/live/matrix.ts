@@ -5,12 +5,12 @@
  * against. A list in a plan file cannot say whether it is satisfied, so it is
  * transcribed here with, for each case, where the assertion actually lives:
  *
- *   - `live`       an assertion in this tier, against a real editor;
- *   - `engine-free` an assertion in the tier that needs no engine. Referenced
+ *   - `live`       an assertion in this suite, against a real editor;
+ *   - `engine-free` an assertion in the suite that needs no engine. Referenced
  *                  rather than duplicated: running the same check twice does
  *                  not make it truer, and a live copy of an engine-free test
  *                  is a test that only runs when somebody has an editor up;
- *   - `cpp`        owned by the plugin's own automation tier (plan item 0.9),
+ *   - `cpp`        owned by the plugin's own automation suite (plan item 0.9),
  *                  because it is about a socket option, a bind result or a
  *                  process lifetime that no client-side test can observe;
  *   - `pending`    the behaviour has not shipped yet. Named with the plan item
@@ -127,7 +127,7 @@ export const MATRIX_CASES: MatrixCase[] = [
         kind: "cpp",
         reason:
           "two editors of one project binding two ports is a socket-exclusivity result (plan 0.2), and " +
-          "this tier attaches to an editor it did not start",
+          "these tests attach to an editor it did not start",
       },
     ],
   },
@@ -209,7 +209,11 @@ export const MATRIX_CASES: MatrixCase[] = [
     id: "both-golden-baselines",
     text: "Both golden baselines.",
     coverage: [
-      { kind: "live", file: LIVE_GOLDEN, title: "was recorded from the live editor, not from a cache or the baked snapshot" },
+      // This case asked for the surface recorded in both states because it
+      // used to differ between them. It no longer can: every action is
+      // declared, so the two recordings are identical and their equality is
+      // what the connected half asserts.
+      { kind: "live", file: LIVE_GOLDEN, title: "advertises exactly what it advertises with no editor attached" },
       { kind: "live", file: LIVE_GOLDEN, title: "matches the committed baseline" },
       { kind: "live", file: LIVE_GOLDEN, title: "still matches the committed baseline" },
       { kind: "live", file: LIVE_GOLDEN, title: "records the same bytes from a catalog enumerated in a different order" },
@@ -332,7 +336,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       },
       {
         kind: "cpp",
-        reason: "the branch only runs when a stop fails, which means stopping the editor this tier attached to",
+        reason: "the branch only runs when a stop fails, which means stopping the editor this suite attached to",
       },
     ],
   },
@@ -343,7 +347,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       {
         kind: "cpp",
         reason:
-          "a socket option and a bind result inside a process this tier does not own; the client cannot " +
+          "a socket option and a bind result inside a process this suite does not own; the client cannot " +
           "observe either (plan item 0.9)",
       },
     ],
@@ -355,7 +359,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       { kind: "live", file: LIVE_SINGLE, title: "hands the editor the port the client resolved" },
       {
         kind: "cpp",
-        reason: "the bind itself happens at editor startup, which this tier does not perform",
+        reason: "the bind itself happens at editor startup, which this suite does not perform",
       },
       {
         kind: "engine-free",
@@ -371,7 +375,7 @@ export const SINGLE_EDITOR_CHANGES: MatrixCase[] = [
       { kind: "live", file: LIVE_ADDRESSING, title: "stamps the port lockfile with the process that owns it" },
       {
         kind: "cpp",
-        reason: "the delete side needs a second editor to quit while the first is live, which needs a process this tier does not own",
+        reason: "the delete side needs a second editor to quit while the first is live, which needs a process this suite does not own",
       },
     ],
   },

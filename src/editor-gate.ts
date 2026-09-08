@@ -18,10 +18,38 @@
  * name rides along in the same machine-readable block shape the error and
  * directive envelopes already use.
  */
-import { classifyActionClass, requiresExplicitEditor, splitTaskName, type ActionClass } from "./action-class.js";
+import { requiresExplicitEditor, type ActionClass } from "./action-class.js";
+import { taskEffect } from "./action-effects.js";
 import { EDITOR_TARGET_PARAM, stripEditorTarget, type ToolDef } from "./types.js";
 import { MICRO_GATEWAY_TOOL, MICRO_GATEWAY_CALL } from "./lean-context.js";
 import type { EditorSession, SessionRegistry } from "./session.js";
+
+/**
+ * Actions whose subject is the SESSION REGISTRY, not any editor.
+ *
+ * Three of these really do change something: `add_editor` registers a session
+ * and can launch an editor process, `drop_editor` closes a socket, and
+ * `use_editor` moves the default target. They declare `mutate`, because that is
+ * what they do, and locking and the guard pipeline are right to see them as
+ * changes.
+ *
+ * This gate asks a narrower question: could an untargeted call land in the
+ * wrong EDITOR? For these it could not. They never reach a bridge, and they
+ * name their subject in their own parameters. Demanding `editor="<name>"` on
+ * "register an editor" would be a riddle rather than a safeguard.
+ *
+ * The exemption used to be spelled as an override in the classifier, which
+ * recorded all four as reads. That made every other consumer of the answer
+ * wrong in order to make this one right: locking and the guard pipeline were
+ * told that launching an editor process observes something. The gate carries
+ * its own exception now, and the declaration stays true.
+ */
+const ADDRESSES_THE_SERVER = new Set([
+  "project.list_editors",
+  "project.use_editor",
+  "project.add_editor",
+  "project.drop_editor",
+]);
 
 export interface UntargetedCall {
   /** `category.action`, already resolved through any gateway indirection. */
@@ -41,7 +69,11 @@ export interface UntargetedCall {
  * between, so there is nothing to refuse.
  */
 export function refuseUntargetedCall(call: UntargetedCall): string | null {
-  const { class: cls } = classifyActionClass(...toPair(call.taskName));
+  if (ADDRESSES_THE_SERVER.has(call.taskName)) return null;
+  // The action's own declaration, not a reading of its name. A name is only
+  // consulted for a task the tool graph does not carry, and the answer there
+  // is a flat `mutate` rather than a second opinion about the name.
+  const { effect: cls } = taskEffect(call.taskName);
   if (!requiresExplicitEditor(cls)) return null;
 
   const others = call.editors.filter((n) => n !== call.activeEditor);
@@ -52,11 +84,6 @@ export function refuseUntargetedCall(call: UntargetedCall): string | null {
     `Re-send it with ${call.targetParam}="<name>". ` +
     `project(action='list_editors') reports what each one is. Reads do not need this.`
   );
-}
-
-function toPair(taskName: string): [string, string] {
-  const { tool, action } = splitTaskName(taskName);
-  return [tool, action];
 }
 
 function describeWhy(taskName: string, cls: ActionClass): string {

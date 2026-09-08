@@ -31,6 +31,23 @@ jobs:
         working-directory: ue-mcp-landing
         run: node scripts/convert-docs.mjs ../ue-mcp/docs ./content/docs
 
+      - name: Install the site's dependencies
+        working-directory: ue-mcp-landing
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the site
+        working-directory: ue-mcp-landing
+        # THE POINT OF THIS JOB. Converting and pushing is a sync, and a sync
+        # cannot fail on content it does not compile: the site is built by the
+        # host from the committed output, so a page that breaks the build turns
+        # this workflow green and freezes the live site on its last good
+        # version. That happened once for about three weeks, because a generic
+        # type in bare table prose parsed as an unclosed tag.
+        #
+        # Building here means a page that cannot compile fails before it is
+        # pushed, where the diff that caused it is still in front of somebody.
+        run: npm run build
+
       - name: Commit and push if changed
         working-directory: ue-mcp-landing
         run: |

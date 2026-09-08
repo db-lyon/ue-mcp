@@ -592,6 +592,8 @@ export const feedbackTool: ToolDef = categoryTool(
   "Submit feedback when a native tool falls short: a missing action, a wrong result, a crash, or a gap you had to work around with execute_python. A python workaround is a common trigger but is not required. Reports are routed to the tracker that owns the surface - ue-mcp core, or the plugin that provides it (PIE Studio, Perforce, Meshy, ...) - by consulting the published plugin registry.",
   {
     submit: {
+      kind: "handler",
+      effect: "mutate",
       description:
         "Submit feedback about a tool gap (missing action, wrong behavior, crash, or a case you had to work around). Provide a specific title and a summary; pythonWorkaround and idealTool are optional enrichment, not prerequisites. Checks the plugin registry first and files against the owning plugin's repo when one matches, then blocks on an MCP elicitation prompt that asks the USER (not the agent) to approve or decline the exact payload - and to override the tracker - before anything is posted to GitHub. If the client cannot show that form (it never advertised elicitation, it throws, or it auto-answers in milliseconds without rendering anything), nothing is lost: the report is written to disk and the result carries a prefilled GitHub issue URL for the user to click. Params: title, summary, pythonWorkaround?, idealTool?, author?, repo?, confirmToken?",
       handler: async (ctx: ToolContext, params: Record<string, unknown>) => {
@@ -1218,6 +1220,8 @@ export const feedbackTool: ToolDef = categoryTool(
     },
 
     route: {
+      kind: "handler",
+      effect: "read",
       description:
         "Dry run the tracker routing for a report without posting anything. Returns the repo the issue would be filed against, the matched plugin (if any), and why. Params: title, summary, idealTool?, repo?. Use it when you are unsure whether a gap belongs to ue-mcp core or to an installed/published plugin.",
       handler: async (ctx: ToolContext, params: Record<string, unknown>) => {

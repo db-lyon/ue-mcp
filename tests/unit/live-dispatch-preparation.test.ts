@@ -180,7 +180,7 @@ describe("normalizeParams on the live dispatch route", () => {
     const tool = categoryTool(
       "probe",
       "Test-only category.",
-      { look: { description: "A direct handler.", handler: async (_ctx, p) => { seen = p; return { ok: true }; } } },
+      { look: { kind: "handler", effect: "read", description: "A direct handler.", handler: async (_ctx, p) => { seen = p; return { ok: true }; } } },
       undefined,
       undefined,
       { normalizeParams: (p) => ({ ...p, canonical: p.legacy ?? p.canonical }) },
@@ -203,9 +203,9 @@ describe("normalizeParams on the live dispatch route", () => {
 
 function budgetTool(): ToolDef {
   return categoryTool("demo", "Demo", {
-    quick: bp("A normal action", "quick_method"),
-    slow: { description: "An action with its own authored floor", bridge: "slow_method", timeoutMs: 120_000 },
-    local: { description: "A direct handler", handler: async () => ({ ok: true }) },
+    quick: bp("read", "A normal action", "quick_method"),
+    slow: { kind: "bridge", effect: "read", description: "An action with its own authored floor", bridge: "slow_method", timeoutMs: 120_000 },
+    local: { kind: "handler", effect: "read", description: "A direct handler", handler: async () => ({ ok: true }) },
   });
 }
 
@@ -278,8 +278,8 @@ describe("timeoutMs on the live dispatch route", () => {
 
 describe("the micro gateway on the live dispatch route", () => {
   const target = (): ToolDef => categoryTool("asset", "Assets", {
-    delete: bp("Delete an asset", "delete_asset"),
-    slow: { description: "Authored floor", bridge: "slow_asset", timeoutMs: 120_000 },
+    delete: bp("read", "Delete an asset", "delete_asset"),
+    slow: { kind: "bridge", effect: "read", description: "Authored floor", bridge: "slow_asset", timeoutMs: 120_000 },
   });
 
   it("repairs a backslashed path inside args, and reports the repair", async () => {
@@ -455,7 +455,7 @@ describe("route parity", () => {
   }
 
   it("sends the same gateway call on both routes", async () => {
-    const target = categoryTool("asset", "Assets", { delete: bp("Delete", "delete_asset") });
+    const target = categoryTool("asset", "Assets", { delete: bp("read", "Delete", "delete_asset") });
     const gateway = buildMicroGateway([target]);
     const params = {
       action: "call",

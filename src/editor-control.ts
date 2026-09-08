@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn } from "child_process";
 import * as net from "net";
+import * as os from "node:os";
 import WebSocket from "ws";
 import { readUeMcpConfig, type ProjectContext } from "./project.js";
 import { EngineResolutionError, selectEngine, trySelectEngine, type EngineLookup } from "./engine-root.js";
@@ -18,6 +19,7 @@ import {
 import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, resolveBridgeTarget } from "./editor-target.js";
 import { startProgress } from "./ui/progress.js";
 import { getDialogMode, getUserStatePath, type DialogMode } from "./user-state.js";
+import { DialogGuard } from "./dialog-guard.js";
 import type { ElicitFn, ProgressFn } from "./types.js";
 
 // Process control is cross-platform: the editor binary path and the running-
@@ -215,16 +217,7 @@ export interface ReadyResult {
  * waits for the snapshot to say `ready` and reports the whole startup as a
  * progress bar rather than handing control back early.
  */
-export async function waitForEditorReadyExternal(
-  projectPath: string,
-  projectDir: string,
-  maxWaitSeconds = 300,
-  launchedAtMs?: number,
-): Promise<ReadyResult> {
-  return waitForEditorReady(projectPath, projectDir, maxWaitSeconds, { launchedAtMs });
-}
-
-async function waitForEditorReady(
+export async function waitForEditorReady(
   projectPath: string | null | undefined,
   projectDir: string | undefined,
   maxWaitSeconds: number,
@@ -366,7 +359,10 @@ async function waitForEditorReady(
             buttons,
             choices: buttons.map((label) => ({ buttonLabel: label, respondWith: respondCallFor(label) })),
           },
-          { pressCalls: opts.pressCalls !== false },
+          // Forwarded, not defaulted: describeBlockingDialog applies the
+          // default, and a second copy of it here is a second place for the
+          // rule to drift away from the guard's.
+          { pressCalls: opts.pressCalls },
         ),
         state: await readEngineState(projectPath ?? null),
       });
@@ -557,12 +553,12 @@ export async function startEditor(
     dialogPolicy?: string;
 
     /**
-     * Arm the bridge's parameter echo for this editor. The live tier's leak
+     * Arm the bridge's parameter echo for this editor. The live tests' leak
      * assertions, which prove a routing key never reaches an editor, can only
      * run when the editor was LAUNCHED with it: it is read at startup, so
      * turning it on over the socket afterwards is too late, exactly like the
      * dialog policy above. Without it those cases skip and say why, which
-     * leaves the sharpest part of the tier unexercised by default.
+     * leaves the sharpest part of the suite unexercised by default.
      */
     paramEcho?: boolean;
 
@@ -904,12 +900,27 @@ function respondCallFor(label: string): string {
     : `editor(action='respond_to_dialog', buttonLabel='${label}')`;
 }
 
-/** The dialog blocking this editor, or null when nothing is. */
-async function readBlockingDialog(port: number, host: string): Promise<BlockingDialog | null> {
+/**
+ * What is blocking this editor: a dialog, nothing, or no answer at all.
+ *
+ * The third case used to be folded into the second. Silence, a socket error
+ * and an 8s timeout were all reported as "no dialog", and the caller acts on
+ * that answer by sending a quit, so a slow reply from an editor sitting on a
+ * modal was enough to send one anyway. The guard treats identical silence as
+ * "not evidence"; two readings of one question with opposite failure
+ * semantics, on the route where being wrong closes an editor.
+ *
+ * Callers must handle `unreadable`. Nothing may be quit on the strength of it.
+ */
+type DialogRead = { dialog: BlockingDialog | null; readable: boolean };
+
+const UNREADABLE: DialogRead = { dialog: null, readable: false };
+
+async function readBlockingDialog(port: number, host: string): Promise<DialogRead> {
   const reply = await callBridgeOnce(port, "list_dialogs", {}, host);
-  if (!accepted(reply) || !reply.result) return null;
+  if (!accepted(reply) || !reply.result) return UNREADABLE;
   const dialogs = reply.result.dialogs;
-  if (!Array.isArray(dialogs) || dialogs.length === 0) return null;
+  if (!Array.isArray(dialogs) || dialogs.length === 0) return { dialog: null, readable: true };
 
   const first = dialogs[0] as Record<string, unknown>;
   const buttons = Array.isArray(first.buttons)
@@ -924,10 +935,13 @@ async function readBlockingDialog(port: number, host: string): Promise<BlockingD
     };
   });
   return {
-    title: typeof first.title === "string" ? first.title : "",
-    message: typeof first.message === "string" ? first.message : "",
-    buttons,
-    choices,
+    readable: true,
+    dialog: {
+      title: typeof first.title === "string" ? first.title : "",
+      message: typeof first.message === "string" ? first.message : "",
+      buttons,
+      choices,
+    },
   };
 }
 
@@ -1079,11 +1093,17 @@ export function resolveDialogMode(opts: {
  * of having them, so each says that plainly rather than leaving the reader to
  * infer it from a mode name.
  */
-function dialogModeGuidance(
+export function dialogModeGuidance(
   resolved: ResolvedDialogMode,
   canElicit: boolean,
   opts: { quitSent?: boolean } = {},
 ): string {
+  // What the mode MEANS is the guard's answer, not a second reading of it
+  // here. This branched on the configured mode and re-derived the "interactive
+  // with nobody to ask behaves as defer" rule inline, which is one more place
+  // for it to drift away from the rule the refusal is actually built from.
+  const effective = DialogGuard.effectiveMode(resolved.mode, canElicit);
+  const downgraded = effective !== resolved.mode;
   const applied = `Dialog handling mode: ${resolved.mode} (${resolved.source}).`;
   // Whether a quit went out is a fact about the call, and this text is reused
   // on both sides of it: before the quit, where nothing was asked to close, and
@@ -1091,28 +1111,28 @@ function dialogModeGuidance(
   const quitState = opts.quitSent
     ? "The quit went out before this dialog appeared and the editor has not closed."
     : "The editor was not asked to quit.";
-  if (resolved.mode === "auto") {
+  const again = "then call editor(action='stop_editor') again.";
+
+  if (effective === "auto") {
     return (
       `${applied} Nothing was pressed for you: in auto mode the whole dialog is handed back and the ` +
-      "choice is yours. Press the button you choose with the call listed beside it, then call " +
-      "editor(action='stop_editor') again."
+      `choice is yours. Press the button you choose with the call listed beside it, ${again}`
     );
   }
-  if (resolved.mode === "interactive" && !canElicit) {
+  if (effective === "interactive") {
+    return `${applied} ${quitState} Answer the dialog, ${again}`;
+  }
+  if (downgraded) {
     return (
       `${applied} Interactive mode shows this dialog to the user in an MCP elicitation form, and this ` +
       "client did not advertise that capability, so no form could be shown and nothing was pressed. " +
       "Answer the dialog in the Unreal Editor window, or set UE_MCP_DIALOG_MODE=auto to answer it from " +
-      "here with editor(action='respond_to_dialog'), then call editor(action='stop_editor') again."
+      `here with editor(action='respond_to_dialog'), ${again}`
     );
-  }
-  if (resolved.mode === "interactive") {
-    return `${applied} ${quitState} Answer the dialog, then call editor(action='stop_editor') again.`;
   }
   return (
     `${applied} Nothing was pressed and nothing was asked of you: in defer mode a blocking dialog is ` +
-    "left alone. Go to the Unreal Editor window and answer the dialog quoted above yourself, then call " +
-    "editor(action='stop_editor') again."
+    `left alone. Go to the Unreal Editor window and answer the dialog quoted above yourself, ${again}`
   );
 }
 
@@ -1134,71 +1154,52 @@ export interface DialogPress {
 }
 
 /**
- * Put the dialog to the person, through MCP elicitation, and press whichever
- * button they choose.
+ * Put the dialog to the person and press what they choose.
  *
- * This is the one path that ends with a button being pressed without a separate
- * respond_to_dialog call, and it presses only what the user picked from the
- * dialog's own labels, in a prompt carrying its full text. Declining leaves the
- * dialog exactly where it is.
+ * The decision, the form and the press all belong to DialogGuard: this only
+ * supplies the transport, because a quit may already be in flight and the
+ * session's own bridge is not usable then. Keeping a second copy of the
+ * interactive logic here is what let the two disagree.
  *
- * Returns null ONLY when nothing was sent, or when the editor answered saying
- * it pressed nothing. A send whose outcome is unknown comes back as a press
- * with confirmed: false, because that is what it is.
+ * Returns the button pressed, or null when nothing was.
  */
 async function askUserToAnswerDialog(
   port: number,
   host: string,
   dialog: BlockingDialog,
   elicit: ElicitFn,
+  mode: DialogMode,
+  canElicit: boolean,
+  sessionGuard?: DialogGuard,
 ): Promise<DialogPress | null> {
-  if (dialog.choices.length === 0) return null;
-
-  const LEAVE_OPEN = "Leave the dialog open";
-  let answer;
-  try {
-    answer = await elicit({
-      message: [
-        "Unreal Editor is blocked on a modal dialog and is waiting for an answer.",
-        "",
-        `Title: ${dialog.title}`,
-        dialog.message === "" ? "(no message text)" : dialog.message,
-        "",
-        "Choose the button to press. Nothing is pressed unless you choose it.",
-      ].join("\n"),
-      requestedSchema: {
-        type: "object",
-        properties: {
-          button: {
-            type: "string",
-            title: "Button",
-            description: "The dialog's own buttons, in the order it lays them out.",
-            enum: [...dialog.buttons, LEAVE_OPEN],
-          },
-        },
-        required: ["button"],
-      },
-    });
-  } catch {
-    // No elicitation UI, or the prompt failed. The dialog stays up and the
-    // report is what the caller gets.
-    return null;
-  }
-
-  if (answer.action !== "accept") return null;
-  const chosen = answer.content?.button;
-  if (typeof chosen !== "string" || chosen === LEAVE_OPEN) return null;
-  if (!dialog.buttons.includes(chosen)) return null;
-
-  const pressed = await callBridgeOnce(port, "respond_to_dialog", { buttonLabel: chosen }, host);
-  if (accepted(pressed)) return { button: chosen, confirmed: true };
-  // The bridge answered and said it did not press: an unregistered method on an
-  // older plugin build, or a handler that refused. Nothing happened to the
-  // dialog, and "nothing was sent" is the honest report.
-  if (pressed.answered) return null;
-  // It did not answer at all. The frame was already on the wire, so whether the
-  // button was pressed is genuinely unknown and must not be reported either way.
-  return { button: chosen, confirmed: false };
+  // The editor's own guard when the caller had one, so its ask-once record and
+  // its knowledge of what is on screen are shared rather than duplicated. The
+  // fallback exists for callers with no session in hand.
+  const guard = sessionGuard ?? new DialogGuard({
+    // The resolved mode, not a hardcoded one. Hardcoding it here meant this
+    // route ignored what the machine asked for and elicited under auto and
+    // defer too.
+    mode: () => mode,
+    probe: () => callBridgeOnce(port, "list_dialogs", {}, host),
+    press: (buttonLabel) => callBridgeOnce(port, "respond_to_dialog", { buttonLabel }, host),
+    elicit: () => elicit,
+  });
+  const decision = await guard.decideFor(
+    "editor.stop_editor",
+    {
+    title: dialog.title,
+    message: dialog.message,
+    buttons: dialog.buttons,
+      choices: (dialog.choices ?? []).filter(
+        (c): c is { buttonLabel: string; respondWith: string } => typeof c.respondWith === "string",
+      ),
+    },
+    { canElicit },
+  );
+  // An unconfirmed press refuses (the guard cannot prove the way is clear) but
+  // still has to be reported, so read the outcome rather than the decision.
+  void decision;
+  return guard.lastPressed;
 }
 
 /**
@@ -1409,7 +1410,20 @@ export interface StopEditorResult {
    */
   alreadyStopped?: boolean;
   /** Why the stop refused, for a caller that would rather branch than parse. */
-  refusedReason?: "unsaved-work" | "blocking-dialog" | "unknown-dirty-state";
+  refusedReason?: "unsaved-work" | "blocking-dialog" | "unknown-dirty-state" | "unknown-dialog-state";
+  /**
+   * The guard's refusal fields, so a caller gets the SAME shape here as from
+   * every other route. This used to assemble its own object carrying only
+   * `dialogBlocking`, leaving the rest undefined depending on which route did
+   * the refusing. Built by DialogGuard.describeRefusal.
+   */
+  dialogBlocking?: true;
+  refusedMethod?: string;
+  dialogTitle?: string;
+  dialogMessage?: string;
+  buttons?: string[];
+  choices?: Array<{ buttonLabel: string; respondWith: string }>;
+  error?: string;
   /** Every package that was dirty when the stop was asked for. */
   dirtyPackages?: string[];
   /** The dialog holding the editor, reported whole so a person can answer it. */
@@ -1435,6 +1449,39 @@ export interface StopEditorResult {
  * editor(stop_editor) and a caller cannot see which dialog handling mode
  * applied if the fields are dropped on the way out.
  */
+/**
+ * The stop half's account of a dialog, forwarded onto the restart's result.
+ *
+ * Both the record of WHAT HAPPENED (mode, source, the dialog, any press) and
+ * the guard's refusal fields travel. Copying only the former dropped
+ * dialogBlocking, refusedMethod, dialogTitle, dialogMessage and error, so a
+ * restart refused by a dialog came back unrecognisable to isDialogRefusal and
+ * to every client branching on that flag.
+ */
+export function restartDialogAccount(
+  stopResult: Partial<StopEditorResult>,
+): Partial<RestartEditorResult> {
+  return {
+    ...(stopResult.dialogBlocking ? { dialogBlocking: stopResult.dialogBlocking } : {}),
+    ...(stopResult.refusedMethod ? { refusedMethod: stopResult.refusedMethod } : {}),
+    ...(stopResult.dialogTitle ? { dialogTitle: stopResult.dialogTitle } : {}),
+    ...(stopResult.dialogMessage !== undefined ? { dialogMessage: stopResult.dialogMessage } : {}),
+    ...(stopResult.buttons ? { buttons: stopResult.buttons } : {}),
+    ...(stopResult.choices ? { choices: stopResult.choices } : {}),
+    ...(stopResult.error ? { error: stopResult.error } : {}),
+    ...(stopResult.refusedReason ? { refusedReason: stopResult.refusedReason } : {}),
+    ...(stopResult.dialogMode ? { dialogMode: stopResult.dialogMode } : {}),
+    ...(stopResult.dialogModeSource ? { dialogModeSource: stopResult.dialogModeSource } : {}),
+    ...(stopResult.blockingDialog ? { blockingDialog: stopResult.blockingDialog } : {}),
+    ...(stopResult.dialogAnsweredByUser
+      ? { dialogAnsweredByUser: stopResult.dialogAnsweredByUser }
+      : {}),
+    ...(stopResult.dialogPressUnconfirmed
+      ? { dialogPressUnconfirmed: stopResult.dialogPressUnconfirmed }
+      : {}),
+  };
+}
+
 export interface RestartEditorResult {
   success: boolean;
   message: string;
@@ -1446,6 +1493,19 @@ export interface RestartEditorResult {
   dialogPressUnconfirmed?: string;
   dialogMode?: DialogMode;
   dialogModeSource?: string;
+  /**
+   * The guard's refusal fields, carried through from the stop half. Copying
+   * only the account of what happened dropped these, so a restart refused by a
+   * dialog was unrecognisable to isDialogRefusal.
+   */
+  dialogBlocking?: true;
+  refusedReason?: "unsaved-work" | "blocking-dialog" | "unknown-dirty-state" | "unknown-dialog-state";
+  refusedMethod?: string;
+  dialogTitle?: string;
+  dialogMessage?: string;
+  buttons?: string[];
+  choices?: Array<{ buttonLabel: string; respondWith: string }>;
+  error?: string;
 }
 
 /**
@@ -1502,6 +1562,7 @@ function unsavedWorkRefusal(dirty: string[], answeredByUser?: string, unconfirme
 
 /**
  * Stop the editor by asking it to quit ITSELF through the bridge. ue-mcp NEVER
+ * lint-prose-allow: no-kill  this comment states what the code refuses to do
  * issues an OS kill: `taskkill /IM UnrealEditor.exe` matches by image name and
  * would also close the user's other editors (e.g. their real project).
  * Success is confirmed by the project's own bridge port going quiet, so it is
@@ -1540,6 +1601,13 @@ export async function stopEditor(
     /** Ask the connected client's user, when it advertised elicitation. */
     elicit?: ElicitFn;
     /**
+     * The editor's own guard. Passed so this route shares the ONE guard per
+     * editor rather than building a second with its own ask-once state, which
+     * put a second form in front of the person for a dialog the first had
+     * already asked about.
+     */
+    guard?: DialogGuard;
+    /**
      * How long each poll of the confirm wait sleeps, in milliseconds.
      *
      * Internal, defaulted to a second, and not reachable from the tool schema:
@@ -1569,7 +1637,13 @@ export async function stopEditor(
    * every button label in order - and nothing that actuates it.
    */
   const dialogMode = resolveDialogMode({ projectDir, canElicit });
-  const pressCalls = dialogMode.mode !== "defer";
+  // The guard owns this rule. Computing it here as well meant the same
+  // decision existed twice and the two renderings disagreed about what defer
+  // strips.
+  // canElicit matters here too: interactive with nobody to ask handed the
+  // press calls over anyway, which is the leak defer exists to close, on the
+  // mode that promises a person chooses.
+  const pressCalls = DialogGuard.handsOverPressCalls(dialogMode.mode, canElicit);
   const ownership = await resolveOwnedEditor(projectDir, projectPath);
   if (!ownership.owned) {
     // No editor was closed, so the verdict is false on every branch here. What
@@ -1617,7 +1691,23 @@ export async function stopEditor(
   // while the game thread is parked inside the modal loop, which is exactly the
   // state where sending a quit would time out and teach nobody anything. Ask
   // before sending, and report the whole question rather than acting on it.
-  let dialog = await readBlockingDialog(port, host);
+  const firstRead = await readBlockingDialog(port, host);
+  if (!firstRead.readable) {
+    // The same rule readDirtyPackages already follows: a question that cannot
+    // be answered is not an answer of "clean". Sending a quit here is how an
+    // editor sitting on a modal got one anyway, under every mode including
+    // defer, because a slow reply was reported as no dialog at all.
+    return {
+      success: false,
+      refusedReason: "unknown-dialog-state",
+      message:
+        "The editor's bridge did not answer when asked whether a dialog is blocking it, so whether "
+        + "one is on screen cannot be established and stopping could dismiss it. Nothing was asked "
+        + "to quit. Read it with editor(action='list_dialogs'), or close the editor yourself and "
+        + "answer whatever it asks.",
+    };
+  }
+  let dialog = firstRead.dialog;
   let answeredByUser: string | undefined;
   /** A press that went out with no answer. Not an answer, and not silence. */
   let unconfirmedPress: string | undefined;
@@ -1644,22 +1734,47 @@ export async function stopEditor(
         }
       : {};
   if (dialog) {
-    // Interactive is the ONLY mode that reaches a button, and only through the
-    // user's own pick in the elicitation form. auto and defer both leave the
-    // dialog exactly where it is.
-    if (dialogMode.mode === "interactive" && canElicit && opts.elicit) {
-      const press = await askUserToAnswerDialog(port, host, dialog, opts.elicit);
+    // Always ask the guard. It applies the mode, so branching on the mode here
+    // as well was a second copy of that decision and the two could disagree.
+    // auto and defer press nothing; interactive puts it to the person.
+    if (opts.elicit) {
+      const press = await askUserToAnswerDialog(
+        port, host, dialog, opts.elicit, dialogMode.mode, canElicit, opts.guard,
+      );
       if (press !== null) {
         if (press.confirmed) answeredByUser = press.button;
         else unconfirmedPress = press.button;
         // Their choice may have raised the next one, and on the unconfirmed
         // path this read is also the only evidence available about whether the
         // press landed. Look again rather than assuming the editor is clear.
-        dialog = await readBlockingDialog(port, host);
+        // Unreadable here keeps the dialog rather than dropping it: this read
+        // is the only evidence about whether the press landed, and treating
+        // silence as success is what would report a clear editor.
+        const after = await readBlockingDialog(port, host);
+        dialog = after.readable ? after.dialog : dialog;
       }
     }
     if (dialog) {
       return {
+        // The guard's own refusal fields, so this route hands a caller exactly
+        // what every other route does: dialogBlocking, refusedMethod,
+        // dialogTitle, dialogMessage, buttons, choices and error. Assembling
+        // its own object left most of those undefined depending on which route
+        // did the refusing.
+        ...DialogGuard.describeRefusal(
+          "editor.stop_editor",
+          {
+            title: dialog.title,
+            message: dialog.message,
+            buttons: dialog.buttons,
+            choices: (dialog.choices ?? []).filter(
+              (c): c is { buttonLabel: string; respondWith: string } =>
+                typeof c.respondWith === "string",
+            ),
+          },
+          dialogMode.mode,
+          canElicit,
+        ),
         success: false,
         refusedReason: "blocking-dialog",
         blockingDialog: pressCalls ? dialog : forRecognitionOnly(dialog),
@@ -1759,14 +1874,17 @@ export async function stopEditor(
   // It was clean and unblocked when the quit went out, so whatever is holding
   // it started afterwards. Say what that is, in full.
   let blockedState = await readEngineState(projectPath, { probeWindows: false });
-  let late = await readBlockingDialog(port, host);
+  const lateRead = await readBlockingDialog(port, host);
+  let late = lateRead.dialog;
   if (late) dialogSeen = true;
 
   // The same mode governs a dialog that came up behind the quit. Interactive
   // puts it to the user exactly as it would have before the quit; auto and
   // defer leave it alone, so the loop below never runs for them.
-  if (late && dialogMode.mode === "interactive" && canElicit && opts.elicit) {
-    const press = await askUserToAnswerDialog(port, host, late, opts.elicit);
+  if (late && opts.elicit) {
+    const press = await askUserToAnswerDialog(
+      port, host, late, opts.elicit, dialogMode.mode, canElicit, opts.guard,
+    );
     if (press !== null) {
       if (press.confirmed) answeredByUser = press.button;
       else unconfirmedPress = press.button;
@@ -1788,7 +1906,8 @@ export async function stopEditor(
           };
         }
       }
-      late = await readBlockingDialog(port, host);
+      const lateAfter = await readBlockingDialog(port, host);
+      late = lateAfter.readable ? lateAfter.dialog : late;
       // The snapshot above was taken BEFORE the elicitation, so it still holds
       // the modal the user has since answered. Rendering it after the press is
       // how one message came to quote a dialog that no longer exists, hand back
@@ -1836,6 +1955,7 @@ export async function stopEditor(
     ...(late
       ? {
           blockingDialog: pressCalls ? late : forRecognitionOnly(late),
+          dialogBlocking: true as const,
           refusedReason: "blocking-dialog" as const,
         }
       : {}),
@@ -1846,7 +1966,7 @@ export async function stopEditor(
 export async function restartEditor(
   project: ProjectContext,
   bridge?: { connect: (timeoutMs?: number) => Promise<void> },
-  opts: { elicit?: ElicitFn } = {},
+  opts: { elicit?: ElicitFn; guard?: DialogGuard } = {},
 ): Promise<RestartEditorResult> {
   // Same rule as start and stop: without a loaded project there is no editor
   // this is about, and the machine-wide answer is somebody else's editor (#819).
@@ -1861,11 +1981,19 @@ export async function restartEditor(
   // result: the stop only reports one when it MET a dialog, and the start half
   // has to keep defer's no-actuation promise whether or not the stop ran into
   // anything.
+  const restartCanElicit = clientAdvertisesElicitation(opts.elicit);
   const dialogMode = resolveDialogMode({
     projectDir: project.projectDir ?? null,
-    canElicit: clientAdvertisesElicitation(opts.elicit),
+    canElicit: restartCanElicit,
   });
-  const stopResult = await stopEditor(project.projectDir ?? undefined, { elicit: opts.elicit });
+  // Forward the editor's OWN guard. Without it the stop half fell back to
+  // constructing a second one, with its own ask-once record, so a restart
+  // asked the person again about a dialog the session guard had already put
+  // to them, and pressed a second real button for it.
+  const stopResult = await stopEditor(project.projectDir ?? undefined, {
+    elicit: opts.elicit,
+    guard: opts.guard,
+  });
   // Whether the stop mattered is a question about THIS project's editor: a
   // failed stop with nothing of ours left running just means it was already
   // down, and another project's editor being up says nothing either way.
@@ -1873,15 +2001,7 @@ export async function restartEditor(
   // account of it rather than flattening it into a message string. The doc
   // promises dialogMode on every result that met a dialog, and a return type
   // that cannot hold it would make that promise unkeepable here.
-  const dialogAccount: Partial<RestartEditorResult> = {
-    ...(stopResult.dialogMode ? { dialogMode: stopResult.dialogMode } : {}),
-    ...(stopResult.dialogModeSource ? { dialogModeSource: stopResult.dialogModeSource } : {}),
-    ...(stopResult.blockingDialog ? { blockingDialog: stopResult.blockingDialog } : {}),
-    ...(stopResult.dialogAnsweredByUser ? { dialogAnsweredByUser: stopResult.dialogAnsweredByUser } : {}),
-    ...(stopResult.dialogPressUnconfirmed
-      ? { dialogPressUnconfirmed: stopResult.dialogPressUnconfirmed }
-      : {}),
-  };
+  const dialogAccount = restartDialogAccount(stopResult);
   if (!stopResult.success && (await findInteractiveEditors(project.projectPath)).length > 0) {
     return { success: false, message: `Failed to stop editor: ${stopResult.message}`, ...dialogAccount };
   }
@@ -1890,7 +2010,9 @@ export async function restartEditor(
   await new Promise((resolve) => setTimeout(resolve, 3000));
 
   const startResult = await startEditor(project, undefined, undefined, {
-    pressCalls: dialogMode.mode !== "defer",
+    // The guard's rule, not a second copy of it. This one also ignored
+    // canElicit, so interactive with nobody to ask handed the buttons over.
+    pressCalls: DialogGuard.handsOverPressCalls(dialogMode.mode, restartCanElicit),
   });
   if (!startResult.success) {
     return { ...startResult, ...dialogAccount };
@@ -1918,6 +2040,66 @@ function getPlatformString(): string {
   if (IS_WINDOWS) return "Win64";
   if (process.platform === "darwin") return "Mac";
   return "Linux";
+}
+
+/**
+ * How many compiles this machine can run at once without running out of room.
+ *
+ * UnrealBuildTool defaults to one process per physical core. Each one maps the
+ * Unreal precompiled header, which costs several GB, so on a machine with less
+ * memory than cores x PCH the compiler does not queue: it fails outright with
+ * C3859 ("failed to create virtual memory for PCH") or C1076, and the build
+ * dies after several minutes of work. The failure names a paging file, so it
+ * reads as a misconfigured machine rather than a parallelism default that does
+ * not fit the hardware.
+ *
+ * This is not a knob anybody should have to find. The number is computed from
+ * the machine and passed to every build, and the cap is only applied when it
+ * is below what UnrealBuildTool would have chosen, so a machine with headroom
+ * builds exactly as it did before.
+ *
+ * `UE_MCP_MAX_PARALLEL_ACTIONS` overrides it, for a machine whose real ceiling
+ * this estimate gets wrong in either direction.
+ */
+export function safeParallelActions(
+  totalMemBytes = os.totalmem(),
+  cores = os.cpus().length,
+): number {
+  const override = Number(process.env.UE_MCP_MAX_PARALLEL_ACTIONS);
+  if (Number.isInteger(override) && override > 0) return override;
+
+  // Measured against Unreal 5.8 on Windows: a PCH compile peaks around 5 GB,
+  // and the OS plus the build server want a few GB that the compiles cannot
+  // have. Both are deliberately pessimistic, because being one process under
+  // costs a little wall clock and being one process over costs the whole build.
+  const GB = 1024 ** 3;
+  const PER_COMPILE_GB = 5;
+  const RESERVED_GB = 4;
+  const usableGB = totalMemBytes / GB - RESERVED_GB;
+  const fits = Math.floor(usableGB / PER_COMPILE_GB);
+  return Math.max(1, Math.min(cores, fits));
+}
+
+/** Whether a build died for want of memory rather than for anything in the code. */
+export function ranOutOfMemory(output: string): boolean {
+  return (
+    output.includes("C3859")
+    || output.includes("C1076")
+    || output.includes("paging file is too small")
+    || output.includes("internal heap limit reached")
+  );
+}
+
+/** What to tell somebody whose build ran out of room, in the terms they hit it in. */
+export function describeMemoryFailure(parallel: number, totalMemBytes = os.totalmem()): string {
+  const gb = Math.round(totalMemBytes / 1024 ** 3);
+  return (
+    `The build ran out of memory rather than hitting anything wrong in the code. This machine has `
+    + `${gb} GB of RAM and the compile was already limited to ${parallel} parallel `
+    + `${parallel === 1 ? "process" : "processes"}, each of which needs several GB for Unreal's `
+    + "precompiled header. Lower it further with UE_MCP_MAX_PARALLEL_ACTIONS, or give Windows a "
+    + "larger paging file, and run the build again."
+  );
 }
 
 export interface BuildOptions {
@@ -1983,7 +2165,12 @@ export async function buildProject(
   // plainly there - while the same command pasted into a terminal worked,
   // because the shell removed them first.
   const commonArgs = [target, platform, configuration];
-  const tailArgs = ["-WaitMutex", "-FromMsBuild", ...(opts.clean ? ["-Clean"] : [])];
+  // Only when it is below what UnrealBuildTool would have picked, so a machine
+  // with headroom builds exactly as it did before and nobody has to know this
+  // exists.
+  const parallel = safeParallelActions();
+  const parallelArgs = parallel < os.cpus().length ? [`-MaxParallelActions=${parallel}`] : [];
+  const tailArgs = ["-WaitMutex", "-FromMsBuild", ...parallelArgs, ...(opts.clean ? ["-Clean"] : [])];
   const windowsArgs = [...commonArgs, `-Project="${resolvedPath}"`, ...tailArgs];
   const posixArgs = [...commonArgs, `-Project=${resolvedPath}`, ...tailArgs];
 
@@ -1997,8 +2184,14 @@ export async function buildProject(
       proc = spawn(buildTool, posixArgs, { stdio: "pipe" });
     }
 
+    // Kept so a failure can be read afterwards. The compiler reports running
+    // out of room as a paging-file problem, which sends people to their
+    // virtual memory settings for what is really a parallelism default that
+    // does not fit the machine.
+    let transcript = "";
     const forward = (data: Buffer) => {
       const text = data.toString();
+      transcript += text;
       if (opts.onOutput) opts.onOutput(text);
       else process.stdout.write(text);
     };
@@ -2015,7 +2208,13 @@ export async function buildProject(
       resolve(
         code === 0
           ? { success: true, exitCode: 0, message: `Build succeeded (${target} ${platform} ${configuration})` }
-          : { success: false, exitCode: code, message: `Build failed with exit code ${code}` },
+          : {
+              success: false,
+              exitCode: code,
+              message: ranOutOfMemory(transcript)
+                ? describeMemoryFailure(parallel)
+                : `Build failed with exit code ${code}`,
+            },
       );
     });
 

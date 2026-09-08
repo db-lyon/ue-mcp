@@ -16,16 +16,15 @@ import {
   explainMissingAction,
   type SessionSurface,
 } from "../../src/session-surface.js";
-import { enrichToolsWithEpicCatalog, type EpicCatalog } from "../../src/epic-enrich.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 
 function graph(): ToolDef[] {
   return [
     categoryTool("alpha", "Alpha category", {
-      list: bp("List things", "alpha_list"),
+      list: bp("read", "List things", "alpha_list"),
     }),
     categoryTool("beta", "Beta category", {
-      read: bp("Read a thing", "beta_read"),
+      read: bp("read", "Read a thing", "beta_read"),
     }),
   ];
 }
@@ -38,17 +37,6 @@ function surfaceOf(name: string, tools: ToolDef[], disabled: string[] = []): Ses
     pluginRecords: [],
     knowledgeByCategory: {},
   };
-}
-
-function catalogWith(toolset: string, toolName: string): EpicCatalog {
-  return {
-    toolsets: [
-      {
-        name: toolset,
-        tools: [{ name: `${toolset}.${toolName}`, description: `Does ${toolName}` }],
-      },
-    ],
-  } as EpicCatalog;
 }
 
 describe("cloneToolGraph", () => {
@@ -70,6 +58,8 @@ describe("cloneToolGraph", () => {
     const copy = cloneToolGraph(original);
     const calls: string[] = [];
     copy[0].actions.only_on_copy = {
+      kind: "handler",
+      effect: "read",
       handler: async () => {
         calls.push("copy");
         return "ok";
@@ -96,33 +86,31 @@ describe("cloneToolGraph", () => {
   });
 });
 
-describe("per-session Epic enrichment", () => {
-  it("keeps one project's toolset off the other project's graph", () => {
-    // The real graph, because routing sends a toolset to a named category and
-    // falls back to the `epic` umbrella, neither of which a synthetic graph has.
+describe("per-session graph isolation", () => {
+  it("keeps one project's added actions off the other project's graph", () => {
+    // Unreal's tools are declared now, so the thing that used to differ per
+    // session is a plugin's injected actions. The property is the same and
+    // still load bearing: two sessions start from one declaration and must not
+    // share whatever either of them was given afterwards.
     const a = baseGraphFor(ALL_TOOLS);
     const b = baseGraphFor(ALL_TOOLS);
 
-    enrichToolsWithEpicCatalog(a, catalogWith("Niagara", "spawn"), {});
-    enrichToolsWithEpicCatalog(b, catalogWith("Landscape", "sculpt"), {});
+    const niagaraOf = (g: ToolDef[]) => g.find((t) => t.name === "niagara")!;
+    niagaraOf(a).actions.vpp_spawn = { kind: "registry", effect: "mutate", description: "A" };
+    niagaraOf(b).actions.vpp_sculpt = { kind: "registry", effect: "mutate", description: "B" };
 
-    const epicActionsIn = (g: ToolDef[]) =>
-      g.flatMap((t) => Object.keys(t.actions)).filter((k) => k.startsWith("epic_"));
-
-    const aEpic = epicActionsIn(a);
-    const bEpic = epicActionsIn(b);
-    expect(aEpic.length).toBeGreaterThan(0);
-    expect(bEpic.length).toBeGreaterThan(0);
-    expect(aEpic.some((k) => k.includes("spawn"))).toBe(true);
-    expect(aEpic.some((k) => k.includes("sculpt"))).toBe(false);
-    expect(bEpic.some((k) => k.includes("sculpt"))).toBe(true);
-    expect(bEpic.some((k) => k.includes("spawn"))).toBe(false);
+    expect(Object.keys(niagaraOf(a).actions)).toContain("vpp_spawn");
+    expect(Object.keys(niagaraOf(a).actions)).not.toContain("vpp_sculpt");
+    expect(Object.keys(niagaraOf(b).actions)).toContain("vpp_sculpt");
+    expect(Object.keys(niagaraOf(b).actions)).not.toContain("vpp_spawn");
   });
 
   it("leaves the pristine declaration untouched", () => {
     const before = ALL_TOOLS.map((t) => Object.keys(t.actions).length);
     const session = baseGraphFor(ALL_TOOLS);
-    enrichToolsWithEpicCatalog(session, catalogWith("Niagara", "spawn"), {});
+    session.find((t) => t.name === "niagara")!.actions.vpp_spawn = {
+      kind: "registry", effect: "mutate", description: "A",
+    };
     const after = ALL_TOOLS.map((t) => Object.keys(t.actions).length);
     expect(after).toEqual(before);
   });

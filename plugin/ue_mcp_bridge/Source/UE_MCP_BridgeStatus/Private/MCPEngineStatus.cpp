@@ -404,6 +404,19 @@ void FMCPEngineStatus::CaptureNow()
 	}
 }
 
+bool FMCPEngineStatus::GetActiveModal(FString& OutTitle, FString& OutMessage, TArray<FString>& OutButtons) const
+{
+	FScopeLock Lock(&Mutex);
+	if (!bModalActive)
+	{
+		return false;
+	}
+	OutTitle = ModalTitle;
+	OutMessage = ModalMessage;
+	OutButtons = ModalButtons;
+	return true;
+}
+
 TSharedPtr<FJsonObject> FMCPEngineStatus::Snapshot() const
 {
 	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();

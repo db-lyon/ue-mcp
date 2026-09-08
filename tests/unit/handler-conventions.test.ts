@@ -29,7 +29,7 @@
  * anyone touches that area.
  *
  * A source-level audit cannot prove a rollback is CORRECT, only that one is
- * emitted. Correctness is what the live tier asserts. Catching the omission is
+ * emitted. Correctness is what the live tests asserts. Catching the omission is
  * still most of the value: the common failure is not a wrong rollback, it is
  * no rollback at all.
  */

@@ -24,6 +24,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import WebSocket from "ws";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -265,7 +266,7 @@ export function assertTestProjectDir(reportedDir) {
  * adds the main checkout's copy, because a worktree has no `Saved/` of its own
  * and no compiled plugin, so the editor a developer has running against this
  * repo is always the main checkout's project. Discovering it keeps the live
- * tier runnable from a feature worktree without loosening the guard: every
+ * suite runnable from a feature worktree without loosening the guard: every
  * candidate is still a `tests/ue_mcp` directory holding `ue_mcp.uproject`
  * inside a checkout of this repository, so no other project can ever qualify.
  */
@@ -309,7 +310,7 @@ export function isLiveTestProjectDir(reportedDir, allowed = liveTestProjectDirs(
 }
 
 /**
- * Hard guard for the live tier, with the same contract as
+ * Hard guard for the live tests, with the same contract as
  * `assertTestProjectDir`: nothing is sent to an editor that has any project
  * but this repository's test project open.
  */
@@ -319,7 +320,7 @@ export function assertLiveTestProjectDir(reportedDir, allowed = liveTestProjectD
     "Aborting: the connected editor is not this repository's test project.\n" +
     `  Expected : ${allowed.join("\n             ")}\n` +
     `  Reported : ${reportedDir ?? "(unknown, is the Python plugin enabled?)"}\n` +
-    "The live tier drives a real editor, so it only ever talks to tests/ue_mcp. Nothing was sent.",
+    "The live tests drives a real editor, so it only ever talks to tests/ue_mcp. Nothing was sent.",
   );
 }
 
@@ -340,4 +341,43 @@ export async function verifyTestProjectTarget(call) {
     );
   }
   return assertTestProjectDir(extractReportedProjectDir(result));
+}
+
+/**
+ * One request and its reply over a fresh socket, so nothing is left open.
+ *
+ * Shared because more than one script needs to say something to an editor that
+ * is already running, and each one growing its own copy is how two callers end
+ * up disagreeing about what a timeout means.
+ */
+export function askOnce(url, method, params, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    const timer = setTimeout(() => {
+      ws.terminate();
+      reject(new Error(`${method} on ${url} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    const done = (fn, value) => {
+      clearTimeout(timer);
+      try {
+        ws.close();
+      } catch {
+        /* already closing */
+      }
+      fn(value);
+    };
+    ws.on("error", (err) => done(reject, err));
+    ws.on("open", () => ws.send(JSON.stringify({ id: "ask-once", method, params: params ?? {} })));
+    ws.on("message", (data) => {
+      let message;
+      try {
+        message = JSON.parse(data.toString());
+      } catch {
+        return;
+      }
+      if (message.id !== "ask-once") return;
+      if (message.error) return done(reject, new Error(message.error.message ?? "bridge error"));
+      done(resolve, message.result);
+    });
+  });
 }

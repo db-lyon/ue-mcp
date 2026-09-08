@@ -55,4 +55,10 @@ export abstract class UeMcpTask<
   }
 }
 
+// Guards are authored from `ue-mcp/guard`, not from here. Re-exporting them
+// through this module would close an import cycle, since the guard base
+// extends `UeMcpTask` above, and it would also say the wrong thing: a guard is
+// implemented by a task and is not one, which is the distinction the separate
+// entry point exists to keep.
+
 export type { TaskResult, RollbackRecord, TaskContext, FlowContext };

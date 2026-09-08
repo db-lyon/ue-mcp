@@ -32,6 +32,7 @@ const srcDir = join(here, "..", "..", "src");
 /** Handed a session, a project or a bridge, or holding state keyed by one. */
 const PER_SESSION: Record<string, string> = {
   "bridge.ts": "One socket, port and lockfile per editor.",
+  "dialog-guard.ts": "One guard per editor: the modal blocking IT, and the decision every route defers to.",
   "session.ts": "The registry of editors itself.",
   "session-surface.ts": "One tool graph per editor, and the union advertised from them.",
   "session-env.ts": "Reports which environment variables flatten the registered editors.",
@@ -49,8 +50,7 @@ const PER_SESSION: Record<string, string> = {
   "plugin-freshness.ts": "Compares deployed against compiled inside one project.",
   "content-index.ts": "Walks ONE project's Content tree through that project's own mount table.",
   "install-check.ts": "Answers whether ONE project can build and load the bridge, from that project's descriptor, plugin directory and engine.",
-  "epic-cache.ts": "Catalog cache keyed by project directory.",
-  "epic-enrich.ts": "Enriches one session's graph from that editor's catalog.",
+  "epic-surface.ts": "Applies one project's nativeTools config to its own graph.",
   "locking.ts": "The lock registry lives in the addressed editor's bridge, under that session's owner id.",
   "index.ts": "Builds the registry and dispatches each call into the editor it addressed.",
   "hook-handler.ts": "Runs against the project the hook payload named.",
@@ -87,7 +87,8 @@ const PER_SESSION: Record<string, string> = {
   "flow/bridge-task.ts": "Calls the addressed session's bridge.",
   "flow/guard.ts": "One guard registry per session; a project's guards do not veto another's calls.",
   "flow/guarded-bridge.ts": "Wraps one session's bridge in that session's guards.",
-  "flow/task-guards.ts": "Discovers guards from one session's registry, against that session's raw bridge.",
+  "flow/guards.ts": "Builds pipeline guards from what a plugin or a project declared.",
+  "flow/guard-schema.ts": "What a guard declaration is, shared by the manifest and ue-mcp.yml.",
   "flow/loader.ts": "Loads each project's own ue-mcp.yml.",
   "flow/git-snapshot.ts": "Snapshots the repository holding one project, through its bridge.",
   "flow/http-server.ts": "Resolves an editor per request and refuses an untargeted run.",
@@ -101,11 +102,16 @@ const PER_SESSION: Record<string, string> = {
 
 /** No editor concept, or one deliberate answer for the whole process. */
 const SESSION_INDEPENDENT: Record<string, string> = {
-  "action-class.ts": "A static classification of the action surface; the same answer in every editor.",
+  "action-class.ts": "The verb lexicon's reading of an action NAME, for the actions this package does not declare; the same answer in every editor.",
+  "action-verbs.ts": "The verb lists themselves. A leaf with no imports and no state.",
+  "action-effects.ts": "Indexes whichever tool graph is published for the whole server; the union across sessions is what it reads, and an action's effect does not change with the editor it runs in.",
+  "lock-owner.ts": "The process-wide fallback lock owner id. A session mints its own through this and holds it itself.",
   "offline.ts": "Classifies whichever tool graph it is handed as offline or editor-bound, and builds the editor-down message from a context handed to it; holds nothing per editor.",
   "action-schema.ts": "Derives one action's parameter schema from whichever tool graph it is handed; holds nothing of its own.",
   "bridge-timeouts.ts": "The call budget table and its resolution; the same answer for every editor.",
   "asset-path.ts": "Pure Unreal path handling.",
+  "guard-task.ts": "The base class a guard is written against; pure over the call it is handed.",
+  "epic-input.ts": "Pure argument shaping for one wrapped engine tool call; no editor to scope it to.",
   "path-params.ts": "Pure separator repair over a parameter bag; the same rule in every editor.",
   "field-select.ts": "Pure projection over whatever result it is handed; no editor to scope it to.",
   "call-pipeline.ts": "Composes those two over one call's parameters and result; holds nothing per editor.",

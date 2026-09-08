@@ -22,7 +22,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ActionSpec, ToolContext, ToolDef } from "../types.js";
+import type { ActionEffect, ActionSpec, ToolContext, ToolDef } from "../types.js";
 import { McpError, ErrorCode } from "../errors.js";
 import { getLiveToolGraph } from "../tools.js";
 import { journalActions } from "./journal-actions.js";
@@ -73,18 +73,38 @@ function discover(ctx: ToolContext): SkillPack[] {
  */
 export const FLOW_OWN_ACTIONS = ["run", "plan", "list"] as const;
 
+/**
+ * What each of those three does to the addressed editor.
+ *
+ * Restated here rather than read off the built tool because `flow-tool.ts`
+ * imports this module and importing it back would close a cycle at module
+ * init. `tests/unit/flow-action-contract.test.ts` fails when the two disagree,
+ * so the restatement cannot drift into a second opinion.
+ *
+ * `run` is `mutate` rather than `unknown` even though a flow is only ever
+ * whatever its steps are: a flow of pure reads is theoretically a read, no
+ * flow in this repo or any shipped plugin is one, and both labels gate
+ * identically. The wider answer is the one that stands.
+ */
+export const FLOW_OWN_EFFECTS: Record<(typeof FLOW_OWN_ACTIONS)[number], ActionEffect> = {
+  run: "mutate",
+  plan: "read",
+  list: "read",
+};
+
 /** The flow category as a graph entry, for the check to hold packs against. */
 export function flowCategoryForCheck(): ToolDef {
-  const names = [
-    ...FLOW_OWN_ACTIONS,
-    ...Object.keys(journalActions),
-    ...Object.keys(skillActions),
-  ];
+  const own = Object.entries(FLOW_OWN_EFFECTS).map(
+    ([name, effect]) => [name, { kind: "handler", effect, handler: async () => ({}) }] as const,
+  );
   return {
     name: "flow",
     description: "",
     schema: {},
-    actions: Object.fromEntries(names.map((n) => [n, {}])),
+    // The real specs for everything but the three own actions, so a check that
+    // reads an effect off this stand-in reads the declaration rather than a
+    // placeholder that happens to be next to it.
+    actions: { ...Object.fromEntries(own), ...journalActions, ...skillActions },
     handler: async () => ({}),
   };
 }
@@ -108,6 +128,8 @@ function requireProjectDir(ctx: ToolContext, verb: string): string {
 
 export const skillActions: Record<string, ActionSpec> = {
   skill_list: {
+    kind: "handler",
+    effect: "read",
     description:
       "Every skill pack this server can see: the ones bundled with ue-mcp, the ones contributed by "
       + "loaded plugins (any plugin package shipping skills/<name>/SKILL.md), and the ones installed "
@@ -118,6 +140,8 @@ export const skillActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => skillList(ctx, params),
   },
   skill_get: {
+    kind: "handler",
+    effect: "read",
     description:
       "One skill pack in full, optionally including its markdown, so an agent can read the workflow "
       + "without leaving the tool surface. Reports whether the project's installed copy matches the "
@@ -126,6 +150,8 @@ export const skillActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => skillGet(ctx, params),
   },
   skill_check: {
+    kind: "handler",
+    effect: "read",
     description:
       "Verify every skill pack against the live action surface. A pack is prose that names calls, so a "
       + "renamed or removed action leaves a document that teaches a call the server refuses; this reads "
@@ -137,6 +163,8 @@ export const skillActions: Record<string, ActionSpec> = {
     handler: async (ctx) => skillCheck(ctx),
   },
   skill_install: {
+    kind: "handler",
+    effect: "mutate",
     description:
       "Copy skill packs into this project's .claude/skills, SKILL.md and ue-mcp.yml sidecar together. "
       + "Idempotent and specific about it: a pack whose destination already holds the same bytes comes "
@@ -147,6 +175,8 @@ export const skillActions: Record<string, ActionSpec> = {
     handler: async (ctx, params) => skillInstall(ctx, params),
   },
   skill_remove: {
+    kind: "handler",
+    effect: "mutate",
     description:
       "Remove installed skill packs from this project's .claude/skills. Deletes the SKILL.md and its "
       + "sidecar, then the pack directory only if it ends up empty and the skills directory only if it "

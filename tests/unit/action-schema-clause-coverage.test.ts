@@ -83,6 +83,12 @@ const ENGLISH_NOT_A_PARAMETER: Record<string, string[]> = {
   "gameplay.find_nav_path": ["filter"],
   // "parameters[] ({name, type}) where type is float|int32|bool|string|name|double"
   "statetree.set_root_parameters": ["name"],
+  // "... onConflict? (skip | overwrite), override? ..." reads as prose here:
+  // the word is English in this clause and became a collision only once the
+  // wrapped engine tools declared `override` as a real material parameter.
+  // Declaring 549 new parameter names across the surface is bound to turn a
+  // few existing English words into collisions; this is the mechanism for it.
+  "material.build_material": ["override"],
 };
 
 describe("the parser recovers what the clause names", () => {

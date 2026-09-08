@@ -13,7 +13,7 @@
     <rect width="1640" height="180" rx="22" fill="#14283f" stroke="#38bdf8" stroke-width="2"/>
     <text x="32" y="44" fill="#38bdf8" font-family="Segoe UI, Arial" font-size="23" font-weight="700">THE SIX-FIELD SENTENCE</text>
     <text x="32" y="90" fill="#f8fafc" font-family="Segoe UI, Arial" font-size="27" font-weight="600">Target + frame + viewpoint + operation + amount + constraints</text>
-    <text x="32" y="137" fill="#cbd5e1" font-family="Segoe UI, Arial" font-size="22">“On the LeatherHood, in character space, looking down, rotate about up, 15° clockwise, preserving location and scale.”</text>
+    <text x="32" y="137" fill="#cbd5e1" font-family="Segoe UI, Arial" font-size="22">“On the HeadMesh, in character space, looking down, rotate about up, 15° clockwise, preserving location and scale.”</text>
     <text x="32" y="166" fill="#64748b" font-family="Segoe UI, Arial" font-size="17">Obvious context may be inferred. Ask one concise question only when the frame or viewpoint changes the result.</text>
   </g>
 

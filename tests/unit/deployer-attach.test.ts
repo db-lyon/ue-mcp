@@ -8,7 +8,7 @@
  * next launch in Unreal into a missing-plugin prompt, on a project the user
  * only pointed at.
  *
- * The live tier asserts the same property against the real test project
+ * The live tests asserts the same property against the real test project
  * (tests/live/single-editor.test.ts); this is the half that needs no editor.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
