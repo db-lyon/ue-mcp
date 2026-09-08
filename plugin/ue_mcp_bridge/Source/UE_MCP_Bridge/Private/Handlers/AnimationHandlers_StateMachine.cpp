@@ -40,6 +40,7 @@
 #include "Rig/Solvers/IKRigFullBodyIK.h"
 #include "Retargeter/IKRetargetChainMapping.h"
 #include "Retargeter/IKRetargetOps.h"
+#include "JsonObjectConverter.h"
 #include "Retargeter/IKRetargetProcessor.h"
 #endif
 #include "PoseSearch/PoseSearchDatabase.h"
@@ -2039,6 +2040,27 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadIKRetargeter(const TSharedPtr<FJs
 			}
 		}
 		OpObj->SetArrayField(TEXT("chainMappings"), OpMappings);
+
+		// #1000: the settings struct is what decides what an op does - the root
+		// motion source, the pelvis alphas, the per-chain FK modes - and this
+		// readout reported everything about an op except that. It is reflected,
+		// so it serialises whole and a later engine adding a field needs no
+		// change here.
+		if (const FIKRetargetOpBase* const Op = OpStruct ? OpStruct->GetPtr<FIKRetargetOpBase>() : nullptr)
+		{
+			if (const UScriptStruct* const SettingsType = Op->GetSettingsType())
+			{
+				OpObj->SetStringField(TEXT("settingsType"), SettingsType->GetPathName());
+				if (const FIKRetargetOpSettingsBase* const Settings = Op->GetSettingsConst())
+				{
+					const TSharedRef<FJsonObject> SettingsJson = MakeShared<FJsonObject>();
+					if (FJsonObjectConverter::UStructToJsonObject(SettingsType, Settings, SettingsJson, 0, 0))
+					{
+						OpObj->SetObjectField(TEXT("settings"), SettingsJson);
+					}
+				}
+			}
+		}
 		RetargetOps.Add(MakeShared<FJsonValueObject>(OpObj));
 	}
 	Result->SetArrayField(TEXT("retargetOps"), RetargetOps);

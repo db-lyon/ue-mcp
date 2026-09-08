@@ -278,6 +278,21 @@ const IKRigExclusion = z.object({
   excluded: z.boolean(),
 }).strict();
 
+// One op's settings write. `settings` names properties on the op's own
+// settings struct, whatever the engine reflects there; `chainSettings`
+// merges into the ChainsToRetarget entry for one named chain rather than
+// replacing the whole array, so adjusting one chain leaves the rest alone
+// (#1000/#1034).
+const IKRetargetOpSettings = z.object({
+  name: z.string().min(1).optional(),
+  index: z.number().int().min(0).optional(),
+  enabled: z.boolean().optional(),
+  settings: z.record(z.unknown()).optional(),
+  chainSettings: z
+    .array(z.object({ chain: z.string().min(1) }).catchall(z.unknown()))
+    .optional(),
+});
+
 const IKRetargetChainMapping = z.object({
   targetChain: z.string().min(1),
   sourceChain: z.string().min(1).nullable().optional(),
@@ -423,8 +438,8 @@ export const animationTool: ToolDef = categoryTool(
     create_composite:   bp("mutate", "Create AnimComposite. Params: name, skeletonPath, packagePath?", "create_anim_composite"),
     list_modifiers:     bp("read", "List applied animation modifiers. Params: assetPath", "list_anim_modifiers", (p) => ({ path: p.assetPath })),
     create_ik_retargeter: bp("mutate", "Create IKRetargeter asset and (default) initialize the UE 5.7 ops stack: assigns sourceRig+targetRig to all ops, runs AutoMapChains. Returns chainsMapped count. Params: name, packagePath?, sourceRig?, targetRig?, autoMapChains? (default true) (#246)", "create_ik_retargeter", (p) => ({ name: p.name, packagePath: p.packagePath, sourceRig: p.sourceRig, targetRig: p.targetRig, autoMapChains: p.autoMapChains, onConflict: p.onConflict })),
-    read_ik_retargeter: bp("read", "Read an IK Retargeter's source/target rigs and preview meshes, flattened and per-op chain mappings, typed op stack, and all named/current pose offsets when the compiled engine exposes them. Params: assetPath (#246)", "read_ik_retargeter", (p) => ({ assetPath: p.assetPath })),
-    configure_ik_retargeter: bp("mutate", "UE 5.8 only. Configure an existing IK Retargeter through UIKRetargeterController with the correct default-op and per-op rig assignment order, auto/manual chain mappings, named pose authoring, processor validation, native readback, transaction rollback, and checked save; older engines return unsupported_engine_version. Whole-pose auto-align resets that pose first: create a new pose or pass pose.reset=true to acknowledge replacement, then manual offsets are applied. Params: retargeterPath, sourceRig?, targetRig?, sourcePreviewMesh?, targetPreviewMesh?, ensureDefaultOps? (default true), autoMapMode? ('exact'|'fuzzy'|'clear'), forceRemap? (default false), chainMappings?: [{targetChain,sourceChain?:string|null}], pose?: {side,name,create?,reset?,autoAlign?,bones?,rotationOffsets?:[{bone,rotationQuaternion}],rootOffsetZ?,snapBoneToGround?}.", "configure_ik_retargeter", (p) => ({ retargeterPath: p.retargeterPath, sourceRig: p.sourceRig, targetRig: p.targetRig, sourcePreviewMesh: p.sourcePreviewMesh, targetPreviewMesh: p.targetPreviewMesh, ensureDefaultOps: p.ensureDefaultOps, autoMapMode: p.autoMapMode, forceRemap: p.forceRemap, chainMappings: p.chainMappings, pose: p.pose })),
+    read_ik_retargeter: bp("read", "Read an IK Retargeter's source/target rigs and preview meshes, flattened and per-op chain mappings, typed op stack, and all named/current pose offsets when the compiled engine exposes them. Each op now carries its `settings` object in full, reflected off the op's own settings struct: the Root Motion op's RootMotionSource, the Pelvis Motion op's alphas and offsets, and the FK Chains op's per-chain RotationMode and TranslationMode. Those settings decide what a retarget actually does, and they were the part only Python could see (#1000). Params: assetPath (#246)", "read_ik_retargeter", (p) => ({ assetPath: p.assetPath })),
+    configure_ik_retargeter: bp("mutate", "UE 5.8 only. `ops` writes the per-op settings that decide what a retarget does and that nothing else could reach: pass {name or index, enabled?, settings?, chainSettings?}. `settings` writes properties on the op's own settings struct; `chainSettings` merges per-chain FK properties into the chain you name rather than replacing the whole ChainsToRetarget list, so setting one chain's RotationMode leaves the others alone. Every op write is validated before the transaction opens and applied inside it, so a bad property name changes nothing (#1000/#1034). Configure an existing IK Retargeter through UIKRetargeterController with the correct default-op and per-op rig assignment order, auto/manual chain mappings, named pose authoring, processor validation, native readback, transaction rollback, and checked save; older engines return unsupported_engine_version. Whole-pose auto-align resets that pose first: create a new pose or pass pose.reset=true to acknowledge replacement, then manual offsets are applied. Params: retargeterPath, sourceRig?, targetRig?, sourcePreviewMesh?, targetPreviewMesh?, ensureDefaultOps? (default true), autoMapMode? ('exact'|'fuzzy'|'clear'), forceRemap? (default false), chainMappings?: [{targetChain,sourceChain?:string|null}], pose?: {side,name,create?,reset?,autoAlign?,bones?,rotationOffsets?:[{bone,rotationQuaternion}],rootOffsetZ?,snapBoneToGround?}.", "configure_ik_retargeter", (p) => ({ ops: p.ops, retargeterPath: p.retargeterPath, sourceRig: p.sourceRig, targetRig: p.targetRig, sourcePreviewMesh: p.sourcePreviewMesh, targetPreviewMesh: p.targetPreviewMesh, ensureDefaultOps: p.ensureDefaultOps, autoMapMode: p.autoMapMode, forceRemap: p.forceRemap, chainMappings: p.chainMappings, pose: p.pose })),
     set_ik_rig_mesh:      bp("mutate", "Set the preview/source skeletal mesh on an EXISTING IK Rig. Params: rigPath, meshPath (#701)", "set_ik_rig_mesh", (p) => ({ rigPath: p.rigPath, meshPath: p.meshPath })),
     set_ik_retargeter_rig: bp("mutate", "Set the source or target IK Rig on an EXISTING IK Retargeter. Params: retargeterPath, rigPath, side? (source|target, default target) (#703)", "set_ik_retargeter_rig", (p) => ({ retargeterPath: p.retargeterPath, rigPath: p.rigPath, side: p.side })),
     auto_align_retarget_pose: bp("mutate", "Auto-align all bones of the source/target retarget pose (chain-to-chain) - fixes a retargeter that outputs a static reference pose. Params: retargeterPath, side? (source|target, default target) (#701)", "auto_align_retarget_pose", (p) => ({ retargeterPath: p.retargeterPath, side: p.side })),
@@ -641,6 +656,7 @@ export const animationTool: ToolDef = categoryTool(
     autoMapMode: z.string().optional().describe("configure_ik_retargeter: native chain auto-map mode: exact | fuzzy | clear"),
     forceRemap: z.boolean().optional().describe("configure_ik_retargeter: replace existing mappings during auto-map; defaults false"),
     chainMappings: z.array(IKRetargetChainMapping).max(10_000).optional().describe("configure_ik_retargeter: explicit target-to-source chain overrides; null or omitted source clears"),
+    ops: z.array(IKRetargetOpSettings).max(64).optional().describe("configure_ik_retargeter: per-op writes. Each entry names an op by `name` or `index` and carries `enabled`, `settings` (properties on that op's settings struct, e.g. RootMotionSource on the Root Motion op or RotationAlpha on Pelvis Motion) and `chainSettings` (per-chain FK properties such as RotationMode and TranslationMode, merged into the named chain rather than replacing the whole list). read_ik_retargeter reports the settings each op actually carries (#1000/#1034)"),
     pose: IKRetargetPose.optional().describe("configure_ik_retargeter: named source or target pose authoring"),
     side: z.string().optional().describe("source|target for retargeter rig/pose actions (#701/#703)"),
     sourceMesh: z.string().optional().describe("batch_retarget_animations: source skeletal mesh (#701)"),
