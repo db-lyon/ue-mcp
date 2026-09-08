@@ -48,7 +48,7 @@ guards:
     description: Arbitrary code and wrapped third-party tools need a human
     scope: unknown
     before:
-      class_path: tasks/AskFirst
+      class_path: guards/AskFirst
 ```
 
 `mutations` includes `unknown`, since a call that might change something is treated as one everywhere in this server.
@@ -69,6 +69,8 @@ A guard needs at least one hook. One with neither would be registered, reported 
 
 Both hooks are optional and independent, so one named guard can hold both halves of a concern and they know they belong together. Ordering is a number rather than something a name has to imply.
 
+`class_path` is a path, resolved from the server's working directory: `guards/PolicyGuard` looks for `guards/PolicyGuard.ts`, `.js`, or an `index` under that name. Nothing enforces a directory, and `guards/` is the convention here only because a guard is not a task and should not sit in `tasks/` next to things that are. A plugin package is the one place a directory IS fixed: a plugin's own tasks resolve from its compiled `dist/tasks/`.
+
 `options` are bound when the guard is built. The call being guarded is layered over them, so a hook reads its configuration and its subject from one object: `method`, `params`, `paths` (the existing files the call will touch, empty for reads) and, for `after`, `result`.
 
 A `class_path` that cannot be resolved stops the server at boot, naming the guard and the manifest or config that declared it. With no guard registered the pipeline is a pass-through, so a guard that failed to build would leave the calls it covers ungated while the configuration says they are guarded.
@@ -84,11 +86,11 @@ guards:
     description: Deny writes outside /Game/Sandbox
     scope: writes
     before:
-      class_path: tasks/PolicyGuard
+      class_path: guards/PolicyGuard
 ```
 
 ```ts
-// tasks/PolicyGuard.ts
+// guards/PolicyGuard.ts
 import { UeMcpGuard, type GuardedCall } from "ue-mcp/guard";
 
 export default class PolicyGuard extends UeMcpGuard<{ allow?: string[] }> {
@@ -120,11 +122,11 @@ guards:
     description: Append every action to an audit log
     scope: all
     after:
-      class_path: tasks/AuditGuard
+      class_path: guards/AuditGuard
 ```
 
 ```ts
-// tasks/AuditGuard.ts
+// guards/AuditGuard.ts
 import { UeMcpGuard, type GuardedCall } from "ue-mcp/guard";
 import { appendFileSync } from "node:fs";
 
