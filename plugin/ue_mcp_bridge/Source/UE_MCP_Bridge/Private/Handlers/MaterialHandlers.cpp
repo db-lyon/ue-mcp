@@ -94,6 +94,7 @@ void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	Registry.RegisterHandler(TEXT("create_material_simple"), &CreateMaterialSimple);
 	Registry.RegisterHandler(TEXT("set_material_usage"), &SetMaterialUsage);
+	Registry.RegisterHandler(TEXT("get_material_usage"), &GetMaterialUsage);
 
 	// #463: MaterialFunction authoring.
 	Registry.RegisterHandler(TEXT("create_material_function"), &CreateMaterialFunction);
@@ -2975,34 +2976,178 @@ UMaterialExpression* FMaterialHandlers::FindExpressionByName(UMaterial* Material
 	return nullptr;
 }
 
-// #225: parse a string usage flag into EMaterialUsage. Mirrors the
-// MATUSAGE_* enum names but accepts shorter aliases too.
+// #225, #1004: every usage flag this handler knows comes from the engine own
+// reflection rather than from a list written out here. EMaterialUsage is a
+// UENUM, so StaticEnum names each enumerator that exists on the engine being
+// built against, and the flag is backed by a bUsedWith* UPROPERTY on UMaterial
+// whose name follows from the enumerator name.
+//
+// Two hand-written tables used to do this, one for the names the parser
+// accepted and one for the property that clears a flag, and both stopped at the
+// twenty enumerators somebody had typed out. VolumetricCloud, Voxels,
+// HeterogeneousVolumes, MeshDeformer, Curves and every enumerator a later
+// engine adds were reported back as unknown (#1004), and writing them in was
+// not open either: naming a 5.8-only enumerator here stops the plugin compiling
+// against 5.4.
+//
+// UMaterial::GetUsageName would have given the same mapping in one call, but it
+// is not reachable the same way on every supported engine (a const member on
+// UMaterial through 5.7, a static on UMaterialInterface from 5.8) and its
+// unhandled arm is UE_LOG(Fatal), which takes the editor down rather than
+// returning an error. So do the engine accessors for reading and writing a
+// flag. That is what MaterialUsageProperty guards below: an enumerator is only
+// admitted once the property behind it resolves on this build, because that
+// property IS the member those switches read, and an enumerator without one
+// would end the session instead of answering.
 namespace
 {
-	static bool ParseMaterialUsage(const FString& In, EMaterialUsage& OutUsage)
+	/**
+	 * Fold a usage name to the form matching compares on. Case, separators, the
+	 * MATUSAGE_ enumerator prefix, the bUsedWith property prefix and a trailing
+	 * plural all carry no meaning here: MATUSAGE_SplineMesh is backed by
+	 * bUsedWithSplineMeshes, so the plural has to go for the two to meet.
+	 */
+	static FString MaterialUsageKey(const FString& In)
 	{
-		const FString S = In.ToLower();
-		auto Hit = [&](const TCHAR* Pat) { return S.Contains(Pat); };
-		if (Hit(TEXT("instanced_static_meshes")) || Hit(TEXT("instancedstatic")) || Hit(TEXT("ism"))) { OutUsage = MATUSAGE_InstancedStaticMeshes; return true; }
-		if (Hit(TEXT("skeletalmesh")) || Hit(TEXT("skeletal_mesh"))) { OutUsage = MATUSAGE_SkeletalMesh; return true; }
-		if (Hit(TEXT("particle_sprites")) || Hit(TEXT("particlesprite"))) { OutUsage = MATUSAGE_ParticleSprites; return true; }
-		if (Hit(TEXT("beam_trails")) || Hit(TEXT("beamtrails"))) { OutUsage = MATUSAGE_BeamTrails; return true; }
-		if (Hit(TEXT("mesh_particles")) || Hit(TEXT("meshparticles"))) { OutUsage = MATUSAGE_MeshParticles; return true; }
-		if (Hit(TEXT("static_lighting")) || Hit(TEXT("staticlighting"))) { OutUsage = MATUSAGE_StaticLighting; return true; }
-		if (Hit(TEXT("morphtargets")) || Hit(TEXT("morph_targets"))) { OutUsage = MATUSAGE_MorphTargets; return true; }
-		if (Hit(TEXT("splinemesh")) || Hit(TEXT("spline_mesh"))) { OutUsage = MATUSAGE_SplineMesh; return true; }
-		if (Hit(TEXT("niagara_sprites")) || Hit(TEXT("niagarasprite"))) { OutUsage = MATUSAGE_NiagaraSprites; return true; }
-		if (Hit(TEXT("niagara_ribbons")) || Hit(TEXT("niagararibbon"))) { OutUsage = MATUSAGE_NiagaraRibbons; return true; }
-		if (Hit(TEXT("niagara_meshparticles")) || Hit(TEXT("niagaramesh"))) { OutUsage = MATUSAGE_NiagaraMeshParticles; return true; }
-		if (Hit(TEXT("geometrycache")) || Hit(TEXT("geometry_cache"))) { OutUsage = MATUSAGE_GeometryCache; return true; }
-		if (Hit(TEXT("nanite"))) { OutUsage = MATUSAGE_Nanite; return true; }
-		if (Hit(TEXT("watersurface")) || Hit(TEXT("water_surface"))) { OutUsage = MATUSAGE_Water; return true; }
-		if (Hit(TEXT("hairstrands")) || Hit(TEXT("hair_strands"))) { OutUsage = MATUSAGE_HairStrands; return true; }
-		if (Hit(TEXT("lidarpointcloud")) || Hit(TEXT("lidar"))) { OutUsage = MATUSAGE_LidarPointCloud; return true; }
-		if (Hit(TEXT("virtualheightfieldmesh")) || Hit(TEXT("vhfm"))) { OutUsage = MATUSAGE_VirtualHeightfieldMesh; return true; }
-		if (Hit(TEXT("clothing"))) { OutUsage = MATUSAGE_Clothing; return true; }
-		if (Hit(TEXT("geometrycollections")) || Hit(TEXT("geometry_collections"))) { OutUsage = MATUSAGE_GeometryCollections; return true; }
-		return false;
+		FString S = In.ToLower();
+		S.ReplaceInline(TEXT("_"), TEXT(""));
+		S.ReplaceInline(TEXT(" "), TEXT(""));
+		S.RemoveFromStart(TEXT("matusage"));
+		S.RemoveFromStart(TEXT("busedwith"));
+		S.RemoveFromEnd(TEXT("s"));
+		return S;
+	}
+
+	/** The enumerator spelling with the MATUSAGE_ prefix off: VolumetricCloud. */
+	static FString MaterialUsageShortName(const FString& EnumeratorName)
+	{
+		FString S = EnumeratorName;
+		S.RemoveFromStart(TEXT("MATUSAGE_"));
+		return S;
+	}
+
+	/**
+	 * The bUsedWith* UPROPERTY backing a usage, or empty when this build has
+	 * none. The name is resolved against the class rather than assembled and
+	 * trusted, so an enumerator the engine spells differently degrades to "no
+	 * reflected property" instead of handing the caller a set_property call that
+	 * would fail. Both plural forms are tried because the engine uses both:
+	 * MATUSAGE_SplineMesh is bUsedWithSplineMeshes while MATUSAGE_StaticMesh is
+	 * bUsedWithStaticMesh.
+	 */
+	static FString MaterialUsageProperty(const FString& EnumeratorName)
+	{
+		const FString Short = MaterialUsageShortName(EnumeratorName);
+		if (Short.IsEmpty()) return FString();
+		UClass* const Cls = UMaterial::StaticClass();
+		const FString Candidates[] = {
+			FString(TEXT("bUsedWith")) + Short,
+			FString(TEXT("bUsedWith")) + Short + TEXT("s"),
+			FString(TEXT("bUsedWith")) + Short + TEXT("es"),
+		};
+		for (const FString& Candidate : Candidates)
+		{
+			if (Cls->FindPropertyByName(FName(*Candidate))) return Candidate;
+		}
+		return FString();
+	}
+
+	/** One usage flag this engine build can actually be asked about. */
+	struct FMaterialUsageFlag
+	{
+		EMaterialUsage Usage;
+		FString Name;      // VolumetricCloud
+		FString Key;       // volumetriccloud, the form matching compares on
+		FString Property;  // bUsedWithVolumetricCloud
+	};
+
+	/**
+	 * Every EMaterialUsage this build reflects that also has a property behind
+	 * it. Built once: the enum and the class are both fixed for the process.
+	 */
+	static const TArray<FMaterialUsageFlag>& MaterialUsageFlags()
+	{
+		static const TArray<FMaterialUsageFlag> Flags = []
+		{
+			TArray<FMaterialUsageFlag> Out;
+			const UEnum* const Enum = StaticEnum<EMaterialUsage>();
+			if (!Enum) return Out;
+			for (int32 Index = 0; Index < Enum->NumEnums(); ++Index)
+			{
+				// NumEnums counts the generated _MAX sentinel, which is not a flag.
+				const FString EnumeratorName = Enum->GetNameStringByIndex(Index);
+				if (EnumeratorName.EndsWith(TEXT("_MAX"))) continue;
+				const int64 Value = Enum->GetValueByIndex(Index);
+				if (Value < 0 || Value >= static_cast<int64>(MATUSAGE_MAX)) continue;
+				const FString Property = MaterialUsageProperty(EnumeratorName);
+				if (Property.IsEmpty()) continue;
+				FMaterialUsageFlag Flag;
+				Flag.Usage = static_cast<EMaterialUsage>(Value);
+				Flag.Name = MaterialUsageShortName(EnumeratorName);
+				Flag.Key = MaterialUsageKey(EnumeratorName);
+				Flag.Property = Property;
+				Out.Add(MoveTemp(Flag));
+			}
+			return Out;
+		}();
+		return Flags;
+	}
+
+	/**
+	 * Read a usage flag off a material through its reflected property rather than
+	 * through UMaterial::GetUsageByFlag, which is a switch whose unhandled arm is
+	 * UE_LOG(Fatal). The property is the same member that accessor would read.
+	 */
+	static bool MaterialUsageIsSet(const UMaterial* Material, const FMaterialUsageFlag& Flag)
+	{
+		if (!Material) return false;
+		const FBoolProperty* const Prop = CastField<FBoolProperty>(
+			UMaterial::StaticClass()->FindPropertyByName(FName(*Flag.Property)));
+		return Prop ? Prop->GetPropertyValue_InContainer(Material) : false;
+	}
+
+	/**
+	 * Short forms the surface accepted before the names were derived from the
+	 * engine. None can be reached by folding: two are initialisms and
+	 * MATUSAGE_Water was spelled watersurface. So they stay written down, and
+	 * they stay at all because callers already send them.
+	 */
+	static FString MaterialUsageAlias(const FString& Key)
+	{
+		if (Key == TEXT("ism"))          return MaterialUsageKey(TEXT("InstancedStaticMeshes"));
+		if (Key == TEXT("vhfm"))         return MaterialUsageKey(TEXT("VirtualHeightfieldMesh"));
+		if (Key == TEXT("lidar"))        return MaterialUsageKey(TEXT("LidarPointCloud"));
+		if (Key == TEXT("watersurface")) return MaterialUsageKey(TEXT("Water"));
+		return FString();
+	}
+
+	static const FMaterialUsageFlag* ParseMaterialUsage(const FString& In)
+	{
+		FString Key = MaterialUsageKey(In);
+		if (Key.IsEmpty()) return nullptr;
+		const FString Aliased = MaterialUsageAlias(Key);
+		if (!Aliased.IsEmpty()) Key = Aliased;
+
+		const TArray<FMaterialUsageFlag>& Flags = MaterialUsageFlags();
+		for (const FMaterialUsageFlag& Flag : Flags)
+		{
+			if (Flag.Key == Key) return &Flag;
+		}
+		// The names used to be matched with Contains, so "Nanite meshes" landed on
+		// Nanite. That leniency is kept for callers already relying on it, but only
+		// where it picks exactly one flag: under Contains a string naming two of
+		// them silently took whichever the list happened to spell first.
+		const FMaterialUsageFlag* Loose = nullptr;
+		int32 LooseCount = 0;
+		for (const FMaterialUsageFlag& Flag : Flags)
+		{
+			if (Flag.Key.Contains(Key) || Key.Contains(Flag.Key))
+			{
+				Loose = &Flag;
+				++LooseCount;
+			}
+		}
+		return LooseCount == 1 ? Loose : nullptr;
 	}
 
 	// UMaterial::SetMaterialUsage became a one-argument virtual in UE 5.8. The
@@ -3201,6 +3346,60 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 	return MCPResult(Result);
 }
 
+// #1004: read the usage flags. set_material_usage could turn one on and
+// nothing in the surface could say whether it was on, so confirming a flag
+// meant execute_python, and on a material instance even that failed:
+// get_editor_property finds no bUsedWith* property on a UMaterialInstance,
+// because the flags live on the base material an instance resolves to.
+//
+// Answering for an instance by walking to that base is not a convenience, it
+// is the actual semantics - an instance renders through its parent shader map,
+// so the parent flags ARE the instance flags - and the response names the
+// material they were read from so the answer is not mistaken for one about the
+// asset that was asked for.
+TSharedPtr<FJsonValue> FMaterialHandlers::GetMaterialUsage(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+
+	UMaterialInterface* const Asset = LoadAssetByPath<UMaterialInterface>(AssetPath);
+	if (!Asset) return MCPError(FString::Printf(TEXT("Material not found: %s"), *AssetPath));
+	UMaterial* const Material = Asset->GetMaterial();
+	if (!Material) return MCPError(FString::Printf(
+		TEXT("%s resolves to no base material, so it has no usage flags"), *Asset->GetPathName()));
+
+	const bool bInherited = Material != Asset;
+
+	TArray<TSharedPtr<FJsonValue>> All;
+	TArray<TSharedPtr<FJsonValue>> Enabled;
+	for (const FMaterialUsageFlag& Flag : MaterialUsageFlags())
+	{
+		const bool bSet = MaterialUsageIsSet(Material, Flag);
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetStringField(TEXT("usage"), Flag.Name);
+		Entry->SetStringField(TEXT("propertyName"), Flag.Property);
+		Entry->SetBoolField(TEXT("enabled"), bSet);
+		All.Add(MakeShared<FJsonValueObject>(Entry));
+		if (bSet) Enabled.Add(MakeShared<FJsonValueString>(Flag.Name));
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), Asset->GetPathName());
+	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
+	Result->SetBoolField(TEXT("inherited"), bInherited);
+	Result->SetArrayField(TEXT("usages"), All);
+	Result->SetArrayField(TEXT("enabled"), Enabled);
+	if (bInherited)
+	{
+		Result->SetStringField(TEXT("inheritedNote"), FString::Printf(
+			TEXT("%s is a material instance and carries no usage flags of its own. These were read from the base material %s, which is the shader map the instance renders through, so turning one on means calling set_usage on that material."),
+			*Asset->GetPathName(), *Material->GetPathName()));
+	}
+	Result->SetStringField(TEXT("flagSourceNote"),
+		TEXT("The set of flags comes from this engine EMaterialUsage reflection, so it is exactly what this build supports rather than a list the bridge carries. Each entry names the bUsedWith* property behind it, which is what editor(set_property) writes to clear a flag."));
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialUsage(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -3228,60 +3427,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialUsage(const TSharedPtr<FJso
 	// goes through editor(set_property) on the reflected bUsedWith* property,
 	// and the exact calls are returned below under clearCalls.
 
-	// Every usage ParseMaterialUsage above can recognise is backed by a plain
-	// bUsedWith* UPROPERTY on UMaterial, which is what makes editor(set_property)
-	// able to clear one. This table covers all twenty of them, including Water,
-	// HairStrands, LidarPointCloud, VirtualHeightfieldMesh and Nanite - each of
-	// those does have a property (uint32 bitfields rather than uint8, which is
-	// the only thing that sets them apart) and an earlier version of this table
-	// omitted them, so the response told callers they could not be cleared when
-	// they could.
-	//
-	// Only the twenty are listed: EMaterialUsage carries more (Voxels,
-	// VolumetricCloud, MeshDeformer, Curves and others), but this handler cannot
-	// reach them because the parser does not spell them, and naming a 5.8-only
-	// enumerator here would stop the plugin compiling against 5.7.
-	//
-	// The name is resolved against the class rather than trusted, so a rename in
-	// a future engine degrades to "no reflected property" instead of handing the
-	// caller a set_property call that would fail.
-	auto UsageClearProperty = [](EMaterialUsage Usage) -> FString
-	{
-		const TCHAR* Name = nullptr;
-		switch (Usage)
-		{
-		case MATUSAGE_SkeletalMesh:           Name = TEXT("bUsedWithSkeletalMesh"); break;
-		case MATUSAGE_ParticleSprites:        Name = TEXT("bUsedWithParticleSprites"); break;
-		case MATUSAGE_BeamTrails:             Name = TEXT("bUsedWithBeamTrails"); break;
-		case MATUSAGE_MeshParticles:          Name = TEXT("bUsedWithMeshParticles"); break;
-		case MATUSAGE_StaticLighting:         Name = TEXT("bUsedWithStaticLighting"); break;
-		case MATUSAGE_MorphTargets:           Name = TEXT("bUsedWithMorphTargets"); break;
-		// Plural in the property, singular in the enumerator.
-		case MATUSAGE_SplineMesh:             Name = TEXT("bUsedWithSplineMeshes"); break;
-		case MATUSAGE_InstancedStaticMeshes:  Name = TEXT("bUsedWithInstancedStaticMeshes"); break;
-		case MATUSAGE_GeometryCollections:    Name = TEXT("bUsedWithGeometryCollections"); break;
-		case MATUSAGE_Clothing:               Name = TEXT("bUsedWithClothing"); break;
-		case MATUSAGE_NiagaraSprites:         Name = TEXT("bUsedWithNiagaraSprites"); break;
-		case MATUSAGE_NiagaraRibbons:         Name = TEXT("bUsedWithNiagaraRibbons"); break;
-		case MATUSAGE_NiagaraMeshParticles:   Name = TEXT("bUsedWithNiagaraMeshParticles"); break;
-		case MATUSAGE_GeometryCache:          Name = TEXT("bUsedWithGeometryCache"); break;
-		case MATUSAGE_Water:                  Name = TEXT("bUsedWithWater"); break;
-		case MATUSAGE_HairStrands:            Name = TEXT("bUsedWithHairStrands"); break;
-		case MATUSAGE_LidarPointCloud:        Name = TEXT("bUsedWithLidarPointCloud"); break;
-		case MATUSAGE_VirtualHeightfieldMesh: Name = TEXT("bUsedWithVirtualHeightfieldMesh"); break;
-		case MATUSAGE_Nanite:                 Name = TEXT("bUsedWithNanite"); break;
-		default: return FString();
-		}
-		return UMaterial::StaticClass()->FindPropertyByName(FName(Name)) ? FString(Name) : FString();
-	};
-
 	TArray<FString> Applied, Unknown, AlreadySet;
 	TArray<TSharedPtr<FJsonValue>> ClearCalls;
 	FString SingleClearProperty;
 	for (const FString& U : UsagesIn)
 	{
-		EMaterialUsage Usage;
-		if (!ParseMaterialUsage(U, Usage))
+		const FMaterialUsageFlag* const Flag = ParseMaterialUsage(U);
+		if (!Flag)
 		{
 			Unknown.Add(U);
 			continue;
@@ -3293,10 +3445,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialUsage(const TSharedPtr<FJso
 		// that also drives the shader-map recompile, so a material whose bit is
 		// set but whose shaders were never compiled is still repaired by a
 		// replay. Skipping it would have quietly removed that repair.
-		const bool bWasSet = Material->GetUsageByFlag(Usage);
+		const bool bWasSet = MaterialUsageIsSet(Material, *Flag);
 		// The bNeedsRecompile out param is gone in the virtual implementation;
 		// the shim that kept it always ignored the value anyway.
-		ApplyMaterialUsage(Material, Usage);
+		ApplyMaterialUsage(Material, Flag->Usage);
 		if (bWasSet)
 		{
 			AlreadySet.Add(U);
@@ -3304,17 +3456,16 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialUsage(const TSharedPtr<FJso
 		}
 		Applied.Add(U);
 
-		const FString ClearProperty = UsageClearProperty(Usage);
-		if (!ClearProperty.IsEmpty())
-		{
-			SingleClearProperty = ClearProperty;
-			TSharedPtr<FJsonObject> Call = MakeShared<FJsonObject>();
-			Call->SetStringField(TEXT("usage"), U);
-			Call->SetStringField(TEXT("objectPath"), Material->GetPathName());
-			Call->SetStringField(TEXT("propertyName"), ClearProperty);
-			Call->SetBoolField(TEXT("value"), false);
-			ClearCalls.Add(MakeShared<FJsonValueObject>(Call));
-		}
+		// A flag is only admitted once the bUsedWith* property behind it resolves
+		// on this build, so every applied flag has one and clearCalls matches
+		// applied one for one.
+		SingleClearProperty = Flag->Property;
+		TSharedPtr<FJsonObject> Call = MakeShared<FJsonObject>();
+		Call->SetStringField(TEXT("usage"), U);
+		Call->SetStringField(TEXT("objectPath"), Material->GetPathName());
+		Call->SetStringField(TEXT("propertyName"), Flag->Property);
+		Call->SetBoolField(TEXT("value"), false);
+		ClearCalls.Add(MakeShared<FJsonValueObject>(Call));
 	}
 
 	Material->PreEditChange(nullptr);
@@ -3366,8 +3517,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialUsage(const TSharedPtr<FJso
 	{
 		Result->SetBoolField(TEXT("rollbackPossible"), false);
 		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
-			TEXT("This call turned on %d flag(s) and a rollback record carries one call, so no single inverse is offered. Each one is listed in clearCalls with the exact editor(set_property) arguments that clear it; run them in any order. %d of them resolved to no reflected property on this engine build and are absent from clearCalls, so nothing in the surface clears those."),
-			Applied.Num(), Applied.Num() - ClearCalls.Num()));
+			TEXT("This call turned on %d flag(s) and a rollback record carries one call, so no single inverse is offered. Each one is listed in clearCalls with the exact editor(set_property) arguments that clear it; run them in any order."),
+			Applied.Num()));
 	}
 	return MCPResult(Result);
 }
@@ -3446,10 +3597,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialSimple(const TSharedPtr<
 		{
 			FString S; if (V.IsValid() && V->TryGetString(S))
 			{
-				EMaterialUsage U;
-				if (ParseMaterialUsage(S, U))
+				if (const FMaterialUsageFlag* const Flag = ParseMaterialUsage(S))
 				{
-					ApplyMaterialUsage(Material, U);
+					ApplyMaterialUsage(Material, Flag->Usage);
 				}
 			}
 		}
