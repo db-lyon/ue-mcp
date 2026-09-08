@@ -2628,6 +2628,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteGraph(const TSharedPtr<FJsonObj
 		: TEXT("subgraph");
 	const int32 DeletedNodeCount = Target->Nodes.Num();
 	const bool bWasOrphaned = OwningNode == nullptr && Kind == TEXT("subgraph");
+	// Everything the response says about the graph is read here, while the
+	// graph is still alive. RemoveGraph destroys it, and reading a name off it
+	// afterwards is a use-after-free that takes the editor down rather than
+	// returning a wrong string. The owning node goes the same way when the
+	// graph it was bound to is removed out from under it.
+	const FString DeletedName = Target->GetName();
+	const FString OwnerTitle = OwningNode
+		? OwningNode->GetNodeTitle(ENodeTitleType::ListView).ToString()
+		: FString();
 
 	FBlueprintEditorUtils::RemoveGraph(Blueprint, Target);
 	RecompileAfterStructuralEdit(Blueprint);
@@ -2635,7 +2644,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteGraph(const TSharedPtr<FJsonObj
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("path"), AssetPath);
-	Result->SetStringField(TEXT("graphName"), Target->GetName());
+	Result->SetStringField(TEXT("graphName"), DeletedName);
 	Result->SetStringField(TEXT("graphSelector"), TargetSelector);
 	Result->SetStringField(TEXT("kind"), Kind);
 	Result->SetBoolField(TEXT("deleted"), true);
@@ -2644,7 +2653,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteGraph(const TSharedPtr<FJsonObj
 	if (OwningNode)
 	{
 		Result->SetBoolField(TEXT("ownerNodeLeftBehind"), true);
-		Result->SetStringField(TEXT("ownerNodeTitle"), OwningNode->GetNodeTitle(ENodeTitleType::ListView).ToString());
+		Result->SetStringField(TEXT("ownerNodeTitle"), OwnerTitle);
 	}
 	Result->SetBoolField(TEXT("rollbackPossible"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
