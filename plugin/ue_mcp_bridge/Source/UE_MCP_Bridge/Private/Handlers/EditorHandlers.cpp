@@ -369,6 +369,122 @@ TSharedPtr<FJsonValue> FEditorHandlers::ExecuteCommand(const TSharedPtr<FJsonObj
 	return MCPResult(Result);
 }
 
+// #995: both Python handlers hand back everything the interpreter logged,
+// which is the right default and a poor one for a verification script: a few
+// hundred printed lines is 60-80 KB of response for a caller that named a
+// resultVariable and wants one value out of it, and the response is then
+// rejected for exceeding the token limit. captureLog and maxLogChars are the
+// two ways out. They live here because the emission block was copied between
+// the two handlers, and a control added to one copy would have been a control
+// the other silently lacked.
+namespace
+{
+	/**
+	 * Quote an arbitrary string as a Python string literal. Used to carry a
+	 * path, a function name and a JSON payload into a generated statement
+	 * without any of them being able to end the literal they sit in.
+	 */
+	static FString PythonStringLiteral(const FString& In)
+	{
+		FString S = In;
+		S.ReplaceInline(TEXT("\\"), TEXT("\\\\"));
+		S.ReplaceInline(TEXT("\""), TEXT("\\\""));
+		S.ReplaceInline(TEXT("\r"), TEXT("\\r"));
+		S.ReplaceInline(TEXT("\n"), TEXT("\\n"));
+		S.ReplaceInline(TEXT("\t"), TEXT("\\t"));
+		return FString(TEXT("\"")) + S + TEXT("\"");
+	}
+
+	static void EmitPythonLog(const TSharedPtr<FJsonObject>& Params,
+							const FPythonCommandEx& Command,
+							const TSharedPtr<FJsonObject>& Result)
+	{
+		bool bCaptureLog = true;
+		Params->TryGetBoolField(TEXT("captureLog"), bCaptureLog);
+		int32 MaxLogChars = 0;  // 0 means no cap
+		Params->TryGetNumberField(TEXT("maxLogChars"), MaxLogChars);
+		if (MaxLogChars < 0) MaxLogChars = 0;
+
+		int32 TotalChars = 0;
+		int32 ErrorCount = 0;
+		for (const FPythonLogOutputEntry& Entry : Command.LogOutput)
+		{
+			if (Entry.Type == EPythonLogOutputType::Error) ++ErrorCount;
+			TotalChars += Entry.Output.Len() + 1;
+		}
+		Result->SetNumberField(TEXT("logEntryCount"), Command.LogOutput.Num());
+		Result->SetNumberField(TEXT("logChars"), TotalChars);
+		Result->SetNumberField(TEXT("logErrorCount"), ErrorCount);
+
+		auto EntryJson = [](const FPythonLogOutputEntry& Entry)
+		{
+			TSharedPtr<FJsonObject> LogEntry = MakeShared<FJsonObject>();
+			LogEntry->SetStringField(TEXT("type"), LexToString(Entry.Type));
+			LogEntry->SetStringField(TEXT("output"), Entry.Output);
+			return MakeShared<FJsonValueObject>(LogEntry);
+		};
+
+		if (!bCaptureLog)
+		{
+			// Errors are not suppressible. A traceback is the one thing a caller
+			// cannot reconstruct from a returned value, and dropping it is how a
+			// failed run reads as an empty one.
+			TArray<TSharedPtr<FJsonValue>> Errors;
+			FString ErrorText;
+			for (const FPythonLogOutputEntry& Entry : Command.LogOutput)
+			{
+				if (Entry.Type != EPythonLogOutputType::Error) continue;
+				Errors.Add(EntryJson(Entry));
+				if (!ErrorText.IsEmpty()) ErrorText += TEXT("\n");
+				ErrorText += Entry.Output;
+			}
+			Result->SetArrayField(TEXT("log_output"), Errors);
+			Result->SetStringField(TEXT("output"), ErrorText);
+			Result->SetBoolField(TEXT("logSuppressed"), true);
+			Result->SetStringField(TEXT("logSuppressedNote"), FString::Printf(
+				TEXT("captureLog was false, so the %d characters this script logged were dropped and only its %d error entries kept. Re-run without captureLog to read the rest."),
+				TotalChars, Errors.Num()));
+			return;
+		}
+
+		// Under a cap the tail is what is kept: a script that failed says why at
+		// the end. Capping the joined string alone would not have helped, because
+		// log_output carries the same text a second time.
+		int32 First = 0;
+		if (MaxLogChars > 0 && TotalChars > MaxLogChars)
+		{
+			int32 Budget = MaxLogChars;
+			First = Command.LogOutput.Num();
+			for (int32 Index = Command.LogOutput.Num() - 1; Index >= 0; --Index)
+			{
+				const int32 Cost = Command.LogOutput[Index].Output.Len() + 1;
+				if (Cost > Budget) break;
+				Budget -= Cost;
+				First = Index;
+			}
+		}
+
+		TArray<TSharedPtr<FJsonValue>> LogArray;
+		FString CombinedOutput;
+		for (int32 Index = First; Index < Command.LogOutput.Num(); ++Index)
+		{
+			const FPythonLogOutputEntry& Entry = Command.LogOutput[Index];
+			LogArray.Add(EntryJson(Entry));
+			if (!CombinedOutput.IsEmpty()) CombinedOutput += TEXT("\n");
+			CombinedOutput += Entry.Output;
+		}
+		Result->SetArrayField(TEXT("log_output"), LogArray);
+		Result->SetStringField(TEXT("output"), CombinedOutput);
+		if (First > 0)
+		{
+			Result->SetBoolField(TEXT("logTruncated"), true);
+			Result->SetStringField(TEXT("logTruncatedNote"), FString::Printf(
+				TEXT("maxLogChars was %d and this script logged %d characters, so the first %d of %d entries were dropped and the tail kept."),
+				MaxLogChars, TotalChars, First, Command.LogOutput.Num()));
+		}
+	}
+}
+
 TSharedPtr<FJsonValue> FEditorHandlers::ExecutePython(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Code;
@@ -417,23 +533,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ExecutePython(const TSharedPtr<FJsonObje
 		Result->SetBoolField(TEXT("resultVariableResolved"), bResultVariableResolved);
 	}
 
-	TArray<TSharedPtr<FJsonValue>> LogArray;
-	for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
-	{
-		TSharedPtr<FJsonObject> LogEntry = MakeShared<FJsonObject>();
-		LogEntry->SetStringField(TEXT("type"), LexToString(Entry.Type));
-		LogEntry->SetStringField(TEXT("output"), Entry.Output);
-		LogArray.Add(MakeShared<FJsonValueObject>(LogEntry));
-	}
-	Result->SetArrayField(TEXT("log_output"), LogArray);
-
-	FString CombinedOutput;
-	for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
-	{
-		if (!CombinedOutput.IsEmpty()) CombinedOutput += TEXT("\n");
-		CombinedOutput += Entry.Output;
-	}
-	Result->SetStringField(TEXT("output"), CombinedOutput);
+	EmitPythonLog(Params, PythonCommand, Result);
 
 	// The script ran (or failed to). What it wrote is its own business: the
 	// interpreter reports no diff this handler could read, and a script that is
@@ -480,13 +580,62 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 		}
 	}
 
+	// #995: a project script under Tools/ usually holds several independent
+	// stages - preflight(), migrate(), verify() - behind a main() that chains
+	// them, and during a session you want one stage, not main(). Running the
+	// file top to bottom could not express that, so every such call went
+	// through execute_python carrying a hand-written exec-into-a-namespace
+	// preamble. entryPoint is that preamble, written once and correctly.
+	//
+	// runpy.run_path with a run_name other than __main__ is what keeps the main
+	// guard from firing, and it hands back the namespace the file defined, so
+	// the named function is called from a module that really was loaded rather
+	// than from a re-exec of the source.
+	const FString EntryPoint = OptionalString(Params, TEXT("entryPoint"));
+
 	FPythonCommandEx PythonCommand;
-	PythonCommand.Command = FilePath;
 	PythonCommand.ExecutionMode = EPythonCommandExecutionMode::ExecuteFile;
 	PythonCommand.FileExecutionScope = EPythonFileExecutionScope::Public;
-	for (const FString& A : ExtraArgs)
+	if (EntryPoint.IsEmpty())
 	{
-		PythonCommand.Command += TEXT(" ") + A;
+		PythonCommand.Command = FilePath;
+		for (const FString& A : ExtraArgs)
+		{
+			PythonCommand.Command += TEXT(" ") + A;
+		}
+	}
+	else
+	{
+		// With an entryPoint the args are the call arguments rather than
+		// sys.argv, which is what a caller asking for one stage means by them.
+		// They go over as JSON and are decoded on the other side, so a value
+		// carrying quotes or newlines cannot break the statement around it.
+		TArray<TSharedPtr<FJsonValue>> ArgValues;
+		for (const FString& A : ExtraArgs) ArgValues.Add(MakeShared<FJsonValueString>(A));
+		FString ArgsJson;
+		const TSharedRef<TJsonWriter<>> ArgsWriter = TJsonWriterFactory<>::Create(&ArgsJson);
+		FJsonSerializer::Serialize(ArgValues, ArgsWriter);
+
+		FString KwargsJson(TEXT("{}"));
+		const TSharedPtr<FJsonObject>* KwargsObj = nullptr;
+		if (Params->TryGetObjectField(TEXT("kwargs"), KwargsObj) && KwargsObj && KwargsObj->IsValid())
+		{
+			KwargsJson.Reset();
+			const TSharedRef<TJsonWriter<>> KwargsWriter = TJsonWriterFactory<>::Create(&KwargsJson);
+			FJsonSerializer::Serialize(KwargsObj->ToSharedRef(), KwargsWriter);
+		}
+
+		PythonCommand.Command = FString::Printf(
+			TEXT("import runpy as _uemcp_runpy, json as _uemcp_json\n")
+			TEXT("_uemcp_path = %s\n")
+			TEXT("_uemcp_entry = %s\n")
+			TEXT("_uemcp_ns = _uemcp_runpy.run_path(_uemcp_path, run_name='ue_mcp_entry')\n")
+			TEXT("_uemcp_fn = _uemcp_ns.get(_uemcp_entry)\n")
+			TEXT("if not callable(_uemcp_fn):\n")
+			TEXT("    raise NameError('run_python_file: {!r} is not a callable defined by {}'.format(_uemcp_entry, _uemcp_path))\n")
+			TEXT("result = _uemcp_fn(*_uemcp_json.loads(%s), **_uemcp_json.loads(%s))\n"),
+			*PythonStringLiteral(FilePath), *PythonStringLiteral(EntryPoint),
+			*PythonStringLiteral(ArgsJson), *PythonStringLiteral(KwargsJson));
 	}
 
 	bool bSuccess = PythonPlugin->ExecPythonCommandEx(PythonCommand);
@@ -494,7 +643,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 	// #732: same first-class result channel as execute_python. The file runs in
 	// the Public (__main__) scope, so a named resultVariable can be read back.
 	FString ResultText = PythonCommand.CommandResult;
-	const FString ResultVariable = OptionalString(Params, TEXT("resultVariable"));
+	FString ResultVariable = OptionalString(Params, TEXT("resultVariable"));
+	// An entryPoint call leaves its return value in `result`, so a caller who
+	// asked for one function does not also have to say where to find what it
+	// returned. An explicit resultVariable still wins.
+	if (ResultVariable.IsEmpty() && !EntryPoint.IsEmpty()) ResultVariable = TEXT("result");
 	bool bResultVariableResolved = false;
 	if (bSuccess && !ResultVariable.IsEmpty())
 	{
@@ -512,25 +665,14 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("success"), bSuccess);
 	Result->SetStringField(TEXT("path"), FilePath);
+	if (!EntryPoint.IsEmpty()) Result->SetStringField(TEXT("entryPoint"), EntryPoint);
 	Result->SetStringField(TEXT("result"), ResultText);
 	if (!ResultVariable.IsEmpty())
 	{
 		Result->SetBoolField(TEXT("resultVariableResolved"), bResultVariableResolved);
 	}
 
-	TArray<TSharedPtr<FJsonValue>> LogArray;
-	FString CombinedOutput;
-	for (const FPythonLogOutputEntry& Entry : PythonCommand.LogOutput)
-	{
-		TSharedPtr<FJsonObject> LogEntry = MakeShared<FJsonObject>();
-		LogEntry->SetStringField(TEXT("type"), LexToString(Entry.Type));
-		LogEntry->SetStringField(TEXT("output"), Entry.Output);
-		LogArray.Add(MakeShared<FJsonValueObject>(LogEntry));
-		if (!CombinedOutput.IsEmpty()) CombinedOutput += TEXT("\n");
-		CombinedOutput += Entry.Output;
-	}
-	Result->SetArrayField(TEXT("log_output"), LogArray);
-	Result->SetStringField(TEXT("output"), CombinedOutput);
+	EmitPythonLog(Params, PythonCommand, Result);
 
 	// The file ran (or failed to). What it wrote is its own business: the
 	// interpreter reports no diff this handler could read.

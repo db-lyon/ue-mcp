@@ -183,7 +183,12 @@ export const editorTool: ToolDef = categoryTool(
         // Gate passed (no candidates, or every candidate ruled out) - run Python.
         // #732: forward an optional resultVariable so scripts can return a value
         // through a first-class `result` channel instead of print()/log.
-        const result = await ctx.bridge.call("execute_python", { code, resultVariable: params.resultVariable });
+        const result = await ctx.bridge.call("execute_python", {
+          code,
+          resultVariable: params.resultVariable,
+          captureLog: params.captureLog,
+          maxLogChars: params.maxLogChars,
+        });
 
         // Track this workaround in memory, and side-channel to a tmp log so
         // the record survives even if the agent ignores the directive.
@@ -241,7 +246,7 @@ export const editorTool: ToolDef = categoryTool(
         );
       },
     },
-    run_python_file: bp("mutate", "Run a Python file from disk with __file__/__name__ populated (#142). Params: filePath, args?, resultVariable? (name of a top-level variable to return as `result`, separate from logs; #732)", "run_python_file", (p) => ({ filePath: p.filePath, args: normalizePythonArgs(p.args), resultVariable: p.resultVariable })),
+    run_python_file: bp("mutate", "Run a Python file from disk with __file__/__name__ populated (#142). Pass entryPoint to load the file WITHOUT firing its `if __name__ == \"__main__\"` guard and then call one named function in it, which is how a Tools/ script holding several stages behind a main() is driven a stage at a time; `args` are then that call's positional arguments rather than sys.argv, `kwargs` its keyword arguments, and its return value comes back as `result` with no resultVariable needed. captureLog=false drops everything the script logged except its errors, and maxLogChars keeps only the tail: a script that prints a few hundred lines otherwise returns tens of KB to a caller that wanted one value. Params: filePath, entryPoint?, args?, kwargs?, resultVariable? (name of a top-level variable to return as `result`, separate from logs), captureLog?, maxLogChars? (#142/#732/#995)", "run_python_file", (p) => ({ filePath: p.filePath, entryPoint: p.entryPoint, args: normalizePythonArgs(p.args), kwargs: p.kwargs, resultVariable: p.resultVariable, captureLog: p.captureLog, maxLogChars: p.maxLogChars })),
     purge_python_modules: bp("mutate", "Purge cached embedded-Python modules whose name starts with a prefix, so the editor drops stale code after you edit a Python tool on disk. Returns the purged module names + count. Params: prefix (required, non-empty) (#719)", "purge_python_modules", (p) => ({ prefix: p.prefix })),
     close_sequence: bp("mutate", "Close the currently open Level Sequence editor (Sequencer). Do this before bulk-deleting actors a sequence may possess - open sequences re-resolve possessables by name during destruction and can mis-bind. Returns wasOpen + closedSequence. Params: none (#718)", "close_sequence"),
     open_tab: bp("mutate", "Open a registered editor tab by ID so its UI can be screenshotted as evidence (e.g. 'ProjectSettings', 'OutputLog', 'ContentBrowserTab1'). Params: tabId (#727)", "open_tab", (p) => ({ tabId: p.tabId })),
@@ -469,6 +474,10 @@ export const editorTool: ToolDef = categoryTool(
     ...epicSchema,
     command: z.string().optional(),
     code: z.string().optional(),
+    entryPoint: z.string().optional().describe("run_python_file: name of a function in the file to call after loading it. The file is loaded under a run name other than __main__, so its main guard does not fire, and the return value comes back as `result` (#995)"),
+    kwargs: z.record(z.unknown()).optional().describe("run_python_file: keyword arguments for the entryPoint call (#995)"),
+    captureLog: z.boolean().optional().describe("execute_python/run_python_file: false drops everything the script logged except its error entries, which are always kept. logChars and logEntryCount still report what was there (#995)"),
+    maxLogChars: z.number().optional().describe("execute_python/run_python_file: keep only the last N characters of logged output, dropping whole entries from the front. Reported as logTruncated (#995)"),
     resultVariable: z.string().optional().describe("execute_python/run_python_file: name of a top-level Python variable to return as `result`, separate from print()/log output (#732)"),
     prefix: z.string().optional().describe("purge_python_modules: purge sys.modules entries starting with this prefix (#719)"),
     tabId: z.string().optional().describe("open_tab: registered editor tab ID, e.g. 'ProjectSettings' (#727)"),
@@ -477,7 +486,7 @@ export const editorTool: ToolDef = categoryTool(
     taskSummary: z.string().optional().describe("execute_python: plain-words intent, searched against the tool registry to gate the call (#704)"),
     ruledOut: z.array(z.object({ action: z.string(), reason: z.string() })).optional().describe("execute_python: reason each searched candidate action does not fit; every candidate must be ruled out before Python runs. 'action' accepts the bare action name, tool(action) or tool.action; 'reason' must be at least 12 characters. Send back the array the previous refusal printed under 'sendThisBack' (#704, #938, #960)"),
     filePath: z.string().optional().describe("Absolute path to a .py file for run_python_file"),
-    args: FunctionArgs.optional().describe('run_python_file: array of positional args. invoke_function / invoke_object_function / invoke_static_function: object mapping parameter name to value, e.g. {"bEnabled": true}. An entry list ([{"name","value"}]) or a JSON string of either is accepted and normalized (#811)'),
+    args: FunctionArgs.optional().describe('run_python_file: array of positional args, exposed as sys.argv[1:] - or, with entryPoint, the positional arguments of that call (#995). invoke_function / invoke_object_function / invoke_static_function: object mapping parameter name to value, e.g. {"bEnabled": true}. An entry list ([{"name","value"}]) or a JSON string of either is accepted and normalized (#811)'),
     calls: z.array(z.object({
       functionName: z.string().min(1),
       objectPath: z.string().optional(),
