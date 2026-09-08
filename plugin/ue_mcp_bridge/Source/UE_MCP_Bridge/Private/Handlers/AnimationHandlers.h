@@ -190,6 +190,9 @@ private:
 	static TSharedPtr<FJsonValue> ListBones(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RebindLeaderPose(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PreviewAnimation(const TSharedPtr<FJsonObject>& Params);
+	// Live-only post-process AnimBP override. This deliberately targets a
+	// spawned/placed component, never a mesh or component-template asset.
+	static TSharedPtr<FJsonValue> SetLivePostProcessAnimBlueprint(const TSharedPtr<FJsonObject>& Params);
 
 	// Animation authoring depth, in AnimationHandlers_Depth.cpp. The removal
 	// half of the surface plus the two things that could not be authored at
