@@ -2095,19 +2095,128 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetViewportCamera(const TSharedPtr<FJson
 		return MCPError(TEXT("No viewport client available"));
 	}
 
-	// Read the camera that is about to be replaced. This is the only state an
-	// inverse call could restore, and it is unreadable once the write lands.
-	const FVector PreviousLocation = ViewportClient->GetViewLocation();
-	const FRotator PreviousRotation = ViewportClient->GetViewRotation();
+		// Validate every supplied value before touching the viewport. OptionalVec3
+		// intentionally supplies defaults for older callers, but silently turning a
+		// malformed new projection/zoom value into a camera write is unsafe.
+		auto ValidateFiniteObjectFields = [&](const TCHAR* Key, const TArray<FString>& FieldNames) -> TSharedPtr<FJsonValue>
+		{
+				if (!Params->HasField(Key)) return nullptr;
+				const TSharedPtr<FJsonObject>* Object = nullptr;
+				if (!Params->TryGetObjectField(Key, Object) || !Object || !Object->IsValid())
+				{
+						return MCPError(FString::Printf(TEXT("'%s' must be an object"), Key));
+				}
+				for (const FString& FieldName : FieldNames)
+				{
+						if (!(*Object)->HasField(FieldName)) continue;
+						double Number = 0.0;
+						if (!(*Object)->TryGetNumberField(FieldName, Number) || !FMath::IsFinite(Number))
+						{
+								return MCPError(FString::Printf(TEXT("'%s.%s' must be a finite number"), Key, *FieldName));
+						}
+				}
+				return nullptr;
+		};
+		auto ViewportTypeName = [](ELevelViewportType Type) -> const TCHAR*
+		{
+				switch (Type)
+				{
+						case LVT_Perspective: return TEXT("perspective");
+						case LVT_OrthoXY: return TEXT("top");
+						case LVT_OrthoNegativeXY: return TEXT("bottom");
+						case LVT_OrthoXZ: return TEXT("left");
+						case LVT_OrthoNegativeXZ: return TEXT("right");
+						case LVT_OrthoNegativeYZ: return TEXT("front");
+						case LVT_OrthoYZ: return TEXT("back");
+						case LVT_OrthoFreelook: return TEXT("orthoFreelook");
+						default: return TEXT("unknown");
+				}
+		};
+		if (TSharedPtr<FJsonValue> Error = ValidateFiniteObjectFields(TEXT("location"), { TEXT("x"), TEXT("y"), TEXT("z") })) return Error;
+		if (TSharedPtr<FJsonValue> Error = ValidateFiniteObjectFields(TEXT("rotation"), { TEXT("pitch"), TEXT("yaw"), TEXT("roll") })) return Error;
 
+		FString RequestedProjection;
+		FString RequestedViewportType;
+		const bool bHasProjection = Params->HasField(TEXT("projection"));
+		const bool bHasViewportType = Params->HasField(TEXT("viewportType"));
+		if (bHasProjection && !Params->TryGetStringField(TEXT("projection"), RequestedProjection))
+		{
+				return MCPError(TEXT("'projection' must be a string such as 'perspective' or 'top'"));
+		}
+		if (bHasViewportType && !Params->TryGetStringField(TEXT("viewportType"), RequestedViewportType))
+		{
+				return MCPError(TEXT("'viewportType' must be a string such as 'perspective' or 'top'"));
+		}
+		if (bHasProjection && bHasViewportType && !RequestedProjection.Equals(RequestedViewportType, ESearchCase::IgnoreCase))
+		{
+				return MCPError(TEXT("'projection' and 'viewportType' disagree; provide only one or use the same value"));
+		}
+
+		FString Projection = bHasProjection ? RequestedProjection : RequestedViewportType;
+		Projection.TrimStartAndEndInline();
+		ELevelViewportType NewViewportType = ViewportClient->GetViewportType();
+		if (bHasProjection || bHasViewportType)
+		{
+				const struct FProjectionName { const TCHAR* Name; ELevelViewportType Type; } Names[] =
+				{
+						{ TEXT("perspective"), LVT_Perspective },
+						{ TEXT("top"), LVT_OrthoXY }, { TEXT("bottom"), LVT_OrthoNegativeXY },
+						{ TEXT("left"), LVT_OrthoXZ }, { TEXT("right"), LVT_OrthoNegativeXZ },
+						{ TEXT("front"), LVT_OrthoNegativeYZ }, { TEXT("back"), LVT_OrthoYZ },
+						{ TEXT("orthofreelook"), LVT_OrthoFreelook }
+				};
+				bool bFound = false;
+				for (const FProjectionName& Name : Names)
+				{
+						if (Projection.Equals(Name.Name, ESearchCase::IgnoreCase))
+						{
+								NewViewportType = Name.Type;
+								bFound = true;
+								break;
+						}
+				}
+				if (!bFound)
+				{
+						return MCPError(TEXT("Unknown viewport projection/type. Valid values are perspective, top, bottom, left, right, front, back, and orthoFreelook"));
+				}
+		}
+
+		const bool bHasOrthoZoom = Params->HasField(TEXT("orthoZoom"));
+		double RequestedOrthoZoom = 0.0;
+		if (bHasOrthoZoom)
+		{
+				if (!Params->TryGetNumberField(TEXT("orthoZoom"), RequestedOrthoZoom) || !FMath::IsFinite(RequestedOrthoZoom)
+					|| RequestedOrthoZoom < MIN_ORTHOZOOM || RequestedOrthoZoom > MAX_ORTHOZOOM)
+				{
+						return MCPError(TEXT("'orthoZoom' must be finite and within the engine MIN_ORTHOZOOM/MAX_ORTHOZOOM bounds"));
+				}
+		}
+
+		// Read the camera that is about to be replaced. This is the only state an
+	// inverse call could restore, and it is unreadable once the write lands.
+		const FVector PreviousLocation = ViewportClient->GetViewLocation();
+		const FRotator PreviousRotation = ViewportClient->GetViewRotation();
+		const ELevelViewportType PreviousViewportType = ViewportClient->GetViewportType();
+		const float PreviousOrthoZoom = ViewportClient->GetOrthoZoom();
+
+	// Viewport type selects a distinct transform cache. Select it before pose writes.
+	if (bHasProjection || bHasViewportType)
+	{
+		ViewportClient->SetViewportType(NewViewportType);
+	}
 	if (Params->HasField(TEXT("location")))
 	{
 		ViewportClient->SetViewLocation(OptionalVec3(Params, TEXT("location")));
 	}
-	if (Params->HasField(TEXT("rotation")))
-	{
-		ViewportClient->SetViewRotation(OptionalRotator(Params, TEXT("rotation")));
-	}
+		if (Params->HasField(TEXT("rotation")))
+		{
+				ViewportClient->SetViewRotation(OptionalRotator(Params, TEXT("rotation")));
+		}
+		if (bHasOrthoZoom)
+		{
+				ViewportClient->SetOrthoZoom(static_cast<float>(RequestedOrthoZoom));
+		}
+		ViewportClient->Invalidate();
 
 	auto Result = MCPSuccess();
 	const FVector CurrentLocation = ViewportClient->GetViewLocation();
@@ -2122,14 +2231,27 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetViewportCamera(const TSharedPtr<FJson
 	PrevRot->SetNumberField(TEXT("roll"), PreviousRotation.Roll);
 	Result->SetObjectField(TEXT("previousLocation"), PrevLoc);
 	Result->SetObjectField(TEXT("previousRotation"), PrevRot);
-	Result->SetBoolField(TEXT("changed"),
-		!CurrentLocation.Equals(PreviousLocation) || !CurrentRotation.Equals(PreviousRotation));
+		Result->SetBoolField(TEXT("changed"),
+				!CurrentLocation.Equals(PreviousLocation) || !CurrentRotation.Equals(PreviousRotation)
+				|| ViewportClient->GetViewportType() != PreviousViewportType
+				|| !FMath::IsNearlyEqual(ViewportClient->GetOrthoZoom(), PreviousOrthoZoom));
+		Result->SetStringField(TEXT("projection"), ViewportTypeName(ViewportClient->GetViewportType()));
+		Result->SetStringField(TEXT("viewportType"), ViewportTypeName(ViewportClient->GetViewportType()));
+		Result->SetNumberField(TEXT("orthoZoom"), ViewportClient->GetOrthoZoom());
+		Result->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(CurrentLocation));
+		auto CurrentRot = MakeShared<FJsonObject>();
+		CurrentRot->SetNumberField(TEXT("pitch"), CurrentRotation.Pitch);
+		CurrentRot->SetNumberField(TEXT("yaw"), CurrentRotation.Yaw);
+		CurrentRot->SetNumberField(TEXT("roll"), CurrentRotation.Roll);
+		Result->SetObjectField(TEXT("rotation"), CurrentRot);
 
 	// Self-inverse: the same handler with the camera this call replaced. Both
 	// halves are sent, so a location-only write still restores the whole pose.
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetObjectField(TEXT("location"), PrevLoc);
-	Payload->SetObjectField(TEXT("rotation"), PrevRot);
+		Payload->SetObjectField(TEXT("rotation"), PrevRot);
+		Payload->SetStringField(TEXT("projection"), ViewportTypeName(PreviousViewportType));
+		Payload->SetNumberField(TEXT("orthoZoom"), PreviousOrthoZoom);
 	MCPSetRollback(Result, TEXT("set_viewport_camera"), Payload);
 	Result->SetBoolField(TEXT("rollbackLossy"), false);
 	Result->SetStringField(TEXT("rollbackNote"),
