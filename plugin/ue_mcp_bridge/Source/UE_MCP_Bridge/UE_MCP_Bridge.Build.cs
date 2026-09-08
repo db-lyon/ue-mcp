@@ -257,5 +257,6 @@ public class UE_MCP_Bridge : ModuleRules
 // Round 3: Private/Handlers/GameplayHandlers_BehaviorTree.cpp and
 // Private/Tests/BehaviorTreeNodeTests.cpp.
 // Round 4: Private/Handlers/GameplayHandlers_BTAuthoring.cpp and
-// Private/Tests/BehaviorTreeAuthoringTests.cpp and
+// Private/Tests/BehaviorTreeAuthoringTests.cpp.
+// Live post-process AnimBP handler automation coverage added.
 // Private/Tests/AnimationSkeletonCreateTests.cpp.

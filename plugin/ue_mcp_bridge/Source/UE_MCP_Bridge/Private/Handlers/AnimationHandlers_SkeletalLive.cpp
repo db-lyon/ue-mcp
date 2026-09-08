@@ -20,6 +20,7 @@
 #include "Animation/Skeleton.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimBlueprintGeneratedClass.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -496,6 +497,120 @@ TSharedPtr<FJsonValue> FAnimationHandlers::PreviewAnimation(const TSharedPtr<FJs
 	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Payload->SetBoolField(TEXT("enabled"), !bEnabled);
 	MCPSetRollback(Result, TEXT("preview_animation"), Payload);
+	return MCPResult(Result);
+}
+
+
+// Set the transient component override rather than the skeletal mesh's
+// PostProcessAnimBlueprint asset setting. A live actor may be an editor-world
+// actor or a PIE copy; either way this is intentionally not saved into an asset
+// or template and disappears when that component is reconstructed.
+TSharedPtr<FJsonValue> FAnimationHandlers::SetLivePostProcessAnimBlueprint(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ActorLabel;
+	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
+	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
+	const FString AnimBlueprintClassPath = OptionalString(Params, TEXT("animBlueprintClassPath"));
+	bool bClear = false;
+	Params->TryGetBoolField(TEXT("clear"), bClear);
+	if (bClear && !AnimBlueprintClassPath.IsEmpty())
+	{
+		return MCPError(TEXT("Pass either animBlueprintClassPath or clear=true, not both"));
+	}
+	if (!bClear && AnimBlueprintClassPath.IsEmpty())
+	{
+		return MCPError(TEXT("animBlueprintClassPath is required unless clear=true"));
+	}
+
+	UAnimBlueprintGeneratedClass* NewClass = nullptr;
+	if (!bClear)
+	{
+		NewClass = LoadObject<UAnimBlueprintGeneratedClass>(nullptr, *AnimBlueprintClassPath);
+		if (!NewClass)
+		{
+			return MCPError(FString::Printf(
+				TEXT("AnimBlueprintGeneratedClass not found: %s. Pass the generated class object path (for example /Game/Animations/ABP_Name.ABP_Name_C), not the AnimBlueprint asset path."),
+				*AnimBlueprintClassPath));
+		}
+		if (!NewClass->IsChildOf(UAnimInstance::StaticClass()))
+		{
+			return MCPError(FString::Printf(TEXT("Class is not an AnimInstance subclass: %s"), *AnimBlueprintClassPath));
+		}
+	}
+
+	UWorld* World = nullptr;
+	AActor* Actor = nullptr;
+	FString ResolvedWorldScope;
+	if (auto Err = ResolveSkeletalActorForQuery(Params, ActorLabel, TEXT("auto"), World, Actor, ResolvedWorldScope)) return Err;
+	ActorLabel = Actor->GetActorLabel();
+	USkeletalMeshComponent* SK = ResolveSkeletalMeshComp(Actor, ComponentName);
+	if (!SK) return MakeSkeletalComponentNotFoundError(Actor, ActorLabel, ComponentName);
+	const USkeletalMesh* MeshAsset = SK->GetSkeletalMeshAsset();
+	if (!MeshAsset)
+	{
+		return MCPError(FString::Printf(TEXT("Skeletal mesh component '%s' has no skeletal mesh"), *SK->GetName()));
+	}
+	if (NewClass)
+	{
+		if (SK->GetAnimClass() == NewClass)
+		{
+			return MCPError(TEXT("The post-process AnimBP must differ from the component's main AnimBP"));
+		}
+
+		const USkeleton* MeshSkeleton = MeshAsset->GetSkeleton();
+		const USkeleton* AnimSkeleton = NewClass->GetTargetSkeleton();
+		if (MeshSkeleton && AnimSkeleton && MeshSkeleton != AnimSkeleton
+			&& !MeshSkeleton->IsCompatibleForEditor(AnimSkeleton)
+			&& !AnimSkeleton->IsCompatibleForEditor(MeshSkeleton))
+		{
+			return MCPError(FString::Printf(
+				TEXT("Post-process AnimBP skeleton '%s' is not compatible with component mesh skeleton '%s'"),
+				*AnimSkeleton->GetPathName(), *MeshSkeleton->GetPathName()));
+		}
+	}
+
+	const TSubclassOf<UAnimInstance> PreviousOverride = SK->OverridePostProcessAnimBP;
+	const bool bAlreadySet = PreviousOverride == NewClass;
+	if (!bAlreadySet)
+	{
+		SK->SetOverridePostProcessAnimBP(NewClass, /*ReinitAnimInstances*/ true);
+	}
+
+	const TSubclassOf<UAnimInstance> OverrideAfter = SK->OverridePostProcessAnimBP;
+	const TSubclassOf<UAnimInstance> EffectiveAfter = SK->GetPostProcessAnimBPClassToBeUsed();
+	UAnimInstance* InstanceAfter = SK->GetPostProcessInstance();
+
+	auto Result = MCPSuccess();
+	if (bAlreadySet) MCPSetExisted(Result); else MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	Result->SetStringField(TEXT("world"), ResolvedWorldScope);
+	Result->SetStringField(TEXT("worldName"), World ? World->GetName() : TEXT(""));
+	AddSkeletalComponentMetadata(Result, SK);
+	Result->SetBoolField(TEXT("clear"), bClear);
+	Result->SetBoolField(TEXT("alreadySet"), bAlreadySet);
+	Result->SetBoolField(TEXT("transient"), true);
+	Result->SetStringField(TEXT("persistence"), TEXT("live component override only; no asset or component template was modified"));
+	Result->SetStringField(TEXT("previousOverrideClass"), PreviousOverride ? PreviousOverride->GetPathName() : TEXT(""));
+	Result->SetStringField(TEXT("overrideClass"), OverrideAfter ? OverrideAfter->GetPathName() : TEXT(""));
+	Result->SetStringField(TEXT("effectivePostProcessClass"), EffectiveAfter ? EffectiveAfter->GetPathName() : TEXT(""));
+	Result->SetStringField(TEXT("postProcessInstancePath"), InstanceAfter ? InstanceAfter->GetPathName() : TEXT(""));
+	Result->SetStringField(TEXT("postProcessInstanceClass"), InstanceAfter ? InstanceAfter->GetClass()->GetPathName() : TEXT(""));
+	Result->SetBoolField(TEXT("postProcessEnabled"), !SK->GetDisablePostProcessBlueprint());
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	Rollback->SetStringField(TEXT("componentName"), SK->GetName());
+	Rollback->SetStringField(TEXT("world"), ResolvedWorldScope);
+	if (PreviousOverride)
+	{
+		Rollback->SetStringField(TEXT("animBlueprintClassPath"), PreviousOverride->GetPathName());
+	}
+	else
+	{
+		Rollback->SetBoolField(TEXT("clear"), true);
+	}
+	MCPSetRollback(Result, TEXT("set_live_post_process_anim_blueprint"), Rollback);
 	return MCPResult(Result);
 }
 

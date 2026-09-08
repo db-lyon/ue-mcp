@@ -184,6 +184,9 @@ describe("animation Control Rig edit workflow", () => {
     expect(source).toContain('SetStringField(TEXT("solver"), TEXT("fk_rotation_chain"))');
     expect(source).toContain("UAnimPoseExtensions::GetAnimPoseAtTime(");
     expect(source).toContain("SourceSection->MapTimeToAnimation(");
+    expect(source).toContain("ControlRigSequencerComposeContactTarget(");
+    expect(source).toContain('Operation->HasField(TEXT("targetReference"))');
+    expect(source).toContain('TEXT("targetMode")');
     expect(source).toContain("GetRelativeTransformReverse(");
     expect(source).toContain("CellCount > ControlRigSequencerMaxFrames");
     expect(source).toContain("contact_constraint_tolerance_exceeded");
@@ -342,6 +345,16 @@ describe("animation Control Rig edit workflow", () => {
         rotationToleranceDegrees: 0.5,
       },
       {
+        op: "contact_lock",
+        control: "hand_l_ik_ctrl",
+        drivenReference: "hand_l",
+        targetReference: "hand_r",
+        startFrame: 4,
+        endFrame: 18,
+        blendInFrames: 2,
+        blendOutFrames: 3,
+      },
+      {
         op: "set_bool",
         control: "arm_r_fk_ik_switch",
         frames: [0, 12, 30],
@@ -371,6 +384,9 @@ describe("animation Control Rig edit workflow", () => {
     expect(operations.safeParse([{ op: "offset", control: "root_ctrl", startFrame: 10, endFrame: 2, translationCm: { x: 1, y: 0, z: 0 } }]).success).toBe(false);
     expect(operations.safeParse([{ op: "offset", control: "root_ctrl", startFrame: 0, endFrame: 2 }]).success).toBe(false);
     const contactTarget = { translation: { x: 0, y: 0, z: 0 } };
+    expect(operations.safeParse([{ op: "contact_lock", control: "foot_ik", startFrame: 0, endFrame: 4 }]).success).toBe(false);
+    expect(operations.safeParse([{ op: "contact_lock", control: "hand_l_ik", startFrame: 0, endFrame: 4, targetReference: "hand_r" }]).success).toBe(true);
+    expect(operations.safeParse([{ op: "contact_lock", control: "hand_l_ik", startFrame: 0, endFrame: 4, targetReference: "hand_r", target: contactTarget }]).success).toBe(true);
     expect(operations.safeParse([{ op: "contact_lock", control: "foot_ik", startFrame: 10, endFrame: 2, target: contactTarget }]).success).toBe(false);
     expect(operations.safeParse([{ op: "contact_lock", control: "foot_ik", startFrame: 0, endFrame: 4, target: contactTarget, blendInFrames: 3, blendOutFrames: 2 }]).success).toBe(false);
     expect(operations.safeParse([{ op: "contact_lock", control: "foot_ik", startFrame: 0, endFrame: 4, target: contactTarget, stabilizeControls: ["pole", "POLE"] }]).success).toBe(false);
