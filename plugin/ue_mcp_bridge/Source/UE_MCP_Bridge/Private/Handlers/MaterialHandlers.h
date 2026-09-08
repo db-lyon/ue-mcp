@@ -84,6 +84,7 @@ private:
 	// #225: single-call simple material authoring + EMaterialUsage flag
 	static TSharedPtr<FJsonValue> CreateMaterialSimple(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetMaterialUsage(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetMaterialUsage(const TSharedPtr<FJsonObject>& Params);
 
 	// #463: MaterialFunction creation + expression authoring inside functions.
 	// Material asset authoring API exists; MaterialFunction was the gap.
