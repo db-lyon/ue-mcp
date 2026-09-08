@@ -1,4 +1,5 @@
 import { checkPluginFreshness } from "../plugin-freshness.js";
+import { checkBridgeParity } from "../bridge-parity.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
@@ -168,6 +169,14 @@ export const projectTool: ToolDef = categoryTool(
         // missing feature.
         const freshness = checkPluginFreshness(ctx.project.projectPath ?? null);
 
+        // #1021: staleness is a timestamp comparison and says nothing about
+        // the handlers themselves. A session reported pluginBuildStale:false
+        // while an advertised method was absent, and every discovery of that
+        // came one failed call at a time. The handshake carries the method
+        // list the running binary registered, so the surface is compared
+        // against it here instead of being taken on trust.
+        const parity = checkBridgeParity(ctx.getToolGraph?.() ?? [], ctx.bridge.capabilities);
+
         // "disconnected" on its own has never been actionable: it is the same
         // word for "no editor", "editor still loading shaders", and "editor
         // blocked on a dialog nobody can see". The engine's own log and the
@@ -206,6 +215,11 @@ export const projectTool: ToolDef = categoryTool(
           engine: offlineEngine ?? undefined,
           pluginBuildStale: freshness.checked ? freshness.stale : undefined,
           pluginBuildWarning: freshness.stale ? freshness.message : undefined,
+          // Absent when there is nothing to say, so a healthy session's status
+          // is exactly what it was. Present, it names methods that will come
+          // back "Unknown method" before one is called.
+          deployedPluginMissingActions: parity.missing.length > 0 ? parity.missing.length : undefined,
+          deployedPluginWarning: parity.message ?? undefined,
           mode: ctx.bridge.isConnected ? "live" : "disconnected",
           editorConnected: ctx.bridge.isConnected,
           editorTarget: {
