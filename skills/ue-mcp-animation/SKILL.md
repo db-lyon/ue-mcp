@@ -74,7 +74,11 @@ right-side pose.
    transactionally reads back the driver and stabilizers. A driven bone/socket
    returns `verification=bake_and_analyze_required`; bake, analyze every
    constrained frame, and reject the output if its residual misses the motion's
-   acceptance tolerance. FK contacts whose translation is ignored by skeleton
+   acceptance tolerance. To follow a moving source bone/socket, set
+   `targetReference`; omit `target` to preserve the first-frame relative
+   transform, or provide `target` as an explicit transform in the reference's
+   space. This is the generic two-hand/hand-to-prop relationship primitive. FK
+   contacts whose translation is ignored by skeleton
    retargeting use a local rotation-chain solve and report
    `solver=fk_rotation_chain`; that path requires a driven bone and does not
    accept stabilizers. Position-only locks leave the driven control orientation
