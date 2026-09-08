@@ -80,10 +80,34 @@ namespace
 			TSharedPtr<FJsonObject> PolicyParams = MakeShared<FJsonObject>();
 			PolicyParams->SetStringField(TEXT("pattern"), Pattern);
 			PolicyParams->SetStringField(TEXT("response"), Response);
-			Registry.ExecuteHandler(TEXT("set_dialog_policy"), PolicyParams);
+			const TSharedPtr<FJsonValue> PolicyResult = Registry.ExecuteHandler(TEXT("set_dialog_policy"), PolicyParams);
 
-			UE_LOG(LogMCPBridge, Log,
-				TEXT("[UE-MCP] Startup dialog policy applied: '%s' answers '%s'"), *Pattern, *Response);
+			// The handler refuses a response keyword it does not recognise, and
+			// its error names the valid ones. Reporting "applied" regardless
+			// would leave a launch believing a prompt is answered when nothing
+			// is armed for it, which is the failure this whole path exists to
+			// prevent.
+			bool bApplied = false;
+			FString PolicyError;
+			if (PolicyResult.IsValid() && PolicyResult->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject>& PolicyObject = PolicyResult->AsObject();
+				bool bSuccess = false;
+				bApplied = PolicyObject->TryGetBoolField(TEXT("success"), bSuccess) && bSuccess;
+				PolicyObject->TryGetStringField(TEXT("error"), PolicyError);
+			}
+
+			if (bApplied)
+			{
+				UE_LOG(LogMCPBridge, Log,
+					TEXT("[UE-MCP] Startup dialog policy applied: '%s' answers '%s'"), *Pattern, *Response);
+			}
+			else
+			{
+				UE_LOG(LogMCPBridge, Warning,
+					TEXT("[UE-MCP] Startup dialog policy '%s' was NOT applied: %s"),
+					*Entry, PolicyError.IsEmpty() ? TEXT("the set_dialog_policy handler returned no success flag") : *PolicyError);
+			}
 		}
 	}
 }
@@ -106,28 +130,27 @@ void FUE_MCP_BridgeModule::StartupModule()
 	FMCPEngineStatus::Get().SetPhase(TEXT("bridge starting"));
 
 	FDialogHandlers::InstallDialogHook();
-	// Safety net: auto-decline overwrite dialogs to prevent game thread blocking.
-	// Handlers should check for existing assets before creating, but if a dialog
-	// slips through, decline it rather than blocking the game thread forever.
-	FDialogHandlers::AddDefaultPolicy(TEXT("already exists"), EAppReturnType::No);
-	FDialogHandlers::AddDefaultPolicy(TEXT("Overwrite"), EAppReturnType::No);
-	// Safety-net for the editor's auto "save level / save unsaved" prompts.
-	// When an agent session ends or the editor closes, these would otherwise
-	// block the main thread waiting on a human. Default to "Discard".
-	// (Agents that actually want to persist changes still call project(build)
-	//  / level(save) / asset(save) explicitly.)
-	FDialogHandlers::AddDefaultPolicy(TEXT("Save Changes"), EAppReturnType::No);
-	FDialogHandlers::AddDefaultPolicy(TEXT("Save Content"), EAppReturnType::No);
-	FDialogHandlers::AddDefaultPolicy(TEXT("Unsaved"), EAppReturnType::No);
-	FDialogHandlers::AddDefaultPolicy(TEXT("Untitled"), EAppReturnType::No);
-	FDialogHandlers::AddDefaultPolicy(TEXT("save your changes"), EAppReturnType::No);
-	FDialogHandlers::AddDefaultPolicy(TEXT("save the level"), EAppReturnType::No);
 
-	// #968: policies the launcher asked for, applied before the socket is even
-	// listening, so a prompt raised during startup is answered rather than
-	// waited on. Matching is first-registered-wins, so these sit behind the
-	// safety nets above and add to them rather than reopening a save prompt
-	// that already has a settled answer.
+	// NO POLICIES ARE ARMED HERE, AND NONE MAY BE.
+	//
+	// This module used to arm its own at load time - "Save Content", "Save
+	// Changes", "Unsaved", "Untitled", "save the level", "already exists",
+	// "Overwrite" - each with a response that pressed a button. That is the
+	// module deciding, before anything has happened, how to answer a question
+	// nobody has read yet, and on a save prompt the answer it had chosen threw
+	// somebody's unsaved work away. Gating them on "a bridge request is in
+	// flight" narrowed when it happened without changing what it was.
+	//
+	// A dialog is a question for a person. The bridge's job is to SURFACE it -
+	// title, full message, every button - through editor(list_dialogs) and the
+	// status snapshot, so a caller can read it and answer it deliberately with
+	// editor(respond_to_dialog). Pressing a button is only ever something a
+	// caller asked for by name.
+	//
+	// #968: policies the LAUNCHER asked for are the one thing applied here, and
+	// they are applied by dispatching set_dialog_policy, so they are recorded as
+	// what they are: a caller arming an answer in advance, before the socket is
+	// listening, for a prompt they already know is coming.
 	ApplyConfiguredDialogPolicies(G_BridgeServer->GetHandlerRegistry());
 
 	if (G_BridgeServer->Start())

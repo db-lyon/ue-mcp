@@ -1,11 +1,11 @@
 ue-mcp:
   version: 1
 
-# Fixture for the live test tier (npm run test:live), which is the only thing
-# that runs this flow. tests/ue_mcp is the one project that tier is allowed to
+# Fixture for the live tests (npm run test:live), which is the only thing
+# that runs this flow. tests/ue_mcp is the one project that suite is allowed to
 # drive, so its fixtures live here.
 #
-# Every step is a read: the tier attaches to an editor somebody else started
+# Every step is a read: the suite attaches to an editor somebody else started
 # and has to leave it exactly as it found it.
 #
 # The `editor:` key inside each step's options is deliberate, and is the point
@@ -14,17 +14,17 @@ ue-mcp:
 # into a bridge call, which no assertion on a response can see. The three steps
 # below cover the three task classes a step can resolve to (the per-action
 # bridge task, a handler-backed action, and the generic class_path task), and
-# the tier reads the editor's own record of what it was handed to prove none of
+# the suite reads the editor's own record of what it was handed to prove none of
 # them forwarded it (#817, plan items 3.2 and 3.3).
 tasks:
   live_tier_generic_bridge:
     class_path: ue-mcp.bridge
     group: util
-    description: Generic bridge task, addressed by method name. Live tier fixture.
+    description: Generic bridge task, addressed by method name. Live tests fixture.
 
 flows:
   live_tier_leak_probe:
-    description: Read-only probe the live tier runs to prove no routing key reaches the editor.
+    description: Read-only probe the live tests runs to prove no routing key reaches the editor.
     steps:
       "1":
         task: asset.list_textures

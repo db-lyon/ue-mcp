@@ -1,0 +1,8 @@
+categories: [blueprint, epic, asset, reflection]
+unrealClasses:
+  - UBlueprint
+  - UEdGraph
+  - UK2Node
+  - USimpleConstructionScript
+engine: ">=5.4"
+triggers: [blueprint, event graph, node, pin, component hierarchy, bp variable]

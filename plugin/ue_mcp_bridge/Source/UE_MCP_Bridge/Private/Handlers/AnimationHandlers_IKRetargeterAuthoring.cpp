@@ -655,6 +655,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRetargeter(const TSharedPt
 		PreparedPose = MoveTemp(Pose);
 	}
 
+	// Read before the transaction reassigns them. A rollback payload built after
+	// the write would carry the values this call just installed.
+	const UIKRigDefinition* PreviousSourceRig = Controller->GetIKRig(ERetargetSourceOrTarget::Source);
+	const UIKRigDefinition* PreviousTargetRig = Controller->GetIKRig(ERetargetSourceOrTarget::Target);
+	USkeletalMesh* PreviousSourcePreview = Controller->GetPreviewMesh(ERetargetSourceOrTarget::Source);
+	USkeletalMesh* PreviousTargetPreview = Controller->GetPreviewMesh(ERetargetSourceOrTarget::Target);
+
 	bool bMutationFailed = false;
 	FString MutationError;
 	bool bAddedDefaultOps = false;
@@ -946,6 +953,40 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRetargeter(const TSharedPt
 	{
 		const FPreparedRetargetPose& Pose = PreparedPose.GetValue();
 		Result->SetObjectField(TEXT("pose"), BuildPoseJson(Controller, Pose.Side, Pose.Name, Pose.bAutoAlignAll));
+	}
+
+	// Only the assignment half of this action is reversible: the rigs and preview
+	// meshes each had a previous asset that a replay of this same action can
+	// point back at. ensureDefaultOps is forced off in that replay so a pure
+	// assignment restore cannot install an op stack of its own.
+	const bool bAssignmentsOnly = !bAddedDefaultOps && !bHasAutoMap
+		&& PreparedMappings.IsEmpty() && !PreparedPose.IsSet();
+	const bool bAssignedAnything = bHasSourceRig || bHasTargetRig || bHasSourcePreview || bHasTargetPreview;
+	const bool bAssignmentsRestorable =
+		(!bHasSourceRig || PreviousSourceRig != nullptr)
+		&& (!bHasTargetRig || PreviousTargetRig != nullptr)
+		&& (!bHasSourcePreview || PreviousSourcePreview != nullptr)
+		&& (!bHasTargetPreview || PreviousTargetPreview != nullptr);
+	if (bAssignmentsOnly && bAssignedAnything && bAssignmentsRestorable)
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("retargeterPath"), Retargeter->GetPathName());
+		Payload->SetBoolField(TEXT("ensureDefaultOps"), false);
+		if (bHasSourceRig) Payload->SetStringField(TEXT("sourceRig"), PreviousSourceRig->GetPathName());
+		if (bHasTargetRig) Payload->SetStringField(TEXT("targetRig"), PreviousTargetRig->GetPathName());
+		if (bHasSourcePreview) Payload->SetStringField(TEXT("sourcePreviewMesh"), PreviousSourcePreview->GetPathName());
+		if (bHasTargetPreview) Payload->SetStringField(TEXT("targetPreviewMesh"), PreviousTargetPreview->GetPathName());
+		MCPSetRollback(Result, TEXT("configure_ik_retargeter"), Payload);
+	}
+	else
+	{
+		TArray<FString> Causes;
+		if (bAddedDefaultOps) Causes.Add(TEXT("a default retarget op stack was installed and no action removes a retarget op"));
+		if (bHasAutoMap || !PreparedMappings.IsEmpty()) Causes.Add(TEXT("chain mappings were rewritten over mappings this call did not capture"));
+		if (PreparedPose.IsSet()) Causes.Add(TEXT("a retarget pose was created, reset or realigned and no action deletes a pose"));
+		if (!bAssignmentsRestorable) Causes.Add(TEXT("a rig or preview mesh this call assigned had none before, and configure_ik_retargeter takes asset paths so it cannot clear one back to unset"));
+		if (Causes.IsEmpty()) Causes.Add(TEXT("this call assigned no rig or preview mesh, so there is no previous asset for a replay to point back at"));
+		MCPSetNoRollback(Result, FString::Join(Causes, TEXT("; ")) + TEXT("."));
 	}
 
 	auto Validation = MakeShared<FJsonObject>();

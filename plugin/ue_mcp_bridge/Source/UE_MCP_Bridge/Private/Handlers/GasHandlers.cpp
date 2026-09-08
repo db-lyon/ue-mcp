@@ -32,7 +32,12 @@
 // Resolve a FGameplayAttribute by name across every loaded AttributeSet
 // subclass. Accepts a bare property name ("Health") or a qualified
 // "SetClassSubstring.Attribute". Returns an invalid attribute on miss.
-static FGameplayAttribute FindGameplayAttributeByName(const FString& Name)
+// OutSetName reports the attribute set class this resolved against. A BARE
+// attribute name is answered by the first matching set TObjectIterator reaches,
+// and iterator order is not stable, so anything that has to name the attribute
+// back - a rollback record above all - must carry the qualified form or it can
+// land on a different set's attribute of the same name on the next call.
+static FGameplayAttribute FindGameplayAttributeByName(const FString& Name, FString* OutSetName = nullptr)
 {
 	FString SetFilter, AttrName = Name;
 	if (Name.Contains(TEXT(".")))
@@ -49,6 +54,7 @@ static FGameplayAttribute FindGameplayAttributeByName(const FString& Name)
 			FStructProperty* SP = CastField<FStructProperty>(*P);
 			if (SP && SP->Struct == FGameplayAttributeData::StaticStruct() && SP->GetName() == AttrName)
 			{
+				if (OutSetName) *OutSetName = C->GetName();
 				return FGameplayAttribute(SP);
 			}
 		}
@@ -69,12 +75,35 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("set_effect_modifier"), &SetEffectModifier);
 	Registry.RegisterHandler(TEXT("set_asc_defaults"), &SetAscDefaults);
 	Registry.RegisterHandler(TEXT("apply_effect"), &ApplyEffect);
+	Registry.RegisterHandler(TEXT("remove_effect"), &RemoveEffect);
 	Registry.RegisterHandler(TEXT("set_attribute"), &SetAttribute);
 	Registry.RegisterHandler(TEXT("get_attribute"), &GetAttribute);
 	Registry.RegisterHandler(TEXT("init_asc"), &InitAsc);
 	Registry.RegisterHandler(TEXT("get_asc_state"), &GetAscState);
 	Registry.RegisterHandler(TEXT("get_live_attribute_value"), &GetLiveAttributeValue);
 	Registry.RegisterHandler(TEXT("set_live_attribute_value"), &SetLiveAttributeValue);
+	Registry.RegisterHandler(TEXT("grant_ability"), &GrantAbility);
+	Registry.RegisterHandler(TEXT("revoke_ability"), &RevokeAbility);
+	Registry.RegisterHandler(TEXT("get_active_effects"), &GetActiveEffects);
+	Registry.RegisterHandler(TEXT("trace_ability_activation"), &TraceAbilityActivation);
+
+	// Input binding, cues and the attribute audit (GasHandlers_Abilities.cpp).
+	Registry.RegisterHandler(TEXT("bind_ability_input"), &BindAbilityInput);
+	Registry.RegisterHandler(TEXT("clear_ability_input"), &ClearAbilityInput);
+	Registry.RegisterHandler(TEXT("send_ability_input"), &SendAbilityInput);
+	Registry.RegisterHandler(TEXT("add_effect_cue"), &AddEffectCue);
+	Registry.RegisterHandler(TEXT("remove_effect_cue"), &RemoveEffectCue);
+	Registry.RegisterHandler(TEXT("validate_cue_coverage"), &ValidateCueCoverage);
+	// Named audit_attributes, not audit_attribute_set: the read/mutate lexicon
+	// takes a mutate verb anywhere in an action name and "set" is one, so the
+	// longer spelling would have been gated as a write it never performs.
+	Registry.RegisterHandler(TEXT("audit_attributes"), &AuditAttributeSet);
+
+	// Snapshot and diff (GasHandlers_Snapshot.cpp).
+	Registry.RegisterHandler(TEXT("capture_gas_state"), &CaptureGasState);
+	Registry.RegisterHandler(TEXT("compare_gas_states"), &CompareGasStates);
+	Registry.RegisterHandler(TEXT("list_gas_snapshots"), &ListGasSnapshots);
+	Registry.RegisterHandler(TEXT("delete_gas_snapshot"), &DeleteGasSnapshot);
 }
 
 TSharedPtr<FJsonValue> FGasHandlers::CreateGasBlueprint(
@@ -371,8 +400,17 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAbilityTags(const TSharedPtr<FJsonObject
 	};
 
 	TSharedPtr<FJsonObject> Applied = MakeShared<FJsonObject>();
+	// The tags each container held before this call, keyed by the SAME param
+	// name, so the record is a straight replay of this action with the previous
+	// values. Only the keys this call actually writes are captured, because a
+	// key the caller did not pass was not touched and must not be rewritten.
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
 	TArray<FString> Unsupported;
+	// Two different questions: bAnyApplied is "did the caller name a container
+	// this handler writes", bAnyChanged is "did any of those containers end up
+	// holding something different". Only the second one is idempotency.
 	bool bAnyApplied = false;
+	bool bAnyChanged = false;
 
 	for (const TPair<FString, FString>& Entry : TagMap)
 	{
@@ -388,6 +426,20 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAbilityTags(const TSharedPtr<FJsonObject
 		}
 
 		FGameplayTagContainer* Container = Prop->ContainerPtrToValuePtr<FGameplayTagContainer>(CDO);
+		// Read before the Reset below, or the record restores an empty container
+		// instead of what was there. The copy is also what the change check at
+		// the end of the loop compares against, so "unchanged" means the tags
+		// really are the same rather than merely that the caller passed a
+		// container this handler recognises.
+		const FGameplayTagContainer PreviousContainer = *Container;
+		{
+			TArray<TSharedPtr<FJsonValue>> PreviousTags;
+			for (const FGameplayTag& Tag : PreviousContainer)
+			{
+				PreviousTags.Add(MakeShared<FJsonValueString>(Tag.GetTagName().ToString()));
+			}
+			RollbackPayload->SetArrayField(Entry.Key, PreviousTags);
+		}
 		Container->Reset();
 		TArray<TSharedPtr<FJsonValue>> Wrote;
 		for (const TSharedPtr<FJsonValue>& TagVal : *TagArray)
@@ -407,6 +459,12 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAbilityTags(const TSharedPtr<FJsonObject
 		}
 		Applied->SetArrayField(Entry.Key, Wrote);
 		bAnyApplied = true;
+		// HasAllExact both ways is set equality for a tag container, which is
+		// what "did this write change anything" actually asks.
+		if (!(Container->HasAllExact(PreviousContainer) && PreviousContainer.HasAllExact(*Container)))
+		{
+			bAnyChanged = true;
+		}
 	}
 
 	if (bAnyApplied)
@@ -416,7 +474,9 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAbilityTags(const TSharedPtr<FJsonObject
 	}
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bAnyChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bAnyChanged);
+	Result->SetBoolField(TEXT("containersWritten"), bAnyApplied);
 	Result->SetStringField(TEXT("abilityPath"), AbilityPath);
 	Result->SetObjectField(TEXT("applied"), Applied);
 	if (Unsupported.Num() > 0)
@@ -424,6 +484,27 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAbilityTags(const TSharedPtr<FJsonObject
 		TArray<TSharedPtr<FJsonValue>> U;
 		for (const FString& S : Unsupported) U.Add(MakeShared<FJsonValueString>(S));
 		Result->SetArrayField(TEXT("unsupportedProperties"), U);
+	}
+
+	if (bAnyChanged)
+	{
+		// Each container is written whole (Reset then re-add), so the inverse is
+		// the same call carrying the tags that were in it. Every restored tag was
+		// registered at read time, so nothing in the record can be skipped as an
+		// unknown tag the way an authored list can.
+		RollbackPayload->SetStringField(TEXT("abilityPath"), AbilityPath);
+		MCPSetRollback(Result, TEXT("set_ability_tags"), RollbackPayload);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), bAnyApplied
+			? TEXT("Every container this call wrote ended up holding exactly the tags it already held, so nothing "
+				   "changed and there is nothing to undo.")
+			: TEXT("No tag container was written, so there is nothing to undo. Pass one of ability_tags, "
+				   "cancel_abilities_with_tag, block_abilities_with_tag, activation_required_tags or "
+				   "activation_blocked_tags to change something."));
 	}
 	return MCPResult(Result);
 }
@@ -443,7 +524,8 @@ TSharedPtr<FJsonValue> FGasHandlers::SetEffectModifier(const TSharedPtr<FJsonObj
 	UGameplayEffect* GE = LoadBlueprintCDO<UGameplayEffect>(EffectPath, CdoErr);
 	if (!GE) return CdoErr;
 
-	const FGameplayAttribute GAttr = FindGameplayAttributeByName(Attribute);
+	FString ResolvedSetName;
+	const FGameplayAttribute GAttr = FindGameplayAttributeByName(Attribute, &ResolvedSetName);
 	if (!GAttr.IsValid())
 	{
 		return MCPError(FString::Printf(
@@ -460,10 +542,31 @@ TSharedPtr<FJsonValue> FGasHandlers::SetEffectModifier(const TSharedPtr<FJsonObj
 
 	// Update an existing modifier for the same attribute+op, else append one.
 	bool bUpdated = false;
+	// The magnitude the existing modifier held, read before it is overwritten.
+	// Only meaningful when this call updates rather than appends, and only when
+	// the magnitude is the ScalableFloat form this action writes.
+	float PreviousMagnitude = 0.f;
+	bool bPreviousMagnitudeReadable = false;
+	bool bPreviousMagnitudeLevelDependent = false;
 	for (FGameplayModifierInfo& M : GE->Modifiers)
 	{
 		if (M.Attribute == GAttr && M.ModifierOp == ModOp)
 		{
+			// GetStaticMagnitudeIfPossible answers for ANY ScalableFloat,
+			// including one bound to a curve table, and hands back that curve's
+			// value at the level asked for. Writing it back as a plain constant
+			// would silently replace the binding, so the magnitude is probed at
+			// three levels and only a value that does not move with level is
+			// treated as a constant this action can restore.
+			float AtLevel1 = 0.f, AtLevel2 = 0.f, AtLevel10 = 0.f;
+			if (M.ModifierMagnitude.GetStaticMagnitudeIfPossible(1.f, AtLevel1)
+				&& M.ModifierMagnitude.GetStaticMagnitudeIfPossible(2.f, AtLevel2)
+				&& M.ModifierMagnitude.GetStaticMagnitudeIfPossible(10.f, AtLevel10))
+			{
+				PreviousMagnitude = AtLevel1;
+				bPreviousMagnitudeReadable = true;
+				bPreviousMagnitudeLevelDependent = (AtLevel2 != AtLevel1) || (AtLevel10 != AtLevel1);
+			}
 			M.ModifierMagnitude = FGameplayEffectModifierMagnitude(FScalableFloat(static_cast<float>(Magnitude)));
 			bUpdated = true;
 			break;
@@ -483,12 +586,60 @@ TSharedPtr<FJsonValue> FGasHandlers::SetEffectModifier(const TSharedPtr<FJsonObj
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	// Qualified with the set it resolved against, so the inverse below and any
+	// caller echoing this back address the same attribute rather than the first
+	// same-named one the class iterator happens to reach next time.
+	const FString QualifiedAttribute = ResolvedSetName.IsEmpty()
+		? GAttr.GetName() : (ResolvedSetName + TEXT(".") + GAttr.GetName());
 	Result->SetStringField(TEXT("effectPath"), EffectPath);
 	Result->SetStringField(TEXT("attribute"), GAttr.GetName());
+	Result->SetStringField(TEXT("qualifiedAttribute"), QualifiedAttribute);
+	Result->SetStringField(TEXT("attributeSet"), ResolvedSetName);
 	Result->SetStringField(TEXT("operation"), Operation);
 	Result->SetNumberField(TEXT("magnitude"), Magnitude);
 	Result->SetBoolField(TEXT("replacedExisting"), bUpdated);
 	Result->SetNumberField(TEXT("modifierCount"), GE->Modifiers.Num());
+
+	if (bUpdated && bPreviousMagnitudeReadable && !bPreviousMagnitudeLevelDependent)
+	{
+		// Overwriting a magnitude inverts to writing the old one back, keyed on
+		// the same attribute and operation this call matched on.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("effectPath"), EffectPath);
+		Payload->SetStringField(TEXT("attribute"), QualifiedAttribute);
+		Payload->SetStringField(TEXT("operation"), Operation);
+		Payload->SetNumberField(TEXT("magnitude"), PreviousMagnitude);
+		MCPSetRollback(Result, TEXT("set_effect_modifier"), Payload);
+		// The value comes back, but as a plain ScalableFloat constant. A
+		// modifier that had been authored as a curve-table lookup whose value
+		// happens not to move with level would come back as that constant, with
+		// the binding gone.
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The previous magnitude is restored as a plain ScalableFloat constant, which is the only form this "
+				 "action writes. It was read at effect levels 1, 2 and 10 and did not move, so no level scaling is "
+				 "lost; a curve-table binding that is flat across those levels would still be replaced by the "
+				 "constant. Read the effect's Modifiers with asset(get_property) first if the binding matters."));
+	}
+	else
+	{
+		// Three cases, each honest about why no record is emitted.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), !bUpdated
+			? TEXT("This APPENDED a new modifier, and no action removes a modifier from a GameplayEffect, so there is "
+				   "no inverse call. Writing a magnitude of zero would leave the modifier in place rather than undo it. "
+				   "Delete and recreate the effect, or edit its Modifiers array directly, to drop one.")
+			: (bPreviousMagnitudeReadable
+				? TEXT("The magnitude that was overwritten CHANGES WITH EFFECT LEVEL - a curve-table-backed "
+					   "ScalableFloat, read at levels 1, 2 and 10 and different at each. This action writes a single "
+					   "constant, so restoring it would replace the curve binding with one number and silently break "
+					   "every other level. No inverse is emitted; recover the binding from source control or read it "
+					   "with asset(get_property).")
+				: TEXT("The modifier that was overwritten did not carry a static magnitude - it was attribute-based, "
+					   "SetByCaller or a custom calculation - and this action only writes the ScalableFloat form, so "
+					   "the previous magnitude cannot be expressed as an inverse call. Read the effect's Modifiers "
+					   "with asset(get_property) before overwriting one of those.")));
+	}
 	return MCPResult(Result);
 }
 
@@ -595,5 +746,15 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAscDefaults(const TSharedPtr<FJsonObject
 	if (InitTable) Result->SetStringField(TEXT("initDataTable"), InitTable->GetPathName());
 	Result->SetStringField(TEXT("note"),
 		TEXT("Attribute set wired to the ASC's DefaultStartingData. If attributes aren't live at runtime, call gas(action=\"init_asc\", attributeSet=...) after PIE starts."));
+	// No inverse. This appends an FAttributeDefaults entry to the ASC component
+	// template's DefaultStartingData, and no action removes one: the array is
+	// only reachable through this call, which adds. blueprint(remove_component)
+	// would delete the whole AbilitySystemComponent, which undoes far more than
+	// this did whenever the component was there first.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("No action removes an entry from an AbilitySystemComponent's DefaultStartingData, so wiring an attribute "
+			 "set to it has no inverse call. Removing the whole component would undo more than this call did. Edit the "
+			 "component template's DefaultStartingData directly if the entry has to go."));
 	return MCPResult(Result);
 }

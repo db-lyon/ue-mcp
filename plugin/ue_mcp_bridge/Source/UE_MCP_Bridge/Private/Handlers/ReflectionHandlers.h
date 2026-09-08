@@ -25,6 +25,11 @@ private:
 	static TSharedPtr<FJsonValue> IsModuleLoaded(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListLoadedModules(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> InspectSaveGame(const TSharedPtr<FJsonObject>& Params);
+	// T1: the per-instance writable schema. reflect_class answers what a CLASS
+	// has; this answers what may be written on THIS asset / CDO / subobject
+	// right now, with each property's constraints and current value.
+	// Implemented in ReflectionHandlers_Schema.cpp.
+	static TSharedPtr<FJsonValue> ReflectInstance(const TSharedPtr<FJsonObject>& Params);
 
 	// Helper functions
 	static UClass* FindClass(const FString& ClassName);

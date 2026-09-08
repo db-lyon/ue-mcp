@@ -651,6 +651,43 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 		MCPSetUpdated(Result);
 		Result->SetStringField(TEXT("dirtyPackage"), ISMC->GetOutermost()->GetName());
 		Result->SetStringField(TEXT("note"), TEXT("Changes are dirty in memory and were not saved."));
+
+		// Every Before was read in world space during the preflight, before the
+		// batch ran, so it is the transform an inverse has to write back and it
+		// is in the space update_instance_transform replays in.
+		const FProjectionPlanEntry* OnlyMoved = nullptr;
+		for (const FProjectionPlanEntry& Entry : Plan.Entries)
+		{
+			if (!Entry.bHit) continue;
+			if (OnlyMoved) { OnlyMoved = nullptr; break; }
+			OnlyMoved = &Entry;
+		}
+		if (OnlyMoved)
+		{
+			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+			Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+			Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+			Payload->SetStringField(TEXT("componentName"), ISMC->GetName());
+			Payload->SetNumberField(TEXT("index"), OnlyMoved->InstanceIndex);
+			Payload->SetBoolField(TEXT("worldSpace"), true);
+			Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(OnlyMoved->Before.GetLocation()));
+			Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(OnlyMoved->Before.Rotator()));
+			Payload->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(OnlyMoved->Before.GetScale3D()));
+			MCPSetRollback(Result, TEXT("update_instance_transform"), Payload);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("Instances are addressed by index, so the inverse has to run before anything else adds or removes an instance on this component."));
+		}
+		else
+		{
+			// A batch of moves is more than one rollback record can carry, and
+			// the per-instance transforms are not shipped either: this action
+			// projects up to 50000 instances in a call and a response holding
+			// one restore payload each would be larger than the edit.
+			MCPSetNoRollback(Result, FString::Printf(
+				TEXT("%d instance transforms were overwritten in one batch. level(update_instance_transform) restores a single index at a time and there is no batched form taking index/transform pairs, so no one call undoes this. ")
+				TEXT("The whole batch is one editor transaction, which editor(undo) reverses only while it is still the most recent one."),
+				Plan.HitCount));
+		}
 	}
 	else if (bDryRun)
 	{

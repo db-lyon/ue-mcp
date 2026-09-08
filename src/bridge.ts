@@ -6,7 +6,7 @@ import { McpError, ErrorCode } from "./errors.js";
 import { resolveBridgeTimeout, TIMEOUT_ENV_VAR } from "./bridge-timeouts.js";
 import { debug, warn } from "./log.js";
 import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
-import { isPidAlive } from "./editor-target.js";
+import { isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
 import { syncRequestedPort } from "./requested-port.js";
 
 /**
@@ -381,9 +381,13 @@ export class EditorBridge implements IBridge {
     this.projectPathForLockfile = resolved;
     this.unverifiedPin = false;
 
-    const lockfile = readBridgeLockfile(resolved);
-    if (lockfile) {
-      this.port = lockfile.port;
+    // D6: the same live-address rule connect() and the lifecycle path use. A
+    // port.json a crashed editor left behind names a port that may since
+    // belong to anything, and taking it here marked the target verified, which
+    // is exactly the #818 guess this refusal exists to prevent.
+    const live = resolveLiveBridgeAddress(path.dirname(resolved));
+    if (live) {
+      this.port = live.port;
       this.portSource = "lockfile";
     } else if (typeof configPort === "number" && configPort > 0) {
       this.port = configPort;
@@ -426,13 +430,27 @@ export class EditorBridge implements IBridge {
     // #492: if a per-project lockfile exists for this .uproject, prefer the
     // port it advertises over the default. Lets multiple editors run side-
     // by-side without their npm clients colliding on 9877.
-    const lockfile = readBridgeLockfile(this.projectPathForLockfile);
-    if (lockfile) {
-      if (lockfile.port !== this.port) {
-        debug("bridge", `lockfile points at port ${lockfile.port}, using it instead of default ${this.port}`);
-        this.port = lockfile.port;
+    //
+    // D6: resolved through the SAME rule the lifecycle path applies. The pid
+    // named by port.json is checked for liveness, because a record a crashed
+    // editor left behind is not evidence about a running one and clearing the
+    // #818 pin refusal on it dials a port that may belong to somebody else.
+    // And when port.json is gone - which is what happens to the survivor when
+    // one of two editors of a project quits - the editor's own
+    // instances/<pid>.json still names its port, so ordinary tool calls now
+    // find the editor that editor(stop_editor) could already resolve.
+    const live = resolveLiveBridgeAddress(
+      this.projectPathForLockfile ? path.dirname(this.projectPathForLockfile) : null,
+    );
+    if (live) {
+      if (live.port !== this.port) {
+        debug(
+          "bridge",
+          `${live.source} points at port ${live.port}, using it instead of ${this.port} (${this.portSource})`,
+        );
+        this.port = live.port;
       }
-      // The target project's own editor published this port, which is the
+      // The target project's own live editor published this port, which is the
       // proof a pin could not give.
       this.portSource = "lockfile";
       this.unverifiedPin = false;
@@ -512,7 +530,11 @@ export class EditorBridge implements IBridge {
     if (this.reconnectTimer) return;
     this.reconnectTimer = setInterval(() => {
       if (this.isConnected) return;
-      this.connect().then(
+      // ensureConnected, not connect: connect() closes the socket before it
+      // does anything else, so a tick landing inside a slow connect tore down
+      // the handshake that was already running and rejected the call waiting
+      // on it. The dedupe in ensureConnected joins that attempt instead.
+      this.ensureConnected().then(
         () => { warn("bridge", "editor bridge reconnected"); },
         (e) => { debug("bridge", "reconnect attempt failed (will retry)", e); },
       );

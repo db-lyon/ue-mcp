@@ -37,6 +37,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Editor.h"
+#include "Editor/Transactor.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
@@ -310,8 +311,33 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ExportMaterialGraph(const TSharedPtr<F
 
 TSharedPtr<FJsonValue> FMaterialHandlers::ImportMaterialGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	// Delegates to BuildMaterialGraph - same JSON spec format.
-	return BuildMaterialGraph(Params);
+	// Delegates to BuildMaterialGraph - same JSON spec format, same effect.
+	TSharedPtr<FJsonValue> Delegated = BuildMaterialGraph(Params);
+
+	// Say so on THIS action's own result. import_material_graph is registered
+	// separately, so a caller reading its response never sees build_material_graph
+	// and would otherwise have to infer where the answer came from. The inverse
+	// verdict is restated here rather than left implicit for the same reason:
+	// this action has no inverse either, and it is not obvious that an action
+	// named "import" is additive rather than a replace.
+	const TSharedPtr<FJsonObject>* AsObject = nullptr;
+	if (Delegated.IsValid() && Delegated->TryGetObject(AsObject) && AsObject && (*AsObject).IsValid())
+	{
+		bool bSucceeded = false;
+		if ((*AsObject)->TryGetBoolField(TEXT("success"), bSucceeded) && bSucceeded)
+		{
+			// TryGet, not Get: FJsonObject::GetStringField on an absent key is a
+			// hard failure, and this must not turn a healthy import into one.
+			FString DelegatedNote;
+			(*AsObject)->TryGetStringField(TEXT("rollbackNote"), DelegatedNote);
+			(*AsObject)->SetStringField(TEXT("aliasOf"), TEXT("build_material_graph"));
+			(*AsObject)->SetBoolField(TEXT("rollbackPossible"), false);
+			(*AsObject)->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("import_material_graph is build_material_graph under another name, and it ADDS to the graph rather than replacing it: there is no replace mode that could be handed a snapshot of the previous graph, and no bulk delete for material expressions, so no single call undoes it. %s"),
+				*DelegatedNote));
+		}
+	}
+	return Delegated;
 }
 
 
@@ -342,6 +368,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	};
 
 	int32 Created = 0;
+	TArray<TSharedPtr<FJsonValue>> CreatedExpressionNames;
 	for (const TSharedPtr<FJsonValue>& V : *NodesArr)
 	{
 		const TSharedPtr<FJsonObject>* NodeObj = nullptr;
@@ -353,6 +380,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 		Expr->MaterialExpressionEditorX = (*NodeObj)->GetNumberField(TEXT("posX"));
 		Expr->MaterialExpressionEditorY = (*NodeObj)->GetNumberField(TEXT("posY"));
 		ByName.Add(Name, Expr);
+		CreatedExpressionNames.Add(MakeShared<FJsonValueString>(Expr->GetName()));
 		++Created;
 
 		// Apply literal values where we can.
@@ -369,9 +397,12 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 		}
 	}
 
-	// Property connections.
+	// Property connections. Each one overwrites whatever the property carried,
+	// so record the displaced binding: it is the half of the change that no
+	// single inverse call can put back.
 	const TArray<TSharedPtr<FJsonValue>>* PropArr = nullptr;
 	int32 Connections = 0;
+	TArray<TSharedPtr<FJsonValue>> OverwrittenProperties;
 	if (Params->TryGetArrayField(TEXT("propertyConnections"), PropArr))
 	{
 		for (const TSharedPtr<FJsonValue>& V : *PropArr)
@@ -386,6 +417,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 			if (!Found || !*Found) continue;
 			FExpressionInput* In = Material->GetExpressionInputForProperty(Prop);
 			if (!In) continue;
+			if (In->Expression)
+			{
+				TSharedPtr<FJsonObject> Displaced = MakeShared<FJsonObject>();
+				Displaced->SetStringField(TEXT("property"), PropName);
+				Displaced->SetStringField(TEXT("previousFrom"), In->Expression->GetName());
+				Displaced->SetNumberField(TEXT("previousOutputIndex"), In->OutputIndex);
+				OverwrittenProperties.Add(MakeShared<FJsonValueObject>(Displaced));
+			}
 			In->Expression = *Found;
 			In->OutputIndex = (int32)(*ConnObj)->GetNumberField(TEXT("outputIndex"));
 			++Connections;
@@ -402,6 +441,21 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("expressionsCreated"), Created);
 	Result->SetNumberField(TEXT("connectionsMade"), Connections);
+	Result->SetArrayField(TEXT("createdExpressions"), CreatedExpressionNames);
+	Result->SetArrayField(TEXT("overwrittenProperties"), OverwrittenProperties);
+
+	// No inverse. This call creates an arbitrary number of expressions and
+	// rewrites an arbitrary number of property inputs, and a rollback record
+	// carries exactly one call. There is no bulk delete for material
+	// expressions, and this action has no replace mode that could be handed a
+	// snapshot of the previous graph (the PCG twin, import_pcg_graph, does have
+	// one and is reversible for that reason). Inventing a single
+	// delete_material_expression here would undo one node out of many and
+	// leave the rest, which is worse than saying so.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+		TEXT("No single call undoes this: %d expression(s) were created and %d property connection(s) written. Undo it by hand with one delete_material_expression per name in createdExpressions, then reconnect anything listed in overwrittenProperties with connect_to_material_property. Wrapping the build in begin_transaction / end_transaction gives a one-step undo instead."),
+		Created, Connections));
 	return MCPResult(Result);
 }
 
@@ -472,9 +526,27 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RenderMaterialPreview(const TSharedPtr
 		}
 	}
 
+	// Whether the destination already held a file decides what this call did to
+	// the disk: created one, or replaced one whose bytes are not recoverable.
+	const bool bOverwroteExistingFile = FPaths::FileExists(OutputPath);
+
 	TArray<uint8> Compressed;
 	FImageUtils::ThumbnailCompressImageArray(Width, Height, Pixels, Compressed);
-	if (!FFileHelper::SaveArrayToFile(Compressed, *OutputPath))
+
+	// Whether the render actually changed anything on disk. A replayed call
+	// against an unchanged material produces the same bytes, and saying so is
+	// the difference between "wrote a file" and "the file already said this".
+	bool bBytesIdentical = false;
+	if (bOverwroteExistingFile)
+	{
+		TArray<uint8> Existing;
+		if (FFileHelper::LoadFileToArray(Existing, *OutputPath))
+		{
+			bBytesIdentical = Existing == Compressed;
+		}
+	}
+
+	if (!bBytesIdentical && !FFileHelper::SaveArrayToFile(Compressed, *OutputPath))
 	{
 		return MCPError(FString::Printf(TEXT("Failed to write PNG: %s"), *OutputPath));
 	}
@@ -486,7 +558,25 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RenderMaterialPreview(const TSharedPtr
 	Result->SetNumberField(TEXT("height"), Height);
 	Result->SetBoolField(TEXT("litRendered"), bLitRendered);
 	Result->SetStringField(TEXT("mode"), Mode);
-	// No rollback: destructive/external (writes a file to disk).
+	Result->SetBoolField(TEXT("overwroteExistingFile"), bOverwroteExistingFile && !bBytesIdentical);
+	if (bBytesIdentical) Result->SetBoolField(TEXT("unchanged"), true);
+	else MCPSetUpdated(Result);
+
+	// No inverse. The effect is a file on disk outside the project, and the
+	// bridge has no action that deletes an arbitrary path (delete_asset works
+	// on content-browser assets). The material itself is untouched.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	if (bBytesIdentical)
+	{
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The file at outputPath already held exactly these bytes, so nothing was written and there is nothing to undo."));
+	}
+	else
+	{
+		Result->SetStringField(TEXT("rollbackNote"), bOverwroteExistingFile
+			? TEXT("This replaced a different file that existed at outputPath. Its previous bytes were not kept and no bridge action deletes or restores an arbitrary file path, so there is no inverse. No project asset was modified.")
+			: TEXT("This wrote a new file at outputPath. No bridge action deletes an arbitrary file path, so there is no inverse. No project asset was modified."));
+	}
 	return MCPResult(Result);
 }
 
@@ -495,10 +585,34 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BeginMaterialTransaction(const TShared
 {
 	const FString Label = OptionalString(Params, TEXT("label"), TEXT("MCP Material Edit"));
 	if (!GEditor) return MCPError(TEXT("GEditor not available"));
-	// No rollback: transaction lifecycle; paired end_material_transaction is the natural counterpart.
-	GEditor->BeginTransaction(FText::FromString(Label));
+	// Refuse BEFORE opening anything. UEditorEngine::BeginTransaction
+	// dereferences GEditor->Trans without checking it, so a check placed after
+	// the call is only reachable past the crash it describes. The editor twin
+	// (begin_editor_transaction) guards in the same place for the same reason.
+	if (!GEditor->Trans)
+	{
+		return MCPError(TEXT("No transaction buffer: GEditor->Trans is null. The editor was started without an undo buffer (a commandlet or -notransactions session), so transactions are unavailable in this process."));
+	}
+
+	const bool bWasActive = GEditor->Trans->IsActive();
+	const int32 Idx = GEditor->BeginTransaction(FText::FromString(Label));
+
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
 	Result->SetStringField(TEXT("label"), Label);
+	Result->SetNumberField(TEXT("transactionIndex"), Idx);
+	// A transaction opened inside another one only nests: the undo step is not
+	// recorded until the outermost end. Saying so is what stops a caller reading
+	// this as "a fresh undo step starts here".
+	Result->SetBoolField(TEXT("nested"), bWasActive);
+
+	// Rollback: abort the transaction rather than commit it. This is the same
+	// inverse the editor twin (begin_editor_transaction) emits, and the reason
+	// cancel exists at all - a flow that fails after this call unwinds to the
+	// state before it instead of committing half an edit.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetNumberField(TEXT("index"), Idx);
+	MCPSetRollback(Result, TEXT("cancel_editor_transaction"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), false);
 	return MCPResult(Result);
 }
 
@@ -506,9 +620,55 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BeginMaterialTransaction(const TShared
 TSharedPtr<FJsonValue> FMaterialHandlers::EndMaterialTransaction(const TSharedPtr<FJsonObject>& Params)
 {
 	if (!GEditor) return MCPError(TEXT("GEditor not available"));
-	// No rollback: lifecycle op.
+
+	// Refuse BEFORE ending anything: UEditorEngine::EndTransaction dereferences
+	// GEditor->Trans unconditionally, so a check after the call is unreachable.
+	UTransactor* Trans = GEditor->Trans;
+	if (!Trans)
+	{
+		return MCPError(TEXT("No transaction buffer: GEditor->Trans is null. The editor was started without an undo buffer (a commandlet or -notransactions session), so transactions are unavailable in this process."));
+	}
+
+	if (!Trans->IsActive())
+	{
+		// Ending when nothing is open is the idempotent replay of a flow that
+		// already ended. Reported rather than errored, matching the editor twin.
+		TSharedPtr<FJsonObject> NoOp = MCPSuccess();
+		NoOp->SetBoolField(TEXT("wasActive"), false);
+		NoOp->SetBoolField(TEXT("committed"), false);
+		NoOp->SetBoolField(TEXT("unchanged"), true);
+		NoOp->SetBoolField(TEXT("rollbackPossible"), false);
+		NoOp->SetStringField(TEXT("rollbackNote"),
+			TEXT("No transaction was open, so nothing was committed and there is nothing to undo."));
+		return MCPResult(NoOp);
+	}
+
 	const int32 Idx = GEditor->EndTransaction();
+	const bool bStillNested = Trans->IsActive();
+
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetNumberField(TEXT("transactionIndex"), Idx);
+	Result->SetBoolField(TEXT("wasActive"), true);
+	Result->SetBoolField(TEXT("committed"), true);
+	Result->SetBoolField(TEXT("stillNested"), bStillNested);
+
+	if (!bStillNested)
+	{
+		// The inverse of committing is undoing the step just recorded. Only
+		// once the nest is fully closed, because before that the step does not
+		// exist in the buffer yet and an undo would reverse someone else's.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetNumberField(TEXT("steps"), 1);
+		Payload->SetStringField(TEXT("direction"), TEXT("undo"));
+		MCPSetRollback(Result, TEXT("undo_redo_steps"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("This closed one nesting level and an outer transaction is still open, so no undo step has been recorded yet. Undoing here would reverse whatever step precedes the open transaction, which is not what this call did. Close the outermost level first."));
+	}
 	return MCPResult(Result);
 }

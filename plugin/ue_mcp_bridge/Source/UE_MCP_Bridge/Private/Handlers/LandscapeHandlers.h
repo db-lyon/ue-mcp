@@ -37,4 +37,35 @@ private:
 	// advertised but never had.
 	static TSharedPtr<FJsonValue> Sculpt(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> PaintLayer(const TSharedPtr<FJsonObject>& Params);
+
+	// V1: region-level read and write, shaping operators, erosion, heightmap
+	// IO, terrain analysis, weight regions, layer lifecycle and holes. All
+	// defined in LandscapeHandlers_Sculpt.cpp, deliberately in the same
+	// translation unit as ResolveLandscape / WorldToLandscapeRect /
+	// ResolveEditLayerGuid / BrushWeight so they call those rather than
+	// copying them (the module is a unity build, and a copied file-local
+	// helper is a redefinition once two files land in one blob).
+	static TSharedPtr<FJsonValue> GetHeightRegion(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetHeightRegion(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetHeightAtPoint(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetNormalAtPoint(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetSlopeAtPoint(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetSlopeMap(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SculptRegion(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ApplyErosion(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ImportHeightmap(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ExportHeightmap(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AnalyzeTerrain(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetLayerWeightRegion(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetLayerWeightRegion(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> LayerExists(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveLayer(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetHoles(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetHoles(const TSharedPtr<FJsonObject>& Params);
+
+	// V17: the core half of a real-world terrain pipeline. Heightmap ingestion
+	// planning and geographic coordinate conversion; the network fetch of DEM
+	// tiles and the opinionated landcover-to-content passes stay outside core.
+	static TSharedPtr<FJsonValue> PlanRealWorldLandscape(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ProjectGeoCoordinates(const TSharedPtr<FJsonObject>& Params);
 };

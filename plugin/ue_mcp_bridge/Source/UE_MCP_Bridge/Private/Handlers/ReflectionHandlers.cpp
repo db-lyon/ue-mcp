@@ -2,6 +2,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
+#include "HandlerPagination.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/Class.h"
 #include "UObject/UnrealType.h"
@@ -45,6 +46,8 @@ void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("is_module_loaded"), &IsModuleLoaded);
 	Registry.RegisterHandler(TEXT("list_loaded_modules"), &ListLoadedModules);
 	Registry.RegisterHandler(TEXT("inspect_save_game"), &InspectSaveGame);
+	// T1: per-instance writable schema (ReflectionHandlers_Schema.cpp).
+	Registry.RegisterHandler(TEXT("reflect_instance"), &ReflectInstance);
 }
 
 // #689: report whether a UClass is currently loaded, and (separately) whether
@@ -113,10 +116,21 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListLoadedModules(const TSharedPtr<F
 	const FString Filter = OptionalString(Params, TEXT("filter"));
 	const bool bLoadedOnly = OptionalBool(Params, TEXT("loadedOnly"), false);
 
+	// T3: paged. A project with its plugins enabled reports several hundred
+	// modules, and the whole list is rarely what the caller wanted.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_loaded_modules|filter=%s|loadedOnly=%d"), *Filter, bLoadedOnly ? 1 : 0),
+			/*DefaultLimit*/ 500, /*MaxLimit*/ 5000, Page))
+	{
+		return Err;
+	}
+
 	TArray<FModuleStatus> Statuses;
 	FModuleManager::Get().QueryModules(Statuses);
 
-	TArray<TSharedPtr<FJsonValue>> Out;
+	TArray<MCPPagination::FPageRow> Rows;
 	int32 LoadedCount = 0;
 	for (const FModuleStatus& S : Statuses)
 	{
@@ -127,14 +141,15 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListLoadedModules(const TSharedPtr<F
 		E->SetStringField(TEXT("name"), S.Name);
 		E->SetBoolField(TEXT("loaded"), S.bIsLoaded);
 		E->SetBoolField(TEXT("gameModule"), S.bIsGameModule);
-		Out.Add(MakeShared<FJsonValueObject>(E));
+		// The module name is the page anchor: unique, and stable across two
+		// enumerations even when modules load in between.
+		Rows.Add({ S.Name, MakeShared<FJsonValueObject>(E) });
 	}
 
 	auto Result = MCPSuccess();
-	Result->SetArrayField(TEXT("modules"), Out);
-	Result->SetNumberField(TEXT("count"), Out.Num());
 	Result->SetNumberField(TEXT("totalLoaded"), LoadedCount);
 	Result->SetNumberField(TEXT("totalModules"), Statuses.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("modules"), Result);
 	return MCPResult(Result);
 }
 
@@ -550,8 +565,17 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListClasses(const TSharedPtr<FJsonOb
 {
 	FString ParentFilter = OptionalString(Params, TEXT("parentFilter"));
 
-	int32 Limit = 100;
-	Params->TryGetNumberField(TEXT("limit"), Limit);
+	// T3: paged. This used to stop at `limit` matches and say nothing about
+	// what it had cut, so a caller filtering on Actor read the first 100
+	// classes as if they were all of them.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_classes|parentFilter=%s"), *ParentFilter),
+			/*DefaultLimit*/ 100, /*MaxLimit*/ 1000, Page))
+	{
+		return Err;
+	}
 
 	auto Result = MCPSuccess();
 
@@ -563,7 +587,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListClasses(const TSharedPtr<FJsonOb
 			return MCPClassNotFoundError(ParentFilter, TEXT("parentFilter"));
 		}
 
-		TArray<TSharedPtr<FJsonValue>> ClassesArray;
+		TArray<MCPPagination::FPageRow> Rows;
 		for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt)
 		{
 			UClass* Class = *ClassIt;
@@ -571,20 +595,25 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListClasses(const TSharedPtr<FJsonOb
 			{
 				TSharedPtr<FJsonObject> ClassObj = MakeShared<FJsonObject>();
 				ClassObj->SetStringField(TEXT("name"), Class->GetName());
+				ClassObj->SetStringField(TEXT("path"), Class->GetPathName());
 				if (Class->GetSuperClass())
 				{
 					ClassObj->SetStringField(TEXT("parent"), Class->GetSuperClass()->GetName());
 				}
-				ClassesArray.Add(MakeShared<FJsonValueObject>(ClassObj));
-				if (ClassesArray.Num() >= Limit)
-				{
-					break;
-				}
+				// The class PATH is the page anchor, not the short name: two
+				// modules may each define a class called Settings, and a page
+				// boundary has to name exactly one of them.
+				Rows.Add({ Class->GetPathName(), MakeShared<FJsonValueObject>(ClassObj) });
 			}
 		}
+		// TObjectIterator walks the object hash, whose order is not a contract,
+		// so the rows are sorted before paging. Without it the same page can
+		// come back in a different order between two calls, and the anchor
+		// would report a change that is only the enumeration reshuffling.
+		Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+			{ return A.Id < B.Id; });
 		Result->SetStringField(TEXT("parentFilter"), ParentFilter);
-		Result->SetArrayField(TEXT("classes"), ClassesArray);
-		Result->SetNumberField(TEXT("count"), ClassesArray.Num());
+		MCPPagination::EmitPage(Page, Rows, TEXT("classes"), Result);
 	}
 	else
 	{
@@ -601,7 +630,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListClasses(const TSharedPtr<FJsonOb
 			TEXT("LocalPlayerSubsystem"),
 		};
 
-		TArray<TSharedPtr<FJsonValue>> ClassesArray;
+		TArray<MCPPagination::FPageRow> Rows;
 		for (const FString& ClassName : CommonClasses)
 		{
 			UClass* Class = FindClass(ClassName);
@@ -609,16 +638,19 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListClasses(const TSharedPtr<FJsonOb
 			{
 				TSharedPtr<FJsonObject> ClassObj = MakeShared<FJsonObject>();
 				ClassObj->SetStringField(TEXT("name"), Class->GetName());
+				ClassObj->SetStringField(TEXT("path"), Class->GetPathName());
 				if (Class->GetSuperClass())
 				{
 					ClassObj->SetStringField(TEXT("parent"), Class->GetSuperClass()->GetName());
 				}
-				ClassesArray.Add(MakeShared<FJsonValueObject>(ClassObj));
+				Rows.Add({ Class->GetPathName(), MakeShared<FJsonValueObject>(ClassObj) });
 			}
 		}
+		// Authored order, so this list is deliberately NOT sorted: it is a
+		// curated starting point rather than an enumeration, and alphabetising
+		// it would bury Actor under AnimInstance.
 		Result->SetStringField(TEXT("note"), TEXT("Showing common base classes. Use parentFilter to find derived classes."));
-		Result->SetArrayField(TEXT("classes"), ClassesArray);
-		Result->SetNumberField(TEXT("count"), ClassesArray.Num());
+		MCPPagination::EmitPage(Page, Rows, TEXT("classes"), Result);
 	}
 
 	return MCPResult(Result);
@@ -628,29 +660,47 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListGameplayTags(const TSharedPtr<FJ
 {
 	FString FilterPrefix = OptionalString(Params, TEXT("filter"));
 
+	// T3: paged. A project that has adopted gameplay tags seriously carries
+	// thousands of them, and the unpaged list was the largest read on this
+	// category.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_gameplay_tags|filter=%s"), *FilterPrefix),
+			/*DefaultLimit*/ 500, /*MaxLimit*/ 5000, Page))
+	{
+		return Err;
+	}
+
 	auto Result = MCPSuccess();
 
 	UGameplayTagsManager& TagsManager = UGameplayTagsManager::Get();
 	FGameplayTagContainer AllTags;
 	TagsManager.RequestAllGameplayTags(AllTags, false);
 
-	TArray<TSharedPtr<FJsonValue>> TagsArray;
+	TArray<FString> TagStrings;
 	for (const FGameplayTag& Tag : AllTags)
 	{
 		FString TagString = Tag.ToString();
 		if (FilterPrefix.IsEmpty() || TagString.StartsWith(FilterPrefix))
 		{
-			TagsArray.Add(MakeShared<FJsonValueString>(TagString));
+			TagStrings.Add(MoveTemp(TagString));
 		}
 	}
+	// Sorted before paging, as it always was: the tag container enumerates in
+	// registration order, which moves when a tag is added, and a page anchor
+	// needs a stable sequence to resume into.
+	TagStrings.Sort();
 
-	TagsArray.Sort([](const TSharedPtr<FJsonValue>& A, const TSharedPtr<FJsonValue>& B) {
-		return A->AsString() < B->AsString();
-	});
+	TArray<MCPPagination::FPageRow> Rows;
+	Rows.Reserve(TagStrings.Num());
+	for (const FString& TagString : TagStrings)
+	{
+		Rows.Add({ TagString, MakeShared<FJsonValueString>(TagString) });
+	}
 
 	Result->SetStringField(TEXT("filter"), FilterPrefix.IsEmpty() ? TEXT("(all)") : FilterPrefix);
-	Result->SetArrayField(TEXT("tags"), TagsArray);
-	Result->SetNumberField(TEXT("count"), TagsArray.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("tags"), Result);
 
 	return MCPResult(Result);
 }
@@ -669,19 +719,226 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateGameplayTag(const TSharedPtr<F
 	FString ProjectDir = FPaths::ProjectDir();
 	FString TagFile = FPaths::Combine(ProjectDir, TEXT("Config"), TEXT("DefaultGameplayTags.ini"));
 
-	FString Section = TEXT("[/Script/GameplayTags.GameplayTagsSettings]");
+	const FString SectionName = TEXT("/Script/GameplayTags.GameplayTagsSettings");
+	const FString Section = FString::Printf(TEXT("[%s]"), *SectionName);
 	FString Entry = FString::Printf(TEXT("+GameplayTagList=(Tag=\"%s\",DevComment=\"%s\")"), *Tag, *Comment);
 
+	// The identity of a tag entry is the TAG, not the whole line. Keying the
+	// duplicate check on the full Entry text matched only when the DevComment
+	// was byte-identical too, so calling twice with a different comment (or
+	// with a comment after one without) appended a SECOND +GameplayTagList line
+	// for the same tag and reported it as created.
+	//
+	// A raw substring scan over the whole file is not enough either, and a
+	// hand-edited ini carries both ways of defeating it. A COMMENTED-OUT
+	// declaration (`;+GameplayTagList=(Tag="Ability.Fire",...)`) contains the
+	// key, so a whole-file scan reports the tag as existing and never writes it,
+	// leaving it undeclared as far as the engine is concerned. And an ini is
+	// tolerant of spacing, so `Tag = "Ability.Fire"` does not contain
+	// `Tag="Ability.Fire"` and the duplicate line comes straight back.
+	//
+	// So the scan is per line, and each line is first reduced to what the ini
+	// parser would actually read: its comment tail is cut off (StripLineComment
+	// below), and a line that is nothing but a comment is then empty and is
+	// skipped along with the other markers the parser ignores (see the marker
+	// note inside the loop). What survives is compared with EVERY whitespace
+	// character
+	// removed, tabs included. FString::RemoveSpacesInline is not that: it is
+	// documented and implemented as removing the SPACE CHARACTER ONLY, so a
+	// tab-aligned `Tag<TAB>=<TAB>"Ability.Fire"` survived it and the duplicate
+	// line came straight back. TrimStartAndEnd already deals with leading and
+	// trailing tabs, which is exactly not where the problem is: the tabs that
+	// matter sit inside the entry. A gameplay tag name can never contain
+	// whitespace, so stripping it cannot merge two distinct tags; the stripped
+	// copy is used only for the comparison and never written back.
+	//
+	// Case is handled explicitly on every comparison below rather than left to
+	// the defaults, because the defaults disagree with each other:
+	// FString::Contains defaults to ESearchCase::IgnoreCase and FString::Equals
+	// defaults to ESearchCase::CaseSensitive. Those line numbers are
+	// UnrealString.h.inl:1162, 1177, 1191 and 1271 in the 5.8 tree this plugin
+	// builds against, and the file moves between versions - the same four
+	// declarations sit further down in 5.7.4, where Equals is at 1318 - so read
+	// them by name, not by number. IgnoreCase is what this handler wants
+	// throughout, since a gameplay tag compares as an FName and FName is
+	// case-insensitive, and an ini section name is looked up on an FString map
+	// key whose operator== is Stricmp.
+	auto StripWhitespace = [](const FString& In)
+	{
+		FString Out;
+		Out.Reserve(In.Len());
+		for (const TCHAR C : In)
+		{
+			if (!FChar::IsWhitespace(C)) Out.AppendChar(C);
+		}
+		return Out;
+	};
+	const FString TagKey = FString::Printf(TEXT("Tag=\"%s\""), *Tag);
+	const FString CompactTagKey = StripWhitespace(TagKey);
+
+	// `//` is a comment marker in an Unreal ini. This scan used to skip only ';'
+	// and '#', so a hand-edited `// +GameplayTagList=(Tag="Ability.Fire",...)`
+	// was invisible to the engine and yet matched the tag key here, and the
+	// handler reported the tag already declared and wrote nothing - leaving it
+	// undeclared, which is the exact failure the commented-out-line note above
+	// says this scan exists to prevent.
+	//
+	// FConfigFile reads every line through FParse::LineExtended with
+	// ELineExtendedFlags::SwallowDoubleSlashComments set
+	// (ConfigCacheIni.cpp:1847-1851). That flag makes LineExtended set bIgnore
+	// on an unquoted `//` (Parse.cpp:1244-1250) and then drop every remaining
+	// character of the line rather than appending it (:1286-1297), so the ini
+	// parser sees the line already truncated at the `//`.
+	//
+	// Truncating here rather than skipping the line is what makes both halves
+	// right: a line that is only a comment becomes empty and is skipped, and a
+	// real declaration carrying a trailing `// note` keeps its declaration.
+	// Section headers get the same treatment for the same reason, and they have
+	// to, because the parser tests the brackets AFTER LineExtended has already
+	// removed the comment: `[Section] // note` IS a section header to Unreal.
+	//
+	// Quote state is tracked because it has to be. DevComment="see http://x"
+	// carries a `//` inside quotes that is not a comment, and LineExtended
+	// toggles bIsQuoted on every `"` and steps over a backslash-escaped `\"` or
+	// `\\` inside a quoted run (:1280-1284) rather than letting it toggle.
+	//
+	// Read in a 5.7.4 source tree. For 5.8, which is what this plugin builds
+	// against, the enumerator survives verbatim -
+	// FParse::ELineExtendedFlags::SwallowDoubleSlashComments (Parse.h:95-112) -
+	// and Epic's own 5.8 Config/Mac/DataDrivenPlatformInfo.ini:58 carries a
+	// bare `// Reenable ...` line inside a section. The implementing body is a
+	// 5.7.4 read; it is not shipped with the launcher install.
+	auto StripLineComment = [](const FString& In)
+	{
+		bool bInQuote = false;
+		for (int32 i = 0; i < In.Len(); ++i)
+		{
+			if (bInQuote && In[i] == TEXT('\\') && i + 1 < In.Len()
+				&& (In[i + 1] == TEXT('"') || In[i + 1] == TEXT('\\')))
+			{
+				++i;
+				continue;
+			}
+			if (In[i] == TEXT('"'))
+			{
+				bInQuote = !bInQuote;
+				continue;
+			}
+			if (!bInQuote && In[i] == TEXT('/') && i + 1 < In.Len() && In[i + 1] == TEXT('/'))
+			{
+				return In.Left(i);
+			}
+		}
+		return In;
+	};
+
+	// The section header is recognised the way FConfigFile's own parser
+	// recognises one, which is deliberately NOT the whitespace-stripped
+	// comparison the tag scan uses. ProcessInputFileContents strips TRAILING
+	// whitespace from the line and then requires the first character to be '['
+	// and the last to be ']' (ConfigCacheIni.cpp:1874-1902). So a line carrying
+	// anything after the closing bracket is not a section header to Unreal
+	// either, and a header written `[ Name ]` names a DIFFERENT section, one
+	// whose name has the spaces in it. Stripped full-line equality would have
+	// accepted that second form and spliced the entry into a section the engine
+	// never reads under the name this handler means. Leading whitespace is not
+	// tolerated for the same reason: the parser tests the raw first character.
+	// A trailing `// note` is tolerated, and has to be, because the parser tests
+	// the brackets on a line LineExtended has already truncated at the comment.
+	// The caller passes a line StripLineComment has already cut, which is what
+	// the parameter name records, so `[Name] // note` arrives as `[Name] ` and
+	// the TrimEnd below finishes the job.
+	auto IsSectionHeader = [&SectionName](const FString& CommentStrippedLine)
+	{
+		FString Line = CommentStrippedLine;
+		Line.TrimEndInline();
+		if (Line.Len() < 2 || Line[0] != TEXT('[') || Line[Line.Len() - 1] != TEXT(']')) return false;
+		return Line.Mid(1, Line.Len() - 2).Equals(SectionName, ESearchCase::IgnoreCase);
+	};
+
 	FString FileContent;
+	bool bTagAlreadyDeclared = false;
 	if (FFileHelper::LoadFileToString(FileContent, *TagFile))
 	{
-		if (!FileContent.Contains(Section))
+		// Walked by offset rather than split into an array of lines, because
+		// the write below has to be an INSERTION into the original text. The
+		// previous shape rejoined with FString::Join(Lines, LineEnd), and a
+		// join rewrites EVERY terminator in the file to the single separator
+		// that was detected: a hand-edited ini with mixed endings came back
+		// wholly converted, which is precisely the unrelated config diff this
+		// code goes out of its way not to produce. Only the inserted line is
+		// written now; every existing byte is left where it was.
+		int32 SectionInsertAt = INDEX_NONE;  // offset just past the header line
+		FString SectionLineEnd;              // that header line's own terminator
+		int32 Cursor = 0;
+		bool bAtEnd = false;
+		while (!bAtEnd && Cursor <= FileContent.Len())
 		{
-			FileContent += TEXT("\n\n") + Section + TEXT("\n") + Entry + TEXT("\n");
+			int32 LineEnd = Cursor;
+			while (LineEnd < FileContent.Len()
+				&& FileContent[LineEnd] != TEXT('\r')
+				&& FileContent[LineEnd] != TEXT('\n'))
+			{
+				++LineEnd;
+			}
+			int32 TermLen = 0;
+			if (LineEnd < FileContent.Len())
+			{
+				TermLen = (FileContent[LineEnd] == TEXT('\r')
+					&& LineEnd + 1 < FileContent.Len()
+					&& FileContent[LineEnd + 1] == TEXT('\n')) ? 2 : 1;
+			}
+			else
+			{
+				bAtEnd = true;
+			}
+
+			// Comment tail off first, exactly as FParse::LineExtended does it,
+			// so everything below sees the line the ini parser would see.
+			const FString Line = StripLineComment(FileContent.Mid(Cursor, LineEnd - Cursor));
+			const FString Trimmed = Line.TrimStartAndEnd();
+			// ';' is the other comment marker the ini parser honours: it skips a
+			// line whose first character is ';' (ConfigCacheIni.cpp:1944-1946).
+			// '#' is not a comment marker there - `#Foo=Bar` parses as a key
+			// literally named "#Foo" - which is why a '#'-prefixed
+			// GameplayTagList line declares nothing and is skipped here too.
+			if (!Trimmed.IsEmpty() && !Trimmed.StartsWith(TEXT(";")) && !Trimmed.StartsWith(TEXT("#")))
+			{
+				if (StripWhitespace(Trimmed).Contains(CompactTagKey, ESearchCase::IgnoreCase))
+				{
+					bTagAlreadyDeclared = true;
+					break;
+				}
+				if (SectionInsertAt == INDEX_NONE && IsSectionHeader(Line))
+				{
+					SectionInsertAt = LineEnd + TermLen;
+					SectionLineEnd = FileContent.Mid(LineEnd, TermLen);
+				}
+			}
+			Cursor = LineEnd + TermLen;
 		}
-		else if (!FileContent.Contains(Entry))
+
+		if (!bTagAlreadyDeclared)
 		{
-			FileContent = FileContent.Replace(*Section, *(Section + TEXT("\n") + Entry));
+			// The separator the file already uses, for the text this call adds.
+			// Silently converting a CRLF ini to LF, or appending LF lines onto a
+			// CRLF file, would be an unrelated change landing in someone's
+			// config diff.
+			const FString FileLineEnd = FileContent.Contains(TEXT("\r\n")) ? TEXT("\r\n") : TEXT("\n");
+			if (SectionInsertAt == INDEX_NONE)
+			{
+				FileContent += FileLineEnd + FileLineEnd + Section + FileLineEnd + Entry + FileLineEnd;
+			}
+			else
+			{
+				// Straight after the header line, reusing THAT line's own
+				// terminator so the new entry matches its neighbours. A header
+				// sitting on the file's last line has no terminator to copy, so
+				// the file default goes in front of the entry instead.
+				FileContent.InsertAt(SectionInsertAt, SectionLineEnd.IsEmpty()
+					? FileLineEnd + Entry
+					: Entry + SectionLineEnd);
+			}
 		}
 	}
 	else
@@ -689,10 +946,38 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateGameplayTag(const TSharedPtr<F
 		FileContent = Section + TEXT("\n") + Entry + TEXT("\n");
 	}
 
+	// Idempotency: this tag is already declared, so there is nothing to write.
+	// A differing DevComment is deliberately NOT treated as a change: rewriting
+	// it would mean editing the caller's ini in place, which this handler has
+	// never done and which is not what "create" was asked for.
+	if (bTagAlreadyDeclared)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetStringField(TEXT("method"), TEXT("ini_append"));
+		Result->SetStringField(TEXT("note"),
+			TEXT("DefaultGameplayTags.ini already declares this tag, so the file was not rewritten. Any comment "
+			     "passed on this call was not applied: edit the existing GameplayTagList entry to change it."));
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT("Nothing was written, so there is nothing to undo."));
+		return MCPResult(Result);
+	}
+
 	if (FFileHelper::SaveStringToFile(FileContent, *TagFile))
 	{
+		MCPSetCreated(Result);
+		Result->SetBoolField(TEXT("unchanged"), false);
 		Result->SetStringField(TEXT("method"), TEXT("ini_append"));
 		Result->SetStringField(TEXT("note"), TEXT("Restart editor to pick up new tag"));
+
+		// The bridge registers no action that removes a gameplay tag: the tag
+		// surface is list_gameplay_tags and this one. Nothing is named as an
+		// inverse, because nothing would answer to the name.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT(
+			"No action removes a gameplay tag. This appended a GameplayTagList entry to "
+			"Config/DefaultGameplayTags.ini, and undoing it means deleting that line from the file by hand or "
+			"through the Gameplay Tags editor."));
 		return MCPResult(Result);
 	}
 
@@ -920,6 +1205,20 @@ TSharedPtr<FJsonValue> FReflectionHandlers::SetEnumEntries(const TSharedPtr<FJso
 		return MCPError(TEXT("Missing 'entries' (array of strings or {name, displayName})"));
 	}
 
+	// The list as it stands, read before the clear loop destroys it. This is
+	// the payload of the inverse call: set_enum_entries replaces the whole list,
+	// so handing it the previous list back is its own exact undo. Index
+	// NumEnums()-1 is the auto _MAX sentinel, which is regenerated and is not an
+	// authored entry.
+	TArray<TSharedPtr<FJsonValue>> PreviousEntries;
+	for (int32 i = 0; i < Enum->NumEnums() - 1; ++i)
+	{
+		TSharedPtr<FJsonObject> Was = MakeShared<FJsonObject>();
+		Was->SetStringField(TEXT("name"), Enum->GetNameStringByIndex(i));
+		Was->SetStringField(TEXT("displayName"), Enum->GetDisplayNameTextByIndex(i).ToString());
+		PreviousEntries.Add(MakeShared<FJsonValueObject>(Was));
+	}
+
 	// Clear existing entries (UE editor utils does this safely).
 	while (Enum->NumEnums() > 1)
 	{
@@ -957,5 +1256,21 @@ TSharedPtr<FJsonValue> FReflectionHandlers::SetEnumEntries(const TSharedPtr<FJso
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("entries"), Added);
+	Result->SetArrayField(TEXT("previousEntries"), PreviousEntries);
+
+	// This action replaces the whole list, so replaying it with the previous
+	// list is the inverse. It is lossy in one named way: a user-defined enum's
+	// underlying enumerator names are minted by the engine, so restoring the
+	// list restores the display names and their order, not the raw names that
+	// were there before.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetArrayField(TEXT("entries"), PreviousEntries);
+	MCPSetRollback(Result, TEXT("set_enum_entries"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	Result->SetStringField(TEXT("rollbackNote"), TEXT(
+		"Replaying set_enum_entries with previousEntries restores the display names and their order. The underlying "
+		"enumerator names are minted by FEnumEditorUtils rather than written by this handler, so anything that "
+		"stored a raw enumerator name may not rebind, and enum values already saved on assets resolve by index."));
 	return MCPResult(Result);
 }

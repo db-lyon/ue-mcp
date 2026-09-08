@@ -23,6 +23,7 @@
 #include "LevelHandlers.h"
 
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 
 #include "Editor.h"
 #include "Engine/World.h"
@@ -271,6 +272,52 @@ namespace
 		return true;
 	}
 
+	/**
+	 * The identity of the descriptor query being paged: the method name plus
+	 * every parameter GatherMatchingDescs reads to decide which descriptors
+	 * match. A cursor is only valid against the key that issued it, so anything
+	 * left out here would let a page-2 cursor be replayed against a different
+	 * filter and page one collection at another collection's boundary.
+	 */
+	FString BuildActorDescCollectionKey(const TCHAR* Method, const TSharedPtr<FJsonObject>& Params)
+	{
+		FString Guids;
+		const TArray<TSharedPtr<FJsonValue>>* GuidValues = nullptr;
+		if (Params.IsValid() && Params->TryGetArrayField(TEXT("guids"), GuidValues) && GuidValues)
+		{
+			TArray<FString> Sorted;
+			for (const TSharedPtr<FJsonValue>& Value : *GuidValues)
+			{
+				FString Guid;
+				if (Value.IsValid() && Value->TryGetString(Guid) && !Guid.IsEmpty())
+				{
+					Sorted.Add(Guid.ToLower());
+				}
+			}
+			// Sorted, because the same set of GUIDs listed in a different order
+			// is the same query and should not invalidate a live cursor.
+			Sorted.Sort();
+			Guids = FString::Join(Sorted, TEXT(","));
+		}
+
+		FBox Box(ForceInit);
+		FString Bounds;
+		if (Params.IsValid() && TryReadBounds(Params, Box))
+		{
+			Bounds = Box.ToString();
+		}
+
+		return FString::Printf(
+			TEXT("%s|filter=%s|className=%s|guids=%s|bounds=%s|loadedOnly=%d|unloadedOnly=%d"),
+			Method,
+			*OptionalString(Params, TEXT("filter")).ToLower(),
+			*OptionalString(Params, TEXT("className")).ToLower(),
+			*Guids,
+			*Bounds,
+			OptionalBool(Params, TEXT("loadedOnly"), false) ? 1 : 0,
+			OptionalBool(Params, TEXT("unloadedOnly"), false) ? 1 : 0);
+	}
+
 	bool RequirePartitionedWorld(UWorld* World, TSharedPtr<FJsonValue>& OutError)
 	{
 		if (!World || !World->IsPartitionedWorld())
@@ -290,6 +337,18 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 	TSharedPtr<FJsonValue> Err;
 	if (!RequirePartitionedWorld(World, Err)) return Err;
 
+	// T3: paged. This cut the list at 'limit' and told the caller to raise it or
+	// narrow the filter, which on a map with 40,000 descriptors is an answer
+	// nobody can act on. The cursor walks the whole set instead.
+	MCPPagination::FPageRequest Page;
+	if (auto PageErr = MCPPagination::ReadPageRequest(
+			Params,
+			BuildActorDescCollectionKey(TEXT("list_actor_descs"), Params),
+			/*DefaultLimit*/ DefaultActorDescLimit, /*MaxLimit*/ 5000, Page))
+	{
+		return PageErr;
+	}
+
 	TArray<FMCPActorDescSnapshot> Matches;
 	FString Error;
 	if (!GatherMatchingDescs(Params, World, Matches, Error))
@@ -297,7 +356,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 		return MCPError(Error);
 	}
 
-	const int32 Limit = FMath::Max(1, OptionalInt(Params, TEXT("limit"), DefaultActorDescLimit));
 	const TSet<FGuid> LoadedGuids = CollectLoadedActorGuids(World);
 
 	int32 LoadedCount = 0;
@@ -306,26 +364,31 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorDescs(const TSharedPtr<FJsonObje
 		if (LoadedGuids.Contains(Desc.Guid)) ++LoadedCount;
 	}
 
-	TArray<TSharedPtr<FJsonValue>> Entries;
-	const int32 Emitted = FMath::Min(Limit, Matches.Num());
-	for (int32 i = 0; i < Emitted; ++i)
+	TArray<MCPPagination::FPageRow> Rows;
+	Rows.Reserve(Matches.Num());
+	for (const FMCPActorDescSnapshot& Desc : Matches)
 	{
-		Entries.Add(MakeShared<FJsonValueObject>(ActorDescToJson(Matches[i], LoadedGuids.Contains(Matches[i].Guid))));
+		// The actor GUID is the anchor. It is the descriptor's durable identity:
+		// it survives a rename, a move between packages and a relabel, all of
+		// which a path or a label would report as a different row.
+		Rows.Add({
+			Desc.Guid.ToString(),
+			MakeShared<FJsonValueObject>(ActorDescToJson(Desc, LoadedGuids.Contains(Desc.Guid))),
+		});
 	}
+
+	// ForEachActorDescInstance walks the partition's descriptor containers,
+	// whose traversal order is not a contract, so the rows are sorted before
+	// paging. A cursor over an unordered enumeration is not resumable.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
 
 	auto Result = MCPSuccess();
 	Result->SetNumberField(TEXT("matched"), Matches.Num());
-	Result->SetNumberField(TEXT("returned"), Entries.Num());
 	Result->SetNumberField(TEXT("loadedMatches"), LoadedCount);
 	Result->SetNumberField(TEXT("unloadedMatches"), Matches.Num() - LoadedCount);
-	Result->SetBoolField(TEXT("truncated"), Matches.Num() > Entries.Num());
-	Result->SetArrayField(TEXT("actorDescs"), Entries);
-	if (Matches.Num() > Entries.Num())
-	{
-		Result->SetStringField(TEXT("note"), FString::Printf(
-			TEXT("%d of %d descriptors returned; raise 'limit' or narrow 'filter' to see the rest."),
-			Entries.Num(), Matches.Num()));
-	}
+	MCPPagination::EmitPage(Page, Rows, TEXT("actorDescs"), Result);
+	Result->SetNumberField(TEXT("returned"), Result->GetIntegerField(TEXT("count")));
 	return MCPResult(Result);
 #elif WITH_EDITOR
 	return MCPError(TEXT("list_actor_descs needs the World Partition actor descriptor instance API, which is UE 5.5 and newer. On UE 5.4 use get_outliner or get_actors_by_class, which only see actors that are already streamed in."));

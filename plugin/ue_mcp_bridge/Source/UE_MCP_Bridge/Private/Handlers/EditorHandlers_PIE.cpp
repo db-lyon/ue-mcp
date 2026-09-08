@@ -213,12 +213,32 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieControl(const TSharedPtr<FJsonObject>
 		bool bIsPlaying = (GEditor->PlayWorld != nullptr);
 		Result->SetBoolField(TEXT("isPlaying"), bIsPlaying);
 		Result->SetStringField(TEXT("action"), Action);
+		// action=status only reads. Stated rather than left blank, because the
+		// same handler mutates under the other two actions.
+		Result->SetBoolField(TEXT("changed"), false);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
 	}
 	else if (Action == TEXT("start"))
 	{
 		if (GEditor->PlayWorld != nullptr)
 		{
-			return MCPError(TEXT("PIE session already active"));
+			// No session was started, so the verdict is false. `alreadyRunning`
+			// is the reason as a field rather than as prose: a caller has to
+			// tell "there was nothing to start" from "the launch broke", and
+			// that is the whole job the marker does. It does not turn the
+			// answer into a yes. A flow step that expects this outcome says so
+			// on itself with ignore_failure: true, which is the flow's decision
+			// to make and not this handler's to hide.
+			TSharedPtr<FJsonObject> Already = MakeShared<FJsonObject>();
+			Already->SetBoolField(TEXT("success"), false);
+			Already->SetStringField(TEXT("error"),
+				TEXT("PIE session already active, so none was started. This call changed nothing; stop the session with pie_control(action=stop) before starting a different one."));
+			Already->SetBoolField(TEXT("alreadyRunning"), true);
+			Already->SetBoolField(TEXT("isPlaying"), true);
+			Already->SetStringField(TEXT("action"), Action);
+			Already->SetBoolField(TEXT("changed"), false);
+			Already->SetBoolField(TEXT("rollbackPossible"), false);
+			return MCPResult(Already);
 		}
 
 		// AssetRegistry must be done with its initial scan before PIE can start.
@@ -351,19 +371,82 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieControl(const TSharedPtr<FJsonObject>
 			RestoreIgnoreBlueprintErrorsState();
 		}
 
+		// Read before requesting. The guard above tests PlayWorld only, and the
+		// request is deferred, so two starts in the same tick both pass it and
+		// the second silently overwrites PlaySessionRequest. This is the signal
+		// that makes the answer below true rather than assumed.
+		const bool bAlreadyQueued = GEditor->IsPlaySessionRequestQueued();
+
 		FRequestPlaySessionParams SessionParams;
 		GEditor->RequestPlaySession(SessionParams);
 		Result->SetStringField(TEXT("action"), Action);
+		// A REQUEST: UEditorEngine::RequestPlaySession stores the params to be
+		// acted on next tick, so PIE is not running yet and isPlaying still
+		// answers false. Queuing over a request that was already queued
+		// replaces it and starts nothing extra, which is a no-op worth saying.
+		Result->SetBoolField(TEXT("changed"), !bAlreadyQueued);
+		Result->SetBoolField(TEXT("alreadyQueued"), bAlreadyQueued);
+		Result->SetBoolField(TEXT("isPlaying"), false);
+		Result->SetBoolField(TEXT("playSessionRequested"), true);
+		Result->SetStringField(TEXT("startNote"), bAlreadyQueued
+			? TEXT("A play session was already queued and this call replaced that request rather than adding one. It begins on a later editor tick; poll pie_control(action=status) until isPlaying is true before doing anything that needs the PIE world.")
+			: TEXT("The play session is queued and begins on a later editor tick. Poll pie_control(action=status) until isPlaying is true before doing anything that needs the PIE world."));
+
+		// No rollback, and stopping is not one. The request is deferred, so at
+		// the moment a rollback would run PlayWorld is still null and
+		// pie_control(action=stop) reports alreadyStopped on exactly that - and
+		// PIE then starts anyway a tick later, leaving the editor in play after
+		// a rollback that reported it had finished. An inverse that can leave
+		// the thing it was meant to undo running is worse than none, and the
+		// idempotent report makes that reading MORE convincing, not less: the
+		// undo would come back clean while play carried on.
+		//
+		// The queued request IS cancellable: UEditorEngine has
+		// CancelRequestPlaySession, which drops it before the tick acts on it.
+		// The bridge exposes no action that calls it, so there is no method
+		// name to put in a rollback record. That is a one-line gap in the
+		// surface, not an engine limitation.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Starting play is a deferred request. pie_control(action=stop) is not its inverse: at rollback time there is no session yet, so it reports alreadyStopped while the queued one starts regardless. The engine can drop a queued request through CancelRequestPlaySession, but no bridge action calls it, so no rollback can name one. Stop it deliberately once pie_control(action=status) reports isPlaying."));
 	}
 	else if (Action == TEXT("stop"))
 	{
 		if (GEditor->PlayWorld == nullptr)
 		{
-			return MCPError(TEXT("No PIE session active"));
+			// The mirror of the start above: nothing was ended, so the verdict
+			// is false, and `alreadyStopped` says the reason was an absent
+			// session rather than a stop that failed to take.
+			TSharedPtr<FJsonObject> Already = MakeShared<FJsonObject>();
+			Already->SetBoolField(TEXT("success"), false);
+			Already->SetStringField(TEXT("error"),
+				TEXT("No PIE session active, so nothing was asked to end. Play is already stopped."));
+			Already->SetBoolField(TEXT("alreadyStopped"), true);
+			Already->SetBoolField(TEXT("isPlaying"), false);
+			Already->SetStringField(TEXT("action"), Action);
+			Already->SetBoolField(TEXT("changed"), false);
+			Already->SetBoolField(TEXT("rollbackPossible"), false);
+			return MCPResult(Already);
 		}
 
 		GEditor->RequestEndPlayMap();
 		Result->SetStringField(TEXT("action"), Action);
+		// Stopping is refused above when no PlayWorld exists, so reaching here
+		// always requested the end of a session that was running. Like the
+		// start, this is queued: RequestEndPlayMap flags the tick loop and the
+		// worlds are torn down on a later tick.
+		Result->SetBoolField(TEXT("changed"), true);
+		Result->SetBoolField(TEXT("endPlayRequested"), true);
+		Result->SetStringField(TEXT("stopNote"),
+			TEXT("The session ends on a later editor tick. Poll pie_control(action=status) until isPlaying is false before doing anything that needs the PIE world gone."));
+		// No rollback. Starting PIE again is not the inverse of stopping it: it
+		// is a fresh session from the map's saved state, with none of the world
+		// the stop tore down. A rollback here would also run after play had
+		// already ended, which is the point at which restarting is a new action
+		// rather than an undo.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Ending play destroys the PIE worlds and everything spawned in them. pie_control(action=start) launches a NEW session from the saved map rather than restoring this one."));
 	}
 	else
 	{
@@ -1020,6 +1103,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetPieTimeScale(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("WorldSettings not available on PIE world"));
 	}
 
+	// Read the dilation that is about to be replaced. This is the only value an
+	// inverse call could restore, and it is unreadable once the write lands.
+	const float PreviousFactor = UGameplayStatics::GetGlobalTimeDilation(World);
+	const float PreviousMaxCap = WS->MaxGlobalTimeDilation;
+	const float PreviousMinCap = WS->MinGlobalTimeDilation;
+
 	// Raise dilation caps so Factor isn't clamped.
 	const float CapHigh = FMath::Max(1000.0f, (float)Factor * 2.0f);
 	WS->MaxGlobalTimeDilation = FMath::Max(WS->MaxGlobalTimeDilation, CapHigh);
@@ -1032,6 +1121,42 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetPieTimeScale(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("maxCap"), WS->MaxGlobalTimeDilation);
 	Result->SetNumberField(TEXT("minCap"), WS->MinGlobalTimeDilation);
 	Result->SetStringField(TEXT("world"), World->GetName());
+	Result->SetNumberField(TEXT("previousFactor"), PreviousFactor);
+	// SetGlobalTimeDilation clamps, so compare what the world holds now against
+	// what it held before rather than against what was asked for.
+	const float AppliedFactor = UGameplayStatics::GetGlobalTimeDilation(World);
+	Result->SetNumberField(TEXT("appliedFactor"), AppliedFactor);
+	const bool bChanged = !FMath::IsNearlyEqual(AppliedFactor, PreviousFactor)
+		|| !FMath::IsNearlyEqual(PreviousMaxCap, WS->MaxGlobalTimeDilation)
+		|| !FMath::IsNearlyEqual(PreviousMinCap, WS->MinGlobalTimeDilation);
+	Result->SetBoolField(TEXT("changed"), bChanged);
+	if (bChanged) MCPSetUpdated(Result);
+
+	// Self-inverse: the same handler with the dilation this call replaced. Only
+	// when that value is one this handler would accept back - it refuses a
+	// non-positive factor, so a world already sitting at zero has no inverse
+	// call rather than a rollback that would be rejected when replayed.
+	if (PreviousFactor > 0.0f)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetNumberField(TEXT("factor"), PreviousFactor);
+		MCPSetRollback(Result, TEXT("set_pie_time_scale"), Payload);
+		// The caps are not part of the inverse: this handler only ever widens
+		// them, and it takes no parameter that would narrow them back.
+		const bool bCapsWidened = !FMath::IsNearlyEqual(PreviousMaxCap, WS->MaxGlobalTimeDilation)
+			|| !FMath::IsNearlyEqual(PreviousMinCap, WS->MinGlobalTimeDilation);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), bCapsWidened
+			? TEXT("Restores the previous time dilation only. The Min/Max GlobalTimeDilation caps this call widened on WorldSettings stay widened, because this handler has no parameter that narrows them. The rollback also needs the same PIE session to still be running: once play ends the world it would target is gone and the call reports that instead.")
+			: TEXT("Restores the previous time dilation only. The rollback needs the same PIE session to still be running: once play ends the world it would target is gone and the call reports that instead."));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The world's time dilation before this call was %g, and this handler refuses a factor that is not greater than zero. Replaying it with that value would be rejected, so no rollback is offered."),
+			PreviousFactor));
+	}
 	return MCPResult(Result);
 }
 
@@ -1323,10 +1448,38 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObj
 	if (!ComponentName.IsEmpty()) Result->SetStringField(TEXT("component"), ComponentName);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
 
+	// Whether the call CAN have written anything is answerable, so answer it
+	// rather than asserting a change. A pure or const UFUNCTION is declared to
+	// have no side effects, and a deferred call against an editor world is one
+	// this handler has already worked out will be skipped outright - the
+	// warning below says exactly that, and claiming changed=true beside it
+	// would be a marker contradicting its own response.
+	const bool bDeferToNextTick = OptionalBool(Params, TEXT("deferToNextTick"), false);
+	const bool bPureFunction = Func->HasAnyFunctionFlags(FUNC_BlueprintPure | FUNC_Const);
+	const bool bWillBeSkipped = bDeferToNextTick && WorldLabel == TEXT("editor");
+	Result->SetBoolField(TEXT("pure"), bPureFunction);
+	Result->SetBoolField(TEXT("changed"), !bPureFunction && !bWillBeSkipped);
+	if (bPureFunction)
+	{
+		Result->SetStringField(TEXT("idempotencyNote"),
+			TEXT("The function is declared BlueprintPure or const, so it is a query: it reports a value and writes nothing. Calling it again returns the same answer for the same state."));
+	}
+	// Past purity the effect is opaque: a non-pure UFUNCTION is not required to
+	// write anything, and nothing here compares before against after.
+	Result->SetBoolField(TEXT("changeDetected"), false);
+	// No rollback. What an arbitrary UFUNCTION did is opaque from here: nothing
+	// was captured before the call, no inverse function is known, and a great
+	// many of them (spawns, damage, sound, RPCs) have none. Inventing one would
+	// hand the flow engine a call that could do anything.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), bPureFunction
+		? TEXT("A pure or const function writes nothing, so there is nothing to undo.")
+		: TEXT("A UFUNCTION call has no known inverse. Wrap the sequence in editor(begin_editor_transaction) and roll back with editor(cancel_editor_transaction) when the effects are transactional, or undo the effect with whatever call your project treats as its opposite."));
+
 	// #973: the opt-in escape from the override above. Queued for the next
 	// engine tick, the send happens after the guard's scope has ended and the
 	// call routes the way it would from game code.
-	if (OptionalBool(Params, TEXT("deferToNextTick"), false))
+	if (bDeferToNextTick)
 	{
 		Result->SetBoolField(TEXT("deferred"), true);
 		if (!NaturalCallspace.IsEmpty())
@@ -1592,6 +1745,29 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 	MCPFunctionCall::WriteOutputs(OutVals, Func, ParamBuf.GetData(), CDO);
 	Result->SetObjectField(TEXT("returnValues"), OutVals);
 
+	// Whether the call CAN have written anything is answerable, so answer it.
+	// Most of what these libraries expose (Kismet math, GeometryScript queries)
+	// is declared BlueprintPure or const, which means it reports a value and
+	// writes nothing.
+	const bool bPureFunction = Func->HasAnyFunctionFlags(FUNC_BlueprintPure | FUNC_Const);
+	Result->SetBoolField(TEXT("pure"), bPureFunction);
+	Result->SetBoolField(TEXT("changed"), !bPureFunction);
+	if (bPureFunction)
+	{
+		Result->SetStringField(TEXT("idempotencyNote"),
+			TEXT("The function is declared BlueprintPure or const, so it is a query: it reports a value and writes nothing. Calling it again returns the same answer for the same state."));
+	}
+	// Past purity the effect is opaque: nothing here compares before to after.
+	Result->SetBoolField(TEXT("changeDetected"), false);
+	// No rollback. What an arbitrary static library function did is opaque from
+	// here: nothing was captured before the call and no inverse function is
+	// known, and the non-pure ones (GeometryScript edits, file writes, spawns)
+	// have no opposite call at all.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), bPureFunction
+		? TEXT("A pure or const function writes nothing, so there is nothing to undo.")
+		: TEXT("A static library call has no known inverse. Wrap the sequence in editor(begin_editor_transaction) and roll back with editor(cancel_editor_transaction) when the effects are transactional."));
+
 	Cleanup();
 	return MCPResult(Result);
 }
@@ -1605,6 +1781,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 {
 	ULevelEditorPlaySettings* Settings = GetPlaySettingsForRW();
 	if (!Settings) return MCPError(TEXT("LevelEditorPlaySettings CDO not available"));
+
+	// Read every field this handler can write before writing any of them. These
+	// are the only values an inverse call could restore, and SaveConfig below
+	// persists the new ones over them.
+	const int32 PrevNumClients = GetIntPropOn(Settings, TEXT("PlayNumberOfClients"), 1);
+	const FString PrevNetMode = NetModeNameFromValue(GetEnumPropOn(Settings, TEXT("PlayNetMode")));
+	const bool bPrevRunUnderOneProcess = GetBoolPropOn(Settings, TEXT("RunUnderOneProcess"), true);
+	const bool bPrevLaunchSeparateServer = GetBoolPropOn(Settings, TEXT("bLaunchSeparateServer"), false);
+	const int32 PrevNewWindowWidth = GetIntPropOn(Settings, TEXT("NewWindowWidth"), 0);
+	const int32 PrevNewWindowHeight = GetIntPropOn(Settings, TEXT("NewWindowHeight"), 0);
 
 	bool bAny = false;
 	int32 NumClients = 0;
@@ -1677,6 +1863,47 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	Result->SetBoolField(TEXT("launchSeparateServer"), GetBoolPropOn(Settings, TEXT("bLaunchSeparateServer"), false));
 	Result->SetNumberField(TEXT("newWindowWidth"), GetIntPropOn(Settings, TEXT("NewWindowWidth"), 0));
 	Result->SetNumberField(TEXT("newWindowHeight"), GetIntPropOn(Settings, TEXT("NewWindowHeight"), 0));
+
+	Result->SetNumberField(TEXT("previousNumClients"), PrevNumClients);
+	Result->SetStringField(TEXT("previousNetMode"), PrevNetMode);
+	Result->SetBoolField(TEXT("previousRunUnderOneProcess"), bPrevRunUnderOneProcess);
+	Result->SetBoolField(TEXT("previousLaunchSeparateServer"), bPrevLaunchSeparateServer);
+	Result->SetNumberField(TEXT("previousNewWindowWidth"), PrevNewWindowWidth);
+	Result->SetNumberField(TEXT("previousNewWindowHeight"), PrevNewWindowHeight);
+	const bool bChanged =
+		GetIntPropOn(Settings, TEXT("PlayNumberOfClients"), 1) != PrevNumClients
+		|| PrevNetMode != NetModeNameFromValue(GetEnumPropOn(Settings, TEXT("PlayNetMode")))
+		|| GetBoolPropOn(Settings, TEXT("RunUnderOneProcess"), true) != bPrevRunUnderOneProcess
+		|| GetBoolPropOn(Settings, TEXT("bLaunchSeparateServer"), false) != bPrevLaunchSeparateServer
+		|| GetIntPropOn(Settings, TEXT("NewWindowWidth"), 0) != PrevNewWindowWidth
+		|| GetIntPropOn(Settings, TEXT("NewWindowHeight"), 0) != PrevNewWindowHeight;
+	Result->SetBoolField(TEXT("changed"), bChanged);
+
+	// Self-inverse: the same handler with every field's previous value. The
+	// net-mode spelling NetModeNameFromValue produces is one this handler
+	// parses back (Standalone / ListenServer / Client all lowercase-match).
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetNumberField(TEXT("numClients"), PrevNumClients);
+	Payload->SetStringField(TEXT("netMode"), PrevNetMode);
+	Payload->SetBoolField(TEXT("runUnderOneProcess"), bPrevRunUnderOneProcess);
+	Payload->SetBoolField(TEXT("launchSeparateServer"), bPrevLaunchSeparateServer);
+	Payload->SetNumberField(TEXT("newWindowWidth"), PrevNewWindowWidth);
+	Payload->SetNumberField(TEXT("newWindowHeight"), PrevNewWindowHeight);
+	MCPSetRollback(Result, TEXT("configure_pie"), Payload);
+	// This handler ignores a non-positive numClients / newWindowWidth /
+	// newWindowHeight, so a previous value of zero cannot be written back and
+	// that field keeps whatever this call left in it.
+	TArray<FString> Unrestorable;
+	if (PrevNumClients <= 0) Unrestorable.Add(TEXT("numClients"));
+	if (PrevNewWindowWidth <= 0) Unrestorable.Add(TEXT("newWindowWidth"));
+	if (PrevNewWindowHeight <= 0) Unrestorable.Add(TEXT("newWindowHeight"));
+	Result->SetBoolField(TEXT("rollbackLossy"), Unrestorable.Num() > 0);
+	if (Unrestorable.Num() > 0)
+	{
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("Restores every field except %s, which was zero or negative before this call. This handler only applies those three when they are greater than zero, so replaying the previous value is a no-op for them and they keep the value written here."),
+			*FString::Join(Unrestorable, TEXT(", "))));
+	}
 	return MCPResult(Result);
 }
 
@@ -1690,7 +1917,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieSetPlayerView(const TSharedPtr<FJsonO
 	APlayerController* PC = World->GetFirstPlayerController();
 	if (!PC) return MCPError(TEXT("No PIE player controller"));
 
-	FRotator Rot = PC->GetControlRotation();
+	const FRotator PreviousRot = PC->GetControlRotation();
+	FRotator Rot = PreviousRot;
 	double Tmp;
 	if (Params->TryGetNumberField(TEXT("pitch"), Tmp)) Rot.Pitch = Tmp;
 	if (Params->TryGetNumberField(TEXT("yaw"), Tmp))   Rot.Yaw = Tmp;
@@ -1699,6 +1927,20 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieSetPlayerView(const TSharedPtr<FJsonO
 
 	auto Result = MCPSuccess();
 	Result->SetObjectField(TEXT("controlRotation"), MCPRotatorToJsonObject(Rot));
+	Result->SetObjectField(TEXT("previousControlRotation"), MCPRotatorToJsonObject(PreviousRot));
+	Result->SetBoolField(TEXT("changed"), !Rot.Equals(PreviousRot));
+
+	// Self-inverse: the same handler with the control rotation this call
+	// replaced. All three axes are sent, so a partial write still restores the
+	// whole rotation.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetNumberField(TEXT("pitch"), PreviousRot.Pitch);
+	Payload->SetNumberField(TEXT("yaw"), PreviousRot.Yaw);
+	Payload->SetNumberField(TEXT("roll"), PreviousRot.Roll);
+	MCPSetRollback(Result, TEXT("pie_set_player_view"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The rollback needs the same PIE session and player controller to still exist. Once play ends it reports that PIE is not running rather than restoring anything, and a live controller keeps turning under player or AI input after the write either way."));
 	return MCPResult(Result);
 }
 
@@ -1712,6 +1954,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::StageGameInput(const TSharedPtr<FJsonObj
 	APlayerController* PC = World->GetFirstPlayerController();
 	if (!PC) return MCPError(TEXT("No PIE player controller"));
 
+	const bool bPreviousShowMouseCursor = PC->bShowMouseCursor != 0;
 	const FString Mode = OptionalString(Params, TEXT("inputMode"), TEXT("gameOnly")).ToLower();
 	if (Mode == TEXT("uionly"))
 	{
@@ -1734,6 +1977,20 @@ TSharedPtr<FJsonValue> FEditorHandlers::StageGameInput(const TSharedPtr<FJsonObj
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("inputMode"), Mode);
 	Result->SetBoolField(TEXT("showMouseCursor"), bShowCursor);
+	Result->SetBoolField(TEXT("previousShowMouseCursor"), bPreviousShowMouseCursor);
+	// Half the write is comparable and half is not: the cursor flag is readable,
+	// the active input mode is not, so the mode is always re-applied. Reporting
+	// changed unconditionally rather than from the cursor flag alone avoids
+	// claiming a no-op for a call that did reset input routing.
+	Result->SetBoolField(TEXT("changed"), true);
+	// No rollback. APlayerController exposes no getter for the input mode it is
+	// currently in - SetInputMode writes into the viewport client and keeps no
+	// readable record - so the mode this call replaced was never captured.
+	// Restoring only showMouseCursor would put the cursor back while leaving
+	// input routed the way this call left it, which is worse than not trying.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The previous input mode is unreadable: Unreal keeps no accessor for the mode a player controller is in, so there is nothing to restore it to. previousShowMouseCursor is reported for the cursor half; call stage_game_input again with the mode the game expects to put input routing back deliberately."));
 	return MCPResult(Result);
 }
 

@@ -378,7 +378,19 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 		}
 
 		// ── Wire the sample to its property or properties ────────────────────
+#if UE_MCP_HAS_5_8_API
 		const TArray<FString> OutputNames = UMaterialEditingLibrary::GetMaterialExpressionOutputNames(Sample);
+#else
+		// GetMaterialExpressionOutputNames() arrived in 5.8, but it only reads
+		// back the expression's own output pins, and UMaterialExpression has
+		// exposed those since long before. Read them directly rather than lose
+		// the by-name channel wiring and fall back to channel index on 5.7.
+		TArray<FString> OutputNames;
+		for (const FExpressionOutput& Output : Sample->GetOutputs())
+		{
+			OutputNames.Add(Output.OutputName.ToString());
+		}
+#endif
 		TArray<TSharedPtr<FJsonValue>> ConnectedTargets;
 		for (int32 TargetIndex = 0; TargetIndex < Slot.Targets.Num(); ++TargetIndex)
 		{
@@ -450,7 +462,17 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 	}
 
 	// ── Recompile, then report what actually survived it ─────────────────────
+#if UE_MCP_HAS_5_8_API
 	const TArray<FString> CompileErrors = UMaterialEditingLibrary::RecompileMaterial(Material);
+#else
+	// RecompileMaterial returns void before 5.8, where it started handing back
+	// the compile errors it collected. The recompile itself is identical, so
+	// only the reporting differs: `compileErrors` below stays empty on 5.7 and
+	// the response says the list could not be read rather than implying the
+	// material compiled clean.
+	UMaterialEditingLibrary::RecompileMaterial(Material);
+	const TArray<FString> CompileErrors;
+#endif
 	const bool bSaved = SaveAssetPackage(Material);
 
 	// Re-read the editor-only data: RecompileMaterial can rebuild it, so the
@@ -491,6 +513,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 		for (const FString& Error : CompileErrors) Errors.Add(MakeShared<FJsonValueString>(Error));
 		Result->SetArrayField(TEXT("compileErrors"), Errors);
 	}
+#if !UE_MCP_HAS_5_8_API
+	// Said out loud, because an absent compileErrors array otherwise reads as
+	// "the recompile produced no errors", and on this engine it means the call
+	// that recompiles does not report them at all.
+	Result->SetStringField(TEXT("compileErrorsNote"),
+		TEXT("compileErrors is not reported on this engine: UMaterialEditingLibrary::RecompileMaterial "
+		     "returns void before UE 5.8. The material was recompiled; read the editor log for its errors."));
+#endif
 
 	// ── Optional: put the finished material on a mesh's slots ────────────────
 	FString MeshPath = OptionalString(Params, TEXT("assignToMesh"));

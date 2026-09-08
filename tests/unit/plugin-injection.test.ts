@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { categoryTool, bp, type ToolDef } from "../../src/types.js";
+import { actionEnumValues, categoryTool, bp, type ToolDef } from "../../src/types.js";
 import { mergeInjectionsIntoTool, type InjectionPlan } from "../../src/plugin/injection.js";
 import { looksLikeBaseTask, nativeHandlerSurface } from "../../src/plugin/loader.js";
 import { PluginManifestSchema } from "../../src/plugin/manifest.js";
@@ -10,8 +10,8 @@ function fakePcg(): ToolDef {
     "pcg",
     "Fake PCG tool for testing.",
     {
-      list_graphs: bp("pcg_list_graphs"),
-      add_node: bp("Add a node", "pcg_add_node"),
+      list_graphs: bp("read", "pcg_list_graphs"),
+      add_node: bp("read", "Add a node", "pcg_add_node"),
     },
     undefined,
     { graphPath: z.string().optional() },
@@ -59,9 +59,9 @@ describe("mergeInjectionsIntoTool", () => {
       actions: { foo: { task: "vpp.foo", description: "" } },
     };
     const { tool } = mergeInjectionsIntoTool(orig, [plan]);
-    const enumSchema = tool.schema.action as z.ZodEnum<[string, ...string[]]>;
-    expect(enumSchema._def.values).toContain("vpp_foo");
-    expect(enumSchema._def.values).toContain("list_graphs");
+    const advertised = actionEnumValues(tool.schema.action);
+    expect(advertised).toContain("vpp_foo");
+    expect(advertised).toContain("list_graphs");
   });
 
   it("skips built-in collisions and never overrides", () => {
@@ -73,7 +73,7 @@ describe("mergeInjectionsIntoTool", () => {
     };
     // Hand-craft a built-in named exactly `vpp_node` to provoke a collision.
     const builtin = categoryTool("pcg", "x", {
-      vpp_node: bp("collision target"),
+      vpp_node: bp("read", "collision target"),
     });
     const { added, skipped } = mergeInjectionsIntoTool(builtin, [plan]);
     expect(added).toEqual([]);

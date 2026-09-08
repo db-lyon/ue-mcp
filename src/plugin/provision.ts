@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { ToolDef, ActionSpec } from "../types.js";
+import { actionEnum } from "../types.js";
 import {
   compileSchemaFields,
   type ManifestProvidedCategory,
 } from "./manifest.js";
+import { inferActionEffect } from "../action-class.js";
 
 /**
  * Per-category provision plan derived from one plugin's `provides:` block.
@@ -34,6 +36,11 @@ export function buildProvidedTool(plan: ProvisionPlan): ToolDef {
 
   for (const [actionName, actionSpec] of Object.entries(plan.spec.actions)) {
     actions[actionName] = {
+      kind: "registry",
+      // The plugin author's answer when the manifest gives one, the name
+      // lexicon's otherwise, marked as the guess it is.
+      effect: actionSpec.effect ?? inferActionEffect(plan.category, actionName),
+      effectSource: actionSpec.effect ? "declared" : "inferred",
       description:
         actionSpec.description ?? `Plugin action from ${plan.pluginName}`,
     };
@@ -57,7 +64,7 @@ export function buildProvidedTool(plan: ProvisionPlan): ToolDef {
     name: plan.category,
     description,
     schema: {
-      action: z.enum(actionNames).describe("Action to perform"),
+      action: actionEnum(actionNames),
       ...extraSchema,
     },
     actions,

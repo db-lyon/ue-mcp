@@ -40,10 +40,21 @@ describe("widget inspect_runtime_instances", () => {
     expect(widgetTool.schema.maxNodesPerInstance.safeParse(0).success).toBe(false);
   });
 
-  it("keeps the editor world out of the runtime world scope", () => {
+  it("advertises the runtime world scopes without gating on them", () => {
     for (const scope of ["pie", "game", "auto"]) {
       expect(widgetTool.schema.world.safeParse(scope).success).toBe(true);
     }
-    expect(widgetTool.schema.world.safeParse("editor").success).toBe(false);
+    // A strict enum here would be validated by the MCP SDK BEFORE the tool
+    // callback runs, so a misspelled scope came back as a transport schema dump
+    // instead of the handler's own answer. The handler refuses anything that
+    // does not resolve to a live PIE/Game world and names the scopes it takes,
+    // so the parse has to let the value through for that message to be reached.
+    expect(widgetTool.schema.world.safeParse("editor").success).toBe(true);
+    expect(widgetTool.schema.world.safeParse("pei").success).toBe(true);
+    expect(widgetTool.schema.world.safeParse(7).success).toBe(false);
+    const described = widgetTool.schema.world.description ?? "";
+    for (const scope of ["pie", "game", "auto"]) {
+      expect(described).toContain(scope);
+    }
   });
 });

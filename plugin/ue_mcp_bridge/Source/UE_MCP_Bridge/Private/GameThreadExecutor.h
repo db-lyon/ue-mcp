@@ -38,6 +38,15 @@ public:
 	// engine loop. Called from the Slate modal loop tick. Game thread only.
 	static void DrainModalSafeQueue();
 
+	// Discard modal-safe queue entries whose work is already over. The queue
+	// only empties itself from the modal loop tick, which does not fire when
+	// no dialog is up, so without this an entry per modal-safe call would sit
+	// there until the next dialog - and list_dialogs and get_dialog_policy are
+	// ordinary polling reads made with no dialog present. Runs off the Slate
+	// pre-tick and off every queued handler. Game thread only; a call from any
+	// other thread returns without touching the queue.
+	static void SweepModalSafeQueue();
+
 	// Check if we're on game thread
 	static bool IsGameThread();
 

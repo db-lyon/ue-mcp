@@ -109,6 +109,15 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAddNode(const TSharedPtr<FJsonObj
 	Res->SetStringField(TEXT("nodeId"), Node->GetName());
 	Res->SetStringField(TEXT("nodeType"), NodeType);
 	Res->SetNumberField(TEXT("maxChildren"), Node->GetMaxChildNodes());
+
+	// The node this call constructed has no parent and no children yet - cue
+	// wiring is a separate soundcue_connect call - so soundcue_remove_node takes
+	// out exactly what was put in, with no edges to lose.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("cuePath"), CuePath);
+	Payload->SetStringField(TEXT("nodeId"), Node->GetName());
+	MCPSetRollback(Res, TEXT("soundcue_remove_node"), Payload);
+	Res->SetBoolField(TEXT("rollbackLossy"), false);
 	return MCPResult(Res);
 }
 
@@ -125,9 +134,15 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueConnect(const TSharedPtr<FJsonObj
 	if (!Child) return MCPError(FString::Printf(TEXT("Child node '%s' not found in cue."), *ChildNodeId));
 
 	const FString ParentNodeId = OptionalString(Params, TEXT("parentNodeId"));
+
+	// What the rollback has to put back, captured before anything moves.
+	FString PreviousRootId;
+	int32 PriorLinksToParent = 0;
+
 	if (ParentNodeId.IsEmpty())
 	{
 		// No parent -> this node becomes the cue root.
+		if (Cue->FirstNode) PreviousRootId = Cue->FirstNode->GetName();
 		Cue->FirstNode = Child;
 	}
 	else
@@ -144,6 +159,15 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueConnect(const TSharedPtr<FJsonObj
 		{
 			return MCPError(FString::Printf(TEXT("Parent node '%s' accepts at most %d children."), *ParentNodeId, Parent->GetMaxChildNodes()));
 		}
+
+		// soundcue_disconnect detaches a child from EVERY slot it occupies under
+		// the named parent, so a child that was already there loses those links
+		// too when the rollback runs. Count them so the result can say so.
+		for (USoundNode* Existing : Parent->ChildNodes)
+		{
+			if (Existing == Child) ++PriorLinksToParent;
+		}
+
 		Parent->InsertChildNode(Index);
 		Parent->ChildNodes[Index] = Child;
 	}
@@ -160,6 +184,43 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueConnect(const TSharedPtr<FJsonObj
 	Res->SetStringField(TEXT("cuePath"), CuePath);
 	Res->SetStringField(TEXT("parentNodeId"), ParentNodeId);
 	Res->SetStringField(TEXT("childNodeId"), ChildNodeId);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("cuePath"), CuePath);
+	if (ParentNodeId.IsEmpty())
+	{
+		Res->SetStringField(TEXT("previousRoot"), PreviousRootId);
+		if (!PreviousRootId.IsEmpty())
+		{
+			// Rooting is a single pointer, so rooting the previous node again is
+			// the exact inverse of rooting this one.
+			Payload->SetStringField(TEXT("childNodeId"), PreviousRootId);
+			MCPSetRollback(Res, TEXT("soundcue_connect"), Payload);
+		}
+		else
+		{
+			// The cue had no root before, and clearRoot is how soundcue_disconnect
+			// puts it back to none.
+			Payload->SetBoolField(TEXT("clearRoot"), true);
+			MCPSetRollback(Res, TEXT("soundcue_disconnect"), Payload);
+		}
+		Res->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Payload->SetStringField(TEXT("childNodeId"), ChildNodeId);
+		Payload->SetStringField(TEXT("parentNodeId"), ParentNodeId);
+		MCPSetRollback(Res, TEXT("soundcue_disconnect"), Payload);
+		Res->SetBoolField(TEXT("rollbackLossy"), PriorLinksToParent > 0);
+		if (PriorLinksToParent > 0)
+		{
+			Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("'%s' was already a child of '%s' in %d other slot(s) before this call, and audio(cue_disconnect) detaches it from ")
+				TEXT("every slot under that parent, so the rollback removes those links as well as the one added here. ")
+				TEXT("Re-add them with audio(cue_connect) using the childIndex each one held."),
+				*ChildNodeId, *ParentNodeId, PriorLinksToParent));
+		}
+	}
 	return MCPResult(Res);
 }
 

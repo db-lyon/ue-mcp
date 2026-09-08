@@ -51,7 +51,15 @@ describe("asset.create_render_target_2d", () => {
       expect(assetTool.schema.format.safeParse(f).success, f).toBe(true);
     }
     expect(assetTool.schema.format.safeParse("json").success).toBe(true);
-    expect(assetTool.schema.format.safeParse("BC7").success).toBe(false);
+    // create_render_target_2d refuses an unknown pixel format and lists every
+    // one it takes. The MCP SDK validates arguments before the tool callback
+    // runs, so a strict enum here would replace that message with a transport
+    // schema dump, and BC7 is exactly the plausible-looking miss a caller needs
+    // the real list for.
+    expect(assetTool.schema.format.safeParse("BC7").success).toBe(true);
+    for (const f of ["RGBA8_SRGB", "RGB10A2", "json", "csv"]) {
+      expect(assetTool.schema.format.description, f).toContain(f);
+    }
   });
 
   it("rejects a negative target gamma", () => {

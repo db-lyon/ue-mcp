@@ -1,30 +1,32 @@
 /**
  * The editor-connected golden baseline (#817, plan item 1.10).
  *
- * Plan item 1.10 asks for the single-editor surface recorded twice, with the
- * editor connected and with it down, because Epic-toolset enrichment picks a
- * live editor, then the project cache, then the snapshot baked into the
- * package. The surface legitimately differs between those states, so one
- * baseline cannot tell a regression from a cold start.
+ * Plan item 1.10 asked for the single-editor surface recorded twice, connected
+ * and down, because the surface used to differ between those states: Unreal's
+ * toolsets were read from a live editor at startup, falling back to a project
+ * cache and then to a snapshot baked into the package, so one baseline could
+ * not tell a regression from a cold start.
  *
- * This is the connected half, and it is the reason the tier exists: the
- * recording only means anything if the server it recorded really did enrich
- * from a live editor. That is asserted, not assumed. The recorder pins a
- * throwaway project that has never been enriched, so there is no cache for the
- * catalog to come from, and then reads back the enrichment source the server
- * narrated at startup. A recording that fell through to the baked snapshot
- * fails here rather than being committed as evidence of something it is not.
+ * It does not differ any more. Those tools are declared actions, so the whole
+ * advertised surface is decided before any editor is contacted, and the two
+ * recordings are identical apart from the label saying which is which. That
+ * equality is now what this file asserts, and it is a stronger property than
+ * the one it replaces: the two baselines cannot drift apart at all, rather
+ * than being separately maintained and compared by eye.
  *
- * Both halves run in this tier (plan 7.3), so a change that moves the surface
- * only when an editor is attached, or only when it is not, has one place that
- * catches either.
+ * The recording still happens against a live editor, because a surface that
+ * only holds while nothing is connected would be worth nothing. What is gone
+ * is the assertion about WHERE the toolset catalog came from, which described
+ * a startup step that no longer runs.
  *
  * To re-record on purpose:  npm run golden:record -- --connected
  */
+import * as fs from "node:fs";
 import * as os from "node:os";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   GOLDEN_EDITOR_CONNECTED,
+  GOLDEN_EDITOR_DOWN,
   GOLDEN_SCHEMA_VERSION,
   actionOrderProblems,
   canonicalizeActionOrder,
@@ -59,14 +61,22 @@ beforeAll(async () => {
 }, CAPTURE_TIMEOUT_MS);
 
 describe("golden baseline: single editor, editor connected", () => {
-  it("was recorded from the live editor, not from a cache or the baked snapshot", () => {
+  it("advertises exactly what it advertises with no editor attached", () => {
+    // The point of the pair. Every action this server exposes is declared, so
+    // an editor being reachable at startup cannot add one, remove one, or
+    // change a schema. A difference here means something reintroduced a
+    // surface that depends on the editor, which is the failure the two
+    // baselines exist to catch and the reason there are two of them.
+    const connected = JSON.parse(serialized) as Record<string, unknown>;
+    const down = JSON.parse(fs.readFileSync(GOLDEN_EDITOR_DOWN, "utf-8")) as Record<string, unknown>;
+    delete connected.scenario;
+    delete down.scenario;
     expect(
-      recording.enrichmentSource,
-      `enrichment came from ${recording.enrichmentSource ?? "nothing"}; ` +
-        "this baseline is only evidence about the live-editor path.\n" +
-        recording.log.split("\n").filter((l) => l.includes("Epic")).join("\n"),
-    ).toBe("live editor");
-    expect(recording.enrichmentCount).toBeGreaterThan(0);
+      connected,
+      "The connected surface differs from the editor-down one. Both are recorded from the "
+      + "same declaration, so they can only diverge if something is reading the editor at "
+      + "startup and changing what the server advertises.",
+    ).toEqual(down);
   });
 
   it("records a surface worth guarding", () => {
@@ -174,7 +184,7 @@ describe("golden baseline: single editor, editor connected", () => {
 describe("golden baseline: the editor-down half, with an editor running", () => {
   it("still matches the committed baseline", async () => {
     // Recorded against a privileged port, so it is the cold surface even
-    // though an editor is up. Running it here as well as in the unit tier is
+    // though an editor is up. Running it here as well as in the unit tests is
     // what plan 7.3 means by "both golden baselines": the two files have to
     // hold at the same moment, or a surface change has been split across them.
     const down = await captureEditorDownSurface();

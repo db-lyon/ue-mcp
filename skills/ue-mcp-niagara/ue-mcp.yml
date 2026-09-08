@@ -1,0 +1,9 @@
+categories: [niagara, asset]
+uePlugins: [Niagara]
+unrealClasses:
+  - UNiagaraSystem
+  - UNiagaraEmitter
+  - UNiagaraScript
+  - UNiagaraDataInterface
+engine: ">=5.4"
+triggers: [niagara, vfx, particle, emitter, renderer, module input, hlsl]

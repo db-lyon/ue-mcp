@@ -148,6 +148,43 @@ private:
 		const TSharedPtr<FJsonObject>& Params,
 		const TSharedPtr<FJsonObject>& OutInfo);
 
+	// ── UMG animation authoring, navigation rules, focus and accessibility ──
+	// Defined in WidgetHandlers_Animation.cpp, a translation-unit partition of
+	// this class: still FWidgetHandlers members, still registered above in
+	// WidgetHandlers.cpp::RegisterHandlers.
+	//
+	// These earn handlers because a UWidgetAnimation, its UMovieScene tracks and
+	// sections, and a UWidgetNavigation subobject all have to be CONSTRUCTED
+	// before any property on them exists for set_property to write. The two
+	// audits evaluate rules across the whole widget tree, which is not a
+	// property read at all.
+	static TSharedPtr<FJsonValue> CreateWidgetAnimation(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DeleteWidgetAnimation(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetWidgetAnimation(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddWidgetAnimationTrack(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveWidgetAnimationTrack(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddWidgetAnimationKey(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveWidgetAnimationKey(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddWidgetAnimationEventKey(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveWidgetAnimationEventKey(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BindWidgetAnimationEvent(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> UnbindWidgetAnimationEvent(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetWidgetNavigation(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ClearWidgetNavigation(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RestoreWidgetNavigation(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AuditWidgetFocusChain(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AuditWidgetAccessibility(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetRuntimeFocusPath(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetRuntimeFocus(const TSharedPtr<FJsonObject>& Params);
+
+	// ── CommonUI ───────────────────────────────────────────────────────────
+	// Defined in WidgetHandlers_CommonUI.cpp, same partition arrangement. Every
+	// CommonUI class is reached by name at runtime rather than by linking the
+	// module, because the plugin ships disabled and a Build.cs dependency would
+	// take the whole bridge down in a project that has it off.
+	static TSharedPtr<FJsonValue> GetBindWidgetContract(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AuditCommonUI(const TSharedPtr<FJsonObject>& Params);
+
 	// Helper: recursively search for a widget by name in the tree
 	static class UWidget* FindWidgetByNameRecursive(class UWidget* Root, const FString& WidgetName);
 };

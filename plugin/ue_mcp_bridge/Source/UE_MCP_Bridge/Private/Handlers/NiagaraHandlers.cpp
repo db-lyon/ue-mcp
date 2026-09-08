@@ -1,6 +1,7 @@
 #include "NiagaraHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 
 #include "UObject/StrongObjectPtr.h"
 #include "HandlerJsonProperty.h"
@@ -89,6 +90,17 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_niagara_module_inputs"), &ListModuleInputs);
 	Registry.RegisterHandler(TEXT("set_niagara_module_input"), &SetModuleInput);
 	Registry.RegisterHandler(TEXT("add_niagara_module"), &AddModule);
+	Registry.RegisterHandler(TEXT("list_niagara_dynamic_inputs"), &ListDynamicInputs);
+	Registry.RegisterHandler(TEXT("set_niagara_dynamic_input"), &SetDynamicInput);
+	Registry.RegisterHandler(TEXT("remove_niagara_dynamic_input"), &RemoveDynamicInput);
+	Registry.RegisterHandler(TEXT("add_niagara_simulation_stage"), &AddSimulationStage);
+	Registry.RegisterHandler(TEXT("remove_niagara_simulation_stage"), &RemoveSimulationStage);
+	Registry.RegisterHandler(TEXT("add_niagara_event_handler"), &AddEventHandler);
+	Registry.RegisterHandler(TEXT("remove_niagara_event_handler"), &RemoveEventHandler);
+	Registry.RegisterHandler(TEXT("get_niagara_custom_hlsl"), &GetCustomHlsl);
+	Registry.RegisterHandler(TEXT("set_niagara_custom_hlsl"), &SetCustomHlsl);
+	Registry.RegisterHandler(TEXT("remove_niagara_module"), &RemoveModule);
+	Registry.RegisterHandler(TEXT("set_niagara_module_enabled"), &SetModuleEnabled);
 	Registry.RegisterHandler(TEXT("remove_emitter_from_system"), &RemoveEmitterFromSystem);
 	Registry.RegisterHandler(TEXT("validate_niagara_system"), &ValidateSystem);
 	Registry.RegisterHandler(TEXT("list_niagara_static_switches"), &ListStaticSwitches);
@@ -96,70 +108,98 @@ void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("create_niagara_module_from_hlsl"), &CreateModuleFromHlsl);
 	// #185: Create an empty scratch-pad-style module
 	Registry.RegisterHandler(TEXT("create_scratch_module"), &CreateScratchModule);
+	Registry.RegisterHandler(TEXT("compile_niagara_system"), &CompileSystem);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::ListNiagaraSystems(const TSharedPtr<FJsonObject>& Params)
 {
+	// T3: paged. Systems and emitters are both rows of one `assets` collection,
+	// each already tagged with its `type`, so one cursor pages one list.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params, TEXT("list_niagara_systems"), /*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
+
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
-	TArray<FAssetData> Assets;
-	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/Niagara"), TEXT("NiagaraSystem")), Assets, true);
 
-	TArray<TSharedPtr<FJsonValue>> AssetArray;
-	for (const FAssetData& Asset : Assets)
+	// The registry returns assets in scan order, which is not a contract, so
+	// each group is sorted by object path before the two are concatenated.
+	const auto Collect = [&AR](const TCHAR* ClassName, const TCHAR* Type)
 	{
-		TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
-		AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
-		AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
-		AssetObj->SetStringField(TEXT("type"), TEXT("System"));
-		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
-	}
+		TArray<FAssetData> Assets;
+		AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/Niagara"), ClassName), Assets, true);
 
-	// Also include emitter assets (#67)
-	TArray<FAssetData> EmitterAssets;
-	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/Niagara"), TEXT("NiagaraEmitter")), EmitterAssets, true);
-	for (const FAssetData& Asset : EmitterAssets)
-	{
-		TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
-		AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
-		AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
-		AssetObj->SetStringField(TEXT("type"), TEXT("Emitter"));
-		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
-	}
+		TArray<MCPPagination::FPageRow> Out;
+		Out.Reserve(Assets.Num());
+		for (const FAssetData& Asset : Assets)
+		{
+			TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
+			AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
+			AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
+			AssetObj->SetStringField(TEXT("type"), Type);
+			// The asset's object path is the page anchor.
+			Out.Add({ Asset.GetObjectPathString(), MakeShared<FJsonValueObject>(AssetObj) });
+		}
+		Out.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+			{ return A.Id < B.Id; });
+		return Out;
+	};
+
+	TArray<MCPPagination::FPageRow> Rows = Collect(TEXT("NiagaraSystem"), TEXT("System"));
+	const int32 SystemCount = Rows.Num();
+	// Emitter assets too (#67).
+	Rows.Append(Collect(TEXT("NiagaraEmitter"), TEXT("Emitter")));
 
 	auto Result = MCPSuccess();
-	Result->SetArrayField(TEXT("assets"), AssetArray);
-	Result->SetNumberField(TEXT("count"), AssetArray.Num());
+	Result->SetNumberField(TEXT("systemCount"), SystemCount);
+	Result->SetNumberField(TEXT("emitterCount"), Rows.Num() - SystemCount);
+	MCPPagination::EmitPage(Page, Rows, TEXT("assets"), Result);
 	return MCPResult(Result);
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::ListNiagaraModules(const TSharedPtr<FJsonObject>& Params)
 {
-	// Default 200 keeps response small; engine ships ~200 NiagaraScripts. Use
-	// pathFilter to narrow results, or pass a higher limit for full sweep.
-	const int32 Limit = OptionalInt(Params, TEXT("limit"), 200);
 	const FString PathFilter = OptionalString(Params, TEXT("pathFilter"));
+
+	// T3: paged. The engine ships around 200 NiagaraScripts and a project with
+	// a VFX library adds more. The old form stopped the walk at `limit` BEFORE
+	// applying pathFilter, so a filter that matched nothing in the first 200
+	// assets reported an empty module list for modules that plainly exist.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_niagara_modules|pathFilter=%s"), *PathFilter),
+			/*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/Niagara"), TEXT("NiagaraScript")), Assets, true);
 
-	TArray<TSharedPtr<FJsonValue>> AssetArray;
+	TArray<MCPPagination::FPageRow> Rows;
+	Rows.Reserve(Assets.Num());
 	for (const FAssetData& Asset : Assets)
 	{
-		if (AssetArray.Num() >= Limit) break;
 		const FString PathStr = Asset.GetObjectPathString();
 		if (!PathFilter.IsEmpty() && !PathStr.Contains(PathFilter)) continue;
 
 		TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
 		AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
 		AssetObj->SetStringField(TEXT("path"), PathStr);
-		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
+		// The asset's object path is the page anchor.
+		Rows.Add({ PathStr, MakeShared<FJsonValueObject>(AssetObj) });
 	}
+	// The registry returns assets in scan order, which is not a contract.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
 
 	auto Result = MCPSuccess();
-	Result->SetArrayField(TEXT("modules"), AssetArray);
-	Result->SetNumberField(TEXT("count"), AssetArray.Num());
 	Result->SetNumberField(TEXT("totalAvailable"), Assets.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("modules"), Result);
 	return MCPResult(Result);
 }
 
@@ -515,6 +555,15 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ReactivateNiagara(const TSharedPtr<FJso
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+
+	// No inverse. This restarts a running simulation: the particles that were
+	// alive are gone and the age the system had reached cannot be put back.
+	// Calling it again restarts it a second time rather than restoring anything.
+	// Nothing on the asset or the actor changed, so there is no authored state
+	// to undo either.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Resetting a running Niagara system has no inverse: the simulation state it discarded is not recorded anywhere and reactivating again only restarts it once more. No asset or actor property was modified by this call."));
 	return MCPResult(Result);
 }
 
@@ -544,6 +593,14 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 
 	auto Result = MCPSuccess();
 
+	// The override this call writes lives on the component and persists with the
+	// actor, so it has a previous value worth carrying. Each branch reads its own
+	// through the matching getter, whose bIsValid says whether the parameter was
+	// there to read at all.
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	bool bHadPreviousValue = false;
+	bool bValueChanged = true;
+
 	// Set parameter based on type
 	FName ParamFName(*ParameterName);
 	if (ParameterType == TEXT("float"))
@@ -552,6 +609,15 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 		if (!Params->TryGetNumberField(TEXT("value"), Value))
 		{
 			return MCPError(TEXT("Missing 'value' parameter for float type"));
+		}
+		bool bIsValid = false;
+		const float PreviousFloat = NiagaraComp->GetVariableFloat(ParamFName, bIsValid);
+		if (bIsValid)
+		{
+			bHadPreviousValue = true;
+			bValueChanged = !FMath::IsNearlyEqual(PreviousFloat, (float)Value);
+			RollbackPayload->SetNumberField(TEXT("value"), PreviousFloat);
+			Result->SetNumberField(TEXT("previousValue"), PreviousFloat);
 		}
 		NiagaraComp->SetVariableFloat(ParamFName, (float)Value);
 		Result->SetNumberField(TEXT("value"), Value);
@@ -563,6 +629,16 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 		Params->TryGetNumberField(TEXT("valueY"), VY);
 		Params->TryGetNumberField(TEXT("valueZ"), VZ);
 		FVector VecValue(VX, VY, VZ);
+		bool bIsValid = false;
+		const FVector PreviousVec = NiagaraComp->GetVariableVec3(ParamFName, bIsValid);
+		if (bIsValid)
+		{
+			bHadPreviousValue = true;
+			bValueChanged = !PreviousVec.Equals(VecValue);
+			RollbackPayload->SetNumberField(TEXT("valueX"), PreviousVec.X);
+			RollbackPayload->SetNumberField(TEXT("valueY"), PreviousVec.Y);
+			RollbackPayload->SetNumberField(TEXT("valueZ"), PreviousVec.Z);
+		}
 		NiagaraComp->SetVariableVec3(ParamFName, VecValue);
 
 		TSharedPtr<FJsonObject> VecObj = MakeShared<FJsonObject>();
@@ -574,12 +650,30 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 	else if (ParameterType == TEXT("bool"))
 	{
 		bool bValue = OptionalBool(Params, TEXT("value"), false);
+		bool bIsValid = false;
+		const bool bPreviousBool = NiagaraComp->GetVariableBool(ParamFName, bIsValid);
+		if (bIsValid)
+		{
+			bHadPreviousValue = true;
+			bValueChanged = bPreviousBool != bValue;
+			RollbackPayload->SetBoolField(TEXT("value"), bPreviousBool);
+			Result->SetBoolField(TEXT("previousValue"), bPreviousBool);
+		}
 		NiagaraComp->SetVariableBool(ParamFName, bValue);
 		Result->SetBoolField(TEXT("value"), bValue);
 	}
 	else if (ParameterType == TEXT("int"))
 	{
 		double IntValue = OptionalNumber(Params, TEXT("value"), 0.0);
+		bool bIsValid = false;
+		const int32 PreviousInt = NiagaraComp->GetVariableInt(ParamFName, bIsValid);
+		if (bIsValid)
+		{
+			bHadPreviousValue = true;
+			bValueChanged = PreviousInt != (int32)IntValue;
+			RollbackPayload->SetNumberField(TEXT("value"), PreviousInt);
+			Result->SetNumberField(TEXT("previousValue"), PreviousInt);
+		}
 		NiagaraComp->SetVariableInt(ParamFName, (int32)IntValue);
 		Result->SetNumberField(TEXT("value"), IntValue);
 	}
@@ -588,12 +682,31 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 		return MCPError(FString::Printf(TEXT("Unsupported parameter type: %s (use float, vector, bool, or int)"), *ParameterType));
 	}
 
-	MCPSetUpdated(Result);
+	if (bValueChanged) MCPSetUpdated(Result);
+	else Result->SetBoolField(TEXT("unchanged"), true);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), FoundActor->GetPathName());
 	Result->SetStringField(TEXT("parameterName"), ParameterName);
 	Result->SetStringField(TEXT("parameterType"), ParameterType);
-	// No rollback: runtime niagara parameter overrides are ephemeral; replaying is safe.
+	Result->SetBoolField(TEXT("hadPreviousValue"), bHadPreviousValue);
+
+	if (bHadPreviousValue)
+	{
+		// Rollback: the same write aimed back at the value the component held.
+		// Addressed by actorPath rather than the label, which is not unique.
+		RollbackPayload->SetStringField(TEXT("actorPath"), FoundActor->GetPathName());
+		RollbackPayload->SetStringField(TEXT("parameterName"), ParameterName);
+		RollbackPayload->SetStringField(TEXT("parameterType"), ParameterType);
+		MCPSetRollback(Result, TEXT("set_niagara_parameter"), RollbackPayload);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The component had no readable '%s' of type %s before this call, so there is no previous value to write back and no action that removes a user-parameter override. Check the name against niagara(list_niagara_system_parameters) if this is unexpected."),
+			*ParameterName, *ParameterType));
+	}
 	return MCPResult(Result);
 }
 
@@ -710,7 +823,16 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterToSystem(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("emitterHandleName"), StoredHandleName.ToString());
 	Result->SetStringField(TEXT("emitterHandleId"), HandleId.ToString());
 	Result->SetNumberField(TEXT("emitterCount"), System->GetEmitterHandles().Num());
-	// No rollback: no paired remove_emitter_from_system handler.
+
+	// Rollback: take the handle back out. remove_emitter_from_system matches on
+	// the handle name it is given, which is why the STORED name is passed rather
+	// than the emitter asset's - AddEmitterToSystem renumbers on a collision, so
+	// the two are not always the same string.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("systemPath"), SystemPath);
+	Payload->SetStringField(TEXT("emitterName"), StoredHandleName.ToString());
+	MCPSetRollback(Result, TEXT("remove_emitter_from_system"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), false);
 	return MCPResult(Result);
 }
 
@@ -769,17 +891,30 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 
 	auto Result = MCPSuccess();
 
+	// The handle name this call resolved to. Passing it back in the rollback
+	// means the replay lands on the same emitter even when the caller addressed
+	// it by leaving emitterName empty (which means "the first one").
+	const FString ResolvedEmitterName = Handles[TargetIdx].GetName().ToString();
+
 	// Handle common properties
 	bool bSet = false;
+	bool bHasPreviousValue = false;
+	bool bChanged = true;
+	FString PreviousValue;
 	if (PropName.Equals(TEXT("enabled"), ESearchCase::IgnoreCase))
 	{
 		const bool bEnabled = Value.ToBool();
+		const bool bWasEnabled = Handles[TargetIdx].GetIsEnabled();
+		PreviousValue = bWasEnabled ? TEXT("true") : TEXT("false");
+		bHasPreviousValue = true;
+		bChanged = bWasEnabled != bEnabled;
 		System->Modify();
 		// GetEmitterHandles() is const; the editor mutates via a non-const handle.
 		FNiagaraEmitterHandle& MutableHandle = const_cast<FNiagaraEmitterHandle&>(Handles[TargetIdx]);
 		MutableHandle.SetIsEnabled(bEnabled, *System, /*bRecompileIfChanged*/ true);
 		bSet = true;
 		Result->SetBoolField(TEXT("enabled"), bEnabled);
+		Result->SetBoolField(TEXT("previousEnabled"), bWasEnabled);
 	}
 
 	// Try reflection on the EmitterData's properties
@@ -790,8 +925,24 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 		if (Prop)
 		{
 			void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(EmitterData);
+			// Export before import. The same property read back through the same
+			// reflection path produces text this handler imports, so the inverse
+			// is this call with that text as its value.
+			Prop->ExportText_Direct(PreviousValue, ValuePtr, ValuePtr, nullptr, PPF_None);
 			const TCHAR* ImportResult = Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
 			bSet = (ImportResult != nullptr);
+			// An empty export is not a value this action can be handed back:
+			// 'value' goes through RequireString, which rejects the empty
+			// string, so a rollback carrying one would fail with "Missing
+			// required parameter 'value'" instead of restoring anything. An
+			// empty FString, a None FName and an empty container all land here.
+			bHasPreviousValue = bSet && !PreviousValue.IsEmpty();
+			if (bSet)
+			{
+				FString AfterValue;
+				Prop->ExportText_Direct(AfterValue, ValuePtr, ValuePtr, nullptr, PPF_None);
+				bChanged = AfterValue != PreviousValue;
+			}
 		}
 	}
 
@@ -800,13 +951,39 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetEmitterProperty(const TSharedPtr<FJs
 		UEditorAssetLibrary::SaveAsset(System->GetPathName());
 	}
 
-	if (bSet) MCPSetUpdated(Result);
+	if (bSet && bChanged) MCPSetUpdated(Result);
+	else if (bSet) Result->SetBoolField(TEXT("unchanged"), true);
 	Result->SetStringField(TEXT("systemPath"), SystemPath);
 	Result->SetStringField(TEXT("emitterName"), EmitterName);
+	Result->SetStringField(TEXT("resolvedEmitterName"), ResolvedEmitterName);
 	Result->SetStringField(TEXT("propertyName"), PropName);
 	Result->SetStringField(TEXT("value"), Value);
 	Result->SetBoolField(TEXT("success"), bSet);
-	// No rollback: emitter reflection writes don't capture a comparable previous value cleanly.
+
+	if (bSet && !bChanged)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The property already held the value asked for, so nothing changed and there is nothing to undo."));
+	}
+	else if (bSet && bHasPreviousValue)
+	{
+		Result->SetStringField(TEXT("previousValue"), PreviousValue);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("systemPath"), SystemPath);
+		Payload->SetStringField(TEXT("emitterName"), ResolvedEmitterName);
+		Payload->SetStringField(TEXT("propertyName"), PropName);
+		Payload->SetStringField(TEXT("value"), PreviousValue);
+		MCPSetRollback(Result, TEXT("set_emitter_property"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else if (bSet)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("'%s' exported to an empty string before this call (an empty FString, a None FName or an empty container). set_emitter_property takes its value through a required-string check that rejects the empty string, so no inverse is offered rather than one that would fail on replay. Clear the property in the Niagara editor if the change has to be undone."),
+			*PropName));
+	}
 	if (!bSet)
 	{
 		// List available properties
@@ -986,10 +1163,45 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddEmitterRenderer(const TSharedPtr<FJs
 	Emitter->PostEditChange();
 	UEditorAssetLibrary::SaveLoadedAsset(System);
 
+	// Where the renderer landed, read off the emitter rather than assumed to be
+	// the end of the list: rendererIndex is the only key remove_emitter_renderer
+	// accepts, so it has to be the real one.
+	const TArray<UNiagaraRendererProperties*> AfterAdd = Data->GetRenderers();
+	const int32 NewRendererIndex = AfterAdd.IndexOfByKey(NewRenderer);
+
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetCreated(Res);
 	Res->SetStringField(TEXT("rendererClass"), RendererClass->GetName());
 	Res->SetStringField(TEXT("emitter"), Emitter->GetName());
+	Res->SetNumberField(TEXT("rendererIndex"), NewRendererIndex);
+	Res->SetNumberField(TEXT("rendererCount"), AfterAdd.Num());
+
+	if (NewRendererIndex != INDEX_NONE)
+	{
+		// Rollback: remove the renderer this call added. The emitter is
+		// addressed with the caller's own emitterName/emitterIndex, which
+		// already resolved once through the same resolver.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("systemPath"), SystemPath);
+		Payload->SetStringField(TEXT("emitterName"), EmitterName);
+		Payload->SetNumberField(TEXT("emitterIndex"), EmitterIndex);
+		Payload->SetNumberField(TEXT("rendererIndex"), NewRendererIndex);
+		MCPSetRollback(Res, TEXT("remove_emitter_renderer"), Payload);
+		// Not lossy: replayed against this emitter as it stands, the rollback
+		// removes exactly the renderer this call added and nothing is left
+		// behind. What it carries is a PRECONDITION rather than a loss, because
+		// rendererIndex is the only key the remove action takes.
+		Res->SetBoolField(TEXT("rollbackLossy"), false);
+		Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("Exact while the renderer list is unchanged: the rollback removes index %d, which is where this call put the new renderer. remove_emitter_renderer has no key other than position, so a renderer added or removed on this emitter first shifts what that index names. Re-read list_emitter_renderers before rolling back out of order."),
+			NewRendererIndex));
+	}
+	else
+	{
+		Res->SetBoolField(TEXT("rollbackPossible"), false);
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("The renderer was added but does not appear in the emitter's renderer list, so there is no index remove_emitter_renderer could be given. Re-read the emitter with list_emitter_renderers before removing anything."));
+	}
 	return MCPResult(Res);
 }
 
@@ -1015,6 +1227,8 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterRenderer(const TSharedPtr<
 	if (RendererIndex >= Renderers.Num()) return MCPError(TEXT("rendererIndex out of range"));
 
 	UNiagaraRendererProperties* ToRemove = Renderers[RendererIndex];
+	const FString RemovedClassName = ToRemove->GetClass()->GetName();
+	const bool bRemovedWasEnabled = ToRemove->GetIsEnabled();
 	Emitter->Modify();
 	Emitter->RemoveRenderer(ToRemove, Version);
 	Emitter->PostEditChange();
@@ -1024,6 +1238,23 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterRenderer(const TSharedPtr<
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("emitter"), Emitter->GetName());
 	Res->SetNumberField(TEXT("removedIndex"), RendererIndex);
+	Res->SetStringField(TEXT("removedClass"), RemovedClassName);
+	Res->SetBoolField(TEXT("removedWasEnabled"), bRemovedWasEnabled);
+
+	// Rollback: put a renderer of the same class back. add_emitter_renderer
+	// resolves a full class name through FindObject/FindClassByShortName, so the
+	// class this one really had is what gets recreated - but it comes back with
+	// its class defaults and at the end of the list, which is the lossy part.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("systemPath"), SystemPath);
+	Payload->SetStringField(TEXT("emitterName"), EmitterName);
+	Payload->SetNumberField(TEXT("emitterIndex"), EmitterIndex);
+	Payload->SetStringField(TEXT("rendererType"), RemovedClassName);
+	MCPSetRollback(Res, TEXT("add_emitter_renderer"), Payload);
+	Res->SetBoolField(TEXT("rollbackLossy"), true);
+	Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+		TEXT("The rollback adds a fresh %s with class defaults. Nothing this renderer had configured comes back - its material, bindings, sort order, alignment and enabled state (%s) were not snapshotted before the removal. It is also appended to the end of the renderer list rather than restored at index %d, so any other index in flight shifts."),
+		*RemovedClassName, bRemovedWasEnabled ? TEXT("enabled") : TEXT("disabled"), RendererIndex));
 	return MCPResult(Res);
 }
 
@@ -1058,11 +1289,20 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 	FString StringValue;
 	bool BoolValue = false;
 	double NumValue = 0.0;
+	// The inverse of a property write is the value that was there, in the shape
+	// the branch that wrote it reads back. A branch that cannot express its
+	// previous state (an object reference that was null) says so instead.
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	bool bRollbackExpressible = false;
+	FString RollbackBlockedReason;
 	R->Modify();
 	if (FBoolProperty* BP = CastField<FBoolProperty>(Prop))
 	{
 		if (!Params->TryGetBoolField(TEXT("value"), BoolValue)) return MCPError(TEXT("Expected bool 'value'"));
-		BP->SetPropertyValue(BP->ContainerPtrToValuePtr<void>(R), BoolValue);
+		void* Addr = BP->ContainerPtrToValuePtr<void>(R);
+		RollbackPayload->SetBoolField(TEXT("value"), BP->GetPropertyValue(Addr));
+		bRollbackExpressible = true;
+		BP->SetPropertyValue(Addr, BoolValue);
 	}
 	else if (FNumericProperty* NP = CastField<FNumericProperty>(Prop))
 	{
@@ -1072,17 +1312,24 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 		void* Addr = NP->ContainerPtrToValuePtr<void>(R);
 		if (NP->IsFloatingPoint())
 		{
+			RollbackPayload->SetNumberField(TEXT("value"), NP->GetFloatingPointPropertyValue(Addr));
+			bRollbackExpressible = true;
 			NP->SetFloatingPointPropertyValue(Addr, NumValue);
 		}
 		else
 		{
+			RollbackPayload->SetNumberField(TEXT("value"), (double)NP->GetSignedIntPropertyValue(Addr));
+			bRollbackExpressible = true;
 			NP->SetIntPropertyValue(Addr, (int64)FMath::RoundToDouble(NumValue));
 		}
 	}
 	else if (FStrProperty* SP = CastField<FStrProperty>(Prop))
 	{
 		if (!Params->TryGetStringField(TEXT("value"), StringValue)) return MCPError(TEXT("Expected string 'value'"));
-		SP->SetPropertyValue(SP->ContainerPtrToValuePtr<void>(R), StringValue);
+		void* Addr = SP->ContainerPtrToValuePtr<void>(R);
+		RollbackPayload->SetStringField(TEXT("value"), SP->GetPropertyValue(Addr));
+		bRollbackExpressible = true;
+		SP->SetPropertyValue(Addr, StringValue);
 	}
 	else if (FObjectPropertyBase* OP = CastField<FObjectPropertyBase>(Prop))
 	{
@@ -1095,7 +1342,18 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 		{
 			return MCPError(FString::Printf(TEXT("Asset %s is a %s, not a %s"), *StringValue, *Asset->GetClass()->GetName(), *OP->PropertyClass->GetName()));
 		}
-		OP->SetObjectPropertyValue(OP->ContainerPtrToValuePtr<void>(R), Asset);
+		void* Addr = OP->ContainerPtrToValuePtr<void>(R);
+		if (UObject* PreviousAsset = OP->GetObjectPropertyValue(Addr))
+		{
+			RollbackPayload->SetStringField(TEXT("value"), PreviousAsset->GetPathName());
+			bRollbackExpressible = true;
+		}
+		else
+		{
+			RollbackBlockedReason = FString::Printf(
+				TEXT("'%s' held no asset before this call, and set_renderer_property cannot clear an object reference: it loads whatever path it is given and rejects one that resolves to nothing."), *PropertyName);
+		}
+		OP->SetObjectPropertyValue(Addr, Asset);
 	}
 	else
 	{
@@ -1109,11 +1367,32 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 		{
 			return MCPError(TEXT("Expected a 'value' for this property"));
 		}
+		void* Addr = Prop->ContainerPtrToValuePtr<void>(R);
+		// Export before import. SetJsonOnProperty's last resort is to coerce a
+		// JSON string and import it as UE export text, which is exactly the
+		// form ExportText_Direct produces, so a struct, enum, name or array
+		// round-trips back through this same branch.
+		FString PreviousValueText;
+		Prop->ExportText_Direct(PreviousValueText, Addr, Addr, R, PPF_None);
 		FString SetError;
-		if (!MCPJsonProperty::SetJsonOnProperty(Prop, Prop->ContainerPtrToValuePtr<void>(R), RawValue, SetError))
+		if (!MCPJsonProperty::SetJsonOnProperty(Prop, Addr, RawValue, SetError))
 		{
 			return MCPError(FString::Printf(
 				TEXT("Could not set %s (%s): %s"), *PropertyName, *Prop->GetCPPType(), *SetError));
+		}
+		// An empty export cannot be handed back: the JSON setter's last resort
+		// imports the string as export text, and an empty one fails for most
+		// property types rather than clearing the value.
+		if (!PreviousValueText.IsEmpty())
+		{
+			RollbackPayload->SetStringField(TEXT("value"), PreviousValueText);
+			bRollbackExpressible = true;
+		}
+		else
+		{
+			RollbackBlockedReason = FString::Printf(
+				TEXT("'%s' exported to an empty string before this call (an empty FString, a None FName or an empty container). Replaying set_renderer_property with an empty value would fail its import rather than restore anything, so no inverse is offered."),
+				*PropertyName);
 		}
 	}
 	R->PostEditChange();
@@ -1123,6 +1402,28 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
 	MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("property"), PropertyName);
+	Res->SetStringField(TEXT("systemPath"), SystemPath);
+	Res->SetNumberField(TEXT("rendererIndex"), RendererIndex);
+
+	if (bRollbackExpressible)
+	{
+		// Rollback: the same write aimed back at the value read off the renderer
+		// a moment ago, addressed by the caller's own emitter and renderer keys.
+		RollbackPayload->SetStringField(TEXT("systemPath"), SystemPath);
+		RollbackPayload->SetStringField(TEXT("propertyName"), PropertyName);
+		RollbackPayload->SetNumberField(TEXT("rendererIndex"), RendererIndex);
+		RollbackPayload->SetStringField(TEXT("emitterName"), EmitterName);
+		RollbackPayload->SetNumberField(TEXT("emitterIndex"), EmitterIndex);
+		MCPSetRollback(Res, TEXT("set_renderer_property"), RollbackPayload);
+		Res->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Res->SetBoolField(TEXT("rollbackPossible"), false);
+		Res->SetStringField(TEXT("rollbackNote"), RollbackBlockedReason.IsEmpty()
+			? TEXT("The previous value of this property could not be put into a form set_renderer_property accepts, so no inverse call is offered rather than one that would write something else.")
+			: RollbackBlockedReason);
+	}
 	return MCPResult(Res);
 }
 
@@ -1566,6 +1867,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 
 	int32 SetCount = 0;
 	FString PrevValue;
+	bool bPrevValuesDiffered = false;
 	FString WritePath;
 	FString MatchedContext;
 	TArray<FString> SeenModules;
@@ -1672,6 +1974,13 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 						PrevValue = Pin->DefaultValue;
 						WritePath = TEXT("pinDefault");
 					}
+					// With stackContext "all" the same module can appear in
+					// several stacks and their pin defaults need not agree. One
+					// rollback value would write the first over all of them.
+					else if (WritePath == TEXT("pinDefault") && Pin->DefaultValue != PrevValue)
+					{
+						bPrevValuesDiffered = true;
+					}
 					FC->Modify();
 					Graph->Modify();
 					Pin->Modify();
@@ -1696,7 +2005,14 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 	UEditorAssetLibrary::SaveLoadedAsset(System);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
-	MCPSetUpdated(Res);
+	// Whether anything actually moved is only answerable on the pin-default
+	// path: there PrevValue was read off the very pin this call then wrote. On
+	// the override-map path PrevValue is a placeholder and says nothing, so that
+	// path keeps reporting an update rather than claiming a comparison it
+	// cannot make.
+	const bool bPinDefaultPath = WritePath == TEXT("pinDefault");
+	if (bPinDefaultPath && PrevValue == Value) Res->SetBoolField(TEXT("unchanged"), true);
+	else MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("moduleName"), ModuleName);
 	Res->SetStringField(TEXT("inputName"), InputName);
 	Res->SetStringField(TEXT("value"), Value);
@@ -1715,8 +2031,23 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 	// override-map path previousValue is a placeholder, and emitting a rollback
 	// for it would write the literal text "(unread: override map)" into a
 	// numeric or colour input.
-	if (WritePath == TEXT("overrideMap"))
+	if (!bPinDefaultPath)
 	{
+		Res->SetBoolField(TEXT("rollbackPossible"), false);
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("This input was written through the stack override map, where the previous value is not read back before the write - previousValue is a placeholder, not a value. Replaying set_niagara_module_input with it would push that placeholder text into the input, so no inverse is offered. Read the input first with niagara(list_dynamic_inputs) if the old value has to be restored."));
+		return MCPResult(Res);
+	}
+	if (PrevValue.IsEmpty())
+	{
+		// An unset pin default is the empty string, and set_niagara_module_input
+		// takes its value through a required-string check that rejects one, so a
+		// rollback carrying it would fail with "Missing required parameter
+		// 'value'" instead of restoring anything.
+		Res->SetBoolField(TEXT("rollbackPossible"), false);
+		Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("Input '%s' had no pin default before this call (the empty string). set_niagara_module_input rejects an empty value, so no inverse is offered rather than one that would fail on replay. Clear the pin in the Niagara editor if the change has to be undone."),
+			*InputName));
 		return MCPResult(Res);
 	}
 	TSharedPtr<FJsonObject> RbPayload = MakeShared<FJsonObject>();
@@ -1726,8 +2057,19 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 	RbPayload->SetStringField(TEXT("value"), PrevValue);
 	RbPayload->SetStringField(TEXT("emitterName"), EmitterName);
 	RbPayload->SetNumberField(TEXT("emitterIndex"), EmitterIndex);
-	RbPayload->SetStringField(TEXT("stackContext"), MatchedContext);
+	// The CALLER's stackContext, not MatchedContext. MatchedContext is the last
+	// stack a pin was found in, so replaying with it would restore one stack out
+	// of however many this call wrote. The caller's own string already resolved
+	// to exactly this pin set, so the replay covers the same ground.
+	RbPayload->SetStringField(TEXT("stackContext"), StackContext);
 	MCPSetRollback(Res, TEXT("set_niagara_module_input"), RbPayload);
+	Res->SetBoolField(TEXT("rollbackLossy"), bPrevValuesDiffered);
+	if (bPrevValuesDiffered)
+	{
+		Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("This call wrote '%s' on %d pins across more than one stack, and those pins did NOT all hold the same value before it. The rollback carries one value ('%s', the first pin's) and writes it to all of them, so the pins that differed come back wrong. Undo it per stack instead: call set_niagara_module_input once with each stackContext, using the value list_module_inputs reports for that stack."),
+			*InputName, SetCount, *PrevValue));
+	}
 	return MCPResult(Res);
 }
 
@@ -1828,6 +2170,20 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::AddModule(const TSharedPtr<FJsonObject>
 	Res->SetStringField(TEXT("moduleName"), NewModule->GetFunctionName());
 	Res->SetNumberField(TEXT("targetIndex"), TargetIndex);
 	Res->SetStringField(TEXT("note"), TEXT("Module node added and wired into the parameter map. Set its inputs with set_niagara_module_input."));
+
+	// Rollback: take the module back out. remove_niagara_module unwires the node
+	// group and closes the parameter-map chain over the gap, which is exactly
+	// what AddScriptModuleToStack opened. It matches on the function name, which
+	// is the name reported above. The emitter and stack are addressed with the
+	// caller's own keys, which already resolved once through the same resolver.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("systemPath"), SystemPath);
+	Payload->SetStringField(TEXT("stackContext"), StackContext);
+	Payload->SetStringField(TEXT("moduleName"), NewModule->GetFunctionName());
+	Payload->SetStringField(TEXT("emitterName"), EmitterName);
+	Payload->SetNumberField(TEXT("emitterIndex"), EmitterIndex);
+	MCPSetRollback(Res, TEXT("remove_niagara_module"), Payload);
+	Res->SetBoolField(TEXT("rollbackLossy"), false);
 	return MCPResult(Res);
 }
 
@@ -1862,6 +2218,19 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterFromSystem(const TSharedPt
 	const FString RemovedName = Handles[TargetIdx].GetName().ToString();
 	const FGuid RemovedId = Handles[TargetIdx].GetId();
 
+	// A handle owns a system-local COPY of the emitter, so its own path points
+	// inside this system's package and re-adding it is not possible. The source
+	// asset it was created from is the emitter's parent, and only when the
+	// handle was made by inheriting one - a standalone copy has none.
+	// GetParent lives on FVersionedNiagaraEmitterData, not on UNiagaraEmitter,
+	// so the version has to be resolved first - the same GetEmitterData() hop
+	// set_emitter_property makes.
+	const FVersionedNiagaraEmitter RemovedInstance = Handles[TargetIdx].GetInstance();
+	const FVersionedNiagaraEmitterData* RemovedData = RemovedInstance.GetEmitterData();
+	UNiagaraEmitter* SourceEmitter = RemovedData ? RemovedData->GetParent().Emitter : nullptr;
+	const bool bSourceIsSeparateAsset =
+		SourceEmitter != nullptr && SourceEmitter->GetOutermost() != System->GetOutermost();
+
 	System->Modify();
 	System->RemoveEmitterHandlesById({ RemovedId });
 	System->RequestCompile(false);
@@ -1873,6 +2242,29 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::RemoveEmitterFromSystem(const TSharedPt
 	Res->SetStringField(TEXT("systemPath"), SystemPath);
 	Res->SetStringField(TEXT("removedEmitter"), RemovedName);
 	Res->SetNumberField(TEXT("remainingEmitters"), System->GetEmitterHandles().Num());
+
+	if (bSourceIsSeparateAsset)
+	{
+		Res->SetStringField(TEXT("removedEmitterSourcePath"), SourceEmitter->GetPathName());
+
+		// Rollback: add the source emitter back. What comes back is a fresh copy
+		// of that asset, not the handle that was removed.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("systemPath"), SystemPath);
+		Payload->SetStringField(TEXT("emitterPath"), SourceEmitter->GetPathName());
+		MCPSetRollback(Res, TEXT("add_emitter_to_system"), Payload);
+		Res->SetBoolField(TEXT("rollbackLossy"), true);
+		Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The rollback re-adds '%s' as a new copy of the source asset. Every edit the removed handle carried is gone: module inputs, renderer settings, static switches and its enabled state were held on the system's own copy and were not snapshotted. The new handle also gets its own name, so '%s' is not guaranteed to come back and anything addressing that name has to be re-pointed."),
+			*SourceEmitter->GetPathName(), *RemovedName));
+	}
+	else
+	{
+		Res->SetBoolField(TEXT("rollbackPossible"), false);
+		Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The removed handle owned a copy of the emitter stored inside this system's own package, with no separate source asset to re-add: it has no parent emitter, or its parent lives in the same package. add_emitter_to_system needs a standalone emitter asset, so there is no call that puts '%s' back."),
+			*RemovedName));
+	}
 	return MCPResult(Res);
 }
 
@@ -2045,6 +2437,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetStaticSwitch(const TSharedPtr<FJsonO
 
 	int32 SetCount = 0;
 	FString PrevValue;
+	bool bPrevValuesDiffered = false;
 	FString MatchedContext;
 	for (const FScriptSlot& Slot : Scripts)
 	{
@@ -2063,7 +2456,12 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetStaticSwitch(const TSharedPtr<FJsonO
 				if (Pin && Pin->Direction == EGPD_Input && Pin->PinName == Needle) { SwitchPin = Pin; break; }
 			}
 			if (!SwitchPin) continue;
+			// PrevValue is the FIRST matching pin's default. When stackContext
+			// is "all" the same module can appear in several stacks, and their
+			// defaults need not agree - a single rollback value would then write
+			// the first one over all of them, so note the disagreement.
 			if (SetCount == 0) PrevValue = SwitchPin->DefaultValue;
+			else if (SwitchPin->DefaultValue != PrevValue) bPrevValuesDiffered = true;
 			FC->Modify();
 			Graph->Modify();
 			SwitchPin->Modify();
@@ -2084,13 +2482,30 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetStaticSwitch(const TSharedPtr<FJsonO
 	UEditorAssetLibrary::SaveLoadedAsset(System);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
-	MCPSetUpdated(Res);
+	// PrevValue was read off the first matching switch pin immediately before it
+	// was written, so comparing the two is the honest answer to "did anything
+	// change" rather than reporting an update for a value that was already set.
+	if (PrevValue == Value) Res->SetBoolField(TEXT("unchanged"), true);
+	else MCPSetUpdated(Res);
 	Res->SetStringField(TEXT("moduleName"), ModuleName);
 	Res->SetStringField(TEXT("switchName"), SwitchName);
 	Res->SetStringField(TEXT("value"), Value);
 	Res->SetStringField(TEXT("previousValue"), PrevValue);
 	Res->SetStringField(TEXT("stackContext"), MatchedContext);
 	Res->SetNumberField(TEXT("pinsUpdated"), SetCount);
+
+	if (PrevValue.IsEmpty())
+	{
+		// An unset switch pin default is the empty string, and
+		// set_niagara_static_switch takes its value through a required-string
+		// check that rejects one, so a rollback carrying it would fail with
+		// "Missing required parameter 'value'" instead of restoring anything.
+		Res->SetBoolField(TEXT("rollbackPossible"), false);
+		Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("Static switch '%s' had no pin default before this call (the empty string). set_niagara_static_switch rejects an empty value, so no inverse is offered rather than one that would fail on replay. niagara(list_static_switches) reports the switch's current defaultValue."),
+			*SwitchName));
+		return MCPResult(Res);
+	}
 
 	TSharedPtr<FJsonObject> RbPayload = MakeShared<FJsonObject>();
 	RbPayload->SetStringField(TEXT("systemPath"), SystemPath);
@@ -2099,8 +2514,19 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetStaticSwitch(const TSharedPtr<FJsonO
 	RbPayload->SetStringField(TEXT("value"), PrevValue);
 	RbPayload->SetStringField(TEXT("emitterName"), EmitterName);
 	RbPayload->SetNumberField(TEXT("emitterIndex"), EmitterIndex);
-	RbPayload->SetStringField(TEXT("stackContext"), MatchedContext);
+	// The CALLER's stackContext, not MatchedContext. MatchedContext is the last
+	// stack a pin was found in, so replaying with it would restore one stack out
+	// of however many this call wrote. The caller's own string already resolved
+	// to exactly this pin set, so the replay covers the same ground.
+	RbPayload->SetStringField(TEXT("stackContext"), StackContext);
 	MCPSetRollback(Res, TEXT("set_niagara_static_switch"), RbPayload);
+	Res->SetBoolField(TEXT("rollbackLossy"), bPrevValuesDiffered);
+	if (bPrevValuesDiffered)
+	{
+		Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("This call wrote '%s' on %d pins across more than one stack, and those pins did NOT all hold the same value before it. The rollback carries one value ('%s', the first pin's) and writes it to all of them, so the pins that differed come back wrong. Undo it per stack instead: call set_niagara_static_switch once with each stackContext, using the value list_static_switches reports for that stack."),
+			*SwitchName, SetCount, *PrevValue));
+	}
 	return MCPResult(Res);
 }
 

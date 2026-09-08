@@ -79,7 +79,7 @@ Nothing stops you putting `context.strategy` in the tracked `ue-mcp.yml` as a pr
 
 !!! info "Config vs. machine state - two homes under `~/.ue-mcp/`"
     - `~/.ue-mcp/config.yml` - your per-user **config** layer (see [Config layering](#config-layering)). Hand-edited. Personal defaults applied across every project.
-    - `~/.ue-mcp/state.json` - machine **state** the tool writes and you never hand-edit: absolute paths to the Claude Code settings files where the feedback hook was installed, plus your feedback-mode preference. Maintained by `npx ue-mcp init` / `npx ue-mcp uninstall-hooks` / `npx ue-mcp feedback mode`.
+    - `~/.ue-mcp/state.json` - machine **state** the tool writes and you never hand-edit: absolute paths to the Claude Code settings files where the feedback hook was installed, plus your feedback-mode and dialog-mode preferences. Maintained by `npx ue-mcp init` / `npx ue-mcp uninstall-hooks` / `npx ue-mcp feedback mode` / `npx ue-mcp dialog mode`.
 
 !!! tip "Migrating from older versions"
     - Pre-1.0.29 used `.ue-mcp.json` for the project config. On first load it is migrated into `ue-mcp.yml` (project fields) + `~/.ue-mcp/state.json` (machine state), then removed.

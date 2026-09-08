@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { ToolDef, ActionSpec } from "../types.js";
+import { actionEnum } from "../types.js";
 import { compileSchemaFields, type ManifestInjectAction } from "./manifest.js";
+import { inferActionEffect } from "../action-class.js";
 
 /**
  * Per-category injection plan derived from one plugin's `inject:` block.
@@ -62,6 +64,12 @@ export function mergeInjectionsIntoTool(
       // no bridge/handler is needed on the ActionSpec itself. The description
       // is what surfaces in the tool's AI docs.
       newActions[prefixed] = {
+        kind: "registry",
+        // The plugin author's answer when the manifest gives one. Otherwise
+        // the name lexicon's, marked as the guess it is: this package cannot
+        // read someone else's task to find out what it does.
+        effect: injectSpec.effect ?? inferActionEffect(orig.name, prefixed),
+        effectSource: injectSpec.effect ? "declared" : "inferred",
         description: injectSpec.description ?? `Plugin action from ${plan.pluginName}`,
       };
       added.push(prefixed);
@@ -93,7 +101,7 @@ export function mergeInjectionsIntoTool(
 
   const newSchema: Record<string, z.ZodType> = {
     ...orig.schema,
-    action: z.enum(allNames).describe("Action to perform"),
+    action: actionEnum(allNames),
     ...extraSchema,
   };
 

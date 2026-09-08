@@ -1319,5 +1319,17 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveBTNode(const TSharedPtr<FJsonObj
 	Result->SetArrayField(TEXT("removed"), Removed);
 	Result->SetNumberField(TEXT("compiledNodeCount"), Addresses.Num());
 	Result->SetBoolField(TEXT("saved"), bSaved);
+
+	// add_bt_node is the opposite operation, not the inverse of this one. It
+	// places a single fresh node under a new guid, so it cannot rebuild the
+	// branch that came down with the removed node, nor the decorators and
+	// services the compiler read off those graph nodes, nor the property values
+	// written onto their instances. Naming it here would hand a flow a recovery
+	// step that restores a fragment and reports a whole tree.
+	MCPSetNoRollback(Result, TEXT(
+		"The node, every node beneath it, and their decorators, services and property values are "
+		"gone from the graph and out of the recompiled tree. add_bt_node places one fresh node at a "
+		"time under a new guid, so no call in this surface puts a removed branch back with its old "
+		"structure, ordering and values."));
 	return MCPResult(Result);
 }

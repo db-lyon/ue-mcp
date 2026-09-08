@@ -389,6 +389,50 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSequence(const TSharedPtr<FJson
 // Params: assetPath, boneName, keyframes[]
 //   Each keyframe: { frame, location?: {x,y,z}, rotation?: {x,y,z,w}, scale?: {x,y,z} }
 // ---------------------------------------------------------------------------
+// One bone track's keys in the shape set_bone_keyframes and bake_keyframes_batch
+// read them: rotation is a quaternion, not a rotator. A keyframe write is only
+// reversible because those actions replace a track's keys wholesale, so replaying
+// the captured array restores the track exactly.
+static TArray<TSharedPtr<FJsonValue>> CaptureBoneTrackKeyframes(
+	const IAnimationDataModel* DataModel,
+	const FName BoneName)
+{
+	TArray<TSharedPtr<FJsonValue>> Keyframes;
+	if (!DataModel) return Keyframes;
+
+	TArray<FTransform> Transforms;
+	DataModel->GetBoneTrackTransforms(BoneName, Transforms);
+	for (const FTransform& Xf : Transforms)
+	{
+		TSharedPtr<FJsonObject> KF = MakeShared<FJsonObject>();
+
+		const FVector Loc = Xf.GetLocation();
+		TSharedPtr<FJsonObject> L = MakeShared<FJsonObject>();
+		L->SetNumberField(TEXT("x"), Loc.X);
+		L->SetNumberField(TEXT("y"), Loc.Y);
+		L->SetNumberField(TEXT("z"), Loc.Z);
+		KF->SetObjectField(TEXT("location"), L);
+
+		const FQuat Rot = Xf.GetRotation();
+		TSharedPtr<FJsonObject> R = MakeShared<FJsonObject>();
+		R->SetNumberField(TEXT("x"), Rot.X);
+		R->SetNumberField(TEXT("y"), Rot.Y);
+		R->SetNumberField(TEXT("z"), Rot.Z);
+		R->SetNumberField(TEXT("w"), Rot.W);
+		KF->SetObjectField(TEXT("rotation"), R);
+
+		const FVector Scale = Xf.GetScale3D();
+		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+		S->SetNumberField(TEXT("x"), Scale.X);
+		S->SetNumberField(TEXT("y"), Scale.Y);
+		S->SetNumberField(TEXT("z"), Scale.Z);
+		KF->SetObjectField(TEXT("scale"), S);
+
+		Keyframes.Add(MakeShared<FJsonValueObject>(KF));
+	}
+	return Keyframes;
+}
+
 TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -423,6 +467,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 	if (BoneIndex == INDEX_NONE)
 	{
 		return MCPError(FString::Printf(TEXT("Bone '%s' not found in skeleton"), *BoneName));
+	}
+
+	// Captured before the bracket opens: whether the track existed at all, and
+	// the keys it held. A track this call has to create has no inverse, because
+	// nothing removes a bone track; one that already existed is restored by
+	// replaying its own keys through this same action.
+	const FName CaptureBoneName(*BoneName);
+	const IAnimationDataModel* PreModel = AnimSeq->GetDataModel();
+	const bool bTrackExisted = PreModel && PreModel->IsValidBoneTrackName(CaptureBoneName);
+	TArray<FTransform> PrevTransforms;
+	TArray<TSharedPtr<FJsonValue>> PrevKeyframes;
+	if (bTrackExisted)
+	{
+		PreModel->GetBoneTrackTransforms(CaptureBoneName, PrevTransforms);
+		PrevKeyframes = CaptureBoneTrackKeyframes(PreModel, CaptureBoneName);
 	}
 
 	IAnimationDataController& Controller = AnimSeq->GetController();
@@ -494,10 +553,40 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneKeyframes(const TSharedPtr<FJs
 	AnimSeq->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(AssetPath);
 
+	// Did the keys actually move? Compare what was written against what was
+	// captured, so a replayed step reports a no-op instead of hollow success.
+	bool bUnchanged = bTrackExisted && PrevTransforms.Num() == KeyframeCount;
+	for (int32 i = 0; bUnchanged && i < KeyframeCount; ++i)
+	{
+		bUnchanged =
+			PrevTransforms[i].GetLocation().Equals(Locations[i])
+			&& PrevTransforms[i].GetRotation().Equals(Rotations[i])
+			&& PrevTransforms[i].GetScale3D().Equals(Scales[i]);
+	}
+
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetBoolField(TEXT("unchanged"), bUnchanged);
+	Result->SetBoolField(TEXT("trackCreated"), !bTrackExisted);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("boneName"), BoneName);
 	Result->SetNumberField(TEXT("keyframesSet"), KeyframeCount);
+
+	if (bTrackExisted)
+	{
+		TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+		Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+		Rollback->SetStringField(TEXT("boneName"), BoneName);
+		Rollback->SetArrayField(TEXT("keyframes"), PrevKeyframes);
+		MCPSetRollback(Result, TEXT("set_bone_keyframes"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The bone had no track on this sequence, so this call created one. No action removes a bone track from an AnimSequence, so there is no inverse call: the track stays, holding the keys that were written."));
+	}
 
 	return MCPResult(Result);
 }
@@ -536,6 +625,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeKeyframesBatch(const TSharedPtr<F
 	TArray<TSharedPtr<FJsonValue>> PerBone;
 	FString FailErr;
 	int32 BonesBaked = 0;
+	// The batch's own inverse is itself, replaying each bone's captured keys.
+	// A bone whose track this call had to create is listed separately, because
+	// nothing removes a bone track and the replay cannot undo the creation.
+	TArray<TSharedPtr<FJsonValue>> PreviousTracks;
+	TArray<TSharedPtr<FJsonValue>> CreatedTracks;
+	int32 BonesActuallyChanged = 0;
 
 	for (const TSharedPtr<FJsonValue>& TrackVal : *Tracks)
 	{
@@ -571,8 +666,19 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeKeyframesBatch(const TSharedPtr<F
 		{
 			return MCPError(TEXT("Animation sequence has no data model, so its bone tracks cannot be read or written"));
 		}
-		if (!DataModel->IsValidBoneTrackName(BoneFName))
+		const bool bTrackExisted = DataModel->IsValidBoneTrackName(BoneFName);
+		TArray<FTransform> PrevTransforms;
+		if (bTrackExisted)
 		{
+			DataModel->GetBoneTrackTransforms(BoneFName, PrevTransforms);
+			TSharedPtr<FJsonObject> PrevTrack = MakeShared<FJsonObject>();
+			PrevTrack->SetStringField(TEXT("bone"), BoneName);
+			PrevTrack->SetArrayField(TEXT("keyframes"), CaptureBoneTrackKeyframes(DataModel, BoneFName));
+			PreviousTracks.Add(MakeShared<FJsonValueObject>(PrevTrack));
+		}
+		else
+		{
+			CreatedTracks.Add(MakeShared<FJsonValueString>(BoneName));
 			Controller.AddBoneCurve(BoneFName);
 		}
 
@@ -615,9 +721,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeKeyframesBatch(const TSharedPtr<F
 			break;
 		}
 
+		bool bBoneUnchanged = bTrackExisted && PrevTransforms.Num() == Locations.Num();
+		for (int32 i = 0; bBoneUnchanged && i < Locations.Num(); ++i)
+		{
+			bBoneUnchanged =
+				PrevTransforms[i].GetLocation().Equals(Locations[i])
+				&& PrevTransforms[i].GetRotation().Equals(Rotations[i])
+				&& PrevTransforms[i].GetScale3D().Equals(Scales[i]);
+		}
+		if (!bBoneUnchanged) ++BonesActuallyChanged;
+
 		TSharedPtr<FJsonObject> BoneRes = MakeShared<FJsonObject>();
 		BoneRes->SetStringField(TEXT("bone"), BoneName);
 		BoneRes->SetNumberField(TEXT("keyframes"), Locations.Num());
+		BoneRes->SetBoolField(TEXT("unchanged"), bBoneUnchanged);
+		BoneRes->SetBoolField(TEXT("trackCreated"), !bTrackExisted);
 		PerBone.Add(MakeShared<FJsonValueObject>(BoneRes));
 		++BonesBaked;
 	}
@@ -636,9 +754,35 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeKeyframesBatch(const TSharedPtr<F
 	if (bSave) UEditorAssetLibrary::SaveAsset(AssetPath);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetBoolField(TEXT("unchanged"), BonesActuallyChanged == 0);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("bonesBaked"), BonesBaked);
 	Result->SetArrayField(TEXT("tracks"), PerBone);
+	Result->SetArrayField(TEXT("createdTracks"), CreatedTracks);
+
+	if (PreviousTracks.Num() > 0)
+	{
+		TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+		Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+		Rollback->SetArrayField(TEXT("tracks"), PreviousTracks);
+		Rollback->SetBoolField(TEXT("save"), bSave);
+		MCPSetRollback(Result, TEXT("bake_keyframes_batch"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), CreatedTracks.Num() > 0);
+		if (CreatedTracks.Num() > 0)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("The replay restores the keys of the %d bone track(s) that already existed. The %d track(s) this call had to create are listed in createdTracks and stay on the sequence, ")
+				TEXT("because no action removes a bone track from an AnimSequence."),
+				PreviousTracks.Num(), CreatedTracks.Num()));
+		}
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Every bone this call wrote had no track on the sequence, so all of them were created here. No action removes a bone track from an AnimSequence, so there is no inverse call."));
+	}
 	return MCPResult(Result);
 }
 
@@ -805,7 +949,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddCurve(const TSharedPtr<FJsonObject
 
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("curveName"), CurveName);
-	// No rollback: no paired remove_curve handler.
+	// This branch only runs when the curve did not exist, and AddCurve makes an
+	// empty one, so removing it by name puts the sequence back.
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+	Rollback->SetStringField(TEXT("curveName"), CurveName);
+	MCPSetRollback(Result, TEXT("remove_anim_curve"), Rollback);
+	Result->SetBoolField(TEXT("rollbackLossy"), false);
 
 	return MCPResult(Result);
 }
@@ -868,6 +1018,29 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetAnimCurveKeys(const TSharedPtr<FJs
 
 	const FAnimationCurveIdentifier CurveId(FName(*CurveName), ERawCurveTrackTypes::RCT_Float);
 
+	// The keys the curve already held, captured before the bracket opens. The
+	// inverse of a curve edit is restoring these keys, not deleting the curve;
+	// deleting is only right when this call is the one that created it.
+	TArray<TSharedPtr<FJsonValue>> PrevKeys;
+	bool bCurveExisted = false;
+	if (const IAnimationDataModel* PreModel = Seq->GetDataModel())
+	{
+		if (const FRichCurve* PrevCurve = PreModel->FindRichCurve(CurveId))
+		{
+			bCurveExisted = true;
+			for (const FRichCurveKey& Key : PrevCurve->Keys)
+			{
+				TSharedPtr<FJsonObject> KeyJson = MakeShared<FJsonObject>();
+				KeyJson->SetNumberField(TEXT("time"), Key.Time);
+				KeyJson->SetNumberField(TEXT("value"), Key.Value);
+				KeyJson->SetStringField(TEXT("interp"),
+					Key.InterpMode == RCIM_Constant ? TEXT("constant")
+					: (Key.InterpMode == RCIM_Cubic ? TEXT("cubic") : TEXT("linear")));
+				PrevKeys.Add(MakeShared<FJsonValueObject>(KeyJson));
+			}
+		}
+	}
+
 	IAnimationDataController& Controller = Seq->GetController();
 	Controller.OpenBracket(NSLOCTEXT("MCP", "SetAnimCurveKeys", "MCP Set Anim Curve Keys"));
 
@@ -890,6 +1063,43 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetAnimCurveKeys(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("curveName"), CurveName);
 	Result->SetBoolField(TEXT("curveCreated"), bAdded);
 	Result->SetNumberField(TEXT("keyCount"), Keys.Num());
+	Result->SetNumberField(TEXT("previousKeyCount"), PrevKeys.Num());
+
+	if (bCurveExisted && PrevKeys.Num() > 0)
+	{
+		// Restore the keys, not the absence of the curve.
+		TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+		Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+		Rollback->SetStringField(TEXT("curveName"), CurveName);
+		Rollback->SetArrayField(TEXT("keys"), PrevKeys);
+		MCPSetRollback(Result, TEXT("set_anim_curve_keys"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else if (bCurveExisted)
+	{
+		// The curve was there but empty, which is the state add_curve leaves and
+		// therefore the normal second half of "add_curve then set_anim_curve_keys".
+		// Replaying this action with an empty keys array is REFUSED ("No valid keys
+		// parsed"), so naming it would hand the flow engine a step that errors.
+		// remove_anim_curve is the call that actually undoes the keys.
+		TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+		Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+		Rollback->SetStringField(TEXT("curveName"), CurveName);
+		MCPSetRollback(Result, TEXT("remove_anim_curve"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The curve existed with no keys before this call. remove_anim_curve takes the keys away, and the empty curve with them, because set_anim_curve_keys rejects an empty keys array and has no form that empties a curve in place. ")
+			TEXT("Put the empty curve back with animation(add_curve) if its name has to remain on the sequence."));
+	}
+	else
+	{
+		// This call created the curve, so removing it is the exact inverse.
+		TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+		Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+		Rollback->SetStringField(TEXT("curveName"), CurveName);
+		MCPSetRollback(Result, TEXT("remove_anim_curve"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
 	return MCPResult(Result);
 }
 
@@ -1034,6 +1244,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyAnimationModifier(const TSharedP
 	TArray<TSharedPtr<FJsonValue>> PropArr;
 	for (const FString& P : AppliedProps) PropArr.Add(MakeShared<FJsonValueString>(P));
 	Result->SetArrayField(TEXT("appliedProps"), PropArr);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("A modifier bakes whatever its OnApply writes (curves, notifies, track edits) and registers itself in the sequence's asset user data. ")
+		TEXT("No action reverts a modifier or unregisters one, and re-applying it is not an inverse, so there is no inverse call. ")
+		TEXT("Recover per artefact: animation(remove_anim_curve) for a baked curve, animation(remove_anim_notify) for baked notifies."));
 	return MCPResult(Result);
 }
 
@@ -1224,6 +1439,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 	TArray<TSharedPtr<FJsonValue>> Results;
 	int32 UpdatedCount = 0;
 	int32 SkippedCount = 0;
+	// This action writes ONE properties object across many sequences, so it is
+	// its own inverse only when every sequence it touched carried the same prior
+	// values. Track them, and whether they agree.
+	TArray<TSharedPtr<FJsonValue>> RestorePaths;
+	TSharedPtr<FJsonObject> SharedPrevProps;
+	bool bPrevPropsAgree = true;
+	int32 ChangedCount = 0;
 
 	for (const TSharedPtr<FJsonValue>& PathVal : *PathsArr)
 	{
@@ -1260,6 +1482,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 			continue;
 		}
 
+		// Every field this action can write, read before any of them is touched.
+		const bool bPrevEnableRootMotion = Seq->bEnableRootMotion;
+		const bool bPrevForceRootLock = Seq->bForceRootLock;
+		const bool bPrevUseNormalizedRootMotionScale = Seq->bUseNormalizedRootMotionScale;
+		const ERootMotionRootLock::Type PrevRootLock = Seq->RootMotionRootLock;
+		const FString PrevRootLockName =
+			PrevRootLock == ERootMotionRootLock::RefPose ? TEXT("RefPose")
+			: (PrevRootLock == ERootMotionRootLock::AnimFirstFrame ? TEXT("AnimFirstFrame") : TEXT("Zero"));
+
 		Seq->Modify();
 
 		bool EnableRootMotion;
@@ -1288,18 +1519,65 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSequenceProperties(const TSharedPt
 		Seq->PostEditChange();
 		UEditorAssetLibrary::SaveLoadedAsset(Seq, /*bOnlyIfIsDirty=*/false);
 
+		TSharedPtr<FJsonObject> PrevProps = MakeShared<FJsonObject>();
+		PrevProps->SetBoolField(TEXT("enableRootMotion"), bPrevEnableRootMotion);
+		PrevProps->SetBoolField(TEXT("forceRootLock"), bPrevForceRootLock);
+		PrevProps->SetBoolField(TEXT("useNormalizedRootMotionScale"), bPrevUseNormalizedRootMotionScale);
+		PrevProps->SetStringField(TEXT("rootMotionRootLock"), PrevRootLockName);
+
+		if (!SharedPrevProps.IsValid())
+		{
+			SharedPrevProps = PrevProps;
+		}
+		else if (bPrevEnableRootMotion != SharedPrevProps->GetBoolField(TEXT("enableRootMotion"))
+			|| bPrevForceRootLock != SharedPrevProps->GetBoolField(TEXT("forceRootLock"))
+			|| bPrevUseNormalizedRootMotionScale != SharedPrevProps->GetBoolField(TEXT("useNormalizedRootMotionScale"))
+			|| PrevRootLockName != SharedPrevProps->GetStringField(TEXT("rootMotionRootLock")))
+		{
+			bPrevPropsAgree = false;
+		}
+		RestorePaths.Add(MakeShared<FJsonValueString>(ResolvedPath));
+		if (bPrevEnableRootMotion != Seq->bEnableRootMotion
+			|| bPrevForceRootLock != Seq->bForceRootLock
+			|| bPrevUseNormalizedRootMotionScale != Seq->bUseNormalizedRootMotionScale
+			|| PrevRootLock != Seq->RootMotionRootLock)
+		{
+			++ChangedCount;
+		}
+
 		Entry->SetStringField(TEXT("status"), TEXT("updated"));
 		Entry->SetBoolField(TEXT("enableRootMotion"), Seq->bEnableRootMotion);
 		Entry->SetBoolField(TEXT("forceRootLock"), Seq->bForceRootLock);
+		Entry->SetObjectField(TEXT("previousProperties"), PrevProps);
 		Results.Add(MakeShared<FJsonValueObject>(Entry));
 		++UpdatedCount;
 	}
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	Result->SetBoolField(TEXT("unchanged"), ChangedCount == 0);
 	Result->SetNumberField(TEXT("updated"), UpdatedCount);
 	Result->SetNumberField(TEXT("skipped"), SkippedCount);
 	Result->SetArrayField(TEXT("results"), Results);
+
+	if (UpdatedCount > 0 && bPrevPropsAgree && SharedPrevProps.IsValid())
+	{
+		// One properties object restores every sequence, because every one of
+		// them carried the same values. The paths are the RESOLVED sequence
+		// paths, so a montage input does not have to resolve again on replay.
+		TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+		Rollback->SetArrayField(TEXT("assetPaths"), RestorePaths);
+		Rollback->SetObjectField(TEXT("properties"), SharedPrevProps);
+		MCPSetRollback(Result, TEXT("set_sequence_properties"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), UpdatedCount == 0
+			? TEXT("No sequence was updated, so there is nothing to undo.")
+			: TEXT("The sequences carried different root-motion settings before this call, and set_sequence_properties writes one properties object across every path it is given, so no single call restores them. Each entry's previousProperties holds its own values, replayable one path at a time."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1417,11 +1695,28 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeRootMotionFromBone(const TSharedP
 		SourceLocOut.Add(SrcLoc);
 	}
 
+	// The two tracks this bake overwrites, captured before the bracket opens. The
+	// inverse is replaying those keys through bake_keyframes_batch, which writes
+	// both tracks in one call.
+	const bool bRootTrackExisted = DataModel->IsValidBoneTrackName(RootFName);
+	const bool bSourceTrackExisted = DataModel->IsValidBoneTrackName(SourceFName);
+	const bool bPrevEnableRootMotion = Seq->bEnableRootMotion;
+	TArray<TSharedPtr<FJsonValue>> PrevTracks;
+	auto CaptureTrack = [&](const FName BoneFName, const FString& BoneLabel)
+	{
+		TSharedPtr<FJsonObject> PrevTrack = MakeShared<FJsonObject>();
+		PrevTrack->SetStringField(TEXT("bone"), BoneLabel);
+		PrevTrack->SetArrayField(TEXT("keyframes"), CaptureBoneTrackKeyframes(DataModel, BoneFName));
+		PrevTracks.Add(MakeShared<FJsonValueObject>(PrevTrack));
+	};
+	if (bRootTrackExisted) CaptureTrack(RootFName, RootBoneName);
+	if (bSourceTrackExisted) CaptureTrack(SourceFName, SourceBoneName);
+
 	IAnimationDataController& Controller = Seq->GetController();
 	Controller.OpenBracket(NSLOCTEXT("MCP", "BakeRootMotion", "Bake Root Motion From Bone"));
 
-	if (!DataModel->IsValidBoneTrackName(RootFName)) Controller.AddBoneCurve(RootFName);
-	if (!DataModel->IsValidBoneTrackName(SourceFName)) Controller.AddBoneCurve(SourceFName);
+	if (!bRootTrackExisted) Controller.AddBoneCurve(RootFName);
+	if (!bSourceTrackExisted) Controller.AddBoneCurve(SourceFName);
 
 	Controller.SetBoneTrackKeys(RootFName, RootLocOut, RootRotOut, RootSclOut);
 	Controller.SetBoneTrackKeys(SourceFName, SourceLocOut, SourceRotIn, SourceSclIn);
@@ -1447,6 +1742,26 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeRootMotionFromBone(const TSharedP
 	Delta->SetNumberField(TEXT("z"), TotalDelta.Z);
 	Result->SetObjectField(TEXT("totalDelta"), Delta);
 	Result->SetStringField(TEXT("interpolation"), bPerFrame ? TEXT("per_frame") : TEXT("linear"));
+	Result->SetBoolField(TEXT("previousEnableRootMotion"), bPrevEnableRootMotion);
+
+	if (PrevTracks.Num() > 0)
+	{
+		TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+		Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+		Rollback->SetArrayField(TEXT("tracks"), PrevTracks);
+		MCPSetRollback(Result, TEXT("bake_keyframes_batch"), Rollback);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The replay restores the keys of the %d bone track(s) that already existed, and a track this call had to create stays on the sequence because nothing removes a bone track. ")
+			TEXT("It does not restore bEnableRootMotion, which this call forced on: replay animation(set_root_motion_settings) with enableRootMotion=%s to finish the undo."),
+			PrevTracks.Num(), bPrevEnableRootMotion ? TEXT("true") : TEXT("false")));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Neither the root nor the source bone had a track on this sequence, so both were created here. No action removes a bone track from an AnimSequence, so there is no inverse call."));
+	}
 	return MCPResult(Result);
 }
 

@@ -815,7 +815,26 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddFunctionParameter(const TSharedPtr
 	Result->SetStringField(TEXT("parameterName"), ParamName);
 	Result->SetStringField(TEXT("parameterType"), ParamType);
 	Result->SetBoolField(TEXT("isOutput"), bIsOutput);
-	// No rollback: no paired remove_function_parameter handler yet.
+
+	// edit_graph_parameters op=remove is the paired remove this handler used to
+	// say it did not have. It drops the user-defined pin from the same entry or
+	// return node this call added it to, and reports alreadyRemoved on replay.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("functionName"), FunctionName);
+	Payload->SetStringField(TEXT("op"), TEXT("remove"));
+	Payload->SetStringField(TEXT("parameterName"), ParamName);
+	Payload->SetBoolField(TEXT("isOutput"), bIsOutput);
+	MCPSetRollback(Result, TEXT("edit_graph_parameters"), Payload);
+	if (bIsOutput)
+	{
+		// The first output parameter on a function mints its return node. The
+		// inverse drops the parameter, not the node it arrived with.
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT(
+			"Removing the parameter does not remove the function's return node. If this call was the one that minted "
+			"it, an empty return node is left behind in the graph after the rollback."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1035,26 +1054,74 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 	AActor* CDO = Cast<AActor>(Blueprint->GeneratedClass->GetDefaultObject(true));
 	if (!CDO) return MCPError(TEXT("Blueprint is not an Actor"));
 
-	bool bCanEverTick = CDO->PrimaryActorTick.bCanEverTick;
-	bool bStartWithTickEnabled = CDO->PrimaryActorTick.bStartWithTickEnabled;
-	double TickInterval = CDO->PrimaryActorTick.TickInterval;
+	// The previous triple, which is both the idempotency answer and the exact
+	// inverse: this handler writes all three fields every call, so replaying it
+	// with these values restores exactly what was there.
+	const bool bPrevCanEverTick = CDO->PrimaryActorTick.bCanEverTick;
+	const bool bPrevStartWithTickEnabled = CDO->PrimaryActorTick.bStartWithTickEnabled;
+	// float, not double: FTickFunction::TickInterval is a float, and holding the
+	// previous value at wider precision is what made the equality test below
+	// unable to recognise a value it had just written.
+	const float PrevTickInterval = CDO->PrimaryActorTick.TickInterval;
+
+	bool bCanEverTick = bPrevCanEverTick;
+	bool bStartWithTickEnabled = bPrevStartWithTickEnabled;
+	double TickInterval = PrevTickInterval;
 
 	Params->TryGetBoolField(TEXT("bCanEverTick"), bCanEverTick);
 	Params->TryGetBoolField(TEXT("bStartWithTickEnabled"), bStartWithTickEnabled);
 	Params->TryGetNumberField(TEXT("TickInterval"), TickInterval);
 
-	CDO->PrimaryActorTick.bCanEverTick = bCanEverTick;
-	CDO->PrimaryActorTick.bStartWithTickEnabled = bStartWithTickEnabled;
-	CDO->PrimaryActorTick.TickInterval = (float)TickInterval;
+	// The stored field is a float, so the comparison has to happen in float.
+	// Comparing the caller's double 0.1 against a float-widened 0.1f is never
+	// equal, which made `unchanged` false for every call that in fact wrote the
+	// same value back.
+	const float NewTickInterval = (float)TickInterval;
+	const bool bNoChange =
+		bCanEverTick == bPrevCanEverTick
+		&& bStartWithTickEnabled == bPrevStartWithTickEnabled
+		&& NewTickInterval == PrevTickInterval;
 
-	Blueprint->MarkPackageDirty();
-	UEditorAssetLibrary::SaveAsset(AssetPath);
+	// A no-op does not dirty the package and does not save it. Reporting
+	// unchanged:true beside an unconditional MarkPackageDirty and SaveAsset was
+	// the claim and the contradiction in the same result.
+	if (!bNoChange)
+	{
+		CDO->PrimaryActorTick.bCanEverTick = bCanEverTick;
+		CDO->PrimaryActorTick.bStartWithTickEnabled = bStartWithTickEnabled;
+		CDO->PrimaryActorTick.TickInterval = NewTickInterval;
+
+		Blueprint->MarkPackageDirty();
+		UEditorAssetLibrary::SaveAsset(AssetPath);
+	}
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bNoChange) MCPSetExisted(Result); else MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetBoolField(TEXT("bCanEverTick"), bCanEverTick);
 	Result->SetBoolField(TEXT("bStartWithTickEnabled"), bStartWithTickEnabled);
-	Result->SetNumberField(TEXT("TickInterval"), TickInterval);
+	Result->SetNumberField(TEXT("TickInterval"), NewTickInterval);
+	Result->SetBoolField(TEXT("previousCanEverTick"), bPrevCanEverTick);
+	Result->SetBoolField(TEXT("previousStartWithTickEnabled"), bPrevStartWithTickEnabled);
+	Result->SetNumberField(TEXT("previousTickInterval"), PrevTickInterval);
+	Result->SetBoolField(TEXT("unchanged"), bNoChange);
+
+	if (bNoChange)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The tick settings already held these values, so nothing was written or saved and there is "
+			     "nothing to undo."));
+	}
+	else
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("path"), AssetPath);
+		Payload->SetBoolField(TEXT("bCanEverTick"), bPrevCanEverTick);
+		Payload->SetBoolField(TEXT("bStartWithTickEnabled"), bPrevStartWithTickEnabled);
+		Payload->SetNumberField(TEXT("TickInterval"), PrevTickInterval);
+		MCPSetRollback(Result, TEXT("set_actor_tick_settings"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -1468,6 +1535,43 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	Params->TryGetArrayField(TEXT("keyframes"), Keys);
 
 	const FName TrackFName(*TrackName);
+
+	// Idempotency, and the reason it matters here more than usual: this handler
+	// has no inverse, so a replayed call that appends a SECOND track of the same
+	// name leaves a timeline nothing in the bridge can clean up. Track names are
+	// what K2Node_Timeline turns into output pins, so two of a name is a broken
+	// node rather than a harmless duplicate. Every track list on the template is
+	// checked, not just the one matching trackType, because the pin name
+	// collides across types too.
+	auto TrackNameTaken = [Timeline, TrackFName]() -> const TCHAR*
+	{
+		for (const FTTFloatTrack& T : Timeline->FloatTracks)       { if (T.GetTrackName() == TrackFName) return TEXT("float"); }
+		for (const FTTVectorTrack& T : Timeline->VectorTracks)      { if (T.GetTrackName() == TrackFName) return TEXT("vector"); }
+		for (const FTTLinearColorTrack& T : Timeline->LinearColorTracks) { if (T.GetTrackName() == TrackFName) return TEXT("color"); }
+		for (const FTTEventTrack& T : Timeline->EventTracks)        { if (T.GetTrackName() == TrackFName) return TEXT("event"); }
+		return nullptr;
+	};
+	if (const TCHAR* ExistingType = TrackNameTaken())
+	{
+		auto Existed = MCPSuccess();
+		MCPSetExisted(Existed);
+		Existed->SetBoolField(TEXT("alreadyExists"), true);
+		Existed->SetBoolField(TEXT("unchanged"), true);
+		Existed->SetStringField(TEXT("path"), AssetPath);
+		Existed->SetStringField(TEXT("timelineName"), TimelineName);
+		Existed->SetStringField(TEXT("trackName"), TrackName);
+		Existed->SetStringField(TEXT("trackType"), TrackType);
+		Existed->SetStringField(TEXT("existingTrackType"), ExistingType);
+		Existed->SetStringField(TEXT("reason"), FString::Printf(TEXT(
+			"Timeline '%s' already has a %s track named '%s', and nothing was added. Track names become "
+			"K2Node_Timeline output pins, so a second track of this name would break the node, and no action "
+			"removes a timeline track once it exists. Pick a different trackName."),
+			*TimelineName, ExistingType, *TrackName));
+		Existed->SetBoolField(TEXT("rollbackPossible"), false);
+		Existed->SetStringField(TEXT("rollbackNote"), TEXT("Nothing was added, so there is nothing to undo."));
+		return MCPResult(Existed);
+	}
+
 	Timeline->Modify();
 
 	auto BumpLength = [&](float Time)
@@ -1597,6 +1701,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("trackType"), TrackType);
 	Result->SetNumberField(TEXT("keyCount"), Keys ? Keys->Num() : 0);
 	Result->SetNumberField(TEXT("timelineLength"), Timeline->TimelineLength);
+
+	// add_timeline_track is the only timeline action the bridge registers. There
+	// is no remove_timeline_track and no editor for a timeline's track list, so
+	// no inverse is named here rather than one that does not exist.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), TEXT(
+		"No action removes a timeline track: add_timeline_track is the only timeline action registered, so there is "
+		"nothing to name as an inverse. The track, its generated curve object and any TimelineLength this call "
+		"raised all stay."));
 	return MCPResult(Result);
 }
 

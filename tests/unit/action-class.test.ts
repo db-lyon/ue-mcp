@@ -1,126 +1,80 @@
 /**
- * Classification drift guard (#817, plan 5.1).
+ * What is left of the verb lexicon.
  *
- * Modelled on `drift.test.ts`: an action nobody classified fails CI rather than
- * surfacing later as a call that either edited the wrong editor or refused to
- * run in the right one. A new action lands with a verb the lexicon knows, or
- * with a line in the override table saying what it does.
+ * This file used to be the drift guard over the whole surface: every action
+ * had to land on a verb the lexicon knew or an entry in an override table, and
+ * a new one that did neither failed CI. That was the best available answer
+ * while the answer came from a name, and it was still a guess. An action
+ * declares its effect now, `tests/unit/action-effects.test.ts` holds the
+ * surface to it, and the lexicon's job shrank to one thing: reading a name
+ * this package never declares.
+ *
+ * There are exactly two callers of it, both at construction time, both
+ * recording what they get as `inferred`:
+ *
+ *   Epic enrichment, which injects wrapped engine tools read out of a live
+ *   registry that can carry toolsets no release has shipped against.
+ *   Plugin injection, for an action whose manifest did not say what it does.
+ *
+ * Nothing consults it at a gate any more. A name nobody declares is a
+ * mutation, which is `action-effects.ts`'s answer and not this one's.
  */
 import { describe, it, expect } from "vitest";
-import { ALL_TOOLS } from "../../src/tools.js";
-import { classifyActionClass, classifyTaskClass, requiresExplicitEditor } from "../../src/action-class.js";
-import { classifyAction } from "../../src/locking.js";
+import { classifyActionClass, inferActionEffect, requiresExplicitEditor } from "../../src/action-class.js";
 
-/** Every `category.action` this package declares. */
-function nativeActions(): Array<{ tool: string; action: string }> {
-  const out: Array<{ tool: string; action: string }> = [];
-  for (const t of ALL_TOOLS) {
-    for (const action of Object.keys(t.actions)) out.push({ tool: t.name, action });
-  }
-  return out;
-}
-
-describe("action classification", () => {
-  it("classifies every native action", () => {
-    const unresolved = nativeActions().filter(
-      (a) => classifyActionClass(a.tool, a.action).source === "unresolved",
-    );
-
-    if (unresolved.length > 0) {
-      throw new Error(
-        `${unresolved.length} action(s) have no read/mutate classification:\n` +
-          unresolved.map((a) => `  ${a.tool}.${a.action}`).join("\n") +
-          `\n\nAdd a verb to the lexicon in src/action-class.ts, or an entry in its ` +
-          `override table with the reason. Untargeted dispatch beyond one editor ` +
-          `depends on this answer.`,
-      );
-    }
-    expect(unresolved).toEqual([]);
-  });
-
-  it("covers the whole surface and finds real mutations in it", () => {
-    const all = nativeActions();
-    expect(all.length).toBeGreaterThan(700);
-    const mutating = all.filter((a) => classifyActionClass(a.tool, a.action).class === "mutate");
-    // The surface is majority write-shaped. A classifier that suddenly calls
-    // most of it `read` has broken, not improved.
-    expect(mutating.length).toBeGreaterThan(all.length / 2);
-  });
-
-  it("never contradicts the locking classifier", () => {
-    // The two answer different questions, but they cannot disagree about
-    // whether something writes. The only exceptions are the session-registry
-    // actions, which address the server rather than any editor, and
-    // level.bulk_line_trace, whose `bulk` prefix locking treats as a write
-    // even though the batch only observes collision.
-    const REGISTRY_ACTIONS = new Set(["project.add_editor", "level.bulk_line_trace"]);
-    const contradictions = nativeActions()
-      .map((a) => ({ ...a, key: `${a.tool}.${a.action}` }))
-      .filter((a) => !REGISTRY_ACTIONS.has(a.key))
-      .filter((a) => classifyAction(a.key, {}).mutates)
-      .filter((a) => classifyActionClass(a.tool, a.action).class !== "mutate");
-
-    expect(
-      contradictions.map((c) => c.key),
-      "locking treats these as writes but the routing gate does not",
-    ).toEqual([]);
-  });
-
-  it("gates the lifecycle actions, which are the ones that close a window", () => {
-    for (const action of ["start_editor", "stop_editor", "restart_editor", "build_project"]) {
-      const cls = classifyActionClass("editor", action).class;
-      expect(cls, `editor.${action}`).toBe("mutate");
-      expect(requiresExplicitEditor(cls)).toBe(true);
-    }
-  });
-
-  it("treats an arbitrary payload as unknown, and gates it like a mutation", () => {
-    for (const key of ["epic.call_tool", "editor.invoke_object_function", "animation.analyze_animation"]) {
-      const cls = classifyTaskClass(key);
-      expect(cls.class, key).toBe("unknown");
-      expect(requiresExplicitEditor(cls.class)).toBe(true);
-    }
-    // `unknown` is a declared answer, not a fall-through.
-    expect(classifyTaskClass("epic.call_tool").source).toBe("override");
-  });
-
-  it("lets plain reads through", () => {
-    for (const key of [
-      "project.get_status",
-      "asset.list",
-      "level.get_outliner",
-      "reflection.reflect_class",
-      "animation.read_control_rig_edit",
-    ]) {
-      expect(classifyTaskClass(key).class, key).toBe("read");
-      expect(requiresExplicitEditor("read")).toBe(false);
-    }
-    expect(classifyTaskClass("animation.read_control_rig_edit").source).toBe("override");
-  });
-
+describe("inferring an effect from a name, for the actions nobody declares", () => {
   it("reads a mutate verb anywhere in the name, not only at the front", () => {
-    expect(classifyActionClass("audio", "metasound_add_node").class).toBe("mutate");
-    expect(classifyActionClass("audio", "metasound_get_graph").class).toBe("read");
-    expect(classifyActionClass("project", "live_coding_compile").class).toBe("mutate");
-    expect(classifyActionClass("project", "live_coding_status").class).toBe("read");
+    // `metasound_add_node` adds a node; `cue_get_graph` does not.
+    expect(inferActionEffect("audio", "metasound_add_node")).toBe("mutate");
+    expect(inferActionEffect("audio", "metasound_get_graph")).toBe("read");
+    expect(inferActionEffect("project", "live_coding_compile")).toBe("mutate");
+    expect(inferActionEffect("project", "live_coding_status")).toBe("read");
   });
 
-  it("defaults an unrecognised epic_* action to read, and only that", () => {
-    const epicDefault = classifyActionClass("gas", "epic_some_tool_nobody_baked");
-    expect(epicDefault).toEqual({ class: "read", source: "epic-default" });
+  it("trusts a read verb only in the leading segment", () => {
+    // The case the rule was written from. `wire_rvt_sample` added a sampler
+    // node to a material and read as a READ, because `sample` is a read verb
+    // and the rule accepted one anywhere in the name. A trailing read verb
+    // settles nothing now and falls through to `unknown`, which is gated like
+    // a mutation.
+    expect(classifyActionClass("material", "wire_rvt_sample")).toEqual({
+      class: "unknown",
+      source: "unresolved",
+    });
+    expect(requiresExplicitEditor("unknown")).toBe(true);
+    // A leading read verb still settles it.
+    expect(classifyActionClass("material", "read_runtime_virtual_texture")).toEqual({
+      class: "read",
+      source: "lexicon",
+    });
+  });
+
+  it("defaults an unrecognised epic_* tool to read, and only that one", () => {
+    // Epic's surface is overwhelmingly read-shaped and a wrapped tool that
+    // writes almost always says so in its name. Defaulting the rest to a
+    // change would make every unbaked Epic action a hard refusal for
+    // multi-editor users, which is the trade plan 5.1 made deliberately.
+    expect(classifyActionClass("gas", "epic_some_tool_nobody_baked")).toEqual({
+      class: "read",
+      source: "epic-default",
+    });
     // A wrapped tool whose name says it writes is still a mutation.
-    expect(classifyActionClass("gas", "epic_gas_toolset_create_attribute_set").class).toBe("mutate");
-    // A non-epic action nobody classified stays unknown and stays gated.
-    const stranger = classifyActionClass("someplugin", "frobnicate_widget");
-    expect(stranger).toEqual({ class: "unknown", source: "unresolved" });
-    expect(requiresExplicitEditor(stranger.class)).toBe(true);
+    expect(inferActionEffect("gas", "epic_gas_toolset_create_attribute_set")).toBe("mutate");
   });
 
-  it("does not require a target for the session-registry actions", () => {
-    // These never reach a bridge: they name their subject in their own
-    // parameters, so no routing decision can send them to the wrong editor.
-    for (const key of ["project.list_editors", "project.use_editor", "project.add_editor", "project.drop_editor"]) {
-      expect(classifyTaskClass(key).class, key).toBe("read");
-    }
+  it("answers unknown for a plugin action whose name says nothing", () => {
+    // Recorded as `inferred` by the injector, so the guess is never read back
+    // later as a declaration.
+    expect(classifyActionClass("someplugin", "frobnicate_widget")).toEqual({
+      class: "unknown",
+      source: "unresolved",
+    });
+    expect(requiresExplicitEditor("unknown")).toBe(true);
+  });
+
+  it("gates every class that is not a read", () => {
+    expect(requiresExplicitEditor("read")).toBe(false);
+    expect(requiresExplicitEditor("mutate")).toBe(true);
+    expect(requiresExplicitEditor("unknown")).toBe(true);
   });
 });

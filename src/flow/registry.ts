@@ -1,6 +1,7 @@
 import { TaskRegistry, ShellTask } from "@db-lyon/flowkit";
 import type { TaskConstructor } from "@db-lyon/flowkit";
 import type { ToolDef } from "../types.js";
+import type { CallPreparation } from "../call-pipeline.js";
 import type { FlowContext } from "./context.js";
 import { BridgeTask } from "./bridge-task.js";
 import { bridgeTaskClass, handlerTaskClass } from "./task-factory.js";
@@ -24,6 +25,17 @@ export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
     for (const [actionName, spec] of Object.entries(tool.actions)) {
       const taskName = `${tool.name}.${actionName}`;
 
+      // Everything the shared preparation cannot work out for itself. This is
+      // the live dispatch route, so anything missing from here is a piece of
+      // the advertised contract that only works in the tests: the category's
+      // parameter folding, the action name that folding branches on, and the
+      // nesting a gateway's parameters arrive under.
+      const prep: CallPreparation = {
+        action: actionName,
+        normalizeParams: tool.options?.normalizeParams,
+        nestedParamsKey: tool.options?.nestedParamsKey,
+      };
+
       if (spec.handler) {
         // FlowContext is a structural superset of ToolContext (see
         // context.ts), so we pass ctx straight through. Rebuilding it
@@ -34,12 +46,17 @@ export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
           taskName,
           handlerTaskClass(taskName, (ctx: FlowContext, params: Record<string, unknown>) => {
             return originalHandler(ctx, params);
-          }),
+          }, prep),
         );
       } else if (spec.bridge) {
         registry.register(
           taskName,
-          bridgeTaskClass(taskName, spec.bridge, spec.mapParams),
+          // The action's authored budget travels with it. Three actions
+          // (blueprint.flush_component_templates, widget.add_widget,
+          // widget.remove_widget) declare 120s because their method has no
+          // entry in the editor's own timeout table, and dropping it here gave
+          // them the 30s default on every live call.
+          bridgeTaskClass(taskName, spec.bridge, spec.mapParams, spec.timeoutMs, prep),
         );
       }
     }

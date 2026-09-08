@@ -239,6 +239,53 @@ export function resolveBridgeTarget(
   };
 }
 
+/** A published bridge address that a live process is standing behind. */
+export interface LiveBridgeAddress {
+  port: number;
+  /** The editor process holding it, or null on plugin builds that publish none. */
+  pid: number | null;
+  source: "port.json" | "instance-record";
+  /** Set when port.json could not answer and an instance record did. */
+  recordPath?: string;
+}
+
+/**
+ * The port a LIVE editor of this project published (#934, D6).
+ *
+ * The data path (EditorBridge.connect) and the lifecycle path (stop / restart)
+ * used to disagree about this in both directions, and both directions hurt:
+ *
+ *   - connect() took port.json on the strength of the port number alone, so a
+ *     record a crashed editor left behind cleared the #818 pin refusal and the
+ *     client dialled a port that may since belong to something else.
+ *   - connect() had no instances/<pid>.json fallback, so with two editors of
+ *     one project the one that quits deletes the shared port.json and the
+ *     survivor becomes invisible to ordinary tool calls while editor(stop_editor)
+ *     resolves it perfectly well. Two subsystems, one editor, opposite answers.
+ *
+ * A lockfile that names NO pid is still honoured: older plugin builds publish
+ * none, and refusing them would refuse a healthy editor for having an old
+ * binary. The pid check only ever discards a record whose named process is
+ * demonstrably gone.
+ *
+ * `isAlive` is injected so this is testable without real pids.
+ */
+export function resolveLiveBridgeAddress(
+  projectDir?: string | null,
+  isAlive: (pid: number) => boolean = isPidAlive,
+): LiveBridgeAddress | null {
+  if (!projectDir) return null;
+  const lockfile = readBridgeLockfileIn(projectDir);
+  if (lockfile && (lockfile.pid === null || isAlive(lockfile.pid))) {
+    return { port: lockfile.port, pid: lockfile.pid, source: "port.json" };
+  }
+  const record = findLiveInstanceRecord(projectDir, isAlive);
+  if (record) {
+    return { port: record.port, pid: record.pid, source: "instance-record", recordPath: record.recordPath };
+  }
+  return null;
+}
+
 /**
  * Filesystem timestamps can be coarse (2s on FAT), and the lockfile is written
  * moments after launch, so allow a little slack when deciding whether it

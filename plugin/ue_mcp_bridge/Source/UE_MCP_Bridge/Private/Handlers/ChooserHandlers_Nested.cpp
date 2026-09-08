@@ -533,5 +533,19 @@ TSharedPtr<FJsonValue> FChooserHandlers::RemapObjectReferences(const TSharedPtr<
 	Result->SetStringField(TEXT("note"), bDryRun
 		? TEXT("Dry run - nothing was written. Re-run with dryRun=false to apply.")
 		: TEXT("References rewritten and the chooser recompiled. The asset is left dirty; save it when ready."));
+	// The swapped pair is not the inverse of this call. Both modes match by
+	// pattern rather than by location, so replaying with from and to exchanged
+	// would also sweep up every reference that already pointed at the new
+	// target before this ran: the rewrite is many-to-one and the reverse cannot
+	// tell the two populations apart. Each entry in 'changes' carries the path
+	// it replaced, but nothing in this surface writes one specific reference
+	// back at its own location, which is what an inverse would need.
+	MCPSetNoRollback(Result, (bDryRun || Rewritten == 0)
+		? TEXT("Nothing was written, so there is nothing to undo.")
+		: TEXT("Every matching reference across the nested chooser tree now points at the new target, and the paths "
+			   "they replaced are reported per entry in 'changes'. Re-running with the pair swapped is not an "
+			   "inverse: it would also drag back references that already pointed at the new target, and no bridge "
+			   "call writes one reference back at its own location. The edit is inside an editor transaction, so "
+			   "undo in the editor is the only way back."));
 	return MCPResult(Result);
 }

@@ -6,7 +6,9 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 #include "HandlerJsonProperty.h"
+#include "Misc/OutputDeviceNull.h"
 #include "JsonSerializer.h"
 #include "VolumeHelpers_Internal.h"
 #include "Editor.h"
@@ -40,7 +42,18 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListVolumes(const TSharedPtr<FJsonObject>
 
 	FString VolumeType = OptionalString(Params, TEXT("volumeType"));
 
-	TArray<TSharedPtr<FJsonValue>> VolumesArray;
+	// T3: paged, so a level whose blocking and audio volumes run to the
+	// thousands is walkable rather than a single response.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_volumes|volumeType=%s"), *VolumeType),
+			/*DefaultLimit*/ 200, /*MaxLimit*/ 5000, Page))
+	{
+		return Err;
+	}
+
+	TArray<MCPPagination::FPageRow> Rows;
 	for (TActorIterator<AVolume> ActorIt(World); ActorIt; ++ActorIt)
 	{
 		AVolume* Volume = *ActorIt;
@@ -65,12 +78,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListVolumes(const TSharedPtr<FJsonObject>
 		LocObj->SetNumberField(TEXT("z"), Location.Z);
 		VolumeObj->SetObjectField(TEXT("location"), LocObj);
 
-		VolumesArray.Add(MakeShared<FJsonValueObject>(VolumeObj));
+		// The actor path is the anchor: two volumes can share a label, and a
+		// page boundary has to name exactly one of them.
+		Rows.Add({ Volume->GetPathName(), MakeShared<FJsonValueObject>(VolumeObj) });
 	}
 
+	// TActorIterator walks the level's actor arrays, whose order is not a
+	// contract and which a spawn or a delete reshuffles, so the rows are sorted
+	// before paging. A cursor over an unordered enumeration is not resumable.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
+
 	auto Result = MCPSuccess();
-	Result->SetArrayField(TEXT("volumes"), VolumesArray);
-	Result->SetNumberField(TEXT("count"), VolumesArray.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("volumes"), Result);
 
 	return MCPResult(Result);
 }
@@ -387,17 +407,166 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddPostProcessBlendable(const TSharedPtr<
 	if (!Material) return MCPError(FString::Printf(TEXT("Material not found: %s"), *MaterialPath));
 
 	const float Weight = (float)OptionalNumber(Params, TEXT("weight"), 1.0);
+
+	// AddOrUpdateBlendable either appends an entry or reweights one that is
+	// already there, and the two invert differently, so which one happened has
+	// to be established first.
+	bool bAlreadyPresent = false;
+	float PreviousWeight = 0.0f;
+	for (const FWeightedBlendable& Existing : Volume->Settings.WeightedBlendables.Array)
+	{
+		if (Existing.Object == static_cast<UObject*>(Material))
+		{
+			bAlreadyPresent = true;
+			PreviousWeight = Existing.Weight;
+			break;
+		}
+	}
+
+	// An append has an inverse too: WeightedBlendables is a reflected field of
+	// FPostProcessSettings, which set_post_process_settings writes like any
+	// other, so the array as it stands right now IS the value that undoes the
+	// append. Captured as export text before the write, which is the form that
+	// action imports.
+	//
+	// But the replay path for that text is a SINGLE engine ImportText_Direct:
+	// SetJsonOnProperty skips the JSON re-parse for a string starting with '(',
+	// the struct branch wants an object and falls through, and
+	// ImportTextIntoProperty sees ContainsMap == false for FWeightedBlendables
+	// and drops to ImportTextRaw. None of the per-element splitting, resize
+	// guarding or count verification the repo added for exactly this hazard is
+	// in play. So the round trip is not asserted here, it is MEASURED: the text
+	// is imported into a scratch FWeightedBlendables and compared against a
+	// copy of the array taken before the write. A rollback is emitted only when
+	// that comparison holds, and the result says which way it went.
+	FString PreviousBlendables;
+	bool bBlendablesRoundTrip = false;
+	FString RoundTripFailure;
+	const FWeightedBlendables OriginalBlendables = Volume->Settings.WeightedBlendables;
+	const FProperty* BlendablesProp =
+		FPostProcessSettings::StaticStruct()->FindPropertyByName(TEXT("WeightedBlendables"));
+	if (!BlendablesProp)
+	{
+		RoundTripFailure = TEXT("FPostProcessSettings does not expose a WeightedBlendables property on this engine, so the array could not be read back at all.");
+	}
+	else
+	{
+		// Exported with NO parent, for the same reason the probe imports with
+		// none: the parent scopes how object references are written, and text
+		// captured relative to this volume is text the ownerless replay may not
+		// resolve. Both sides of the round trip now stand in exactly the
+		// conditions the restore will run in.
+		BlendablesProp->ExportTextItem_Direct(
+			PreviousBlendables,
+			BlendablesProp->ContainerPtrToValuePtr<void>(&Volume->Settings),
+			nullptr, nullptr, PPF_None);
+
+		// Proof, not assertion. The scratch copy is what the inverse would
+		// produce; Identical against the pre-write array is whether it is the
+		// same data. This also settles the empty-array case, where the exported
+		// literal is ambiguous, without having to reason about it.
+		FWeightedBlendables Scratch;
+		// The owner is nullptr, matching the replay exactly. The real restore
+		// reaches ImportText_Direct through ImportTextRaw with no owner, and a
+		// blendable outered to this volume or its level (a material instance
+		// created here, say) can resolve against Volume and fail against
+		// nullptr. Probing with Volume would pass where the replay fails, which
+		// is the one direction rollbackVerified must never claim.
+		//
+		// Silenced for the same reason ImportTextRaw silences it: the fifth
+		// parameter defaults to GWarn, and a probe that is expected to fail
+		// sometimes must not spray the editor log on every call.
+		FOutputDeviceNull Silent;
+		const TCHAR* Consumed = BlendablesProp->ImportText_Direct(
+			*PreviousBlendables, &Scratch, nullptr, PPF_None, &Silent);
+		if (Consumed == nullptr)
+		{
+			RoundTripFailure = FString::Printf(
+				TEXT("re-importing the captured array text failed outright (text was '%s')"), *PreviousBlendables);
+		}
+		else if (!BlendablesProp->Identical(&Scratch, &OriginalBlendables, PPF_None))
+		{
+			// Identical walks count, Weight and Object, so an equal count still
+			// fails on a drifted weight or an unresolved blendable. Saying
+			// "produced 2 entries against the 2 that were there" would read as
+			// nonsense, so the count and content cases are reported apart.
+			RoundTripFailure = Scratch.Array.Num() != OriginalBlendables.Array.Num()
+				? FString::Printf(
+					TEXT("re-importing the captured array text produced %d entries against the %d that were there, so the text does not reproduce the array"),
+					Scratch.Array.Num(), OriginalBlendables.Array.Num())
+				: FString::Printf(
+					TEXT("re-importing the captured array text produced the right number of entries (%d) but not the same ones: a blendable weight did not survive the export text's precision, or a blendable object did not resolve without an owner, which is how the restore would run"),
+					Scratch.Array.Num());
+		}
+		else
+		{
+			bBlendablesRoundTrip = true;
+		}
+	}
+
 	Volume->Modify();
 	Volume->AddOrUpdateBlendable(Material, Weight);
 	Volume->PostEditChange();
 	Volume->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	const bool bBlendableChanged = !bAlreadyPresent || PreviousWeight != Weight;
+	if (bAlreadyPresent) MCPSetExisted(Result); else MCPSetCreated(Result);
+	// `updated` was emitted unconditionally before this handler learned to tell
+	// an append from a reweight. It stays present in BOTH branches so a
+	// consumer branching on it reads a bool rather than undefined.
+	Result->SetBoolField(TEXT("updated"), bBlendableChanged);
+	Result->SetBoolField(TEXT("unchanged"), !bBlendableChanged);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Volume->GetPathName());
 	Result->SetStringField(TEXT("material"), Material->GetPathName());
 	Result->SetNumberField(TEXT("weight"), Weight);
+	if (bAlreadyPresent) Result->SetNumberField(TEXT("previousWeight"), PreviousWeight);
 	Result->SetNumberField(TEXT("blendableCount"), Volume->Settings.WeightedBlendables.Array.Num());
+
+	if (bAlreadyPresent && PreviousWeight != Weight)
+	{
+		// The blendable was already on the volume, so this was a reweight and
+		// the same call with the old weight undoes it exactly, in place, with
+		// no effect on any other entry in the array.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Volume->GetPathName());
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("materialPath"), Material->GetPathName());
+		Payload->SetNumberField(TEXT("weight"), PreviousWeight);
+		MCPSetRollback(Result, TEXT("add_post_process_blendable"), Payload);
+	}
+	else if (!bAlreadyPresent && bBlendablesRoundTrip)
+	{
+		// The append is undone by restoring the array to what it was, through
+		// the general post-process setter. WeightedBlendables carries no
+		// bOverride_ bit, so enableOverrides is off and nothing else is
+		// touched. propertyName pins the struct: APostProcessVolume declares
+		// its FPostProcessSettings as Settings.
+		//
+		// Reached only when the import-and-compare above actually held.
+		TSharedPtr<FJsonObject> Settings = MakeShared<FJsonObject>();
+		Settings->SetStringField(TEXT("WeightedBlendables"), PreviousBlendables);
+
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Volume->GetPathName());
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("propertyName"), TEXT("Settings"));
+		Payload->SetObjectField(TEXT("settings"), Settings);
+		Payload->SetBoolField(TEXT("enableOverrides"), false);
+		MCPSetRollback(Result, TEXT("set_post_process_settings"), Payload);
+		Result->SetBoolField(TEXT("rollbackVerified"), true);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The captured array text was re-imported into a scratch copy and compared against the array as it stood before the write, and it matched, so this inverse reproduces the entries it names. It restores the WHOLE WeightedBlendables array, so it also reverts any other change made to that array in between rather than removing just this entry. The restore goes through one engine text import rather than the per-element path used for maps, so if a blendable asset has been deleted by the time it replays, the import fails and the whole restore reports applied:false rather than putting back the entries that still resolve."));
+	}
+	else if (!bAlreadyPresent)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetBoolField(TEXT("rollbackVerified"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The blendable was appended, and the only inverse available is rewriting the whole WeightedBlendables array through set_post_process_settings. That was tested against this volume's own data before being offered and it does not hold: %s. Restoring from it would write an array that is not the one that was here, so no inverse is named."),
+			*RoundTripFailure));
+	}
 	return MCPResult(Result);
 }

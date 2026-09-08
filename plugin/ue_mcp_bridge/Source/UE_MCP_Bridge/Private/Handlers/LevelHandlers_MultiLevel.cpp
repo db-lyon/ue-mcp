@@ -437,6 +437,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 		Result->SetNumberField(TEXT("requestedActors"), TotalRequested);
 		Result->SetNumberField(TEXT("matchedActors"), TotalMatched);
 		Result->SetNumberField(TEXT("deletedActors"), TotalDeleted);
+		// Whether this call actually changed anything, rather than leaving the
+		// caller to infer it from two counters. A dry run and an
+		// onMissing=ignore replay whose labels are already gone both reach here
+		// having deleted nothing and saved nothing.
+		Result->SetBoolField(TEXT("unchanged"), !bAnyAppliedChanges);
+		if (bAnyAppliedChanges)
+		{
+			// Stated only when something was really committed, because a dry
+			// run has nothing to undo in the first place.
+			MCPSetNoRollback(Result,
+				TEXT("Actors were destroyed and every changed level was saved to disk, so the .umap files no longer hold them. ")
+				TEXT("Undoing that would need a call that re-creates an actor with its full serialized state inside a named level, and the bridge has no such action."));
+		}
 		Result->SetStringField(TEXT("originalLevelPath"), OriginalLevelPath);
 		Result->SetBoolField(TEXT("restoreOriginalLevelRequested"), bRestoreOriginalLevel);
 		Result->SetBoolField(TEXT("restoredOriginalLevel"), bRestoredOriginalLevel);

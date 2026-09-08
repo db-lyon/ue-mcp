@@ -13,12 +13,15 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
+#include "JsonSerializer.h"
 #include "Handlers/AssetHandlers.h"
+#include "Components/SceneComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/AssetManagerTypes.h"
 #include "Engine/DataTable.h"
 #include "GameFramework/Actor.h"
+#include "Math/IntVector.h"
 #include "GameFramework/DefaultPawn.h"
 #include "GameFramework/GameModeBase.h"
 #include "Misc/AutomationTest.h"
@@ -448,6 +451,355 @@ bool FReadbackVerificationTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("the mismatch says what was asked for"), Detail.Contains(TEXT("Windows")));
 	return true;
 #endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A number written to a numeric property arrives as a number.
+//
+// The setter used to render every scalar as text before importing it, and a
+// JSON number renders through FJsonValueNumber::TryGetString, which is
+// FString::SanitizeFloat, which is Printf("%f"): six fractional digits and no
+// more. A double asked for 1e-9 stored 0 and one asked for 0.123456789 stored
+// 0.123457, in the property itself and in every component of a struct written
+// through the same recursion.
+//
+// Every comparison below is exact. A tolerance is what let this hide.
+// ─────────────────────────────────────────────────────────────────────────────
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FJsonPropertyNumericPrecisionTest,
+	"UE.MCP.Property.NumericWritesKeepTheirPrecision",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FJsonPropertyNumericPrecisionTest::RunTest(const FString& Parameters)
+{
+	// ── Doubles. FVector::X is FLargeWorldCoordinatesReal, which is a double.
+	FProperty* DoubleProp = TBaseStructure<FVector>::Get()->FindPropertyByName(TEXT("X"));
+	if (!TestNotNull(TEXT("FVector::X exists"), DoubleProp)) return false;
+	if (!TestNotNull(TEXT("FVector::X is a double property"), CastField<FDoubleProperty>(DoubleProp))) return false;
+
+	auto WriteDouble = [this, DoubleProp](double Requested) -> double
+	{
+		FDefaultConstructedPropertyElement Buffer(DoubleProp);
+		FString Error;
+		if (!MCPJsonProperty::SetJsonOnProperty(
+				DoubleProp, Buffer.GetObjAddress(), MakeShared<FJsonValueNumber>(Requested), Error))
+		{
+			AddError(FString::Printf(TEXT("writing %.17g to a double failed: %s"), Requested, *Error));
+			return 0.0;
+		}
+		return CastField<FDoubleProperty>(DoubleProp)->GetPropertyValue(Buffer.GetObjAddress());
+	};
+
+	TestTrue(TEXT("1e-9 lands as 1e-9 and not as zero"), WriteDouble(1e-9) == 1e-9);
+	TestTrue(TEXT("0.123456789 keeps every digit"), WriteDouble(0.123456789) == 0.123456789);
+	TestTrue(TEXT("a negative fraction keeps every digit"), WriteDouble(-2.0000000001) == -2.0000000001);
+	TestTrue(TEXT("a whole number is unchanged"), WriteDouble(42.0) == 42.0);
+	TestTrue(TEXT("zero is unchanged"), WriteDouble(0.0) == 0.0);
+
+	// ── Floats. The double narrows to the property's own precision, which is
+	// what the property's type means, and nothing else is lost on the way.
+	FProperty* FloatProp = FPerPlatformFloat::StaticStruct()->FindPropertyByName(TEXT("Default"));
+	if (!TestNotNull(TEXT("FPerPlatformFloat::Default exists"), FloatProp)) return false;
+	if (!TestNotNull(TEXT("FPerPlatformFloat::Default is a float property"), CastField<FFloatProperty>(FloatProp))) return false;
+	{
+		FDefaultConstructedPropertyElement Buffer(FloatProp);
+		FString Error;
+		if (TestTrue(
+				TEXT("a float takes a fractional number"),
+				MCPJsonProperty::SetJsonOnProperty(
+					FloatProp, Buffer.GetObjAddress(), MakeShared<FJsonValueNumber>(0.123456789), Error)))
+		{
+			const float Stored = CastField<FFloatProperty>(FloatProp)->GetPropertyValue(Buffer.GetObjAddress());
+			TestTrue(TEXT("a float keeps all the precision a float has"), Stored == (float)0.123456789);
+		}
+	}
+
+	// ── int32. A value that is not the integer the caller named is refused,
+	// never rounded or truncated into a different one.
+	FProperty* IntProp = FPerPlatformInt::StaticStruct()->FindPropertyByName(TEXT("Default"));
+	if (!TestNotNull(TEXT("FPerPlatformInt::Default exists"), IntProp)) return false;
+	if (!TestNotNull(TEXT("FPerPlatformInt::Default is an int32 property"), CastField<FIntProperty>(IntProp))) return false;
+	{
+		FDefaultConstructedPropertyElement Buffer(IntProp);
+		FString Error;
+		if (TestTrue(
+				TEXT("an int32 takes a whole number"),
+				MCPJsonProperty::SetJsonOnProperty(
+					IntProp, Buffer.GetObjAddress(), MakeShared<FJsonValueNumber>(42), Error)))
+		{
+			TestEqual(TEXT("the int32 holds the number that was written"),
+				CastField<FIntProperty>(IntProp)->GetPropertyValue(Buffer.GetObjAddress()), 42);
+		}
+
+		Error.Reset();
+		TestFalse(
+			TEXT("an int32 refuses a fractional number"),
+			MCPJsonProperty::SetJsonOnProperty(
+				IntProp, Buffer.GetObjAddress(), MakeShared<FJsonValueNumber>(2.5), Error));
+		TestTrue(TEXT("and says the value is not whole"), Error.Contains(TEXT("whole number")));
+		TestEqual(TEXT("the refused write left the previous value alone"),
+			CastField<FIntProperty>(IntProp)->GetPropertyValue(Buffer.GetObjAddress()), 42);
+
+		Error.Reset();
+		TestFalse(
+			TEXT("an int32 refuses a value it cannot hold"),
+			MCPJsonProperty::SetJsonOnProperty(
+				IntProp, Buffer.GetObjAddress(), MakeShared<FJsonValueNumber>(1e10), Error));
+		TestTrue(TEXT("and says it is out of range"), Error.Contains(TEXT("out of range")));
+
+		Error.Reset();
+		TestFalse(
+			TEXT("an int32 refuses a negative value it cannot hold"),
+			MCPJsonProperty::SetJsonOnProperty(
+				IntProp, Buffer.GetObjAddress(), MakeShared<FJsonValueNumber>(-1e10), Error));
+		TestTrue(TEXT("and says it is out of range"), Error.Contains(TEXT("out of range")));
+	}
+
+	// ── int64. A JSON number is a double, so above 2^53 it no longer carries
+	// every integer: the write is refused rather than storing a neighbour, and
+	// the same number sent as a JSON string lands at full width.
+	FProperty* Int64Prop = TBaseStructure<FInt64Vector2>::Get()->FindPropertyByName(TEXT("X"));
+	if (!TestNotNull(TEXT("FInt64Vector2::X exists"), Int64Prop)) return false;
+	if (!TestNotNull(TEXT("FInt64Vector2::X is an int64 property"), CastField<FInt64Property>(Int64Prop))) return false;
+	{
+		FDefaultConstructedPropertyElement Buffer(Int64Prop);
+		FString Error;
+		const int64 ExactLimit = 9007199254740992LL; // 2^53
+		if (TestTrue(
+				TEXT("an int64 takes the largest integer a JSON number carries exactly"),
+				MCPJsonProperty::SetJsonOnProperty(
+					Int64Prop, Buffer.GetObjAddress(), MakeShared<FJsonValueNumber>((double)ExactLimit), Error)))
+		{
+			TestTrue(TEXT("and stores it exactly"),
+				CastField<FInt64Property>(Int64Prop)->GetPropertyValue(Buffer.GetObjAddress()) == ExactLimit);
+		}
+
+		Error.Reset();
+		TestFalse(
+			TEXT("an int64 refuses a number past 2^53"),
+			MCPJsonProperty::SetJsonOnProperty(
+				Int64Prop, Buffer.GetObjAddress(), MakeShared<FJsonValueNumber>(9007199254740994.0), Error));
+		TestTrue(TEXT("and names the escape that does work"), Error.Contains(TEXT("JSON string")));
+		TestTrue(TEXT("the refused write left the previous value alone"),
+			CastField<FInt64Property>(Int64Prop)->GetPropertyValue(Buffer.GetObjAddress()) == ExactLimit);
+
+		// The escape: as text, every digit survives, which is the whole reason
+		// the number form is allowed to refuse.
+		Error.Reset();
+		if (TestTrue(
+				TEXT("an int64 takes a big integer written as a string"),
+				MCPJsonProperty::SetJsonOnProperty(
+					Int64Prop, Buffer.GetObjAddress(),
+					MakeShared<FJsonValueString>(TEXT("9007199254740993")), Error)))
+		{
+			TestTrue(TEXT("and stores the odd integer a double could not have carried"),
+				CastField<FInt64Property>(Int64Prop)->GetPropertyValue(Buffer.GetObjAddress()) == 9007199254740993LL);
+		}
+	}
+
+	// ── An enum-valued byte is an enum first. It is an FNumericProperty, so it
+	// is the one numeric kind the number branch has to step over by hand.
+	FProperty* MobilityProp = USceneComponent::StaticClass()->FindPropertyByName(TEXT("Mobility"));
+	if (!TestNotNull(TEXT("USceneComponent::Mobility exists"), MobilityProp)) return false;
+	{
+		FNumericProperty* AsNumeric = CastField<FNumericProperty>(MobilityProp);
+		if (!TestNotNull(TEXT("a TEnumAsByte field is a numeric property"), AsNumeric)) return false;
+		TestTrue(TEXT("and says it is an enum, which is what keeps it off the number branch"), AsNumeric->IsEnum());
+
+		FDefaultConstructedPropertyElement Buffer(MobilityProp);
+		FString Error;
+		if (TestTrue(
+				TEXT("the enum branch still resolves a full enumerator name"),
+				MCPJsonProperty::SetJsonOnProperty(
+					MobilityProp, Buffer.GetObjAddress(), MakeShared<FJsonValueString>(TEXT("Movable")), Error)))
+		{
+			TestTrue(TEXT("and stores that enumerator"),
+				CastField<FByteProperty>(MobilityProp)->GetPropertyValue(Buffer.GetObjAddress())
+					== (uint8)EComponentMobility::Movable);
+		}
+
+		Error.Reset();
+		if (TestTrue(
+				TEXT("the enum branch still resolves a friendly alias"),
+				MCPJsonProperty::SetJsonOnProperty(
+					MobilityProp, Buffer.GetObjAddress(), MakeShared<FJsonValueString>(TEXT("static")), Error)))
+		{
+			TestTrue(TEXT("and stores that enumerator"),
+				CastField<FByteProperty>(MobilityProp)->GetPropertyValue(Buffer.GetObjAddress())
+					== (uint8)EComponentMobility::Static);
+		}
+	}
+
+	// ── An enum class is not an FNumericProperty at all, so no number branch
+	// can reach it whatever the value looks like.
+	FProperty* EnumProp = AActor::StaticClass()->FindPropertyByName(TEXT("SpawnCollisionHandlingMethod"));
+	if (!TestNotNull(TEXT("AActor::SpawnCollisionHandlingMethod exists"), EnumProp)) return false;
+	{
+		if (!TestNotNull(TEXT("an enum class field is an enum property"), CastField<FEnumProperty>(EnumProp))) return false;
+		TestNull(TEXT("an enum class field is not a numeric property"), CastField<FNumericProperty>(EnumProp));
+
+		FDefaultConstructedPropertyElement Buffer(EnumProp);
+		FString Error;
+		if (TestTrue(
+				TEXT("the enum branch still resolves an enum class name"),
+				MCPJsonProperty::SetJsonOnProperty(
+					EnumProp, Buffer.GetObjAddress(), MakeShared<FJsonValueString>(TEXT("AlwaysSpawn")), Error)))
+		{
+			TestTrue(TEXT("and stores that enumerator"),
+				CastField<FEnumProperty>(EnumProp)->GetUnderlyingProperty()->GetSignedIntPropertyValue(Buffer.GetObjAddress())
+					== (int64)ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		}
+	}
+
+	// ── A bool is not an FNumericProperty either.
+	FProperty* BoolProp = FPerPlatformBool::StaticStruct()->FindPropertyByName(TEXT("Default"));
+	if (!TestNotNull(TEXT("FPerPlatformBool::Default exists"), BoolProp)) return false;
+	{
+		if (!TestNotNull(TEXT("a bool field is a bool property"), CastField<FBoolProperty>(BoolProp))) return false;
+		TestNull(TEXT("a bool field is not a numeric property"), CastField<FNumericProperty>(BoolProp));
+
+		FDefaultConstructedPropertyElement Buffer(BoolProp);
+		FString Error;
+		if (TestTrue(
+				TEXT("a bool takes true"),
+				MCPJsonProperty::SetJsonOnProperty(
+					BoolProp, Buffer.GetObjAddress(), MakeShared<FJsonValueBoolean>(true), Error)))
+		{
+			TestTrue(TEXT("and stores true"),
+				CastField<FBoolProperty>(BoolProp)->GetPropertyValue(Buffer.GetObjAddress()));
+		}
+		Error.Reset();
+		if (TestTrue(
+				TEXT("a bool takes false"),
+				MCPJsonProperty::SetJsonOnProperty(
+					BoolProp, Buffer.GetObjAddress(), MakeShared<FJsonValueBoolean>(false), Error)))
+		{
+			TestFalse(TEXT("and stores false"),
+				CastField<FBoolProperty>(BoolProp)->GetPropertyValue(Buffer.GetObjAddress()));
+		}
+	}
+
+	// ── A struct written field by field recurses through the same setter, so
+	// every component has to keep its digits too. This is the case that made a
+	// location or a transform drift.
+	FProperty* VectorProp = USceneComponent::StaticClass()->FindPropertyByName(TEXT("RelativeLocation"));
+	if (!TestNotNull(TEXT("USceneComponent::RelativeLocation exists"), VectorProp)) return false;
+	{
+		FDefaultConstructedPropertyElement Buffer(VectorProp);
+		TSharedPtr<FJsonObject> VectorJson = MakeShared<FJsonObject>();
+		VectorJson->SetNumberField(TEXT("X"), 0.123456789);
+		VectorJson->SetNumberField(TEXT("Y"), 1e-9);
+		VectorJson->SetNumberField(TEXT("Z"), -3.0000000001);
+		const TSharedPtr<FJsonValue> Requested = MakeShared<FJsonValueObject>(VectorJson);
+
+		FString Error;
+		if (TestTrue(
+				FString::Printf(TEXT("the vector is written (%s)"), *Error),
+				MCPJsonProperty::SetJsonOnProperty(VectorProp, Buffer.GetObjAddress(), Requested, Error)))
+		{
+			const FVector& Stored = *static_cast<const FVector*>(Buffer.GetObjAddress());
+			TestTrue(TEXT("X keeps every digit"), Stored.X == 0.123456789);
+			TestTrue(TEXT("Y keeps every digit"), Stored.Y == 1e-9);
+			TestTrue(TEXT("Z keeps every digit"), Stored.Z == -3.0000000001);
+
+			// The readback check compares numerics exactly, so it is the thing
+			// that reported a lossy round trip while the text path was in use.
+			FString Detail;
+			TestTrue(
+				FString::Printf(TEXT("the stored vector verifies against the request (%s)"), *Detail),
+				MCPJsonProperty::VerifyJsonOnProperty(VectorProp, Buffer.GetObjAddress(), Requested, Detail));
+		}
+	}
+	return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The read half. A numeric property comes back as a JSON number, not as a
+// quoted string, for every width a double carries exactly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FJsonPropertyNumericReadTest,
+	"UE.MCP.Property.NumericReadsComeBackAsNumbers",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FJsonPropertyNumericReadTest::RunTest(const FString& Parameters)
+{
+	// An int32 and a double were already emitted as numbers; they are here so a
+	// later edit cannot quietly turn them back into text.
+	FProperty* IntProp = FPerPlatformInt::StaticStruct()->FindPropertyByName(TEXT("Default"));
+	FProperty* DoubleProp = TBaseStructure<FVector>::Get()->FindPropertyByName(TEXT("X"));
+	if (!TestNotNull(TEXT("FPerPlatformInt::Default exists"), IntProp)) return false;
+	if (!TestNotNull(TEXT("FVector::X exists"), DoubleProp)) return false;
+
+	{
+		FDefaultConstructedPropertyElement Buffer(IntProp);
+		CastField<FIntProperty>(IntProp)->SetPropertyValue(Buffer.GetObjAddress(), -7);
+		const TSharedPtr<FJsonValue> Read = FMCPJsonSerializer::SerializeValue(Buffer.GetObjAddress(), IntProp);
+		if (TestTrue(TEXT("an int32 reads back as a number"), Read.IsValid() && Read->Type == EJson::Number))
+		{
+			TestTrue(TEXT("and carries the value"), Read->AsNumber() == -7.0);
+		}
+	}
+	{
+		FDefaultConstructedPropertyElement Buffer(DoubleProp);
+		CastField<FDoubleProperty>(DoubleProp)->SetPropertyValue(Buffer.GetObjAddress(), 0.123456789);
+		const TSharedPtr<FJsonValue> Read = FMCPJsonSerializer::SerializeValue(Buffer.GetObjAddress(), DoubleProp);
+		if (TestTrue(TEXT("a double reads back as a number"), Read.IsValid() && Read->Type == EJson::Number))
+		{
+			TestTrue(TEXT("and keeps every digit"), Read->AsNumber() == 0.123456789);
+		}
+	}
+
+	// A uint32 is the width that used to fall through to exported text and come
+	// back quoted. The struct is looked up by path because the core integer
+	// vector variants have no StaticStruct() of their own.
+	if (UScriptStruct* Uint32Vector = FindObject<UScriptStruct>(nullptr, TEXT("/Script/CoreUObject.Uint32Vector")))
+	{
+		FProperty* UintProp = Uint32Vector->FindPropertyByName(TEXT("X"));
+		if (TestNotNull(TEXT("FUint32Vector::X exists"), UintProp))
+		{
+			FDefaultConstructedPropertyElement Buffer(UintProp);
+			CastField<FNumericProperty>(UintProp)->SetIntPropertyValue(Buffer.GetObjAddress(), (uint64)4294967295u);
+			const TSharedPtr<FJsonValue> Read = FMCPJsonSerializer::SerializeValue(Buffer.GetObjAddress(), UintProp);
+			if (TestTrue(TEXT("a uint32 reads back as a number"), Read.IsValid() && Read->Type == EJson::Number))
+			{
+				TestTrue(TEXT("and carries the whole value"), Read->AsNumber() == 4294967295.0);
+			}
+		}
+	}
+	else
+	{
+		AddInfo(TEXT("FUint32Vector is not registered in this build; the uint32 read is not asserted here."));
+	}
+
+	// An enum still reads back as its name, which is the form the setter takes.
+	FProperty* MobilityProp = USceneComponent::StaticClass()->FindPropertyByName(TEXT("Mobility"));
+	if (TestNotNull(TEXT("USceneComponent::Mobility exists"), MobilityProp))
+	{
+		FDefaultConstructedPropertyElement Buffer(MobilityProp);
+		CastField<FByteProperty>(MobilityProp)->SetPropertyValue(Buffer.GetObjAddress(), (uint8)EComponentMobility::Movable);
+		const TSharedPtr<FJsonValue> Read = FMCPJsonSerializer::SerializeValue(Buffer.GetObjAddress(), MobilityProp);
+		if (TestTrue(TEXT("an enum byte reads back as a string"), Read.IsValid() && Read->Type == EJson::String))
+		{
+			TestTrue(TEXT("and names the enumerator"), Read->AsString().Contains(TEXT("Movable")));
+		}
+	}
+
+	// A bool still reads back as a bool.
+	FProperty* BoolProp = FPerPlatformBool::StaticStruct()->FindPropertyByName(TEXT("Default"));
+	if (TestNotNull(TEXT("FPerPlatformBool::Default exists"), BoolProp))
+	{
+		FDefaultConstructedPropertyElement Buffer(BoolProp);
+		CastField<FBoolProperty>(BoolProp)->SetPropertyValue(Buffer.GetObjAddress(), true);
+		const TSharedPtr<FJsonValue> Read = FMCPJsonSerializer::SerializeValue(Buffer.GetObjAddress(), BoolProp);
+		if (TestTrue(TEXT("a bool reads back as a bool"), Read.IsValid() && Read->Type == EJson::Boolean))
+		{
+			TestTrue(TEXT("and carries the value"), Read->AsBool());
+		}
+	}
+	return true;
 }
 
 #endif // WITH_DEV_AUTOMATION_TESTS

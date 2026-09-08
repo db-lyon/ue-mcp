@@ -268,6 +268,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 	OwnerAsset->PostEditChange();
 	OwnerPackage->MarkPackageDirty();
 
+	// The new object lives inside a package that existed before this call, and
+	// nothing in this surface takes one back out: delete_asset would destroy
+	// the owning asset along with everything else in it, which is a larger loss
+	// than the thing being undone. Undoing this needs a remove_subobject that
+	// does not exist, so the property values overwritten on a reused subobject
+	// are not recoverable through the bridge either.
+	MCPSetNoRollback(Result, FString::Printf(
+		TEXT("Created or reconfigured the subobject '%s' inside the existing package '%s'. No action removes a named ")
+		TEXT("subobject from a package or restores its previous property values; delete_asset would destroy the whole ")
+		TEXT("owning asset rather than undo this."),
+		*Name, *OwnerPackage->GetName()));
+
 	// Saving in the same call is what closes the garbage-collection window the
 	// issue is about: after this the subobject is an export on disk, so a later
 	// call resolves it by path even if the in-memory copy is collected.

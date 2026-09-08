@@ -15,6 +15,8 @@
 #include "AttributeSet.h"
 #include "GameplayEffect.h"
 #include "GameplayEffectTypes.h"
+#include "Abilities/GameplayAbility.h"
+#include "GameplayAbilitySpec.h"
 #include "GameplayTagContainer.h"
 #include "UObject/UObjectHash.h"
 #include "UObject/UnrealType.h"
@@ -286,6 +288,10 @@ TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& 
 	FString EffectSpec;
 	if (auto Err = RequireStringAlt(Params, TEXT("effectClass"), TEXT("effectPath"), EffectSpec)) return Err;
 
+	// Captured before anything resolves, because the rollback record has to name
+	// the same world scope this call ran against rather than re-guessing it.
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
+
 	AActor* Actor = nullptr;
 	TSharedPtr<FJsonValue> Err;
 	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Err);
@@ -331,7 +337,28 @@ TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& 
 		}
 	}
 
+	// Which effects were already live, so the apply below can be told apart from
+	// a STACK onto one of them. A GameplayEffect whose StackingType is not None
+	// does not produce a new active effect when one of its class is already on
+	// the ASC: ApplyGameplayEffectSpecToSelf returns the EXISTING handle with an
+	// incremented stack count. Without this the rollback would remove that whole
+	// effect, destroying stacks that were there before the call.
+	TSet<FString> HandlesBeforeApply;
+	{
+		const FGameplayEffectQuery BeforeQuery;
+		for (const FActiveGameplayEffectHandle& Live : ASC->GetActiveEffects(BeforeQuery))
+		{
+			HandlesBeforeApply.Add(Live.ToString());
+		}
+	}
+
 	const FActiveGameplayEffectHandle Active = ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data);
+	const bool bStackedOntoExisting = Active.IsValid() && HandlesBeforeApply.Contains(Active.ToString());
+	int32 StackCountAfter = 0;
+	if (const FActiveGameplayEffect* AppliedEffect = ASC->GetActiveGameplayEffect(Active))
+	{
+		StackCountAfter = AppliedEffect->Spec.GetStackCount();
+	}
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
@@ -340,11 +367,218 @@ TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& 
 	Result->SetBoolField(TEXT("applied"), Active.WasSuccessfullyApplied());
 	// Duration/Infinite effects produce a live handle; instant effects don't.
 	Result->SetBoolField(TEXT("durationActive"), Active.IsValid());
+	// The handle is what gas(remove_effect) addresses, so it is reported here
+	// rather than only inside the rollback record a caller may never read.
+	if (Active.IsValid())
+	{
+		Result->SetStringField(TEXT("effectHandle"), Active.ToString());
+		Result->SetNumberField(TEXT("stackCount"), StackCountAfter);
+		Result->SetBoolField(TEXT("stackedOntoExisting"), bStackedOntoExisting);
+	}
+	// Idempotency: an effect the ASC refused - application requirements not met,
+	// an immunity tag - changed nothing at all, and saying so is what stops a
+	// retry after a timeout from reading as a second successful application.
+	// Applying the SAME effect twice is deliberately two applications, because
+	// that is what stacking means in GAS; the flag reports refusal, not replay.
+	Result->SetBoolField(TEXT("unchanged"), !Active.WasSuccessfullyApplied());
 	if (AppliedKeys.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> Keys;
 		for (const FString& K : AppliedKeys) Keys.Add(MakeShared<FJsonValueString>(K));
 		Result->SetArrayField(TEXT("setByCaller"), Keys);
+	}
+
+	// The inverse is removing the effect this call put on the ASC, addressed by
+	// the handle it just returned. Only a duration or infinite effect HAS a
+	// handle: an instant effect executes its modifiers straight into the
+	// attribute base and leaves no active effect behind, so no record is emitted
+	// for that case rather than one that would remove somebody else's effect.
+	if (Active.IsValid())
+	{
+		TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+		RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		RollbackPayload->SetStringField(TEXT("effectHandle"), Active.ToString());
+		RollbackPayload->SetStringField(TEXT("world"), WorldScope);
+		if (bStackedOntoExisting)
+		{
+			// This call added ONE stack to an effect that was already there.
+			// Removing the handle outright would take the stacks that predate it
+			// as well, so the record undoes exactly the stack this call added.
+			RollbackPayload->SetNumberField(TEXT("stacksToRemove"), 1);
+		}
+		MCPSetRollback(Result, TEXT("remove_effect"), RollbackPayload);
+		Result->SetBoolField(TEXT("rollbackLossy"), bStackedOntoExisting);
+		if (bStackedOntoExisting)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("This did not create a new active effect: an effect of this class was already on the ASC and its "
+					 "stack count went to %d. The inverse removes ONE stack rather than the whole effect, so the "
+					 "stacks that predate this call survive - but the duration refresh a stack application performs "
+					 "does not come back."),
+				StackCountAfter));
+		}
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), Active.WasSuccessfullyApplied()
+			? TEXT("This effect executed instantly: its modifiers were folded into the attribute base values and no active effect remains to remove. "
+				   "There is no inverse call. Restore the individual attributes with gas(set_attribute) if the previous values were captured first.")
+			: TEXT("The effect was refused and nothing changed, so there is nothing to undo."));
+	}
+	return MCPResult(Result);
+}
+
+// gas(remove_effect): take an active GameplayEffect back off a live ASC.
+//
+// The inverse of gas(apply_effect), and the reason that action can offer one at
+// all. Addressed by the handle apply_effect returned, which is the only way to
+// remove exactly the effect a given call added; effectClass is the fallback for
+// a caller that never held the handle, and it removes every active effect of
+// that class on the actor.
+TSharedPtr<FJsonValue> FGasHandlers::RemoveEffect(const TSharedPtr<FJsonObject>& Params)
+{
+	MCP_CHECK_GAME_THREAD();
+
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
+
+	AActor* Actor = nullptr;
+	TSharedPtr<FJsonValue> Err;
+	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Err);
+	if (!ASC) return Err;
+
+	const FString HandleText = OptionalString(Params, TEXT("effectHandle"));
+	const FString EffectSpec = OptionalString(Params, TEXT("effectClass"),
+		OptionalString(Params, TEXT("effectPath")));
+	if (HandleText.IsEmpty() && EffectSpec.IsEmpty())
+	{
+		return MCPError(TEXT(
+			"Pass 'effectHandle' (what gas(apply_effect) reported for a duration or infinite effect) "
+			"or 'effectClass' (removes every active effect of that class on this actor). "
+			"gas(get_active_effects) lists the handles currently on an actor."));
+	}
+
+	// -1 is the engine's own "remove the whole effect regardless of stacks".
+	const int32 StacksToRemove = static_cast<int32>(OptionalNumber(Params, TEXT("stacksToRemove"), -1.0));
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+
+	TArray<FActiveGameplayEffectHandle> ToRemove;
+	if (!HandleText.IsEmpty())
+	{
+		// A malformed handle is REFUSED, never coerced. FCString::Atoi turns
+		// "abc", "null" and " " into 0, and 0 is a legitimately reachable handle,
+		// so parsing without this guard would resolve a garbled record onto a
+		// real, unrelated active effect and remove it reporting success.
+		if (!HandleText.IsNumeric())
+		{
+			return MCPError(FString::Printf(
+				TEXT("'effectHandle' is '%s', which is not a handle. A handle is the integer string gas(apply_effect) "
+					 "and gas(get_active_effects) report. Pass that exactly, or use 'effectClass' instead."),
+				*HandleText));
+		}
+		Result->SetStringField(TEXT("effectHandle"), HandleText);
+		// Matched by comparing the ASC's own live handles as text rather than by
+		// rebuilding one from an int: the FActiveGameplayEffectHandle(int32)
+		// constructor is deprecated in 5.8 and produces a handle with a null
+		// owning ASC, and a handle that matches nothing has to read as "already
+		// gone" rather than as a lookup that silently landed somewhere.
+		const FGameplayEffectQuery Query;
+		for (const FActiveGameplayEffectHandle& Candidate : ASC->GetActiveEffects(Query))
+		{
+			if (Candidate.ToString() == HandleText)
+			{
+				ToRemove.Add(Candidate);
+				break;
+			}
+		}
+	}
+	else
+	{
+		UClass* EffectClass = ResolveClassDeriving(EffectSpec, UGameplayEffect::StaticClass());
+		if (!EffectClass)
+		{
+			return MCPError(FString::Printf(
+				TEXT("GameplayEffect class not found: %s (pass a content path or class name)"), *EffectSpec));
+		}
+		Result->SetStringField(TEXT("effect"), EffectClass->GetPathName());
+		const FGameplayEffectQuery Query;
+		for (const FActiveGameplayEffectHandle& Candidate : ASC->GetActiveEffects(Query))
+		{
+			const FActiveGameplayEffect* Active = ASC->GetActiveGameplayEffect(Candidate);
+			if (Active && Active->Spec.Def && Active->Spec.Def->GetClass() == EffectClass)
+			{
+				ToRemove.Add(Candidate);
+			}
+		}
+	}
+
+	if (ToRemove.Num() == 0)
+	{
+		// Replaying a rollback after the effect has already expired must not
+		// fail the flow: no matching active effect IS the state asked for.
+		Result->SetNumberField(TEXT("removed"), 0);
+		Result->SetBoolField(TEXT("alreadyRemoved"), true);
+		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Nothing was removed, so there is nothing to restore."));
+		return MCPResult(Result);
+	}
+
+	// The class and level have to be read BEFORE the effects go, or the rollback
+	// can only re-apply the effect at a level it never had.
+	FString RemovedClassPath;
+	double RemovedLevel = 1.0;
+	int32 DistinctClasses = 0;
+	TSet<FString> SeenClasses;
+	int32 Removed = 0;
+	for (const FActiveGameplayEffectHandle& Handle : ToRemove)
+	{
+		const FActiveGameplayEffect* Active = ASC->GetActiveGameplayEffect(Handle);
+		const UGameplayEffect* Def = Active ? Active->Spec.Def : nullptr;
+		const FString ClassPath = Def ? Def->GetClass()->GetPathName() : FString();
+		const double Level = Active ? (double)Active->Spec.GetLevel() : 1.0;
+		if (!ASC->RemoveActiveGameplayEffect(Handle, StacksToRemove)) continue;
+		++Removed;
+		if (!ClassPath.IsEmpty() && !SeenClasses.Contains(ClassPath))
+		{
+			SeenClasses.Add(ClassPath);
+			++DistinctClasses;
+			RemovedClassPath = ClassPath;
+			RemovedLevel = Level;
+		}
+	}
+
+	Result->SetNumberField(TEXT("removed"), Removed);
+	Result->SetBoolField(TEXT("alreadyRemoved"), Removed == 0);
+	if (Removed > 0) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+
+	if (Removed == 1 && DistinctClasses == 1)
+	{
+		TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+		RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		RollbackPayload->SetStringField(TEXT("effectClass"), RemovedClassPath);
+		RollbackPayload->SetNumberField(TEXT("level"), RemovedLevel);
+		RollbackPayload->SetStringField(TEXT("world"), WorldScope);
+		MCPSetRollback(Result, TEXT("apply_effect"), RollbackPayload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Re-applying the effect class at the level it was removed at gives a NEW active effect with a fresh handle. "
+				 "Its remaining duration, stack count, SetByCaller magnitudes and original instigator are not restored, "
+				 "because none of those survive removal."));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), Removed == 0
+			? TEXT("The ASC refused every removal, so nothing changed and there is nothing to restore.")
+			: FString::Printf(
+				TEXT("%d active effects were removed in one call. A single gas(apply_effect) re-applies one effect, "
+					 "so no inverse is emitted for a multi-effect removal; re-apply them individually if that is what you want."),
+				Removed));
 	}
 	return MCPResult(Result);
 }
@@ -361,6 +595,8 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAttribute(const TSharedPtr<FJsonObject>&
 	{
 		return MCPError(TEXT("Missing required parameter 'value'"));
 	}
+
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("auto"));
 
 	AActor* Actor = nullptr;
 	TSharedPtr<FJsonValue> Err;
@@ -380,15 +616,52 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAttribute(const TSharedPtr<FJsonObject>&
 	// SetNumericAttributeBase recalculates CurrentValue through the aggregator,
 	// so dependent modifiers stay consistent (unlike a raw property write).
 	ASC->SetNumericAttributeBase(Attr, static_cast<float>(NewValue));
+	// Read back rather than trusting the request: the set's own clamping can
+	// land a different number, and the comparison decides both the idempotency
+	// marker and whether a rollback record is needed at all.
+	const float StoredBase = ASC->GetNumericAttributeBase(Attr);
+	const bool bChanged = StoredBase != OldBase;
+
+	// The attribute is named back QUALIFIED with the set it was resolved on.
+	// FindAttributeByName accepts "SetName.Property", and a bare property name
+	// is ambiguous the moment two attribute sets on the actor declare one with
+	// the same name - "Health" is the obvious case - so the inverse has to say
+	// which set it means or it can land on the wrong one.
+	const FString QualifiedAttribute = SetName.IsEmpty()
+		? Attr.GetName() : (SetName + TEXT(".") + Attr.GetName());
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bChanged);
+	Result->SetStringField(TEXT("qualifiedAttribute"), QualifiedAttribute);
 	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("attributeSet"), SetName);
 	Result->SetStringField(TEXT("attribute"), Attr.GetName());
 	Result->SetNumberField(TEXT("previousBaseValue"), OldBase);
-	Result->SetNumberField(TEXT("baseValue"), ASC->GetNumericAttributeBase(Attr));
+	Result->SetNumberField(TEXT("baseValue"), StoredBase);
 	Result->SetNumberField(TEXT("currentValue"), ASC->GetNumericAttribute(Attr));
+	if (bChanged)
+	{
+		// The base value the aggregator held before this call, written back
+		// through the same path. SetNumericAttributeBase recomputes the current
+		// value from the base and the modifiers that are still active, so
+		// restoring the base restores both - the modifiers were never touched.
+		TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+		RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		RollbackPayload->SetStringField(TEXT("attribute"), QualifiedAttribute);
+		RollbackPayload->SetNumberField(TEXT("value"), OldBase);
+		RollbackPayload->SetStringField(TEXT("world"), WorldScope);
+		MCPSetRollback(Result, TEXT("set_attribute"), RollbackPayload);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The attribute already held this base value - or the set's own clamping refused the write - so "
+				 "nothing changed and there is nothing to undo."));
+	}
 	return MCPResult(Result);
 }
 
@@ -569,6 +842,18 @@ TSharedPtr<FJsonValue> FGasHandlers::GetLiveAttributeValue(const TSharedPtr<FJso
 
 	auto Result = MCPSuccess();
 	WriteLiveAttributeFields(Result, Req);
+	// This reads a value, but with registerOwnerSets left at its default it may
+	// first register the actor's own attribute sets on the ASC, which is a
+	// change to the live world - which is why the action is classified as a
+	// mutation. The flag says whether this call was the one that did it.
+	Result->SetBoolField(TEXT("unchanged"), !Req.bAdopted);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), Req.bAdopted
+		? TEXT("This call registered the actor's own attribute set(s) on its AbilitySystemComponent, which is exactly what "
+			   "InitializeComponent does at BeginPlay. No action in this surface un-registers one, and un-registering would "
+			   "not be a restoration anyway: the set belongs to the actor and the engine would register it again the moment "
+			   "the world begins play. Pass registerOwnerSets false to read without registering.")
+		: TEXT("Nothing was registered and no value was written, so there is nothing to undo."));
 	return MCPResult(Result);
 }
 
@@ -617,13 +902,62 @@ TSharedPtr<FJsonValue> FGasHandlers::SetLiveAttributeValue(const TSharedPtr<FJso
 		Req.Attribute.SetNumericValueChecked(Applied, Req.Set);
 	}
 
+	// Read back rather than trusting the request: PreAttributeChange is allowed
+	// to clamp, and a write that clamped to the value already there changed
+	// nothing at all.
+	const float StoredCurrent = Req.Attribute.GetNumericValue(Req.Set);
+	const float StoredBase = Req.ASC->GetNumericAttributeBase(Req.Attribute);
+	const bool bValueChanged = ValueType == TEXT("base")
+		? StoredBase != PreviousBase : StoredCurrent != PreviousCurrent;
+
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	// Registering the actor's own sets is a change to the live world too, so a
+	// call that only did that is still not "unchanged".
+	const bool bChanged = bValueChanged || Req.bAdopted;
+	if (bChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bChanged);
+	Result->SetBoolField(TEXT("valueChanged"), bValueChanged);
 	WriteLiveAttributeFields(Result, Req);
 	Result->SetStringField(TEXT("valueType"), ValueType);
 	Result->SetNumberField(TEXT("requestedValue"), NewValue);
 	Result->SetNumberField(TEXT("previousCurrentValue"), PreviousCurrent);
 	Result->SetNumberField(TEXT("previousBaseValue"), PreviousBase);
+
+	if (!bValueChanged)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), Req.bAdopted
+			? TEXT("The attribute already held this value - or the set's own PreAttributeChange clamped the write back "
+				   "to it - so no value has to be restored. The attribute set registration this call performed is not "
+				   "undone either; it is what InitializeComponent does at BeginPlay.")
+			: TEXT("The attribute already held this value, or the set's own PreAttributeChange clamped the write back "
+				   "to it, so nothing changed and there is nothing to undo."));
+		return MCPResult(Result);
+	}
+
+	// The inverse writes the value this call overwrote, through the same
+	// valueType: "base" goes back through the aggregator and "current" back into
+	// the attribute data, and the two are not interchangeable, so the record
+	// carries the one that was used. The set is named by its REGISTERED class
+	// path, which is what was actually written - it can be a subclass of what
+	// the caller asked for.
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	RollbackPayload->SetStringField(TEXT("actorPath"), Req.Actor->GetPathName());
+	RollbackPayload->SetStringField(TEXT("attributeSet"), Req.Set->GetClass()->GetPathName());
+	RollbackPayload->SetStringField(TEXT("attribute"), Req.Attribute.GetName());
+	RollbackPayload->SetStringField(TEXT("valueType"), ValueType);
+	RollbackPayload->SetNumberField(TEXT("value"),
+		ValueType == TEXT("base") ? PreviousBase : PreviousCurrent);
+	RollbackPayload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world"), TEXT("auto")));
+	MCPSetRollback(Result, TEXT("set_live_attribute_value"), RollbackPayload);
+	Result->SetBoolField(TEXT("rollbackLossy"), Req.bAdopted);
+	if (Req.bAdopted)
+	{
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The value comes back, but this call also registered the actor's own attribute set(s) on its "
+				 "AbilitySystemComponent to reach it, and that registration is not undone. It is what "
+				 "InitializeComponent would have done at BeginPlay, so it is left in place."));
+	}
 	return MCPResult(Result);
 }
 
@@ -686,6 +1020,13 @@ TSharedPtr<FJsonValue> FGasHandlers::InitAsc(const TSharedPtr<FJsonObject>& Para
 	TSharedPtr<FJsonValue> Err;
 	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Err);
 	if (!ASC) return Err;
+
+	// Read before the init, so the result can say whether this call is what put
+	// the ASC into the state it is now in, or whether it was already there.
+	const FGameplayAbilityActorInfo* ExistingInfo = ASC->AbilityActorInfo.Get();
+	const bool bActorInfoAlreadySet = ExistingInfo != nullptr
+		&& ExistingInfo->OwnerActor.Get() == Actor
+		&& ExistingInfo->AvatarActor.Get() == Actor;
 
 	// Establish owner/avatar so abilities activate and effect contexts target
 	// correctly. Safe to call again; a game's own pawn may also init the ASC.
@@ -758,5 +1099,543 @@ TSharedPtr<FJsonValue> FGasHandlers::InitAsc(const TSharedPtr<FJsonObject>& Para
 		Result->SetArrayField(TEXT("registeredOwnerSets"), Adopted);
 	}
 	Result->SetNumberField(TEXT("attributeCount"), AttrCount);
+
+	// Idempotency: initialising an ASC that is already initialised for this
+	// actor, with every set it needs already registered, moves nothing. Saying
+	// so is what lets a replayed flow step tell "already done" from "done now".
+	const bool bChanged = !bActorInfoAlreadySet || AdoptedSets.Num() > 0 || bConstructedSet;
+	Result->SetBoolField(TEXT("unchanged"), !bChanged);
+	if (bChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("actorInfoAlreadySet"), bActorInfoAlreadySet);
+
+	// No inverse. InitAbilityActorInfo has no counterpart that returns an ASC to
+	// "never initialised", and it is what a game's own pawn does at BeginPlay
+	// anyway, so undoing it would put the ASC into a state the engine treats as
+	// a bug rather than into the state it was in. Registering the actor's own
+	// attribute sets is likewise what InitializeComponent does. The one part
+	// that IS an addition - a set CONSTRUCTED because the actor owned none - is
+	// named here so a caller can decide what to do about it.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), bConstructedSet
+		? FString::Printf(TEXT(
+			"InitAbilityActorInfo has no inverse: there is no call that returns an AbilitySystemComponent to "
+			"uninitialised, and it is what BeginPlay would have done. This call also CONSTRUCTED a '%s' the actor did "
+			"not own, which stays on the ASC; it lives only in memory, so ending PIE or reloading the level clears it."),
+			*CreatedSet)
+		: TEXT("InitAbilityActorInfo has no inverse: there is no call that returns an AbilitySystemComponent to "
+			   "uninitialised, and it is what BeginPlay would have done. Registering the actor's own attribute sets is "
+			   "the same story - InitializeComponent does it at BeginPlay, so it is left in place."));
 	return MCPResult(Result);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Granting, diagnosis and the reason an activation failed.
+//
+// Everything above operates on attributes and effects. What was missing is the
+// half that decides whether an authored ability does anything at all: an
+// ability the ASC has never been given cannot activate, and when activation
+// does fail GAS reports it only to the log, as a line that names neither the
+// ability nor the reason in a form anything can read back.
+//
+// These are deliberately NOT property writes. An ability's configuration is
+// reachable through asset(set_property) on its Blueprint CDO, because that
+// action resolves a Blueprint path to the generated class default object and
+// walks nested properties. What no property write can do is call GiveAbility,
+// read the active effect container, or ask the ability whether it would
+// activate right now and why not.
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace
+{
+	/**
+	 * Resolve a UGameplayAbility subclass from a content path or a class name.
+	 *
+	 * Accepts a Blueprint path ("/Game/Abilities/GA_Fireball"), the generated
+	 * class path ("/Game/Abilities/GA_Fireball.GA_Fireball_C") and a native
+	 * class name ("UGameplayAbility"), because a caller who just created the
+	 * asset has the first spelling and a caller reading get_asc_state has the
+	 * second.
+	 */
+	UClass* ResolveAbilityClass(const FString& Spec, TSharedPtr<FJsonValue>& OutError)
+	{
+		if (Spec.IsEmpty())
+		{
+			OutError = MCPError(TEXT("Missing ability class"));
+			return nullptr;
+		}
+
+		// A generated-class path loads directly.
+		if (UClass* Direct = LoadObject<UClass>(nullptr, *Spec))
+		{
+			if (Direct->IsChildOf(UGameplayAbility::StaticClass())) return Direct;
+			OutError = MCPError(FString::Printf(
+				TEXT("'%s' is a %s, not a GameplayAbility"), *Spec, *Direct->GetName()));
+			return nullptr;
+		}
+
+		// A Blueprint path: take its generated class.
+		TSharedPtr<FJsonValue> Ignored;
+		if (UGameplayAbility* CDO = LoadBlueprintCDO<UGameplayAbility>(Spec, Ignored))
+		{
+			return CDO->GetClass();
+		}
+
+		// A bare "_C"-less content path, then a native class name.
+		if (UClass* Generated = LoadObject<UClass>(nullptr, *(Spec + TEXT("_C"))))
+		{
+			if (Generated->IsChildOf(UGameplayAbility::StaticClass())) return Generated;
+		}
+		if (UClass* Native = FindObject<UClass>(nullptr, *Spec))
+		{
+			if (Native->IsChildOf(UGameplayAbility::StaticClass())) return Native;
+		}
+
+		OutError = MCPError(FString::Printf(
+			TEXT("Could not resolve '%s' to a GameplayAbility class. Pass the Blueprint path "
+				 "(/Game/Abilities/GA_Fireball), its generated class path (…_C), or a native class name."),
+			*Spec));
+		return nullptr;
+	}
+
+	/** One ability spec, as JSON. Shared by grant, revoke and the tracer. */
+	TSharedPtr<FJsonObject> DescribeSpec(const FGameplayAbilitySpec& Spec)
+	{
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+		// The int is private; ToString is the public identity.
+		Out->SetStringField(TEXT("handle"), Spec.Handle.ToString());
+		Out->SetStringField(TEXT("abilityClass"), Spec.Ability ? Spec.Ability->GetClass()->GetPathName() : TEXT("None"));
+		Out->SetNumberField(TEXT("level"), Spec.Level);
+		Out->SetNumberField(TEXT("inputID"), Spec.InputID);
+		Out->SetBoolField(TEXT("active"), Spec.IsActive());
+		return Out;
+	}
+}
+
+TSharedPtr<FJsonValue> FGasHandlers::GrantAbility(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AbilitySpec;
+	if (auto Err = RequireString(Params, TEXT("abilityClass"), AbilitySpec)) return Err;
+
+	AActor* Actor = nullptr;
+	TSharedPtr<FJsonValue> Error;
+	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Error);
+	if (!ASC) return Error;
+
+	UClass* AbilityClass = ResolveAbilityClass(AbilitySpec, Error);
+	if (!AbilityClass) return Error;
+
+	const int32 Level = static_cast<int32>(OptionalNumber(Params, TEXT("level"), 1.0));
+	const int32 InputID = static_cast<int32>(OptionalNumber(Params, TEXT("inputId"), -1.0));
+
+	// Granting is server-authoritative in GAS. On a client ASC GiveAbility is a
+	// no-op that logs and returns an invalid handle, which would otherwise read
+	// as success here.
+	if (!ASC->IsOwnerActorAuthoritative())
+	{
+		return MCPError(FString::Printf(
+			TEXT("'%s' ASC is not authoritative, and GiveAbility only runs on the authority. "
+				 "Target the server/primary PIE world (world=\"pie\", pieInstance=0)."),
+			*Actor->GetActorLabel()));
+	}
+
+	// Idempotent: granting the same class twice would leave two specs and two
+	// handles for what the caller thinks of as one ability.
+	for (const FGameplayAbilitySpec& Existing : ASC->GetActivatableAbilities())
+	{
+		if (Existing.Ability && Existing.Ability->GetClass() == AbilityClass)
+		{
+			auto Already = MCPSuccess();
+			MCPSetExisted(Already);
+			Already->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+			Already->SetObjectField(TEXT("spec"), DescribeSpec(Existing));
+			Already->SetStringField(TEXT("note"), TEXT("This ability class was already granted; the existing spec is returned."));
+			return MCPResult(Already);
+		}
+	}
+
+	FGameplayAbilitySpec Spec(AbilityClass, Level, InputID, Actor);
+	const FGameplayAbilitySpecHandle Handle = ASC->GiveAbility(Spec);
+	if (!Handle.IsValid())
+	{
+		return MCPError(FString::Printf(
+			TEXT("GiveAbility refused '%s' on '%s'."), *AbilityClass->GetName(), *Actor->GetActorLabel()));
+	}
+
+	const FGameplayAbilitySpec* Granted = ASC->FindAbilitySpecFromHandle(Handle);
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	if (Granted) Result->SetObjectField(TEXT("spec"), DescribeSpec(*Granted));
+	Result->SetNumberField(TEXT("activatableCount"), ASC->GetActivatableAbilities().Num());
+
+	// Undoing a grant is a revoke of the same class on the same actor.
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	RollbackPayload->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
+	MCPSetRollback(Result, TEXT("revoke_ability"), RollbackPayload);
+
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGasHandlers::RevokeAbility(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AbilitySpec;
+	if (auto Err = RequireString(Params, TEXT("abilityClass"), AbilitySpec)) return Err;
+
+	AActor* Actor = nullptr;
+	TSharedPtr<FJsonValue> Error;
+	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Error);
+	if (!ASC) return Error;
+
+	UClass* AbilityClass = ResolveAbilityClass(AbilitySpec, Error);
+	if (!AbilityClass) return Error;
+
+	if (!ASC->IsOwnerActorAuthoritative())
+	{
+		return MCPError(TEXT("ClearAbility only runs on the authority. Target the server/primary PIE world."));
+	}
+
+	// The level and input binding have to be read BEFORE the specs go, or the
+	// rollback can only restore the ability at defaults it never had.
+	TArray<FGameplayAbilitySpecHandle> ToClear;
+	int32 RevokedLevel = 1;
+	int32 RevokedInputID = INDEX_NONE;
+	for (const FGameplayAbilitySpec& Existing : ASC->GetActivatableAbilities())
+	{
+		if (Existing.Ability && Existing.Ability->GetClass() == AbilityClass)
+		{
+			ToClear.Add(Existing.Handle);
+			RevokedLevel = Existing.Level;
+			RevokedInputID = Existing.InputID;
+		}
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
+	Result->SetNumberField(TEXT("revoked"), ToClear.Num());
+
+	// Idempotent, and it says which happened: a caller replaying a rollback
+	// should not get an error for work already undone.
+	if (ToClear.Num() == 0)
+	{
+		Result->SetBoolField(TEXT("alreadyRevoked"), true);
+		return MCPResult(Result);
+	}
+
+	for (const FGameplayAbilitySpecHandle& Handle : ToClear) ASC->ClearAbility(Handle);
+	Result->SetNumberField(TEXT("activatableCount"), ASC->GetActivatableAbilities().Num());
+
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	RollbackPayload->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
+	RollbackPayload->SetNumberField(TEXT("level"), RevokedLevel);
+	RollbackPayload->SetNumberField(TEXT("inputId"), RevokedInputID);
+	MCPSetRollback(Result, TEXT("grant_ability"), RollbackPayload);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGasHandlers::GetActiveEffects(const TSharedPtr<FJsonObject>& Params)
+{
+	AActor* Actor = nullptr;
+	TSharedPtr<FJsonValue> Error;
+	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Error);
+	if (!ASC) return Error;
+
+	// Everything, rather than a query: the caller is diagnosing, and a filter
+	// that hid the effect they were looking for would be the whole problem.
+	const FGameplayEffectQuery Query;
+	TArray<FActiveGameplayEffectHandle> Handles = ASC->GetActiveEffects(Query);
+
+	TArray<TSharedPtr<FJsonValue>> Effects;
+	for (const FActiveGameplayEffectHandle& Handle : Handles)
+	{
+		const FActiveGameplayEffect* Active = ASC->GetActiveGameplayEffect(Handle);
+		if (!Active) continue;
+
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		const UGameplayEffect* Def = Active->Spec.Def;
+		Entry->SetStringField(TEXT("effectClass"), Def ? Def->GetClass()->GetPathName() : TEXT("None"));
+		// The int is private; ToString is the public identity.
+		Entry->SetStringField(TEXT("handle"), Handle.ToString());
+		Entry->SetNumberField(TEXT("level"), Active->Spec.GetLevel());
+		Entry->SetNumberField(TEXT("stackCount"), Active->Spec.GetStackCount());
+		Entry->SetNumberField(TEXT("duration"), Active->GetDuration());
+		Entry->SetNumberField(TEXT("timeRemaining"), Active->GetTimeRemaining(ASC->GetWorld()->GetTimeSeconds()));
+		Entry->SetBoolField(TEXT("inhibited"), Active->bIsInhibited);
+
+		// Which actor caused this, which is the question asked when an effect
+		// is present and nobody knows where it came from.
+		if (const AActor* Instigator = Active->Spec.GetEffectContext().GetInstigator())
+		{
+			Entry->SetStringField(TEXT("instigator"), Instigator->GetActorLabel());
+		}
+
+		FGameplayTagContainer GrantedTags;
+		Active->Spec.GetAllGrantedTags(GrantedTags);
+		TArray<TSharedPtr<FJsonValue>> TagList;
+		for (const FGameplayTag& Tag : GrantedTags) TagList.Add(MakeShared<FJsonValueString>(Tag.ToString()));
+		Entry->SetArrayField(TEXT("grantedTags"), TagList);
+
+		Effects.Add(MakeShared<FJsonValueObject>(Entry));
+	}
+
+	FGameplayTagContainer Owned;
+	ASC->GetOwnedGameplayTags(Owned);
+	TArray<TSharedPtr<FJsonValue>> OwnedList;
+	for (const FGameplayTag& Tag : Owned) OwnedList.Add(MakeShared<FJsonValueString>(Tag.ToString()));
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetNumberField(TEXT("effectCount"), Effects.Num());
+	Result->SetArrayField(TEXT("activeEffects"), Effects);
+	Result->SetArrayField(TEXT("ownedTags"), OwnedList);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGasHandlers::TraceAbilityActivation(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AbilitySpec;
+	if (auto Err = RequireString(Params, TEXT("abilityClass"), AbilitySpec)) return Err;
+
+	AActor* Actor = nullptr;
+	TSharedPtr<FJsonValue> Error;
+	UAbilitySystemComponent* ASC = ResolveASC(Params, Actor, Error);
+	if (!ASC) return Error;
+
+	UClass* AbilityClass = ResolveAbilityClass(AbilitySpec, Error);
+	if (!AbilityClass) return Error;
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
+
+	// This only reads unless `activate` is passed, which is why the action is
+	// classified "unknown" rather than as a mutation. Both markers are set here
+	// so that every early return below - and there are several - reports the
+	// truth for the path it took: nothing fired, nothing to undo.
+	Result->SetBoolField(TEXT("unchanged"), true);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Nothing was activated, so there is nothing to undo."));
+
+	TArray<TSharedPtr<FJsonValue>> Blockers;
+	const auto Block = [&Blockers](const FString& Reason)
+	{
+		Blockers.Add(MakeShared<FJsonValueString>(Reason));
+	};
+
+	// 1. Granted at all. This is the single most common reason an authored
+	//    ability does nothing, and it produces no log line worth reading.
+	const FGameplayAbilitySpec* Spec = nullptr;
+	for (const FGameplayAbilitySpec& Candidate : ASC->GetActivatableAbilities())
+	{
+		if (Candidate.Ability && Candidate.Ability->GetClass() == AbilityClass)
+		{
+			Spec = &Candidate;
+			break;
+		}
+	}
+	if (!Spec)
+	{
+		Block(TEXT("not granted: this ability class is not in the ASC's activatable abilities. Call gas(grant_ability) first."));
+		Result->SetBoolField(TEXT("granted"), false);
+		Result->SetBoolField(TEXT("wouldActivate"), false);
+		Result->SetArrayField(TEXT("blockedBy"), Blockers);
+		return MCPResult(Result);
+	}
+
+	Result->SetBoolField(TEXT("granted"), true);
+	Result->SetObjectField(TEXT("spec"), DescribeSpec(*Spec));
+
+	// Spec->Ability is a TObjectPtr, so the two branches have no common type
+	// without naming it. The primary instance is preferred because an
+	// instanced ability's live state is what decides whether it can activate;
+	// a non-instanced one only ever has the CDO.
+	UGameplayAbility* Ability = Spec->GetPrimaryInstance();
+	if (!Ability) Ability = Spec->Ability;
+	if (!Ability)
+	{
+		Block(TEXT("the spec has no ability instance or CDO to interrogate."));
+		Result->SetBoolField(TEXT("wouldActivate"), false);
+		Result->SetArrayField(TEXT("blockedBy"), Blockers);
+		return MCPResult(Result);
+	}
+
+	// 2. Already running, and not allowed to retrigger. Read through
+	//    reflection because the flag is protected on UGameplayAbility; it is a
+	//    UPROPERTY, so this is the supported way in rather than a workaround.
+	bool bRetrigger = false;
+	if (const FBoolProperty* RetriggerProp = CastField<FBoolProperty>(
+			Ability->GetClass()->FindPropertyByName(TEXT("bRetriggerInstancedAbility"))))
+	{
+		bRetrigger = RetriggerProp->GetPropertyValue_InContainer(Ability);
+	}
+	if (Spec->IsActive() && !bRetrigger)
+	{
+		Block(TEXT("already active, and bRetriggerInstancedAbility is false."));
+	}
+
+	// 3. Tags: the ability's own blockers, and what the ASC currently owns.
+	FGameplayTagContainer OwnedTags;
+	ASC->GetOwnedGameplayTags(OwnedTags);
+
+	const auto ReportTags = [&](const TCHAR* Field, const FGameplayTagContainer& Tags)
+	{
+		if (Tags.IsEmpty()) return;
+		TArray<TSharedPtr<FJsonValue>> List;
+		for (const FGameplayTag& Tag : Tags) List.Add(MakeShared<FJsonValueString>(Tag.ToString()));
+		Result->SetArrayField(Field, List);
+	};
+
+	// CanActivateAbility reports the tags it refused over through a single
+	// OptionalRelevantTags container. The engine does not separate "the owner
+	// has a tag that blocks this" from "the ability requires a tag the owner
+	// lacks", so neither does this: the tags are reported as what they are,
+	// the ones relevant to the refusal, rather than sorted into two buckets on
+	// a guess.
+	FGameplayTagContainer RelevantTags;
+	const FGameplayAbilityActorInfo* ActorInfo = ASC->AbilityActorInfo.Get();
+
+	// 3a. The ASC has to have been initialised before anything can activate.
+	//     An actor spawned into the editor world never ran InitAbilityActorInfo,
+	//     because there is no BeginPlay in a world that has not begun play, so
+	//     CanActivateAbility refuses with no tag to point at. Without this the
+	//     result read "wouldActivate: false, blockedBy: []", which is the exact
+	//     self-contradiction this action exists to stop a caller hitting.
+	const bool bAscInitialised = ActorInfo != nullptr
+		&& ActorInfo->OwnerActor.IsValid()
+		&& ActorInfo->AvatarActor.IsValid();
+	if (!bAscInitialised)
+	{
+		Block(TEXT("the ASC has no valid actor info: InitAbilityActorInfo has not run. "
+				   "In PIE that happens at BeginPlay; in the editor world call gas(init_asc) first."));
+	}
+	Result->SetBoolField(TEXT("ascInitialized"), bAscInitialised);
+	const bool bCanActivate = Ability->CanActivateAbility(
+		Spec->Handle,
+		ActorInfo,
+		/*SourceTags*/ nullptr,
+		/*TargetTags*/ nullptr,
+		&RelevantTags);
+
+	ReportTags(TEXT("ownedTags"), OwnedTags);
+	ReportTags(TEXT("relevantTags"), RelevantTags);
+
+	if (!bCanActivate && !RelevantTags.IsEmpty())
+	{
+		Block(FString::Printf(
+			TEXT("refused over tags: %s. Compare against ownedTags, and against the ability's "
+				 "ActivationRequiredTags / ActivationBlockedTags."),
+			*RelevantTags.ToStringSimple()));
+	}
+
+	// 4. Cooldown, reported with the time left rather than as a bare "no".
+	//    CheckCooldown returns TRUE when the ability is free to use, so a
+	//    false here is the cooldown being active.
+	FGameplayTagContainer CooldownTags;
+	if (!Ability->CheckCooldown(Spec->Handle, ActorInfo, &CooldownTags))
+	{
+		float Remaining = 0.f;
+		float Duration = 0.f;
+		Ability->GetCooldownTimeRemainingAndDuration(Spec->Handle, ActorInfo, Remaining, Duration);
+		Result->SetNumberField(TEXT("cooldownRemaining"), Remaining);
+		Result->SetNumberField(TEXT("cooldownDuration"), Duration);
+		Block(FString::Printf(TEXT("on cooldown: %.2fs of %.2fs remaining."), Remaining, Duration));
+	}
+
+	// 5. Cost, which is the other half of "it just does not fire".
+	FGameplayTagContainer CostTags;
+	if (!Ability->CheckCost(Spec->Handle, ActorInfo, &CostTags))
+	{
+		const UGameplayEffect* CostEffect = Ability->GetCostGameplayEffect();
+		Block(FString::Printf(
+			TEXT("cost not met%s."),
+			CostEffect ? *FString::Printf(TEXT(" (%s)"), *CostEffect->GetClass()->GetName()) : TEXT("")));
+	}
+
+	// A verdict of "will not activate" with an empty reason list is worse than
+	// no answer, so the last resort names itself as the last resort.
+	if (!bCanActivate && Blockers.Num() == 0)
+	{
+		Block(TEXT("CanActivateAbility refused without reporting a reason. The remaining "
+				   "explanation is the ability's own CanActivateAbility override, or a "
+				   "Blueprint-side check inside it."));
+	}
+
+	Result->SetBoolField(TEXT("wouldActivate"), bCanActivate && Blockers.Num() == 0);
+	Result->SetArrayField(TEXT("blockedBy"), Blockers);
+	if (bCanActivate && Blockers.Num() == 0)
+	{
+		Result->SetStringField(TEXT("note"), TEXT("Nothing is blocking activation right now."));
+	}
+
+	// Optionally prove it, rather than only predicting it.
+	if (OptionalBool(Params, TEXT("activate"), false))
+	{
+		const bool bActivated = ASC->TryActivateAbility(Spec->Handle);
+		Result->SetBoolField(TEXT("activated"), bActivated);
+		if (bActivated)
+		{
+			Result->SetBoolField(TEXT("unchanged"), false);
+			// Activating an ability RUNS it: its cost is committed, its cooldown
+			// effect is applied, its tags are granted and whatever it does to the
+			// world has already happened. Cancelling it afterwards stops the rest
+			// of the ability, it does not put those back, so no inverse is
+			// offered rather than one that would only look like an undo.
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("The ability activated and has already committed its cost, applied its cooldown and run its effects. "
+					 "There is no call that un-activates it: cancelling an ability ends what is still running rather than "
+					 "restoring what it already did. Capture the state first with gas(capture_gas_state) if you need a diff."));
+		}
+		if (!bActivated && Blockers.Num() == 0)
+		{
+			Result->SetStringField(TEXT("activationNote"), TEXT(
+				"TryActivateAbility refused even though no blocker was found. That usually means the "
+				"ability's own CanActivateAbility override, or a Blueprint-side check, refused it."));
+		}
+	}
+
+	return MCPResult(Result);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared resolution, exported for the other GAS translation units.
+//
+// The four helpers above are file-local, and the module is a unity build, so a
+// second copy of any of them in another .cpp is a redefinition on some grouping
+// (and the grouping shifts with file count, file order and the adaptive-unity
+// working set, so the duplicate builds clean locally and breaks elsewhere).
+// These thin wrappers are the one exported spelling. They forward rather than
+// move the definitions, so the actions already verified against a live editor
+// keep calling exactly the code they were verified against.
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace MCPGas
+{
+
+UAbilitySystemComponent* ResolveActorASC(
+	const TSharedPtr<FJsonObject>& Params,
+	AActor*& OutActor,
+	TSharedPtr<FJsonValue>& OutError)
+{
+	return ResolveASC(Params, OutActor, OutError);
+}
+
+UClass* ResolveGameplayAbilityClass(const FString& Spec, TSharedPtr<FJsonValue>& OutError)
+{
+	return ResolveAbilityClass(Spec, OutError);
+}
+
+UClass* ResolveClassDerivingFrom(const FString& Spec, UClass* Base)
+{
+	return ResolveClassDeriving(Spec, Base);
+}
+
+TSharedPtr<FJsonObject> DescribeAbilitySpec(const FGameplayAbilitySpec& Spec)
+{
+	return DescribeSpec(Spec);
+}
+
 }

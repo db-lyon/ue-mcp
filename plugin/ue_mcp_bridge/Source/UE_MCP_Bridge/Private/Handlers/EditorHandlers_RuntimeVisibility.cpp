@@ -724,6 +724,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::RestoreRuntimeVisibility(const TSharedPt
 	}
 
 	int32 Changed = 0;
+	// A restore writes state, so its own inverse is the state it is about to
+	// overwrite. Captured target by target as the writes happen, because after
+	// the loop the previous values are the ones that were just discarded.
+	TArray<FMCPRuntimeVisibilityRestoreTarget> UndoTargets;
 	for (const FMCPRuntimeVisibilityRestoreTarget& Target : Snapshot->Targets)
 	{
 		if (USceneComponent* Component = Target.Component.Get())
@@ -732,6 +736,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::RestoreRuntimeVisibility(const TSharedPt
 				(Component->bHiddenInGame != 0) != Target.bComponentHidden)
 			{
 				++Changed;
+				FMCPRuntimeVisibilityRestoreTarget& Undo = UndoTargets.AddDefaulted_GetRef();
+				Undo.Component = Component;
+				Undo.bVisible = Component->GetVisibleFlag();
+				Undo.bComponentHidden = Component->bHiddenInGame != 0;
 				Component->SetVisibility(Target.bVisible, false);
 				Component->SetHiddenInGame(Target.bComponentHidden, false);
 			}
@@ -739,19 +747,50 @@ TSharedPtr<FJsonValue> FEditorHandlers::RestoreRuntimeVisibility(const TSharedPt
 		else if (AActor* Actor = Target.Actor.Get(); Actor && Actor->IsHidden() != Target.bActorHidden)
 		{
 			++Changed;
+			FMCPRuntimeVisibilityRestoreTarget& Undo = UndoTargets.AddDefaulted_GetRef();
+			Undo.Actor = Actor;
+			Undo.bActorHidden = Actor->IsHidden();
 			Actor->SetActorHiddenInGame(Target.bActorHidden);
 		}
 	}
 
+	const int32 SnapshotTargetCount = Snapshot->Targets.Num();
+
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("restored"), true);
 	Result->SetStringField(TEXT("rollbackToken"), RollbackToken);
-	Result->SetNumberField(TEXT("targetCount"), Snapshot->Targets.Num());
+	Result->SetNumberField(TEXT("targetCount"), SnapshotTargetCount);
 	Result->SetNumberField(TEXT("changed"), Changed);
-	Result->SetNumberField(TEXT("alreadyRestored"), Snapshot->Targets.Num() - Changed);
+	Result->SetNumberField(TEXT("alreadyRestored"), SnapshotTargetCount - Changed);
+	// A restore run twice writes nothing the second time, and a caller retrying
+	// after a timeout needs that as a field rather than as arithmetic on two
+	// counts.
+	Result->SetBoolField(TEXT("unchanged"), Changed == 0);
 	Result->SetStringField(TEXT("worldPath"), World->GetPathName());
 	Result->SetNumberField(TEXT("pieInstance"), WorldContext->PIEInstance);
 	Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
 	Result->SetBoolField(TEXT("persisted"), false);
+
+	// The inverse of a restore is another restore, against the state this one
+	// overwrote. Stored last on purpose: making room for a new snapshot can
+	// evict an old one and rehash the map, which would leave `Snapshot`
+	// dangling, so nothing reads it past this point.
+	if (UndoTargets.Num() > 0)
+	{
+		TSharedPtr<FJsonObject> UndoPayload = MakeShared<FJsonObject>();
+		UndoPayload->SetStringField(TEXT("world"), TEXT("pie"));
+		UndoPayload->SetNumberField(TEXT("pieInstance"), WorldContext->PIEInstance);
+		UndoPayload->SetStringField(
+			TEXT("rollbackToken"),
+			MCPRuntimeVisibilityStoreRollback(World, WorldContext->PIEInstance, UndoTargets));
+		MCPSetRollback(Result, TEXT("restore_runtime_visibility"), UndoPayload);
+	}
+	else
+	{
+		MCPSetNoRollback(Result,
+			TEXT("Every target already held the state this token restores, so nothing was overwritten and there is "
+			     "no prior state to put back. Undoing a restore that wrote something emits a restore_runtime_visibility "
+			     "rollback of its own."));
+	}
 	return MCPResult(Result);
 }

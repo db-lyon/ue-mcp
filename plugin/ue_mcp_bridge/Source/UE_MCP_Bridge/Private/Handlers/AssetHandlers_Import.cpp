@@ -154,6 +154,107 @@ namespace
 		}
 		return nullptr;
 	}
+
+	/** The inverse of an import that produced assets: delete exactly what it
+	 *  produced.
+	 *
+	 *  One asset goes through delete_asset and several through
+	 *  delete_asset_batch, because a rollback record is a single call and an
+	 *  FBX import routinely yields more than one object: a skeletal mesh import
+	 *  returns the mesh plus a generated Skeleton and PhysicsAsset, and a static
+	 *  mesh import can return the mesh plus its materials. Branching only on
+	 *  ==1 and ==0 left exactly those calls, the ones that created the most,
+	 *  saying nothing at all about recoverability. */
+	void EmitImportedAssetsRollback(
+		TSharedPtr<FJsonObject> Result,
+		const TArray<TSharedPtr<FJsonValue>>& ImportedPaths)
+	{
+		if (ImportedPaths.Num() == 0)
+		{
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"), TEXT("No asset was produced, so there is nothing to undo."));
+			return;
+		}
+
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		if (ImportedPaths.Num() == 1)
+		{
+			Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
+			MCPSetRollback(Result, TEXT("delete_asset"), Payload);
+		}
+		else
+		{
+			Payload->SetArrayField(TEXT("assetPaths"), ImportedPaths);
+			MCPSetRollback(Result, TEXT("delete_asset_batch"), Payload);
+		}
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The inverse deletes the %d asset(s) this import produced. Two limits. These importers replace an asset already ")
+			TEXT("at the destination rather than refusing, so where one was there its previous content is gone and deleting the ")
+			TEXT("asset does not bring it back. And the delete runs with the default force=false, so it refuses any of these that ")
+			TEXT("something outside the rollback still references, and reports that rather than removing them."),
+			ImportedPaths.Num()));
+	}
+
+	/** What a set_curvetable_keys replay does NOT carry back.
+	 *
+	 *  CurveKeysToJson emits time, value, interpMode and the two tangents.
+	 *  FRichCurveKey also has TangentMode, TangentWeightMode, ArriveTangentWeight
+	 *  and LeaveTangentWeight, and SetCurveTableKeys rebuilds each key with
+	 *  FRichCurveKey(Time, Value), which defaults those to RCTM_Auto,
+	 *  RCTWM_WeightedNone and zero. A simple curve has none of those fields, so
+	 *  its replay is exact and is not flagged. */
+	void EmitCurveKeyReplayCaveat(TSharedPtr<FJsonObject> Result, const bool bRichCurve, const int32 PriorKeyCount)
+	{
+		const bool bLossy = bRichCurve && PriorKeyCount > 0;
+		Result->SetBoolField(TEXT("rollbackLossy"), bLossy);
+		if (bLossy)
+		{
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("The inverse restores every key's time, value, interpolation mode and both tangents. On a rich curve it does ")
+				TEXT("not restore per-key tangent mode, tangent weight mode or the tangent weights: this action rebuilds keys with ")
+				TEXT("the FRichCurveKey defaults for those, so a break or user tangent goes back to auto and any weight goes to zero."));
+		}
+	}
+
+	/** The inverse of a whole-table CurveTable import, from the snapshot taken
+	 *  before it ran. Shared by the success and the failure path: the importer
+	 *  empties the table before it reports problems, so a failed import is the
+	 *  outcome that needs this most. */
+	void EmitPriorCurveTableRollback(
+		TSharedPtr<FJsonObject> Result,
+		const FString& AssetPath,
+		const FString& PriorJson,
+		const int32 PriorRowCount,
+		const ECurveTableMode PriorMode)
+	{
+		if (PriorRowCount > 0)
+		{
+			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+			Payload->SetStringField(TEXT("assetPath"), AssetPath);
+			Payload->SetStringField(TEXT("jsonString"), PriorJson);
+			Payload->SetStringField(TEXT("format"), TEXT("json"));
+			// Cubic is what makes CreateTableFromJSONString build rich rows, so
+			// the restored table comes back in the curve mode it had.
+			Payload->SetStringField(TEXT("interpMode"),
+				PriorMode == ECurveTableMode::RichCurves ? TEXT("cubic") : TEXT("linear"));
+			MCPSetRollback(Result, TEXT("import_curvetable"), Payload);
+			Result->SetBoolField(TEXT("rollbackLossy"), true);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("The inverse replays the table's pre-call JSON export, which carries row names, key times and key values. ")
+				TEXT("The CurveTable JSON form has no place for per-key interpolation modes or tangents, so the restored rows all ")
+				TEXT("share one interpolation mode."));
+		}
+		else
+		{
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("The table had no rows before this call. Restoring that would mean importing an empty row set, and whether ")
+				TEXT("the engine's CurveTable importer accepts one is not established from the installed headers, so no inverse is ")
+				TEXT("emitted rather than one that may report success without emptying the table. ")
+				TEXT("Remove the imported rows with asset(remove_curvetable_row)."));
+		}
+	}
 }
 
 
@@ -281,12 +382,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 	}
 
 	// Rollback only when a single asset was produced (paired inverse: delete_asset).
-	if (ImportedPaths.Num() == 1)
-	{
-		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
-		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-	}
+	EmitImportedAssetsRollback(Result, ImportedPaths);
 
 	return MCPResult(Result);
 }
@@ -442,12 +538,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no assets were produced"));
 	}
 
-	if (ImportedPaths.Num() == 1)
-	{
-		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
-		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-	}
+	EmitImportedAssetsRollback(Result, ImportedPaths);
 
 	return MCPResult(Result);
 }
@@ -556,12 +647,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no assets were produced"));
 	}
 
-	if (ImportedPaths.Num() == 1)
-	{
-		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
-		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-	}
+	EmitImportedAssetsRollback(Result, ImportedPaths);
 
 	return MCPResult(Result);
 }
@@ -769,33 +855,43 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 	Result->SetArrayField(TEXT("modifiedProperties"), ModifiedArray);
 	Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Modified %d texture properties"), ModifiedProperties.Num()));
 
-	// Self-inverse rollback. We store enum values as numeric strings for the
-	// inverse call; the handler accepts strings so we'd lose the mapping back
-	// to string keys. For safety, emit rollback only when simple bool props
-	// changed - compression/LOD group changes are not reversed here.
-	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("assetPath"), AssetPath);
-	bool bHaveReversibleField = false;
+	// Complete self-inverse, routed the way SetTextureSettingsByType routes its
+	// own: bulk_set_asset_properties writes UPROPERTYs by name and resolves an
+	// enum from its enumerator name, so all four of these come back exactly.
+	//
+	// This deliberately does NOT go back through set_texture_settings. That
+	// action maps compressionSettings from an 11-entry list and lodGroup from a
+	// 19-entry list, and both fall through to a default (TC_Default,
+	// TEXTUREGROUP_World) on anything outside them, so a prior value from
+	// elsewhere in either enum would be silently rewritten to the wrong one.
+	// GetNameStringByValue has no such gap.
+	TSharedPtr<FJsonObject> Prev = MakeShared<FJsonObject>();
 	for (const FString& P : ModifiedProperties)
 	{
-		if (P == TEXT("sRGB"))
+		if (P == TEXT("compressionSettings"))
 		{
-			Payload->SetBoolField(TEXT("sRGB"), PrevSRGB);
-			bHaveReversibleField = true;
+			Prev->SetStringField(TEXT("CompressionSettings"),
+				StaticEnum<TextureCompressionSettings>()->GetNameStringByValue((int64)PrevCompression));
 		}
-		else if (P == TEXT("neverStream"))
+		else if (P == TEXT("lodGroup"))
 		{
-			Payload->SetBoolField(TEXT("neverStream"), PrevNeverStream);
-			bHaveReversibleField = true;
+			Prev->SetStringField(TEXT("LODGroup"),
+				StaticEnum<TextureGroup>()->GetNameStringByValue((int64)PrevLODGroup));
 		}
+		else if (P == TEXT("sRGB"))       Prev->SetBoolField(TEXT("SRGB"), PrevSRGB);
+		else if (P == TEXT("neverStream")) Prev->SetBoolField(TEXT("NeverStream"), PrevNeverStream);
 	}
-	// Suppress unused-variable warnings on the enum captures when no
-	// reversible fields matched.
-	(void)PrevCompression; (void)PrevLODGroup;
-	if (bHaveReversibleField)
-	{
-		MCPSetRollback(Result, TEXT("set_texture_properties"), Payload);
-	}
+	// ModifiedProperties is never empty here: the handler returns an error above
+	// when nothing was named, so there is always at least one field to restore.
+	TSharedPtr<FJsonObject> Item = MakeShared<FJsonObject>();
+	Item->SetStringField(TEXT("assetPath"), AssetPath);
+	Item->SetObjectField(TEXT("properties"), Prev);
+	TArray<TSharedPtr<FJsonValue>> Items;
+	Items.Add(MakeShared<FJsonValueObject>(Item));
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetArrayField(TEXT("items"), Items);
+	MCPSetRollback(Result, TEXT("bulk_set_asset_properties"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), false);
 
 	return MCPResult(Result);
 }
@@ -903,7 +999,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJson
 	for (FGCRootScope* G : Roots) delete G;
 
 	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
+	// Guarded: a batch that produced nothing used to report created:true.
+	if (Imported > 0) MCPSetCreated(Result);
+	Result->SetBoolField(TEXT("unchanged"), Imported == 0);
 	Result->SetNumberField(TEXT("requested"), Items->Num());
 	Result->SetNumberField(TEXT("imported"), Imported);
 	Result->SetNumberField(TEXT("failed"), Items->Num() - Imported);
@@ -914,6 +1012,37 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJson
 		RecArray.Add(MakeShared<FJsonValueObject>(Rec));
 	}
 	Result->SetArrayField(TEXT("items"), RecArray);
+
+	// Rollback: delete exactly the assets this call produced. Lossy, because
+	// entries default to replaceExisting=true: where an import landed on a
+	// texture that was already there, deleting it removes the asset instead of
+	// restoring the version the import overwrote.
+	TArray<TSharedPtr<FJsonValue>> ImportedForRollback;
+	for (const TSharedPtr<FJsonObject>& Rec : ItemRecords)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Produced = nullptr;
+		if (Rec->TryGetArrayField(TEXT("importedAssets"), Produced) && Produced)
+		{
+			for (const TSharedPtr<FJsonValue>& P : *Produced) ImportedForRollback.Add(P);
+		}
+	}
+	if (ImportedForRollback.Num() > 0)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetArrayField(TEXT("assetPaths"), ImportedForRollback);
+		MCPSetRollback(Result, TEXT("delete_asset_batch"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The inverse deletes the assets this import produced. Two limits. An entry that landed on an existing texture ")
+			TEXT("(replaceExisting defaults to true) had its previous content overwritten, and deleting the asset does not bring ")
+			TEXT("that back. And the delete runs with the default force=false, so it refuses any imported texture that something ")
+			TEXT("outside the rollback still references, and reports that rather than removing it."));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT("No asset was produced, so there is nothing to undo."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1028,12 +1157,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 		}
 	}
 
-	if (ImportedPaths.Num() == 1)
-	{
-		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
-		MCPSetRollback(Result, TEXT("delete_asset"), Payload);
-	}
+	EmitImportedAssetsRollback(Result, ImportedPaths);
 
 	return MCPResult(Result);
 }
@@ -1167,8 +1291,16 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportCurveTable(const TSharedPtr<FJsonOb
 	const FString InterpRaw = OptionalString(Params, TEXT("interpMode"), TEXT("linear"));
 	if (!ParseCurveInterpMode(InterpRaw, InterpMode))
 	{
-		return MCPError(FString::Printf(TEXT("Unknown interpMode '%s'. Use linear, constant, or cubic."), *InterpRaw));
+		return MCPError(FString::Printf(TEXT("Unknown interpMode '%s'. Use linear, constant, cubic or none."), *InterpRaw));
 	}
+
+	// CreateTableFrom*String empties the table first, so the rows that are
+	// there now are the only record of the pre-call state. UCurveTable's own
+	// JSON writer is the reader's counterpart, so the snapshot replays through
+	// this same action.
+	const int32 PriorRowCount = Table->GetRowMap().Num();
+	const ECurveTableMode PriorMode = Table->GetCurveTableMode();
+	const FString PriorJson = PriorRowCount > 0 ? Table->GetTableAsJSON() : FString();
 
 	TArray<FString> Problems;
 	if (Format == TEXT("json"))
@@ -1196,6 +1328,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportCurveTable(const TSharedPtr<FJsonOb
 		Result->SetStringField(TEXT("assetPath"), AssetPath);
 		Result->SetArrayField(TEXT("errors"), Errors);
 		Result->SetStringField(TEXT("error"), FString::Printf(TEXT("CurveTable import completed with %d problem(s)"), Problems.Num()));
+		// The importer emptied the table before it hit these problems, so this
+		// failure is MORE destructive than the success path, not less. The
+		// snapshot is the only way back and it is already in hand.
+		Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+		EmitPriorCurveTableRollback(Result, AssetPath, PriorJson, PriorRowCount, PriorMode);
 		return MCPResult(Result);
 	}
 
@@ -1207,6 +1344,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportCurveTable(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("format"), Format);
 	Result->SetStringField(TEXT("curveType"), CurveTableModeName(Table->GetCurveTableMode()));
 	Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+
+	EmitPriorCurveTableRollback(Result, AssetPath, PriorJson, PriorRowCount, PriorMode);
 	return MCPResult(Result);
 }
 
@@ -1232,7 +1371,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableRow(const TSharedPtr<FJsonOb
 	const FString InterpRaw = OptionalString(Params, TEXT("interpMode"), TEXT("linear"));
 	if (!ParseCurveInterpMode(InterpRaw, InterpMode))
 	{
-		return MCPError(FString::Printf(TEXT("Unknown interpMode '%s'. Use linear, constant, or cubic."), *InterpRaw));
+		return MCPError(FString::Printf(TEXT("Unknown interpMode '%s'. Use linear, constant, cubic or none."), *InterpRaw));
 	}
 
 	FString CurveType = OptionalString(Params, TEXT("curveType"), OptionalString(Params, TEXT("mode")));
@@ -1256,6 +1395,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableRow(const TSharedPtr<FJsonOb
 		return MCPError(TEXT("Cannot add a simple row to a rich CurveTable."));
 	}
 
+	// Adding the first row also moves the table off ECurveTableMode::Empty, and
+	// RemoveRow does not move it back: only EmptyTable resets the mode, and no
+	// action calls it. So the inverse is exact for every row but the first.
+	const bool bTableWasEmptyMode = Table->GetCurveTableMode() == ECurveTableMode::Empty;
+
 	if (bRich)
 	{
 		Table->AddRichCurve(RowKey);
@@ -1274,6 +1418,22 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableRow(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("rowName"), RowName);
 	Result->SetStringField(TEXT("curveType"), CurveTableModeName(Table->GetCurveTableMode()));
 	Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+
+	// The row is created empty, so removing it takes the table back to where it
+	// was, with one exception handled below.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("rowName"), RowName);
+	MCPSetRollback(Result, TEXT("remove_curvetable_row"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), bTableWasEmptyMode);
+	if (bTableWasEmptyMode)
+	{
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("This was the first row, so it also set the table's curve mode from empty to %s. The inverse removes the row, ")
+			TEXT("but only EmptyTable resets that mode and no action calls it, so the table stays typed and will refuse a row of ")
+			TEXT("the other curve type afterwards."),
+			*CurveTableModeName(Table->GetCurveTableMode())));
+	}
 	return MCPResult(Result);
 }
 
@@ -1295,6 +1455,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveCurveTableRow(const TSharedPtr<FJso
 		return MCPResult(Result);
 	}
 
+	// The keys go with the row, and add_curvetable_row only puts an empty row
+	// back, so hand them to the caller as well as naming the loss below.
+	const ECurveTableMode PriorMode = Table->GetCurveTableMode();
+	FRealCurve* const PriorCurve = GetCurveTableRow(Table, RowName);
+	const TArray<TSharedPtr<FJsonValue>> RemovedKeys = CurveKeysToJson(PriorCurve, PriorMode);
+	// A simple curve's interpolation mode is a property of the row, not of its
+	// keys, and add_curvetable_row takes it, so it does not have to be lost.
+	FString PriorSimpleInterp;
+	if (PriorMode == ECurveTableMode::SimpleCurves && PriorCurve)
+	{
+		PriorSimpleInterp = CurveInterpModeName(static_cast<FSimpleCurve*>(PriorCurve)->GetKeyInterpMode());
+	}
+
 	Table->RemoveRow(RowKey);
 	SaveCurveTableChange(Table);
 
@@ -1303,6 +1476,23 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveCurveTableRow(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("rowName"), RowName);
 	Result->SetNumberField(TEXT("rowCount"), Table->GetRowMap().Num());
+	Result->SetArrayField(TEXT("removedKeys"), RemovedKeys);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("rowName"), RowName);
+	if (PriorMode == ECurveTableMode::RichCurves)       Payload->SetStringField(TEXT("curveType"), TEXT("rich"));
+	else if (PriorMode == ECurveTableMode::SimpleCurves) Payload->SetStringField(TEXT("curveType"), TEXT("simple"));
+	if (!PriorSimpleInterp.IsEmpty()) Payload->SetStringField(TEXT("interpMode"), PriorSimpleInterp);
+	MCPSetRollback(Result, TEXT("add_curvetable_row"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), RemovedKeys.Num() > 0);
+	if (RemovedKeys.Num() > 0)
+	{
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The inverse puts the row back under the same name and curve type, but empty: add_curvetable_row does not take keys, ")
+			TEXT("so the %d key(s) this call removed do not come back. They are in removedKeys, and asset(set_curvetable_keys) replays them."),
+			RemovedKeys.Num()));
+	}
 	return MCPResult(Result);
 }
 
@@ -1344,6 +1534,23 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameCurveTableRow(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("oldName"), OldName);
 	Result->SetStringField(TEXT("newName"), NewName);
+
+	// Self-inverse: rename back. The row keeps its curve either way.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("oldName"), NewName);
+	Payload->SetStringField(TEXT("newName"), OldName);
+	MCPSetRollback(Result, TEXT("rename_curvetable_row"), Payload);
+	// Declared lossy for the same row-position effect rename_datatable_row
+	// declares, and for the conservative reason: UCurveTable::RenameRow is
+	// ENGINE_API with no implementation in the installed tree, so whether it
+	// keeps the row's place in the row map is not established here. Claiming
+	// an exact inverse would be asserting the half that has not been checked.
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The inverse restores the row name and its curve. Whether the row returns to its original position in the row map ")
+		TEXT("is not established: UCurveTable::RenameRow's implementation is not in the installed engine tree, and the DataTable ")
+		TEXT("equivalent is known to move a renamed row to the end."));
 	return MCPResult(Result);
 }
 
@@ -1391,6 +1598,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetCurveTableKeys(const TSharedPtr<FJsonO
 		return MCPError(TEXT("Missing keys array. Each key is { time, value, interpMode? }."));
 	}
 
+	// This replaces the row's whole key list, so the list it is about to
+	// replace is the inverse call's payload, in the { time, value, interpMode,
+	// arriveTangent?, leaveTangent? } shape read back in below.
+	//
+	// That shape is everything a simple curve has, and less than a rich one
+	// has: FRichCurveKey also carries TangentMode, TangentWeightMode and the
+	// two tangent weights, and the rich branch below rebuilds each key with
+	// FRichCurveKey(Time, Value), whose defaults are RCTM_Auto,
+	// RCTWM_WeightedNone and zero weights. So a rich replay resets break and
+	// user tangent modes and every weight. Flagged rather than silently lost.
+	const bool bPriorRich = Table->GetCurveTableMode() == ECurveTableMode::RichCurves;
+	const TArray<TSharedPtr<FJsonValue>> PriorKeys = CurveKeysToJson(Curve, Table->GetCurveTableMode());
+
 	if (Table->GetCurveTableMode() == ECurveTableMode::SimpleCurves)
 	{
 		FSimpleCurve* Simple = static_cast<FSimpleCurve*>(Curve);
@@ -1414,7 +1634,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetCurveTableKeys(const TSharedPtr<FJsonO
 			if ((*KeyObj)->TryGetStringField(TEXT("interpMode"), InterpRaw))
 			{
 				ERichCurveInterpMode Parsed = RCIM_Linear;
-				if (!ParseCurveInterpMode(InterpRaw, Parsed)) return MCPError(FString::Printf(TEXT("Unknown interpMode '%s'."), *InterpRaw));
+				if (!ParseCurveInterpMode(InterpRaw, Parsed)) return MCPError(FString::Printf(TEXT("Unknown interpMode '%s'. Use linear, constant, cubic or none."), *InterpRaw));
 				if (Parsed == RCIM_Cubic) return MCPError(TEXT("Simple CurveTables cannot use cubic interpolation."));
 				if (bSawInterp && Parsed != SharedInterp) return MCPError(TEXT("Simple CurveTables require one shared interpMode for all keys."));
 				SharedInterp = Parsed;
@@ -1447,7 +1667,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetCurveTableKeys(const TSharedPtr<FJsonO
 			FString InterpRaw;
 			if ((*KeyObj)->TryGetStringField(TEXT("interpMode"), InterpRaw) && !ParseCurveInterpMode(InterpRaw, Interp))
 			{
-				return MCPError(FString::Printf(TEXT("Unknown interpMode '%s'."), *InterpRaw));
+				return MCPError(FString::Printf(TEXT("Unknown interpMode '%s'. Use linear, constant, cubic or none."), *InterpRaw));
 			}
 			FRichCurveKey Key((float)Time, (float)Value);
 			Key.InterpMode = Interp;
@@ -1472,6 +1692,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetCurveTableKeys(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("rowName"), RowName);
 	Result->SetStringField(TEXT("curveType"), CurveTableModeName(Table->GetCurveTableMode()));
 	Result->SetNumberField(TEXT("keyCount"), KeyValues->Num());
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("rowName"), RowName);
+	Payload->SetArrayField(TEXT("keys"), PriorKeys);
+	MCPSetRollback(Result, TEXT("set_curvetable_keys"), Payload);
+	EmitCurveKeyReplayCaveat(Result, bPriorRich, PriorKeys.Num());
 	return MCPResult(Result);
 }
 
@@ -1500,9 +1727,17 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableKey(const TSharedPtr<FJsonOb
 	const FString InterpRaw = OptionalString(Params, TEXT("interpMode"), TEXT("linear"));
 	if (!ParseCurveInterpMode(InterpRaw, InterpMode))
 	{
-		return MCPError(FString::Printf(TEXT("Unknown interpMode '%s'. Use linear, constant, or cubic."), *InterpRaw));
+		return MCPError(FString::Printf(TEXT("Unknown interpMode '%s'. Use linear, constant, cubic or none."), *InterpRaw));
 	}
 	const float Tolerance = (float)OptionalNumber(Params, TEXT("keyTimeTolerance"), UE_KINDA_SMALL_NUMBER);
+
+	// UpdateOrAddKey either adds a key or overwrites the one already at that
+	// time, so neither "remove the key" nor "write the old value" is the
+	// inverse on its own. The row's whole prior key list is, and
+	// set_curvetable_keys takes exactly that, with the rich-curve caveat
+	// EmitCurveKeyReplayCaveat states.
+	const bool bPriorRich = Table->GetCurveTableMode() == ECurveTableMode::RichCurves;
+	const TArray<TSharedPtr<FJsonValue>> PriorKeys = CurveKeysToJson(Curve, Table->GetCurveTableMode());
 
 	if (Table->GetCurveTableMode() == ECurveTableMode::SimpleCurves)
 	{
@@ -1531,6 +1766,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableKey(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("time"), Time);
 	Result->SetNumberField(TEXT("value"), Value);
 	Result->SetStringField(TEXT("interpMode"), CurveInterpModeName(InterpMode));
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("rowName"), RowName);
+	Payload->SetArrayField(TEXT("keys"), PriorKeys);
+	MCPSetRollback(Result, TEXT("set_curvetable_keys"), Payload);
+	EmitCurveKeyReplayCaveat(Result, bPriorRich, PriorKeys.Num());
 	return MCPResult(Result);
 }
 
@@ -1638,6 +1880,44 @@ namespace
 		}
 		return nullptr;
 	}
+
+	/** The inverse of a whole-table DataTable import, from the snapshot taken
+	 *  before it ran. Shared by the success and the failure path, because
+	 *  CreateTableFromJSONString empties the table before it reports errors. */
+	void EmitPriorDataTableRollback(
+		TSharedPtr<FJsonObject> Result,
+		const FString& AssetPath,
+		const FString& PriorJson,
+		const int32 PriorRowCount)
+	{
+		if (PriorRowCount > 0)
+		{
+			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+			Payload->SetStringField(TEXT("assetPath"), AssetPath);
+			Payload->SetStringField(TEXT("jsonString"), PriorJson);
+			MCPSetRollback(Result, TEXT("reimport_datatable"), Payload);
+			// Marked lossy for the same reason its CurveTable twin is: a whole
+			// table replayed through a JSON export only carries what that form
+			// can hold. FText is the known gap, and it is the one this module
+			// already documents (HandlerJsonProperty.h: "FText identity is per
+			// instance"), so a restored FText cell keeps its string and loses
+			// the namespace and key it was authored under.
+			Result->SetBoolField(TEXT("rollbackLossy"), true);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("The inverse replays the table's pre-call JSON export, which carries every row and every field value. ")
+				TEXT("An FText field comes back as its source string under a fresh localization namespace and key rather than ")
+				TEXT("the ones it was authored with, because that identity is per instance and the JSON form does not carry it."));
+		}
+		else
+		{
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("The table had no rows before this call. Restoring that would mean importing an empty row set, and whether ")
+				TEXT("the engine's DataTable importer accepts one is not established from the installed headers, so no inverse is ")
+				TEXT("emitted rather than one that may report success without emptying the table. ")
+				TEXT("Remove the imported rows with asset(remove_datatable_row)."));
+		}
+	}
 }
 
 TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObject>& Params)
@@ -1739,6 +2019,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 		}
 	}
 
+	// CreateTableFromJSONString replaces the whole table, so the rows standing
+	// now are the only record of the pre-call state. GetTableAsJSON is the
+	// writer that pairs with that reader, and asset(read_datatable) already
+	// relies on the same export, so the snapshot replays through this action.
+	const int32 PriorRowCount = DataTable->GetRowMap().Num();
+	const FString PriorJson = PriorRowCount > 0
+		? DataTable->GetTableAsJSON(EDataTableExportFlags::UseJsonObjectsForStructs)
+		: FString();
+
 	TArray<FString> Errors = DataTable->CreateTableFromJSONString(JsonString);
 
 	if (Errors.Num() > 0)
@@ -1752,6 +2041,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 		ErrResult->SetBoolField(TEXT("success"), false);
 		ErrResult->SetArrayField(TEXT("errors"), ErrorsArray);
 		ErrResult->SetStringField(TEXT("error"), FString::Printf(TEXT("Reimport completed with %d error(s)"), Errors.Num()));
+		// CreateTableFromJSONString emptied the table before it hit these
+		// errors, so this failure is MORE destructive than the success path.
+		// The snapshot is the only way back and it is already in hand.
+		ErrResult->SetStringField(TEXT("assetPath"), AssetPath);
+		ErrResult->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
+		EmitPriorDataTableRollback(ErrResult, AssetPath, PriorJson, PriorRowCount);
 		return MCPResult(ErrResult);
 	}
 
@@ -1762,7 +2057,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
 	Result->SetStringField(TEXT("message"), TEXT("DataTable reimported successfully from JSON"));
-	// No rollback: destructive/external - reimport replaces table contents.
+
+	EmitPriorDataTableRollback(Result, AssetPath, PriorJson, PriorRowCount);
 
 	return MCPResult(Result);
 }
@@ -2019,6 +2315,28 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRow(const TSharedPtr<FJson
 		return MCPResult(Noop);
 	}
 
+	// Snapshot every field before the row goes, in the shape set_datatable_row
+	// reads back as its `row` object. That is the same serializer that call
+	// uses to build its own inverse payload, so the round trip is the one the
+	// upsert path already relies on.
+	TSharedPtr<FJsonObject> PrevFields = MakeShared<FJsonObject>();
+	if (const UScriptStruct* RowStruct = DataTable->GetRowStruct())
+	{
+		if (uint8* const* RowPtr = DataTable->GetRowMap().Find(RowKey))
+		{
+			if (*RowPtr)
+			{
+				for (TFieldIterator<FProperty> It(RowStruct); It; ++It)
+				{
+					FProperty* Prop = *It;
+					PrevFields->SetField(
+						Prop->GetAuthoredName(),
+						FMCPJsonSerializer::SerializeValue(Prop->ContainerPtrToValuePtr<void>(*RowPtr), Prop));
+				}
+			}
+		}
+	}
+
 	DataTable->RemoveRow(RowKey);
 	DataTable->MarkPackageDirty();
 	UEditorAssetLibrary::SaveLoadedAsset(DataTable, /*bOnlyIfIsDirty*/ true);
@@ -2028,6 +2346,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveDataTableRow(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("rowName"), RowName);
 	Result->SetNumberField(TEXT("rowCount"), DataTable->GetRowMap().Num());
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("rowName"), RowName);
+	Payload->SetObjectField(TEXT("row"), PrevFields);
+	MCPSetRollback(Result, TEXT("set_datatable_row"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The inverse recreates the row and writes back each field's value. Two things do not come back. The row is appended ")
+		TEXT("to the end of the row map rather than returned to its original position, because the DataTable API has no way to ")
+		TEXT("insert at an index. And an FText field comes back as its source string under a fresh localization namespace and key: ")
+		TEXT("that identity is per instance and the JSON form the value travels in does not carry it."));
 	return MCPResult(Result);
 }
 
@@ -2151,6 +2481,17 @@ TSharedPtr<FJsonValue> FAssetHandlers::RenameDataTableRow(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("oldName"), OldName);
 	Result->SetStringField(TEXT("newName"), NewName);
+
+	// Self-inverse: rename back. The field values travel with the row.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("oldName"), NewName);
+	Payload->SetStringField(TEXT("newName"), OldName);
+	MCPSetRollback(Result, TEXT("rename_datatable_row"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("A rename is an add followed by a remove, so this call already moved the row to the end of the row map. ")
+		TEXT("The inverse restores the name and every field value; it cannot restore the original position."));
 	return MCPResult(Result);
 }
 
@@ -2548,6 +2889,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTable(const TSharedPtr<FJsonO
 	TArray<TSharedPtr<FJsonValue>> BeforeKeys;
 	const int32 BeforeCount = AppendStringTableEntries(StringTable, TEXT(""), BeforeEntries, BeforeKeys, false);
 
+	// The source string of every key, kept only long enough to work out which
+	// ones this import actually overwrote or dropped. Serialising the whole
+	// pre-call table into the response would put a localization table of
+	// thousands of entries on the wire on every call.
+	TMap<FString, FString> BeforeStrings;
+	StringTable->GetStringTable()->EnumerateKeysAndSourceStrings(
+		[&BeforeStrings](const FTextKey& Key, const FString& SourceString) -> bool
+		{
+			BeforeStrings.Add(Key.ToString(), SourceString);
+			return true;
+		});
+
 	StringTable->Modify(true);
 #if UE_MCP_HAS_5_8_API
 	const bool bImported = StringTable->GetMutableStringTable()->ImportStringsFromCSVFile(FilePath);
@@ -2572,6 +2925,37 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTable(const TSharedPtr<FJsonO
 	Result->SetNumberField(TEXT("entryCountBefore"), BeforeCount);
 	Result->SetNumberField(TEXT("entryCountAfter"), AfterCount);
 	Result->SetArrayField(TEXT("keys"), Keys);
+
+	// Only the keys this import changed, matching what import_stringtable_csv
+	// reports. An untouched key needs nothing replayed, so carrying it here
+	// would be payload for payload's sake.
+	TSharedPtr<FJsonObject> PreviousEntries = MakeShared<FJsonObject>();
+	StringTable->GetStringTable()->EnumerateKeysAndSourceStrings(
+		[&BeforeStrings, &PreviousEntries](const FTextKey& Key, const FString& SourceString) -> bool
+		{
+			const FString KeyString = Key.ToString();
+			if (const FString* Previous = BeforeStrings.Find(KeyString))
+			{
+				if (!Previous->Equals(SourceString, ESearchCase::CaseSensitive))
+				{
+					PreviousEntries->SetStringField(KeyString, *Previous);
+				}
+				BeforeStrings.Remove(KeyString);
+			}
+			return true;
+		});
+	// Whatever is left was in the table before and is not in it now.
+	for (const TPair<FString, FString>& Dropped : BeforeStrings)
+	{
+		PreviousEntries->SetStringField(Dropped.Key, Dropped.Value);
+	}
+	Result->SetObjectField(TEXT("previousEntries"), PreviousEntries);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The importer merges the file into the table, overwriting the source string of every key it carries. ")
+		TEXT("The bridge writes String Table entries one key at a time (set_stringtable_entry, remove_stringtable_entry), ")
+		TEXT("so restoring N entries takes N calls and a rollback record is a single call. previousEntries carries the ")
+		TEXT("pre-call sourceString of exactly the keys this import overwrote or dropped, which is what a caller replays by hand."));
 	return MCPResult(Result);
 }
 
@@ -2806,6 +3190,25 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 		Result->SetNumberField(TEXT("expectedKeyCount"), ExpectedKeys.Num());
 		Result->SetBoolField(TEXT("expectedKeysPresent"), true);
 	}
+	// The pre-call source string of every key this call overwrote or removed.
+	// Without it, updatedKeys and removedKeys name the damage without carrying
+	// what it would take to repair.
+	TSharedPtr<FJsonObject> PreviousEntries = MakeShared<FJsonObject>();
+	for (const FString& Key : UpdatedKeys)
+	{
+		if (const FString* Previous = Before.Find(Key)) PreviousEntries->SetStringField(Key, *Previous);
+	}
+	for (const FString& Key : RemovedKeys)
+	{
+		if (const FString* Previous = Before.Find(Key)) PreviousEntries->SetStringField(Key, *Previous);
+	}
+	Result->SetObjectField(TEXT("previousEntries"), PreviousEntries);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The bridge writes String Table entries one key at a time (set_stringtable_entry, remove_stringtable_entry), ")
+		TEXT("so restoring the entries in updatedKeys and removedKeys and dropping the ones in addedKeys takes one call each, ")
+		TEXT("and a rollback record is a single call. previousEntries carries the pre-call sourceString for every key in ")
+		TEXT("updatedKeys and removedKeys, which is what a caller replays by hand."));
 	Result->SetBoolField(TEXT("persisted"), bPersisted);
 	Result->SetBoolField(TEXT("saved"), bPersisted);
 	if (Package)
@@ -2886,7 +3289,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Reimport failed -- check that the asset has a valid source file"));
 	}
-	// No rollback: destructive/external - reimport pulls fresh from source file.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("A reimport rebuilds the asset from its source file in place, so the content it replaced is gone and the new ")
+		TEXT("content does not carry it. Reimporting again re-reads the same file rather than restoring the previous build, ")
+		TEXT("and deleting the asset would destroy it rather than undo the call. There is no inverse action."));
 
 	return MCPResult(Result);
 }
@@ -2913,8 +3320,24 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 		return MCPError(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
+	// Resolve a relative outputPath against the project directory, the way
+	// export_texture already does. Left raw it resolves against the process
+	// working directory, which is the engine's binaries folder: not somewhere a
+	// caller can predict, and it would put the existence probe below and the
+	// file the exporter actually writes in two different places.
+	FString AbsOutputPath = OutputPath;
+	if (FPaths::IsRelative(AbsOutputPath))
+	{
+		AbsOutputPath = FPaths::Combine(FPaths::ProjectDir(), AbsOutputPath);
+	}
+
+	// Whether the output file was already there decides whether this call
+	// created one or overwrote one. bReplaceIdentical below is true, so
+	// reporting "created" unconditionally would call every overwrite a create.
+	const bool bOutputExisted = IFileManager::Get().FileExists(*AbsOutputPath);
+
 	// Create parent directory if needed
-	FString OutputDir = FPaths::GetPath(OutputPath);
+	FString OutputDir = FPaths::GetPath(AbsOutputPath);
 	if (!OutputDir.IsEmpty())
 	{
 		IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
@@ -2924,7 +3347,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 	// Use UE's AssetExportTask - same as unreal.AssetExportTask in Python
 	UAssetExportTask* ExportTask = NewObject<UAssetExportTask>();
 	ExportTask->Object = Asset;
-	ExportTask->Filename = OutputPath;
+	ExportTask->Filename = AbsOutputPath;
 	ExportTask->bAutomated = true;
 	ExportTask->bPrompt = false;
 	ExportTask->bReplaceIdentical = true;
@@ -2933,13 +3356,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportAsset(const TSharedPtr<FJsonObject>
 
 	if (!bSuccess)
 	{
-		return MCPError(FString::Printf(TEXT("Export failed for '%s' to '%s'. The asset type may not have a registered exporter."), *AssetPath, *OutputPath));
+		return MCPError(FString::Printf(TEXT("Export failed for '%s' to '%s'. The asset type may not have a registered exporter."), *AssetPath, *AbsOutputPath));
 	}
 
 	auto Result = MCPSuccess();
+	if (bOutputExisted) MCPSetUpdated(Result); else MCPSetCreated(Result);
+	Result->SetBoolField(TEXT("overwroteExistingFile"), bOutputExisted);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
-	Result->SetStringField(TEXT("outputPath"), OutputPath);
+	Result->SetStringField(TEXT("outputPath"), AbsOutputPath);
 	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("An export writes an output artifact rather than changing project state. Nothing in the project moved, and ")
+		TEXT("deleting a file that regenerates on demand is not an undo. There is no inverse action."));
 	return MCPResult(Result);
 }
 
@@ -2963,6 +3392,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportTexture(const TSharedPtr<FJsonObjec
 	FString AbsPath = OutputPath;
 	if (FPaths::IsRelative(AbsPath)) AbsPath = FPaths::Combine(FPaths::ProjectDir(), AbsPath);
 	if (!AbsPath.EndsWith(TEXT(".png"))) AbsPath += TEXT(".png");
+	// Same reason as export_asset: bReplaceIdentical is true below, so this
+	// distinguishes writing a new PNG from overwriting one that was there.
+	const bool bOutputExisted = IFileManager::Get().FileExists(*AbsPath);
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsPath), /*Tree*/ true);
 
 	UAssetExportTask* Task = NewObject<UAssetExportTask>();
@@ -2977,12 +3409,17 @@ TSharedPtr<FJsonValue> FAssetHandlers::ExportTexture(const TSharedPtr<FJsonObjec
 	if (!bOk || Size < 0) return MCPError(FString::Printf(TEXT("Texture export failed for %s"), *AssetPath));
 
 	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
+	if (bOutputExisted) MCPSetUpdated(Result); else MCPSetCreated(Result);
+	Result->SetBoolField(TEXT("overwroteExistingFile"), bOutputExisted);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("path"), AbsPath);
 	Result->SetNumberField(TEXT("width"), Texture->GetSizeX());
 	Result->SetNumberField(TEXT("height"), Texture->GetSizeY());
 	Result->SetNumberField(TEXT("sizeBytes"), (double)Size);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("An export writes an output artifact rather than changing project state. The texture is untouched, and ")
+		TEXT("deleting a PNG that regenerates on demand is not an undo. There is no inverse action."));
 	return MCPResult(Result);
 }
 

@@ -1,0 +1,3 @@
+categories: [project, editor, asset, level, blueprint, reflection, feedback, flow]
+engine: ">=5.4"
+triggers: [ue-mcp, unreal, editor, get_status, orientation, where do i start]

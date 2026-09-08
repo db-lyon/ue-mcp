@@ -1,8 +1,10 @@
 #include "GameplayHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerAssetCreate.h"
+#include "JsonSerializer.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 #include "Modules/ModuleManager.h"
 #include "StateTree.h"
@@ -13,6 +15,7 @@
 #include "StateTreeSchema.h"
 #include "StateTreeEditingSubsystem.h"
 #include "StateTreeCompilerLog.h"
+#include "HandlerStateTreeSchema.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -124,9 +127,44 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_imc_mapping"), &RemoveImcMapping);
 	Registry.RegisterHandler(TEXT("set_imc_mapping_key"), &SetImcMappingKey);
 	Registry.RegisterHandler(TEXT("set_imc_mapping_action"), &SetImcMappingAction);
+	// V11 Enhanced Input depth: the read half authoring never had, the
+	// action's own instanced trigger/modifier arrays, live apply/remove of a
+	// mapping context, the live action value, and the audit.
+	Registry.RegisterHandler(TEXT("read_input_action"), &ReadInputAction);
+	Registry.RegisterHandler(TEXT("set_action_triggers"), &SetActionTriggers);
+	Registry.RegisterHandler(TEXT("apply_mapping_context"), &ApplyMappingContext);
+	Registry.RegisterHandler(TEXT("remove_mapping_context"), &RemoveMappingContext);
+	Registry.RegisterHandler(TEXT("get_action_value"), &GetActionValue);
+	Registry.RegisterHandler(TEXT("validate_input"), &ValidateInput);
+	// T18 Mass Entity and Zone Graph. ensure_mass_entity_config and
+	// read_mass_entity_config already ship from MassHandlers.cpp.
+	Registry.RegisterHandler(TEXT("list_mass_types"), &ListMassTypes);
+	Registry.RegisterHandler(TEXT("remove_mass_trait"), &RemoveMassTrait);
+	Registry.RegisterHandler(TEXT("reorder_mass_traits"), &ReorderMassTraits);
+	Registry.RegisterHandler(TEXT("validate_mass_entity_config"), &ValidateMassEntityConfig);
+	Registry.RegisterHandler(TEXT("query_zone_graph"), &QueryZoneGraph);
 	Registry.RegisterHandler(TEXT("create_blackboard"), &CreateBlackboard);
 	Registry.RegisterHandler(TEXT("create_behavior_tree"), &CreateBehaviorTree);
 	Registry.RegisterHandler(TEXT("create_eqs_query"), &CreateEqsQuery);
+	Registry.RegisterHandler(TEXT("list_eqs_types"), &ListEqsTypes);
+	Registry.RegisterHandler(TEXT("read_eqs_query"), &ReadEqsQuery);
+	Registry.RegisterHandler(TEXT("add_eqs_generator"), &AddEqsGenerator);
+	Registry.RegisterHandler(TEXT("add_eqs_test"), &AddEqsTest);
+	Registry.RegisterHandler(TEXT("remove_eqs_test"), &RemoveEqsTest);
+	Registry.RegisterHandler(TEXT("remove_eqs_option"), &RemoveEqsOption);
+	Registry.RegisterHandler(TEXT("get_bt_runtime"), &GetBtRuntime);
+	Registry.RegisterHandler(TEXT("get_live_blackboard"), &GetLiveBlackboard);
+	Registry.RegisterHandler(TEXT("set_live_blackboard"), &SetLiveBlackboard);
+	Registry.RegisterHandler(TEXT("run_behavior_tree"), &RunBehaviorTree);
+	Registry.RegisterHandler(TEXT("stop_behavior_tree"), &StopBehaviorTree);
+	Registry.RegisterHandler(TEXT("list_ai_agents"), &ListAiAgents);
+	Registry.RegisterHandler(TEXT("read_perception"), &ReadPerception);
+	Registry.RegisterHandler(TEXT("remove_sense"), &RemoveSense);
+	Registry.RegisterHandler(TEXT("get_perceived_actors"), &GetPerceivedActors);
+	Registry.RegisterHandler(TEXT("check_perception"), &CheckPerception);
+	Registry.RegisterHandler(TEXT("report_noise_event"), &ReportNoiseEvent);
+	Registry.RegisterHandler(TEXT("reorder_eqs_tests"), &ReorderEqsTests);
+	Registry.RegisterHandler(TEXT("run_eqs_query"), &RunEqsQuery);
 	Registry.RegisterHandler(TEXT("create_state_tree"), &CreateStateTree);
 	Registry.RegisterHandler(TEXT("get_input_mapping_contexts"), &GetInputMappingContexts);
 	Registry.RegisterHandler(TEXT("get_state_tree_runtime"), &GetStateTreeRuntime);
@@ -177,37 +215,10 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_smart_object_slot"), &RemoveSmartObjectSlot);
 	Registry.RegisterHandler(TEXT("list_smart_object_slots"), &ListSmartObjectSlots);
 	Registry.RegisterHandler(TEXT("add_smart_object_slot_behavior"), &AddSmartObjectSlotBehavior);
+	Registry.RegisterHandler(TEXT("add_smart_object_default_behavior"), &AddSmartObjectDefaultBehavior);
 	// read_imc through get_pie_subsystem_state moved to pie-studio
 	Registry.RegisterHandler(TEXT("get_navmesh_details"), &GetNavmeshDetails);
 	// apply_damage_in_pie moved to pie-studio
-}
-
-TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSharedPtr<FJsonObject>& Params)
-{
-	FString Name;
-	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
-
-	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/SmartObjects"));
-	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
-
-	UClass* SmartObjectDefClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectDefinition"));
-	if (!SmartObjectDefClass)
-	{
-		return MCPError(TEXT("SmartObjectDefinition class not found. Enable SmartObjects plugin."));
-	}
-
-	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("SmartObjectDefinition"), SmartObjectDefClass, nullptr);
-	if (Created.EarlyReturn) return Created.EarlyReturn;
-
-	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
-
-	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
-	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
-	Result->SetStringField(TEXT("name"), Name);
-	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
-
-	return MCPResult(Result);
 }
 
 // ── #416: SmartObject slot authoring (reflection-only) ────────────────
@@ -300,7 +311,248 @@ namespace
 		}
 		return FString();
 	}
+
+	// ── #833: behavior definitions ────────────────────────────────────────
+	//
+	// USmartObjectDefinition::Validate refuses a definition whose slot has no
+	// behavior definition when the definition carries no default either:
+	//   "Slot at index N needs to provide a behavior definition since there is
+	//    no default one in the SmartObject definition"
+	// Slots were addable and behaviors were not settable at create time, and
+	// DefaultBehaviorDefinitions had no route at all, so every definition the
+	// bridge built with slots failed the editor's own asset check.
+
+	static UClass* BehaviorDefinitionBaseClass()
+	{
+		return FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectBehaviorDefinition"));
+	}
+
+	// Accepts a behavior-definition asset path or a class spelling, and
+	// instances the class under the definition (the arrays are Instanced).
+	static UObject* ResolveBehaviorDefinition(UObject* Outer, const FString& Spec, FString& OutError)
+	{
+		if (UObject* Existing = LoadObject<UObject>(nullptr, *Spec))
+		{
+			if (!Existing->IsA<UClass>()) return Existing;
+		}
+		UClass* Base = BehaviorDefinitionBaseClass();
+		UClass* BehaviorClass = Base
+			? MCPResolveClassOfType(Spec, Base)
+			: MCPResolveClass(Spec);
+		if (!BehaviorClass)
+		{
+			OutError = FString::Printf(
+				TEXT("Behavior definition class not found: '%s'. Pass a USmartObjectBehaviorDefinition subclass ")
+				TEXT("(/Script/<Module>.<Class>) or the path of an existing behavior asset. ")
+				TEXT("The engine's concrete behavior definitions ship in optional plugins: ")
+				TEXT("GameplayBehaviorSmartObjects (GameplayBehaviorSmartObjectBehaviorDefinition) and ")
+				TEXT("MassGameplay (SmartObjectMassBehaviorDefinition). Enable one with project(enable_plugin) if this ")
+				TEXT("project has none. reflection(list_classes, parentFilter=\"SmartObjectBehaviorDefinition\") lists ")
+				TEXT("what is loaded right now."),
+				*Spec);
+			return nullptr;
+		}
+		if (BehaviorClass->HasAnyClassFlags(CLASS_Abstract))
+		{
+			OutError = FString::Printf(
+				TEXT("'%s' resolves to %s, which is abstract and cannot be instanced. Name a concrete subclass."),
+				*Spec, *BehaviorClass->GetPathName());
+			return nullptr;
+		}
+		return NewObject<UObject>(Outer, BehaviorClass);
+	}
+
+	// Append one behavior instance to a TArray<TObjectPtr<USmartObjectBehaviorDefinition>>
+	// reached by reflection - the slot's BehaviorDefinitions or the definition's
+	// DefaultBehaviorDefinitions, which are the same shape.
+	static FString AppendBehaviorDefinition(
+		UObject* Asset,
+		UStruct* Owner,
+		void* Container,
+		const TCHAR* PropertyName,
+		const FString& Spec,
+		const TSharedPtr<FJsonObject>* InstanceProperties,
+		UObject*& OutInstance,
+		int32& OutIndex)
+	{
+		FArrayProperty* Arr = CastField<FArrayProperty>(Owner->FindPropertyByName(FName(PropertyName)));
+		if (!Arr) return FString::Printf(TEXT("No '%s' TArray property (engine layout changed?)"), PropertyName);
+		FObjectProperty* Inner = CastField<FObjectProperty>(Arr->Inner);
+		if (!Inner) return FString::Printf(TEXT("'%s' inner is not a UObject*"), PropertyName);
+
+		FString ResolveError;
+		OutInstance = ResolveBehaviorDefinition(Asset, Spec, ResolveError);
+		if (!OutInstance) return ResolveError;
+
+		if (InstanceProperties && (*InstanceProperties).IsValid())
+		{
+			for (const auto& Pair : (*InstanceProperties)->Values)
+			{
+				FProperty* P = OutInstance->GetClass()->FindPropertyByName(FName(*Pair.Key));
+				if (!P) continue;
+				FString E;
+				MCPJsonProperty::SetJsonOnProperty(P, P->ContainerPtrToValuePtr<void>(OutInstance), Pair.Value, E);
+			}
+		}
+
+		FScriptArrayHelper Helper(Arr, Arr->ContainerPtrToValuePtr<void>(Container));
+		OutIndex = Helper.AddValue();
+		Inner->SetObjectPropertyValue(Helper.GetRawPtr(OutIndex), OutInstance);
+		return FString();
+	}
+
+	static int32 CountDefaultBehaviorDefinitions(UObject* Asset)
+	{
+		FArrayProperty* Arr = CastField<FArrayProperty>(
+			Asset->GetClass()->FindPropertyByName(FName(TEXT("DefaultBehaviorDefinitions"))));
+		if (!Arr) return 0;
+		FScriptArrayHelper Helper(Arr, Arr->ContainerPtrToValuePtr<void>(Asset));
+		return Helper.Num();
+	}
+
+	// The engine's rule, restated where the bridge can act on it: a slot with
+	// no behavior definition is only legal when the definition has a default.
+	// Reported on every write so a caller learns the asset is unusable at the
+	// call that made it so, rather than from the editor's asset check later.
+	static void ReportDefinitionValidity(const FSlotsAccess& SA, TSharedPtr<FJsonObject>& Result)
+	{
+		const int32 DefaultCount = CountDefaultBehaviorDefinitions(SA.Asset);
+		FScriptArrayHelper Slots(SA.SlotsProp, SA.ArrayAddr);
+		FArrayProperty* SlotBehaviors = CastField<FArrayProperty>(
+			SA.SlotStruct->Struct->FindPropertyByName(FName(TEXT("BehaviorDefinitions"))));
+
+		TArray<TSharedPtr<FJsonValue>> Offenders;
+		if (DefaultCount == 0 && SlotBehaviors)
+		{
+			for (int32 i = 0; i < Slots.Num(); ++i)
+			{
+				FScriptArrayHelper Behaviors(
+					SlotBehaviors, SlotBehaviors->ContainerPtrToValuePtr<void>(Slots.GetRawPtr(i)));
+				if (Behaviors.Num() == 0) Offenders.Add(MakeShared<FJsonValueNumber>(i));
+			}
+		}
+
+		Result->SetNumberField(TEXT("defaultBehaviorCount"), DefaultCount);
+		Result->SetBoolField(TEXT("definitionValid"), Offenders.Num() == 0);
+		if (Offenders.Num() > 0)
+		{
+			Result->SetArrayField(TEXT("slotsMissingBehavior"), Offenders);
+			Result->SetStringField(TEXT("validationError"), FString::Printf(
+				TEXT("%d slot(s) provide no behavior definition and the definition has no default one, so the editor's ")
+				TEXT("asset check rejects this asset (\"Slot at index N needs to provide a behavior definition since ")
+				TEXT("there is no default one in the SmartObject definition\"). Fix it either way: ")
+				TEXT("gameplay(add_smart_object_slot_behavior, slotIndex, behaviorClass) per slot, or ")
+				TEXT("gameplay(add_smart_object_default_behavior, behaviorClass) once for the whole definition."),
+				Offenders.Num()));
+		}
+	}
 }
+
+TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Name;
+	if (auto Err = RequireString(Params, TEXT("name"), Name)) return Err;
+
+	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/SmartObjects"));
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
+
+	UClass* SmartObjectDefClass = FindObject<UClass>(nullptr, TEXT("/Script/SmartObjectsModule.SmartObjectDefinition"));
+	if (!SmartObjectDefClass)
+	{
+		return MCPError(TEXT("SmartObjectDefinition class not found. Enable SmartObjects plugin."));
+	}
+
+	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("SmartObjectDefinition"), SmartObjectDefClass, nullptr);
+	if (Created.EarlyReturn) return Created.EarlyReturn;
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+
+	// #833: a definition with slots and no behavior definition anywhere fails
+	// the editor's asset check. Setting the default here is the one-call way to
+	// make every slot added later legal, and it had no route before.
+	const FString DefaultBehavior = OptionalString(Params, TEXT("defaultBehaviorClass"));
+	if (!DefaultBehavior.IsEmpty())
+	{
+		const TSharedPtr<FJsonObject>* InstanceProps = nullptr;
+		Params->TryGetObjectField(TEXT("instanceProperties"), InstanceProps);
+		UObject* Instance = nullptr;
+		int32 Index = INDEX_NONE;
+		Created.Asset->Modify();
+		const FString Err = AppendBehaviorDefinition(
+			Created.Asset, Created.Asset->GetClass(), Created.Asset,
+			TEXT("DefaultBehaviorDefinitions"), DefaultBehavior, InstanceProps, Instance, Index);
+		if (!Err.IsEmpty())
+		{
+			// Nothing usable was written, so do not leave the asset behind: a
+			// definition whose default silently failed is the broken shape.
+			UEditorAssetLibrary::DeleteAsset(Created.Asset->GetPathName());
+			return MCPError(Err);
+		}
+		Created.Asset->PostEditChange();
+		Result->SetStringField(TEXT("defaultBehavior"), Instance->GetClass()->GetPathName());
+		Result->SetNumberField(TEXT("defaultBehaviorIndex"), Index);
+	}
+
+	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
+
+	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
+	Result->SetStringField(TEXT("name"), Name);
+	Result->SetNumberField(TEXT("defaultBehaviorCount"), CountDefaultBehaviorDefinitions(Created.Asset));
+	// No slots yet, so the definition is valid either way; the field is set so
+	// a caller reads the same key on create as on every slot write.
+	Result->SetBoolField(TEXT("definitionValid"), true);
+	if (DefaultBehavior.IsEmpty())
+	{
+		Result->SetStringField(TEXT("note"),
+			TEXT("This definition has no default behavior definition. That is legal while it has no slots, but the ")
+			TEXT("editor's asset check rejects any slot added later that carries no behavior of its own. Pass ")
+			TEXT("defaultBehaviorClass here, or behaviorClass on gameplay(add_smart_object_slot)."));
+	}
+	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
+
+	return MCPResult(Result);
+}
+
+// #833: add a default behavior definition to an EXISTING definition. The
+// per-slot route (add_smart_object_slot_behavior) shipped; the definition-wide
+// default it falls back to had no route, so a definition already carrying
+// slots could not be made valid without editing it by hand.
+TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectDefaultBehavior(const TSharedPtr<FJsonObject>& Params)
+{
+	FSlotsAccess SA;
+	if (auto Err = ResolveSlots(Params, SA)) return Err;
+	FString BehaviorSpec;
+	if (auto Err = RequireString(Params, TEXT("behaviorClass"), BehaviorSpec)) return Err;
+
+	const TSharedPtr<FJsonObject>* InstanceProps = nullptr;
+	Params->TryGetObjectField(TEXT("instanceProperties"), InstanceProps);
+
+	SA.Asset->Modify();
+	UObject* Instance = nullptr;
+	int32 Index = INDEX_NONE;
+	const FString Err = AppendBehaviorDefinition(
+		SA.Asset, SA.Asset->GetClass(), SA.Asset,
+		TEXT("DefaultBehaviorDefinitions"), BehaviorSpec, InstanceProps, Instance, Index);
+	if (!Err.IsEmpty()) return MCPError(Err);
+
+	SA.Asset->PostEditChange();
+	SA.Asset->MarkPackageDirty();
+	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
+	Result->SetStringField(TEXT("behavior"), Instance->GetClass()->GetPathName());
+	Result->SetNumberField(TEXT("behaviorIndex"), Index);
+	ReportDefinitionValidity(SA, Result);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+		TEXT("Nothing in this surface removes an entry from DefaultBehaviorDefinitions, so adding one has no inverse ")
+		TEXT("call. The entry added here is at index %d if it has to be cleared by hand."), Index));
+	return MCPResult(Result);
+}
+
 
 TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlot(const TSharedPtr<FJsonObject>& Params)
 {
@@ -316,6 +568,29 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlot(const TSharedPtr<FJ
 		Helper.RemoveValues(NewIdx, 1);
 		return MCPError(ApplyErr);
 	}
+
+	// #833: a slot with no behavior definition is what the editor's asset check
+	// rejects, so the slot can be born with one instead of being added and then
+	// repaired by a second call.
+	const FString BehaviorSpec = OptionalString(Params, TEXT("behaviorClass"));
+	FString AddedBehavior;
+	if (!BehaviorSpec.IsEmpty())
+	{
+		const TSharedPtr<FJsonObject>* InstanceProps = nullptr;
+		Params->TryGetObjectField(TEXT("instanceProperties"), InstanceProps);
+		UObject* Instance = nullptr;
+		int32 BehaviorIndex = INDEX_NONE;
+		const FString BehaviorErr = AppendBehaviorDefinition(
+			SA.Asset, SA.SlotStruct->Struct, SlotAddr,
+			TEXT("BehaviorDefinitions"), BehaviorSpec, InstanceProps, Instance, BehaviorIndex);
+		if (!BehaviorErr.IsEmpty())
+		{
+			Helper.RemoveValues(NewIdx, 1);
+			return MCPError(BehaviorErr);
+		}
+		AddedBehavior = Instance->GetClass()->GetPathName();
+	}
+
 	SA.Asset->PostEditChange();
 	SA.Asset->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
@@ -325,6 +600,8 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlot(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
 	Result->SetNumberField(TEXT("slotIndex"), NewIdx);
 	Result->SetNumberField(TEXT("slotCount"), Helper.Num());
+	if (!AddedBehavior.IsEmpty()) Result->SetStringField(TEXT("behavior"), AddedBehavior);
+	ReportDefinitionValidity(SA, Result);
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
@@ -349,16 +626,75 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetSmartObjectSlot(const TSharedPtr<FJ
 	}
 	SA.Asset->Modify();
 	void* SlotAddr = Helper.GetRawPtr(SlotIdx);
+
+	// The slot's current values for exactly the fields this call is about to
+	// overwrite, read before the write and in the JSON shape this same action
+	// takes back. FMCPJsonSerializer::SerializeValue is the read half of the
+	// MCPJsonProperty::SetJsonOnProperty that ApplySlotFieldsFromJson uses, so
+	// the round trip is the pair rather than two hand-written encodings.
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	int32 CapturedFields = 0;
+	{
+		auto CapturePrevious = [&](const TCHAR* ParamName, const TCHAR* PropName)
+		{
+			FProperty* P = SA.SlotStruct->Struct->FindPropertyByName(FName(PropName));
+			if (!P) return;
+			TSharedPtr<FJsonValue> Previous =
+				FMCPJsonSerializer::SerializeValue(P->ContainerPtrToValuePtr<void>(SlotAddr), P);
+			if (!Previous.IsValid()) return;
+			RollbackPayload->SetField(ParamName, Previous);
+			++CapturedFields;
+		};
+		// The SAME type-checked accessors ApplySlotFieldsFromJson writes
+		// through. Probing with HasField instead would capture - and emit a
+		// record for - a field the writer skipped because its JSON was the
+		// wrong type, e.g. offset given as a string.
+		const TSharedPtr<FJsonObject>* ObjProbe = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* ArrProbe = nullptr;
+		FString StrProbe;
+		if (Params->TryGetObjectField(TEXT("offset"), ObjProbe))   CapturePrevious(TEXT("offset"),   TEXT("Offset"));
+		if (Params->TryGetObjectField(TEXT("rotation"), ObjProbe)) CapturePrevious(TEXT("rotation"), TEXT("Rotation"));
+		if (Params->TryGetArrayField(TEXT("tags"), ArrProbe))      CapturePrevious(TEXT("tags"),     TEXT("RuntimeTags"));
+		if (Params->TryGetStringField(TEXT("name"), StrProbe))     CapturePrevious(TEXT("name"),     TEXT("Name"));
+	}
+
+	// The whole slot as text, before and after. Exact, and it covers every
+	// field the writer touches without a second per-field comparison.
+	FString SlotTextBefore;
+	SA.SlotStruct->ExportTextItem_Direct(SlotTextBefore, SlotAddr, nullptr, nullptr, PPF_None);
+
 	const FString ApplyErr = ApplySlotFieldsFromJson(SA.SlotStruct, SlotAddr, Params);
 	if (!ApplyErr.IsEmpty()) return MCPError(ApplyErr);
+
+	FString SlotTextAfter;
+	SA.SlotStruct->ExportTextItem_Direct(SlotTextAfter, SlotAddr, nullptr, nullptr, PPF_None);
+	const bool bSlotChanged = SlotTextAfter != SlotTextBefore;
 	SA.Asset->PostEditChange();
 	SA.Asset->MarkPackageDirty();
 	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bSlotChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bSlotChanged);
+	Result->SetNumberField(TEXT("fieldsWritten"), CapturedFields);
 	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
 	Result->SetNumberField(TEXT("slotIndex"), SlotIdx);
+	if (CapturedFields > 0 && bSlotChanged)
+	{
+		RollbackPayload->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
+		RollbackPayload->SetNumberField(TEXT("slotIndex"), SlotIdx);
+		MCPSetRollback(Result, TEXT("set_smart_object_slot"), RollbackPayload);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), CapturedFields == 0
+			? TEXT("None of offset, rotation, tags or name was passed in a form this action writes, so nothing on the "
+				   "slot was written and there is nothing to undo.")
+			: TEXT("The slot already held the values this call wrote, so nothing changed and there is nothing to "
+				   "undo."));
+	}
 	return MCPResult(Result);
 }
 
@@ -380,6 +716,43 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSmartObjectSlot(const TSharedPtr
 		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
 		return MCPResult(Noop);
 	}
+	// Everything about the slot, read before it goes. The exported text is for
+	// the human reading the response; the per-field JSON below is the only part
+	// gameplay(add_smart_object_slot) can actually take back.
+	void* DoomedSlot = Helper.GetRawPtr(SlotIdx);
+	FString RemovedSlotText;
+	SA.SlotStruct->ExportTextItem_Direct(RemovedSlotText, DoomedSlot, nullptr, nullptr, PPF_None);
+
+	// Re-adding APPENDS, so the index only survives when the slot being removed
+	// is the last one. Anywhere else, restoring would shift every later slot and
+	// hand the caller a differently indexed slot than it had.
+	const bool bWasLastSlot = (SlotIdx == Helper.Num() - 1);
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	int32 RemovedBehaviorCount = 0;
+	if (bWasLastSlot)
+	{
+		const TCHAR* const Fields[][2] = {
+			{ TEXT("offset"),   TEXT("Offset") },
+			{ TEXT("rotation"), TEXT("Rotation") },
+			{ TEXT("tags"),     TEXT("RuntimeTags") },
+			{ TEXT("name"),     TEXT("Name") },
+		};
+		for (const auto& Field : Fields)
+		{
+			FProperty* P = SA.SlotStruct->Struct->FindPropertyByName(FName(Field[1]));
+			if (!P) continue;
+			TSharedPtr<FJsonValue> Previous =
+				FMCPJsonSerializer::SerializeValue(P->ContainerPtrToValuePtr<void>(DoomedSlot), P);
+			if (Previous.IsValid()) RollbackPayload->SetField(Field[0], Previous);
+		}
+		if (FArrayProperty* BDArr = CastField<FArrayProperty>(
+			SA.SlotStruct->Struct->FindPropertyByName(FName(TEXT("BehaviorDefinitions")))))
+		{
+			FScriptArrayHelper BDHelper(BDArr, BDArr->ContainerPtrToValuePtr<void>(DoomedSlot));
+			RemovedBehaviorCount = BDHelper.Num();
+		}
+	}
+
 	SA.Asset->Modify();
 	Helper.RemoveValues(SlotIdx, 1);
 	SA.Asset->PostEditChange();
@@ -387,10 +760,47 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSmartObjectSlot(const TSharedPtr
 	UEditorAssetLibrary::SaveAsset(SA.Asset->GetPathName());
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
 	Result->SetNumberField(TEXT("slotIndex"), SlotIdx);
 	Result->SetBoolField(TEXT("deleted"), true);
+	Result->SetBoolField(TEXT("alreadyDeleted"), false);
 	Result->SetNumberField(TEXT("slotCount"), Helper.Num());
+	Result->SetStringField(TEXT("removedSlot"), RemovedSlotText);
+	ReportDefinitionValidity(SA, Result);
+	Result->SetBoolField(TEXT("wasLastSlot"), bWasLastSlot);
+
+	if (bWasLastSlot)
+	{
+		// Appending puts the slot back at the index it had, with the fields
+		// add_smart_object_slot accepts. Its BehaviorDefinitions do not come
+		// back, because that action has no parameter for them.
+		RollbackPayload->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
+		MCPSetRollback(Result, TEXT("add_smart_object_slot"), RollbackPayload);
+		Result->SetBoolField(TEXT("rollbackLossy"), RemovedBehaviorCount > 0);
+		if (RemovedBehaviorCount > 0)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("The slot comes back at the same index with its offset, rotation, tags and name, but the %d "
+					 "BehaviorDefinition(s) it carried do NOT: gameplay(add_smart_object_slot) takes at most one "
+					 "behaviorClass and cannot describe an instanced behavior's own property values. Re-add them with "
+					 "gameplay(add_smart_object_slot_behavior); 'removedSlot' names what was there."),
+				RemovedBehaviorCount));
+		}
+	}
+	else
+	{
+		// No inverse for a slot in the middle. Re-adding APPENDS, so restoring
+		// would hand back a slot at a different index while every later slot
+		// stays shifted - a caller addressing slots by index would then edit the
+		// wrong one, which is worse than reporting that nothing can undo this.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("This slot was not the last one, so removing it shifted every later slotIndex down by one. "
+				 "gameplay(add_smart_object_slot) appends, which would put the slot back at the END rather than "
+				 "where it was, leaving every index wrong; no inverse is emitted rather than one that silently "
+				 "renumbers the slots. The removed slot is reported in full as 'removedSlot' for manual recovery."));
+	}
 	return MCPResult(Result);
 }
 
@@ -438,6 +848,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListSmartObjectSlots(const TSharedPtr<
 	Result->SetStringField(TEXT("assetPath"), SA.Asset->GetPathName());
 	Result->SetNumberField(TEXT("slotCount"), Helper.Num());
 	Result->SetArrayField(TEXT("slots"), Slots);
+	ReportDefinitionValidity(SA, Result);
 	return MCPResult(Result);
 }
 
@@ -457,42 +868,19 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlotBehavior(const TShar
 	if (SlotIdx >= Helper.Num()) return MCPError(FString::Printf(TEXT("slotIndex %d out of range"), SlotIdx));
 	void* SlotAddr = Helper.GetRawPtr(SlotIdx);
 
-	FProperty* BDProp = SA.SlotStruct->Struct->FindPropertyByName(FName(TEXT("BehaviorDefinitions")));
-	if (!BDProp) return MCPError(TEXT("Slot struct has no 'BehaviorDefinitions' property"));
-	FArrayProperty* BDArr = CastField<FArrayProperty>(BDProp);
-	if (!BDArr) return MCPError(TEXT("'BehaviorDefinitions' is not a TArray"));
-	FObjectProperty* BDObj = CastField<FObjectProperty>(BDArr->Inner);
-	if (!BDObj) return MCPError(TEXT("'BehaviorDefinitions' inner is not a UObject*"));
-
-	// Resolve the behavior class. Caller may pass either a class path or an
-	// existing UBehaviorDefinition asset; the array holds object pointers.
-	UObject* BehaviorAsset = LoadObject<UObject>(nullptr, *BehaviorClassPath);
-	if (!BehaviorAsset)
-	{
-		// Try as a class path
-		UClass* BehaviorClass = LoadClass<UObject>(nullptr, *BehaviorClassPath);
-		if (!BehaviorClass) return MCPError(FString::Printf(TEXT("Could not load behavior asset/class '%s'"), *BehaviorClassPath));
-		BehaviorAsset = NewObject<UObject>(SA.Asset, BehaviorClass);
-	}
+	// Resolution, instancing and the instanceProperties write are shared with
+	// add_smart_object_slot and add_smart_object_default_behavior: one route to
+	// a behavior definition, so a name that works on one works on all three.
+	const TSharedPtr<FJsonObject>* InstObj = nullptr;
+	Params->TryGetObjectField(TEXT("instanceProperties"), InstObj);
 
 	SA.Asset->Modify();
-	FScriptArrayHelper BDHelper(BDArr, BDProp->ContainerPtrToValuePtr<void>(SlotAddr));
-	const int32 NewBDIdx = BDHelper.AddValue();
-	BDObj->SetObjectPropertyValue(BDHelper.GetRawPtr(NewBDIdx), BehaviorAsset);
-
-	// Optional instance properties: dictionary of name -> JSON value applied
-	// to the new behavior asset.
-	const TSharedPtr<FJsonObject>* InstObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("instanceProperties"), InstObj) && InstObj && (*InstObj).IsValid())
-	{
-		for (const auto& Pair : (*InstObj)->Values)
-		{
-			FProperty* P = BehaviorAsset->GetClass()->FindPropertyByName(FName(*Pair.Key));
-			if (!P) continue;
-			FString E;
-			MCPJsonProperty::SetJsonOnProperty(P, P->ContainerPtrToValuePtr<void>(BehaviorAsset), Pair.Value, E);
-		}
-	}
+	UObject* BehaviorAsset = nullptr;
+	int32 NewBDIdx = INDEX_NONE;
+	const FString BehaviorErr = AppendBehaviorDefinition(
+		SA.Asset, SA.SlotStruct->Struct, SlotAddr,
+		TEXT("BehaviorDefinitions"), BehaviorClassPath, InstObj, BehaviorAsset, NewBDIdx);
+	if (!BehaviorErr.IsEmpty()) return MCPError(BehaviorErr);
 
 	SA.Asset->PostEditChange();
 	SA.Asset->MarkPackageDirty();
@@ -504,6 +892,17 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlotBehavior(const TShar
 	Result->SetNumberField(TEXT("slotIndex"), SlotIdx);
 	Result->SetNumberField(TEXT("behaviorIndex"), NewBDIdx);
 	Result->SetStringField(TEXT("behavior"), BehaviorAsset->GetClass()->GetPathName());
+	ReportDefinitionValidity(SA, Result);
+	// No inverse. Nothing in this surface removes an entry from a slot's
+	// BehaviorDefinitions: the array is reachable only through this call, which
+	// appends. gameplay(remove_smart_object_slot) would delete the whole slot,
+	// which undoes far more than adding one behaviour to it.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+		TEXT("No action removes an entry from a SmartObject slot's BehaviorDefinitions, so adding one has no inverse "
+			 "call. Removing the slot would undo more than this did. The entry added here is at behaviorIndex %d of "
+			 "slot %d if it has to be cleared by hand."),
+		NewBDIdx, SlotIdx));
 	return MCPResult(Result);
 }
 
@@ -583,36 +982,67 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetGameFrameworkInfo(const TSharedPtr<
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ListInputAssets(const TSharedPtr<FJsonObject>& Params)
 {
+	// T3: paged. Two asset classes come back here, so ONE cursor pages ONE
+	// collection: every row, each tagged with its `kind`, under `assets`. The
+	// two familiar arrays are still emitted and hold this page's rows of that
+	// kind, so an existing reader keeps working while the paging fields
+	// (count, total, hasMore, nextCursor) describe the whole listing.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params, TEXT("list_input_assets"), /*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
+
 	auto Result = MCPSuccess();
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 
-	// List InputAction assets
-	TArray<FAssetData> InputActions;
-	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/EnhancedInput"), TEXT("InputAction")), InputActions, true);
-
-	TArray<TSharedPtr<FJsonValue>> InputActionArray;
-	for (const FAssetData& Asset : InputActions)
+	// The registry returns assets in whatever order it scanned them, which is
+	// not a contract, so each group is sorted by object path before paging.
+	const auto Collect = [&AR](const TCHAR* ClassName, const TCHAR* Kind)
 	{
-		TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
-		AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
-		AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
-		InputActionArray.Add(MakeShared<FJsonValueObject>(AssetObj));
+		TArray<FAssetData> Assets;
+		AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/EnhancedInput"), ClassName), Assets, true);
+
+		TArray<MCPPagination::FPageRow> Out;
+		Out.Reserve(Assets.Num());
+		for (const FAssetData& Asset : Assets)
+		{
+			TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
+			AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
+			AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
+			AssetObj->SetStringField(TEXT("kind"), Kind);
+			// The asset's object path is the page anchor: unique, and stable
+			// across two scans of the registry.
+			Out.Add({ Asset.GetObjectPathString(), MakeShared<FJsonValueObject>(AssetObj) });
+		}
+		Out.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+			{ return A.Id < B.Id; });
+		return Out;
+	};
+
+	TArray<MCPPagination::FPageRow> Rows = Collect(TEXT("InputAction"), TEXT("inputAction"));
+	const int32 ActionCount = Rows.Num();
+	Rows.Append(Collect(TEXT("InputMappingContext"), TEXT("inputMappingContext")));
+
+	Result->SetNumberField(TEXT("inputActionCount"), ActionCount);
+	Result->SetNumberField(TEXT("inputMappingContextCount"), Rows.Num() - ActionCount);
+	MCPPagination::EmitPage(Page, Rows, TEXT("assets"), Result);
+
+	// This page's rows, regrouped the way this action always reported them.
+	TArray<TSharedPtr<FJsonValue>> InputActionArray;
+	TArray<TSharedPtr<FJsonValue>> MappingContextArray;
+	for (const TSharedPtr<FJsonValue>& Row : Result->GetArrayField(TEXT("assets")))
+	{
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (!Row.IsValid() || !Row->TryGetObject(Obj) || !Obj || !Obj->IsValid()) continue;
+		FString Kind;
+		(*Obj)->TryGetStringField(TEXT("kind"), Kind);
+		if (Kind == TEXT("inputAction")) InputActionArray.Add(Row);
+		else MappingContextArray.Add(Row);
 	}
 	Result->SetArrayField(TEXT("inputActions"), InputActionArray);
-
-	// List InputMappingContext assets
-	TArray<FAssetData> MappingContexts;
-	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/EnhancedInput"), TEXT("InputMappingContext")), MappingContexts, true);
-
-	TArray<TSharedPtr<FJsonValue>> MappingContextArray;
-	for (const FAssetData& Asset : MappingContexts)
-	{
-		TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
-		AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
-		AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
-		MappingContextArray.Add(MakeShared<FJsonValueObject>(AssetObj));
-	}
 	Result->SetArrayField(TEXT("inputMappingContexts"), MappingContextArray);
 
 	return MCPResult(Result);
@@ -620,22 +1050,36 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListInputAssets(const TSharedPtr<FJson
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ListBehaviorTrees(const TSharedPtr<FJsonObject>& Params)
 {
+	// T3: paged.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params, TEXT("list_behavior_trees"), /*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
+
 	auto Result = MCPSuccess();
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/AIModule"), TEXT("BehaviorTree")), Assets, true);
 
-	TArray<TSharedPtr<FJsonValue>> AssetArray;
+	TArray<MCPPagination::FPageRow> Rows;
+	Rows.Reserve(Assets.Num());
 	for (const FAssetData& Asset : Assets)
 	{
 		TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
 		AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
 		AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
-		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
+		// The asset's object path is the page anchor. Two folders can each hold
+		// a BT_Enemy, and a page boundary has to name exactly one of them.
+		Rows.Add({ Asset.GetObjectPathString(), MakeShared<FJsonValueObject>(AssetObj) });
 	}
-	Result->SetArrayField(TEXT("behaviorTrees"), AssetArray);
+	// The registry returns assets in scan order, which is not a contract.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
 
+	MCPPagination::EmitPage(Page, Rows, TEXT("behaviorTrees"), Result);
 	return MCPResult(Result);
 }
 
@@ -662,22 +1106,35 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListEqsQueries(const TSharedPtr<FJsonO
 
 TSharedPtr<FJsonValue> FGameplayHandlers::ListStateTrees(const TSharedPtr<FJsonObject>& Params)
 {
+	// T3: paged.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params, TEXT("list_state_trees"), /*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
+
 	auto Result = MCPSuccess();
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/StateTreeModule"), TEXT("StateTree")), Assets, true);
 
-	TArray<TSharedPtr<FJsonValue>> AssetArray;
+	TArray<MCPPagination::FPageRow> Rows;
+	Rows.Reserve(Assets.Num());
 	for (const FAssetData& Asset : Assets)
 	{
 		TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
 		AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
 		AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
-		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
+		// The asset's object path is the page anchor.
+		Rows.Add({ Asset.GetObjectPathString(), MakeShared<FJsonValueObject>(AssetObj) });
 	}
-	Result->SetArrayField(TEXT("stateTrees"), AssetArray);
+	// The registry returns assets in scan order, which is not a contract.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
 
+	MCPPagination::EmitPage(Page, Rows, TEXT("stateTrees"), Result);
 	return MCPResult(Result);
 }
 
@@ -774,10 +1231,15 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateEqsQuery(const TSharedPtr<FJsonO
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/AI/EQS"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	UClass* EQSClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.EnvironmentQuery"));
+	// The asset type reads as "Environment Query" in the editor, but the UClass
+	// is UEnvQuery. Looking up the display name found nothing, so this action
+	// refused every call it was ever given.
+	UClass* EQSClass = FindObject<UClass>(nullptr, TEXT("/Script/AIModule.EnvQuery"));
 	if (!EQSClass)
 	{
-		return MCPError(TEXT("EnvironmentQuery class not found."));
+		return MCPError(TEXT(
+			"UEnvQuery class not found: the AIModule is not loaded in this editor. "
+			"EQS lives in AIModule, which a project with no AI content may never load."));
 	}
 
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("EnvironmentQuery"), EQSClass, nullptr);
@@ -822,52 +1284,26 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 		return MCPError(TEXT("Created asset is not a UStateTree"));
 	}
 
-	if (StateTree->EditorData == nullptr)
+	// #833: the schema is not optional dressing. Without one the compiler bails
+	// with "does not have a schema" and the asset is written dead, so the
+	// resolution failing is a failed create, not a silent substitution.
+	MCPStateTreeSchema::FResolution Schema = MCPStateTreeSchema::Resolve(
+		OptionalString(Params, TEXT("schema")));
+	if (!Schema.SchemaClass)
 	{
-		// Resolve the schema class (default: actor-component schema). Resolved by
-		// path so no hard GameplayStateTreeModule build dependency is needed.
-		const FString SchemaName = OptionalString(Params, TEXT("schema"),
-			TEXT("/Script/GameplayStateTreeModule.StateTreeComponentSchema"));
-		// The standard actor-component schema lives in GameplayStateTreeModule,
-		// which is not loaded until something uses a StateTreeComponent. Force it
-		// (and the AI variant) so the schema class registers.
-		FModuleManager::Get().LoadModule(TEXT("GameplayStateTreeModule"));
-		UClass* SchemaClass = LoadClass<UStateTreeSchema>(nullptr, *SchemaName);
-		// #823: shared resolution catches the prefixed C++ spelling
-		// (UStateTreeComponentSchema, /Script/Module.UMySchema).
-		if (!SchemaClass) SchemaClass = MCPResolveClassOfType(SchemaName, UStateTreeSchema::StaticClass());
-		if (!SchemaClass)
-		{
-			// Fall back to any concrete, non-abstract StateTreeSchema subclass so
-			// authoring still works even if the named schema is unavailable.
-			for (TObjectIterator<UClass> It; It; ++It)
-			{
-				if (It->IsChildOf(UStateTreeSchema::StaticClass()) &&
-					*It != UStateTreeSchema::StaticClass() &&
-					!It->HasAnyClassFlags(CLASS_Abstract) &&
-					!It->GetName().Contains(TEXT("Test")))
-				{
-					SchemaClass = *It;
-					break;
-				}
-			}
-		}
-		if (!SchemaClass)
-		{
-			return MCPError(FString::Printf(
-				TEXT("StateTree schema class not found: %s (pass 'schema' as a /Script/<Module>.<SchemaClass> path)"), *SchemaName));
-		}
-
-		UStateTreeEditorData* EditorData = NewObject<UStateTreeEditorData>(
-			StateTree, UStateTreeEditorData::StaticClass(), FName(), RF_Transactional);
-		StateTree->EditorData = EditorData;
-		EditorData->Schema = NewObject<UStateTreeSchema>(EditorData, SchemaClass, FName(), RF_Transactional);
-		EditorData->AddRootState();
-
-		FStateTreeCompilerLog Log;
-		UStateTreeEditingSubsystem::CompileStateTree(StateTree, Log);
-		StateTree->MarkPackageDirty();
+		// The asset exists at this point. Delete it rather than leave a
+		// schema-less tree behind, which is the exact shape being fixed.
+		const FString OrphanPath = StateTree->GetPathName();
+		UEditorAssetLibrary::DeleteAsset(OrphanPath);
+		return MCPStateTreeSchema::UnresolvedError(Schema);
 	}
+
+	const MCPStateTreeSchema::FAttachOutcome Attach =
+		MCPStateTreeSchema::AttachSchema(StateTree, Schema.SchemaClass);
+
+	FStateTreeCompilerLog Log;
+	const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, Log);
+	StateTree->MarkPackageDirty();
 
 	SaveAssetPackage(StateTree);
 
@@ -875,9 +1311,14 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), StateTree->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
-	if (UStateTreeEditorData* ED = Cast<UStateTreeEditorData>(StateTree->EditorData))
+	Result->SetStringField(TEXT("schema"), Schema.SchemaClass->GetPathName());
+	Result->SetStringField(TEXT("schemaSource"), Schema.Source);
+	Result->SetBoolField(TEXT("compiled"), bCompiled);
+	Result->SetBoolField(TEXT("createdEditorData"), Attach.bCreatedEditorData);
+	if (!Schema.Note.IsEmpty())
 	{
-		if (ED->Schema) Result->SetStringField(TEXT("schema"), ED->Schema->GetClass()->GetPathName());
+		Result->SetStringField(TEXT("schemaNote"), Schema.Note);
+		Result->SetArrayField(TEXT("availableSchemas"), MCPStateTreeSchema::ConcreteSchemaPathsJson());
 	}
 	MCPSetDeleteAssetRollback(Result, StateTree->GetPathName());
 
@@ -1233,6 +1674,17 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RebuildNavmesh(const TSharedPtr<FJsonO
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("status"), TEXT("rebuild_triggered"));
 
+	// No inverse. The navmesh is DERIVED data: this recomputes it from the
+	// level's geometry and nav bounds, which is a build step rather than an
+	// authored change, and the thing it replaces was the stale output of the
+	// same computation. Nothing restores a previous navmesh, and nothing would
+	// want to - editing the level and rebuilding again is the only way the
+	// result changes.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Rebuilding navigation recomputes derived data from the level. There is no call that restores the "
+			 "previous navmesh, and none is needed: the result is decided by the level, so a rebuild on an unchanged "
+			 "level produces the same navmesh again."));
 	return MCPResult(Result);
 }
 
@@ -1454,6 +1906,14 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJso
 			MCPSetExisted(Existed);
 			Existed->SetStringField(TEXT("blackboardPath"), BlackboardPath);
 			Existed->SetStringField(TEXT("keyName"), KeyName);
+			// Nothing was declared, so no record: an inverse here would remove a
+			// key this call did not create. That is the whole reason a replayed
+			// add has to be told apart from a first one.
+			Existed->SetBoolField(TEXT("unchanged"), true);
+			Existed->SetBoolField(TEXT("rollbackPossible"), false);
+			Existed->SetStringField(TEXT("rollbackNote"),
+				TEXT("A key of this name was already on the Blackboard, so nothing was added. No inverse is emitted, "
+					 "because removing it would delete a key this call did not create."));
 			return MCPResult(Existed);
 		}
 	}
@@ -1581,11 +2041,16 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBlackboardKey(const TSharedPtr<FJso
 		Result->SetStringField(TEXT("baseClass"), AsCls->BaseClass ? AsCls->BaseClass->GetPathName() : TEXT("Object"));
 	}
 	Result->SetNumberField(TEXT("totalKeys"), BlackboardAsset->Keys.Num());
-	// #469: rollback via remove_blackboard_key.
+	// #469: rollback via remove_blackboard_key. Exact: the key did not exist
+	// before this call - the loop above returned early if it did - so removing
+	// it by name restores the Blackboard to what it was. That action is
+	// idempotent on a name it cannot find, so a replayed rollback is safe.
+	Result->SetBoolField(TEXT("unchanged"), false);
 	TSharedPtr<FJsonObject> RollPayload = MakeShared<FJsonObject>();
 	RollPayload->SetStringField(TEXT("blackboardPath"), BlackboardPath);
 	RollPayload->SetStringField(TEXT("keyName"), KeyName);
 	MCPSetRollback(Result, TEXT("remove_blackboard_key"), RollPayload);
+	Result->SetBoolField(TEXT("rollbackLossy"), false);
 
 	return MCPResult(Result);
 }
@@ -1682,12 +2147,54 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveBlackboardKey(const TSharedPtr<F
 	const FName KeyFName(*KeyName);
 	int32 RemovedIdx = INDEX_NONE;
 	FString RemovedType;
+	// What add_blackboard_key needs to put this key back: its keyType in the
+	// short spelling that action takes, and the base class or enum an Object,
+	// Class or Enum key carries. Read here, before the entry is destroyed.
+	FString RollbackKeyType;
+	FString RollbackBaseClass;
 	for (int32 i = 0; i < BB->Keys.Num(); ++i)
 	{
 		if (BB->Keys[i].EntryName == KeyFName)
 		{
 			RemovedIdx = i;
-			RemovedType = BB->Keys[i].KeyType ? BB->Keys[i].KeyType->GetClass()->GetName() : TEXT("Unknown");
+			UBlackboardKeyType* KeyType = BB->Keys[i].KeyType;
+			RemovedType = KeyType ? KeyType->GetClass()->GetName() : TEXT("Unknown");
+			if (KeyType)
+			{
+				// "BlackboardKeyType_Bool" is how the class is named; "Bool" is
+				// what add_blackboard_key's keyType parameter takes. The list is
+				// exactly what that action accepts, checked rather than derived:
+				// UBlackboardKeyType_NativeEnum derives straight from
+				// UBlackboardKeyType and would otherwise strip to "NativeEnum",
+				// and so would any project-defined subclass, producing a record
+				// the adder rejects at replay time.
+				static const TCHAR* const AdderKeyTypes[] = {
+					TEXT("Bool"), TEXT("Int"), TEXT("Float"), TEXT("String"), TEXT("Name"),
+					TEXT("Object"), TEXT("Class"), TEXT("Enum"), TEXT("Vector"), TEXT("Rotator"),
+				};
+				FString ShortType = RemovedType;
+				ShortType.RemoveFromStart(TEXT("BlackboardKeyType_"));
+				for (const TCHAR* Supported : AdderKeyTypes)
+				{
+					if (ShortType.Equals(Supported, ESearchCase::CaseSensitive))
+					{
+						RollbackKeyType = ShortType;
+						break;
+					}
+				}
+				if (UBlackboardKeyType_Object* AsObj = Cast<UBlackboardKeyType_Object>(KeyType))
+				{
+					if (AsObj->BaseClass) RollbackBaseClass = AsObj->BaseClass->GetPathName();
+				}
+				else if (UBlackboardKeyType_Class* AsCls = Cast<UBlackboardKeyType_Class>(KeyType))
+				{
+					if (AsCls->BaseClass) RollbackBaseClass = AsCls->BaseClass->GetPathName();
+				}
+				else if (UBlackboardKeyType_Enum* AsEnum = Cast<UBlackboardKeyType_Enum>(KeyType))
+				{
+					if (AsEnum->EnumType) RollbackBaseClass = AsEnum->EnumType->GetPathName();
+				}
+			}
 			break;
 		}
 	}
@@ -1695,8 +2202,14 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveBlackboardKey(const TSharedPtr<F
 	{
 		auto Noop = MCPSuccess();
 		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		Noop->SetBoolField(TEXT("updated"), false);
 		Noop->SetStringField(TEXT("blackboardPath"), BlackboardPath);
 		Noop->SetStringField(TEXT("keyName"), KeyName);
+		Noop->SetNumberField(TEXT("remainingKeys"), BB->Keys.Num());
+		Noop->SetBoolField(TEXT("rollbackPossible"), false);
+		Noop->SetStringField(TEXT("rollbackNote"),
+			TEXT("No key of that name is on this Blackboard, so nothing was removed and there is nothing to put "
+				 "back."));
 		return MCPResult(Noop);
 	}
 	BB->Modify();
@@ -1709,7 +2222,51 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveBlackboardKey(const TSharedPtr<F
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("blackboardPath"), BlackboardPath);
 	Result->SetStringField(TEXT("keyName"), KeyName);
+	Result->SetStringField(TEXT("removedKeyType"), RemovedType);
+	Result->SetNumberField(TEXT("removedIndex"), RemovedIdx);
 	Result->SetNumberField(TEXT("remainingKeys"), BB->Keys.Num());
+
+	if (!RollbackKeyType.IsEmpty())
+	{
+		// The inverse re-declares the key with the same name and type.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("blackboardPath"), BlackboardPath);
+		Payload->SetStringField(TEXT("keyName"), KeyName);
+		Payload->SetStringField(TEXT("keyType"), RollbackKeyType);
+		// add_blackboard_key reads the base class and the enum from the same
+		// 'baseClass' parameter, which is why one field covers both.
+		if (!RollbackBaseClass.IsEmpty()) Payload->SetStringField(TEXT("baseClass"), RollbackBaseClass);
+		MCPSetRollback(Result, TEXT("add_blackboard_key"), Payload);
+		// Keys are appended, and UpdateKeyIDs renumbers on every edit, so a
+		// restored key lands at the END of the list with a new key ID.
+		// Always lossy: add_blackboard_key declares a name and a type and
+		// nothing else, so the entry's instance-sync flag and its editor-only
+		// description and category are not carried whatever the index does.
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The key comes back with the same name and type%s. gameplay(add_blackboard_key) takes no other "
+				 "parameters, so the entry's bInstanceSynced flag and its editor-only description and category are "
+				 "NOT restored.%s"),
+			RollbackBaseClass.IsEmpty() ? TEXT("") : TEXT(", and its base class or enum"),
+			RemovedIdx == BB->Keys.Num()
+				? TEXT("")
+				: *FString::Printf(
+					TEXT(" It is also appended at index %d rather than the %d it held, because add_blackboard_key "
+						 "appends and UpdateKeyIDs renumbers. Behaviour Tree nodes bind by key NAME, so they still "
+						 "resolve; anything reading key IDs directly does not."),
+					BB->Keys.Num(), RemovedIdx)));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The removed key's type was '%s', which gameplay(add_blackboard_key) cannot re-declare: it accepts "
+				 "Bool, Int, Float, String, Name, Object, Class, Enum, Vector and Rotator, and anything else - a "
+				 "NativeEnum key, a project-defined UBlackboardKeyType subclass, or an entry with no KeyType object "
+				 "at all - has no spelling in that action. No inverse is emitted rather than one that would be "
+				 "refused at replay time."),
+			*RemovedType));
+	}
 	return MCPResult(Result);
 }
 
@@ -1768,18 +2325,43 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListBTNodeClasses(const TSharedPtr<FJs
 {
 	const FString KindFilter = OptionalString(Params, TEXT("kind"), TEXT("")).ToLower();
 	const bool bAll = KindFilter.IsEmpty();
+	if (!bAll
+		&& KindFilter != TEXT("composite") && KindFilter != TEXT("task")
+		&& KindFilter != TEXT("decorator") && KindFilter != TEXT("service"))
+	{
+		// An unrecognised kind used to fall through every test and return four
+		// counts with no arrays at all, which reads as an empty node palette.
+		return MCPError(FString::Printf(
+			TEXT("'kind' must be one of composite, task, decorator, service, got '%s'. Omit it for every kind."),
+			*KindFilter));
+	}
 
-	auto PushClass = [](TArray<TSharedPtr<FJsonValue>>& Out, UClass* C, const TCHAR* Kind)
+	// T3: paged. Four class groups come back here, so ONE cursor pages ONE
+	// collection: every row, each tagged with its `kind`, under `classes`. The
+	// four familiar arrays are still emitted and hold this page's rows of that
+	// kind, while the counts stay counts of the WHOLE listing.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_bt_node_classes|kind=%s"), *KindFilter),
+			/*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
+
+	auto PushClass = [](TArray<MCPPagination::FPageRow>& Out, UClass* C, const TCHAR* Kind)
 	{
 		if (!C || C->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists)) return;
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetStringField(TEXT("name"), C->GetName());
 		Obj->SetStringField(TEXT("path"), C->GetPathName());
 		Obj->SetStringField(TEXT("kind"), Kind);
-		Out.Add(MakeShared<FJsonValueObject>(Obj));
+		// The class PATH is the page anchor, not the short name: two modules can
+		// each declare a BTTask_MoveTo, and a page boundary has to name one.
+		Out.Add({ C->GetPathName(), MakeShared<FJsonValueObject>(Obj) });
 	};
 
-	TArray<TSharedPtr<FJsonValue>> Composites, Tasks, Decorators, Services;
+	TArray<MCPPagination::FPageRow> Composites, Tasks, Decorators, Services;
 	for (TObjectIterator<UClass> It; It; ++It)
 	{
 		UClass* C = *It;
@@ -1789,15 +2371,47 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ListBTNodeClasses(const TSharedPtr<FJs
 		else if (C->IsChildOf(UBTService::StaticClass())) PushClass(Services, C, TEXT("service"));
 	}
 
+	// TObjectIterator walks the object hash, whose order is not a contract, so
+	// each group is sorted by class path and the groups are then concatenated
+	// in a fixed order. Without both, the same page comes back reshuffled and
+	// a cursor cannot resume into it.
+	const auto ByPath = [](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; };
+	Composites.Sort(ByPath);
+	Tasks.Sort(ByPath);
+	Decorators.Sort(ByPath);
+	Services.Sort(ByPath);
+
 	auto Result = MCPSuccess();
-	if (bAll || KindFilter == TEXT("composite")) Result->SetArrayField(TEXT("composites"), Composites);
-	if (bAll || KindFilter == TEXT("task")) Result->SetArrayField(TEXT("tasks"), Tasks);
-	if (bAll || KindFilter == TEXT("decorator")) Result->SetArrayField(TEXT("decorators"), Decorators);
-	if (bAll || KindFilter == TEXT("service")) Result->SetArrayField(TEXT("services"), Services);
 	Result->SetNumberField(TEXT("compositeCount"), Composites.Num());
 	Result->SetNumberField(TEXT("taskCount"), Tasks.Num());
 	Result->SetNumberField(TEXT("decoratorCount"), Decorators.Num());
 	Result->SetNumberField(TEXT("serviceCount"), Services.Num());
+
+	TArray<MCPPagination::FPageRow> Rows;
+	if (bAll || KindFilter == TEXT("composite")) Rows.Append(Composites);
+	if (bAll || KindFilter == TEXT("task")) Rows.Append(Tasks);
+	if (bAll || KindFilter == TEXT("decorator")) Rows.Append(Decorators);
+	if (bAll || KindFilter == TEXT("service")) Rows.Append(Services);
+	MCPPagination::EmitPage(Page, Rows, TEXT("classes"), Result);
+
+	// This page's rows, regrouped the way this action always reported them.
+	TArray<TSharedPtr<FJsonValue>> PageComposites, PageTasks, PageDecorators, PageServices;
+	for (const TSharedPtr<FJsonValue>& Row : Result->GetArrayField(TEXT("classes")))
+	{
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (!Row.IsValid() || !Row->TryGetObject(Obj) || !Obj || !Obj->IsValid()) continue;
+		FString Kind;
+		(*Obj)->TryGetStringField(TEXT("kind"), Kind);
+		if (Kind == TEXT("composite")) PageComposites.Add(Row);
+		else if (Kind == TEXT("task")) PageTasks.Add(Row);
+		else if (Kind == TEXT("decorator")) PageDecorators.Add(Row);
+		else if (Kind == TEXT("service")) PageServices.Add(Row);
+	}
+	if (bAll || KindFilter == TEXT("composite")) Result->SetArrayField(TEXT("composites"), PageComposites);
+	if (bAll || KindFilter == TEXT("task")) Result->SetArrayField(TEXT("tasks"), PageTasks);
+	if (bAll || KindFilter == TEXT("decorator")) Result->SetArrayField(TEXT("decorators"), PageDecorators);
+	if (bAll || KindFilter == TEXT("service")) Result->SetArrayField(TEXT("services"), PageServices);
 	return MCPResult(Result);
 }
 
@@ -2058,59 +2672,231 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 	}
 
 	FScriptArrayHelper Helper(SensesProp, SensesProp->ContainerPtrToValuePtr<void>(PercTemplate));
+
+	// Find the sense config this call is about. An existing one and a freshly
+	// constructed one are then driven through the SAME settings pass below.
+	//
+	// The existing-config branch used to return existed: true right here, before
+	// the settings pass ran at all, so the ordinary flow - add a sense, then tune
+	// it - wrote nothing and reported success. Idempotency means the call says
+	// what it did, not that the second call does nothing.
+	UObject* Cfg = nullptr;
+	int32 ConfigIndex = INDEX_NONE;
 	for (int32 i = 0; i < Helper.Num(); ++i)
 	{
 		UObject* Existing = ElemProp->GetObjectPropertyValue(Helper.GetRawPtr(i));
 		if (Existing && Existing->GetClass() == SenseCfgClass)
 		{
-			auto Ex = MCPSuccess();
-			MCPSetExisted(Ex);
-			Ex->SetStringField(TEXT("blueprintPath"), BPPath);
-			Ex->SetStringField(TEXT("component"), ResolvedComp);
-			Ex->SetStringField(TEXT("senseType"), SenseType);
-			Ex->SetStringField(TEXT("senseConfig"), SenseCfgClass->GetName());
-			return MCPResult(Ex);
+			Cfg = Existing;
+			ConfigIndex = i;
+			break;
+		}
+	}
+	const bool bExisted = (Cfg != nullptr);
+
+	// Validate every setting BEFORE anything is constructed, appended or written.
+	//
+	// This loop used to run after the config was in the array and did
+	// `if (!P) continue;`, so a misspelled key returned success having done
+	// nothing, and a key whose value would not convert vanished the same way.
+	// Both are the worst failure this bridge has: an ordinary success for a
+	// change that never happened.
+	//
+	// Validating first also matters for the failure path. Applying mid-loop
+	// left a half-configured config appended to the array with the Blueprint
+	// uncompiled, which AddPerceptionComponent already avoids for its own
+	// `senses` array for exactly this reason. The update path below needs the
+	// same guarantee, and gets it from the same check plus a per-key snapshot.
+	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
+	const bool bHasSettings =
+		Params->TryGetObjectField(TEXT("settings"), PropsObj) && PropsObj && (*PropsObj).IsValid();
+
+	if (bHasSettings)
+	{
+		TArray<FString> UnknownKeys;
+		for (const auto& KV : (*PropsObj)->Values)
+		{
+			if (!SenseCfgClass->FindPropertyByName(FName(*KV.Key))) UnknownKeys.Add(FString(*KV.Key));
+		}
+		if (UnknownKeys.Num() > 0)
+		{
+			// Name what is valid, so one error is enough to fix the call.
+			TArray<FString> Valid;
+			for (TFieldIterator<FProperty> It(SenseCfgClass); It; ++It)
+			{
+				Valid.Add(It->GetName());
+			}
+			Valid.Sort();
+			return MCPError(FString::Printf(
+				TEXT("%s has no propert%s named %s. Valid properties on %s: %s. Nothing was changed."),
+				*SenseCfgClass->GetName(),
+				UnknownKeys.Num() == 1 ? TEXT("y") : TEXT("ies"),
+				*FString::Join(UnknownKeys, TEXT(", ")),
+				*SenseCfgClass->GetName(),
+				*FString::Join(Valid, TEXT(", "))));
 		}
 	}
 
-	UObject* Cfg = NewObject<UObject>(PercTemplate, SenseCfgClass, NAME_None, RF_Transactional);
-	const int32 NewIdx = Helper.AddValue();
-	ElemProp->SetObjectPropertyValue(Helper.GetRawPtr(NewIdx), Cfg);
+	if (!bExisted)
+	{
+		Cfg = NewObject<UObject>(PercTemplate, SenseCfgClass, NAME_None, RF_Transactional);
+		ConfigIndex = Helper.AddValue();
+		ElemProp->SetObjectPropertyValue(Helper.GetRawPtr(ConfigIndex), Cfg);
+	}
 
 	// Optional per-sense tuning (e.g. { "SightRadius": 1500 }).
+	//
+	// Each write is snapshotted first, so a value that will not convert halfway
+	// through leaves the component exactly as it was found rather than half
+	// applied: the create path drops the whole appended element, the update path
+	// puts back the values it had already written.
+	struct FSenseSettingWrite
+	{
+		FProperty* Property = nullptr;
+		FString PreviousText;
+	};
+	TArray<FSenseSettingWrite> Written;
 	TArray<FString> AppliedProps;
-	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("settings"), PropsObj) && PropsObj && (*PropsObj).IsValid())
+	TArray<FString> ChangedProps;
+	TArray<FString> AlreadyAtValueProps;
+
+	auto UndoWrites = [&]()
+	{
+		if (!bExisted)
+		{
+			Helper.RemoveValues(ConfigIndex, 1);
+			return;
+		}
+		for (int32 i = Written.Num() - 1; i >= 0; --i)
+		{
+			FProperty* P = Written[i].Property;
+			P->ImportText_Direct(*Written[i].PreviousText, P->ContainerPtrToValuePtr<void>(Cfg), Cfg, PPF_None);
+		}
+	};
+
+	if (bHasSettings)
 	{
 		for (const auto& KV : (*PropsObj)->Values)
 		{
 			FProperty* P = Cfg->GetClass()->FindPropertyByName(FName(*KV.Key));
-			if (!P) continue;
-			FString PErr;
-			if (MCPJsonProperty::SetJsonOnProperty(P, P->ContainerPtrToValuePtr<void>(Cfg), KV.Value, PErr))
+			// Existence was proved above, so a miss here is impossible; the
+			// guard stays because a null deref would be worse than a message.
+			if (!P)
 			{
-				AppliedProps.Add(FString(*KV.Key));
+				UndoWrites();
+				return MCPError(FString::Printf(
+					TEXT("Property '%s' vanished between validation and apply on %s."),
+					*FString(*KV.Key), *SenseCfgClass->GetName()));
 			}
+
+			void* ValueAddr = P->ContainerPtrToValuePtr<void>(Cfg);
+			FString BeforeText;
+			P->ExportText_Direct(BeforeText, ValueAddr, ValueAddr, Cfg, PPF_None);
+
+			FString PErr;
+			if (!MCPJsonProperty::SetJsonOnProperty(P, ValueAddr, KV.Value, PErr))
+			{
+				// A value that will not convert is a failed call, not a skipped key.
+				UndoWrites();
+				return MCPError(FString::Printf(
+					TEXT("Could not set '%s' on %s: %s. %s"),
+					*FString(*KV.Key), *SenseCfgClass->GetName(), *PErr,
+					bExisted
+						? TEXT("The sense was left exactly as it was found; no setting was applied.")
+						: TEXT("The sense was not added.")));
+			}
+			Written.Add(FSenseSettingWrite{ P, BeforeText });
+			AppliedProps.Add(FString(*KV.Key));
+
+			FString AfterText;
+			P->ExportText_Direct(AfterText, ValueAddr, ValueAddr, Cfg, PPF_None);
+			if (AfterText == BeforeText) AlreadyAtValueProps.Add(FString(*KV.Key));
+			else ChangedProps.Add(FString(*KV.Key));
 		}
 	}
 
-	FKismetEditorUtilities::CompileBlueprint(BP);
-	SaveAssetPackage(BP);
+	// Compile and save only when something actually moved. A call that found the
+	// sense already configured exactly as asked has no reason to dirty the asset.
+	const bool bChanged = (!bExisted || ChangedProps.Num() > 0);
+	if (bChanged)
+	{
+		FKismetEditorUtilities::CompileBlueprint(BP);
+		SaveAssetPackage(BP);
+	}
 
+	// Three outcomes, reported apart: created, existed and updated, existed and
+	// unchanged. Collapsing the last two is what made the old result dishonest.
 	auto Result = MCPSuccess();
-	MCPSetCreated(Result);
+	if (bExisted) MCPSetExisted(Result); else MCPSetCreated(Result);
+	if (bExisted && ChangedProps.Num() > 0) MCPSetUpdated(Result);
+	else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("changed"), bChanged);
 	Result->SetStringField(TEXT("blueprintPath"), BPPath);
 	Result->SetStringField(TEXT("component"), ResolvedComp);
 	Result->SetStringField(TEXT("senseType"), SenseType);
 	Result->SetStringField(TEXT("senseConfig"), Cfg->GetClass()->GetName());
+	Result->SetNumberField(TEXT("index"), ConfigIndex);
+
+	auto ToJsonArray = [](const TArray<FString>& In)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FString& S : In) Out.Add(MakeShared<FJsonValueString>(S));
+		return Out;
+	};
 	if (AppliedProps.Num() > 0)
 	{
-		TArray<TSharedPtr<FJsonValue>> A;
-		for (const FString& S : AppliedProps) A.Add(MakeShared<FJsonValueString>(S));
-		Result->SetArrayField(TEXT("appliedProperties"), A);
+		Result->SetArrayField(TEXT("appliedProperties"), ToJsonArray(AppliedProps));
+		Result->SetArrayField(TEXT("changedProperties"), ToJsonArray(ChangedProps));
+		Result->SetArrayField(TEXT("unchangedProperties"), ToJsonArray(AlreadyAtValueProps));
 	}
 
-	// Rollback: removing the sense again isn't a first-class action; report intent.
+	if (!bExisted)
+	{
+		Result->SetStringField(TEXT("note"), FString::Printf(
+			TEXT("%s was added to '%s' and %d setting(s) were written."),
+			*SenseCfgClass->GetName(), *ResolvedComp, AppliedProps.Num()));
+	}
+	else if (ChangedProps.Num() > 0)
+	{
+		Result->SetStringField(TEXT("note"), FString::Printf(
+			TEXT("%s was already on '%s'; %d of %d requested setting(s) changed its value."),
+			*SenseCfgClass->GetName(), *ResolvedComp, ChangedProps.Num(), AppliedProps.Num()));
+	}
+	else if (bHasSettings)
+	{
+		Result->SetStringField(TEXT("note"), FString::Printf(
+			TEXT("%s was already on '%s' and every requested setting already held that value, ")
+			TEXT("so the asset was not touched. gameplay(read_perception) reports the current values."),
+			*SenseCfgClass->GetName(), *ResolvedComp));
+	}
+	else
+	{
+		Result->SetStringField(TEXT("note"), FString::Printf(
+			TEXT("%s was already on '%s' and no settings were supplied, so nothing was written. ")
+			TEXT("Pass 'settings' to tune it."),
+			*SenseCfgClass->GetName(), *ResolvedComp));
+	}
+
+	// The inverse of adding a sense is removing it, and remove_sense is a real
+	// action now. It is only the inverse when THIS call added the config: undoing
+	// a tuning pass by destroying a config the caller already had is not an undo.
+	if (!bExisted)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("blueprintPath"), BPPath);
+		Payload->SetStringField(TEXT("senseType"), SenseType);
+		Payload->SetStringField(TEXT("componentName"), ResolvedComp);
+		MCPSetRollback(Result, TEXT("remove_sense"), Payload);
+	}
+	else if (ChangedProps.Num() > 0)
+	{
+		Result->SetBoolField(TEXT("rollbackUnavailable"), true);
+		Result->SetStringField(TEXT("rollbackUnavailableReason"), TEXT(
+			"This call tuned a sense config that already existed. Removing it would destroy a config "
+			"the caller did not create, and the previous values are not carried here. Read them with "
+			"gameplay(read_perception) before tuning, and write them back with configure_sense."));
+	}
+
 	return MCPResult(Result);
 }
 

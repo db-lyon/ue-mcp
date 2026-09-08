@@ -59,6 +59,7 @@ CODE_OF_CONDUCT.md
 debug.log
 deploy-bridge.js
 .gitmodules
+.sf
 
 ## OS
 .DS_Store
@@ -157,6 +158,13 @@ venv/
 **/*.xcuserdata
 
 # Test-generated assets (should not be tracked - tests create/cleanup these)
+# Fixtures built by the live tests and by probes. Every live test creates its
+# own assets under an MCP-prefixed content path and deletes them in afterAll;
+# a run that dies partway leaves them behind. A stray .uasset reaching the
+# index also trips the em-dash pre-commit hook, which scans staged files as
+# text. The narrower MCPTest rules below predate this and are kept so an
+# existing checkout does not suddenly see those paths as new.
+tests/**/Content/MCP*/
 tests/**/Content/MCPTest/**/*.uasset
 tests/**/Content/MCPTest/**/*.umap
 tests/**/Content/*SmokeTest*.uasset
@@ -188,3 +196,9 @@ tests/ue_mcp/.ue-mcp/
 
 ## Local benchmark scratch
 bench/
+
+# Agent scratch space, never committed.
+.scratch/
+
+# Engine symbol index cache for the live tests (rebuilt on demand).
+.engine-index-cache/

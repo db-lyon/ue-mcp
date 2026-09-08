@@ -584,6 +584,123 @@ namespace MCPJsonProperty
 			}
 		}
 
+		// Numbers, assigned as numbers rather than rendered as text.
+		//
+		// Everything past this point turns the value into a string and hands it
+		// to the import parser, and a JSON number renders through
+		// FJsonValueNumber::TryGetString, which is FString::SanitizeFloat, which
+		// is Printf("%f"): six fractional digits and no more. A double property
+		// asked for 1e-9 stored 0, one asked for 0.123456789 stored 0.123457,
+		// and because this setter recurses through here for every component of a
+		// struct, a vector or a transform lost the same digits field by field.
+		// Assigning through FNumericProperty skips the text entirely, so what
+		// lands is what arrived.
+		//
+		// Three kinds of property stay on the text path deliberately:
+		//   - FBoolProperty and FEnumProperty are not FNumericProperty at all,
+		//     so neither can be caught here whatever the value is;
+		//   - an enum-valued byte (FByteProperty with an Enum) belongs to the
+		//     enum branches above, and for a numeric value the import parser is
+		//     what checks the number names a real enumerator. An enumerator is a
+		//     small exact integer, so it never needed the precision fix;
+		//   - a number carried as text (TJsonValueNumberString: its type is
+		//     Number but it prefers its string form) keeps every digit it was
+		//     written with, and the parser reads all of them.
+		if (Value->Type == EJson::Number && !Value->PreferStringRepresentation())
+		{
+			FNumericProperty* NumProp = CastField<FNumericProperty>(Prop);
+			if (NumProp && !NumProp->IsEnum())
+			{
+				const double Number = Value->AsNumber();
+				if (NumProp->IsFloatingPoint())
+				{
+					// A float target narrows the double to its own precision.
+					// That narrowing belongs to the property's type and not to
+					// the transport: it is exactly what assigning the value in
+					// C++ would do.
+					NumProp->SetFloatingPointPropertyValue(ValueAddr, Number);
+					return true;
+				}
+				if (NumProp->IsInteger())
+				{
+					// An integer target. A JSON number is a double, so every
+					// way it can fail to name the integer the caller meant is
+					// refused here rather than rounded, clamped or truncated
+					// into a different one.
+					const FString Rendered = FString::Printf(TEXT("%.17g"), Number);
+					if (!FMath::IsFinite(Number) || Number != FMath::TruncToDouble(Number))
+					{
+						OutError = FString::Printf(
+							TEXT("property '%s' is %s and %s is not a whole number"),
+							*Prop->GetName(), *Prop->GetCPPType(), *Rendered);
+						return false;
+					}
+
+					// The width the target actually holds, named property class
+					// by property class. This is the whole closed set of
+					// integer property types, and naming them is what makes an
+					// unsigned target refuse a negative value: asking
+					// FNumericProperty::CanHoldValue instead would answer "yes"
+					// to -1 into a uint64, because that cast round trips back
+					// to -1 and compares equal.
+					int64 Lowest = 0;
+					int64 Highest = 0;
+					bool bKnownWidth = true;
+					if (Prop->IsA<FInt8Property>())        { Lowest = TNumericLimits<int8>::Lowest();   Highest = TNumericLimits<int8>::Max(); }
+					else if (Prop->IsA<FInt16Property>())  { Lowest = TNumericLimits<int16>::Lowest();  Highest = TNumericLimits<int16>::Max(); }
+					else if (Prop->IsA<FIntProperty>())    { Lowest = TNumericLimits<int32>::Lowest();  Highest = TNumericLimits<int32>::Max(); }
+					else if (Prop->IsA<FInt64Property>())  { Lowest = TNumericLimits<int64>::Lowest();  Highest = TNumericLimits<int64>::Max(); }
+					else if (Prop->IsA<FByteProperty>())   { Lowest = 0; Highest = TNumericLimits<uint8>::Max(); }
+					else if (Prop->IsA<FUInt16Property>()) { Lowest = 0; Highest = TNumericLimits<uint16>::Max(); }
+					else if (Prop->IsA<FUInt32Property>()) { Lowest = 0; Highest = (int64)TNumericLimits<uint32>::Max(); }
+					// A uint64 above int64's maximum is past the point a JSON
+					// number carries an integer at all, so int64's maximum is
+					// the honest ceiling for it too.
+					else if (Prop->IsA<FUInt64Property>()) { Lowest = 0; Highest = TNumericLimits<int64>::Max(); }
+					else { bKnownWidth = false; }
+
+					if (bKnownWidth)
+					{
+						// Compared as doubles, because the cast to int64 is
+						// undefined outside int64's own range. Every bound
+						// below 2^53 converts exactly; int64's maximum rounds
+						// up to 2^63, so a value between the two passes here
+						// and is refused a few lines down by the 2^53 test,
+						// which is what keeps the cast in range.
+						if (Number < (double)Lowest || Number > (double)Highest)
+						{
+							OutError = FString::Printf(
+								TEXT("value %s is out of range for %s property '%s'"),
+								*Rendered, *Prop->GetCPPType(), *Prop->GetName());
+							return false;
+						}
+
+						// Past 2^53 a double no longer carries every integer,
+						// so the value here need not be the one the caller
+						// wrote: those digits were gone before this code ever
+						// saw them, when the JSON was parsed into a double.
+						// Refusing says so out loud. The same number sent as a
+						// JSON string reaches the import parser below, which
+						// reads it at full 64-bit width.
+						constexpr double ExactIntegerLimit = 9007199254740992.0; // 2^53
+						if (Number > ExactIntegerLimit || Number < -ExactIntegerLimit)
+						{
+							OutError = FString::Printf(
+								TEXT("value %s is beyond the range a JSON number carries integers exactly (2^53), so '%s' would not receive the integer that was written. Send it as a JSON string instead"),
+								*Rendered, *Prop->GetName());
+							return false;
+						}
+
+						const int64 IntValue = (int64)Number;
+						NumProp->SetIntPropertyValue(ValueAddr, IntValue);
+						return true;
+					}
+					// An integer width this build does not know about keeps the
+					// behaviour it had: the text path below.
+				}
+			}
+		}
+
 		// Fallback: coerce JSON to string and import it as UE export text.
 		// #820: map-bearing text goes through MCPPropertyText, which reads the
 		// pairs itself and refuses a write that would store fewer entries than
@@ -891,8 +1008,10 @@ namespace MCPJsonProperty
 				// `int32 Foo[3]`, is ONE FProperty with ArrayDim == 3 rather than
 				// an FArrayProperty. Without this branch every indexed write to
 				// one landed on element 0, or was refused as "not an array",
-				// which is how RecastNavMesh's three navmesh generation tiers
-				// became unreachable: only the Low tier could be read or written
+				// lint-prose-allow: tier  RecastNavMesh's own name for its three generation tiers
+	// which is how RecastNavMesh's three navmesh generation tiers
+				// lint-prose-allow: tier  RecastNavMesh's own name for its three generation tiers
+	// became unreachable: only the Low tier could be read or written
 				// while the engine generated from Default and High.
 				else if (Prop->ArrayDim > 1)
 				{

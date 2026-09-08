@@ -1,6 +1,7 @@
 #include "PCGHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
 #include "HandlerJsonProperty.h"
 #include "VolumeHelpers_Internal.h"
@@ -165,22 +166,34 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 TSharedPtr<FJsonValue> FPCGHandlers::ListPCGGraphs(const TSharedPtr<FJsonObject>& Params)
 {
+	// T3: paged.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params, TEXT("list_pcg_graphs"), /*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
+
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
 	TArray<FAssetData> Assets;
 	AR.GetAssetsByClass(FTopLevelAssetPath(TEXT("/Script/PCG"), TEXT("PCGGraph")), Assets, true);
 
-	TArray<TSharedPtr<FJsonValue>> AssetArray;
+	TArray<MCPPagination::FPageRow> Rows;
+	Rows.Reserve(Assets.Num());
 	for (const FAssetData& Asset : Assets)
 	{
 		TSharedPtr<FJsonObject> AssetObj = MakeShared<FJsonObject>();
 		AssetObj->SetStringField(TEXT("name"), Asset.AssetName.ToString());
 		AssetObj->SetStringField(TEXT("path"), Asset.GetObjectPathString());
-		AssetArray.Add(MakeShared<FJsonValueObject>(AssetObj));
+		// The asset's object path is the page anchor.
+		Rows.Add({ Asset.GetObjectPathString(), MakeShared<FJsonValueObject>(AssetObj) });
 	}
+	// The registry returns assets in scan order, which is not a contract.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
 
 	auto Result = MCPSuccess();
-	Result->SetArrayField(TEXT("graphs"), AssetArray);
-	Result->SetNumberField(TEXT("count"), AssetArray.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("graphs"), Result);
 	return MCPResult(Result);
 }
 
@@ -562,6 +575,32 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 		return MCPError(TEXT("No suitable input pin found on target node"));
 	}
 
+	// Idempotency, and a correctness guard on the rollback: if this edge is
+	// already here, this call creates nothing, so it must not hand back a
+	// disconnect that would cut a wire it did not make.
+	for (const TObjectPtr<UPCGPin>& OutPin : SourceNode->GetOutputPins())
+	{
+		if (!OutPin || OutPin->Properties.Label != ResolvedSourcePinLabel) continue;
+		for (const TObjectPtr<UPCGEdge>& Edge : OutPin->Edges)
+		{
+			if (!Edge || !Edge->OutputPin || Edge->OutputPin->Node != TargetNode) continue;
+			if (Edge->OutputPin->Properties.Label != ResolvedTargetPinLabel) continue;
+
+			auto Existed = MCPSuccess();
+			MCPSetExisted(Existed);
+			Existed->SetStringField(TEXT("assetPath"), AssetPath);
+			Existed->SetStringField(TEXT("sourceNodeName"), SourceNodeName);
+			Existed->SetStringField(TEXT("targetNodeName"), TargetNodeName);
+			Existed->SetStringField(TEXT("sourcePinLabel"), ResolvedSourcePinLabel.ToString());
+			Existed->SetStringField(TEXT("targetPinLabel"), ResolvedTargetPinLabel.ToString());
+			Existed->SetBoolField(TEXT("edgeVerified"), true);
+			Existed->SetBoolField(TEXT("rollbackPossible"), false);
+			Existed->SetStringField(TEXT("rollbackNote"),
+				TEXT("The edge was already here, so this call created nothing. No disconnect is offered: running one would cut a wire this call did not make."));
+			return MCPResult(Existed);
+		}
+	}
+
 	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "ConnectPCGNodes", "Connect PCG Nodes"));
 	Graph->Modify();
 	SourceNode->Modify();
@@ -616,6 +655,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 	UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
 
 	auto Result = MCPSuccess();
+	// The edge did not exist a moment ago - the pre-check above returned early
+	// if it had - so this call is the one that made it.
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("sourceNodeName"), SourceNodeName);
 	Result->SetStringField(TEXT("targetNodeName"), TargetNodeName);
@@ -685,6 +727,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 	TargetNode->Modify();
 
 	int32 RemovedCount = 0;
+	// Which edges actually went. With both pin labels omitted this call can cut
+	// several at once, and a rollback record carries one connect - so the list is
+	// what makes the difference visible instead of implied.
+	TArray<TSharedPtr<FJsonValue>> RemovedEdgeList;
+	FString FirstRemovedSourcePin, FirstRemovedTargetPin;
 	for (const TObjectPtr<UPCGPin>& OutPin : SourceNode->GetOutputPins())
 	{
 		if (!OutPin) continue;
@@ -703,6 +750,17 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 		for (UPCGEdge* Edge : ToRemove)
 		{
 			if (!Edge) continue;
+			const FString CutSourcePin = OutPin->Properties.Label.ToString();
+			const FString CutTargetPin = Edge->OutputPin ? Edge->OutputPin->Properties.Label.ToString() : FString();
+			TSharedPtr<FJsonObject> Cut = MakeShared<FJsonObject>();
+			Cut->SetStringField(TEXT("sourcePinLabel"), CutSourcePin);
+			Cut->SetStringField(TEXT("targetPinLabel"), CutTargetPin);
+			RemovedEdgeList.Add(MakeShared<FJsonValueObject>(Cut));
+			if (RemovedCount == 0)
+			{
+				FirstRemovedSourcePin = CutSourcePin;
+				FirstRemovedTargetPin = CutTargetPin;
+			}
 			if (Edge->OutputPin)
 			{
 				Edge->OutputPin->Edges.Remove(Edge);
@@ -721,6 +779,12 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 		Noop->SetStringField(TEXT("targetNodeName"), TargetNodeName);
 		Noop->SetNumberField(TEXT("removedEdges"), 0);
 		Noop->SetBoolField(TEXT("alreadyDisconnected"), true);
+		// No connect is offered here. Nothing was cut, so a replayed
+		// connect_pcg_nodes would CREATE an edge this call never removed, on
+		// whichever pins the resolver picks by default.
+		Noop->SetBoolField(TEXT("rollbackPossible"), false);
+		Noop->SetStringField(TEXT("rollbackNote"),
+			TEXT("No edge matched, so nothing was removed and there is nothing to undo. connect_pcg_nodes is deliberately NOT offered as the inverse: it would add a wire this call never cut."));
 		return MCPResult(Noop);
 	}
 
@@ -736,6 +800,25 @@ TSharedPtr<FJsonValue> FPCGHandlers::DisconnectPCGNodes(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("sourceNodeName"), SourceNodeName);
 	Result->SetStringField(TEXT("targetNodeName"), TargetNodeName);
 	Result->SetNumberField(TEXT("removedEdges"), RemovedCount);
+	Result->SetArrayField(TEXT("removedEdgeList"), RemovedEdgeList);
+
+	// Rollback: re-add the edge, naming both pins explicitly so the replay lands
+	// on the same slots rather than on whichever pins connect_pcg_nodes would
+	// pick by default.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("sourceNodeName"), SourceNodeName);
+	Payload->SetStringField(TEXT("targetNodeName"), TargetNodeName);
+	Payload->SetStringField(TEXT("sourcePinLabel"), FirstRemovedSourcePin);
+	Payload->SetStringField(TEXT("targetPinLabel"), FirstRemovedTargetPin);
+	MCPSetRollback(Result, TEXT("connect_pcg_nodes"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), RemovedCount > 1);
+	if (RemovedCount > 1)
+	{
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("%d edges were cut because the pin labels were left open, and the rollback restores only the first one (%s -> %s). Replay the rest from removedEdgeList with connect_pcg_nodes."),
+			RemovedCount, *FirstRemovedSourcePin, *FirstRemovedTargetPin));
+	}
 	return MCPResult(Result);
 }
 
@@ -775,6 +858,43 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 		return MCPResult(Noop);
 	}
 
+	// Read what is about to be lost: the settings class is what a replacement
+	// node can be built from, and the edges are what it cannot.
+	const UPCGSettings* RemovedSettings = FoundNode->GetSettings();
+	const FString RemovedSettingsClassPath = RemovedSettings ? RemovedSettings->GetClass()->GetPathName() : FString();
+	const int32 RemovedPosX = FoundNode->PositionX;
+	const int32 RemovedPosY = FoundNode->PositionY;
+
+	TArray<TSharedPtr<FJsonValue>> SeveredEdges;
+	for (const TObjectPtr<UPCGPin>& OutPin : FoundNode->GetOutputPins())
+	{
+		if (!OutPin) continue;
+		for (const TObjectPtr<UPCGEdge>& Edge : OutPin->Edges)
+		{
+			if (!Edge || !Edge->OutputPin || !Edge->OutputPin->Node) continue;
+			TSharedPtr<FJsonObject> Cut = MakeShared<FJsonObject>();
+			Cut->SetStringField(TEXT("from"), NodeName);
+			Cut->SetStringField(TEXT("fromPin"), OutPin->Properties.Label.ToString());
+			Cut->SetStringField(TEXT("to"), Edge->OutputPin->Node->GetName());
+			Cut->SetStringField(TEXT("toPin"), Edge->OutputPin->Properties.Label.ToString());
+			SeveredEdges.Add(MakeShared<FJsonValueObject>(Cut));
+		}
+	}
+	for (const TObjectPtr<UPCGPin>& InPin : FoundNode->GetInputPins())
+	{
+		if (!InPin) continue;
+		for (const TObjectPtr<UPCGEdge>& Edge : InPin->Edges)
+		{
+			if (!Edge || !Edge->InputPin || !Edge->InputPin->Node) continue;
+			TSharedPtr<FJsonObject> Cut = MakeShared<FJsonObject>();
+			Cut->SetStringField(TEXT("from"), Edge->InputPin->Node->GetName());
+			Cut->SetStringField(TEXT("fromPin"), Edge->InputPin->Properties.Label.ToString());
+			Cut->SetStringField(TEXT("to"), NodeName);
+			Cut->SetStringField(TEXT("toPin"), InPin->Properties.Label.ToString());
+			SeveredEdges.Add(MakeShared<FJsonValueObject>(Cut));
+		}
+	}
+
 	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "RemovePCGNode", "Remove PCG Node"));
 	Graph->Modify();
 
@@ -789,7 +909,33 @@ TSharedPtr<FJsonValue> FPCGHandlers::RemovePCGNode(const TSharedPtr<FJsonObject>
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("removedNodeName"), NodeName);
 	Result->SetBoolField(TEXT("deleted"), true);
-	// No rollback: removal of PCG node not reversible without snapshotting settings + connections.
+	Result->SetStringField(TEXT("removedNodeType"), RemovedSettingsClassPath);
+	Result->SetArrayField(TEXT("severedEdges"), SeveredEdges);
+
+	if (!RemovedSettingsClassPath.IsEmpty())
+	{
+		// Rollback: put a node of the same settings class back at the same spot.
+		// add_pcg_node resolves a full class path through FindObject<UClass>, so
+		// the class this node really had is the one recreated. What it cannot do
+		// is restore the settings values or the edges, both of which are listed
+		// above for a caller that has to rebuild them.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("nodeType"), RemovedSettingsClassPath);
+		Payload->SetNumberField(TEXT("posX"), RemovedPosX);
+		Payload->SetNumberField(TEXT("posY"), RemovedPosY);
+		MCPSetRollback(Result, TEXT("add_pcg_node"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The rollback adds a fresh node of the same class at the same position, with DEFAULT settings and no wiring. This node's settings values and its %d edge(s) do not come back - the edges are listed in severedEdges, replay them with connect_pcg_nodes. The replacement also gets a new engine-assigned name, so '%s' will not exist again and anything holding that name has to be re-pointed. To undo a node removal exactly, snapshot with export_pcg_graph first and restore with import_pcg_graph replace=true."),
+			SeveredEdges.Num(), *NodeName));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The removed node carried no settings object, so there is no class for add_pcg_node to recreate it from. Restore the graph from an export_pcg_graph snapshot with import_pcg_graph replace=true."));
+	}
 	return MCPResult(Result);
 }
 
@@ -866,16 +1012,43 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 	}
 
 	TSharedPtr<FJsonObject> SetResults = MakeShared<FJsonObject>();
+	// The previous value of every property this call lands, as UE export text.
+	// SetJsonOnProperty's last resort imports export text from a JSON string, so
+	// what is read out here goes back in through the very same setter.
+	TSharedPtr<FJsonObject> PreviousSettings = MakeShared<FJsonObject>();
+	int32 UncapturedCount = 0;
 	TArray<FString> Errors;
 
 	Settings->Modify();
 
 	for (const auto& Prop : PropertiesToSet)
 	{
+		// Resolve and export BEFORE the write, through the same dotted-path
+		// walker the setter uses, so nested and indexed keys capture the leaf
+		// the write is about to land on.
+		FProperty* LeafProp = nullptr;
+		void* LeafAddr = nullptr;
+		UObject* LeafOwner = nullptr;
+		FString ResolveErr;
+		FString PreviousText;
+		bool bCaptured = MCPJsonProperty::ResolveDottedPath(Settings, Prop.Key, LeafProp, LeafAddr, LeafOwner, ResolveErr)
+			&& LeafProp != nullptr && LeafAddr != nullptr;
+		if (bCaptured)
+		{
+			LeafProp->ExportText_Direct(PreviousText, LeafAddr, LeafAddr, LeafOwner, PPF_None);
+			// An empty export is not a value that reads back: the JSON setter's
+			// last resort imports the string as export text, and an empty one
+			// fails for most property types rather than clearing the value. Drop
+			// it from the rollback and count it as uncaptured instead.
+			if (PreviousText.IsEmpty()) bCaptured = false;
+		}
+
 		FString SubErr;
 		if (MCPJsonProperty::SetDottedPropertyFromJson(Settings, Prop.Key, Prop.Value, SubErr))
 		{
 			SetResults->SetField(Prop.Key, Prop.Value);
+			if (bCaptured) PreviousSettings->SetStringField(Prop.Key, PreviousText);
+			else ++UncapturedCount;
 		}
 		else
 		{
@@ -894,6 +1067,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("nodeName"), NodeName);
 	Result->SetObjectField(TEXT("setProperties"), SetResults);
+	Result->SetObjectField(TEXT("previousProperties"), PreviousSettings);
+	if (SetResults->Values.Num() > 0) MCPSetUpdated(Result);
+	else Result->SetBoolField(TEXT("unchanged"), true);
 	if (Errors.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ErrorArray;
@@ -904,6 +1080,31 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 		Result->SetArrayField(TEXT("errors"), ErrorArray);
 	}
 	Result->SetBoolField(TEXT("success"), Errors.Num() == 0);
+
+	if (PreviousSettings->Values.Num() > 0)
+	{
+		// Rollback: the same call, carrying the values read off the node a moment
+		// ago. Only the properties that were actually written appear, so a
+		// rollback never touches a key this call left alone.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetStringField(TEXT("nodeName"), NodeName);
+		Payload->SetObjectField(TEXT("settings"), PreviousSettings);
+		MCPSetRollback(Result, TEXT("set_pcg_node_settings"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), UncapturedCount > 0);
+		if (UncapturedCount > 0)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("%d written propert(ies) could not be read back before the write (the dotted path did not resolve to a leaf) and are not in the rollback. Everything in previousProperties is restored exactly."),
+				UncapturedCount));
+		}
+	}
+	else if (SetResults->Values.Num() > 0)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("None of the written properties could be read back before the write, so no inverse call is offered rather than one that would write something else. Snapshot with export_pcg_graph and restore with import_pcg_graph replace=true if this has to be undone."));
+	}
 	return MCPResult(Result);
 }
 
@@ -926,6 +1127,20 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExecutePCGGraph(const TSharedPtr<FJsonObjec
 		return MCPError(FString::Printf(TEXT("No PCGComponent found on actor: %s"), *ActorLabel));
 	}
 
+	// What the component looked like before: whether it already held generated
+	// content, and the seed that content was built from. Both decide which
+	// inverse is honest.
+	//
+	// bGenerated is only meaningful on a NON-partitioned component: the engine
+	// documents it as always false for partitionable actors, where the real
+	// generation lives on the local components the partition subsystem owns. So
+	// a partitioned component is a third state - "cannot tell" - and must not be
+	// read as "nothing was generated", which would hand back a cleanup_pcg
+	// rollback that destroys content while calling itself lossless.
+	const bool bPartitioned = PCGComp->IsPartitioned();
+	const bool bWasGenerated = PCGComp->bGenerated;
+	const int32 PreviousSeed = PCGComp->Seed;
+
 	// Set seed if provided
 	double Seed = 0;
 	if (Params->TryGetNumberField(TEXT("seed"), Seed))
@@ -937,6 +1152,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExecutePCGGraph(const TSharedPtr<FJsonObjec
 	PCGComp->Generate();
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), FoundActor->GetPathName());
 	Result->SetStringField(TEXT("componentName"), PCGComp->GetName());
@@ -945,6 +1161,61 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExecutePCGGraph(const TSharedPtr<FJsonObjec
 		Result->SetStringField(TEXT("graphName"), PCGComp->GetGraph()->GetName());
 	}
 	Result->SetNumberField(TEXT("seed"), PCGComp->Seed);
+	Result->SetNumberField(TEXT("previousSeed"), PreviousSeed);
+	Result->SetBoolField(TEXT("wasGenerated"), bWasGenerated);
+	Result->SetBoolField(TEXT("partitioned"), bPartitioned);
+
+	if (bPartitioned)
+	{
+		// Generation state is not readable here, so neither inverse can be
+		// offered honestly: cleanup_pcg would destroy content that may have
+		// predated this call, and regenerating repeats the destruction.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("This component is partitioned, so bGenerated is always false on it and whether it already held generated content cannot be read: the real generation lives on the local components the PCG partition subsystem owns. cleanup_pcg is not offered as the inverse because on a partitioned component it would destroy content this call may not have created. Undo it by regenerating with the seed reported in previousSeed, once you have confirmed what the partition held."));
+	}
+	else if (!bWasGenerated)
+	{
+		// Nothing was generated before, so clearing the output is an exact
+		// return to the previous state.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), FoundActor->GetPathName());
+		Payload->SetBoolField(TEXT("removeComponents"), true);
+		MCPSetRollback(Result, TEXT("cleanup_pcg"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), PCGComp->Seed != PreviousSeed);
+		if (PCGComp->Seed != PreviousSeed)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("cleanup_pcg removes the content this call generated, which is the state the component was in. It does not put the seed back: this call changed it from %d to %d, and cleanup does not write seeds."),
+				PreviousSeed, PCGComp->Seed));
+		}
+	}
+	else if (PCGComp->Seed != PreviousSeed)
+	{
+		// Content existed and this call rebuilt it under a DIFFERENT seed, so
+		// the seed is real state that can be put back. Re-running with the old
+		// seed restores it and rebuilds equivalent content from the same graph.
+		// The instances that were destroyed, and any hand edits to them, are not
+		// recoverable, which is what makes it lossy rather than exact.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), FoundActor->GetPathName());
+		Payload->SetNumberField(TEXT("seed"), PreviousSeed);
+		MCPSetRollback(Result, TEXT("execute_pcg_graph"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The component already held generated content, which this call destroyed and rebuilt under seed %d. The rollback puts seed %d back and regenerates from it, which reproduces equivalent content from the same graph rather than restoring what was there: the destroyed actors and components are gone, and any hand edits made to them do not come back."),
+			PCGComp->Seed, PreviousSeed));
+	}
+	else
+	{
+		// Content existed and the seed did not change, so a replay would only
+		// destroy and rebuild the same content a second time. That is not an
+		// inverse, and force_regenerate_pcg says the same thing about the same
+		// situation - the two must not disagree.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The component already held generated content and the seed did not change, so this call destroyed and rebuilt it from the same graph and seed. There is no inverse: running this action again repeats the destruction, and cleanup_pcg would leave the component empty rather than as it was. The content is equivalent to what was there, so this only matters where the generated actors had been edited by hand."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1323,9 +1594,16 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 	}
 
 	// Ensure the selector is UPCGMeshSelectorWeighted; instantiate if missing/mismatched.
+	// Swapping the selector destroys the previous one outright, which is a change
+	// this action cannot undo - record what it was so the note can name it.
 	UPCGMeshSelectorWeighted* WeightedSelector = Cast<UPCGMeshSelectorWeighted>(SpawnerSettings->MeshSelectorParameters);
+	FString ReplacedSelectorClass;
 	if (!WeightedSelector)
 	{
+		if (SpawnerSettings->MeshSelectorParameters)
+		{
+			ReplacedSelectorClass = SpawnerSettings->MeshSelectorParameters->GetClass()->GetName();
+		}
 		SpawnerSettings->SetMeshSelectorType(UPCGMeshSelectorWeighted::StaticClass());
 		WeightedSelector = Cast<UPCGMeshSelectorWeighted>(SpawnerSettings->MeshSelectorParameters);
 	}
@@ -1335,6 +1613,26 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 	}
 
 	const bool bReplace = OptionalBool(Params, TEXT("replace"), true);
+
+	// The entry list as found, in the only shape this action can be handed back:
+	// {mesh, weight}. That is NOT the whole entry. Each one carries a full
+	// FPCGSoftISMComponentDescriptor - material overrides, collision profile,
+	// cull distances, component tags - and the parser below rebuilds an entry
+	// from the mesh and weight alone, defaulting the rest. Since the rollback
+	// replays with replace=true, restoring the list DISCARDS every descriptor,
+	// so a non-empty previous list always makes the rollback lossy.
+	TArray<TSharedPtr<FJsonValue>> PreviousEntries;
+	bool bPreviousEntryHadNoMesh = false;
+	for (const FPCGMeshSelectorWeightedEntry& Existing : WeightedSelector->MeshEntries)
+	{
+		TSharedPtr<FJsonObject> EntryJson = MakeShared<FJsonObject>();
+		EntryJson->SetStringField(TEXT("mesh"), Existing.Descriptor.StaticMesh.ToString());
+		EntryJson->SetNumberField(TEXT("weight"), Existing.Weight);
+		PreviousEntries.Add(MakeShared<FJsonValueObject>(EntryJson));
+		if (Existing.Descriptor.StaticMesh.IsNull()) bPreviousEntryHadNoMesh = true;
+	}
+	const bool bDescriptorsWillBeLost = PreviousEntries.Num() > 0;
+
 	TArray<FPCGMeshSelectorWeightedEntry> Rebuilt;
 	if (!bReplace)
 	{
@@ -1378,6 +1676,44 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 	Result->SetNumberField(TEXT("entriesAdded"), Added);
 	Result->SetNumberField(TEXT("totalEntries"), WeightedSelector->MeshEntries.Num());
 	Result->SetBoolField(TEXT("replaced"), bReplace);
+	Result->SetArrayField(TEXT("previousEntries"), PreviousEntries);
+
+	// Rollback: write the entry list back exactly as it was found, with
+	// replace=true so the entries this call appended or overwrote are gone
+	// rather than merged with the restored ones.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("nodeName"), NodeName);
+	Payload->SetArrayField(TEXT("entries"), PreviousEntries);
+	Payload->SetBoolField(TEXT("replace"), true);
+	MCPSetRollback(Result, TEXT("set_static_mesh_spawner_meshes"), Payload);
+	const bool bLossy = bDescriptorsWillBeLost || bPreviousEntryHadNoMesh || !ReplacedSelectorClass.IsEmpty();
+	Result->SetBoolField(TEXT("rollbackLossy"), bLossy);
+	if (!ReplacedSelectorClass.IsEmpty())
+	{
+		Result->SetStringField(TEXT("replacedMeshSelectorClass"), ReplacedSelectorClass);
+	}
+	if (bLossy)
+	{
+		FString Note;
+		if (bDescriptorsWillBeLost)
+		{
+			Note += FString::Printf(
+				TEXT("The rollback restores the mesh and weight of the %d entr(ies) that were here, and replays with replace=true, which rebuilds each entry from {mesh, weight} alone. Every entry's ISM descriptor is therefore DISCARDED: material overrides, collision profile, cull distances and component tags all return to their defaults. "),
+				PreviousEntries.Num());
+		}
+		if (bPreviousEntryHadNoMesh)
+		{
+			Note += TEXT("One or more entries had no static mesh set; an entry with an empty mesh is skipped on the way back in and its slot in the list disappears. ");
+		}
+		if (!ReplacedSelectorClass.IsEmpty())
+		{
+			Note += FString::Printf(
+				TEXT("This node also used a %s mesh selector, which was replaced outright by a weighted one. The previous selector and its configuration do not come back - that object is gone and this action only writes weighted entries. Set the selector type in the PCG editor to undo it."),
+				*ReplacedSelectorClass);
+		}
+		Result->SetStringField(TEXT("rollbackNote"), Note.TrimEnd());
+	}
 	return MCPResult(Result);
 }
 
@@ -1429,6 +1765,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::ForceRegeneratePCG(const TSharedPtr<FJsonOb
 		return MCPError(FString::Printf(TEXT("PCGComponent on '%s' has no graph assigned"), *ActorLabel));
 	}
 
+	// bGenerated is always false on a partitioned component (the engine says so
+	// on the flag itself), so it cannot be read as "nothing was generated" here.
+	const bool bPartitioned = PCGComp->IsPartitioned();
+	const bool bWasGenerated = PCGComp->bGenerated;
+
 	// Full reset: clear → re-assign → cleanup → generate. UE 5.7's
 	// UPCGComponent::Cleanup takes a single bRemoveComponents arg.
 	PCGComp->SetGraph(nullptr);
@@ -1437,12 +1778,46 @@ TSharedPtr<FJsonValue> FPCGHandlers::ForceRegeneratePCG(const TSharedPtr<FJsonOb
 	PCGComp->Generate(/*bForce*/ true);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("componentName"), PCGComp->GetName());
 	Result->SetStringField(TEXT("graphName"), OriginalGraph->GetName());
 	Result->SetStringField(TEXT("graphPath"), OriginalGraph->GetPathName());
 	Result->SetBoolField(TEXT("regenerated"), true);
+	Result->SetBoolField(TEXT("wasGenerated"), bWasGenerated);
+	Result->SetBoolField(TEXT("partitioned"), bPartitioned);
+
+	if (bPartitioned)
+	{
+		// Generation state is unreadable on a partitioned component, so
+		// cleanup_pcg cannot be offered: it would destroy content this call may
+		// not have created, while reporting the undo as exact.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("This component is partitioned, so bGenerated is always false on it and whether it already held generated content cannot be read: the real generation lives on the local components the PCG partition subsystem owns. cleanup_pcg is not offered as the inverse because on a partitioned component it would destroy content this call may not have created."));
+	}
+	else if (!bWasGenerated)
+	{
+		// Nothing had been generated, so clearing the output puts the component
+		// back exactly where it was.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		Payload->SetBoolField(TEXT("removeComponents"), true);
+		MCPSetRollback(Result, TEXT("cleanup_pcg"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		// No inverse. The graph and seed did not change, so the content is
+		// equivalent to what was destroyed - but the destroyed instances are
+		// gone, and running this action again would only destroy and rebuild
+		// them a second time rather than restore anything. cleanup_pcg would
+		// leave the component empty, which is not the state it was in.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The component already held generated content, which this call destroyed and rebuilt from the same graph and seed. There is no inverse: regenerating again repeats the destruction, and cleanup_pcg would leave the component empty rather than as it was. The content is equivalent to what was there, so this only matters where the generated actors had been edited by hand."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1456,6 +1831,12 @@ TSharedPtr<FJsonValue> FPCGHandlers::CleanupPCG(const TSharedPtr<FJsonObject>& P
 	ActorLabel = Actor->GetActorLabel();
 
 	const bool bRemoveComponents = OptionalBool(Params, TEXT("removeComponents"), true);
+	// bGenerated is always false on a partitioned component, so it must not be
+	// reported as "nothing was removed" there: the content it cleaned lives on
+	// the local components the partition subsystem owns.
+	const bool bPartitioned = PCGComp->IsPartitioned();
+	const bool bWasGenerated = PCGComp->bGenerated;
+	const bool bHasGraph = PCGComp->GetGraph() != nullptr;
 	PCGComp->Cleanup(bRemoveComponents);
 
 	auto Result = MCPSuccess();
@@ -1464,6 +1845,55 @@ TSharedPtr<FJsonValue> FPCGHandlers::CleanupPCG(const TSharedPtr<FJsonObject>& P
 	Result->SetStringField(TEXT("componentName"), PCGComp->GetName());
 	Result->SetBoolField(TEXT("removeComponents"), bRemoveComponents);
 	Result->SetBoolField(TEXT("cleaned"), true);
+	Result->SetBoolField(TEXT("wasGenerated"), bWasGenerated);
+	Result->SetBoolField(TEXT("partitioned"), bPartitioned);
+
+	if (bPartitioned && bHasGraph)
+	{
+		// Whether anything was removed is unreadable here, so this must not
+		// claim "unchanged". Regenerating is still the intended inverse of a
+		// cleanup on a partitioned component, with the caveat spelled out.
+		MCPSetUpdated(Result);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		MCPSetRollback(Result, TEXT("force_regenerate_pcg"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("This component is partitioned, so bGenerated is always false on it and whether this call removed anything cannot be read: the real generation lives on the local components the PCG partition subsystem owns. The rollback regenerates from the component's graph and seed, which are unchanged. It reproduces equivalent content rather than restoring the exact instances, and if the partition happened to hold nothing it CREATES content where there was none."));
+	}
+	else if (bPartitioned)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("This component is partitioned, so whether this call removed anything cannot be read, and it has no graph assigned, so nothing can regenerate what it may have removed."));
+	}
+	else if (!bWasGenerated)
+	{
+		// Nothing had been generated, so nothing was removed.
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The component held no generated content, so this call removed nothing and there is nothing to undo."));
+	}
+	else if (bHasGraph)
+	{
+		MCPSetUpdated(Result);
+		// PCG output is a function of the graph and the seed, both untouched by a
+		// cleanup, so regenerating reproduces equivalent content.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		MCPSetRollback(Result, TEXT("force_regenerate_pcg"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The rollback regenerates from the component's graph and seed, which are unchanged, so the content that comes back is equivalent to what was removed. It is not the same content: the actors and components that were destroyed are gone, so any edit made to them by hand after they were generated does not come back."));
+	}
+	else
+	{
+		MCPSetUpdated(Result);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The component has no graph assigned, so nothing can regenerate the content this call removed. Assign a graph with toggle_pcg_graph before regenerating."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1490,6 +1920,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::ToggleGraphPCG(const TSharedPtr<FJsonObject
 		if (!TargetGraph) return MCPError(FString::Printf(TEXT("No graph on '%s' and no graphPath provided"), *ActorLabel));
 	}
 
+	// The graph the component had. When the caller named a different one this is
+	// the only thing that undoes the swap; when they named none, this call is a
+	// deliberate re-apply of the same graph and changes no state at all.
+	UPCGGraph* PreviousGraph = PCGComp->GetGraph();
+
 	PCGComp->SetGraph(nullptr);
 	PCGComp->SetGraph(TargetGraph);
 
@@ -1500,6 +1935,36 @@ TSharedPtr<FJsonValue> FPCGHandlers::ToggleGraphPCG(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("graphName"), TargetGraph->GetName());
 	Result->SetStringField(TEXT("graphPath"), TargetGraph->GetPathName());
 	Result->SetBoolField(TEXT("toggled"), true);
+	if (PreviousGraph)
+	{
+		Result->SetStringField(TEXT("previousGraphPath"), PreviousGraph->GetPathName());
+	}
+
+	if (PreviousGraph == TargetGraph)
+	{
+		// Cleared and re-set the same graph: a reinit kick, not a state change.
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The component's graph assignment is the one it already had; clearing and re-setting it forces a reinit and leaves no state change to undo."));
+	}
+	else if (PreviousGraph)
+	{
+		MCPSetUpdated(Result);
+		// Rollback: assign the graph it had, through the same action.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		Payload->SetStringField(TEXT("graphPath"), PreviousGraph->GetPathName());
+		MCPSetRollback(Result, TEXT("toggle_pcg_graph"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		MCPSetUpdated(Result);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The component had no graph assigned before this call, and toggle_pcg_graph cannot clear an assignment: it requires a graph to set, and with no graphPath it re-applies the current one. Clear it with editor(set_property) on the component if the change has to be undone."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1525,6 +1990,30 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 	}
 
 	const bool bReplace = OptionalBool(Params, TEXT("replace"), false);
+
+	// Snapshot the graph before touching it. export_pcg_graph and this action
+	// speak the same vocabulary by design (#213), so the export IS the inverse
+	// payload: replayed with replace=true it wipes whatever this import leaves
+	// and rebuilds what was here. That works for an additive import too, since
+	// replacing with the previous contents removes the nodes it added.
+	//
+	// Cost, stated rather than hidden: ExportGraph walks a process-wide
+	// TObjectIterator<UEdGraphNode> to recover hand-laid-out editor positions,
+	// so every import now pays one object-iterator pass. That is small beside
+	// what an import already does - instantiate N settings objects, rebuild the
+	// edges, PostEditChange and save the package - and it buys the only exact
+	// inverse this action can have, so it is taken unconditionally rather than
+	// behind a flag the TS surface would have to grow.
+	TSharedPtr<FJsonObject> Snapshot;
+	{
+		TSharedPtr<FJsonValue> Exported = ExportGraph(Params);
+		const TSharedPtr<FJsonObject>* ExportedObj = nullptr;
+		if (Exported.IsValid() && Exported->TryGetObject(ExportedObj) && ExportedObj && (*ExportedObj).IsValid()
+			&& (*ExportedObj)->HasField(TEXT("nodes")))
+		{
+			Snapshot = *ExportedObj;
+		}
+	}
 
 	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "ImportPCGGraph", "Import PCG Graph"));
 	Graph->Modify();
@@ -1770,6 +2259,32 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 	if (Warnings.Num() > 0)
 	{
 		Result->SetArrayField(TEXT("warnings"), Warnings);
+	}
+
+	if (Snapshot.IsValid())
+	{
+		// Rollback: import the snapshot taken before the write, with replace=true
+		// so what this call built is torn out rather than merged with it. The
+		// snapshot came from export_pcg_graph, whose nodes/connections shape is
+		// the shape this action reads.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetBoolField(TEXT("replace"), true);
+		Payload->SetField(TEXT("nodes"), Snapshot->TryGetField(TEXT("nodes")));
+		if (Snapshot->HasField(TEXT("connections")))
+		{
+			Payload->SetField(TEXT("connections"), Snapshot->TryGetField(TEXT("connections")));
+		}
+		MCPSetRollback(Result, TEXT("import_pcg_graph"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The rollback rebuilds the graph from a snapshot taken before this call: each node's class, position, every edge, and the settings the export captured. Node names are attempted but NOT guaranteed. The import renames each rebuilt node to the name in the snapshot only when nothing else is found under the graph's outer holding it, and the check is a StaticFindObject on the outer rather than a look at the node list - a node the same replace pass has just removed still occupies its name until garbage collection, so a rollback can land on the engine-assigned name instead. Every such case is listed in that call's warnings, so read them rather than assuming the names came back. What does NOT come back at all is any settings property the export could not see: only properties flagged editable are captured, so anything outside that set returns to its class default."));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The graph could not be exported before the import, so there is no snapshot to restore from and no other call undoes a bulk import."));
 	}
 	return MCPResult(Result);
 }

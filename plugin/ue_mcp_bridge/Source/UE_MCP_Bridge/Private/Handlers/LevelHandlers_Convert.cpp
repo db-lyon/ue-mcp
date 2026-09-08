@@ -309,6 +309,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::ConvertBrushesToStaticMesh(const TSharedP
 	else
 	{
 		MCPSetCreated(Result);
+		// The header says there is no undo path back to a builder brush, and
+		// the result has to say it too: a caller cannot tell a considered
+		// decision from a forgotten one by reading a missing field.
+		MCPSetNoRollback(Result,
+			TEXT("ConvertActors destroyed the source brushes and replaced them with StaticMeshActors and newly generated StaticMesh assets. ")
+			TEXT("Undoing that would need a call that rebuilds an ABrush from its original brush model, and the bridge has no action that creates a brush at all."));
 		Result->SetStringField(TEXT("saveNote"),
 			TEXT("The level is left dirty and is NOT saved, and the generated static meshes are new unsaved packages. Save both when you have checked the result."));
 	}

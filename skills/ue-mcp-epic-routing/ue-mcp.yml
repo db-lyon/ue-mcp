@@ -1,0 +1,6 @@
+categories: [epic, blueprint]
+# The whole subject of this pack is the wrapped ToolsetRegistry, which does not
+# exist before 5.8. On an older engine the native half of its advice still
+# applies and the epic_* half does not.
+engine: ">=5.8"
+triggers: [epic, toolset, graph dsl, native or epic, tool routing]

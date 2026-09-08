@@ -101,6 +101,25 @@ describe("editor(play_in_editor_ignore_blueprint_errors)", () => {
     expect(call).not.toHaveBeenCalled();
   });
 
+  it("refuses rather than throwing when the client advertises no elicitation", async () => {
+    // The shipped server always builds a gate, so `if (!ctx.elicit)` was never
+    // true in production and this branch was unreachable: a client advertising
+    // nothing fell through to a call that throws, and the caller got a raw
+    // prompt failure instead of the refusal that names the config key it needs
+    // to set. Every other test here passes a bare gate, which the capability
+    // probe takes at face value, so none of them covered it.
+    const elicit = Object.assign(vi.fn<ElicitFn>(), {
+      clientAdvertisesElicitation: () => false,
+    }) as ElicitFn;
+    const { ctx, call } = makeContext({}, elicit);
+
+    const result = await invoke(ctx);
+
+    expect(result.code).toBe("approval_required");
+    expect(elicit).not.toHaveBeenCalled();
+    expect(call).not.toHaveBeenCalled();
+  });
+
   it("never sends the bypass flag on the plain play_in_editor action", async () => {
     const { ctx, call } = makeContext({ pie: { allowIgnoreBlueprintErrors: true } });
 

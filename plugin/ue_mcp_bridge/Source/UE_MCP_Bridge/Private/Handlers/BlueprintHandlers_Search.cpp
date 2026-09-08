@@ -32,6 +32,7 @@
 #include "BlueprintHandlers_Internal.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 #include "Engine/Blueprint.h"
 #include "Engine/World.h"
 #include "Engine/LevelScriptBlueprint.h"
@@ -283,8 +284,25 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallSites(const TSharedPtr<FJso
 	const FString OutputPath = OptionalString(Params, TEXT("outputPath"), TEXT(""));
 
 	const int32 Offset = FMath::Max(0, OptionalInt(Params, TEXT("offset"), 0));
-	const int32 Limit = FMath::Clamp(
-		OptionalInt(Params, TEXT("limit"), DefaultCallSiteLimit), 1, MaxCallSiteLimit);
+	// T3: paged. `offset` keeps working and still means the same row index; the
+	// cursor is the resumable form of it, anchored on the identity of the last
+	// row rather than on a count into a result set that a recompile moves.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(
+				TEXT("search_blueprint_call_sites|names=%s|class=%s|dir=%s|nested=%d|levelScripts=%d|neighbours=%d|narrow=%d"),
+				*FString::Join(FunctionNames, TEXT(",")),
+				FilterClass ? *FilterClass->GetPathName() : TEXT(""),
+				*Directory,
+				bIncludeNestedGraphs ? 1 : 0,
+				bIncludeLevelScripts ? 1 : 0,
+				bIncludeNeighbours ? 1 : 0,
+				bNarrowByRegistry ? 1 : 0),
+			DefaultCallSiteLimit, MaxCallSiteLimit, Page))
+	{
+		return Err;
+	}
 	const int32 MaxBlueprints = FMath::Clamp(
 		OptionalInt(Params, TEXT("maxBlueprints"), DefaultMaxBlueprints), 1, MaxMaxBlueprints);
 
@@ -369,7 +387,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallSites(const TSharedPtr<FJso
 	}
 
 	// ── Load and walk ───────────────────────────────────────────────────────
-	TArray<TSharedPtr<FJsonValue>> Hits;
+	TArray<MCPPagination::FPageRow> Hits;
 	TArray<FString> FailedToLoad;
 	int32 BlueprintsLoaded = 0;
 	int32 GraphsScanned = 0;
@@ -480,7 +498,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallSites(const TSharedPtr<FJso
 					AppendNeighbours(HitObj, Node);
 				}
 
-				Hits.Add(MakeShared<FJsonValueObject>(HitObj));
+				// The page anchor names the exact node: the owning asset, the
+				// graph selector that disambiguates two graphs of one name, and
+				// the node GUID. A node GUID is stable across a recompile,
+				// which a row index is not.
+				const FString RowId = FString::Printf(TEXT("%s|%s|%s"),
+					*Blueprint->GetPathName(), *Selector, *Node->NodeGuid.ToString());
+				Hits.Add({ RowId, MakeShared<FJsonValueObject>(HitObj) });
 				if (Hits.Num() >= MaxCollectedHits)
 				{
 					bTruncatedAtMaxHits = true;
@@ -539,14 +563,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallSites(const TSharedPtr<FJso
 	}
 
 	// ── Response ────────────────────────────────────────────────────────────
-	auto BuildResult = [&](int32 SliceStart, int32 SliceEnd) -> TSharedPtr<FJsonObject>
+	// Everything about the query and the work done. The rows themselves are
+	// added by the caller, because the file dump wants all of them and the
+	// response wants one page.
+	auto BuildEnvelope = [&]() -> TSharedPtr<FJsonObject>
 	{
-		TArray<TSharedPtr<FJsonValue>> Slice;
-		for (int32 Index = SliceStart; Index < SliceEnd; ++Index)
-		{
-			Slice.Add(Hits[Index]);
-		}
-
 		TSharedPtr<FJsonObject> Obj = MCPSuccess();
 		TArray<TSharedPtr<FJsonValue>> RequestedNames;
 		for (const FString& Name : FunctionNames)
@@ -561,13 +582,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallSites(const TSharedPtr<FJso
 		Obj->SetStringField(TEXT("directory"), Directory);
 		Obj->SetBoolField(TEXT("includeNestedGraphs"), bIncludeNestedGraphs);
 		Obj->SetBoolField(TEXT("includeLevelScripts"), bIncludeLevelScripts);
-		Obj->SetArrayField(TEXT("callSites"), Slice);
-		Obj->SetNumberField(TEXT("returned"), Slice.Num());
-		Obj->SetNumberField(TEXT("total"), Hits.Num());
-		Obj->SetNumberField(TEXT("offset"), SliceStart);
-		Obj->SetNumberField(TEXT("limit"), SliceEnd - SliceStart);
-		Obj->SetBoolField(TEXT("hasMore"), SliceEnd < Hits.Num());
-		Obj->SetNumberField(TEXT("nextOffset"), SliceEnd < Hits.Num() ? SliceEnd : -1);
 
 		// The work that was done and the work that was avoided, so a caller can
 		// tell a genuinely empty result from an over-eager filter.
@@ -617,14 +631,20 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallSites(const TSharedPtr<FJso
 		return Obj;
 	};
 
-	const int32 SliceStart = FMath::Min(Offset, Hits.Num());
-	const int32 SliceEnd = FMath::Min(SliceStart + Limit, Hits.Num());
-
 	if (bDumpToFile)
 	{
 		// Same convention as read_graph: the file holds the whole result set,
-		// the response holds where to find it.
-		const TSharedPtr<FJsonObject> DumpResult = BuildResult(0, Hits.Num());
+		// the response holds where to find it. A dump is never paged.
+		const TSharedPtr<FJsonObject> DumpResult = BuildEnvelope();
+		TArray<TSharedPtr<FJsonValue>> AllRows;
+		AllRows.Reserve(Hits.Num());
+		for (const MCPPagination::FPageRow& Row : Hits)
+		{
+			AllRows.Add(Row.Value);
+		}
+		DumpResult->SetArrayField(TEXT("callSites"), AllRows);
+		DumpResult->SetNumberField(TEXT("returned"), AllRows.Num());
+		DumpResult->SetNumberField(TEXT("total"), AllRows.Num());
 		FString ResolvedDumpPath;
 		FString DumpError;
 		if (!WriteJsonObjectToFile(DumpResult, OutputPath, Directory, TEXT("call_sites"), ResolvedDumpPath, DumpError))
@@ -643,6 +663,35 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallSites(const TSharedPtr<FJso
 		return MCPResult(Result);
 	}
 
-	return MCPResult(BuildResult(SliceStart, SliceEnd));
+	// A caller that passed the older `offset` instead of a cursor gets exactly
+	// the page a cursor issued at that offset would have given it: the anchor
+	// is read out of this same enumeration, so the boundary is exact and
+	// nothing is reported as having changed.
+	const int32 LegacyStart = FMath::Min(Offset, Hits.Num());
+	if (!Page.bResumed && LegacyStart > 0)
+	{
+		Page.bResumed = true;
+		Page.ResumeOffset = LegacyStart;
+		Page.ResumeAnchor = Hits[LegacyStart - 1].Id;
+	}
+
+	TSharedPtr<FJsonObject> Result = BuildEnvelope();
+	// bRowsAreComplete is false once the walk stopped at MaxCollectedHits: the
+	// collection was not fully enumerated, so `total` would be a floor rather
+	// than a count and the page says `totalKnown: false` instead.
+	MCPPagination::EmitPage(Page, Hits, TEXT("callSites"), Result, !bTruncatedAtMaxHits);
+
+	// The older offset-shaped fields, kept so an existing caller reads the same
+	// answer out of the same names.
+	double PageOffset = 0.0;
+	double PageCount = 0.0;
+	Result->TryGetNumberField(TEXT("pageOffset"), PageOffset);
+	Result->TryGetNumberField(TEXT("count"), PageCount);
+	const int32 SliceEnd = static_cast<int32>(PageOffset) + static_cast<int32>(PageCount);
+	Result->SetNumberField(TEXT("returned"), PageCount);
+	Result->SetNumberField(TEXT("offset"), PageOffset);
+	Result->SetNumberField(TEXT("limit"), Page.Limit);
+	Result->SetNumberField(TEXT("nextOffset"), SliceEnd < Hits.Num() ? SliceEnd : -1);
+	return MCPResult(Result);
 }
 

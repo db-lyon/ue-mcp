@@ -20,9 +20,13 @@ import {
   type Guard,
   type GuardContext,
 } from "@db-lyon/flowkit/guard";
+import * as fs from "node:fs";
 import type { IBridge } from "../bridge.js";
+import type { ProjectContext } from "../project.js";
 import type { EditorSession } from "../session.js";
 import { classifyWrite, type WriteClassification } from "./write-methods.js";
+import { bridgeMethodEffect, mayChangeState } from "../action-effects.js";
+import type { ActionEffect } from "../types.js";
 
 /** Resolve a UE content path to an absolute on-disk file, or null if it does not exist. */
 export type ResolveExistingFile = (contentPath: string) => string | null;
@@ -61,6 +65,77 @@ export function writeScope(ctx: CallContext): boolean {
   return ctx.writeFiles().length > 0;
 }
 
+/**
+ * Every call that is not a declared read.
+ *
+ * Wider than `writeScope`, and deliberately so. That one asks which existing
+ * files a call modifies, which is the source-control question: it answers
+ * "no" whenever it cannot extract a content path, and a call with no asset
+ * path in its parameters is still a mutation of the editor.
+ *
+ * The guard pipeline sits on `IBridge.call`, so what it is handed is a bridge
+ * METHOD name rather than a `category.action`. `bridgeMethodEffect` is what
+ * turns one into the other, and it has no undefined answer: the effects the
+ * forwarding actions declared, or the table of methods a handler calls
+ * directly, or `mutate` for a method this server does not recognise.
+ *
+ * It still FAILS CLOSED, and now it does so by declaration rather than by not
+ * finding a verb in a list. Listing mutating verbs was the wrong way round:
+ * that list is open-ended, and every verb missing from it was a mutation
+ * nobody guarded. Inverting it to a read list was the same guess pointed the
+ * other way, and it put every read whose name does not open with a read verb
+ * (`metasound_get_graph`, `line_trace`, `hit_test_viewport_pixel`) in front of
+ * a guard that had no business seeing it.
+ */
+export function mutationScope(ctx: CallContext): boolean {
+  return mayChangeState(effectOf(ctx));
+}
+
+/**
+ * What THIS call does, method and arguments together.
+ *
+ * The arguments matter for one reason and it is not a detail: all 830 wrapped
+ * engine tools dispatch through `epic_call_tool`, so the method alone is
+ * `unknown` and every scope below was wrong about 830 of the 1920 actions on
+ * this surface. `mutations` fired on every wrapped read, `reads` matched none
+ * of them, and `unknown` matched all of them, which made a guard meant to put
+ * a person in front of arbitrary code stop `epic_list_attributes` as well.
+ *
+ * `unknown` means an argument decides. The guard has the arguments.
+ */
+function effectOf(ctx: CallContext): ActionEffect {
+  return bridgeMethodEffect(ctx.method, ctx.params).effect;
+}
+
+/**
+ * Only the calls that observe.
+ *
+ * The complement of `mutationScope`, for auditing what an agent looked at
+ * without the noise of everything it did. It could not be offered while the
+ * answer came from a verb list: "not a read" tolerates a wrong guess in the
+ * safe direction, and "IS a read" does not, because a mutation that slipped
+ * into this scope is a mutation the guard was told to ignore.
+ */
+export function readScope(ctx: CallContext): boolean {
+  return effectOf(ctx) === "read";
+}
+
+/**
+ * Only the calls whose effect a PARAMETER decides.
+ *
+ * `editor(execute_python)`, `editor(execute_command)`, the wrapped Epic tools
+ * behind `epic_call_tool`, and the reflected `invoke_*` family. The escape
+ * hatches: the calls that can do anything, named as a set rather than
+ * enumerated by hand in every project that wants to gate them.
+ *
+ * This is the scope that the declaration made possible rather than merely made
+ * correct. A verb list cannot produce this set at all - `unknown` is not a
+ * property of the name, it is the absence of one.
+ */
+export function unknownScope(ctx: CallContext): boolean {
+  return effectOf(ctx) === "unknown";
+}
+
 /** Build the per-call context, wiring the lazy write-enrichment helpers. */
 export function makeCallContext(
   method: string,
@@ -88,4 +163,22 @@ export function makeCallContext(
   });
 
   return Object.assign(ctx, { write, writeFiles });
+}
+
+/**
+ * Turn a content path into the file on disk it names, or null.
+ *
+ * This is what lets a guard scoped to writes see which existing files a call
+ * would modify. It is deliberately null-returning rather than throwing: a path
+ * that resolves to nothing is a call that creates something, not an error.
+ */
+export function makeResolveExistingFile(project: ProjectContext): ResolveExistingFile {
+  return (contentPath: string): string | null => {
+    try {
+      const abs = project.resolveContentPath(contentPath);
+      return fs.existsSync(abs) ? abs : null;
+    } catch {
+      return null;
+    }
+  };
 }

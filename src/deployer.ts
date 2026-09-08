@@ -195,24 +195,47 @@ function ensurePythonPlugin(uprojectPath: string): boolean {
 /*  C++ Plugin deployment                                             */
 /* ------------------------------------------------------------------ */
 
-function deployCppPlugin(uprojectPath: string): boolean {
-  const projectDir = path.dirname(uprojectPath);
-  const pluginsDir = path.join(projectDir, "Plugins");
+/**
+ * Which entries in the deployed tree are stale, given what the source has.
+ *
+ * Exported so the mirror rule can be tested as the rule rather than as a copy
+ * of it. "Never hand-copy a file into the test project" is a property of this
+ * function: anything the source does not name, and that is not a build
+ * artifact directory, is removed on the next deploy, so a hand-placed file
+ * never survives to be compiled.
+ *
+ * Name comparison follows the filesystem. On Windows and macOS `Handlers.cpp`
+ * and `handlers.cpp` are one file, and treating them as two deletes the file
+ * that was just copied in.
+ */
+export function staleDeployedEntries(
+  destNames: string[],
+  sourceNames: Set<string>,
+  artifactDirs: Set<string>,
+  caseInsensitiveFs = process.platform === "win32" || process.platform === "darwin",
+): string[] {
+  const key = (name: string): string => (caseInsensitiveFs ? name.toLowerCase() : name);
+  return destNames.filter((name) => !artifactDirs.has(name) && !sourceNames.has(key(name)));
+}
 
-  const sourcePluginDir = path.resolve(
-    selfDir(),
-    "..",
-    "plugin",
-    "ue_mcp_bridge",
-  );
-
+/**
+ * Copy the authored plugin tree over the deployed one, and leave the deployed
+ * tree in a state UnrealBuildTool will compile correctly.
+ *
+ * Exported with both directories as arguments so the whole step, including the
+ * Build.cs touch that a new source file depends on, can be driven against real
+ * directories. deployCppPlugin resolves the authored tree relative to this
+ * module, which no test can redirect.
+ */
+export function deployPluginTree(sourcePluginDir: string, targetPluginDir: string): boolean {
   if (!fs.existsSync(sourcePluginDir)) {
     console.error(`[ue-mcp] C++ plugin source not found at ${sourcePluginDir}`);
     return false;
   }
 
-  const targetPluginDir = path.join(pluginsDir, "UE_MCP_Bridge");
   let anyDeployed = false;
+  /** Sources that did not exist in the deployed tree before this run. */
+  const newSourceFiles: string[] = [];
 
   // Build outputs live in the deployed tree, not the source tree, so they are
   // never copied and never pruned.
@@ -245,14 +268,24 @@ function deployCppPlugin(uprojectPath: string): boolean {
         copyRecursive(srcPath, destPath);
       } else {
         const srcBytes = fs.readFileSync(srcPath);
+        const existed = fs.existsSync(destPath);
         let shouldWrite = true;
-        if (fs.existsSync(destPath)) {
+        if (existed) {
           const destBytes = fs.readFileSync(destPath);
           shouldWrite = !srcBytes.equals(destBytes);
         }
         if (shouldWrite) {
           fs.writeFileSync(destPath, srcBytes);
           anyDeployed = true;
+        }
+        // A .cpp that was not here before needs UnrealBuildTool to look again.
+        // UBT caches the source list per module and only rebuilds that list
+        // when the module's Build.cs is newer than the cache, so a brand new
+        // handler file deploys, compiles into nothing, and every action in it
+        // answers "Unknown method" at runtime with a build that reported
+        // success. Touching Build.cs is what makes the next build see it.
+        if (!existed && /\.(cpp|h)$/i.test(entry.name)) {
+          newSourceFiles.push(entry.name);
         }
       }
     }
@@ -263,13 +296,15 @@ function deployCppPlugin(uprojectPath: string): boolean {
     // for symbols defined twice, once from the new module and once from the
     // stale copy. Also drop the intermediate objects for anything pruned, since
     // UBT links whatever .obj files it finds from an earlier build.
-    for (const entry of fs.readdirSync(dest, { withFileTypes: true })) {
-      if (artifactDirs.has(entry.name) || sourceNames.has(nameKey(entry.name))) {
-        continue;
-      }
-      const stalePath = path.join(dest, entry.name);
-      fs.rmSync(stalePath, { recursive: true, force: true });
-      pruneIntermediates(entry.name);
+    const stale = staleDeployedEntries(
+      fs.readdirSync(dest).map((n) => n),
+      sourceNames,
+      artifactDirs,
+      caseInsensitiveFs,
+    );
+    for (const name of stale) {
+      fs.rmSync(path.join(dest, name), { recursive: true, force: true });
+      pruneIntermediates(name);
       anyDeployed = true;
     }
   }
@@ -293,7 +328,55 @@ function deployCppPlugin(uprojectPath: string): boolean {
   }
 
   copyRecursive(sourcePluginDir, targetPluginDir);
+  if (newSourceFiles.length > 0) {
+    touchBuildRules(targetPluginDir, newSourceFiles);
+  }
   return anyDeployed;
+}
+
+function deployCppPlugin(uprojectPath: string): boolean {
+  const projectDir = path.dirname(uprojectPath);
+  return deployPluginTree(
+    path.resolve(selfDir(), "..", "plugin", "ue_mcp_bridge"),
+    path.join(projectDir, "Plugins", "UE_MCP_Bridge"),
+  );
+}
+
+/**
+ * Make UnrealBuildTool rescan a module whose file list just changed.
+ *
+ * UBT caches the source list per module and rebuilds it only when the module's
+ * Build.cs is newer than that cache. A new .cpp therefore deploys, compiles
+ * into nothing, and every action in it answers "Unknown method" at runtime,
+ * from a build that reported success. Touching every Build.cs under the
+ * deployed plugin costs nothing on a build where no file was added, because
+ * this only runs when one was.
+ */
+export function touchBuildRules(pluginDir: string, because: string[] = []): string[] {
+  const touched: string[] = [];
+  const now = new Date();
+  const walk = (dir: string): void => {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "Binaries" || entry.name === "Intermediate") continue;
+        walk(full);
+      } else if (entry.name.endsWith(".Build.cs")) {
+        fs.utimesSync(full, now, now);
+        touched.push(full);
+      }
+    }
+  };
+  walk(pluginDir);
+  if (touched.length > 0 && because.length > 0) {
+    console.error(
+      `[ue-mcp] ${because.length} new source file(s) deployed `
+      + `(${because.slice(0, 3).join(", ")}${because.length > 3 ? ", ..." : ""}); `
+      + "touched Build.cs so UnrealBuildTool rescans the module.",
+    );
+  }
+  return touched;
 }
 
 function ensureCppPluginEnabled(uprojectPath: string): boolean {

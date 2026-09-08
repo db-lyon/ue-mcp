@@ -318,6 +318,13 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 		{
 			if (SM->Sockets[i] && SM->Sockets[i]->SocketName == FName(*SocketName))
 			{
+				// Read before the removal. After RemoveAt the array no longer
+				// holds the socket, and a transform captured then would put
+				// back a socket at the origin rather than where this one was.
+				const FVector PrevLoc = SM->Sockets[i]->RelativeLocation;
+				const FRotator PrevRot = SM->Sockets[i]->RelativeRotation;
+				const FVector PrevScale = SM->Sockets[i]->RelativeScale;
+
 				SM->Modify();
 				SM->Sockets.RemoveAt(i);
 				SM->MarkPackageDirty();
@@ -327,6 +334,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 				Result->SetStringField(TEXT("meshType"), TEXT("StaticMesh"));
 				Result->SetStringField(TEXT("source"), TEXT("mesh"));
 				Result->SetBoolField(TEXT("deleted"), true);
+
+				// add_socket recreates it with the transform it had.
+				// onConflict=update so the restore lands whether or not a
+				// socket of that name exists again by the time it runs.
+				TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+				Payload->SetStringField(TEXT("assetPath"), AssetPath);
+				Payload->SetStringField(TEXT("socketName"), SocketName);
+				Payload->SetObjectField(TEXT("relativeLocation"), MCPVec3ToJsonObject(PrevLoc));
+				Payload->SetObjectField(TEXT("relativeRotation"), MCPRotatorToJsonObject(PrevRot));
+				Payload->SetObjectField(TEXT("relativeScale"), MCPVec3ToJsonObject(PrevScale));
+				Payload->SetStringField(TEXT("onConflict"), TEXT("update"));
+				MCPSetRollback(Result, TEXT("add_socket"), Payload);
 				return MCPResult(Result);
 			}
 		}
@@ -346,6 +365,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 		{
 			if (Sockets[i] && Sockets[i]->SocketName == FName(*SocketName))
 			{
+				// Captured before the removal, and the bone with it: a socket
+				// restored onto the wrong bone is attached to the wrong part of
+				// the skeleton however right its transform is.
+				const FVector PrevLoc = Sockets[i]->RelativeLocation;
+				const FRotator PrevRot = Sockets[i]->RelativeRotation;
+				const FVector PrevScale = Sockets[i]->RelativeScale;
+				const FString PrevBone = Sockets[i]->BoneName.ToString();
+
 				SKM->Modify();
 				Sockets[i]->Modify();
 				Sockets.RemoveAt(i);
@@ -357,6 +384,16 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 				Result->SetStringField(TEXT("meshType"), TEXT("SkeletalMesh"));
 				Result->SetStringField(TEXT("source"), TEXT("mesh"));
 				Result->SetBoolField(TEXT("deleted"), true);
+
+				TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+				Payload->SetStringField(TEXT("assetPath"), AssetPath);
+				Payload->SetStringField(TEXT("socketName"), SocketName);
+				Payload->SetStringField(TEXT("boneName"), PrevBone);
+				Payload->SetObjectField(TEXT("relativeLocation"), MCPVec3ToJsonObject(PrevLoc));
+				Payload->SetObjectField(TEXT("relativeRotation"), MCPRotatorToJsonObject(PrevRot));
+				Payload->SetObjectField(TEXT("relativeScale"), MCPVec3ToJsonObject(PrevScale));
+				Payload->SetStringField(TEXT("onConflict"), TEXT("update"));
+				MCPSetRollback(Result, TEXT("add_socket"), Payload);
 				return MCPResult(Result);
 			}
 		}
@@ -375,6 +412,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 		{
 			if (Skel->Sockets[i] && Skel->Sockets[i]->SocketName == FName(*SocketName))
 			{
+				const FVector PrevLoc = Skel->Sockets[i]->RelativeLocation;
+				const FRotator PrevRot = Skel->Sockets[i]->RelativeRotation;
+				const FVector PrevScale = Skel->Sockets[i]->RelativeScale;
+				const FString PrevBone = Skel->Sockets[i]->BoneName.ToString();
+
 				Skel->Modify();
 				Skel->Sockets[i]->Modify();
 				Skel->Sockets.RemoveAt(i);
@@ -385,6 +427,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::RemoveSocket(const TSharedPtr<FJsonObject
 				Result->SetStringField(TEXT("meshType"), TEXT("Skeleton"));
 				Result->SetStringField(TEXT("source"), TEXT("skeleton"));
 				Result->SetBoolField(TEXT("deleted"), true);
+
+				// The same assetPath routes add_socket back to the Skeleton's
+				// own socket array, so the rig-level socket is restored where it
+				// lived rather than on a mesh.
+				TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+				Payload->SetStringField(TEXT("assetPath"), AssetPath);
+				Payload->SetStringField(TEXT("socketName"), SocketName);
+				Payload->SetStringField(TEXT("boneName"), PrevBone);
+				Payload->SetObjectField(TEXT("relativeLocation"), MCPVec3ToJsonObject(PrevLoc));
+				Payload->SetObjectField(TEXT("relativeRotation"), MCPRotatorToJsonObject(PrevRot));
+				Payload->SetObjectField(TEXT("relativeScale"), MCPVec3ToJsonObject(PrevScale));
+				Payload->SetStringField(TEXT("onConflict"), TEXT("update"));
+				MCPSetRollback(Result, TEXT("add_socket"), Payload);
 				return MCPResult(Result);
 			}
 		}

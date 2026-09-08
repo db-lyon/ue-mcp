@@ -1,0 +1,14 @@
+# What this pack needs, in the form prose cannot carry. Read by
+# flow(action="skill_list") and checked by flow(action="skill_check").
+categories: [animation, asset, editor, project]
+uePlugins: [IKRig, ControlRig]
+unrealClasses:
+  - USkeleton
+  - USkeletalMesh
+  - UAnimSequence
+  - UAnimMontage
+  - UIKRigDefinition
+  - UIKRetargeter
+  - UControlRigBlueprint
+engine: ">=5.4"
+triggers: [animation, skeleton, retarget, ik rig, control rig, montage, anim sequence]

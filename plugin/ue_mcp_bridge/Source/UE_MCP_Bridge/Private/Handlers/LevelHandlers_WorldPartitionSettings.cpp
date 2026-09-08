@@ -527,12 +527,78 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldPartitionSettings(const TSharedPt
 	}
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("worldPartition"), WorldPartition->GetPathName());
 	Result->SetNumberField(TEXT("appliedCount"), Applied.Num() - FailureCount);
 	Result->SetNumberField(TEXT("failedCount"), FailureCount);
 	Result->SetArrayField(TEXT("writes"), Applied);
 	if (FailureCount > 0) Result->SetBoolField(TEXT("success"), false);
+
+	// Every write is a dotted path rooted at the world partition and every one
+	// recorded the value it replaced, so the inverse is this same action with
+	// those values.
+	//
+	// EVERY path that applied is restated, including ones whose value looks
+	// unmoved. The only available comparison is export text against export
+	// text, which cannot prove a value stayed put: two different values that
+	// print the same read as equal. Dropping a path on that evidence would
+	// leave a write that landed with no way back, which is the worse of the
+	// two errors. The change test therefore drives the idempotency markers
+	// only, never what goes in the payload.
+	{
+		TSharedPtr<FJsonObject> InverseSettings = MakeShared<FJsonObject>();
+		bool bAnyValueChanged = false;
+		// A grid shorthand resolves to a path like
+		// RuntimeHash.StreamingGrids[1].CellSize, so the grid's POSITION IN THE
+		// ARRAY is inside the key. That position is not a stable identity, and
+		// the note below has to say so rather than imply the opposite.
+		bool bIndexAddressed = false;
+		for (const TSharedPtr<FJsonValue>& Value : Applied)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Entry.IsValid()) continue;
+			bool bApplied = false;
+			if (!Entry->TryGetBoolField(TEXT("applied"), bApplied) || !bApplied) continue;
+			FString Path;
+			if (!Entry->TryGetStringField(TEXT("path"), Path) || Path.IsEmpty()) continue;
+			const TSharedPtr<FJsonValue> Previous = Entry->TryGetField(TEXT("previousValue"));
+			if (!Previous.IsValid()) continue;
+
+			// previousValue and value are both export text from the same
+			// property, so comparing them says whether this path moved.
+			FString PreviousText, NewText;
+			if (Previous->TryGetString(PreviousText) && Entry->TryGetStringField(TEXT("value"), NewText) &&
+				PreviousText != NewText)
+			{
+				bAnyValueChanged = true;
+			}
+			if (Path.Contains(TEXT("["))) bIndexAddressed = true;
+			InverseSettings->SetField(Path, Previous);
+		}
+
+		if (bAnyValueChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("unchanged"), !bAnyValueChanged);
+
+		// Not gated on bAnyValueChanged: see above. A write landed on every
+		// path in InverseSettings.
+		if (InverseSettings->Values.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+			Payload->SetObjectField(TEXT("settings"), InverseSettings);
+			MCPSetRollback(Result, TEXT("set_world_partition_settings"), Payload);
+			Result->SetBoolField(TEXT("rollbackIndexAddressed"), bIndexAddressed);
+			if (bIndexAddressed)
+			{
+				Result->SetBoolField(TEXT("rollbackLossy"), true);
+				Result->SetStringField(TEXT("rollbackNote"),
+					TEXT("At least one restored path carries an array position, such as RuntimeHash.StreamingGrids[1].CellSize, because that is the only addressing this action has. An array position is not a stable identity: if a streaming grid is added or removed between this write and the replay, the same path resolves to a DIFFERENT grid and the inverse writes the old value onto it, reporting applied:true while the grid this call changed keeps its new value. Nothing detects that. Replay the inverse before any grid is added or removed, or check writes[].path still names the grid you meant. The inverse also restores the settings only, not the streaming data built from them: rebuild that afterwards exactly as after the forward write."));
+			}
+			else
+			{
+				Result->SetStringField(TEXT("rollbackNote"),
+					TEXT("Every restored path is a fixed dotted path with no array position in it, so it resolves to the same property on replay. The inverse restores the settings, not the streaming data built from them: rebuild that afterwards exactly as after the forward write."));
+			}
+		}
+	}
 	Result->SetStringField(TEXT("note"),
 		TEXT("Streaming settings only take effect for cells generated after the change, so rebuild the streaming data (or re-cook) before measuring. The map package is left dirty and is NOT saved."));
 	return MCPResult(Result);
@@ -682,5 +748,17 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddRuntimeCellTransformer(const TSharedPt
 	}
 	Result->SetStringField(TEXT("note"),
 		TEXT("Transformers run when streaming cells are generated, so rebuild the streaming data before measuring. The map package is left dirty and is NOT saved."));
+	// No action removes ONE entry from RuntimeCellsTransformerStack. What
+	// set_world_partition_settings can do is rewrite the whole array from a
+	// JSON array, which SetJsonOnProperty rebuilds element by element, so it
+	// could empty the stack: that is a blanket replacement of every
+	// transformer, including the ones this call never touched, and it
+	// reconstructs each surviving entry's instanced sub-object rather than
+	// restoring the object that is there. Undoing an append with it would be a
+	// wider and lossier write than the append itself, so it is not the inverse.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+		TEXT("There is no action that removes one runtime cell transformer. Rewriting the whole RuntimeCellsTransformerStack through set_world_partition_settings would replace every entry, not just the one added at index %d, and would rebuild the other transformers' instanced objects instead of leaving them alone. Remove the entry in the editor's world settings, or undo the transaction while it is still on the stack."),
+		NewIndex));
 	return MCPResult(Result);
 }

@@ -123,14 +123,106 @@ export function resolveUProjectPath(inputPath: string): string {
  * project. Lets a caller learn a project's settings (its pinned bridge port,
  * say) before committing to the switch.
  */
+/**
+ * One `ue-mcp:` key that failed validation, and what was wrong with it.
+ *
+ * Kept per project directory so a reader who is already looking at the project
+ * (project(get_status), the startup banner) can be told, rather than the user
+ * having to find a warn() line on stderr that their MCP client writes to a log
+ * nobody opens.
+ */
+export interface UeMcpConfigRejection {
+  key: string;
+  message: string;
+}
+
+const rejectionsByDir = new Map<string, UeMcpConfigRejection[]>();
+
+/** Every `ue-mcp:` key that was dropped for this project, newest read wins. */
+export function ueMcpConfigRejections(projectDir?: string | null): UeMcpConfigRejection[] {
+  if (!projectDir) return [];
+  return rejectionsByDir.get(path.resolve(projectDir)) ?? [];
+}
+
+/** One line per rejected key, phrased for a person reading a terminal. */
+export function describeConfigRejections(rejections: UeMcpConfigRejection[]): string[] {
+  return rejections.map(
+    (r) =>
+      `ue-mcp.yml: '${r.key}' is not a valid setting and was ignored (${r.message}). ` +
+      `Every other key in the block still applies.`,
+  );
+}
+
+/**
+ * Validate the merged block key by key, keeping the ones that parse.
+ *
+ * The whole-block safeParse this replaced was all-or-nothing: one malformed
+ * key - `disable: gas` where a list is required - dropped the entire block,
+ * so a pinned `bridge.port` went with it, the derived hash port was used
+ * instead, and the client ended up on a different port from the editor, which
+ * reads the same yaml and binds what `bridge.port` says. One typo, two
+ * subsystems disagreeing about where the editor is.
+ *
+ * Each declared key is parsed against its OWN schema, so nothing reaches the
+ * result unvalidated: a key that fails is dropped, never coerced and never
+ * passed through. Undeclared keys pass through exactly as they did before,
+ * because the schema is `.passthrough()` and always was.
+ */
+export function partitionUeMcpConfig(block: unknown): {
+  config: UeMcpConfig;
+  rejected: UeMcpConfigRejection[];
+} {
+  if (block === null || typeof block !== "object" || Array.isArray(block)) {
+    return {
+      config: {},
+      rejected: [{ key: "ue-mcp", message: "the block is not a mapping of settings" }],
+    };
+  }
+
+  const whole = UeMcpConfigSchema.safeParse(block);
+  if (whole.success) return { config: whole.data, rejected: [] };
+
+  const shape = UeMcpConfigSchema.shape as Record<string, { safeParse(v: unknown): { success: boolean; data?: unknown; error?: { issues: Array<{ message: string; path: Array<string | number> }> } } }>;
+  const kept: Record<string, unknown> = {};
+  const rejected: UeMcpConfigRejection[] = [];
+  for (const [key, value] of Object.entries(block as Record<string, unknown>)) {
+    const keySchema = shape[key];
+    if (!keySchema) {
+      kept[key] = value;
+      continue;
+    }
+    const one = keySchema.safeParse(value);
+    if (one.success) {
+      if (one.data !== undefined) kept[key] = one.data;
+      continue;
+    }
+    const issue = one.error?.issues?.[0];
+    const where = issue && issue.path.length > 0 ? `${key}.${issue.path.join(".")}: ` : "";
+    rejected.push({ key, message: `${where}${issue?.message ?? "invalid value"}` });
+  }
+
+  // The survivors are parsed again as a whole, so the returned object is one
+  // the schema accepts rather than a hand-assembled record that only looks
+  // like one. A failure here cannot come from a key that just validated, so
+  // the honest answer is the empty config the old code returned.
+  const again = UeMcpConfigSchema.safeParse(kept);
+  if (!again.success) {
+    return {
+      config: {},
+      rejected: [...rejected, { key: "ue-mcp", message: "the surviving keys still did not validate together" }],
+    };
+  }
+  return { config: again.data, rejected };
+}
+
 export function readUeMcpConfig(projectDir: string): UeMcpConfig {
   const block = loadLayeredUeMcpBlock(projectDir);
-  const parsed = UeMcpConfigSchema.safeParse(block);
-  if (!parsed.success) {
-    warn("project", `merged ue-mcp: config did not match expected shape - using defaults`, parsed.error);
-    return {};
+  const { config, rejected } = partitionUeMcpConfig(block);
+  rejectionsByDir.set(path.resolve(projectDir), rejected);
+  for (const line of describeConfigRejections(rejected)) {
+    warn("project", line);
   }
-  return parsed.data;
+  return config;
 }
 
 export class ProjectContext {

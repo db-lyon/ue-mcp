@@ -60,7 +60,13 @@ function makeProject(name: string, opts?: { lockfilePort?: number; configPort?: 
   if (opts?.lockfilePort !== undefined) {
     const lockDir = path.join(dir, "Saved", "UE_MCP_Bridge");
     fs.mkdirSync(lockDir, { recursive: true });
-    fs.writeFileSync(path.join(lockDir, "port.json"), JSON.stringify({ port: opts.lockfilePort, pid: 7 }));
+    // The lockfile names THIS process, because the fake editor it points at is
+    // a socket server running in this process. connect() checks that pid for
+    // liveness before treating a published port as a running editor (D6).
+    fs.writeFileSync(
+      path.join(lockDir, "port.json"),
+      JSON.stringify({ port: opts.lockfilePort, pid: process.pid }),
+    );
   }
   if (opts?.configPort !== undefined) {
     fs.writeFileSync(

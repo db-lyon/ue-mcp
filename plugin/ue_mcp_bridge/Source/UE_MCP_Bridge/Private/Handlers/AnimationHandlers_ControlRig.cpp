@@ -93,12 +93,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigGraph(const TSharedPtr<
 	// ControlRigBlueprint was removed in 5.7 and the client-host interface
 	// moved, so reach the models by walking the blueprint's own subobjects for
 	// URigVMGraph. That is version-tolerant and needs no editor-only host API.
+	// Through the shared helper, not a local #if: GetObjectsWithOuter takes
+	// EGetObjectsFlags in 5.8 and a bool before it, and the version gate for
+	// that lives in exactly one place (Public/HandlerUtils.h).
 	TArray<UObject*> Subobjects;
-#if UE_MCP_HAS_5_8_API
-	GetObjectsWithOuter(Blueprint, Subobjects, EGetObjectsFlags::IncludeNestedObjects);
-#else
-	GetObjectsWithOuter(Blueprint, Subobjects, /*bIncludeNestedObjects=*/true);
-#endif
+	MCPGetNestedSubobjects(Blueprint, Subobjects);
 
 	TArray<URigVMGraph*> Models;
 	for (UObject* Object : Subobjects)

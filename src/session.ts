@@ -25,11 +25,12 @@ import { EditorBridge } from "./bridge.js";
 import { ProjectContext } from "./project.js";
 import { GuardedBridge } from "./flow/guarded-bridge.js";
 import { GuardRegistry } from "./flow/guard.js";
-import { makeResolveExistingFile } from "./flow/task-guards.js";
+import { makeResolveExistingFile } from "./flow/guard.js";
 import { normalizeProjectRoot } from "./port.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { warn } from "./log.js";
-import { newLockOwnerId } from "./locking.js";
+import { newLockOwnerId } from "./lock-owner.js";
+import { withoutDialogActuation } from "./dialog-guard.js";
 
 /** Key used for the session that has no project bound. */
 export const DEFAULT_SESSION_KEY = "";
@@ -87,7 +88,13 @@ export class EditorSession {
      *  must not veto another project's calls, so each session has its own. */
     readonly guards: GuardRegistry,
   ) {
-    this.bridge = new EditorBridge();
+    // An armed dialog policy presses buttons on the modal already on screen, so
+    // it is refused while one is up. Applied HERE, on the session's own bridge,
+    // because every other path goes through it: the guarded bridge wraps this,
+    // guard tasks are handed this, and a handler reaching for
+    // `ctx.session.bridge` gets this. Wrapping one caller left the escape one
+    // line away.
+    this.bridge = withoutDialogActuation(this, new EditorBridge());
     // Order matters: setConfigPort marks the port as config-pinned, which is
     // the only thing stopping setProjectContext from overwriting an explicit
     // `bridge.port` with the derived per-project one.
@@ -141,6 +148,16 @@ export class SessionRegistry {
   private activeKey: string | null = null;
   /** Fired whenever the session set changes, so the caller can re-advertise. */
   onCountChanged?: (count: number) => void;
+  /**
+   * Builds one session's dispatch surface: its own tool graph, plugins, task
+   * registry and guards. Installed by the server, which owns all of those.
+   *
+   * A session registered at runtime has none of it until this has run, and
+   * until then it must not be dispatched to: every lookup that misses used to
+   * fall back to the FIRST project's load, so a second editor ran the first
+   * project's flows and plugin tasks inside itself (D1).
+   */
+  prepareSession?: (session: EditorSession) => Promise<void>;
   /** Held while a compound edit is mid-flight, so observers see one change. */
   private suppressNotify = false;
 
@@ -255,16 +272,61 @@ export class SessionRegistry {
     if (this.activeKey === previousKey) this.activeKey = nextKey;
 
     const projectName = session.project.projectName;
+    const previousName = session.name;
     if (projectName && projectName.toLowerCase() !== session.name.toLowerCase()) {
       session.name = this.uniqueName(projectName, session);
     }
 
     session.portSharedWith = [];
     for (const other of this.byKey.values()) {
-      other.portSharedWith = other.portSharedWith.filter((n) => n !== session.name);
+      other.portSharedWith = other.portSharedWith.filter((n) => n !== previousName);
     }
     this.noteSharedPorts(session);
+
+    // D9: the advertised `editor` parameter enumerates session names, so a
+    // rename that does not fire this leaves every tool schema naming a session
+    // that no longer answers, and a client honouring tools/list_changed is
+    // never told. The count did not change; the SET did, which is what the
+    // observer re-reads.
+    if (previousName !== session.name && !this.suppressNotify) {
+      this.onCountChanged?.(this.byKey.size);
+    }
     return session;
+  }
+
+  /**
+   * Recompute which sessions share a bridge port (S2).
+   *
+   * register() and rekey() note this from `bridge.port` as it stands BEFORE
+   * any lockfile has been read, and connect() can move the port afterwards -
+   * that is the whole point of the lockfile. So the collision record computed
+   * at registration describes ports that may no longer be the ones in use, in
+   * both directions: a clash that has since resolved is still reported, and
+   * one that only appeared after both editors published their real ports is
+   * not. Anything displaying or acting on the record asks for it fresh.
+   */
+  refreshSharedPorts(): void {
+    for (const session of this.byKey.values()) session.portSharedWith = [];
+    const seen = new Map<number, EditorSession[]>();
+    for (const session of this.byKey.values()) {
+      const peers = seen.get(session.bridge.port) ?? [];
+      for (const other of peers) {
+        other.portSharedWith.push(session.name);
+        session.portSharedWith.push(other.name);
+      }
+      peers.push(session);
+      seen.set(session.bridge.port, peers);
+    }
+  }
+
+  /**
+   * Wait for a session's dispatch surface to exist.
+   *
+   * A no-op when no builder is installed, which is every embedder and test
+   * that drives the registry without the server around it.
+   */
+  async prepare(session: EditorSession): Promise<void> {
+    await this.prepareSession?.(session);
   }
 
   /** Resolve without throwing. */

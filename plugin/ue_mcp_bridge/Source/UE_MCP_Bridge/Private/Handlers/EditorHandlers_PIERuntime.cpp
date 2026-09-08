@@ -13,6 +13,7 @@
 
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 #include "HandlerFunctionCall.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerPropertyText.h"
@@ -240,6 +241,23 @@ namespace
 				*FunctionName, *CallTarget->GetClass()->GetName(), *FString::Join(Names, TEXT(", "))));
 		}
 
+		// The per-entry convention answer, emitted here because this is where
+		// the resolved UFunction is known. Whether the call CAN have written
+		// anything is answerable off its own flags: a BlueprintPure or const
+		// function is declared to be a query. Past that the effect is opaque,
+		// and nothing here compares before to after, so changeDetected says the
+		// answer is a declaration rather than a measurement.
+		//
+		// FLAGS ONLY, no prose. invoke_object_functions runs up to 64 calls and
+		// puts one of these objects in its results array for each, so a note
+		// written here would be shipped 64 times. The wording lives once, on
+		// the handler that advertises the action.
+		const bool bPureFunction = Func->HasAnyFunctionFlags(FUNC_BlueprintPure | FUNC_Const);
+		Result->SetBoolField(TEXT("pure"), bPureFunction);
+		Result->SetBoolField(TEXT("changed"), !bPureFunction);
+		Result->SetBoolField(TEXT("changeDetected"), false);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+
 		TArray<uint8> ParamBuf;
 		ParamBuf.SetNumZeroed(Func->ParmsSize);
 		for (TFieldIterator<FProperty> It(Func); It && (It->PropertyFlags & CPF_Parm); ++It)
@@ -407,6 +425,24 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeObjectFunction(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("world"), World->GetPathName());
 		Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
 	}
+	// The convention markers, on the handler that advertises the action rather
+	// than only inside the helper: a per-handler source scan has to be able to
+	// see them here. Same lookup the helper performs, so the two agree by
+	// construction; a name that resolves to nothing leaves the helper to return
+	// the error and this Result is discarded.
+	const UFunction* ResolvedFunc = Target->FindFunction(FName(*FunctionName));
+	const bool bPure = ResolvedFunc && ResolvedFunc->HasAnyFunctionFlags(FUNC_BlueprintPure | FUNC_Const);
+	Result->SetBoolField(TEXT("changed"), ResolvedFunc != nullptr && !bPure);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	if (bPure)
+	{
+		Result->SetStringField(TEXT("idempotencyNote"),
+			TEXT("The function is declared BlueprintPure or const, so it is a query: it reports a value and writes nothing. Calling it again returns the same answer for the same state."));
+	}
+	Result->SetStringField(TEXT("rollbackNote"), bPure
+		? TEXT("A pure or const function writes nothing, so there is nothing to undo.")
+		: TEXT("A UFUNCTION call has no known inverse. Wrap the sequence in editor(begin_editor_transaction) and roll back with editor(cancel_editor_transaction) when the effects are transactional, or undo the effect with whatever call your project treats as its opposite."));
+
 	return CallFunctionWithJsonArgs(Target, FunctionName, Params, Result);
 }
 
@@ -463,6 +499,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeObjectFunctions(const TSharedPtr<F
 	auto Result = MCPSuccess();
 	TArray<TSharedPtr<FJsonValue>> Results;
 	Results.Reserve(Calls->Num());
+	// Set by any entry whose own function was not declared pure. A sequence of
+	// pure getters wrote nothing and should not report that it did.
+	bool bAnyCallChanged = false;
 
 	for (int32 Index = 0; Index < Calls->Num(); ++Index)
 	{
@@ -507,6 +546,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeObjectFunctions(const TSharedPtr<F
 		if (CallResult.IsValid() && CallResult->TryGetObject(CallResultPtr) && CallResultPtr && CallResultPtr->IsValid())
 		{
 			(*CallResultPtr)->TryGetBoolField(TEXT("success"), bCallSucceeded);
+			// Each entry reports its own purity, so the sequence can say whether
+			// any of it could have written rather than assuming all of it did.
+			bool bCallChanged = false;
+			if ((*CallResultPtr)->TryGetBoolField(TEXT("changed"), bCallChanged) && bCallChanged)
+			{
+				bAnyCallChanged = true;
+			}
 		}
 		if (!bCallSucceeded)
 		{
@@ -523,8 +569,24 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeObjectFunctions(const TSharedPtr<F
 	}
 
 	Result->SetArrayField(TEXT("results"), Results);
-	Result->SetNumberField(TEXT("completedCalls"), Results.Num() - (Result->GetBoolField(TEXT("success")) ? 0 : 1));
+	const int32 CompletedCalls = Results.Num() - (Result->GetBoolField(TEXT("success")) ? 0 : 1);
+	Result->SetNumberField(TEXT("completedCalls"), CompletedCalls);
 	Result->SetNumberField(TEXT("requestedCalls"), Calls->Num());
+	// Answered from the entries rather than from the count: a sequence that
+	// completed no call ran no game code at all, and one made entirely of pure
+	// getters ran code that is declared to write nothing.
+	Result->SetBoolField(TEXT("changed"), CompletedCalls > 0 && bAnyCallChanged);
+	Result->SetBoolField(TEXT("changeDetected"), false);
+	// Said once, here, rather than in each of up to 64 entries.
+	Result->SetStringField(TEXT("idempotencyNote"),
+		TEXT("Each entry carries its own `pure` flag. changed is true when at least one call that ran was not declared BlueprintPure or const; a sequence of pure getters wrote nothing."));
+	// No rollback, and none is possible even in principle here: this is
+	// sequencing rather than a transaction, so a failure part-way leaves the
+	// earlier calls applied, and no inverse is known for any of them.
+	// completedCalls says how far it got so a retry can resume.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("UFUNCTION calls have no known inverse, and the calls that completed before a failure stay applied. Wrap the sequence in editor(begin_editor_transaction) and roll back with editor(cancel_editor_transaction) when the effects are transactional; otherwise resume from completedCalls rather than replaying from the start."));
 	return MCPResult(Result);
 }
 
@@ -919,6 +981,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 	ActorLabel = Actor->GetActorLabel();
 
 	const FVector StartLocation = Actor->GetActorLocation();
+	// Captured alongside the location because the read below is consumed as the
+	// requested rotation when the caller omits one, and an inverse call needs
+	// the value the actor actually had before the move.
+	const FRotator StartRotation = Actor->GetActorRotation();
 	const FVector Location = Params->HasField(TEXT("location"))
 		? OptionalVec3(Params, TEXT("location"))
 		: StartLocation;
@@ -970,6 +1036,41 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("note"),
 			TEXT("Actor has no movement component; nothing would have fought the move."));
 	}
+	Result->SetObjectField(TEXT("previousLocation"), VectorJson(StartLocation));
+	Result->SetObjectField(TEXT("previousRotation"), RotatorJson(StartRotation));
+	// Compared against the transform read back, not against what was requested:
+	// a blocked sweep or a clamped placement can leave the actor where it was.
+	const bool bChanged = !Actor->GetActorLocation().Equals(StartLocation)
+		|| !Actor->GetActorRotation().Equals(StartRotation);
+	Result->SetBoolField(TEXT("changed"), bChanged);
+
+	// Self-inverse: the same handler teleporting back to the transform this
+	// call moved the actor off. Addressed by path so the undo cannot land on a
+	// namesake. sweep is deliberately NOT carried: the rollback has to reach the
+	// place the actor provably occupied a moment ago, and replaying a swept move
+	// could stop it short against something that has since moved into the path,
+	// leaving the actor somewhere neither the caller nor the flow chose.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	Payload->SetObjectField(TEXT("location"), VectorJson(StartLocation));
+	Payload->SetObjectField(TEXT("rotation"), RotatorJson(StartRotation));
+	Payload->SetBoolField(TEXT("stopMovement"), bStopMovement);
+	if (Params->HasField(TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
+	if (Params->HasField(TEXT("pieInstance"))) Payload->SetNumberField(TEXT("pieInstance"), OptionalInt(Params, TEXT("pieInstance"), 0));
+	MCPSetRollback(Result, TEXT("teleport_runtime_actor"), Payload);
+	const bool bVelocityDiscarded = bStopMovement && Movement != nullptr;
+	Result->SetBoolField(TEXT("rollbackLossy"), bVelocityDiscarded || bSweep);
+	FString RollbackNote = TEXT("Restores the transform only.");
+	if (bVelocityDiscarded)
+	{
+		RollbackNote += TEXT(" StopMovementImmediately zeroed the movement component's velocity and pending forces, and those are not captured or restored, so a character that was mid-fall comes back standing still.");
+	}
+	if (bSweep)
+	{
+		RollbackNote += TEXT(" This call swept to its destination and the rollback does not sweep back: it places the actor at the recorded transform outright, so a body that moved into the return path is passed through rather than blocking the restore.");
+	}
+	RollbackNote += TEXT(" The rollback needs the same PIE session to still be running: once play ends the actor it names no longer exists.");
+	Result->SetStringField(TEXT("rollbackNote"), RollbackNote);
 	return MCPResult(Result);
 }
 
@@ -1011,6 +1112,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 			*ActorLabel));
 	}
 
+	const EMovementMode PrevModeEnum = Movement->MovementMode;
 	const FString PrevMode = UEnum::GetValueAsString(Movement->MovementMode);
 	const uint8 PrevCustom = Movement->CustomMovementMode;
 	const FVector PrevVelocity = Movement->Velocity;
@@ -1105,6 +1207,56 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 		Result->SetStringField(TEXT("modeNote"),
 			TEXT("This is the mode as of this call. CharacterMovement re-evaluates on the next tick and can leave it (e.g. Swimming outside a water volume falls back to Falling) - sample it again after a tick to confirm it held."));
 	}
+	// Read back rather than trusting the request: SetMovementMode substitutes,
+	// and a write of the value already in place is a genuine no-op.
+	const bool bChanged = Movement->MovementMode != PrevModeEnum
+		|| Movement->CustomMovementMode != PrevCustom
+		|| !Movement->Velocity.Equals(PrevVelocity);
+	Result->SetBoolField(TEXT("changed"), bChanged);
+
+	// Self-inverse: the same handler with the mode and velocity this call
+	// replaced. Only the named modes this handler parses can be spelled back,
+	// so an enum value outside that set gets no rollback rather than one that
+	// would be refused when replayed.
+	const TCHAR* PrevModeToken = nullptr;
+	switch (PrevModeEnum)
+	{
+	case MOVE_None:       PrevModeToken = TEXT("none"); break;
+	case MOVE_Walking:    PrevModeToken = TEXT("walking"); break;
+	case MOVE_NavWalking: PrevModeToken = TEXT("navwalking"); break;
+	case MOVE_Falling:    PrevModeToken = TEXT("falling"); break;
+	case MOVE_Swimming:   PrevModeToken = TEXT("swimming"); break;
+	case MOVE_Flying:     PrevModeToken = TEXT("flying"); break;
+	case MOVE_Custom:     PrevModeToken = TEXT("custom"); break;
+	default:              PrevModeToken = nullptr; break;
+	}
+	if (PrevModeToken)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		Payload->SetStringField(TEXT("mode"), PrevModeToken);
+		// customMode is refused with any other mode, so it is sent only for the
+		// one mode that accepts it.
+		if (PrevModeEnum == MOVE_Custom) Payload->SetNumberField(TEXT("customMode"), PrevCustom);
+		Payload->SetObjectField(TEXT("velocity"), VectorJson(PrevVelocity));
+		if (Params->HasField(TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
+		if (Params->HasField(TEXT("pieInstance"))) Payload->SetNumberField(TEXT("pieInstance"), OptionalInt(Params, TEXT("pieInstance"), 0));
+		MCPSetRollback(Result, TEXT("set_movement_mode"), Payload);
+		// NavWalking is the one mode the component can refuse and replace on the
+		// way back in, exactly as it can on the way in.
+		const bool bLossy = PrevModeEnum == MOVE_NavWalking;
+		Result->SetBoolField(TEXT("rollbackLossy"), bLossy);
+		Result->SetStringField(TEXT("rollbackNote"), bLossy
+			? TEXT("The previous mode was NavWalking, which CharacterMovement substitutes with Walking when the world has no navigation data, so the replay can land on a different mode than the one recorded. The rollback also needs the same PIE session: once play ends the actor it names no longer exists.")
+			: TEXT("Restores the movement mode and the velocity this call replaced. The rollback needs the same PIE session to still be running, and a live character keeps moving under its own physics and input afterwards."));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The component was in %s before this call, which is not one of the named modes this handler accepts, so replaying it would be refused. No rollback is offered."),
+			*PrevMode));
+	}
 	return MCPResult(Result);
 }
 
@@ -1189,7 +1341,6 @@ TSharedPtr<FJsonValue> FEditorHandlers::FindLiveObjects(const TSharedPtr<FJsonOb
 	const FString OuterPath = OptionalString(Params, TEXT("outerPath"));
 	const bool bIncludeDefaults = OptionalBool(Params, TEXT("includeDefaults"), false);
 	const bool bExactClass = OptionalBool(Params, TEXT("exactClass"), false);
-	const int32 Limit = FMath::Clamp(OptionalInt(Params, TEXT("limit"), 50), 1, 1000);
 
 	// An exact path is a lookup, not a search: report whether it resolves
 	// rather than failing the call, because "is this instance still there" is
@@ -1248,8 +1399,24 @@ TSharedPtr<FJsonValue> FEditorHandlers::FindLiveObjects(const TSharedPtr<FJsonOb
 		}
 	}
 
-	TArray<TSharedPtr<FJsonValue>> Matches;
-	int32 TotalMatches = 0;
+	// T3: paged. This used to collect `limit` matches and set `truncated`,
+	// which told a caller there were more without giving it any way to read
+	// them. Read the whole match set and page it instead. The request is read
+	// here rather than at the top of the handler because the objectPath branch
+	// above is a single-object lookup, not a collection.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(
+				TEXT("find_object|className=%s|nameContains=%s|outerPath=%s|world=%s|includeDefaults=%d|exactClass=%d"),
+				*ClassSpec, *NameContains, *OuterPath, *WorldScope,
+				bIncludeDefaults ? 1 : 0, bExactClass ? 1 : 0),
+			/*DefaultLimit*/ 50, /*MaxLimit*/ 1000, Page))
+	{
+		return Err;
+	}
+
+	TArray<MCPPagination::FPageRow> Rows;
 	auto Consider = [&](UObject* Obj)
 	{
 		if (!IsValid(Obj)) return;
@@ -1266,11 +1433,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::FindLiveObjects(const TSharedPtr<FJsonOb
 		}
 		if (bScopeToWorld && Obj->GetTypedOuter<UWorld>() != ScopeWorld) return;
 
-		++TotalMatches;
-		if (Matches.Num() < Limit)
-		{
-			Matches.Add(MakeShared<FJsonValueObject>(DescribeLiveObject(Obj)));
-		}
+		// The object's full path is the page anchor: it is the one string that
+		// names this instance across two separate enumerations, and it is what
+		// the caller passes back as objectPath to inspect the row further.
+		Rows.Add({ Obj->GetPathName(), MakeShared<FJsonValueObject>(DescribeLiveObject(Obj)) });
 	};
 
 	if (FilterClass)
@@ -1287,11 +1453,17 @@ TSharedPtr<FJsonValue> FEditorHandlers::FindLiveObjects(const TSharedPtr<FJsonOb
 		for (TObjectIterator<UObject> It; It; ++It) Consider(*It);
 	}
 
+	// GetObjectsOfClass and TObjectIterator both walk the object hash, whose
+	// order is not a contract and moves as objects are created and destroyed,
+	// so the rows are sorted by path before paging. A cursor over an unordered
+	// enumeration is not resumable.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
+
+	const int32 TotalMatches = Rows.Num();
 	auto Result = MCPSuccess();
-	Result->SetArrayField(TEXT("matches"), Matches);
-	Result->SetNumberField(TEXT("count"), Matches.Num());
 	Result->SetNumberField(TEXT("totalMatches"), TotalMatches);
-	Result->SetBoolField(TEXT("truncated"), TotalMatches > Matches.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("matches"), Result);
 	if (FilterClass)
 	{
 		Result->SetStringField(TEXT("resolvedClass"), FilterClass->GetPathName());
@@ -1389,20 +1561,57 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	}
 
 	UObject* ExportOwner = LeafOwner ? LeafOwner : Target;
-	FString PreviousValue;
-	Prop->ExportTextItem_Direct(PreviousValue, ValueAddr, nullptr, ExportOwner, PPF_None);
+
+	// Structured, not export text, and reported under the same field names and
+	// in the same form editor(set_property) uses: a caller reading
+	// previousValue/value off one of the two actions must not have to re-parse
+	// them off the other. Export text is refused or misread on replay for a
+	// struct-keyed TMap, a gameplay tag and a null object reference.
+	//
+	// It does NOT make a float exact. MCPJsonProperty::SetJsonOnPropertyImpl
+	// has no numeric branch, so a JSON number falls to its export-text
+	// fallback, is stringified by FString::SanitizeFloat, and SanitizeFloat is
+	// Printf("%f"): six fractional digits. The truncation moved from the reader
+	// to the writer rather than going away, and the probe below reports it as
+	// lossy instead of letting it restore wrong in silence.
+	TSharedPtr<FJsonValue> PreviousStructured = FMCPJsonSerializer::SerializeValue(ValueAddr, Prop);
+
+	// A raw copy, so "did this change anything" is the property's own
+	// comparison rather than one between two truncated strings, and so the
+	// rollback can be verified before it is advertised.
+	const bool bComparable = MCPJsonProperty::PropertyIsComparableByIdentity(Prop);
+	FDefaultConstructedPropertyElement PreviousRaw(Prop);
+	Prop->CopyCompleteValue(PreviousRaw.GetObjAddress(), ValueAddr);
+
+	// Prove the round trip rather than asserting it, keeping the two ways it
+	// can fail apart: a value the setter REFUSES cannot be rolled back at all
+	// and must not be advertised (an FTransform is the common case, serialized
+	// as translation/rotation/scale with a Rotator against reflected fields
+	// Translation, Rotation as an FQuat and Scale3D), while a value it accepts
+	// that lands elsewhere is lossy but usable.
+	bool bRollbackApplies = false;
+	bool bRollbackRoundTrips = false;
+	FString ProbeError;
+	if (bComparable)
+	{
+		FDefaultConstructedPropertyElement Probe(Prop);
+		bRollbackApplies =
+			MCPJsonProperty::SetJsonOnProperty(Prop, Probe.GetObjAddress(), PreviousStructured, ProbeError);
+		bRollbackRoundTrips = bRollbackApplies
+			&& Prop->Identical(Probe.GetObjAddress(), PreviousRaw.GetObjAddress(), PPF_None);
+	}
+	else
+	{
+		// Not comparable, so the probe would prove nothing either way. The
+		// rollback is still offered: it is the same call that wrote the value.
+		bRollbackApplies = true;
+	}
 
 	FString SetError;
 	if (!MCPJsonProperty::SetJsonOnProperty(Prop, ValueAddr, NewValue, SetError))
 	{
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *ResolvedName, *SetError));
 	}
-
-	// Read back rather than echoing the request: a clamped or coerced write
-	// otherwise reports the value the caller asked for and not the one the
-	// object now holds.
-	FString CurrentValue;
-	Prop->ExportTextItem_Direct(CurrentValue, ValueAddr, nullptr, ExportOwner, PPF_None);
 
 	// Deliberately no Modify/MarkPackageDirty/save. A live instance is not an
 	// asset, and dirtying a PIE package or a spawned widget's outer would ask
@@ -1415,16 +1624,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		ExportOwner->PostEditChangeProperty(ChangeEvent);
 	}
 
+	// The property's own comparison, not a string one: two exported strings
+	// agree on values that differ past the sixth decimal.
+	const bool bChanged = !bComparable
+		|| !Prop->Identical(ValueAddr, PreviousRaw.GetObjAddress(), PPF_None);
+
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bChanged) MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("objectPath"), Description);
 	Result->SetStringField(TEXT("objectClass"), Target->GetClass()->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("resolvedPropertyName"), ResolvedName);
 	Result->SetStringField(TEXT("leafPropertyName"), Prop->GetName());
 	Result->SetStringField(TEXT("type"), Prop->GetCPPType());
-	Result->SetStringField(TEXT("previousValue"), PreviousValue);
-	Result->SetStringField(TEXT("value"), CurrentValue);
+	Result->SetField(TEXT("previousValue"), PreviousStructured);
+	Result->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValueAddr, Prop));
 	Result->SetBoolField(TEXT("persisted"), false);
 	if (World)
 	{
@@ -1432,5 +1646,38 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 		Result->SetStringField(TEXT("netMode"), DescribePIENetMode(World));
 	}
 	Result->SetStringField(TEXT("note"), TEXT("Written to the live instance only. It is not saved and does not survive PIE ending or the object being destroyed; use editor(set_property) to write an asset."));
+	Result->SetBoolField(TEXT("changed"), bChanged);
+	// changeDetected has ONE meaning everywhere it appears: true when `changed`
+	// came from comparing the value before against the value after.
+	Result->SetBoolField(TEXT("changeDetected"), bComparable);
+
+	if (bRollbackApplies)
+	{
+		// Self-inverse: the same handler with the value this call replaced, in
+		// the structured form the setter takes back. Addressed by the resolved
+		// object path rather than by target/playerIndex, so the undo cannot land
+		// on a different instance.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("objectPath"), Description);
+		Payload->SetStringField(TEXT("propertyName"), ResolvedName);
+		Payload->SetField(TEXT("value"), PreviousStructured);
+		Payload->SetBoolField(TEXT("postEditChange"), bPostEditChange);
+		MCPSetRollback(Result, TEXT("set_object_property"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), !bRollbackRoundTrips);
+		Result->SetStringField(TEXT("rollbackNote"), bRollbackRoundTrips
+			? TEXT("The rollback value was applied to a scratch copy of this property and came back identical, so it restores the property's own value. That is what was measured; any PostEditChangeProperty side effect the first write had is replayed but not verified. It names the live instance by path, so it needs that instance to still exist: once PIE ends or the object is destroyed it reports the object was not found. Nothing was persisted either way.")
+			: (bComparable
+				? TEXT("The rollback value applied to a scratch copy but did not come back identical, so the restore is approximate. The usual cause is a number: the shared setter has no numeric branch, so a JSON number is written through FString::SanitizeFloat and keeps six fractional digits. It also names the live instance by path and needs that instance to still exist once the rollback runs.")
+				: TEXT("The rollback value could not be verified: FText and instanced subobjects are fresh instances on every import and are never identical to the original. It also names the live instance by path and needs that instance to still exist once the rollback runs.")));
+	}
+	else
+	{
+		// The setter refused its own serialization of this value, so replaying
+		// it would fail rather than restore.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("No rollback is offered: the value this call replaced does not survive its own round trip. Applying the serialized form to a scratch copy of the property was refused with: %s"),
+			*ProbeError));
+	}
 	return MCPResult(Result);
 }

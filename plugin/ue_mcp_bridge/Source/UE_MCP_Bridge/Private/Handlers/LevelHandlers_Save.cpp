@@ -302,6 +302,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::SaveLevel(const TSharedPtr<FJsonObject>& 
 	Result->SetArrayField(TEXT("saved"), Saved);
 	if (Skipped.Num() > 0) Result->SetArrayField(TEXT("skipped"), Skipped);
 
+	// Stated before the failure branch, because a partial save has already
+	// overwritten the packages it did write.
+	if (Saved.Num() > 0)
+	{
+		MCPSetNoRollback(Result,
+			TEXT("The level package, and every external actor package that was dirty, were overwritten on disk with the editor's in-memory state. ")
+			TEXT("Undoing that needs the previous file contents back, and the bridge has no action that snapshots or restores a package file; source control is what holds the old revision."));
+	}
+
 	if (Failed.Num() > 0)
 	{
 		Result->SetBoolField(TEXT("success"), false);

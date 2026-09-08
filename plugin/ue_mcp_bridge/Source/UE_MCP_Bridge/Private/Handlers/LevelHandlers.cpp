@@ -1,6 +1,7 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 #include "VolumeHelpers_Internal.h"
 #include "EditorScriptingUtilities/Public/EditorLevelLibrary.h"
 #include "ScopedTransaction.h"
@@ -26,6 +27,7 @@
 #include "Exporters/FbxExportOption.h"
 #include "AssetExportTask.h"
 #include "Misc/FileHelper.h"
+#include "Misc/PackageName.h"
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
 #include "ReferenceSkeleton.h"
@@ -257,10 +259,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 	const bool bExactClass = OptionalBool(Params, TEXT("exactClass"), false);
 	const FString FolderPathFilter = OptionalString(Params, TEXT("folderPath"));
 	const FString FolderPathPrefixFilter = OptionalString(Params, TEXT("folderPathPrefix"));
-	// Default 50 keeps us snappy on World Partition projects whose levels
-	// contain hundreds of streaming-proxy / HLOD actors. Callers who need the
-	// full list can pass a larger limit explicitly.
-	int32 Limit = OptionalInt(Params, TEXT("limit"), 50);
 	bool bIncludeStreaming = OptionalBool(Params, TEXT("includeStreaming"), false);
 
 	// #717: optional tri-state filter on editor-only visibility. When present,
@@ -270,7 +268,26 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 	bool bEditorHiddenFilterValue = false;
 	const bool bHasEditorHiddenFilter = Params->TryGetBoolField(TEXT("editorHidden"), bEditorHiddenFilterValue);
 
-	TArray<TSharedPtr<FJsonValue>> ActorsArray;
+	// T3: paged. The default of 50 kept this snappy on World Partition levels
+	// and told nobody it had cut anything, so an agent reading a 900-actor map
+	// acted on the first 50 as if they were the level. The default stays 50;
+	// what changes is that the rest is now reachable and the response says it
+	// is there.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(
+				TEXT("get_world_outliner|world=%s|classFilter=%s|exactClass=%d|nameFilter=%s|folderPath=%s|folderPathPrefix=%s|editorHidden=%d|includeStreaming=%d"),
+				*WorldScope, *ClassFilter, bExactClass ? 1 : 0, *NameFilter,
+				*FolderPathFilter, *FolderPathPrefixFilter,
+				bHasEditorHiddenFilter ? (bEditorHiddenFilterValue ? 1 : 0) : -1,
+				bIncludeStreaming ? 1 : 0),
+			/*DefaultLimit*/ 50, /*MaxLimit*/ 5000, Page))
+	{
+		return Err;
+	}
+
+	TArray<MCPPagination::FPageRow> Rows;
 	int32 TotalCount = 0;
 	int32 StreamingSkipped = 0;
 	for (TActorIterator<AActor> ActorIt(World); ActorIt; ++ActorIt)
@@ -335,7 +352,6 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 		{
 			continue;
 		}
-		if (ActorsArray.Num() >= Limit) break;
 
 		TSharedPtr<FJsonObject> ActorObj = MakeShared<FJsonObject>();
 		ActorObj->SetStringField(TEXT("name"), ActorName);
@@ -375,15 +391,26 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 		}
 		ActorObj->SetArrayField(TEXT("components"), ComponentsArray);
 
-		ActorsArray.Add(MakeShared<FJsonValueObject>(ActorObj));
+		// The actor PATH is the anchor, not the label or the internal name: two
+		// actors in a level can carry the same label, and a page boundary has to
+		// name exactly one of them.
+		Rows.Add({ Actor->GetPathName(), MakeShared<FJsonValueObject>(ActorObj) });
 	}
+
+	// TActorIterator walks the level's actor arrays, whose order is not a
+	// contract and which a spawn or a delete reshuffles, so the rows are sorted
+	// before paging. Without it the same page can come back in a different
+	// order between two calls and the anchor would report a change that is only
+	// the iteration reshuffling.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("worldName"), World->GetName());
 	Result->SetNumberField(TEXT("totalActors"), TotalCount);
-	Result->SetNumberField(TEXT("returnedActors"), ActorsArray.Num());
 	Result->SetNumberField(TEXT("streamingSkipped"), StreamingSkipped);
-	Result->SetArrayField(TEXT("actors"), ActorsArray);
+	MCPPagination::EmitPage(Page, Rows, TEXT("actors"), Result);
+	Result->SetNumberField(TEXT("returnedActors"), Result->GetIntegerField(TEXT("count")));
 
 	return MCPResult(Result);
 }
@@ -443,7 +470,21 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetEditorVisibility(const TSharedPtr<FJso
 	Result->SetBoolField(TEXT("hidden"), bHidden);
 	Result->SetNumberField(TEXT("matched"), Matched);
 	Result->SetNumberField(TEXT("changed"), Changed);
+	Result->SetBoolField(TEXT("unchanged"), Changed == 0);
 	Result->SetArrayField(TEXT("affected"), Affected);
+
+	// The inverse flips back only the actors whose flag this call actually
+	// moved, which is what `affected` holds.
+	if (Changed > 0)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetArrayField(TEXT("actorLabels"), Affected);
+		Payload->SetBoolField(TEXT("hidden"), !bHidden);
+		MCPSetRollback(Result, TEXT("set_editor_visibility"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The editor label is the only selector this action takes, and labels are not unique. Where several actors share a label, the inverse also flips the ones this call found already in the requested state."));
+	}
 	return MCPResult(Result);
 }
 
@@ -565,12 +606,60 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActor(const TSharedPtr<FJsonObject>
 
 	const FString ActorLabel = ActorToDelete->GetActorLabel();
 
+	// Snapshot before the actor goes away. A delete inverts to a spawn only as
+	// far as what was captured first, so capture the three things place_actor
+	// can put back and say plainly that the rest is gone.
+	const FString DeletedClassPath = ActorToDelete->GetClass()->GetPathName();
+	const FTransform DeletedTransform = ActorToDelete->GetActorTransform();
+
+	// place_actor checks the LABEL before it spawns and skips on a hit, so a
+	// respawn that names a label some other actor still carries would return
+	// existed:true and create nothing while reporting success. That is exactly
+	// the case a path-addressed delete produces: this handler refuses an
+	// ambiguous label, so reaching a namesake at all means the caller passed
+	// actorPath. Count the namesakes that will remain after the destroy.
+	TArray<AActor*> LabelMatches;
+	MCPCollectActorsByToken(World, ActorLabel, EMCPActorMatch::Label, LabelMatches);
+	const bool bLabelSurvivesElsewhere = LabelMatches.Num() > 1;
+
 	World->DestroyActor(ActorToDelete);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetBoolField(TEXT("deleted"), true);
-	// Delete is not reversible by default (would need snapshot-before-delete).
+
+	Result->SetBoolField(TEXT("labelSurvivesElsewhere"), bLabelSurvivesElsewhere);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorClass"), DeletedClassPath);
+	Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(DeletedTransform.GetLocation()));
+	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(DeletedTransform.Rotator()));
+	Payload->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(DeletedTransform.GetScale3D()));
+
+	FString LossNote =
+		TEXT("place_actor respawns the same class at the same transform. It does not restore the actor's property overrides, its instance components, its tags, its folder path, its attachments or its streaming state, and the respawned actor is a new object with a new path, so anything that referenced the old one by path stays broken.");
+	if (bLabelSurvivesElsewhere)
+	{
+		// Naming the label here would make place_actor find the surviving
+		// namesake, answer existed:true and spawn NOTHING while reporting
+		// success. Spawning under an engine-assigned label is a visible,
+		// truthful outcome; a silent no-op is not.
+		LossNote += TEXT(" The label is deliberately NOT restored: another actor already carries it, and place_actor skips when a label is taken, so passing it would spawn nothing and still report success. The respawned actor gets an engine-assigned label and has to be renamed by hand.");
+	}
+	else
+	{
+		// Unique at delete time. onConflict=error so that if something claims
+		// the label before the replay, the rollback FAILS visibly instead of
+		// returning existed:true and creating nothing.
+		Payload->SetStringField(TEXT("label"), ActorLabel);
+		Payload->SetStringField(TEXT("onConflict"), TEXT("error"));
+		LossNote += TEXT(" The label was unique when this ran, so the inverse restores it and passes onConflict=error: if another actor has taken the label by the time the inverse runs, it fails loudly rather than skipping the spawn and reporting success.");
+	}
+	LossNote += TEXT(" On a World Partition map the respawn also lands in whichever cell the transform falls in, which need not be the package the original lived in.");
+
+	MCPSetRollback(Result, TEXT("place_actor"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	Result->SetStringField(TEXT("rollbackNote"), LossNote);
 
 	return MCPResult(Result);
 }
@@ -598,7 +687,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObj
 
 	// LabelOrName, not label alone: a caller often has an internal name rather
 	// than a label, because a PIE-spawned actor has no label worth guessing.
-	// The label tier is still exhausted first and the name tier refuses on
+	// The label pass is still exhausted first and the name pass refuses on
 	// ambiguity, so accepting the name cannot reintroduce a silent pick (#983).
 	FMCPActorSelector ActorSel;
 	ActorSel.Match = EMCPActorMatch::LabelOrName;
@@ -680,7 +769,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorDetails(const TSharedPtr<FJsonObj
 			//
 			// This is a general serialization bug, not a navmesh one. It was
 			// noticed on RecastNavMesh's NavMeshResolutionParams, a three-element
+			// lint-prose-allow: tier  RecastNavMesh's own name for its three generation tiers
 			// fixed array holding the Low, Default and High generation tiers, and
+			// lint-prose-allow: tier  RecastNavMesh's own name for its three generation tiers
 			// reporting only the Low tier as if it were the whole property sent a
 			// user tuning cell sizes against numbers Recast was not using. Any
 			// fixed array on any class had the same problem.
@@ -730,7 +821,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 
 	// LabelOrName, not label alone: a caller often has an internal name rather
 	// than a label, because a PIE-spawned actor has no label worth guessing.
-	// The label tier is still exhausted first and the name tier refuses on
+	// The label pass is still exhausted first and the name pass refuses on
 	// ambiguity, so accepting the name cannot reintroduce a silent pick (#983).
 	FMCPActorSelector ActorSel;
 	ActorSel.Match = EMCPActorMatch::LabelOrName;
@@ -1037,14 +1128,29 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListLevels(const TSharedPtr<FJsonObject>&
 {
 	REQUIRE_EDITOR_WORLD(World);
 
-	TArray<TSharedPtr<FJsonValue>> LevelsArray;
+	// T3: paged. A streaming-heavy map carries hundreds of sublevels, and this
+	// answered all of them at once.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params, TEXT("list_levels"), /*DefaultLimit*/ 200, /*MaxLimit*/ 5000, Page))
+	{
+		return Err;
+	}
+
+	// Deliberately NOT sorted. The persistent level first and then the world's
+	// own streaming-level array is an authored order that carries meaning, and
+	// it is stable between two calls because it is a stored array rather than a
+	// hash traversal.
+	TArray<MCPPagination::FPageRow> Rows;
 
 	// Add persistent level
 	TSharedPtr<FJsonObject> PersistentObj = MakeShared<FJsonObject>();
 	PersistentObj->SetStringField(TEXT("name"), World->GetName());
 	PersistentObj->SetStringField(TEXT("type"), TEXT("persistent"));
 	PersistentObj->SetBoolField(TEXT("isLoaded"), true);
-	LevelsArray.Add(MakeShared<FJsonValueObject>(PersistentObj));
+	// The anchor is the level's package name, prefixed by its kind so the
+	// persistent level cannot collide with a sublevel of the same name.
+	Rows.Add({ FString::Printf(TEXT("persistent:%s"), *World->GetName()), MakeShared<FJsonValueObject>(PersistentObj) });
 
 	// Add streaming levels
 	const TArray<ULevelStreaming*>& StreamingLevels = World->GetStreamingLevels();
@@ -1052,17 +1158,17 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListLevels(const TSharedPtr<FJsonObject>&
 	{
 		if (!StreamingLevel) continue;
 
+		const FString PackageName = StreamingLevel->GetWorldAssetPackageFName().ToString();
 		TSharedPtr<FJsonObject> LevelObj = MakeShared<FJsonObject>();
-		LevelObj->SetStringField(TEXT("name"), StreamingLevel->GetWorldAssetPackageFName().ToString());
+		LevelObj->SetStringField(TEXT("name"), PackageName);
 		LevelObj->SetStringField(TEXT("type"), TEXT("streaming"));
 		LevelObj->SetBoolField(TEXT("isLoaded"), StreamingLevel->IsLevelLoaded());
 		LevelObj->SetBoolField(TEXT("isVisible"), StreamingLevel->IsLevelVisible());
-		LevelsArray.Add(MakeShared<FJsonValueObject>(LevelObj));
+		Rows.Add({ FString::Printf(TEXT("streaming:%s"), *PackageName), MakeShared<FJsonValueObject>(LevelObj) });
 	}
 
 	auto Result = MCPSuccess();
-	Result->SetArrayField(TEXT("levels"), LevelsArray);
-	Result->SetNumberField(TEXT("count"), LevelsArray.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("levels"), Result);
 
 	return MCPResult(Result);
 }
@@ -1117,7 +1223,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 
 	// LabelOrName, not label alone: a caller often has an internal name rather
 	// than a label, because a PIE-spawned actor has no label worth guessing.
-	// The label tier is still exhausted first and the name tier refuses on
+	// The label pass is still exhausted first and the name pass refuses on
 	// ambiguity, so accepting the name cannot reintroduce a silent pick (#983).
 	FMCPActorSelector ActorSel;
 	ActorSel.Match = EMCPActorMatch::LabelOrName;
@@ -1277,6 +1383,22 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 
 	REQUIRE_EDITOR_WORLD(World);
 
+	// What was selected before, by path, so the inverse restores exactly these
+	// actors rather than whatever answers to their labels afterwards.
+	TArray<TSharedPtr<FJsonValue>> PreviousPaths;
+	TSet<FString> PreviousPathSet;
+	if (USelection* PreviousSelection = GEditor->GetSelectedActors())
+	{
+		for (int32 i = 0; i < PreviousSelection->Num(); i++)
+		{
+			if (AActor* Selected = Cast<AActor>(PreviousSelection->GetSelectedObject(i)))
+			{
+				PreviousPaths.Add(MakeShared<FJsonValueString>(Selected->GetPathName()));
+				PreviousPathSet.Add(Selected->GetPathName());
+			}
+		}
+	}
+
 	// Deselect all
 	GEditor->SelectNone(true, true, false);
 
@@ -1326,11 +1448,28 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 		}
 	}
 
+	// Same set, same selection: a replay of this call changed nothing.
+	bool bUnchanged = SelectedPathsArray.Num() == PreviousPathSet.Num();
+	if (bUnchanged)
+	{
+		for (const TSharedPtr<FJsonValue>& PathValue : SelectedPathsArray)
+		{
+			if (!PreviousPathSet.Contains(PathValue->AsString())) { bUnchanged = false; break; }
+		}
+	}
+
 	auto Result = MCPSuccess();
 	Result->SetArrayField(TEXT("selected"), SelectedArray);
 	Result->SetArrayField(TEXT("selectedPaths"), SelectedPathsArray);
 	Result->SetArrayField(TEXT("notFound"), NotFoundArray);
 	Result->SetNumberField(TEXT("selectedCount"), SelectedPathsArray.Num());
+	Result->SetBoolField(TEXT("unchanged"), bUnchanged);
+
+	// select_actors replaces the selection wholesale, so replaying it with the
+	// paths that were selected before restores it exactly.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetArrayField(TEXT("actorPaths"), PreviousPaths);
+	MCPSetRollback(Result, TEXT("select_actors"), Payload);
 
 	return MCPResult(Result);
 }
@@ -1464,6 +1603,18 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveComponentFromActor(const TSharedPtr
 	}
 
 	const FString ComponentClass = Target->GetClass()->GetName();
+	// The PATH, not the short name, for the inverse: add_component_to_actor
+	// only reaches a short name through FindClassByShortName and a
+	// /Script/Engine. probe, neither of which resolves a Blueprint-generated
+	// component class.
+	const FString ComponentClassPath = Target->GetClass()->GetPathName();
+	// Two facts the inverse has to disclose. This loop searches GetComponents(),
+	// which includes native default subobjects and SCS components, so the thing
+	// being destroyed is not necessarily an instance component and is not
+	// necessarily replaceable.
+	const bool bWasInstanceComponent = Actor->GetInstanceComponents().Contains(Target);
+	const bool bWasRootComponent = (Target == Actor->GetRootComponent());
+
 	Actor->Modify();
 	Target->Modify();
 	Actor->RemoveInstanceComponent(Target);
@@ -1474,9 +1625,45 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveComponentFromActor(const TSharedPtr
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetStringField(TEXT("componentClass"), ComponentClass);
+	Result->SetStringField(TEXT("componentClassPath"), ComponentClassPath);
 	Result->SetBoolField(TEXT("deleted"), true);
-	// Removing an instance component is not symmetrically reversible without a
-	// snapshot of its property state. No rollback record emitted by default.
+	Result->SetBoolField(TEXT("wasInstanceComponent"), bWasInstanceComponent);
+	Result->SetBoolField(TEXT("wasRootComponent"), bWasRootComponent);
+
+	if (bWasRootComponent)
+	{
+		// add_component_to_actor attaches a new SceneComponent to the actor's
+		// root, and the root is what was just destroyed. The inverse would
+		// attach to null and leave the actor rootless, which is worse than
+		// leaving it broken in the way the caller already broke it.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The component removed was the actor's ROOT. add_component_to_actor attaches what it creates to the actor's root component, which no longer exists, so the inverse would leave the actor rootless rather than restore it. There is no action that sets an actor's root component, so this has to be repaired in the editor or by undoing the transaction."));
+		return MCPResult(Result);
+	}
+
+	// add_component_to_actor puts a component of the same class back on the
+	// same actor under the same name. Its property state is not captured here,
+	// so the replacement is a default-constructed component.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Payload->SetStringField(TEXT("componentName"), ComponentName);
+	Payload->SetStringField(TEXT("componentClass"), ComponentClassPath);
+	MCPSetRollback(Result, TEXT("add_component_to_actor"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+
+	FString LossNote =
+		TEXT("The replacement is a default-constructed component attached to the actor's root. Its property values, its own attachment parent and socket, and its relative transform are not restored. It is created with the same FName in the same outer as the object just destroyed, which the engine resolves by renaming rather than reusing, so the restored component's internal name can differ from the one reported here even though componentName matches.");
+	if (!bWasInstanceComponent)
+	{
+		// The lookup above searches GetComponents(), so this can and does
+		// happen: a native default subobject or an SCS component belongs to the
+		// class, and what comes back is an instance component instead.
+		LossNote += TEXT(" This component was NOT an instance component: it was a native default subobject or an SCS component that belongs to the actor's class. The inverse adds an INSTANCE component, so the actor ends up with a per-instance override where it previously had a class-owned component, and a construction-script rerun or a class recompile will not treat the two the same.");
+	}
+	LossNote += TEXT(" On a World Partition map the inverse resolves the actor by path against loaded actors only, so it fails if the actor's cell unloaded between this call and the replay.");
+	Result->SetStringField(TEXT("rollbackNote"), LossNote);
 	return MCPResult(Result);
 }
 
@@ -1486,6 +1673,56 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 	if (auto Err = RequireString(Params, TEXT("levelPath"), LevelPath)) return Err;
 
 	if (!GEditor) return MCPError(TEXT("GEditor not available"));
+
+	// "Open level X" inverts to opening the level that was open, which has to
+	// be read before the swap.
+	//
+	// The test is whether the package EXISTS ON DISK, not what mount it sits
+	// under. A /Game or /Engine prefix check would call a map in a plugin's
+	// content mount unreopenable, which is false: it is saved, it is mounted
+	// and load_level takes it. Only an untitled or temporary world genuinely
+	// has no path that reopens it, and that is what DoesPackageExist answers.
+	FString PreviousLevelPath;
+	if (UWorld* PreviousWorld = GEditor->GetEditorWorldContext().World())
+	{
+		if (UPackage* PreviousPackage = PreviousWorld->GetOutermost())
+		{
+			const FString PreviousName = PreviousPackage->GetName();
+			if (!PreviousName.IsEmpty() && FPackageName::DoesPackageExist(PreviousName))
+			{
+				PreviousLevelPath = PreviousName;
+			}
+		}
+	}
+	// Both sides reduced to a package name before comparing. What was captured
+	// above is a package name and what the caller passes is commonly the object
+	// path form (/Game/Maps/Foo.Foo), so comparing them raw reports "not the
+	// same map" for the same map.
+	const FString RequestedPackageName = FPackageName::ObjectPathToPackageName(LevelPath);
+	const bool bAlreadyOpen = !PreviousLevelPath.IsEmpty() && PreviousLevelPath == RequestedPackageName;
+
+	// Short-circuit, and this is the whole point of the flag. Falling through
+	// would end the play session, run two full-purge garbage collections and
+	// reload the map from disk, throwing away every unsaved change to the very
+	// map the response then calls "already open". A replayed step must not do
+	// that.
+	if (bAlreadyOpen)
+	{
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("levelPath"), LevelPath);
+		Noop->SetStringField(TEXT("previousLevelPath"), PreviousLevelPath);
+		Noop->SetBoolField(TEXT("alreadyOpen"), true);
+		Noop->SetBoolField(TEXT("unchanged"), true);
+		Noop->SetBoolField(TEXT("endedPlaySession"), false);
+		if (UWorld* OpenWorld = GEditor->GetEditorWorldContext().World())
+		{
+			Noop->SetStringField(TEXT("worldName"), OpenWorld->GetName());
+			Noop->SetStringField(TEXT("worldPath"), OpenWorld->GetPathName());
+		}
+		Noop->SetStringField(TEXT("note"),
+			TEXT("This map was already the open one, so nothing was reloaded: no play session was ended, no garbage collection ran and no unsaved change was discarded. There is no rollback because nothing changed."));
+		return MCPResult(Noop);
+	}
 
 	// #590/#589: loading a map right after a PIE session (or a level-script
 	// recompile / duplicate) fatally asserts "World Memory Leaks: N leaks
@@ -1528,6 +1765,26 @@ TSharedPtr<FJsonValue> FLevelHandlers::LoadLevel(const TSharedPtr<FJsonObject>& 
 
 	Result->SetStringField(TEXT("levelPath"), LevelPath);
 	Result->SetBoolField(TEXT("endedPlaySession"), bEndedPIE);
+	// The already-open case returned above, so reaching here is a real load.
+	Result->SetBoolField(TEXT("alreadyOpen"), false);
+	Result->SetBoolField(TEXT("unchanged"), false);
+
+	if (!PreviousLevelPath.IsEmpty())
+	{
+		Result->SetStringField(TEXT("previousLevelPath"), PreviousLevelPath);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("levelPath"), PreviousLevelPath);
+		MCPSetRollback(Result, TEXT("load_level"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Reopening the previous map loads it from disk. Unsaved in-memory changes to it were discarded by this load and do not come back, and any play session this call ended is not restarted."));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The map that was open has no package file on disk, so no levelPath reopens it. That is an untitled or temporary world; a saved map on any mounted content path, a plugin's included, does get an inverse."));
+	}
 
 	return MCPResult(Result);
 }
@@ -1691,6 +1948,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::ClearLevelScript(const TSharedPtr<FJsonOb
 	Result->SetArrayField(TEXT("variables"), Variables);
 	Result->SetBoolField(TEXT("compileSucceeded"), bCompileSucceeded);
 	Result->SetBoolField(TEXT("saved"), bSaved);
+	Result->SetBoolField(TEXT("unchanged"), bDryRun || (NodeCount == 0 && VariableCount == 0));
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("There is no action that rebuilds a level blueprint's graphs. The response names every node and variable removed, but a node's pins, its connections and its literal values are not captured, so nothing can replay them. Undo in the editor is the recovery path while the transaction is still on the stack, and clearing with save=false is what keeps it there."));
 	return MCPResult(Result);
 }
 
@@ -2599,8 +2860,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJs
 
 	WBComp->Modify();
 	void* Addr = Prop->ContainerPtrToValuePtr<void>(WBComp);
+	// Read the value out in the same export-text form this handler imports, so
+	// the inverse is literally the call that puts the old value back.
+	FString PreviousValue;
+	Prop->ExportTextItem_Direct(PreviousValue, Addr, nullptr, WBComp, PPF_None);
 	const TCHAR* R = Prop->ImportText_Direct(*ValueStr, Addr, WBComp, PPF_None);
 	if (R == nullptr) return MCPError(FString::Printf(TEXT("ImportText failed for '%s'"), *ValueStr));
+
+	// Read back in the same form to say whether the write moved anything. The
+	// caller's text and the export text are not comparable ("1" against
+	// "1.000000"), so the comparison has to be export against export.
+	FString WrittenValue;
+	Prop->ExportTextItem_Direct(WrittenValue, Addr, nullptr, WBComp, PPF_None);
+	const bool bValueChanged = WrittenValue != PreviousValue;
 
 	// Fire PostEditChangeProperty so the water body rebuilds / re-renders.
 	FPropertyChangedEvent Evt(Prop);
@@ -2608,13 +2880,30 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJs
 	Actor->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bValueChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bValueChanged);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("componentName"), WBComp->GetName());
 	Result->SetStringField(TEXT("componentClass"), WBComp->GetClass()->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("value"), ValueStr);
+	Result->SetStringField(TEXT("previousValue"), PreviousValue);
+
+	// The undo travels by actor path so replaying it cannot land on a namesake.
+	// Emitted only when the value actually moved: restoring a value that was
+	// already there is a second write, not an undo.
+	if (bValueChanged)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("propertyName"), PropertyName);
+		Payload->SetStringField(TEXT("value"), PreviousValue);
+		MCPSetRollback(Result, TEXT("set_water_body_property"), Payload);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("On a World Partition map the inverse resolves the actor by path against loaded actors only, so it fails if the actor's cell unloaded between this call and the replay."));
+	}
 	return MCPResult(Result);
 }
 
@@ -2772,6 +3061,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 	// #927: the leaf element of a C-style fixed array, `int32 Foo[3]`. That is
 	// ONE FProperty with ArrayDim == 3, so without an index the write lands on
 	// element 0 and the other elements are unreachable. The read side has the
+	// lint-prose-allow: tier  RecastNavMesh's own name for its three generation tiers
 	// mirror of this bug; a read that shows three tiers and a write that can
 	// only reach the first is not a usable pair.
 	int32 LeafArrayIndex = 0;
@@ -3039,7 +3329,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReadActorMotion(const TSharedPtr<FJsonObj
 	// #983: the same list spelled as object paths, which is what a caller
 	// reaches for when several actors share a label. These are kept apart from
 	// the label list and resolved by MCPFindActorByPath rather than folded into
-	// the label token tier, so the export-text form and a case difference both
+	// the label token pass, so the export-text form and a case difference both
 	// resolve here exactly as they do everywhere else.
 	TArray<FString> Paths;
 	FString SinglePath;
@@ -3257,6 +3547,28 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddHismcInstances(const TSharedPtr<FJsonO
 	Result->SetNumberField(TEXT("totalInstances"), ISMC->GetInstanceCount());
 	Result->SetArrayField(TEXT("instanceIndices"), IndicesJson);
 	Result->SetBoolField(TEXT("worldSpace"), bWorldSpace);
+
+	// remove_instance takes one index per call, so a single inverse exists only
+	// when a single instance was added. Naming it for a multi-instance add
+	// would leave every other instance in place while reporting a rollback.
+	if (AddedIndices.Num() == 1)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("componentName"), ISMC->GetName());
+		Payload->SetNumberField(TEXT("index"), AddedIndices[0]);
+		MCPSetRollback(Result, TEXT("remove_instance"), Payload);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Instances are addressed by index, and an index is only a stable handle while the component's instance list is unchanged. The inverse removes the instance this call appended, so it has to run before anything else adds or removes one on the same component. The instance actions do NOT compose under a reverse-order unwind either: this one inverts by index while remove_instance inverts by appending, so unwinding a mixed sequence restores the instance COUNT but not the numbering, and this index-keyed inverse would then delete a different instance. On a World Partition map the inverse resolves the actor by path against loaded actors only, so it fails if the actor's cell unloaded in between."));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("%d instances were added and level(remove_instance) removes one index per call, so no single inverse undoes this. instanceIndices names every index added, and removing them highest-first is what unwinds it."),
+			AddedIndices.Num()));
+	}
 	return MCPResult(Result);
 }
 
@@ -3351,16 +3663,46 @@ TSharedPtr<FJsonValue> FLevelHandlers::UpdateInstanceTransform(const TSharedPtr<
 	if (Params->TryGetObjectField(TEXT("rotation"), Sub) && Sub) ReadRotatorFields(*Sub, Rot);
 	if (Params->TryGetObjectField(TEXT("scale"), Sub) && Sub) ReadVec3Fields(*Sub, Scale);
 
+	// The transform this call is about to overwrite, in the same space the
+	// inverse will be replayed in.
+	const FVector PreviousLoc = Xf.GetLocation();
+	const FRotator PreviousRot = Xf.Rotator();
+	const FVector PreviousScale = Xf.GetScale3D();
+
+	// Both transforms are in the same space, so this says whether the write
+	// moved the instance meaningfully. FTransform::Equals carries a 1e-4
+	// tolerance, so it answers "worth reporting as an update", NOT "no write
+	// happened": the write below runs either way and a sub-tolerance delta is
+	// still a delta on disk. Only the marker keys off this. The rollback does
+	// not, or a real edit would be left unrecoverable.
+	const FTransform NewTransform(Rot, Loc, Scale);
+	const bool bTransformChanged = !Xf.Equals(NewTransform);
+
 	ISMC->Modify();
-	const bool bOk = ISMC->UpdateInstanceTransform(Index, FTransform(Rot, Loc, Scale), bWorldSpace, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ true);
+	const bool bOk = ISMC->UpdateInstanceTransform(Index, NewTransform, bWorldSpace, /*bMarkRenderStateDirty*/ true, /*bTeleport*/ true);
 	if (!bOk) return MCPError(FString::Printf(TEXT("UpdateInstanceTransform failed for index %d"), Index));
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bTransformChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bTransformChanged);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("componentName"), ISMC->GetName());
 	Result->SetNumberField(TEXT("index"), Index);
+
+	// Emitted unconditionally: UpdateInstanceTransform above already ran.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Payload->SetStringField(TEXT("componentName"), ISMC->GetName());
+	Payload->SetNumberField(TEXT("index"), Index);
+	Payload->SetBoolField(TEXT("worldSpace"), bWorldSpace);
+	Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(PreviousLoc));
+	Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(PreviousRot));
+	Payload->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(PreviousScale));
+	MCPSetRollback(Result, TEXT("update_instance_transform"), Payload);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Instances are addressed by index, so the inverse has to run before anything else adds or removes an instance on the same component. Note that the instance actions do NOT compose under a reverse-order unwind: add_instances inverts by index while remove_instance inverts by appending, so a sequence mixing them restores the instance COUNT but not the numbering, and an index-keyed inverse replayed after that reaches a different instance. On a World Partition map the inverse also resolves the actor by path against loaded actors only, so it fails if the actor's cell unloaded in between."));
 	return MCPResult(Result);
 }
 
@@ -3386,16 +3728,45 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveInstance(const TSharedPtr<FJsonObje
 		return MCPError(FString::Printf(TEXT("index %d out of range (0..%d)"), Index, ISMC->GetInstanceCount() - 1));
 	}
 
+	// Capture the transform before it is dropped. World space, because that is
+	// what add_instances defaults to and what makes the restore independent of
+	// the component's own transform.
+	FTransform RemovedTransform;
+	const bool bHaveTransform = ISMC->GetInstanceTransform(Index, RemovedTransform, /*bWorldSpace*/ true);
+
 	ISMC->Modify();
 	const bool bOk = ISMC->RemoveInstance(Index);
 	ISMC->MarkRenderStateDirty();
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("removed"), bOk);
+	Result->SetBoolField(TEXT("unchanged"), !bOk);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("componentName"), ISMC->GetName());
 	Result->SetNumberField(TEXT("remainingInstances"), ISMC->GetInstanceCount());
+
+	if (bOk && bHaveTransform)
+	{
+		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+		Entry->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(RemovedTransform.GetLocation()));
+		Entry->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(RemovedTransform.Rotator()));
+		Entry->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(RemovedTransform.GetScale3D()));
+		TArray<TSharedPtr<FJsonValue>> Transforms;
+		Transforms.Add(MakeShared<FJsonValueObject>(Entry));
+
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("componentName"), ISMC->GetName());
+		Payload->SetBoolField(TEXT("worldSpace"), true);
+		Payload->SetArrayField(TEXT("transforms"), Transforms);
+		MCPSetRollback(Result, TEXT("add_instances"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The instance comes back at the same world transform but is appended, so it does not return to index %d. Removing an instance also renumbers the ones after it, and those indices are not restored either. Per-instance custom float data is not captured and does not come back. Because this inverse appends while add_instances and update_instance_transform invert BY INDEX, the instance actions do not compose under a reverse-order unwind: the count comes back but the numbering does not, so an index-keyed inverse replayed afterwards reaches a different instance. On a World Partition map the inverse also resolves the actor by path against loaded actors only, so it fails if the actor's cell unloaded in between."),
+			Index));
+	}
 	return MCPResult(Result);
 }
 
@@ -3408,29 +3779,86 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 	REQUIRE_ASSET(UStaticMesh, Mesh, AssetPath);
 
 	const bool bEnabled = OptionalBool(Params, TEXT("enabled"), true);
-	Mesh->Modify();
 	// Use the accessor pair (GetNaniteSettings/SetNaniteSettings) - direct
 	// member access to NaniteSettings is deprecated in 5.7+.
 	FMeshNaniteSettings Settings = Mesh->GetNaniteSettings();
+	const bool bPreviousEnabled = Settings.bEnabled != 0;
+	const int32 PreviousPositionPrecision = Settings.PositionPrecision;
 	Settings.bEnabled = bEnabled;
 	if (Params->HasField(TEXT("positionPrecision")))
 	{
 		Settings.PositionPrecision = OptionalInt(Params, TEXT("positionPrecision"), Settings.PositionPrecision);
 	}
-	Mesh->SetNaniteSettings(Settings);
 
-	// Force a rebuild so the Nanite data is generated immediately rather than
-	// on next cook. Build() is the editor's explicit rebuild entry point.
-	Mesh->Build(/*bSilent*/ true);
-	Mesh->PostEditChange();
-	const bool bSaved = SaveAssetPackage(Mesh);
+	// Decided BEFORE anything is written. Build() regenerates the Nanite data
+	// and SaveAssetPackage rewrites the uasset, so running them and then
+	// reporting unchanged:true would mean a no-op call still rebuilt a mesh
+	// and produced a new file on disk. An idempotency marker that costs a
+	// rebuild is not idempotency.
+	const bool bSettingsChanged =
+		(Settings.bEnabled != 0) != bPreviousEnabled ||
+		Settings.PositionPrecision != PreviousPositionPrecision;
+
+	bool bSaved = false;
+	if (bSettingsChanged)
+	{
+		// Modify() lives INSIDE the branch. It defaults to bAlwaysMarkDirty, so
+		// running it on the no-op path dirtied the package while the response
+		// said unchanged:true and saved:false, leaving the asset dirty with
+		// nothing written and nothing to save.
+		Mesh->Modify();
+		Mesh->SetNaniteSettings(Settings);
+
+		// Force a rebuild so the Nanite data is generated immediately rather
+		// than on next cook. Build() is the editor's explicit rebuild entry point.
+		Mesh->Build(/*bSilent*/ true);
+		Mesh->PostEditChange();
+		bSaved = SaveAssetPackage(Mesh);
+	}
+
+	const bool bNowEnabled = Mesh->GetNaniteSettings().bEnabled != 0;
+	const int32 NowPositionPrecision = Mesh->GetNaniteSettings().PositionPrecision;
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bSettingsChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bSettingsChanged);
 	Result->SetStringField(TEXT("assetPath"), Mesh->GetPathName());
-	Result->SetBoolField(TEXT("naniteEnabled"), Mesh->GetNaniteSettings().bEnabled != 0);
-	Result->SetNumberField(TEXT("positionPrecision"), Mesh->GetNaniteSettings().PositionPrecision);
+	Result->SetBoolField(TEXT("naniteEnabled"), bNowEnabled);
+	Result->SetNumberField(TEXT("positionPrecision"), NowPositionPrecision);
 	Result->SetBoolField(TEXT("saved"), bSaved);
+	Result->SetBoolField(TEXT("previousNaniteEnabled"), bPreviousEnabled);
+	Result->SetNumberField(TEXT("previousPositionPrecision"), PreviousPositionPrecision);
+	Result->SetBoolField(TEXT("rebuilt"), bSettingsChanged);
+	if (!bSettingsChanged)
+	{
+		// The skip is a real capability change and has to be said out loud.
+		// This action used to call Build() on every invocation, which is the
+		// only way anything in this category forces a static-mesh rebuild:
+		// get_nanite_info only reads. A caller who was relying on that to
+		// regenerate stale data now gets nothing, and would otherwise see only
+		// unchanged:true with no reason.
+		Result->SetStringField(TEXT("note"),
+			TEXT("The Nanite settings already held these values, so nothing was written: no rebuild ran, PostEditChange was not called and the package was neither dirtied nor saved. ")
+			TEXT("That also means stale or missing Nanite data was NOT regenerated. If the mesh was imported or duplicated without a build, or the derived data cache missed, this call did not fix it: ")
+			TEXT("flip enabled and set it back to force the rebuild, or rebuild the mesh from the editor."));
+	}
+
+	// This writes exactly the two fields it names, so replaying it with the
+	// values that were there restores the settings struct. Emitted only when
+	// the settings moved, which here is safe rather than approximate: the
+	// comparison is over an exact bool and an exact int decided before the
+	// write, and when it is false NOTHING was written, so there is genuinely
+	// nothing to undo.
+	if (bSettingsChanged)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), Mesh->GetPathName());
+		Payload->SetBoolField(TEXT("enabled"), bPreviousEnabled);
+		Payload->SetNumberField(TEXT("positionPrecision"), PreviousPositionPrecision);
+		MCPSetRollback(Result, TEXT("set_nanite_settings"), Payload);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The inverse rebuilds the mesh with the previous settings and saves the package again, so the asset returns to its previous Nanite state rather than to its previous file bytes."));
+	}
 	return MCPResult(Result);
 #else
 	return MCPError(TEXT("SetNaniteSettings requires the editor"));
@@ -3545,6 +3973,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::ExportActorFbx(const TSharedPtr<FJsonObje
 	const int64 FbxSize = IFileManager::Get().FileSize(*AbsPath);
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
+	// Nothing in the project or the level changed, but two files did, and a
+	// caller that pointed outputPath at an existing FBX has lost it.
+	MCPSetNoRollback(Result,
+		TEXT("The FBX and its .json sidecar were written to the caller's outputPath, overwriting whatever was already there, and any missing directories were created. ")
+		TEXT("Undoing that would need a call that deletes or restores a file on disk outside the content browser, and the bridge has none."));
 	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
 	Result->SetStringField(TEXT("fbx"), AbsPath);
 	Result->SetStringField(TEXT("metadata"), MetaPath);
@@ -3804,6 +4237,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorFolderPath(const TSharedPtr<FJson
 	Result->SetArrayField(TEXT("missingLabels"), MissingLabels);
 	Result->SetStringField(TEXT("note"),
 		TEXT("Folder paths are editor-only organisation. The level is left dirty and unsaved; save it yourself when ready."));
+	Result->SetBoolField(TEXT("unchanged"), Changed == 0);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Undoing this is one move per actor back to that actor's own previous folder, and no action here takes a per-actor folder list. Its only selectors address actors by editor label, which is not unique, so a single restore call could also move a namesake this call never touched. actors[].previousFolderPath carries every value a caller needs to replay it one actor at a time."));
 	return MCPResult(Result);
 }
 
@@ -3915,8 +4352,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 	Result->SetBoolField(TEXT("dryRun"), bDryRun);
 	Result->SetNumberField(TEXT("matched"), Matches.Num());
 	Result->SetNumberField(TEXT("deleted"), Deleted);
+	Result->SetBoolField(TEXT("unchanged"), Deleted == 0);
 	Result->SetArrayField(TEXT("labels"), Labels);
 	Result->SetArrayField(TEXT("classPaths"), ClassPaths);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("This deletes whatever the filters matched, across any number of classes, and nothing here spawns a list of actors of differing classes at captured transforms. The actors' transforms, properties, components and attachments are not captured before the destroy, so no call can put them back. dryRun=true is the preflight; the editor's undo stack is the recovery path."));
 
 	// #963: a destructive action that matched nothing must not answer with a
 	// bare success and a zero. A caller who trusts that concludes there is
@@ -3965,6 +4406,17 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddActorTag(const TSharedPtr<FJsonObject>
 	TArray<TSharedPtr<FJsonValue>> TagsOut;
 	for (const FName& T : A->Tags) TagsOut.Add(MakeShared<FJsonValueString>(T.ToString()));
 	Result->SetArrayField(TEXT("tags"), TagsOut);
+
+	// Only the call that actually added the tag has an inverse. Removing one
+	// the actor already carried would undo something this call did not do.
+	if (!bAlreadyHad)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), A->GetPathName());
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("tag"), Tag);
+		MCPSetRollback(Result, TEXT("remove_actor_tag"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -3993,6 +4445,18 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveActorTag(const TSharedPtr<FJsonObje
 	Result->SetStringField(TEXT("actorPath"), A->GetPathName());
 	Result->SetStringField(TEXT("tag"), Tag);
 	Result->SetNumberField(TEXT("removed"), Removed);
+
+	if (Removed > 0)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), A->GetPathName());
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("tag"), Tag);
+		MCPSetRollback(Result, TEXT("add_actor_tag"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("AActor::Tags is an authored array and add_actor_tag appends, so the tag comes back at the end rather than at the position it held. It also comes back once, which is short if the actor carried the same tag more than once."));
+	}
 	return MCPResult(Result);
 }
 
@@ -4012,6 +4476,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorTags(const TSharedPtr<FJsonObject
 		return MCPError(TEXT("Missing 'tags' array"));
 	}
 
+	// The whole array, as it stands, is what set_actor_tags puts back.
+	TArray<TSharedPtr<FJsonValue>> PreviousTags;
+	for (const FName& T : A->Tags) PreviousTags.Add(MakeShared<FJsonValueString>(T.ToString()));
+
 	A->Modify();
 	A->Tags.Reset();
 	for (const TSharedPtr<FJsonValue>& V : *TagsArr)
@@ -4025,12 +4493,38 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorTags(const TSharedPtr<FJsonObject
 	A->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
-	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
-	Result->SetStringField(TEXT("actorPath"), A->GetPathName());
 	TArray<TSharedPtr<FJsonValue>> Out;
 	for (const FName& T : A->Tags) Out.Add(MakeShared<FJsonValueString>(T.ToString()));
+
+	// Order matters here: Tags is an authored array, so a reordering is a real
+	// change even when the set is identical.
+	bool bTagsChanged = Out.Num() != PreviousTags.Num();
+	if (!bTagsChanged)
+	{
+		for (int32 i = 0; i < Out.Num(); ++i)
+		{
+			if (Out[i]->AsString() != PreviousTags[i]->AsString()) { bTagsChanged = true; break; }
+		}
+	}
+	if (bTagsChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bTagsChanged);
+	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
+	Result->SetStringField(TEXT("actorPath"), A->GetPathName());
 	Result->SetArrayField(TEXT("tags"), Out);
+	Result->SetArrayField(TEXT("previousTags"), PreviousTags);
+
+	// This action replaces the array wholesale, so replaying it with the array
+	// that was there restores it, order included.
+	if (bTagsChanged)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), A->GetPathName());
+		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetArrayField(TEXT("tags"), PreviousTags);
+		MCPSetRollback(Result, TEXT("set_actor_tags"), Payload);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("On a World Partition map the inverse resolves the actor by path against loaded actors only, so it fails if the actor's cell unloaded between this call and the replay."));
+	}
 	return MCPResult(Result);
 }
 
@@ -4044,13 +4538,32 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListActorTags(const TSharedPtr<FJsonObjec
 	if (!A) return ActorErr;
 	ActorLabel = A->GetActorLabel();
 
+	// T3: paged. Tag lists are usually short, but a data-driven actor can carry
+	// hundreds, and the category pages uniformly rather than making the caller
+	// remember which list actions accept a cursor.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_actor_tags|actor=%s"), *A->GetPathName()),
+			/*DefaultLimit*/ 200, /*MaxLimit*/ 5000, Page))
+	{
+		return Err;
+	}
+
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), A->GetPathName());
-	TArray<TSharedPtr<FJsonValue>> Out;
-	for (const FName& T : A->Tags) Out.Add(MakeShared<FJsonValueString>(T.ToString()));
-	Result->SetArrayField(TEXT("tags"), Out);
-	Result->SetNumberField(TEXT("count"), Out.Num());
+	// Deliberately NOT sorted: AActor::Tags is an authored array and its order
+	// is what the caller sees in the details panel. The tag itself is the
+	// anchor, which is why the emitted order can stay as authored.
+	TArray<MCPPagination::FPageRow> Rows;
+	Rows.Reserve(A->Tags.Num());
+	for (const FName& T : A->Tags)
+	{
+		const FString Tag = T.ToString();
+		Rows.Add({ Tag, MakeShared<FJsonValueString>(Tag) });
+	}
+	MCPPagination::EmitPage(Page, Rows, TEXT("tags"), Result);
 	return MCPResult(Result);
 }
 
@@ -4111,15 +4624,51 @@ TSharedPtr<FJsonValue> FLevelHandlers::DetachActor(const TSharedPtr<FJsonObject>
 	if (!Child) return ActorErr;
 	ChildLabel = Child->GetActorLabel();
 
+	// The parent this call is about to drop, by path, plus the socket it was
+	// attached to. Both are needed to name the attach that undoes it.
+	AActor* PreviousParent = Child->GetAttachParentActor();
+	const FString PreviousParentPath = PreviousParent ? PreviousParent->GetPathName() : FString();
+	const FString PreviousParentLabel = PreviousParent ? PreviousParent->GetActorLabel() : FString();
+	FString PreviousSocketName;
+	if (PreviousParent && Child->GetRootComponent())
+	{
+		const FName Socket = Child->GetRootComponent()->GetAttachSocketName();
+		if (Socket != NAME_None) PreviousSocketName = Socket.ToString();
+	}
+	const bool bWasAttached = PreviousParent != nullptr;
+
 	Child->Modify();
 	Child->DetachFromActor(FDetachmentTransformRules(EDetachmentRule::KeepWorld, true));
 	Child->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bWasAttached) MCPSetUpdated(Result); else MCPSetExisted(Result);
+	// Present in both branches: MCPSetExisted does not write `updated`, and
+	// this handler emitted it unconditionally before, so a consumer branching
+	// on it must not start reading undefined.
+	Result->SetBoolField(TEXT("updated"), bWasAttached);
+	Result->SetBoolField(TEXT("unchanged"), !bWasAttached);
 	Result->SetStringField(TEXT("childLabel"), ChildLabel);
 	Result->SetStringField(TEXT("childPath"), Child->GetPathName());
 	Result->SetBoolField(TEXT("detached"), true);
+	Result->SetBoolField(TEXT("alreadyDetached"), !bWasAttached);
+	Result->SetStringField(TEXT("previousParentLabel"), PreviousParentLabel);
+	Result->SetStringField(TEXT("previousParentPath"), PreviousParentPath);
+
+	if (bWasAttached)
+	{
+		// Detach kept the world transform, and attaching back with KeepWorld
+		// keeps it too, so the relative transform is recomputed to the same
+		// place it held before.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("childPath"), Child->GetPathName());
+		Payload->SetStringField(TEXT("childLabel"), ChildLabel);
+		Payload->SetStringField(TEXT("parentPath"), PreviousParentPath);
+		Payload->SetStringField(TEXT("parentLabel"), PreviousParentLabel);
+		Payload->SetStringField(TEXT("attachRule"), TEXT("KeepWorld"));
+		if (!PreviousSocketName.IsEmpty()) Payload->SetStringField(TEXT("socketName"), PreviousSocketName);
+		MCPSetRollback(Result, TEXT("attach_actor"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -4428,6 +4977,23 @@ TSharedPtr<FJsonValue> FLevelHandlers::DetachComponent(const TSharedPtr<FJsonObj
 	Result->SetBoolField(TEXT("detached"), true);
 	Result->SetBoolField(TEXT("alreadyDetached"), !bWasAttached);
 	Result->SetBoolField(TEXT("detachmentChanged"), bWasAttached);
+
+	if (bWasAttached && PreviousParentActor)
+	{
+		// attach_component names both ends by path and re-resolves the two
+		// components by name, which is exactly what was recorded above. The
+		// detach kept the world transform and KeepWorld puts it back.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("childPath"), Child->GetPathName());
+		Payload->SetStringField(TEXT("childLabel"), Child->GetActorLabel());
+		Payload->SetStringField(TEXT("childComponentName"), ChildComponent->GetName());
+		Payload->SetStringField(TEXT("parentPath"), PreviousParentActor->GetPathName());
+		Payload->SetStringField(TEXT("parentLabel"), PreviousParentLabel);
+		Payload->SetStringField(TEXT("parentComponentName"), PreviousParentName);
+		Payload->SetStringField(TEXT("attachRule"), TEXT("KeepWorld"));
+		if (!PreviousSocketName.IsEmpty()) Payload->SetStringField(TEXT("socketName"), PreviousSocketName);
+		MCPSetRollback(Result, TEXT("attach_component"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -4503,6 +5069,34 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetCurrentEditLevel(const TSharedPtr<FJso
 	ULevelEditorSubsystem* LES = GEditor ? GEditor->GetEditorSubsystem<ULevelEditorSubsystem>() : nullptr;
 	if (!LES) return MCPError(TEXT("LevelEditorSubsystem not available"));
 
+	// The level that was current. Held as a POINTER as well as a name: two
+	// sub-levels can share a name, so comparing names afterwards would report
+	// a real switch between namesakes as "nothing happened".
+	ULevel* PreviousLevel = World->GetCurrentLevel();
+	FString PreviousLevelName;
+	FString PreviousLevelPath;
+	if (PreviousLevel)
+	{
+		PreviousLevelName = PreviousLevel->GetOuter()->GetName();
+		PreviousLevelPath = PreviousLevel->GetOuter()->GetPathName();
+	}
+
+	// SetCurrentLevelByName is first-match-wins on a duplicated name, and the
+	// payload can carry nothing but that name, so count the namesakes now and
+	// let the response say whether the inverse is exact or a coin flip.
+	int32 PreviousNameMatches = 0;
+	if (!PreviousLevelName.IsEmpty())
+	{
+		for (ULevel* Candidate : World->GetLevels())
+		{
+			if (Candidate && Candidate->GetOuter() &&
+				Candidate->GetOuter()->GetName() == PreviousLevelName)
+			{
+				++PreviousNameMatches;
+			}
+		}
+	}
+
 	const bool bOk = LES->SetCurrentLevelByName(FName(*LevelName));
 	if (!bOk)
 	{
@@ -4511,11 +5105,33 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetCurrentEditLevel(const TSharedPtr<FJso
 
 	ULevel* Cur = World->GetCurrentLevel();
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	const FString NewLevelName = Cur ? Cur->GetOuter()->GetName() : FString();
+	const bool bLevelChanged = Cur != PreviousLevel;
+	if (bLevelChanged) MCPSetUpdated(Result); else MCPSetExisted(Result);
+	// Present in both branches: MCPSetExisted does not write `updated`, and a
+	// consumer branching on it must not read undefined.
+	Result->SetBoolField(TEXT("updated"), bLevelChanged);
+	Result->SetBoolField(TEXT("unchanged"), !bLevelChanged);
 	if (Cur)
 	{
-		Result->SetStringField(TEXT("levelName"), Cur->GetOuter()->GetName());
+		Result->SetStringField(TEXT("levelName"), NewLevelName);
 		Result->SetStringField(TEXT("levelPath"), Cur->GetOuter()->GetPathName());
+	}
+	Result->SetStringField(TEXT("previousLevelName"), PreviousLevelName);
+	Result->SetStringField(TEXT("previousLevelPath"), PreviousLevelPath);
+
+	if (bLevelChanged && !PreviousLevelName.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("levelName"), PreviousLevelName);
+		MCPSetRollback(Result, TEXT("set_current_edit_level"), Payload);
+		if (PreviousNameMatches > 1)
+		{
+			Result->SetBoolField(TEXT("rollbackLossy"), true);
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("%d loaded sub-levels answer to the name '%s', and SetCurrentLevelByName takes the first one it reaches. This action's only parameter is that name, so the inverse can set the current level to a DIFFERENT sub-level of the same name, and everything spawned afterwards would land in the wrong package. previousLevelPath names the one this call left; check the current level against it after replaying."),
+				PreviousNameMatches, *PreviousLevelName));
+		}
 	}
 	return MCPResult(Result);
 }
@@ -4603,6 +5219,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddStreamingSublevel(const TSharedPtr<FJs
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("levelPath"), LevelPath);
 	Result->SetStringField(TEXT("levelName"), FPaths::GetBaseFilename(LevelPath));
+
+	// remove_streaming_sublevel resolves by package name, which is what
+	// AddLevelToWorld recorded on the streaming level it returned.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("levelName"), SL->GetWorldAssetPackageName());
+	MCPSetRollback(Result, TEXT("remove_streaming_sublevel"), Payload);
 	return MCPResult(Result);
 }
 
@@ -4614,7 +5236,37 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveStreamingSublevel(const TSharedPtr<
 	if (Name.IsEmpty()) return MCPError(TEXT("Missing levelName (or levelPath)"));
 
 	ULevelStreaming* SL = FindStreamingByName(World, Name);
-	if (!SL) return MCPError(FString::Printf(TEXT("Streaming sub-level not found: %s"), *Name));
+	if (!SL)
+	{
+		// Idempotent: a sub-level that is not in the world is the state this
+		// call asks for, so a replayed rollback is a no-op rather than a fail.
+		//
+		// #963's rule applies though: a destructive action that matched nothing
+		// must not answer with a bare success. A typo and a completed removal
+		// produce the same alreadyRemoved=true, so the response names what IS
+		// in the world and says which of the two this might be.
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("levelName"), Name);
+		Noop->SetBoolField(TEXT("removed"), false);
+		Noop->SetBoolField(TEXT("alreadyRemoved"), true);
+		Noop->SetStringField(TEXT("zeroMatchNote"),
+			TEXT("No streaming sub-level answers to that name. This is idempotent, not a statement that it was ever there: an already-removed sub-level and a misspelt name look identical here. Compare against candidates[] before concluding the removal happened."));
+		TArray<TSharedPtr<FJsonValue>> Candidates;
+		for (ULevelStreaming* Other : World->GetStreamingLevels())
+		{
+			if (!Other) continue;
+			Candidates.Add(MakeShared<FJsonValueString>(Other->GetWorldAssetPackageName()));
+		}
+		Noop->SetArrayField(TEXT("candidates"), Candidates);
+		return MCPResult(Noop);
+	}
+
+	// Everything add_streaming_sublevel can put back, read before the removal.
+	const FString PackageName = SL->GetWorldAssetPackageName();
+	const bool bWasLoaded = SL->ShouldBeLoaded();
+	const bool bWasVisible = SL->GetShouldBeVisibleFlag();
+	const FVector PreviousLocation = SL->LevelTransform.GetLocation();
+	const bool bWasAlwaysLoaded = SL->GetClass()->GetName().Contains(TEXT("AlwaysLoaded"));
 
 	ULevel* Loaded = SL->GetLoadedLevel();
 	if (Loaded)
@@ -4624,8 +5276,26 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveStreamingSublevel(const TSharedPtr<
 	World->RemoveStreamingLevels({ SL });
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("levelName"), Name);
+	Result->SetStringField(TEXT("packageName"), PackageName);
 	Result->SetBoolField(TEXT("removed"), true);
+	Result->SetBoolField(TEXT("alreadyRemoved"), false);
+
+	if (!PackageName.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("levelPath"), PackageName);
+		Payload->SetStringField(TEXT("streamingClass"),
+			bWasAlwaysLoaded ? TEXT("LevelStreamingAlwaysLoaded") : TEXT("LevelStreamingDynamic"));
+		Payload->SetBoolField(TEXT("initiallyLoaded"), bWasLoaded);
+		Payload->SetBoolField(TEXT("initiallyVisible"), bWasVisible);
+		Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(PreviousLocation));
+		MCPSetRollback(Result, TEXT("add_streaming_sublevel"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The biggest loss first: removing a sub-level discards the loaded ULevel, and adding it back LOADS IT FROM DISK, so every unsaved edit to every actor inside it is gone and does not come back. Beyond that, the sub-level returns with its package, its loaded and visible flags and its transform location, but add_streaming_sublevel only builds a LevelStreamingDynamic or a LevelStreamingAlwaysLoaded, so any other streaming class becomes the nearest of those two, and the streaming level's remaining properties, the transform rotation and its position in the world's streaming list are not restored."));
+	}
 	return MCPResult(Result);
 }
 
@@ -4638,6 +5308,18 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetStreamingSublevelProperties(const TSha
 
 	ULevelStreaming* SL = FindStreamingByName(World, Name);
 	if (!SL) return MCPError(FString::Printf(TEXT("Streaming sub-level not found: %s"), *Name));
+
+	// Every field this action can write, as it stands, so the inverse is this
+	// same call with the values that were there.
+	const bool bPreviousLoaded = SL->ShouldBeLoaded();
+	const bool bPreviousVisible = SL->GetShouldBeVisibleFlag();
+	const FVector PreviousLocation = SL->LevelTransform.GetLocation();
+	// Read the field the write actually drives. UEditorLevelUtils::SetLevelVisibility
+	// sets ULevelStreaming::bShouldBeVisibleInEditor; ULevel::bIsVisible is the
+	// transient "is it associated with the world right now" state, which is a
+	// different question and can disagree mid-transition. Restoring from the
+	// wrong one would put back a value this call never changed.
+	const bool bPreviousEditorVisible = SL->GetShouldBeVisibleInEditor();
 
 	bool bChanged = false;
 	if (Params->HasField(TEXT("initiallyLoaded"))) { SL->SetShouldBeLoaded(OptionalBool(Params, TEXT("initiallyLoaded"), true)); bChanged = true; }
@@ -4657,6 +5339,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetStreamingSublevelProperties(const TSha
 	}
 
 	bool bEditorVisibleSet = false;
+	bool bEditorVisibleSkipped = false;
 	const bool bEditorVisible = OptionalBool(Params, TEXT("editorVisible"), true);
 	if (Params->HasField(TEXT("editorVisible")))
 	{
@@ -4664,8 +5347,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetStreamingSublevelProperties(const TSha
 		if (Loaded)
 		{
 			UEditorLevelUtils::SetLevelVisibility(Loaded, bEditorVisible, false);
+			bEditorVisibleSet = true;
 		}
-		bEditorVisibleSet = true;
+		else
+		{
+			// The sub-level is not loaded, so there is nothing to show or hide
+			// and no write happened. Flagging it as set anyway made the
+			// response claim a write and emit a rollback record for it.
+			bEditorVisibleSkipped = true;
+		}
 	}
 
 	auto Result = MCPSuccess();
@@ -4674,6 +5364,31 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetStreamingSublevelProperties(const TSha
 	Result->SetBoolField(TEXT("initiallyLoaded"), SL->ShouldBeLoaded());
 	Result->SetBoolField(TEXT("initiallyVisible"), SL->GetShouldBeVisibleFlag());
 	if (bEditorVisibleSet) Result->SetBoolField(TEXT("editorVisible"), bEditorVisible);
+	if (bEditorVisibleSkipped)
+	{
+		Result->SetStringField(TEXT("editorVisibleNote"),
+			TEXT("editorVisible was passed but the sub-level is not loaded, so there was nothing to show or hide and no write was made. Load it first if you meant to change its editor visibility."));
+	}
+
+	if (bChanged || bEditorVisibleSet)
+	{
+		// Restate only the fields this call actually wrote. Passing the others
+		// would write values the caller never asked to change.
+		//
+		// Addressed by the resolved PACKAGE NAME, never by the caller's token.
+		// FindStreamingByName also matches on the base filename, and
+		// /Game/A/Sub and /Game/B/Sub both answer to "Sub", so replaying the
+		// token could write this sub-level's old flags onto a different one.
+		// The package name is the pass that resolver checks first and the only
+		// one that is unique.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("levelName"), SL->GetWorldAssetPackageName());
+		if (Params->HasField(TEXT("initiallyLoaded"))) Payload->SetBoolField(TEXT("initiallyLoaded"), bPreviousLoaded);
+		if (Params->HasField(TEXT("initiallyVisible"))) Payload->SetBoolField(TEXT("initiallyVisible"), bPreviousVisible);
+		if (Params->HasField(TEXT("location"))) Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(PreviousLocation));
+		if (bEditorVisibleSet) Payload->SetBoolField(TEXT("editorVisible"), bPreviousEditorVisible);
+		MCPSetRollback(Result, TEXT("set_streaming_sublevel_properties"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -4733,6 +5448,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnGrid(const TSharedPtr<FJsonObject>& 
 	MCPSetCreated(Result);
 	Result->SetNumberField(TEXT("count"), Spawned.Num());
 	Result->SetArrayField(TEXT("labels"), Spawned);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Undoing this means deleting the actors it spawned, and level(delete_actor) takes one actor path per call while level(delete_actors) takes filters rather than a path list. A single delete_actors on the shared labelPrefix would also delete any pre-existing actor whose label starts with it, so no inverse is named. labels[] is the list to delete one at a time."));
 	return MCPResult(Result);
 }
 
@@ -4781,16 +5499,44 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchTranslate(const TSharedPtr<FJsonObje
 	}
 	if (Targets.Num() == 0) return MCPError(TEXT("Provide actorLabels[], actorPaths[] or tag matching at least one actor"));
 
+	// Resolve the selector to paths as the move happens. The inverse names the
+	// same actors by path rather than replaying a label or tag selector that
+	// may match a different set by the time it runs.
+	TArray<TSharedPtr<FJsonValue>> TargetPaths;
 	for (AActor* A : Targets)
 	{
 		A->Modify();
 		A->SetActorLocation(A->GetActorLocation() + Offset);
 		A->MarkPackageDirty();
+		TargetPaths.Add(MakeShared<FJsonValueString>(A->GetPathName()));
 	}
 
+	// A zero offset moved nothing, however many actors it walked. Reporting
+	// updated and handing back an inverse that translates by -0 would be two
+	// falsehoods about the same no-op.
+	const bool bOffsetMoves = !Offset.IsNearlyZero();
+
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bOffsetMoves) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bOffsetMoves);
 	Result->SetNumberField(TEXT("count"), Targets.Num());
+	Result->SetArrayField(TEXT("actorPaths"), TargetPaths);
+
+	// A translation by an offset inverts to a translation by its negation, on
+	// exactly the actors that moved.
+	if (bOffsetMoves)
+	{
+		TSharedPtr<FJsonObject> InverseOffset = MakeShared<FJsonObject>();
+		InverseOffset->SetNumberField(TEXT("x"), -Offset.X);
+		InverseOffset->SetNumberField(TEXT("y"), -Offset.Y);
+		InverseOffset->SetNumberField(TEXT("z"), -Offset.Z);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetArrayField(TEXT("actorPaths"), TargetPaths);
+		Payload->SetObjectField(TEXT("offset"), InverseOffset);
+		MCPSetRollback(Result, TEXT("batch_translate"), Payload);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("On a World Partition map the inverse resolves each actor by path against loaded actors only, so any actor whose cell unloaded between this call and the replay is silently not moved back: the count in the response is what was moved, not what the inverse will reach."));
+	}
 	return MCPResult(Result);
 }
 
@@ -4900,6 +5646,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActorsBatch(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("failedSpawn"), FailedSpawn);
 	Result->SetArrayField(TEXT("labels"), Labels);
 	if (Errors.Num() > 0) Result->SetArrayField(TEXT("errors"), Errors);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Undoing this means deleting the actors it spawned, and level(delete_actor) takes one actor path per call while level(delete_actors) takes filters rather than a path list. Deleting by the labels these actors carry would reach any namesake as well, so no inverse is named. labels[] is the list to delete one at a time."));
 	return MCPResult(Result);
 }
 

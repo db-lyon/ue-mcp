@@ -89,10 +89,16 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 
 	Material->GetExpressionCollection().AddExpression(TextureSampleExpr);
 
-	// Connect RGB output (index 0) to the requested material property
+	// Connect RGB output (index 0) to the requested material property. Whatever
+	// was wired into that property is overwritten here, so record it: deleting
+	// the node this call added is the inverse of the ADD, not of the overwrite.
+	UMaterialExpression* PreviousPropertyExpression = nullptr;
+	int32 PreviousPropertyOutputIndex = 0;
 	UMaterialEditorOnlyData* EditorOnlyData = Material->GetEditorOnlyData();
 	if (FExpressionInput* PropertyInput = GetMaterialPropertyInput(EditorOnlyData, MatProperty))
 	{
+		PreviousPropertyExpression = PropertyInput->Expression;
+		PreviousPropertyOutputIndex = PropertyInput->OutputIndex;
 		PropertyInput->Connect(0, TextureSampleExpr);
 	}
 
@@ -104,7 +110,27 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("texturePath"), Texture->GetPathName());
 	Result->SetStringField(TEXT("property"), PropertyName);
+	Result->SetStringField(TEXT("expressionName"), TextureSampleExpr->GetName());
 	Result->SetNumberField(TEXT("expressionCount"), Material->GetExpressions().Num());
+
+	// Rollback: delete the TextureSample this call created. delete_material_expression
+	// also clears every input that referenced it, so the property input goes back
+	// to unconnected - which is only the previous state when the property was
+	// unconnected to begin with. Lossy whenever it was not.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("materialPath"), Material->GetPathName());
+	Payload->SetStringField(TEXT("expressionName"), TextureSampleExpr->GetName());
+	MCPSetRollback(Result, TEXT("delete_material_expression"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), PreviousPropertyExpression != nullptr);
+	if (PreviousPropertyExpression)
+	{
+		Result->SetStringField(TEXT("previousPropertyExpression"), PreviousPropertyExpression->GetName());
+		Result->SetNumberField(TEXT("previousPropertyOutputIndex"), PreviousPropertyOutputIndex);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("Deleting the TextureSample removes what this call added and leaves '%s' unconnected. It does NOT restore the connection this call overwrote: '%s' output %d was wired into '%s' before. Rewire it with connect_to_material_property expressionName='%s' outputName='%d'."),
+			*PropertyName, *PreviousPropertyExpression->GetName(), PreviousPropertyOutputIndex, *PropertyName,
+			*PreviousPropertyExpression->GetName(), PreviousPropertyOutputIndex));
+	}
 
 	return MCPResult(Result);
 }
@@ -248,6 +274,10 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TShar
 		return MCPResult(Existed);
 	}
 
+	// What this pin carried before the write is the only thing that can undo it.
+	UMaterialExpression* PreviousExpression = TargetInput->Expression;
+	const int32 PreviousOutputIndex = TargetInput->OutputIndex;
+
 	Material->PreEditChange(nullptr);
 	TargetInput->Connect(SourceOutputIndex, SourceExpression);
 	Material->PostEditChange();
@@ -260,7 +290,35 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TShar
 	Result->SetStringField(TEXT("targetExpression"), TargetExpression->GetClass()->GetName());
 	Result->SetNumberField(TEXT("sourceOutputIndex"), SourceOutputIndex);
 	Result->SetNumberField(TEXT("targetInputIndex"), TargetInputIndex);
-	// No rollback: no paired disconnect handler by names.
+
+	if (PreviousExpression)
+	{
+		// Rollback: rewire the pin to what it carried before. Both pin keys are
+		// passed as index strings, which the resolvers above read via
+		// IsNumeric(), so a pin whose name this material does not spell the same
+		// way still lands on the same slot. targetExpression replays the
+		// caller's own string because that string already resolved once.
+		Result->SetStringField(TEXT("previousSourceExpression"), PreviousExpression->GetName());
+		Result->SetNumberField(TEXT("previousSourceOutputIndex"), PreviousOutputIndex);
+
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("materialPath"), Material->GetPathName());
+		Payload->SetStringField(TEXT("sourceExpression"), PreviousExpression->GetName());
+		Payload->SetStringField(TEXT("sourceOutput"), FString::FromInt(PreviousOutputIndex));
+		Payload->SetStringField(TEXT("targetExpression"), TargetExpressionName);
+		Payload->SetStringField(TEXT("targetInput"), FString::FromInt(TargetInputIndex));
+		MCPSetRollback(Result, TEXT("connect_material_expressions"), Payload);
+	}
+	else
+	{
+		// No inverse: the pin was unconnected, and nothing in the surface clears
+		// an expression input. disconnect_material_property only clears the
+		// material's own property inputs, not a pin on an expression node.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("Input %d on '%s' was unconnected before this call, and no action clears an expression input (disconnect_material_property only clears the material's own property inputs). Undoing this needs the target node deleted and rebuilt, or an undo step."),
+			TargetInputIndex, *TargetExpressionName));
+	}
 
 	return MCPResult(Result);
 }
@@ -409,10 +467,21 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TShared
 	}
 
 	FString DeletedClass = Expression->GetClass()->GetName();
+	// Desc, not GetDescription(). Desc is the comment a level designer typed;
+	// GetDescription() is the single-line caption the editor synthesises for
+	// lists, and it falls back to a class-derived string when Desc is empty.
+	// Feeding that back as `name` would give the replacement node a visible
+	// comment the deleted node never had.
+	const FString DeletedDesc = Expression->Desc;
+	const int32 DeletedPosX = Expression->MaterialExpressionEditorX;
+	const int32 DeletedPosY = Expression->MaterialExpressionEditorY;
 
 	Material->PreEditChange(nullptr);
 
-	// Disconnect all references from other expressions that point to this one
+	// Disconnect all references from other expressions that point to this one.
+	// Record each one: the wires are what a rollback cannot put back, so the
+	// caller is at least told exactly which ones were cut.
+	TArray<TSharedPtr<FJsonValue>> SeveredWires;
 	for (UMaterialExpression* OtherExpr : Material->GetExpressions())
 	{
 		if (!OtherExpr || OtherExpr == Expression) continue;
@@ -422,6 +491,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TShared
 			if (!Input) break;
 			if (Input->Expression == Expression)
 			{
+				TSharedPtr<FJsonObject> Wire = MakeShared<FJsonObject>();
+				Wire->SetStringField(TEXT("targetExpression"), OtherExpr->GetName());
+				Wire->SetNumberField(TEXT("targetInputIndex"), i);
+				Wire->SetNumberField(TEXT("sourceOutputIndex"), Input->OutputIndex);
+				SeveredWires.Add(MakeShared<FJsonValueObject>(Wire));
 				Input->Expression = nullptr;
 				Input->OutputIndex = 0;
 			}
@@ -429,32 +503,37 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TShared
 	}
 
 	// Disconnect any material property inputs that reference this expression
+	TArray<TSharedPtr<FJsonValue>> SeveredProperties;
 	UMaterialEditorOnlyData* EditorOnlyData = Material->GetEditorOnlyData();
 	if (EditorOnlyData)
 	{
-		auto ClearIfMatch = [Expression](FExpressionInput& Input)
+		auto ClearIfMatch = [Expression, &SeveredProperties](FExpressionInput& Input, const TCHAR* PropertyLabel)
 		{
 			if (Input.Expression == Expression)
 			{
+				TSharedPtr<FJsonObject> Wire = MakeShared<FJsonObject>();
+				Wire->SetStringField(TEXT("property"), PropertyLabel);
+				Wire->SetNumberField(TEXT("sourceOutputIndex"), Input.OutputIndex);
+				SeveredProperties.Add(MakeShared<FJsonValueObject>(Wire));
 				Input.Expression = nullptr;
 				Input.OutputIndex = 0;
 			}
 		};
-		ClearIfMatch(EditorOnlyData->BaseColor);
-		ClearIfMatch(EditorOnlyData->Metallic);
-		ClearIfMatch(EditorOnlyData->Specular);
-		ClearIfMatch(EditorOnlyData->Roughness);
-		ClearIfMatch(EditorOnlyData->Anisotropy);
-		ClearIfMatch(EditorOnlyData->EmissiveColor);
-		ClearIfMatch(EditorOnlyData->Opacity);
-		ClearIfMatch(EditorOnlyData->OpacityMask);
-		ClearIfMatch(EditorOnlyData->Normal);
-		ClearIfMatch(EditorOnlyData->Tangent);
-		ClearIfMatch(EditorOnlyData->WorldPositionOffset);
-		ClearIfMatch(EditorOnlyData->SubsurfaceColor);
-		ClearIfMatch(EditorOnlyData->AmbientOcclusion);
-		ClearIfMatch(EditorOnlyData->Refraction);
-		ClearIfMatch(EditorOnlyData->PixelDepthOffset);
+		ClearIfMatch(EditorOnlyData->BaseColor, TEXT("BaseColor"));
+		ClearIfMatch(EditorOnlyData->Metallic, TEXT("Metallic"));
+		ClearIfMatch(EditorOnlyData->Specular, TEXT("Specular"));
+		ClearIfMatch(EditorOnlyData->Roughness, TEXT("Roughness"));
+		ClearIfMatch(EditorOnlyData->Anisotropy, TEXT("Anisotropy"));
+		ClearIfMatch(EditorOnlyData->EmissiveColor, TEXT("EmissiveColor"));
+		ClearIfMatch(EditorOnlyData->Opacity, TEXT("Opacity"));
+		ClearIfMatch(EditorOnlyData->OpacityMask, TEXT("OpacityMask"));
+		ClearIfMatch(EditorOnlyData->Normal, TEXT("Normal"));
+		ClearIfMatch(EditorOnlyData->Tangent, TEXT("Tangent"));
+		ClearIfMatch(EditorOnlyData->WorldPositionOffset, TEXT("WorldPositionOffset"));
+		ClearIfMatch(EditorOnlyData->SubsurfaceColor, TEXT("SubsurfaceColor"));
+		ClearIfMatch(EditorOnlyData->AmbientOcclusion, TEXT("AmbientOcclusion"));
+		ClearIfMatch(EditorOnlyData->Refraction, TEXT("Refraction"));
+		ClearIfMatch(EditorOnlyData->PixelDepthOffset, TEXT("PixelDepthOffset"));
 	}
 
 	Material->GetExpressionCollection().RemoveExpression(Expression);
@@ -467,7 +546,30 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TShared
 	Result->SetStringField(TEXT("deletedClass"), DeletedClass);
 	Result->SetNumberField(TEXT("expressionCount"), Material->GetExpressions().Num());
 	Result->SetBoolField(TEXT("deleted"), true);
-	// No rollback: would require snapshotting the expression and all its connections.
+	Result->SetArrayField(TEXT("severedExpressionInputs"), SeveredWires);
+	Result->SetArrayField(TEXT("severedProperties"), SeveredProperties);
+
+	// Rollback: put a node of the same class back at the same spot. That is the
+	// honest half of the inverse. Its authored values (a texture reference, a
+	// constant, a parameter's default) and every wire listed above are gone,
+	// because nothing was snapshotted before the delete and one rollback record
+	// carries one call. The class name is passed as-is: add_material_expression
+	// prefixes a "U" onto a MaterialExpression* name, so it resolves the class
+	// this node really had.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("materialPath"), Material->GetPathName());
+	Payload->SetStringField(TEXT("expressionType"), DeletedClass);
+	Payload->SetNumberField(TEXT("positionX"), DeletedPosX);
+	Payload->SetNumberField(TEXT("positionY"), DeletedPosY);
+	if (!DeletedDesc.IsEmpty())
+	{
+		Payload->SetStringField(TEXT("name"), DeletedDesc);
+	}
+	MCPSetRollback(Result, TEXT("add_material_expression"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+		TEXT("The rollback adds a fresh %s at the same position, with default values and no wiring. It does NOT restore this node's authored property values, and it does NOT restore the %d expression input(s) and %d material property input(s) listed in severedExpressionInputs / severedProperties - rewire those with connect_material_expressions and connect_to_material_property. The replacement also gets a new engine name, so anything that addressed this node by name has to be re-pointed."),
+		*DeletedClass, SeveredWires.Num(), SeveredProperties.Num()));
 
 	return MCPResult(Result);
 }
@@ -504,8 +606,15 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DisconnectMaterialProperty(const TShar
 
 	Material->PreEditChange(nullptr);
 
-	auto ClearInput = [](FExpressionInput& Input)
+	// Read the binding out before clearing it. Without this the handler could
+	// only report that it cleared something, never what, and there was nothing
+	// to hand a rollback.
+	UMaterialExpression* PreviousExpression = nullptr;
+	int32 PreviousOutputIndex = 0;
+	auto ClearInput = [&PreviousExpression, &PreviousOutputIndex](FExpressionInput& Input)
 	{
+		PreviousExpression = Input.Expression;
+		PreviousOutputIndex = Input.OutputIndex;
 		Input.Expression = nullptr;
 		Input.OutputIndex = 0;
 	};
@@ -541,10 +650,34 @@ TSharedPtr<FJsonValue> FMaterialHandlers::DisconnectMaterialProperty(const TShar
 	Material->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("materialPath"), Material->GetPathName());
 	Result->SetStringField(TEXT("property"), PropertyName);
-	// No rollback: we don't capture the previous expression binding before clearing.
+
+	if (PreviousExpression)
+	{
+		MCPSetUpdated(Result);
+		Result->SetStringField(TEXT("previousExpression"), PreviousExpression->GetName());
+		Result->SetNumberField(TEXT("previousOutputIndex"), PreviousOutputIndex);
+
+		// Rollback: reconnect exactly what was cleared. connect_to_material_property
+		// reads outputName numerically when it parses as a number, so the output
+		// index round-trips without needing the pin's display name.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("materialPath"), Material->GetPathName());
+		Payload->SetStringField(TEXT("expressionName"), PreviousExpression->GetName());
+		Payload->SetStringField(TEXT("property"), PropertyName);
+		Payload->SetStringField(TEXT("outputName"), FString::FromInt(PreviousOutputIndex));
+		MCPSetRollback(Result, TEXT("connect_to_material_property"), Payload);
+	}
+	else
+	{
+		// Nothing was wired into the property, so nothing changed and there is
+		// nothing to undo. Replaying this call is a no-op by construction.
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("'%s' was already unconnected, so this call changed nothing and there is no inverse to run."), *PropertyName));
+	}
 
 	return MCPResult(Result);
 }

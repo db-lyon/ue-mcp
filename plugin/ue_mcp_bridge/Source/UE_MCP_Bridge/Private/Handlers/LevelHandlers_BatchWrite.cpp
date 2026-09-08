@@ -430,6 +430,16 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchSetActorProperties(const TSharedPtr<
 		Result->SetStringField(TEXT("saveNote"),
 			TEXT("The level is left dirty and is NOT saved. Call level(save) when you are done."));
 	}
+	// Undoing a batch write means restoring each actor's OWN previous value,
+	// and nothing on this surface takes a per-actor value list: this action
+	// applies one value to everything its selector matched. A single restore
+	// call would have to be a blanket write of some shared value, which is not
+	// the inverse of what happened. The selectors here address actors by
+	// editor label as well, which is not unique, so such a call could also
+	// write onto a namesake this one never touched.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("results[].properties[].previousValue carries each actor's own value from before the write, and is present only where that value was a non-empty string: a property row WITHOUT it either held an empty value or came from a write that reported none, and the two are not distinguishable here. Replay the ones you have one at a time with level(set_actor_property), which emits its own rollback per actor. No single call restores them together."));
 	return MCPResult(Result);
 }
 
@@ -582,6 +592,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::BulkSetComponentProperty(const TSharedPtr
 		Result->SetStringField(TEXT("saveNote"),
 			TEXT("The level is left dirty and is NOT saved. Call level(save) when you are done."));
 	}
+	// Same structural reason as batch_set_actor_properties: the inverse is one
+	// write per component with that component's own previous value, and this
+	// action only applies one shared value across a label-addressed selector.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("results[].previousValue carries each component's own value from before the write, and is present only where that value was a non-empty string: a row WITHOUT it either held an empty value or came from a write that reported none, and the two are not distinguishable here. Replay the ones you have one at a time with level(set_component_property), which emits its own rollback per actor. No single call restores them together."));
 	return MCPResult(Result);
 }
 
@@ -794,6 +810,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveComponentsByClass(const TSharedPtr<
 			TEXT("dryRun defaults to TRUE for this action because it deletes components whose auto-generated names you cannot enumerate. Pass dryRun=false to commit."));
 	}
 
+	// A removal, across many actors, of components whose property state was
+	// never captured. level(add_component_to_actor) takes one actor and one
+	// component per call and constructs a default component, so no single call
+	// is the inverse of this and even the per-actor replay is not a restore.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("results[].components names every component removed, per actor, and componentClass names the class, so level(add_component_to_actor) can put an empty one back on each. Their property values, transforms and attachments were not captured and do not come back. dryRun=true, which is the default here, is the preflight."));
+
 	return MCPResult(Result);
 }
 
@@ -964,7 +988,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorsBatch(const TSharedPtr<FJsonOb
 				}
 				else
 				{
-					const FBoxSphereBounds WorldBounds = SceneComponent->GetBounds();
+					const FBoxSphereBounds WorldBounds = MCPComponentWorldBounds(*SceneComponent);
 					Location = WorldBounds.Origin + WorldBounds.BoxExtent * ExtentFraction + Offset;
 				}
 
@@ -1189,6 +1213,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorsBatch(const TSharedPtr<FJsonOb
 		Result->SetStringField(TEXT("saveNote"),
 			TEXT("The level is left dirty and is NOT saved. Call level(save) when you are done."));
 	}
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Undoing this means deleting the actors it spawned, and level(delete_actor) takes one actor path per call while level(delete_actors) takes filters rather than a path list. Deleting by the labels these actors carry would reach any namesake as well, so no inverse is named. results[].actorLabel is the list to delete one at a time."));
 	return MCPResult(Result);
 }
 
@@ -1422,6 +1449,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentMaterials(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("saveNote"),
 			TEXT("These are COMPONENT overrides on placed actors, so the LEVEL is dirty and is NOT saved. The mesh ASSET is untouched; use material(build_material) or asset(set_property) to write the asset's own slots."));
 	}
+	// Restoring this is a per-actor slot array, not one shared value: each
+	// component had its own previous material per slot, and a slot that showed
+	// the mesh default has to be cleared rather than assigned. This action
+	// takes one materials list for everything its label-addressed selector
+	// matched, so no single call expresses that.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("results[].slots[] carries each slot's previousMaterialPath and its previousSource, which says whether the slot was a component override or the mesh default. Replay them per actor with an explicit actorLabels of one, passing a null for every slot whose previousSource was not componentOverride."));
 	return MCPResult(Result);
 }
 
@@ -1567,5 +1602,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorHLODLayer(const TSharedPtr<FJsonO
 		Result->SetStringField(TEXT("saveNote"),
 			TEXT("On a World Partition map each actor lives in its own package, so this dirties one package per actor. Save them with level(save) or editor(save_dirty). HLOD assignment takes effect on the next HLOD build."));
 	}
+	// Each actor had its own previous layer, and this action writes one layer
+	// across everything its label-addressed selector matched. A blanket
+	// re-assignment is not the inverse of that, and on a World Partition map
+	// the actors are re-homed per package, so nothing here is index-addressed
+	// either.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("results[].previousHLODLayer carries each actor's own layer from before the write, an empty string meaning it had no override. Replay them one actor at a time with an explicit actorLabels of one. enableAutoLODGeneration, when it was passed, is not captured per actor and does not come back."));
 	return MCPResult(Result);
 }

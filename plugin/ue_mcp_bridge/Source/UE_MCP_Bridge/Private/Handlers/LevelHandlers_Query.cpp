@@ -597,7 +597,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 			bool bBoundsInvalid = false;
 			if (SceneComponent && (Fields.bBounds || Fields.bHealth))
 			{
-				const FBoxSphereBounds ComponentBounds = SceneComponent->GetBounds();
+				const FBoxSphereBounds ComponentBounds = MCPComponentWorldBounds(*SceneComponent);
 				const FVector Extent = ComponentBounds.BoxExtent;
 				bBoundsZero = Extent.IsNearlyZero() && FMath::IsNearlyZero(ComponentBounds.SphereRadius);
 				bBoundsInvalid =

@@ -1,5 +1,6 @@
 import type { TaskResult } from "@db-lyon/flowkit";
 import { liftRollback } from "./rollback.js";
+import { applyHandlerOutcome } from "./handler-outcome.js";
 import { UeMcpTask } from "../task.js";
 import { stripEditorTarget } from "../types.js";
 
@@ -19,6 +20,11 @@ import { stripEditorTarget } from "../types.js";
  * Handlers may attach a `rollback: { method, payload }` to their response.
  * When present, it is lifted onto `TaskResult.rollback` so the flow runner
  * can invoke the inverse on failure when `rollback_on_failure` is enabled.
+ *
+ * This class is also the inverse executor: `liftRollback` names
+ * `ue-mcp.bridge` as the task the runner replays, so a rollback that the
+ * editor refuses is reported through the same reading of the body as any
+ * other step.
  */
 export class BridgeTask extends UeMcpTask {
   get taskName() {
@@ -45,6 +51,10 @@ export class BridgeTask extends UeMcpTask {
     const result: TaskResult = { success: true, data: obj };
     const record = liftRollback(obj.rollback);
     if (record) result.rollback = record;
-    return result;
+    // The step's verdict comes from the body, not from the promise settling:
+    // the bridge resolves a `success: false` answer normally. Applied AFTER
+    // the lift and never touching `data`, because a destructive call that
+    // failed is exactly when the inverse and the detail matter most.
+    return applyHandlerOutcome(this.ctx, obj, result);
   }
 }

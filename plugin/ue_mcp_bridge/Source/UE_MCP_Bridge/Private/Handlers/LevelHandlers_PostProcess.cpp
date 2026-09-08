@@ -233,6 +233,132 @@ namespace
 		return true;
 	}
 
+	/**
+	 * Did any applied write actually move a value?
+	 *
+	 * ApplyPostProcessSetting records previousValue before its write and
+	 * newValue after it, so this is a direct comparison rather than a guess. A
+	 * call that wrote the values already there changed nothing and must not
+	 * report `updated`, and must not carry a rollback either.
+	 */
+	bool PostProcessAnyValueChanged(const TArray<TSharedPtr<FJsonValue>>& Applied)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : Applied)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Entry.IsValid()) continue;
+			bool bApplied = false;
+			if (!Entry->TryGetBoolField(TEXT("applied"), bApplied) || !bApplied) continue;
+
+			const TSharedPtr<FJsonValue> Previous = Entry->TryGetField(TEXT("previousValue"));
+			const TSharedPtr<FJsonValue> Current = Entry->TryGetField(TEXT("newValue"));
+			if (!Previous.IsValid() || !Current.IsValid()) return true;
+			if (!FJsonValue::CompareEqual(*Previous, *Current)) return true;
+
+			// Turning an override bit on is a change even when the value under
+			// it did not move, because the renderer starts honouring it.
+			bool bWasEnabled = false;
+			bool bIsEnabled = false;
+			if (Entry->TryGetBoolField(TEXT("overrideWasEnabled"), bWasEnabled) &&
+				Entry->TryGetBoolField(TEXT("overrideEnabled"), bIsEnabled) &&
+				bWasEnabled != bIsEnabled)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * The set_post_process_settings call that puts back what a write changed.
+	 *
+	 * Every entry ApplyPostProcessSetting produced carries the value that was
+	 * there and, where the field has one, whether its override bit was already
+	 * on. Both go into the inverse: restoring the value while leaving an
+	 * override bit this call switched on would leave the volume overriding a
+	 * setting it did not override before. enableOverrides is off in the
+	 * inverse so the bits are written only where they are named explicitly.
+	 *
+	 * Returns false when nothing was applied, which is when there is nothing
+	 * to undo.
+	 */
+	bool BuildPostProcessInverse(
+		AActor* Actor,
+		const FMCPPostProcessTarget& Target,
+		const TArray<TSharedPtr<FJsonValue>>& Applied,
+		TSharedPtr<FJsonObject>& OutPayload)
+	{
+		// Pass one: every field this call WROTE, by resolved name. Each of those
+		// carries its own previousValue, read before its own write, and that
+		// reading is authoritative.
+		//
+		// This matters because `overrideWasEnabled` on a value field is sampled
+		// AFTER that field's write, and SetPostProcessSettings iterates the
+		// caller's settings object in map order. A caller passing both Bloom
+		// and bOverride_Bloom in one call can have the bit written first, so
+		// Bloom's entry would report the bit as "already enabled" when this
+		// same call is what enabled it. Deriving the flag from that reading
+		// would then overwrite the flag's own honest previousValue and leave a
+		// volume no longer overriding something it used to override.
+		TSet<FString> WrittenFieldNames;
+		for (const TSharedPtr<FJsonValue>& Value : Applied)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Entry.IsValid()) continue;
+			bool bApplied = false;
+			if (!Entry->TryGetBoolField(TEXT("applied"), bApplied) || !bApplied) continue;
+			FString ResolvedName;
+			if (Entry->TryGetStringField(TEXT("resolvedName"), ResolvedName) && !ResolvedName.IsEmpty())
+			{
+				WrittenFieldNames.Add(ResolvedName);
+			}
+		}
+
+		TSharedPtr<FJsonObject> Settings = MakeShared<FJsonObject>();
+		for (const TSharedPtr<FJsonValue>& Value : Applied)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Entry.IsValid()) continue;
+			bool bApplied = false;
+			if (!Entry->TryGetBoolField(TEXT("applied"), bApplied) || !bApplied) continue;
+
+			FString ResolvedName;
+			if (!Entry->TryGetStringField(TEXT("resolvedName"), ResolvedName) || ResolvedName.IsEmpty()) continue;
+			const TSharedPtr<FJsonValue> Previous = Entry->TryGetField(TEXT("previousValue"));
+			if (!Previous.IsValid()) continue;
+			Settings->SetField(ResolvedName, Previous);
+
+			FString OverrideFlag;
+			bool bOverrideWasEnabled = false;
+			if (Entry->TryGetStringField(TEXT("overrideFlag"), OverrideFlag) && !OverrideFlag.IsEmpty() &&
+				Entry->TryGetBoolField(TEXT("overrideWasEnabled"), bOverrideWasEnabled))
+			{
+				// Only derive the flag when this call did not write it itself.
+				// When it did, that entry's own previousValue is already in
+				// Settings and is the reading taken before anything changed.
+				if (!WrittenFieldNames.Contains(OverrideFlag))
+				{
+					Settings->SetBoolField(OverrideFlag, bOverrideWasEnabled);
+				}
+			}
+		}
+		if (Settings->Values.Num() == 0) return false;
+
+		OutPayload = MakeShared<FJsonObject>();
+		OutPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		OutPayload->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+		// Re-resolve the same struct: componentName only when the settings live
+		// on a component, because passing it makes the lookup component-only.
+		if (Target.OwnerKind == TEXT("component"))
+		{
+			OutPayload->SetStringField(TEXT("componentName"), Target.OwnerName);
+		}
+		OutPayload->SetStringField(TEXT("propertyName"), Target.PropertyName);
+		OutPayload->SetObjectField(TEXT("settings"), Settings);
+		OutPayload->SetBoolField(TEXT("enableOverrides"), false);
+		return true;
+	}
+
 	/** Describe the resolved struct on a response, so a caller sees what it hit. */
 	void EmitPostProcessTargetFields(const TSharedPtr<FJsonObject>& Result, AActor* Actor, const FMCPPostProcessTarget& Target)
 	{
@@ -373,8 +499,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetPostProcessSettings(const TSharedPtr<F
 	Target.Owner->PostEditChange();
 	Actor->MarkPackageDirty();
 
+	const bool bAnyChanged = PostProcessAnyValueChanged(Applied);
+
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bAnyChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bAnyChanged);
 	EmitPostProcessTargetFields(Result, Actor, Target);
 	Result->SetBoolField(TEXT("enableOverrides"), bEnableOverrides);
 	Result->SetNumberField(TEXT("appliedCount"), SuccessCount);
@@ -383,6 +512,17 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetPostProcessSettings(const TSharedPtr<F
 	if (FailureCount > 0) Result->SetBoolField(TEXT("success"), false);
 	Result->SetStringField(TEXT("note"),
 		TEXT("Each written setting also had its bOverride_<Name> flag enabled, which is what makes the value take effect. The level is left dirty and is NOT saved."));
+
+	// Gated on whether a write LANDED, not on bAnyChanged. That comparison is
+	// export text against export text, so two different floats that print the
+	// same read as equal; suppressing the inverse on it would leave a struct
+	// that was written, PostEditChange-d and marked dirty with no way back.
+	// The marker above is allowed to be approximate. The rollback is not.
+	TSharedPtr<FJsonObject> Payload;
+	if (SuccessCount > 0 && BuildPostProcessInverse(Actor, Target, Applied, Payload))
+	{
+		MCPSetRollback(Result, TEXT("set_post_process_settings"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -514,8 +654,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFixedExposure(const TSharedPtr<FJsonOb
 	Target.Owner->PostEditChange();
 	Actor->MarkPackageDirty();
 
+	const bool bAnyChanged = PostProcessAnyValueChanged(Applied);
+
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bAnyChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bAnyChanged);
 	EmitPostProcessTargetFields(Result, Actor, Target);
 	Result->SetNumberField(TEXT("exposure"), Exposure);
 	Result->SetNumberField(TEXT("failedCount"), FailureCount);
@@ -523,5 +666,16 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFixedExposure(const TSharedPtr<FJsonOb
 	if (FailureCount > 0) Result->SetBoolField(TEXT("success"), false);
 	Result->SetStringField(TEXT("note"),
 		TEXT("Min and max adaptation brightness are set to the same value, which is how the engine disables eye adaptation, and both override flags are enabled so the values apply. The level is left dirty and is NOT saved."));
+
+	// This is a shorthand over the same struct writes, so its inverse is the
+	// general setter restoring the exposure fields it touched. Gated on a write
+	// having landed rather than on bAnyChanged, for the reason given in
+	// SetPostProcessSettings: the change test is export text and cannot be
+	// trusted to prove nothing moved.
+	TSharedPtr<FJsonObject> Payload;
+	if ((Applied.Num() - FailureCount) > 0 && BuildPostProcessInverse(Actor, Target, Applied, Payload))
+	{
+		MCPSetRollback(Result, TEXT("set_post_process_settings"), Payload);
+	}
 	return MCPResult(Result);
 }

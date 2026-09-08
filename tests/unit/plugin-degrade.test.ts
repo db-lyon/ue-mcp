@@ -51,7 +51,7 @@ afterAll(() => {
 });
 
 function baseTools(): ToolDef[] {
-  return [categoryTool("gameplay", "Gameplay", { noop: { description: "n", handler: async () => ({}) } })];
+  return [categoryTool("gameplay", "Gameplay", { noop: { kind: "handler", effect: "read", description: "n", handler: async () => ({}) } })];
 }
 
 describe("#892 one malformed param does not take the category down", () => {

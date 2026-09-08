@@ -9,6 +9,7 @@
 #include "AnimationHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -334,16 +335,37 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListBones(const TSharedPtr<FJsonObjec
 	const FReferenceSkeleton& Ref = SK->GetSkeletalMeshAsset()->GetRefSkeleton();
 	const int32 NumBones = Ref.GetNum();
 
-	TArray<TSharedPtr<FJsonValue>> Bones;
+	// T3: paged. A production skeleton runs to several hundred bones once
+	// twist, cloth and facial joints are in, and the whole hierarchy arrived in
+	// one response with no way to ask for part of it.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_bones|actor=%s|component=%s"), *Actor->GetPathName(), *SK->GetName()),
+			/*DefaultLimit*/ 200, /*MaxLimit*/ 5000, Page))
+	{
+		return Err;
+	}
+
+	// Deliberately NOT sorted. Reference-skeleton index order is a contract of
+	// the asset: parents precede children, so the emitted sequence is the
+	// hierarchy itself, and alphabetising it would destroy the one thing that
+	// makes a bone list readable.
+	TArray<MCPPagination::FPageRow> Bones;
+	Bones.Reserve(NumBones);
 	for (int32 i = 0; i < NumBones; ++i)
 	{
+		const FString BoneName = Ref.GetBoneName(i).ToString();
 		TSharedPtr<FJsonObject> B = MakeShared<FJsonObject>();
-		B->SetStringField(TEXT("name"), Ref.GetBoneName(i).ToString());
+		B->SetStringField(TEXT("name"), BoneName);
 		B->SetNumberField(TEXT("index"), i);
 		const int32 ParentIdx = Ref.GetParentIndex(i);
 		B->SetNumberField(TEXT("parentIndex"), ParentIdx);
 		if (ParentIdx != INDEX_NONE) B->SetStringField(TEXT("parentName"), Ref.GetBoneName(ParentIdx).ToString());
-		Bones.Add(MakeShared<FJsonValueObject>(B));
+		// The bone NAME is the anchor, not its index: a skeleton edited between
+		// two pages renumbers every bone after the change, and an index would
+		// then resume at a different joint while claiming to be exact.
+		Bones.Add({ BoneName, MakeShared<FJsonValueObject>(B) });
 	}
 
 	auto Result = MCPSuccess();
@@ -354,7 +376,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListBones(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("worldName"), World ? World->GetName() : TEXT(""));
 	AddSkeletalComponentMetadata(Result, SK);
 	Result->SetNumberField(TEXT("boneCount"), NumBones);
-	Result->SetArrayField(TEXT("bones"), Bones);
+	MCPPagination::EmitPage(Page, Bones, TEXT("bones"), Result);
 	return MCPResult(Result);
 }
 
@@ -391,10 +413,22 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RebindLeaderPose(const TSharedPtr<FJs
 	if (!Body) return MCPError(TEXT("Could not resolve a body SkeletalMeshComponent"));
 
 	int32 Rebound = 0;
+	int32 AlreadyBoundToBody = 0;
 	TArray<TSharedPtr<FJsonValue>> Bound;
+	// What each component was following before, reported so a caller can see
+	// what the rebind displaced. It is not a rollback payload: no action points
+	// a component at an arbitrary leader or clears one.
+	TArray<TSharedPtr<FJsonValue>> PreviousLeaders;
 	for (USkeletalMeshComponent* C : Comps)
 	{
 		if (C == Body) continue;
+		const USkinnedMeshComponent* PrevLeader = C->LeaderPoseComponent.Get();
+		if (PrevLeader == Body) ++AlreadyBoundToBody;
+		TSharedPtr<FJsonObject> Prev = MakeShared<FJsonObject>();
+		Prev->SetStringField(TEXT("component"), C->GetName());
+		Prev->SetStringField(TEXT("previousLeader"), PrevLeader ? PrevLeader->GetName() : FString());
+		PreviousLeaders.Add(MakeShared<FJsonValueObject>(Prev));
+
 		C->SetLeaderPoseComponent(nullptr, /*bForceUpdate*/ true);
 		C->SetLeaderPoseComponent(Body, /*bForceUpdate*/ true);
 		Bound.Add(MakeShared<FJsonValueString>(C->GetName()));
@@ -403,11 +437,18 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RebindLeaderPose(const TSharedPtr<FJs
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	Result->SetBoolField(TEXT("unchanged"), Rebound > 0 && AlreadyBoundToBody == Rebound);
 	Result->SetStringField(TEXT("actorLabel"), ActorLabel);
 	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 	Result->SetStringField(TEXT("body"), Body->GetName());
 	Result->SetNumberField(TEXT("rebound"), Rebound);
+	Result->SetNumberField(TEXT("alreadyBoundToBody"), AlreadyBoundToBody);
 	Result->SetArrayField(TEXT("components"), Bound);
+	Result->SetArrayField(TEXT("previousLeaders"), PreviousLeaders);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("This points every other skeletal mesh component at one body component. No action sets a component's leader pose to an arbitrary component or clears one, so the previous bindings listed in previousLeaders cannot be replayed. ")
+		TEXT("The binding is live component state on the spawned actor rather than saved asset data, so it is rebuilt from the actor's construction when the world reloads."));
 	return MCPResult(Result);
 }
 

@@ -91,4 +91,20 @@ private:
 	static TSharedPtr<FJsonValue> AddMaterialFunctionExpression(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ConnectMaterialFunctionExpressions(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListMaterialFunctionExpressions(const TSharedPtr<FJsonObject>& Params);
+
+	// Runtime Virtual Textures, in MaterialHandlers_RVT.cpp. Every SETTING on
+	// a URuntimeVirtualTexture, on its component and on a landscape's virtual
+	// texture group is a UPROPERTY that asset/editor(set_property) already
+	// reaches, so none of these is a setter. Each one calls an engine function
+	// a property write cannot: creating the asset, spawning and fitting the
+	// bounding volume, InitVirtualTextureDependentSettings on a sample node,
+	// mirroring graph connections into the output node, and fanning a landscape
+	// assignment across every streaming proxy with a render-state refresh.
+	static TSharedPtr<FJsonValue> CreateRuntimeVirtualTexture(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadRuntimeVirtualTexture(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddRvtVolume(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetRvtVolumeBounds(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddRvtSampler(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddRvtOutput(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AssignRvtToLandscape(const TSharedPtr<FJsonObject>& Params);
 };

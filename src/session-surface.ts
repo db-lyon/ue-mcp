@@ -16,7 +16,7 @@
  */
 import { z } from "zod";
 import type { ToolDef, ActionSpec } from "./types.js";
-import { cloneToolDef, cloneToolGraph } from "./types.js";
+import { actionEnum, cloneToolDef, cloneToolGraph } from "./types.js";
 import type { EditorSession } from "./session.js";
 import type { PluginRecord } from "./plugin/loader.js";
 
@@ -128,7 +128,7 @@ function mergeActions(target: ToolDef, added: Record<string, ActionSpec>, donor:
 function rebuildActionEnum(tool: ToolDef): void {
   const names = Object.keys(tool.actions) as [string, ...string[]];
   if (names.length === 0) return;
-  tool.schema.action = z.enum(names).describe("Action to perform");
+  tool.schema.action = actionEnum(names);
 }
 
 /**

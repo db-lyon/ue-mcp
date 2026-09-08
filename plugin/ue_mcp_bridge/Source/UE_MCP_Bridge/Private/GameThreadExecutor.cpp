@@ -46,26 +46,121 @@ bool FMCPGameThreadExecutor::IsHandlerInFlight()
 namespace
 {
 	// Shared between the calling thread (which may abandon the wait on
-	// timeout) and the game-thread ticker lambda (which completes the work).
-	// Captured by value into the lambda so its lifetime extends past the
-	// caller's stack frame - critical when the caller times out on a long
-	// Python script. Without this shared state, the ticker would later
-	// write through dangling references and trigger a pool-returned event,
-	// producing EXCEPTION_ACCESS_VIOLATION (issue #128 item 5).
+	// timeout) and the game-thread runners (which complete the work).
+	// Held by shared pointer so its lifetime extends past the caller's stack
+	// frame - critical when the caller times out on a long Python script.
+	// Without this shared state, a runner would later write through dangling
+	// references and trigger a pool-returned event, producing
+	// EXCEPTION_ACCESS_VIOLATION (issue #128 item 5).
 	struct FSharedExecState
 	{
 		FCriticalSection EventMutex;
 		FEvent* DoneEvent = nullptr;
 		TSharedPtr<FJsonValue> Result;
 		FThreadSafeBool bAbandoned{false};
-		// Modal-safe work is queued twice - once on the core ticker, once on
-		// the modal loop drain - because only one of the two runs depending on
+		// Modal-safe work is offered to two runners - the core ticker and the
+		// modal loop drain - because only one of the two runs depending on
 		// what the game thread is doing. Whichever gets here first claims it.
 		FThreadSafeCounter Claimed;
+
+		// The request itself lives here rather than in a lambda copy per
+		// runner. A lambda that captured this state would keep the state alive
+		// from wherever it was parked, and that is exactly what let the
+		// modal-safe queue pin one handler copy and one whole params object
+		// per call for the life of the process.
+		FMCPGameThreadExecutor::FHandlerFunction Handler;
+		TSharedPtr<FJsonObject> Params;
+		bool bModalSafe = false;
+
+		void Run();
 	};
 
+	void FSharedExecState::Run()
+	{
+		// Caller already gave up - skip the work entirely. Python may
+		// still be mid-execution; we cannot safely cancel it, but we
+		// can avoid starting it.
+		if (bAbandoned)
+		{
+			return;
+		}
+
+		// Offered to two runners when modal-safe; run on exactly one of them.
+		if (Claimed.Set(1) != 0)
+		{
+			return;
+		}
+
+		// Safety: verify GEditor is available before running handlers.
+		//
+		// #968: except for the modal-safe ones. They go through Slate and check
+		// FSlateApplication for themselves, so GEditor is not something they
+		// need, and refusing them here would put the startup deadlock back one
+		// layer down: a dialog raised before GEditor exists is exactly the one
+		// nothing else can clear.
+		if (!GEditor && !bModalSafe)
+		{
+			TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
+			ErrorObject->SetStringField(TEXT("error"), TEXT("Editor world not ready yet. Retry in a moment."));
+			Result = MakeShared<FJsonValueObject>(ErrorObject);
+		}
+		else
+		{
+			FHandlerInFlightScope InFlight; // #603
+			Result = Handler(Params);
+		}
+
+		// Trigger the event only if it is still live (i.e. the caller
+		// has not already returned it to the pool). The mutex serialises
+		// with the caller's Return-to-pool.
+		FScopeLock Lock(&EventMutex);
+		if (DoneEvent)
+		{
+			DoneEvent->Trigger();
+		}
+	}
+
 	// MPSC: any socket thread can enqueue, only the game thread drains.
-	TQueue<TFunction<void()>, EQueueMode::Mpsc> GModalSafeQueue;
+	//
+	// Weak, and swept when stale. DrainModalSafeQueue has one caller and it is
+	// the Slate modal-loop tick, so with no dialog on screen it never fires.
+	// A strong entry per modal-safe call therefore never came off again, and
+	// list_dialogs and get_dialog_policy are ordinary polling reads an agent
+	// makes with no dialog present: an hour of once-a-second polling parked
+	// 3600 live handler copies and 3600 whole request params objects in a
+	// process-lifetime queue. A weak entry owns none of that, and the sweep
+	// below drops it as soon as the work it named is over.
+	TQueue<TWeakPtr<FSharedExecState>, EQueueMode::Mpsc> GModalSafeQueue;
+
+	// Drop every queue entry whose work is finished, abandoned, or gone.
+	//
+	// Game thread only. TQueue in Mpsc mode permits exactly one consumer, and
+	// every caller of this and of DrainModalSafeQueue runs on the game thread,
+	// so no two are ever inside the queue at the same time.
+	void SweepModalSafeQueueImpl()
+	{
+		while (TWeakPtr<FSharedExecState>* Head = GModalSafeQueue.Peek())
+		{
+			const TSharedPtr<FSharedExecState> Pinned = Head->Pin();
+			// Alive, unclaimed and not abandoned means a caller is still
+			// waiting for the modal loop to run this one. Stop here: it is the
+			// oldest entry, and popping past it would drop live work.
+			if (Pinned.IsValid() && Pinned->Claimed.GetValue() == 0 && !Pinned->bAbandoned)
+			{
+				break;
+			}
+			GModalSafeQueue.Pop();
+		}
+	}
+}
+
+void FMCPGameThreadExecutor::SweepModalSafeQueue()
+{
+	if (!IsInGameThread())
+	{
+		return;
+	}
+	SweepModalSafeQueueImpl();
 }
 
 void FMCPGameThreadExecutor::DrainModalSafeQueue()
@@ -75,10 +170,18 @@ void FMCPGameThreadExecutor::DrainModalSafeQueue()
 		return;
 	}
 
-	TFunction<void()> Work;
-	while (GModalSafeQueue.Dequeue(Work))
+	TWeakPtr<FSharedExecState> Weak;
+	while (GModalSafeQueue.Dequeue(Weak))
 	{
-		Work();
+		// A pin that fails means the caller returned and the ticker copy is
+		// already destroyed: nobody is waiting for this and there is nothing
+		// left to dereference. A pin that succeeds holds the state for the
+		// whole call, so a caller returning underneath cannot free it
+		// mid-handler.
+		if (const TSharedPtr<FSharedExecState> Pinned = Weak.Pin())
+		{
+			Pinned->Run();
+		}
 	}
 }
 
@@ -112,67 +215,33 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 	// Use FTSTicker to run on the game thread tick loop (NOT inside TaskGraph).
 	// This avoids the TaskGraph recursion assertion when handlers trigger
 	// subsystems like InterchangeEngine that schedule their own TaskGraph work.
+	// Handler and Params live in the shared state so they outlive the caller's
+	// stack if the caller abandons the wait, without a second copy per runner.
 	TSharedRef<FSharedExecState> State = MakeShared<FSharedExecState>();
 	State->DoneEvent = FPlatformProcess::GetSynchEventFromPool();
+	State->Handler = Handler;
+	State->Params = Params;
+	State->bModalSafe = bModalSafe;
 
-	// Capture Handler and Params by value so they outlive the caller's stack
-	// if the caller abandons the wait.
-	auto RunOnce = [State, Handler, Params, bModalSafe]()
-	{
-		// Caller already gave up - skip the work entirely. Python may
-		// still be mid-execution; we cannot safely cancel it, but we
-		// can avoid starting it.
-		if (State->bAbandoned)
-		{
-			return;
-		}
-
-		// Queued on two paths when modal-safe; run on exactly one of them.
-		if (State->Claimed.Set(1) != 0)
-		{
-			return;
-		}
-
-		// Safety: verify GEditor is available before running handlers.
-		//
-		// #968: except for the modal-safe ones. They go through Slate and check
-		// FSlateApplication for themselves, so GEditor is not something they
-		// need, and refusing them here would put the startup deadlock back one
-		// layer down: a dialog raised before GEditor exists is exactly the one
-		// nothing else can clear.
-		if (!GEditor && !bModalSafe)
-		{
-			TSharedPtr<FJsonObject> ErrorObject = MakeShared<FJsonObject>();
-			ErrorObject->SetStringField(TEXT("error"), TEXT("Editor world not ready yet. Retry in a moment."));
-			State->Result = MakeShared<FJsonValueObject>(ErrorObject);
-		}
-		else
-		{
-			FHandlerInFlightScope InFlight; // #603
-			State->Result = Handler(Params);
-		}
-
-		// Trigger the event only if it is still live (i.e. the caller
-		// has not already returned it to the pool). The mutex serialises
-		// with the caller's Return-to-pool below.
-		FScopeLock Lock(&State->EventMutex);
-		if (State->DoneEvent)
-		{
-			State->DoneEvent->Trigger();
-		}
-	};
-
+	// The ticker delegate and this stack frame hold the only strong references,
+	// so the work cannot outlive the pair of them.
 	FTSTicker::GetCoreTicker().AddTicker(
-		FTickerDelegate::CreateLambda([RunOnce](float) -> bool
+		FTickerDelegate::CreateLambda([State](float) -> bool
 		{
-			RunOnce();
+			State->Run();
+			// Every call registers one of these, so this is where the modal-safe
+			// queue is swept: a finished entry comes off here rather than
+			// waiting for a dialog that may never appear. While a modal is up
+			// the core ticker does not tick, but then the modal loop is
+			// draining the queue outright.
+			SweepModalSafeQueueImpl();
 			return false; // one-shot - do not re-tick
 		})
 	);
 
 	if (bModalSafe)
 	{
-		GModalSafeQueue.Enqueue(RunOnce);
+		GModalSafeQueue.Enqueue(TWeakPtr<FSharedExecState>(State));
 	}
 
 	// Block the calling thread until the ticker fires, the timeout expires, or
@@ -207,10 +276,10 @@ TSharedPtr<FJsonValue> FMCPGameThreadExecutor::ExecuteOnGameThread(FHandlerFunct
 		State->bAbandoned = true;
 	}
 
-	// Return the event under the same mutex the ticker uses. If the ticker
-	// is about to Trigger, it will block until we null the pointer, then
-	// skip. If the ticker has not yet run, the lambda's bAbandoned check
-	// will cause it to exit without touching the event.
+	// Return the event under the same mutex the runners use. If one is about
+	// to Trigger, it will block until we null the pointer, then skip. If
+	// neither has run yet, Run's bAbandoned check makes it exit without
+	// touching the event.
 	{
 		FScopeLock Lock(&State->EventMutex);
 		FPlatformProcess::ReturnSynchEventToPool(State->DoneEvent);

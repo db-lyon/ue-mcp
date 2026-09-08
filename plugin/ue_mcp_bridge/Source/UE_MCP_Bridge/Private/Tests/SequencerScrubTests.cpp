@@ -14,7 +14,7 @@
  * have open. A call with no parameters is refused either because no sequence is
  * open or because neither seconds nor frame was given, and both are the same
  * statement: the action does not answer with a position it did not scrub to.
- * Anything that needs a sequence open in Sequencer belongs to the live tier,
+ * Anything that needs a sequence open in Sequencer belongs to the live tests,
  * because a test that opened one would be driving the editor hosting it.
  */
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(

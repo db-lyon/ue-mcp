@@ -13,6 +13,7 @@ import * as path from "node:path";
 import { readUeMcpConfig } from "../../src/project.js";
 import { EditorBridge } from "../../src/bridge.js";
 import { collapsingEnvWarnings } from "../../src/session-env.js";
+import { envWarningsFor } from "../../src/tools/project.js";
 import { getFeedbackMode, setFeedbackMode } from "../../src/user-state.js";
 
 let root: string;
@@ -160,11 +161,69 @@ describe("collapsing env warnings", () => {
       UE_MCP_ENV: "ci",
       UE_MCP_CONTEXT_STRATEGY: "lean",
       UE_MCP_FEEDBACK_MODE: "defer",
+      UE_MCP_DIALOG_MODE: "auto",
+      UE_MCP_TEST_ENGINE_ROOT: "D:/UE_5.6",
     });
-    expect(lines).toHaveLength(7);
+    expect(lines).toHaveLength(9);
+  });
+
+  // D7: engine-root.ts makes this candidate #1, ahead of UE_BUILD_TOOL_PATH,
+  // editor.buildToolPath, UE_EDITOR_PATH and editor.path. It was the one
+  // engine variable missing from this list, so a 5.6 project and a 5.8 project
+  // were both launched and built against one engine while the startup output
+  // named only the variables that lost to it.
+  it("name the engine root variable that outranks every per-project engine setting", () => {
+    const lines = collapsingEnvWarnings(["Alpha", "Beta"], {
+      UE_MCP_TEST_ENGINE_ROOT: "D:/UE_5.6",
+      UE_EDITOR_PATH: "D:/UE_5.8/UnrealEditor.exe",
+    });
+    expect(lines).toHaveLength(2);
+    // Reported first, because it decides first.
+    expect(lines[0]).toContain("UE_MCP_TEST_ENGINE_ROOT=D:/UE_5.6");
+    expect(lines[0]).toContain("ahead of every other engine setting");
+    expect(lines[0]).toContain("Alpha, Beta");
   });
 
   it("say nothing about variables nobody set", () => {
     expect(collapsingEnvWarnings(["Alpha", "Beta"], {})).toEqual([]);
+  });
+});
+
+describe("the env warnings a runtime-added editor gets", () => {
+  // The defect: index.ts computes collapsingEnvWarnings ONCE, over the session
+  // list built from the command line, and the function is silent at one editor
+  // by design. project(add_editor) is the only runtime path to a second editor
+  // and never asked again, so a server started on project A with
+  // UE_MCP_TEST_ENGINE_ROOT exported, then given project B, launched and built
+  // B against A's engine and said nothing at any point.
+  //
+  // The property that fixes it is that the answer is a function of the CURRENT
+  // session set, so the same context yields different answers as the set grows.
+  const ctxWith = (...names: string[]) =>
+    ({ sessions: { list: () => names.map((name) => ({ name })) } }) as unknown as Parameters<typeof envWarningsFor>[0];
+
+  let saved: string | undefined;
+  beforeEach(() => {
+    saved = process.env.UE_MCP_TEST_ENGINE_ROOT;
+    process.env.UE_MCP_TEST_ENGINE_ROOT = "D:/UE_5.8";
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env.UE_MCP_TEST_ENGINE_ROOT;
+    else process.env.UE_MCP_TEST_ENGINE_ROOT = saved;
+  });
+
+  it("stays silent while there is one editor", () => {
+    expect(envWarningsFor(ctxWith("Alpha"))).toBeUndefined();
+  });
+
+  it("names the variable as soon as a second editor exists", () => {
+    const lines = envWarningsFor(ctxWith("Alpha", "Beta"));
+    expect(lines).toBeDefined();
+    expect(lines!.join(" ")).toContain("UE_MCP_TEST_ENGINE_ROOT=D:/UE_5.8");
+    expect(lines!.join(" ")).toContain("Alpha, Beta");
+  });
+
+  it("says nothing on a server with no session registry", () => {
+    expect(envWarningsFor({} as unknown as Parameters<typeof envWarningsFor>[0])).toBeUndefined();
   });
 });

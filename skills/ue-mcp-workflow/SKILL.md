@@ -5,7 +5,7 @@ description: Use when driving Unreal Engine editor via the ue-mcp MCP server. Co
 
 # ue-mcp workflow
 
-The `ue-mcp` MCP exposes 19 category tools (action-dispatch style) that drive a live Unreal Engine editor via a C++ bridge plugin. Every tool takes an `action` parameter.
+The `ue-mcp` MCP exposes 26 category tools (action-dispatch style) that drive a live Unreal Engine editor via a C++ bridge plugin. Every tool takes an `action` parameter.
 
 ## Start every session with a status check
 
@@ -46,6 +46,7 @@ For any write action:
 
 If no native action covers your case:
 
-1. Try `reflection(action="search_classes"/"search_functions", query=...)` to confirm no UFUNCTION exists.
+1. Confirm no action already covers it: `project(action="search_tools", query=...)` searches the whole surface by intent, and `project(action="describe_action", action="...")` gives one action's parameters.
+2. Confirm no UFUNCTION exists to call directly: `reflection(action="list_classes", parentFilter=...)` finds the class and `reflection(action="reflect_class", className=...)` lists what it exposes. A BlueprintCallable function is reachable with `editor(action="invoke_object_function")`.
 2. Use `execute_python` as a last resort.
 3. Consider using `feedback(action="submit")` to open a GitHub issue describing the gap. It checks the plugin registry and files against whichever tracker owns the surface - `db-lyon/ue-mcp` for core, or the plugin's own repo when the gap is in a plugin-provided category. Run `feedback(action="route")` first if you want to see where it would land without posting.

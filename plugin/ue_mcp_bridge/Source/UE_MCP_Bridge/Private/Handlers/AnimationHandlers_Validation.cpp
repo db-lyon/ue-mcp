@@ -730,6 +730,34 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AnalyzeAnimation(const TSharedPtr<FJs
 		Result->SetStringField(TEXT("outputDirectory"), OutputDirectory);
 		Result->SetStringField(TEXT("manifestPath"), ManifestPath);
 		Result->SetStringField(TEXT("samplesPath"), SamplesPath);
+
+		// The only effect this call has outside the response, and it happens
+		// only when the caller named a directory. The sequence, its skeleton
+		// and the preview mesh are read and never written: the pose evaluation
+		// runs against a stack-local FCompactPose.
+		//
+		// No inverse is named because deleting a report this same call
+		// regenerates on demand is not a meaningful undo, and the bridge has no
+		// delete-file action to name anyway. The files are safe to leave: the
+		// handler refuses to run when either already exists, so a replay cannot
+		// overwrite a report somebody is reading.
+		MCPSetNoRollback(Result, FString::Printf(TEXT(
+			"Wrote the analysis report '%s' and its samples file '%s', and changed no animation, skeleton or "
+			"asset state. An analysis report is an output artifact rather than project state, and this call "
+			"regenerates it on demand, so no inverse is named. Nothing in the bridge deletes a file outside "
+			"the content browser."), *ManifestPath, *SamplesPath));
+		MCPSetCreated(Result);
+	}
+	else
+	{
+		// The whole call is a read on this path: it opens the sequence, samples
+		// poses into a local buffer and reports. Said out loud because a caller
+		// reading a body with neither a rollback nor a note cannot tell that
+		// from a handler that forgot one.
+		MCPSetNoRollback(Result, TEXT(
+			"Read the sequence and reported on it. No file was written and no asset, skeleton or world state "
+			"changed, so there is nothing to undo."));
+		Result->SetBoolField(TEXT("unchanged"), true);
 	}
 	return MCPResult(Result);
 }

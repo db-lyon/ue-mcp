@@ -620,6 +620,11 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 	const int32 BeforeGoalCount = Controller->GetAllGoals().Num();
 	const int32 BeforeSolverCount = Controller->GetNumSolvers();
 	const TSet<FName> BeforeExcluded(Skeleton.ExcludedBones);
+	// Read before the transaction writes over them, because the rollback payload
+	// below has to carry the bones this rig used to name, not the ones it names
+	// after this call succeeds.
+	const FName BeforeRetargetRoot = Controller->GetRetargetRoot();
+	const FName BeforeRootMotionBone = Controller->GetRootMotionBone();
 	UPackage* Package = Rig->GetOutermost();
 	const bool bWasDirty = Package && Package->IsDirty();
 	bool bFailed = false;
@@ -892,6 +897,46 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 		Result->SetNumberField(TEXT("fullBodyIKSolverIndex"), SolverIndex);
 		Result->SetBoolField(TEXT("fullBodyIKSolverCreated"), Controller->GetNumSolvers() > BeforeSolverCount);
 	}
+	// Only the settings half of this action is reversible. retargetRoot,
+	// rootMotionBone and bone exclusions each had a previous value that a replay
+	// of this same action can write back. The rest of what it does is creation,
+	// and creation is what no registered action can take back.
+	const bool bSettingsOnly = !bAutoRetarget && Chains.IsEmpty() && !FullBody.bPresent
+		&& (RetargetRoot.IsSet() || RootMotionBone.IsSet() || !Exclusions.IsEmpty());
+	const bool bBonesRestorable =
+		(!RetargetRoot.IsSet() || !BeforeRetargetRoot.IsNone())
+		&& (!RootMotionBone.IsSet() || !BeforeRootMotionBone.IsNone());
+	if (bSettingsOnly && bBonesRestorable)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("rigPath"), Rig->GetPathName());
+		if (RetargetRoot.IsSet()) Payload->SetStringField(TEXT("retargetRoot"), BeforeRetargetRoot.ToString());
+		if (RootMotionBone.IsSet()) Payload->SetStringField(TEXT("rootMotionBone"), BeforeRootMotionBone.ToString());
+		if (!Exclusions.IsEmpty())
+		{
+			TArray<TSharedPtr<FJsonValue>> PreviousExclusions;
+			for (const FExclusionRequest& Request : Exclusions)
+			{
+				TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+				Entry->SetStringField(TEXT("bone"), Request.Bone.ToString());
+				Entry->SetBoolField(TEXT("excluded"), BeforeExcluded.Contains(Request.Bone));
+				PreviousExclusions.Add(MakeShared<FJsonValueObject>(Entry));
+			}
+			Payload->SetArrayField(TEXT("exclusions"), PreviousExclusions);
+		}
+		MCPSetRollback(Result, TEXT("configure_ik_rig"), Payload);
+	}
+	else
+	{
+		TArray<FString> Causes;
+		if (bAutoRetarget) Causes.Add(TEXT("autoSetup replaced the rig's retarget definition and no action restores the previous one"));
+		if (!Chains.IsEmpty()) Causes.Add(TEXT("retarget chains were upserted and no action removes a chain"));
+		if (FullBody.bPresent) Causes.Add(TEXT("IK goals and a Full Body IK solver were upserted and no action removes a goal or a solver"));
+		if (!bBonesRestorable) Causes.Add(TEXT("retargetRoot or rootMotionBone had no previous bone, and configure_ik_rig takes a bone name so it cannot clear one back to none"));
+		if (Causes.IsEmpty()) Causes.Add(TEXT("this call changed nothing whose previous value a replay could write back"));
+		MCPSetNoRollback(Result, FString::Join(Causes, TEXT("; ")) + TEXT("."));
+	}
+
 	TArray<TSharedPtr<FJsonValue>> WarningValues;
 	for (const FString& Warning : Warnings) WarningValues.Add(MakeShared<FJsonValueString>(Warning));
 	Result->SetArrayField(TEXT("warnings"), WarningValues);

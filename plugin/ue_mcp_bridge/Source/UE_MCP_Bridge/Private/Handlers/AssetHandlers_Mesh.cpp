@@ -708,8 +708,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 	Result->SetArrayField(TEXT("meshes"), ResultArray);
 	Result->SetStringField(TEXT("offsetApplied"), FString::Printf(TEXT("(%.2f, %.2f, %.2f)"), Center.X, Center.Y, Center.Z));
 	Result->SetNumberField(TEXT("meshCount"), Meshes.Num());
-	// No rollback: destructive/external - vertex offsets applied non-idempotently;
-	// re-running shifts the pivot again. Not natural-key idempotent.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+		TEXT("The offset (%.2f, %.2f, %.2f) was baked into the mesh descriptions and committed, and the bridge has no action ")
+		TEXT("that translates mesh vertices, so nothing can add it back. Calling recenter_pivot again shifts by the new centroid, ")
+		TEXT("which is not the same operation. There is no inverse action."),
+		Center.X, Center.Y, Center.Z));
 
 	return MCPResult(Result);
 }
@@ -739,6 +743,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSkeletalMeshMaterialSlots(const TShare
 
 	TArray<TSharedPtr<FJsonValue>> Applied;
 	TArray<FString> Errors;
+	// The slots this call is about to overwrite, captured once each: a caller
+	// may name the same slot twice, and only the first capture is the state
+	// that existed before this call ran.
+	TArray<TSharedPtr<FJsonValue>> RollbackSlots;
+	TSet<int32> RollbackSlotIndices;
+	int32 EmptySlotsOverwritten = 0;
 
 	for (const TSharedPtr<FJsonValue>& SlotVal : *SlotsArr)
 	{
@@ -793,6 +803,25 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSkeletalMeshMaterialSlots(const TShare
 			continue;
 		}
 
+		// The slot's prior material, before it is overwritten, is the inverse
+		// entry for this slot. An empty slot has no materialPath to name, so
+		// it is counted rather than reversed.
+		if (!RollbackSlotIndices.Contains(Index))
+		{
+			RollbackSlotIndices.Add(Index);
+			if (UMaterialInterface* Previous = Materials[Index].MaterialInterface)
+			{
+				TSharedPtr<FJsonObject> Prev = MakeShared<FJsonObject>();
+				Prev->SetNumberField(TEXT("slotIndex"), Index);
+				Prev->SetStringField(TEXT("materialPath"), Previous->GetPathName());
+				RollbackSlots.Add(MakeShared<FJsonValueObject>(Prev));
+			}
+			else
+			{
+				++EmptySlotsOverwritten;
+			}
+		}
+
 		Materials[Index].MaterialInterface = Material;
 
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
@@ -808,7 +837,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSkeletalMeshMaterialSlots(const TShare
 	UEditorAssetLibrary::SaveLoadedAsset(Mesh, /*bOnlyIfIsDirty=*/false);
 
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	// Guarded: a call where every slot entry errored used to report
+	// updated:true next to an empty applied list.
+	if (Applied.Num() > 0) MCPSetUpdated(Result);
+	Result->SetBoolField(TEXT("unchanged"), Applied.Num() == 0);
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetNumberField(TEXT("slotCount"), Materials.Num());
 	Result->SetArrayField(TEXT("applied"), Applied);
@@ -817,6 +849,39 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSkeletalMeshMaterialSlots(const TShare
 		TArray<TSharedPtr<FJsonValue>> ErrArr;
 		for (const FString& E : Errors) ErrArr.Add(MakeShared<FJsonValueString>(E));
 		Result->SetArrayField(TEXT("errors"), ErrArr);
+	}
+
+	// Only when there is a material to put back. A payload with an empty slots
+	// array restores nothing, and the SaveLoadedAsset call above runs with
+	// bOnlyIfIsDirty=false, so replaying one would spend an unconditional
+	// package write to accomplish nothing and report it as a successful
+	// rollback.
+	if (RollbackSlots.Num() > 0)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), AssetPath);
+		Payload->SetArrayField(TEXT("slots"), RollbackSlots);
+		MCPSetRollback(Result, TEXT("set_sk_material_slots"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), EmptySlotsOverwritten > 0);
+		if (EmptySlotsOverwritten > 0)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("The inverse writes each slot's previous material back by index. %d slot(s) held no material before this call, ")
+				TEXT("and this action only assigns a materialPath, so those slots stay assigned rather than going back to empty."),
+				EmptySlotsOverwritten));
+		}
+	}
+	else if (EmptySlotsOverwritten > 0)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("All %d slot(s) this call wrote were empty beforehand, and this action can only assign a materialPath, never clear ")
+			TEXT("one, so no inverse call can put them back to empty."), EmptySlotsOverwritten));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT("No slot was written, so there is nothing to undo."));
 	}
 	return MCPResult(Result);
 }
@@ -1225,6 +1290,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshNav(const TSharedPtr<FJsonObject>&
 	REQUIRE_ASSET(UStaticMesh, Mesh, AssetPath);
 
 	bool bChanged = false;
+	const bool bPrevHasNavData = Mesh->bHasNavigationData;
 
 	bool bHasNavData = false;
 	if (Params->TryGetBoolField(TEXT("bHasNavigationData"), bHasNavData))
@@ -1234,8 +1300,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshNav(const TSharedPtr<FJsonObject>&
 	}
 
 	bool bClearNavCollision = false;
+	bool bClearedNavCollision = false;
 	if (Params->TryGetBoolField(TEXT("clearNavCollision"), bClearNavCollision) && bClearNavCollision)
 	{
+		bClearedNavCollision = Mesh->GetNavCollision() != nullptr;
 		Mesh->SetNavCollision(nullptr);
 		bChanged = true;
 	}
@@ -1252,6 +1320,20 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshNav(const TSharedPtr<FJsonObject>&
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetBoolField(TEXT("bHasNavigationData"), Mesh->bHasNavigationData);
 	Result->SetBoolField(TEXT("hasNavCollision"), Mesh->GetNavCollision() != nullptr);
+
+	// Self-inverse on the flag. clearNavCollision is deliberately absent from
+	// the payload: it only ever clears, so replaying it would clear again.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetBoolField(TEXT("bHasNavigationData"), bPrevHasNavData);
+	MCPSetRollback(Result, TEXT("set_mesh_nav"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), bClearedNavCollision);
+	if (bClearedNavCollision)
+	{
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The inverse restores bHasNavigationData. The NavCollision object this call dropped is not restored: nothing ")
+			TEXT("in the bridge recreates one, and the engine rebuilds it from the mesh on the next cook or nav build."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1352,6 +1434,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetClothConfig(const TSharedPtr<FJsonObje
 
 	int32 Applied = 0;
 	TArray<TSharedPtr<FJsonValue>> Modified;
+	// The prior value of each property, exported as the same text this handler
+	// imports, taken from the first config that matched. ConfigsTouched says
+	// whether that one snapshot describes every config that was written.
+	TSharedPtr<FJsonObject> PrevProps = MakeShared<FJsonObject>();
+	int32 ConfigsTouched = 0;
 	for (UClothingAssetBase* Base : Mesh->GetMeshClothingAssets())
 	{
 		UClothingAssetCommon* Cloth = Cast<UClothingAssetCommon>(Base);
@@ -1363,6 +1450,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetClothConfig(const TSharedPtr<FJsonObje
 			if (!Cfg) continue;
 			if (!ConfigType.IsEmpty() && !CfgPair.Key.ToString().Contains(ConfigType) && !Cfg->GetClass()->GetName().Contains(ConfigType)) continue;
 			Cfg->Modify();
+			bool bTouchedThisConfig = false;
 			for (const auto& Pair : (*PropsObj)->Values)
 			{
 				FProperty* Prop = Cfg->GetClass()->FindPropertyByName(FName(*Pair.Key));
@@ -1372,10 +1460,21 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetClothConfig(const TSharedPtr<FJsonObje
 				else if (Pair.Value->Type == EJson::Number) ValueStr = FString::SanitizeFloat(Pair.Value->AsNumber());
 				else if (Pair.Value->Type == EJson::Boolean) ValueStr = Pair.Value->AsBool() ? TEXT("true") : TEXT("false");
 				else continue;
+				if (ConfigsTouched == 0)
+				{
+					// ExportTextItem_Direct is what read_cloth_data reports and
+					// ImportText_Direct is what the line below consumes, so the
+					// captured text replays through this same action.
+					FString PrevStr;
+					Prop->ExportTextItem_Direct(PrevStr, Prop->ContainerPtrToValuePtr<void>(Cfg), nullptr, Cfg, PPF_None);
+					PrevProps->SetStringField(Pair.Key, PrevStr);
+				}
 				Prop->ImportText_Direct(*ValueStr, Prop->ContainerPtrToValuePtr<void>(Cfg), Cfg, PPF_None);
 				Modified.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("%s.%s"), *CfgPair.Key.ToString(), *Pair.Key)));
+				bTouchedThisConfig = true;
 				++Applied;
 			}
+			if (bTouchedThisConfig) ++ConfigsTouched;
 			Cfg->PostEditChange();
 		}
 	}
@@ -1386,6 +1485,25 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetClothConfig(const TSharedPtr<FJsonObje
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
 	Result->SetNumberField(TEXT("applied"), Applied);
+	Result->SetNumberField(TEXT("configsTouched"), ConfigsTouched);
 	Result->SetArrayField(TEXT("modified"), Modified);
+
+	// Self-inverse, through the same clothingAsset / configType filters this
+	// call resolved, so the rollback reaches exactly the configs it wrote.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("skeletalMeshPath"), MeshPath);
+	if (!ClothName.IsEmpty())  Payload->SetStringField(TEXT("clothingAsset"), ClothName);
+	if (!ConfigType.IsEmpty()) Payload->SetStringField(TEXT("configType"), ConfigType);
+	Payload->SetObjectField(TEXT("properties"), PrevProps);
+	MCPSetRollback(Result, TEXT("set_cloth_config"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), ConfigsTouched > 1);
+	if (ConfigsTouched > 1)
+	{
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The filters matched %d configs and this action writes one value to all of them, so the inverse carries the ")
+			TEXT("values read off the first config and writes those to all %d. Where the configs held different values before, ")
+			TEXT("only the first one is restored exactly. Narrow clothingAsset and configType to one config for an exact inverse."),
+			ConfigsTouched, ConfigsTouched));
+	}
 	return MCPResult(Result);
 }

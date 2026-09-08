@@ -1,7 +1,7 @@
 /**
- * Shared plumbing for the live tier (#817, plan items 1.10 and 7.3).
+ * Shared plumbing for the live tests (#817, plan items 1.10 and 7.3).
  *
- * The live tier is the only tier that talks to a real Unreal editor. Two rules
+ * The live tests is the only suite that talks to a real Unreal editor. Two rules
  * follow from that and both are enforced here rather than left to each test:
  *
  *  1. **It only ever drives `tests/ue_mcp`.** The editor is asked which project
@@ -9,7 +9,7 @@
  *     run. This is the same guard `scripts/bridge-target.mjs` applies to the
  *     smoke harness, for the same reason: these runs execute real calls against
  *     a real editor.
- *  2. **No editor is started or stopped.** The tier attaches to an editor that
+ *  2. **No editor is started or stopped.** The suite attaches to an editor that
  *     is already up and leaves it exactly as it found it. Every case that would
  *     need a launch or a shutdown is asserted read-only, or against a fabricated
  *     bridge, and says so where it is written.
@@ -31,7 +31,7 @@ import {
   PROJECT_IDENTITY_PYTHON,
 } from "../../scripts/bridge-target.mjs";
 
-/** The editor this tier is attached to. */
+/** The editor this suite is attached to. */
 export interface LiveTarget {
   /** The verified project root. Always a `tests/ue_mcp` of this repository. */
   projectDir: string;
@@ -62,7 +62,7 @@ export interface LiveCapabilities {
 
 const HOST = process.env.UE_MCP_LIVE_HOST ?? process.env.UE_MCP_TEST_HOST ?? "127.0.0.1";
 
-/** Port hint published by `scripts/live-tier.mjs` after its own preflight. */
+/** Port hint published by `scripts/live-tests.mjs` after its own preflight. */
 const PORT_HINT = Number.parseInt(process.env.UE_MCP_LIVE_PORT ?? "", 10);
 
 let discovered: LiveTarget | null = null;
@@ -74,7 +74,7 @@ const bridges: EditorBridge[] = [];
  *
  * Never returns a target it could not verify: a bridge that answers on a
  * candidate port with some other project open aborts the run outright, since a
- * live tier that quietly retargets is exactly the failure the guard exists for.
+ * live tests that quietly retargets is exactly the failure the guard exists for.
  */
 export async function liveTarget(): Promise<LiveTarget> {
   if (discovered) return discovered;
@@ -88,7 +88,7 @@ async function discover(): Promise<LiveTarget> {
   const allowed = liveTestProjectDirs();
   if (allowed.length === 0) {
     throw new Error(
-      "No tests/ue_mcp project found in this checkout. The live tier drives that project and nothing else.",
+      "No tests/ue_mcp project found in this checkout. The live tests drives that project and nothing else.",
     );
   }
 
@@ -147,7 +147,7 @@ async function discover(): Promise<LiveTarget> {
       lockfile: lastLockfile as never,
       lastError,
     }) +
-      "\n\nThe live tier needs an editor already running on tests/ue_mcp. Start one, then re-run" +
+      "\n\nThe live tests needs an editor already running on tests/ue_mcp. Start one, then re-run" +
       "\n    npm run test:live",
   );
 }
@@ -166,7 +166,7 @@ export async function liveBridge(timeoutMs = 5000): Promise<EditorBridge> {
   return bridge;
 }
 
-/** Drop every connection this tier opened. Never touches the editor process. */
+/** Drop every connection this suite opened. Never touches the editor process. */
 export function closeLiveBridges(): void {
   for (const bridge of bridges.splice(0)) bridge.disconnect();
 }
@@ -180,7 +180,7 @@ export function closeLiveBridges(): void {
  *
  * The echo is a test facility that can only be armed when the editor process
  * starts, deliberately: there is no way to switch it on over the socket. So a
- * tier that cannot start editors either finds it on or reports why it skipped,
+ * suite that cannot start editors either finds it on or reports why it skipped,
  * which is what plan item 3.3 asks for.
  */
 export async function paramEchoUnavailable(): Promise<string | null> {
@@ -240,7 +240,7 @@ export async function paramNamesFor(bridge: EditorBridge, method: string): Promi
 /**
  * A throwaway project directory, for the cases that need a SECOND session.
  *
- * One machine has one editor, and this tier does not start another. A session
+ * One machine has one editor, and this suite does not start another. A session
  * whose editor is not running is still a registered session (plan item 4.4),
  * which is exactly what the multi-editor cases need: the count is what arms
  * gating, addressing and the union refusal, and the live editor is one of the

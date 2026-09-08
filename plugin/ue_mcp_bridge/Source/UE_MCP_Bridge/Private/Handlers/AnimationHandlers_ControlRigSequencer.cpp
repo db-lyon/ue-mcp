@@ -108,6 +108,11 @@ namespace
 		bool BoolValue = false;
 		float FloatValue = 0.0f;
 		int32 IntValue = 0;
+		// The scalar counterparts of Before, so a scalar write is as reversible
+		// as a transform write. Sampled at the same point, from the same frames.
+		TArray<bool> BoolBefore;
+		TArray<float> FloatBefore;
+		TArray<int32> IntBefore;
 	};
 
 	struct FControlRigContactMetrics
@@ -2050,6 +2055,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 				Session.Sequence, Session.ControlRig, ControlName, Write.Frames, EMovieSceneTimeUnit::DisplayRate);
 			if (Existing.Num() != Write.Frames.Num())
 				return MCPError(FString::Printf(TEXT("Could not sample %s before applying operations[%d]"), *ControlString, OperationIndex));
+			Write.BoolBefore = Existing;
 		}
 		else if (Write.ValueType == EControlRigPreparedValueType::Float)
 		{
@@ -2057,6 +2063,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 				Session.Sequence, Session.ControlRig, ControlName, Write.Frames, EMovieSceneTimeUnit::DisplayRate);
 			if (Existing.Num() != Write.Frames.Num())
 				return MCPError(FString::Printf(TEXT("Could not sample %s before applying operations[%d]"), *ControlString, OperationIndex));
+			Write.FloatBefore = Existing;
 		}
 		else if (Write.ValueType == EControlRigPreparedValueType::Integer)
 		{
@@ -2064,6 +2071,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 				Session.Sequence, Session.ControlRig, ControlName, Write.Frames, EMovieSceneTimeUnit::DisplayRate);
 			if (Existing.Num() != Write.Frames.Num())
 				return MCPError(FString::Printf(TEXT("Could not sample %s before applying operations[%d]"), *ControlString, OperationIndex));
+			Write.IntBefore = Existing;
 		}
 		else
 		{
@@ -3076,6 +3084,130 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 		ContactResults.Add(MakeShared<FJsonValueObject>(Object));
 	}
 	Result->SetArrayField(TEXT("contactQa"), ContactResults);
+
+	// The inverse is this same action replaying the values sampled before the
+	// writes landed. Every prepared write, including the FK chain and stabilizer
+	// writes a contact_lock adds, carries its own before-state, so the operations
+	// below cover exactly what was keyed.
+	{
+		TArray<TSharedPtr<FJsonValue>> InverseOperations;
+		for (const FControlRigPreparedWrite& Write : Prepared)
+		{
+			const FString ControlString = Write.Control.ToString();
+			if (Write.ValueType == EControlRigPreparedValueType::Transform)
+			{
+				// set_keys takes one absolute transform per frame, and requires
+				// strictly increasing frames plus exactly the three transform
+				// fields. The frames were prepared sorted and unique.
+				TArray<TSharedPtr<FJsonValue>> Keys;
+				for (int32 Index = 0; Index < Write.Frames.Num() && Index < Write.Before.Num(); ++Index)
+				{
+					const FTransform& Xf = Write.Before[Index];
+					const FVector Translation = Xf.GetTranslation();
+					const FQuat Rotation = Xf.GetRotation().GetNormalized();
+					const FVector Scale = Xf.GetScale3D();
+
+					auto TranslationObject = MakeShared<FJsonObject>();
+					TranslationObject->SetNumberField(TEXT("x"), Translation.X);
+					TranslationObject->SetNumberField(TEXT("y"), Translation.Y);
+					TranslationObject->SetNumberField(TEXT("z"), Translation.Z);
+					auto RotationObject = MakeShared<FJsonObject>();
+					RotationObject->SetNumberField(TEXT("x"), Rotation.X);
+					RotationObject->SetNumberField(TEXT("y"), Rotation.Y);
+					RotationObject->SetNumberField(TEXT("z"), Rotation.Z);
+					RotationObject->SetNumberField(TEXT("w"), Rotation.W);
+					auto ScaleObject = MakeShared<FJsonObject>();
+					ScaleObject->SetNumberField(TEXT("x"), Scale.X);
+					ScaleObject->SetNumberField(TEXT("y"), Scale.Y);
+					ScaleObject->SetNumberField(TEXT("z"), Scale.Z);
+
+					// Exactly translation, rotationQuaternion and scale: set_keys
+					// rejects a transform object that carries anything else.
+					auto TransformObject = MakeShared<FJsonObject>();
+					TransformObject->SetObjectField(TEXT("translation"), TranslationObject);
+					TransformObject->SetObjectField(TEXT("rotationQuaternion"), RotationObject);
+					TransformObject->SetObjectField(TEXT("scale"), ScaleObject);
+					auto KeyObject = MakeShared<FJsonObject>();
+					KeyObject->SetNumberField(TEXT("frame"), Write.Frames[Index].Value);
+					KeyObject->SetObjectField(TEXT("transform"), TransformObject);
+					Keys.Add(MakeShared<FJsonValueObject>(KeyObject));
+				}
+				if (Keys.IsEmpty()) continue;
+				auto Operation = MakeShared<FJsonObject>();
+				Operation->SetStringField(TEXT("op"), TEXT("set_keys"));
+				Operation->SetStringField(TEXT("control"), ControlString);
+				Operation->SetStringField(TEXT("space"),
+					Write.Space == EControlRigTransformSpace::Global ? TEXT("component") : TEXT("local"));
+				Operation->SetArrayField(TEXT("keys"), Keys);
+				InverseOperations.Add(MakeShared<FJsonValueObject>(Operation));
+				continue;
+			}
+
+			// A scalar op writes ONE value across the frames it is given, so the
+			// restore groups the sampled frames by the value they held and emits
+			// one operation per distinct value.
+			const TCHAR* ScalarOp =
+				Write.ValueType == EControlRigPreparedValueType::Bool ? TEXT("set_bool")
+				: (Write.ValueType == EControlRigPreparedValueType::Float ? TEXT("set_float") : TEXT("set_int"));
+			TArray<double> DistinctValues;
+			TArray<TArray<TSharedPtr<FJsonValue>>> GroupedFrames;
+			const int32 ScalarCount =
+				Write.ValueType == EControlRigPreparedValueType::Bool ? Write.BoolBefore.Num()
+				: (Write.ValueType == EControlRigPreparedValueType::Float ? Write.FloatBefore.Num() : Write.IntBefore.Num());
+			for (int32 Index = 0; Index < Write.Frames.Num() && Index < ScalarCount; ++Index)
+			{
+				const double Value =
+					Write.ValueType == EControlRigPreparedValueType::Bool ? (Write.BoolBefore[Index] ? 1.0 : 0.0)
+					: (Write.ValueType == EControlRigPreparedValueType::Float
+						? static_cast<double>(Write.FloatBefore[Index])
+						: static_cast<double>(Write.IntBefore[Index]));
+				int32 Group = DistinctValues.IndexOfByKey(Value);
+				if (Group == INDEX_NONE)
+				{
+					Group = DistinctValues.Add(Value);
+					GroupedFrames.AddDefaulted();
+				}
+				GroupedFrames[Group].Add(MakeShared<FJsonValueNumber>(Write.Frames[Index].Value));
+			}
+			for (int32 Group = 0; Group < DistinctValues.Num(); ++Group)
+			{
+				auto Operation = MakeShared<FJsonObject>();
+				Operation->SetStringField(TEXT("op"), ScalarOp);
+				Operation->SetStringField(TEXT("control"), ControlString);
+				Operation->SetArrayField(TEXT("frames"), GroupedFrames[Group]);
+				if (Write.ValueType == EControlRigPreparedValueType::Bool)
+				{
+					Operation->SetBoolField(TEXT("value"), DistinctValues[Group] != 0.0);
+				}
+				else
+				{
+					Operation->SetNumberField(TEXT("value"), DistinctValues[Group]);
+				}
+				InverseOperations.Add(MakeShared<FJsonValueObject>(Operation));
+			}
+		}
+
+		if (InverseOperations.Num() > 0)
+		{
+			auto Rollback = MakeShared<FJsonObject>();
+			Rollback->SetStringField(TEXT("sequencePath"), Session.SequencePath);
+			Rollback->SetStringField(TEXT("bindingTag"), Session.BindingTag);
+			Rollback->SetArrayField(TEXT("operations"), InverseOperations);
+			MCPSetRollback(Result, TEXT("apply_control_rig_edits"), Rollback);
+			Result->SetBoolField(TEXT("rollbackLossy"), true);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("The replay writes back the value every keyed control held at every frame this call touched, which restores the curve at those frames. ")
+				TEXT("What it cannot restore is the shape between them: a frame that carried no key before now carries one, and the tangents and interpolation of the keys that were replaced are not captured. ")
+				TEXT("It also does not undo the section-to-key selection this call set on the track."));
+		}
+		else
+		{
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("No prepared write carried a sampled before-state, so there is nothing for an inverse call to replay."));
+		}
+	}
+
 	MCPSetUpdated(Result);
 	return MCPResult(Result);
 #endif

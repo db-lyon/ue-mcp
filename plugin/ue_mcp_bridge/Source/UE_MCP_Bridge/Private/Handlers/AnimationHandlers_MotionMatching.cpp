@@ -13,6 +13,7 @@
 #include "HandlerUtils.h"
 #include "HandlerAssetCreate.h"
 #include "PoseSearch/PoseSearchSchema.h"
+#include "HandlerPoseSearchSchema.h"
 #include "PoseSearch/PoseSearchFeatureChannel.h"
 #include "PoseSearch/PoseSearchFeatureChannel_Pose.h"
 #include "PoseSearch/PoseSearchFeatureChannel_Trajectory.h"
@@ -86,14 +87,6 @@ static const TMap<FString, int32>& TrajectoryFlagTable()
 		{ TEXT("facingdirectionxy"),   int32(EPoseSearchTrajectoryFlags::FacingDirectionXY) },
 	};
 	return Table;
-}
-
-// Finalize a schema after channel edits (recomputes cardinality + finalized
-// channels). Finalize() is private; PostEditChangeProperty triggers it publicly.
-static void FinalizeSchema(UPoseSearchSchema* Schema)
-{
-	FPropertyChangedEvent EmptyEvent(nullptr);
-	Schema->PostEditChangeProperty(EmptyEvent);
 }
 
 // ─── AnimGraph node authoring helpers ─────────────────────────────────────
@@ -208,7 +201,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchSchema(const TSharedP
 	{
 		Schema->AddDefaultChannels();
 	}
-	FinalizeSchema(Schema);
+	MCPPoseSearch::Finalize(Schema);
 	UEditorAssetLibrary::SaveLoadedAsset(Schema);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
@@ -269,7 +262,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaPoseChannel(const 
 	}
 
 	Schema->AddChannel(Channel);
-	FinalizeSchema(Schema);
+	MCPPoseSearch::Finalize(Schema);
 	UEditorAssetLibrary::SaveLoadedAsset(Schema);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
@@ -279,6 +272,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaPoseChannel(const 
 	Res->SetNumberField(TEXT("boneCount"), Added.Num());
 	Res->SetArrayField(TEXT("bones"), Added);
 	Res->SetNumberField(TEXT("channelCount"), Schema->GetChannels().Num());
+	Res->SetBoolField(TEXT("rollbackPossible"), false);
+	Res->SetStringField(TEXT("rollbackNote"),
+		TEXT("No action removes a feature channel from a PoseSearchSchema, so there is no inverse call to name. ")
+		TEXT("Recover by rebuilding the schema with animation(create_pose_search_schema) under a new name and re-pointing the database at it with animation(set_pose_search_schema)."));
 	return MCPResult(Res);
 }
 
@@ -319,7 +316,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaTrajectoryChannel(
 	}
 
 	Schema->AddChannel(Channel);
-	FinalizeSchema(Schema);
+	MCPPoseSearch::Finalize(Schema);
 	UEditorAssetLibrary::SaveLoadedAsset(Schema);
 
 	TSharedPtr<FJsonObject> Res = MCPSuccess();
@@ -328,6 +325,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaTrajectoryChannel(
 	Res->SetStringField(TEXT("channelType"), TEXT("Trajectory"));
 	Res->SetNumberField(TEXT("sampleCount"), Count);
 	Res->SetNumberField(TEXT("channelCount"), Schema->GetChannels().Num());
+	Res->SetBoolField(TEXT("rollbackPossible"), false);
+	Res->SetStringField(TEXT("rollbackNote"),
+		TEXT("No action removes a feature channel from a PoseSearchSchema, so there is no inverse call to name. ")
+		TEXT("Recover by rebuilding the schema with animation(create_pose_search_schema) under a new name and re-pointing the database at it with animation(set_pose_search_schema)."));
 	return MCPResult(Res);
 }
 
@@ -514,6 +515,24 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 	UPoseSearchDatabase* Database = LoadAssetByPath<UPoseSearchDatabase>(AssetPath);
 	if (!Database) return MCPError(FString::Printf(TEXT("PoseSearchDatabase not found: %s"), *AssetPath));
 
+	// Every field this action can write, read before any of them is touched. The
+	// action is its own inverse, so the rollback carries all of them whether or
+	// not the caller passed them.
+	const float PrevContinuingPoseCostBias = Database->ContinuingPoseCostBias;
+	const float PrevBaseCostBias = Database->BaseCostBias;
+	const float PrevLoopingCostBias = Database->LoopingCostBias;
+	const int32 PrevKDTreeQueryNumNeighbors = Database->KDTreeQueryNumNeighbors;
+	const EPoseSearchMode PrevPoseSearchMode = Database->PoseSearchMode;
+	FString PrevPoseSearchModeName = TEXT("BruteForce");
+	if (PrevPoseSearchMode == EPoseSearchMode::PCAKDTree) PrevPoseSearchModeName = TEXT("PCAKDTree");
+	else if (PrevPoseSearchMode == EPoseSearchMode::VPTree) PrevPoseSearchModeName = TEXT("VPTree");
+	else if (PrevPoseSearchMode == EPoseSearchMode::EventOnly) PrevPoseSearchModeName = TEXT("EventOnly");
+#if WITH_EDITORONLY_DATA
+	const int32 PrevNumberOfPrincipalComponents = Database->NumberOfPrincipalComponents;
+	const FString PrevNormalizationSetPath =
+		Database->NormalizationSet ? Database->NormalizationSet->GetPathName() : FString();
+#endif
+
 	Database->Modify();
 	double Num = 0.0;
 	if (Params->TryGetNumberField(TEXT("continuingPoseCostBias"), Num)) Database->ContinuingPoseCostBias = (float)Num;
@@ -552,6 +571,53 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 	Res->SetNumberField(TEXT("baseCostBias"), Database->BaseCostBias);
 	Res->SetNumberField(TEXT("loopingCostBias"), Database->LoopingCostBias);
 	Res->SetNumberField(TEXT("kdTreeQueryNumNeighbors"), Database->KDTreeQueryNumNeighbors);
+	// Every field the writes above can touch, not just the four this result
+	// echoes: numberOfPrincipalComponents and normalizationSetPath mutate and
+	// save the asset too, and leaving them out of this comparison is how a real
+	// write reports itself as a no-op.
+	bool bUnchanged =
+		PrevContinuingPoseCostBias == Database->ContinuingPoseCostBias
+		&& PrevBaseCostBias == Database->BaseCostBias
+		&& PrevLoopingCostBias == Database->LoopingCostBias
+		&& PrevKDTreeQueryNumNeighbors == Database->KDTreeQueryNumNeighbors
+		&& PrevPoseSearchMode == Database->PoseSearchMode;
+#if WITH_EDITORONLY_DATA
+	bUnchanged = bUnchanged
+		&& PrevNumberOfPrincipalComponents == Database->NumberOfPrincipalComponents
+		&& PrevNormalizationSetPath == (Database->NormalizationSet ? Database->NormalizationSet->GetPathName() : FString());
+#endif
+	Res->SetBoolField(TEXT("unchanged"), bUnchanged);
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+	Rollback->SetNumberField(TEXT("continuingPoseCostBias"), PrevContinuingPoseCostBias);
+	Rollback->SetNumberField(TEXT("baseCostBias"), PrevBaseCostBias);
+	Rollback->SetNumberField(TEXT("loopingCostBias"), PrevLoopingCostBias);
+	Rollback->SetNumberField(TEXT("kdTreeQueryNumNeighbors"), PrevKDTreeQueryNumNeighbors);
+	Rollback->SetStringField(TEXT("poseSearchMode"), PrevPoseSearchModeName);
+#if WITH_EDITORONLY_DATA
+	Rollback->SetNumberField(TEXT("numberOfPrincipalComponents"), PrevNumberOfPrincipalComponents);
+	// normalizationSetPath is only written when non-empty, so omitting it when the
+	// database had none leaves the assignment this call made in place. That is the
+	// one field the replay cannot clear, and the note below says so.
+	if (!PrevNormalizationSetPath.IsEmpty())
+	{
+		Rollback->SetStringField(TEXT("normalizationSetPath"), PrevNormalizationSetPath);
+	}
+#endif
+	MCPSetRollback(Res, TEXT("set_pose_search_database_settings"), Rollback);
+#if WITH_EDITORONLY_DATA
+	const bool bAssignedFirstNormalizationSet =
+		PrevNormalizationSetPath.IsEmpty() && Database->NormalizationSet != nullptr;
+	Res->SetBoolField(TEXT("rollbackLossy"), bAssignedFirstNormalizationSet);
+	if (bAssignedFirstNormalizationSet)
+	{
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("The database had no normalization set before this call. set_pose_search_database_settings only writes normalizationSetPath when it is non-empty and has no form that clears one, so the replay restores every other setting and leaves the assignment in place."));
+	}
+#else
+	Res->SetBoolField(TEXT("rollbackLossy"), false);
+#endif
 	return MCPResult(Res);
 }
 
@@ -592,13 +658,23 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMotionMatchingNode(const TSharedPt
 	}
 
 	bool bConnected = false;
+	// The node that fed the output pose before this call took the pin, recorded
+	// because deleting this node does not put that link back.
+	FString DisplacedOutputSource;
 	if (OptionalBool(Params, TEXT("connectToOutput"), true))
 	{
 		if (UAnimGraphNode_Root* Root = FindOutputPoseNode(Graph))
 		{
 			UEdGraphPin* RootIn = GetPosePin(Root, EGPD_Input);
 			UEdGraphPin* NodeOut = GetPosePin(MMNode, EGPD_Output);
-			if (RootIn && NodeOut) { RootIn->BreakAllPinLinks(); NodeOut->MakeLinkTo(RootIn); bConnected = true; }
+			if (RootIn && NodeOut)
+			{
+				if (RootIn->LinkedTo.Num() > 0 && RootIn->LinkedTo[0] && RootIn->LinkedTo[0]->GetOwningNode())
+				{
+					DisplacedOutputSource = RootIn->LinkedTo[0]->GetOwningNode()->NodeGuid.ToString();
+				}
+				RootIn->BreakAllPinLinks(); NodeOut->MakeLinkTo(RootIn); bConnected = true;
+			}
 		}
 	}
 
@@ -612,6 +688,22 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMotionMatchingNode(const TSharedPt
 	Res->SetStringField(TEXT("nodeGuid"), MMNode->NodeGuid.ToString());
 	Res->SetStringField(TEXT("databasePath"), Database ? Database->GetPathName() : FString());
 	Res->SetBoolField(TEXT("connectedToOutput"), bConnected);
+	Res->SetStringField(TEXT("displacedOutputSource"), DisplacedOutputSource);
+
+	// blueprint(delete_node) reaches an AnimBlueprint graph and matches by node
+	// GUID, which is the one this call just minted.
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+	Rollback->SetStringField(TEXT("graphName"), GraphName);
+	Rollback->SetStringField(TEXT("nodeId"), MMNode->NodeGuid.ToString());
+	MCPSetRollback(Res, TEXT("delete_node"), Rollback);
+	Res->SetBoolField(TEXT("rollbackLossy"), !DisplacedOutputSource.IsEmpty());
+	if (!DisplacedOutputSource.IsEmpty())
+	{
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("Connecting to the output pose broke the link that was already on that pin. Deleting this node removes it but does not re-link the node it displaced, so the output pose is left unconnected: ")
+			TEXT("re-wire it with blueprint(connect_pins) from the node named in displacedOutputSource."));
+	}
 	return MCPResult(Res);
 }
 
@@ -649,6 +741,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseHistoryNode(const TSharedPtr<F
 	// Insert into the pose chain feeding the output: whatever currently drives the
 	// output pose becomes this node's Source, and this node drives the output.
 	bool bInserted = false;
+	// The node that fed the output pose before this one was spliced in front of
+	// it, recorded because deleting this node does not re-link it.
+	FString DisplacedOutputSource;
 	if (OptionalBool(Params, TEXT("insertBeforeOutput"), true))
 	{
 		if (UAnimGraphNode_Root* Root = FindOutputPoseNode(Graph))
@@ -661,6 +756,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseHistoryNode(const TSharedPtr<F
 				if (RootIn->LinkedTo.Num() > 0)
 				{
 					UEdGraphPin* PrevSource = RootIn->LinkedTo[0];
+					if (PrevSource->GetOwningNode())
+					{
+						DisplacedOutputSource = PrevSource->GetOwningNode()->NodeGuid.ToString();
+					}
 					RootIn->BreakAllPinLinks();
 					PrevSource->MakeLinkTo(HistIn);
 				}
@@ -679,6 +778,20 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseHistoryNode(const TSharedPtr<F
 	Res->SetStringField(TEXT("graphName"), GraphName);
 	Res->SetStringField(TEXT("nodeGuid"), HistNode->NodeGuid.ToString());
 	Res->SetBoolField(TEXT("insertedBeforeOutput"), bInserted);
+	Res->SetStringField(TEXT("displacedOutputSource"), DisplacedOutputSource);
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+	Rollback->SetStringField(TEXT("graphName"), GraphName);
+	Rollback->SetStringField(TEXT("nodeId"), HistNode->NodeGuid.ToString());
+	MCPSetRollback(Res, TEXT("delete_node"), Rollback);
+	Res->SetBoolField(TEXT("rollbackLossy"), !DisplacedOutputSource.IsEmpty());
+	if (!DisplacedOutputSource.IsEmpty())
+	{
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("This node was spliced between the output pose and whatever fed it. Deleting it breaks both links and does not restore the original one, so the output pose is left unconnected: ")
+			TEXT("re-wire it with blueprint(connect_pins) from the node named in displacedOutputSource."));
+	}
 	return MCPResult(Res);
 }
 
@@ -740,6 +853,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 	UEdGraphPin* ContextPin = EvalNode->FindPin(TEXT("ContextObject"), EGPD_Input);
 	bool bContextWired = false;
 	FString ContextWiredTo;
+	// Reported so a caller can find and delete the nodes this call authored;
+	// there is no single inverse action for them.
+	FString ContextNodeGuid;
 	if (ContextPin)
 	{
 		UEdGraphPin* ContextSourcePin = nullptr;
@@ -757,7 +873,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 				PawnNode->NodePosX = EvalNode->NodePosX - 250;
 				PawnNode->NodePosY = EvalNode->NodePosY;
 				ContextSourcePin = PawnNode->GetReturnValuePin();
-				if (ContextSourcePin) ContextWiredTo = TEXT("pawn");
+				if (ContextSourcePin) { ContextWiredTo = TEXT("pawn"); ContextNodeGuid = PawnNode->NodeGuid.ToString(); }
 			}
 		}
 
@@ -774,7 +890,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 			{
 				if (Pin && Pin->Direction == EGPD_Output) { ContextSourcePin = Pin; break; }
 			}
-			if (ContextSourcePin) ContextWiredTo = TEXT("self");
+			if (ContextSourcePin) { ContextWiredTo = TEXT("self"); ContextNodeGuid = SelfNode->NodeGuid.ToString(); }
 		}
 
 		if (ContextSourcePin)
@@ -816,6 +932,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMotionMatchingChooser(const TShare
 	Res->SetBoolField(TEXT("contextWired"), bContextWired);
 	Res->SetStringField(TEXT("contextSource"), ContextWiredTo);
 	Res->SetBoolField(TEXT("disabledThreadedUpdate"), bDisabledThreadedUpdate);
+	Res->SetStringField(TEXT("evaluateChooserNodeGuid"), EvalNode->NodeGuid.ToString());
+	Res->SetStringField(TEXT("contextNodeGuid"), ContextNodeGuid);
+	Res->SetBoolField(TEXT("rollbackPossible"), false);
+	Res->SetStringField(TEXT("rollbackNote"),
+		TEXT("This call authors an EvaluateChooser node and a context-source node, breaks whatever drove the Database pin, and may turn off multithreaded animation update. ")
+		TEXT("No single action undoes that: calling it again adds another EvaluateChooser rather than replacing this one, and deleting the nodes would leave the Database pin unwired. ")
+		TEXT("Recover by deleting the nodes named in evaluateChooserNodeGuid and contextNodeGuid with blueprint(delete_node) and restoring the Database pin by hand."));
 	return MCPResult(Res);
 }
 
@@ -893,13 +1016,23 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddSequenceEvaluator(const TSharedPtr
 	}
 
 	bool bConnected = false;
+	// The node that fed the result pose before this call took the pin, recorded
+	// because deleting this node does not put that link back.
+	FString DisplacedOutputSource;
 	if (OptionalBool(Params, TEXT("connectToOutput"), true))
 	{
 		if (UAnimGraphNode_Base* Result = FindGraphResultNode(Graph))
 		{
 			UEdGraphPin* ResultIn = GetPosePin(Result, EGPD_Input);
 			UEdGraphPin* NodeOut = GetPosePin(EvalNode, EGPD_Output);
-			if (ResultIn && NodeOut) { ResultIn->BreakAllPinLinks(); NodeOut->MakeLinkTo(ResultIn); bConnected = true; }
+			if (ResultIn && NodeOut)
+			{
+				if (ResultIn->LinkedTo.Num() > 0 && ResultIn->LinkedTo[0] && ResultIn->LinkedTo[0]->GetOwningNode())
+				{
+					DisplacedOutputSource = ResultIn->LinkedTo[0]->GetOwningNode()->NodeGuid.ToString();
+				}
+				ResultIn->BreakAllPinLinks(); NodeOut->MakeLinkTo(ResultIn); bConnected = true;
+			}
 		}
 	}
 
@@ -913,6 +1046,20 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddSequenceEvaluator(const TSharedPtr
 	Res->SetStringField(TEXT("nodeGuid"), EvalNode->NodeGuid.ToString());
 	Res->SetStringField(TEXT("sequencePath"), Sequence ? Sequence->GetPathName() : FString());
 	Res->SetBoolField(TEXT("connectedToOutput"), bConnected);
+	Res->SetStringField(TEXT("displacedOutputSource"), DisplacedOutputSource);
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+	Rollback->SetStringField(TEXT("graphName"), GraphName);
+	Rollback->SetStringField(TEXT("nodeId"), EvalNode->NodeGuid.ToString());
+	MCPSetRollback(Res, TEXT("delete_node"), Rollback);
+	Res->SetBoolField(TEXT("rollbackLossy"), !DisplacedOutputSource.IsEmpty());
+	if (!DisplacedOutputSource.IsEmpty())
+	{
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("Connecting to the result pose broke the link that was already on that pin. Deleting this node removes it but does not re-link the node it displaced, so the result pose is left unconnected: ")
+			TEXT("re-wire it with blueprint(connect_pins) from the node named in displacedOutputSource."));
+	}
 	return MCPResult(Res);
 }
 
@@ -967,6 +1114,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BindAnimNodeFunction(const TSharedPtr
 	// this UFunction*, so it must not be dereferenced afterwards.
 	const bool bThreadSafe = Found->HasMetaData(TEXT("BlueprintThreadSafe"));
 
+	// What the slot was bound to before, read before it is overwritten: this
+	// action is its own inverse, and an empty slot has no call that clears it.
+	const FName PrevFunctionName = Target->GetMemberName();
+
 	Node->Modify();
 	Target->SetSelfMember(FuncFName);
 	// Mirror to the runtime node so the setting is consistent pre-compile.
@@ -993,6 +1144,26 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BindAnimNodeFunction(const TSharedPtr
 	if (!bThreadSafe || !bCompiled)
 	{
 		Res->SetStringField(TEXT("warning"), TEXT("bound, but the function must be marked BlueprintThreadSafe with a compatible (FAnimUpdateContext, FAnim...Reference) signature for the binding to run - the compiler rejected it otherwise"));
+	}
+	Res->SetStringField(TEXT("previousFunctionName"), PrevFunctionName.ToString());
+	Res->SetBoolField(TEXT("unchanged"), PrevFunctionName == FuncFName);
+
+	if (!PrevFunctionName.IsNone())
+	{
+		TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+		Rollback->SetStringField(TEXT("assetPath"), AssetPath);
+		Rollback->SetStringField(TEXT("graphName"), GraphName);
+		Rollback->SetStringField(TEXT("nodeGuid"), NodeGuidStr);
+		Rollback->SetStringField(TEXT("binding"), SlotResolved);
+		Rollback->SetStringField(TEXT("functionName"), PrevFunctionName.ToString());
+		MCPSetRollback(Res, TEXT("bind_anim_node_function"), Rollback);
+		Res->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Res->SetBoolField(TEXT("rollbackPossible"), false);
+		Res->SetStringField(TEXT("rollbackNote"),
+			TEXT("The slot carried no binding before this call. bind_anim_node_function requires a functionName and has no form that clears a slot, so there is no call that returns the node to unbound."));
 	}
 	return MCPResult(Res);
 }

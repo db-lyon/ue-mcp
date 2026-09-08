@@ -32,6 +32,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "HandlerEditorState.h"
+#include "HandlerPagination.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
@@ -263,15 +264,30 @@ TSharedPtr<FJsonValue> FLevelHandlers::DestroyTransientActor(const TSharedPtr<FJ
 		return MCPResult(Result);
 	}
 
+	// What the inverse needs, read while the actor still exists. A destroyed
+	// actor cannot be asked what class it was or where it stood.
+	struct FDestroyedTransient
+	{
+		FString ClassPath;
+		FString Label;
+		FTransform Transform;
+	};
+	TArray<FDestroyedTransient> Restorable;
+
 	TArray<FString> Destroyed;
 	TArray<FString> Failed;
 	for (AActor* Actor : Targets)
 	{
 		const FString Description = FString::Printf(
 			TEXT("%s (%s)"), *Actor->GetActorLabel(), *Actor->GetClass()->GetName());
+		FDestroyedTransient Snapshot;
+		Snapshot.ClassPath = Actor->GetClass()->GetPathName();
+		Snapshot.Label = Actor->GetActorLabel();
+		Snapshot.Transform = Actor->GetActorTransform();
 		if (World->DestroyActor(Actor))
 		{
 			Destroyed.Add(Description);
+			Restorable.Add(MoveTemp(Snapshot));
 		}
 		else
 		{
@@ -287,8 +303,47 @@ TSharedPtr<FJsonValue> FLevelHandlers::DestroyTransientActor(const TSharedPtr<FJ
 	}
 	Result->SetNumberField(TEXT("matched"), Targets.Num());
 	Result->SetNumberField(TEXT("destroyed"), Destroyed.Num());
+	// A replay of the same call finds nothing left to destroy, which is a
+	// success that changed nothing. Saying so is what lets a retried step tell
+	// the two apart.
+	Result->SetBoolField(TEXT("alreadyDeleted"), Targets.IsEmpty());
 	Result->SetArrayField(TEXT("destroyedActors"), MCPStringListToJson(Destroyed));
 	Result->SetArrayField(TEXT("failed"), MCPStringListToJson(Failed));
+	// The spawn_transient_actor call that brings one of them back, in that
+	// action's own parameter names so it can be replayed unedited.
+	auto MakeSpawnPayload = [&WorldScope](const FDestroyedTransient& Entry)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("world"), WorldScope);
+		Payload->SetStringField(TEXT("actorClass"), Entry.ClassPath);
+		if (!Entry.Label.IsEmpty()) Payload->SetStringField(TEXT("label"), Entry.Label);
+		Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Entry.Transform.GetLocation()));
+		Payload->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Entry.Transform.Rotator()));
+		Payload->SetObjectField(TEXT("scale"), MCPVec3ToJsonObject(Entry.Transform.GetScale3D()));
+		return Payload;
+	};
+
+	if (Restorable.Num() == 1)
+	{
+		MCPSetRollback(Result, TEXT("spawn_transient_actor"), MakeSpawnPayload(Restorable[0]));
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The inverse spawns a fresh verification actor of the same class at the same transform. It is a new actor with a new object path, so anything written onto the destroyed one after it was spawned is not restored."));
+	}
+	else if (Restorable.Num() > 1)
+	{
+		// One rollback record is one call, so a batch destroy has no single
+		// inverse. The per-actor calls are handed over instead of described.
+		TArray<TSharedPtr<FJsonValue>> RestoreCalls;
+		for (const FDestroyedTransient& Entry : Restorable)
+		{
+			RestoreCalls.Add(MakeShared<FJsonValueObject>(MakeSpawnPayload(Entry)));
+		}
+		Result->SetArrayField(TEXT("restorable"), RestoreCalls);
+		MCPSetNoRollback(Result, FString::Printf(
+			TEXT("%d transient verification actors were destroyed in one call, and level(spawn_transient_actor) makes one actor at a time, so no single call undoes the batch. ")
+			TEXT("Each entry of 'restorable' is a ready spawn_transient_actor payload for one of them."),
+			Restorable.Num()));
+	}
 	if (Targets.IsEmpty())
 	{
 		Result->SetStringField(TEXT("zeroMatchNote"),
@@ -311,26 +366,39 @@ TSharedPtr<FJsonValue> FLevelHandlers::ListTransientActors(const TSharedPtr<FJso
 		return MCPError(FString::Printf(TEXT("World not available for scope '%s'"), *WorldScope));
 	}
 
+	// T3: paged. This stopped at MCPTransientMaxListed and reported `truncated`
+	// with no way to reach the rest, which on a run that spawned more than that
+	// left the caller unable to see what it still had to clean up.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_transient_actors|world=%s"), *WorldScope),
+			/*DefaultLimit*/ MCPTransientMaxListed, /*MaxLimit*/ 5000, Page))
+	{
+		return Err;
+	}
+
 	const FName MarkerTag(MCPTransientActorTag);
-	TArray<TSharedPtr<FJsonValue>> Actors;
-	int32 Total = 0;
+	TArray<MCPPagination::FPageRow> Rows;
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
 		if (!Actor || !Actor->Tags.Contains(MarkerTag)) continue;
-		++Total;
-		if (Actors.Num() < MCPTransientMaxListed)
-		{
-			Actors.Add(MakeShared<FJsonValueObject>(MCPDescribeTransientActor(Actor)));
-		}
+		// The actor path is the anchor: verification actors are spawned with a
+		// shared label prefix, so the label does not name one of them.
+		Rows.Add({ Actor->GetPathName(), MakeShared<FJsonValueObject>(MCPDescribeTransientActor(Actor)) });
 	}
+
+	// TActorIterator order is not a contract, and this list changes shape by
+	// construction as verification actors are spawned and destroyed, so it is
+	// sorted before paging.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("worldName"), World->GetName());
-	Result->SetNumberField(TEXT("total"), Total);
-	Result->SetNumberField(TEXT("returned"), Actors.Num());
-	Result->SetBoolField(TEXT("truncated"), Actors.Num() < Total);
-	Result->SetArrayField(TEXT("actors"), Actors);
+	MCPPagination::EmitPage(Page, Rows, TEXT("actors"), Result);
+	Result->SetNumberField(TEXT("returned"), Result->GetIntegerField(TEXT("count")));
 	Result->SetStringField(TEXT("note"),
 		TEXT("These are RF_Transient verification actors spawned by level(spawn_transient_actor). A save cannot write them into the map, and they do not survive a map reload, but they are in the open world until destroyed."));
 	return MCPResult(Result);

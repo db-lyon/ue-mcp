@@ -8,9 +8,9 @@
  * corpus is recorded twice:
  *
  *   - `editor-down.json`, with nothing listening. Needs only Node, so it is
- *     guarded by `tests/unit/golden-editor-down.test.ts` in the unit tier.
+ *     guarded by `tests/unit/golden-editor-down.test.ts` in the unit tests.
  *   - `editor-connected.json`, with a real editor answering. Guarded by
- *     `tests/live/golden-connected.test.ts` in the live tier.
+ *     `tests/live/golden-connected.test.ts` in the live tests.
  *
  * One recorder produces both. A second implementation of the capture would
  * make the two baselines prove that the two recorders agree with each other
@@ -157,10 +157,16 @@ function normalizePaths(text: string, projectDir: string, sandbox: string): stri
 }
 
 /**
- * Rewrite the two values that move on their own between runs against one
- * unchanged server: the port the editor happened to bind, and any wall-clock
- * timestamp. Left alone the connected baseline would show a diff after every
- * editor restart, and a baseline that churns is one nobody reads.
+ * Rewrite the values that move on their own between runs against one
+ * unchanged server: the port the editor happened to bind, any wall-clock
+ * timestamp, and the server's own version.
+ *
+ * The version is here because the server reports package.json rather than a
+ * literal, which is the fix for it having told every client 0.6.4 for nine
+ * minor releases. That made both baselines move on every bump, and the
+ * CONNECTED one can only be re-recorded with an editor running, so a release
+ * would otherwise have required standing an editor up to satisfy a diff that
+ * carries no information about the advertised surface.
  *
  * The port substitution is skipped for a privileged port number, which only
  * the editor-down recording uses. `1` as a bare number occurs throughout a
@@ -169,6 +175,7 @@ function normalizePaths(text: string, projectDir: string, sandbox: string): stri
  */
 function normalizeVolatileValues(text: string, port: number, host: string): string {
   let out = text.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?/g, "<TIMESTAMP>");
+  out = out.replace(/("version":\s*)"[^"]+"/g, '$1"<VERSION>"');
   if (port >= 1024) {
     out = out.replace(new RegExp(`${escapeRegExp(host)}:${port}\\b`, "g"), `${host}:<PORT>`);
     out = out.replace(new RegExp(`\\b${port}\\b`, "g"), "<PORT>");
@@ -210,9 +217,17 @@ function byCodeUnit(a: string, b: string): number {
  */
 function actionEnumOf(tool: GoldenTool): string[] | null {
   const schema = tool.inputSchema as
-    | { properties?: { action?: { enum?: unknown } } }
+    | { properties?: { action?: { enum?: unknown; anyOf?: Array<{ enum?: unknown }> } } }
     | undefined;
-  const values = schema?.properties?.action?.enum;
+  const action = schema?.properties?.action;
+  // `action` is advertised as an enum but parsed as a string, so its schema is
+  // an anyOf of the enum and a bare string. The enum is still the thing this
+  // file canonicalises; it just sits one level down. Reading only the top
+  // level silently returned null for every tool, which turned the enriched-
+  // action sort into a no-op without failing anything that said so.
+  const values = Array.isArray(action?.enum)
+    ? action.enum
+    : action?.anyOf?.find((branch) => Array.isArray(branch.enum))?.enum;
   if (!Array.isArray(values)) return null;
   if (!values.every((v) => typeof v === "string")) return null;
   return values as string[];
@@ -362,15 +377,6 @@ export interface GoldenRecording {
   sandbox: string;
   projectDir: string;
   repoRoot: string;
-  /**
-   * Where the recorded server's Epic catalog came from, as it reported at
-   * startup: "live editor", "project cache", "baked snapshot", or null when
-   * it surfaced nothing. The connected half is only evidence about the live
-   * path when this says so.
-   */
-  enrichmentSource: string | null;
-  /** Tool actions Epic enrichment injected, from the same startup log. */
-  enrichmentCount: number;
   /** Everything the recorded server wrote to stderr. Kept for diagnostics. */
   log: string;
 }
@@ -448,7 +454,6 @@ export async function captureSurface(options: CaptureOptions): Promise<GoldenRec
     );
 
     const log = fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf-8") : "";
-    const enrichment = readEnrichment(log);
 
     // The one ordering in the document that the recorded server did not choose:
     // the actions enrichment took from the editor's toolset registry.
@@ -460,8 +465,6 @@ export async function captureSurface(options: CaptureOptions): Promise<GoldenRec
       sandbox,
       projectDir,
       repoRoot: REPO_ROOT,
-      enrichmentSource: enrichment.source,
-      enrichmentCount: enrichment.count,
       log,
     };
   } finally {
@@ -481,7 +484,7 @@ export async function captureEditorDownSurface(): Promise<GoldenRecording> {
 
 /**
  * The connected half. `port` is the port a verified editor is answering on;
- * the live tier discovers it and refuses anything but the test project before
+ * the live tests discovers it and refuses anything but the test project before
  * this is called.
  */
 export async function captureEditorConnectedSurface(

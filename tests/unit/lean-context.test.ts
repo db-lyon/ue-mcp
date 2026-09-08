@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { z } from "zod";
-import { categoryTool, bp, type ToolDef, type ToolContext } from "../../src/types.js";
+import { actionEnumValues, categoryTool, bp, type ToolDef, type ToolContext } from "../../src/types.js";
 import {
   resolveContextStrategy,
   splitDescription,
@@ -8,16 +8,18 @@ import {
   applyLeanContext,
   buildMicroGateway,
 } from "../../src/lean-context.js";
+import { searchToolGraph } from "../../src/tool-search.js";
+import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO } from "../../src/instructions.js";
 
 function fixtureTools(): ToolDef[] {
   return [
     categoryTool("blueprint", "Blueprint authoring.", {
-      create: bp("Create a new Blueprint asset", "create_blueprint"),
-      add_node: bp("Add a node to a graph", "add_node"),
+      create: bp("read", "Create a new Blueprint asset", "create_blueprint"),
+      add_node: bp("read", "Add a node to a graph", "add_node"),
     }, undefined, {}),
     categoryTool("level", "Level actors and volumes.", {
-      place_actor: bp("Spawn an actor into the level", "place_actor"),
-      delete_actor: bp("Remove an actor from the level", "delete_actor"),
+      place_actor: bp("read", "Spawn an actor into the level", "place_actor"),
+      delete_actor: bp("read", "Remove an actor from the level", "delete_actor"),
     }, undefined, {}),
   ];
 }
@@ -98,7 +100,7 @@ describe("applyLeanContext", () => {
     const bpTool = leaned.find((t) => t.name === "blueprint")!;
     expect(Object.keys(bpTool.actions)).toEqual(["create", "add_node", "describe"]);
     // The action enum must include the injected describe so it validates.
-    const enumValues = (bpTool.schema.action as z.ZodEnum<[string, ...string[]]>).options;
+    const enumValues = actionEnumValues(bpTool.schema.action);
     expect(enumValues).toContain("describe");
   });
 
@@ -157,11 +159,11 @@ describe("buildMicroGateway", () => {
   function microFixture(): ToolDef[] {
     return [
       categoryTool("blueprint", "Blueprint authoring.", {
-        create: { description: "Create a BP", handler: async (_c, p) => ({ created: p.name }) },
-        compile: bp("Compile a BP", "compile_blueprint"),
+        create: { kind: "handler", effect: "read", description: "Create a BP", handler: async (_c, p) => ({ created: p.name }) },
+        compile: bp("read", "Compile a BP", "compile_blueprint"),
       }, undefined, {}),
       categoryTool("level", "Level actors.", {
-        place_actor: bp("Place an actor", "place_actor"),
+        place_actor: bp("read", "Place an actor", "place_actor"),
       }, undefined, {}),
     ];
   }
@@ -175,10 +177,10 @@ describe("buildMicroGateway", () => {
   const invoke = (gw: ToolDef, params: Record<string, unknown>) =>
     gw.actions.call.handler!(ctxB, { action: "call", ...params });
 
-  it("exposes exactly the three gateway actions", () => {
+  it("exposes search alongside the three gateway actions", () => {
     const gw = buildMicroGateway(microFixture());
     expect(gw.name).toBe("tools");
-    expect(Object.keys(gw.actions)).toEqual(["list_categories", "describe", "call"]);
+    expect(Object.keys(gw.actions)).toEqual(["search", "list_categories", "describe", "call"]);
   });
 
   it("list_categories returns every category with a summary", async () => {
@@ -214,5 +216,46 @@ describe("buildMicroGateway", () => {
     const gw = buildMicroGateway(microFixture());
     await expect(invoke(gw, { category: "nope", method: "create" })).rejects.toThrow(/Unknown category/);
     await expect(invoke(gw, { category: "blueprint", method: "nope" })).rejects.toThrow(/Unknown action/);
+  });
+});
+
+describe("compact discovery for spatial requests", () => {
+  const tools = [categoryTool("level", "Spatial tools", {
+    nudge_component: bp("read", "Adjust a component. Params: componentName, axisRotation?", "nudge_component"),
+    irrelevant: bp("read", "Something else. Params: none", "irrelevant"),
+  }, undefined, {
+    componentName: z.string().optional(),
+    axisRotation: z.object({ axis: z.enum(["forward", "right", "up"]), degrees: z.number() }).optional(),
+  })];
+
+  it("uses the same intent ranking in full, lean and micro, without losing plugins", async () => {
+    const expected = searchToolGraph(tools, "clockwise").map(({ tool, action, description }) =>
+      ({ category: tool, action, description }),
+    );
+    expect(expected[0].action).toBe("nudge_component");
+    for (const discovery of [buildCatalogTool(tools), buildMicroGateway(tools)]) {
+      expect(await runAction(discovery, "search", { query: "clockwise" })).toMatchObject({ results: expected });
+    }
+    expect(await runAction(buildMicroGateway(tools), "search", { query: "absent_word" })).toMatchObject({ count: 0, results: [] });
+  });
+
+  it("describes one action with nested arguments without dumping the category", async () => {
+    for (const discovery of [buildCatalogTool(tools), buildMicroGateway(tools)]) {
+      const result = await runAction(discovery, "describe", { category: "level", method: "nudge_component" }) as any;
+      expect(result.action).toBe("nudge_component");
+      expect(result.actions).toBeUndefined();
+      expect(result.params.find((p: any) => p.name === "axisRotation").properties.axis).toMatchObject({
+        required: true, enumValues: ["forward", "right", "up"],
+      });
+      await expect(runAction(discovery, "describe", { category: "level", method: "missing" })).rejects.toThrow("Unknown action");
+    }
+  });
+
+  it("retains spatial interpretation and verification guidance in every context mode", () => {
+    for (const instructions of [SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO]) {
+      expect(instructions).toContain("dryRun=true");
+      expect(instructions).toContain("viewRotation");
+      expect(instructions).toContain("not visual verification");
+    }
   });
 });

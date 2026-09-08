@@ -372,6 +372,28 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 	{
 		Res->SetStringField(TEXT("resultText"), TEXT(""));
 	}
+
+	// No inverse, and the reason is whose code ran rather than a gap here. This
+	// action is a dispatcher: the effect belongs to the wrapped engine tool the
+	// caller named in 'toolset' and 'tool', and the toolset API hands back a
+	// result payload rather than a description of what was written. Naming an
+	// inverse would mean guessing at an effect this wrapper never saw.
+	MCPSetNoRollback(Res, FString::Printf(
+		TEXT("Dispatched the wrapped engine tool '%s.%s'. Whatever that tool changed is its own, and the toolset API "
+		     "reports a result value rather than the writes behind it, so nothing here knows what to reverse. An "
+		     "inverse would be a second epic(call_tool) naming whichever tool undoes it, which only the caller "
+		     "choosing the tool can decide."),
+		*Toolset, *ToolName));
+
+	// Idempotency is unreadable for the same reason. Whether the tool found
+	// work to do, or found its target already in the requested state, is
+	// decided inside the tool and is not part of what it returns. A flag
+	// invented here would be a claim about somebody else's code.
+	Res->SetBoolField(TEXT("idempotencyObservable"), false);
+	Res->SetStringField(TEXT("idempotencyNote"), FString::Printf(
+		TEXT("'%s.%s' decides whether it changed anything, and the toolset API returns its result value without "
+		     "saying so. Read 'result' to see what the tool reported; this wrapper adds no claim of its own."),
+		*Toolset, *ToolName));
 	return MCPResult(Res);
 }
 

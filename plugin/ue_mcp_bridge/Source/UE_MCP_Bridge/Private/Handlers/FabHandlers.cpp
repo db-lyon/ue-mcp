@@ -89,6 +89,24 @@ TSharedPtr<FJsonValue> FFabHandlers::Login(const TSharedPtr<FJsonObject>& Params
 		return MCPError(TEXT("Failed to invoke Fab.Login console command"));
 	auto Res = MCPSuccess();
 	Res->SetStringField(TEXT("note"), TEXT("Login flow triggered. Complete authentication in the account-portal window if prompted; call fab(status) afterward."));
+	// No idempotency flag, and the reason is stated rather than left as an
+	// absence: the Fab module publishes no authentication or library-sync state
+	// this build can read, so nothing here can measure whether the call changed
+	// anything. A fabricated unchanged=false would be a claim, not a reading.
+	Res->SetBoolField(TEXT("idempotencyObservable"), false);
+	Res->SetStringField(TEXT("idempotencyNote"),
+		TEXT("Whether an account was already signed in, and whether this flow ends in one being signed in, are both decided outside this call. Nothing in the Fab module reports that state back, so this call cannot say whether it changed "
+			 "anything. fab(status) is the closest reading available and does not cover it."));
+
+	// No inverse. This opens the EOS account-portal flow and returns before
+	// anything has authenticated, so it creates no state of its own to undo.
+	// fab(logout) is not the inverse: it would clear whatever session the user
+	// already had, including one this call had nothing to do with.
+	Res->SetBoolField(TEXT("rollbackPossible"), false);
+	Res->SetStringField(TEXT("rollbackNote"),
+		TEXT("Triggering the login flow creates no state this call owns - the user authenticates, or does not, in the "
+			 "account portal. fab(logout) would clear a session that may predate this call, so it is not offered as "
+			 "an inverse."));
 	return MCPResult(Res);
 }
 
@@ -99,6 +117,22 @@ TSharedPtr<FJsonValue> FFabHandlers::Logout(const TSharedPtr<FJsonObject>& Param
 		return MCPError(TEXT("Failed to invoke Fab.Logout console command"));
 	auto Res = MCPSuccess();
 	Res->SetStringField(TEXT("note"), TEXT("Persistent Fab auth cleared."));
+	// No idempotency flag, and the reason is stated rather than left as an
+	// absence: the Fab module publishes no authentication or library-sync state
+	// this build can read, so nothing here can measure whether the call changed
+	// anything. A fabricated unchanged=false would be a claim, not a reading.
+	Res->SetBoolField(TEXT("idempotencyObservable"), false);
+	Res->SetStringField(TEXT("idempotencyNote"),
+		TEXT("Whether a session was there to clear is not readable from here. Nothing in the Fab module reports that state back, so this call cannot say whether it changed "
+			 "anything. fab(status) is the closest reading available and does not cover it."));
+
+	// No inverse. Logging back in means the user authenticating in the EOS
+	// account portal; fab(login) only opens that window and cannot restore the
+	// credentials this call destroyed.
+	Res->SetBoolField(TEXT("rollbackPossible"), false);
+	Res->SetStringField(TEXT("rollbackNote"),
+		TEXT("The stored credentials are gone. fab(login) opens the account-portal flow for a person to complete; no "
+			 "call restores a cleared session, so this has no inverse."));
 	return MCPResult(Res);
 }
 
@@ -116,6 +150,22 @@ TSharedPtr<FJsonValue> FFabHandlers::SyncLibrary(const TSharedPtr<FJsonObject>& 
 		return MCPError(TEXT("Failed to invoke Fab.TEDS.MyFolderIntegration console command"));
 	auto Res = MCPSuccess();
 	Res->SetStringField(TEXT("note"), TEXT("Library sync queued. Owned Fab items load into the Content Browser asynchronously; requires an active Fab login."));
+	// No idempotency flag, and the reason is stated rather than left as an
+	// absence: the Fab module publishes no authentication or library-sync state
+	// this build can read, so nothing here can measure whether the call changed
+	// anything. A fabricated unchanged=false would be a claim, not a reading.
+	Res->SetBoolField(TEXT("idempotencyObservable"), false);
+	Res->SetStringField(TEXT("idempotencyNote"),
+		TEXT("The sync runs asynchronously and its results land in the Content Browser after this call has returned. Nothing in the Fab module reports that state back, so this call cannot say whether it changed "
+			 "anything. fab(status) is the closest reading available and does not cover it."));
+
+	// No inverse. This loads what the user already owns into the editor's TEDS
+	// index so the Content Browser can show it. Nothing un-lists a library, and
+	// the listing is rebuilt from the account on the next sync anyway.
+	Res->SetBoolField(TEXT("rollbackPossible"), false);
+	Res->SetStringField(TEXT("rollbackNote"),
+		TEXT("Syncing populates an in-editor index of the library the account already owns. There is no call that "
+			 "un-lists it, and nothing on disk or in the project changed."));
 	return MCPResult(Res);
 }
 
@@ -157,11 +207,33 @@ TSharedPtr<FJsonValue> FFabHandlers::CacheInfo(const TSharedPtr<FJsonObject>& Pa
 TSharedPtr<FJsonValue> FFabHandlers::ClearCache(const TSharedPtr<FJsonObject>& Params)
 {
 	if (!IsFabModuleLoaded()) return MCPError(TEXT("Fab plugin not loaded"));
+
+	// Read the cache size first so the result can say whether this call actually
+	// deleted anything. Only available when the native API is linked; without it
+	// the console command is still the right thing to run, there is just nothing
+	// to measure it against.
+	int64 PreviousBytes = -1;
+#if WITH_FAB_PLUGIN
+	PreviousBytes = (int64)FFabAssetsCache::GetCacheSize();
+#endif
+
 	// Routed through the console command so this works without WITH_FAB_PLUGIN.
 	if (!RunFabConsoleCommand(TEXT("Fab.ClearCache")))
 		return MCPError(TEXT("Failed to invoke Fab.ClearCache console command"));
 	auto Res = MCPSuccess();
 	Res->SetStringField(TEXT("note"), TEXT("Fab download cache cleared."));
+	if (PreviousBytes >= 0)
+	{
+		Res->SetNumberField(TEXT("previousCacheSizeBytes"), (double)PreviousBytes);
+		Res->SetBoolField(TEXT("unchanged"), PreviousBytes == 0);
+	}
+	// No inverse. The cached downloads are deleted from disk and nothing puts
+	// them back: they return only by downloading them from Fab again, which is
+	// a fresh transfer rather than a restoration.
+	Res->SetBoolField(TEXT("rollbackPossible"), false);
+	Res->SetStringField(TEXT("rollbackNote"),
+		TEXT("The cached downloads are deleted from disk. No call restores them; they come back only by downloading "
+			 "the assets from Fab again. Nothing in the project changed - the cache is a download staging area."));
 	return MCPResult(Res);
 }
 
@@ -215,6 +287,27 @@ TSharedPtr<FJsonValue> FFabHandlers::ImportFile(const TSharedPtr<FJsonObject>& P
 		Res->SetArrayField(TEXT("importedAssets"), Arr);
 		Res->SetNumberField(TEXT("count"), ImportedPaths->Num());
 		MCPSetCreated(Res);
+
+		if (ImportedPaths->Num() > 0)
+		{
+			// The inverse deletes exactly the assets this import wrote, which is
+			// only expressible because the callback handed back their paths.
+			// force is true because the imported set references itself - a
+			// material referencing its textures - and a reference check would
+			// refuse to delete the half that is still pointed at.
+			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+			Payload->SetArrayField(TEXT("assetPaths"), Arr);
+			Payload->SetBoolField(TEXT("force"), true);
+			MCPSetRollback(Res, TEXT("delete_asset_batch"), Payload);
+			Res->SetBoolField(TEXT("rollbackLossy"), false);
+		}
+		else
+		{
+			Res->SetBoolField(TEXT("unchanged"), true);
+			Res->SetBoolField(TEXT("rollbackPossible"), false);
+			Res->SetStringField(TEXT("rollbackNote"),
+				TEXT("The import produced no objects, so nothing was written and there is nothing to delete."));
+		}
 	}
 	else
 	{
@@ -222,6 +315,16 @@ TSharedPtr<FJsonValue> FFabHandlers::ImportFile(const TSharedPtr<FJsonObject>& P
 		// import is running and will land in Destination shortly.
 		Res->SetBoolField(TEXT("async"), true);
 		Res->SetStringField(TEXT("note"), FString::Printf(TEXT("Import running asynchronously into %s; poll asset(list) on that path to confirm."), *Destination));
+		// No inverse for this branch. The importer has not reported what it
+		// created yet, and a record naming the destination FOLDER would delete
+		// whatever else already lives there. Read the path afterwards and delete
+		// deliberately instead.
+		Res->SetBoolField(TEXT("rollbackPossible"), false);
+		Res->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The import is still running, so the paths it writes are not known yet and no inverse can name them. "
+				 "A record targeting '%s' would delete assets that were already there. List the destination after the "
+				 "import lands and delete what it added with asset(delete_batch)."),
+			*Destination));
 	}
 	return MCPResult(Res);
 #else

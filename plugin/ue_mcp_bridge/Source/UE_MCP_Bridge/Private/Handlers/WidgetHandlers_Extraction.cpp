@@ -510,22 +510,24 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ExtractWidgetSubtree(const TSharedPtr<FJ
 		++CopiedBindings;
 	}
 
-	// WidgetVariableNameToGuidMap keeps external references stable when a
-	// widget variable is later renamed. It landed in 5.5, so gate on the
-	// shared macro rather than an ad-hoc version expression.
-#if UE_MCP_HAS_5_5_API
-	for (const FExtractedWidgetPlanEntry& Entry : Plan)
-	{
-		const FName WidgetName(*Entry.DestinationName);
-		if (!Destination->WidgetVariableNameToGuidMap.Contains(WidgetName))
-		{
-			Destination->WidgetVariableNameToGuidMap.Add(WidgetName, FGuid::NewGuid());
-		}
-	}
-#endif
-
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Destination);
-	FKismetEditorUtilities::CompileBlueprint(Destination);
+
+	// WidgetVariableNameToGuidMap keeps external references stable when a widget
+	// variable is later renamed, and the compiler reports a failure for any
+	// widget variable it generates without an entry (#728). The entries are
+	// written off the widgets the destination tree actually owns rather than off
+	// the plan, because the importer renames a widget whose name was already
+	// taken while the plan still holds the name that was asked for.
+	const MCPWidgetGuidMap::FSyncReport GuidSync = MCPWidgetGuidMap::CompileChecked(Destination);
+	if (!GuidSync.bCompiled)
+	{
+		if (bCreatedDestination)
+		{
+			UEditorAssetLibrary::DeleteAsset(DestinationAssetPath);
+		}
+		return MCPWidgetGuidMap::BlockedError(DestinationAssetPath, GuidSync);
+	}
+
 	if (Destination->Status == BS_Error)
 	{
 		if (bCreatedDestination)
@@ -561,5 +563,6 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ExtractWidgetSubtree(const TSharedPtr<FJ
 	Result->SetBoolField(TEXT("sourcePackageDirtyBefore"), bSourceDirtyBefore);
 	Result->SetBoolField(TEXT("sourcePackageDirtyAfter"), Source->GetOutermost()->IsDirty());
 	Result->SetBoolField(TEXT("sourceUnchanged"), bSourceDirtyBefore == Source->GetOutermost()->IsDirty());
+	MCPSetWidgetGuidOutcome(Result, GuidSync, Destination->GetPathName());
 	return MCPResult(Result);
 }

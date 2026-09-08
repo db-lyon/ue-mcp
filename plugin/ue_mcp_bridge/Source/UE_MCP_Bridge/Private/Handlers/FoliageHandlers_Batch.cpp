@@ -233,6 +233,18 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 	int32 Failed = 0;
 	int32 SaveFailures = 0;
 
+	// One {assetPath, properties} item per type this call writes, carrying the
+	// value each property held before the write. asset(bulk_set_properties) is
+	// the inverse: it is the only action that takes DIFFERENT values per asset,
+	// which is what a conditional batch needs, since two matched types can have
+	// had different previous values for the same setting.
+	TArray<TSharedPtr<FJsonValue>> RollbackItems;
+	// Types whose previous values cannot be carried: a FoliageType embedded in
+	// a level is not an asset, so nothing can address it by path.
+	int32 UnaddressableTypes = 0;
+	// Properties that resolved for the write but had no readable previous value.
+	int32 UnreadableProperties = 0;
+
 	for (const FMCPFoliageBatchCandidate& Candidate : Candidates)
 	{
 		TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
@@ -274,6 +286,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 		TArray<TSharedPtr<FJsonValue>> SettingRows;
 		bool bTypeOk = true;
 		bool bTypeChanged = false;
+		TSharedPtr<FJsonObject> RollbackProperties = MakeShared<FJsonObject>();
 		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*SettingsObject)->Values)
 		{
 			TSharedPtr<FJsonObject> SettingRow = MakeShared<FJsonObject>();
@@ -314,6 +327,10 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 			}
 			else
 			{
+				// The write landed, so this property is part of the inverse -
+				// but only if its previous value could be read at all.
+				if (Before.IsValid()) RollbackProperties->SetField(Pair.Key, Before);
+				else ++UnreadableProperties;
 				FString AfterType;
 				const TSharedPtr<FJsonValue> After =
 					MCPQuery::ReadDottedProperty(Candidate.Type, Pair.Key, AfterType);
@@ -333,6 +350,23 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 
 		if (!bDryRun && bTypeOk)
 		{
+			// A FoliageType placed in a level lives inside the level package
+			// rather than as its own asset, so no assetPath addresses it and no
+			// inverse can name it. Counted rather than silently dropped.
+			if (RollbackProperties->Values.Num() > 0)
+			{
+				if (Candidate.Type->IsAsset())
+				{
+					TSharedPtr<FJsonObject> RollbackItem = MakeShared<FJsonObject>();
+					RollbackItem->SetStringField(TEXT("assetPath"), Candidate.Path);
+					RollbackItem->SetObjectField(TEXT("properties"), RollbackProperties);
+					RollbackItems.Add(MakeShared<FJsonValueObject>(RollbackItem));
+				}
+				else
+				{
+					++UnaddressableTypes;
+				}
+			}
 			Candidate.Type->MarkPackageDirty();
 			++Updated;
 			if (bSave)
@@ -404,16 +438,69 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 		{
 			MCPSetUpdated(Result);
 		}
+		Result->SetBoolField(TEXT("unchanged"), Updated == 0);
 		if (!bSave && Updated > 0)
 		{
 			Result->SetStringField(TEXT("saveNote"),
 				TEXT("save=false: the FoliageType packages are dirty and NOT saved."));
+		}
+
+		// asset(bulk_set_properties) caps a batch at 500 items. A record holding
+		// part of the batch would restore part of the write, which is worse than
+		// saying plainly that it cannot be undone in one call.
+		const int32 BulkPropertyBatchLimit = 500;
+		if (RollbackItems.Num() > BulkPropertyBatchLimit)
+		{
+			Result->SetBoolField(TEXT("rollbackOmitted"), true);
+			Result->SetStringField(TEXT("rollbackOmittedReason"), FString::Printf(
+				TEXT("%d foliage types were written, above the %d-item limit of asset(bulk_set_properties), so the "
+					 "previous values are NOT carried as one inverse call. Narrow 'where' or the candidate set and "
+					 "run the batch in pieces if it has to be undoable."),
+				RollbackItems.Num(), BulkPropertyBatchLimit));
+		}
+		else if (RollbackItems.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+			RollbackPayload->SetArrayField(TEXT("items"), RollbackItems);
+			RollbackPayload->SetBoolField(TEXT("save"), bSave);
+			RollbackPayload->SetBoolField(TEXT("dryRun"), false);
+			RollbackPayload->SetBoolField(TEXT("continueOnError"), true);
+			MCPSetRollback(Result, TEXT("bulk_set_asset_properties"), RollbackPayload);
+			Result->SetBoolField(TEXT("rollbackOmitted"), false);
+			const bool bLossy = UnaddressableTypes > 0 || UnreadableProperties > 0;
+			Result->SetBoolField(TEXT("rollbackLossy"), bLossy);
+			if (bLossy)
+			{
+				Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+					TEXT("%d of the written types come back. %d FoliageType(s) live inside a level rather than as "
+						 "assets, so no assetPath addresses them and their previous values are not carried; %d "
+						 "property write(s) had no readable previous value and are not restored."),
+					RollbackItems.Num(), UnaddressableTypes, UnreadableProperties));
+			}
+		}
+		else if (Updated > 0)
+		{
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("Types were written but none of their previous values could be carried - the matched "
+					 "FoliageTypes live inside a level rather than as assets, or their properties had no readable "
+					 "previous value - so no inverse can be expressed."));
+		}
+		else
+		{
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("Nothing was written, so there is nothing to undo."));
 		}
 	}
 	else
 	{
 		Result->SetStringField(TEXT("dryRunNote"),
 			TEXT("dryRun defaults to TRUE for this action because it writes to many assets at once. Pass dryRun=false to commit."));
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("This was a preview: nothing was written, so there is nothing to undo."));
 	}
 	return MCPResult(Result);
 }

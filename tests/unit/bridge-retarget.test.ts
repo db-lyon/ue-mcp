@@ -43,7 +43,14 @@ async function fakeEditor(name: string): Promise<{
   };
 }
 
-/** Temp .uproject, optionally with the lockfile its editor would publish. */
+/**
+ * Temp .uproject, optionally with the lockfile its editor would publish.
+ *
+ * The lockfile names THIS process as the editor that bound the port, because
+ * the fake editor is a socket server running in this process. connect() checks
+ * that pid for liveness before it will treat a published port as proof of a
+ * running editor (D6), and a made-up pid describes an editor that has exited.
+ */
 function makeProject(name: string, lockfilePort?: number): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `ue-mcp-818-${name}-`));
   const uproject = path.join(dir, `${name}.uproject`);
@@ -54,7 +61,7 @@ function makeProject(name: string, lockfilePort?: number): string {
     fs.mkdirSync(lockDir, { recursive: true });
     fs.writeFileSync(
       path.join(lockDir, "port.json"),
-      JSON.stringify({ port: lockfilePort, pid: 4242 }),
+      JSON.stringify({ port: lockfilePort, pid: process.pid }),
     );
   }
   return uproject;
@@ -156,7 +163,10 @@ describe("EditorBridge.retargetProject", () => {
     // The editor starts and publishes the port it actually bound.
     const lockDir = path.join(path.dirname(projectB), "Saved", "UE_MCP_Bridge");
     fs.mkdirSync(lockDir, { recursive: true });
-    fs.writeFileSync(path.join(lockDir, "port.json"), JSON.stringify({ port: editorB.port, pid: 1 }));
+    fs.writeFileSync(
+      path.join(lockDir, "port.json"),
+      JSON.stringify({ port: editorB.port, pid: process.pid }),
+    );
 
     try {
       await expect(bridge.call("ping", {}, 1000)).resolves.toEqual({ editor: "B" });

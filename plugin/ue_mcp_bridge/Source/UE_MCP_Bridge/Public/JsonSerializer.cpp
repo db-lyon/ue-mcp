@@ -277,6 +277,25 @@ TSharedPtr<FJsonValue> FMCPJsonSerializer::SerializePropertyValue(const void* Va
 		}
 		return MakeShared<FJsonValueNumber>(ByteProp->GetPropertyValue(Value));
 	}
+	// The integer widths the branches above do not name one by one: int8,
+	// int16, uint16 and uint32. Without this they reached the export-text
+	// fallback and a plain number came back to the caller quoted, which is the
+	// read half of the defect the setter had in the other direction. Each of
+	// these widths is carried exactly by a double.
+	//
+	// FUInt64Property is left on the text path on purpose: a uint64 past 2^53
+	// has no exact JSON number, and its exported text reads back through the
+	// setter without losing a digit. An enum-valued byte cannot reach here at
+	// all, since the byte branch above returns its name first; the test is kept
+	// so the branch is safe to read on its own.
+	else if (FNumericProperty* NumericProp = CastField<FNumericProperty>(Property))
+	{
+		if (NumericProp->IsInteger() && !NumericProp->IsEnum() && !Property->IsA<FUInt64Property>())
+		{
+			return MakeShared<FJsonValueNumber>(
+				static_cast<double>(NumericProp->GetSignedIntPropertyValue(Value)));
+		}
+	}
 	else if (FArrayProperty* ArrayProp = CastField<FArrayProperty>(Property))
 	{
 		TArray<TSharedPtr<FJsonValue>> JsonArray;

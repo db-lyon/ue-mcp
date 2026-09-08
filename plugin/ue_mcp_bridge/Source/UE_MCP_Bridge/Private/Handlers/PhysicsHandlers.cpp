@@ -4,6 +4,7 @@
 #include "Handlers/BlueprintHandlers_Internal.h"
 #include "Components/PrimitiveComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/Blueprint.h"
 #include "Engine/World.h"
 #include "Editor.h"
@@ -101,7 +102,12 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionProfile(const TSharedPtr<FJ
 	{
 		MCPSetExisted(Result);
 		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("unchanged"), true);
 		Result->SetNumberField(TEXT("componentsModified"), 0);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Every primitive component already used this collision profile, so nothing changed and there is "
+				 "nothing to undo."));
 		return MCPResult(Result);
 	}
 
@@ -115,18 +121,56 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionProfile(const TSharedPtr<FJ
 
 	Result->SetNumberField(TEXT("componentsModified"), ComponentsModified);
 	Result->SetBoolField(TEXT("success"), ComponentsModified > 0);
+	Result->SetBoolField(TEXT("unchanged"), ComponentsModified == 0);
 
 	if (ComponentsModified == 0)
 	{
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents found on actor"));
+		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The actor has no PrimitiveComponent to profile, so nothing was written and there is nothing to "
+				 "undo."));
+		return MCPResult(Result);
 	}
-	else
+
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("previousProfileName"), PrevProfile);
+	// Two spellings that cannot be replayed. An EMPTY name exports to nothing
+	// and then fails this handler's own RequireString at replay time, and the
+	// "Custom" sentinel names no profile the engine can look up - a component
+	// reports it once it carries per-channel overrides, and writing it back
+	// would restore nothing. Either way the record is withheld rather than
+	// emitted knowing it would be refused.
+	const bool bPrevWasCustom =
+		(FName(*PrevProfile) == UCollisionProfile::CustomCollisionProfileName);
+	if (PrevProfile.IsEmpty() || bPrevWasCustom)
 	{
-		MCPSetUpdated(Result);
-		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
-		Payload->SetStringField(TEXT("profileName"), PrevProfile);
-		MCPSetRollback(Result, TEXT("set_collision_profile"), Payload);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), bPrevWasCustom
+			? TEXT("The components' previous profile read as the 'Custom' sentinel, which names no profile the engine "
+				   "can look up: a component reports it once it carries per-channel response overrides. Restoring "
+				   "that behaviour needs gameplay(set_collision) with collisionEnabled, objectType and the full "
+				   "response table, which this action has no parameters for, so no inverse is emitted.")
+			: TEXT("No component reported a previous collision profile name, and gameplay(set_collision_profile) "
+				   "requires a non-empty profileName, so no inverse can be expressed."));
+		return MCPResult(Result);
+	}
+
+	// Addressed by actorPath, which is unique, rather than by a label that can
+	// match several actors.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	Payload->SetStringField(TEXT("profileName"), PrevProfile);
+	MCPSetRollback(Result, TEXT("set_collision_profile"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), ComponentsModified > 1);
+	if (ComponentsModified > 1)
+	{
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The record carries the profile read from the FIRST of %d primitive component(s) written. Components "
+				 "that used different profiles before this call all come back with that one's profile; "
+				 "gameplay(set_collision) with a componentName is the per-component form."),
+			ComponentsModified));
 	}
 
 	return MCPResult(Result);
@@ -178,7 +222,12 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetPhysicsEnabled(const TSharedPtr<FJso
 	{
 		MCPSetExisted(Result);
 		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("unchanged"), true);
 		Result->SetNumberField(TEXT("componentsModified"), 0);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Every primitive component was already simulating in this state, so nothing changed and there is "
+				 "nothing to undo."));
 		return MCPResult(Result);
 	}
 
@@ -192,18 +241,40 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetPhysicsEnabled(const TSharedPtr<FJso
 
 	Result->SetNumberField(TEXT("componentsModified"), ComponentsModified);
 	Result->SetBoolField(TEXT("success"), ComponentsModified > 0);
+	Result->SetBoolField(TEXT("unchanged"), ComponentsModified == 0);
 
 	if (ComponentsModified == 0)
 	{
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents found on actor"));
+		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The actor has no PrimitiveComponent to simulate, so nothing was written and there is nothing to "
+				 "undo."));
 	}
 	else
 	{
 		MCPSetUpdated(Result);
+		// The inverse is this same action with the previous flag. The method
+		// name is the REGISTERED one - gameplay(set_simulate_physics) - and the
+		// parameter is 'enabled', which is the spelling this handler reads
+		// alongside 'simulate'. Addressed by actorPath, which is unique, rather
+		// than by a label that can match several actors.
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 		Payload->SetBoolField(TEXT("enabled"), bPrev);
-		MCPSetRollback(Result, TEXT("set_physics_enabled"), Payload);
+		MCPSetRollback(Result, TEXT("set_simulate_physics"), Payload);
+		// The previous flag is read from the FIRST simulating component, and
+		// this writes every one of them, so an actor whose components differed
+		// all come back with that one's value.
+		Result->SetBoolField(TEXT("rollbackLossy"), ComponentsModified > 1);
+		if (ComponentsModified > 1)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("The record carries the simulate flag read from the FIRST of %d primitive component(s) written. "
+					 "Components that differed from each other before this call all come back with that one's value."),
+				ComponentsModified));
+		}
 	}
 
 	return MCPResult(Result);
@@ -214,8 +285,21 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 	FString ActorLabel;
 	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
 
+	// The published TS schema documents this parameter as 'collisionEnabled',
+	// which is also what gameplay(set_collision) calls it, while this handler
+	// historically read only 'collisionType'. A schema-conformant call therefore
+	// failed on a parameter the caller had supplied under the documented name.
+	// Both spellings are read, and the error below names both.
 	FString CollisionType;
-	if (auto Err = RequireString(Params, TEXT("collisionType"), CollisionType)) return Err;
+	if (!Params->TryGetStringField(TEXT("collisionType"), CollisionType) || CollisionType.IsEmpty())
+	{
+		if (!Params->TryGetStringField(TEXT("collisionEnabled"), CollisionType) || CollisionType.IsEmpty())
+		{
+			return MCPError(TEXT(
+				"Missing 'collisionEnabled' (aka 'collisionType'). Pass one of NoCollision, QueryOnly, PhysicsOnly "
+				"or QueryAndPhysics."));
+		}
+	}
 
 	// Map string to ECollisionEnabled
 	ECollisionEnabled::Type CollisionEnabled;
@@ -270,7 +354,12 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 	{
 		MCPSetExisted(Result);
 		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("unchanged"), true);
 		Result->SetNumberField(TEXT("componentsModified"), 0);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Every primitive component already held this collision mode, so nothing changed and there is nothing "
+				 "to undo."));
 		return MCPResult(Result);
 	}
 
@@ -284,10 +373,16 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 
 	Result->SetNumberField(TEXT("componentsModified"), ComponentsModified);
 	Result->SetBoolField(TEXT("success"), ComponentsModified > 0);
+	Result->SetBoolField(TEXT("unchanged"), ComponentsModified == 0);
 
 	if (ComponentsModified == 0)
 	{
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents found on actor"));
+		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The actor has no PrimitiveComponent to set collision on, so nothing was written and there is "
+				 "nothing to undo."));
 	}
 	else
 	{
@@ -301,10 +396,23 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 		case ECollisionEnabled::QueryAndPhysics: PrevTypeStr = TEXT("QueryAndPhysics"); break;
 		default: PrevTypeStr = TEXT("NoCollision"); break;
 		}
+		// Addressed by actorPath, which is unique, rather than by a label that
+		// can match several actors. 'collisionType' is this handler's own
+		// parameter name and is read before the 'collisionEnabled' alias, so the
+		// record replays regardless of which spelling the original call used.
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
 		Payload->SetStringField(TEXT("collisionType"), PrevTypeStr);
 		MCPSetRollback(Result, TEXT("set_collision_enabled"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), ComponentsModified > 1);
+		if (ComponentsModified > 1)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("The record carries the collision mode read from the FIRST of %d primitive component(s) written. "
+					 "Components that differed from each other before this call all come back with that one's mode; "
+					 "gameplay(set_collision) with a componentName is the per-component form."),
+				ComponentsModified));
+		}
 	}
 
 	return MCPResult(Result);
@@ -440,6 +548,125 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollision(const TSharedPtr<FJsonObje
 		return MCPError(TEXT("Nothing to set. Provide collisionProfile, collisionEnabled, objectType, responseToAllChannels, and/or responses."));
 	}
 
+	// What the first target looked like before anything was written. Reading one
+	// component mirrors what set_collision_profile and set_collision_enabled
+	// already do for their own rollbacks, and the note below says plainly that
+	// components which differed from each other all come back with this one's
+	// settings.
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	FName PreviousProfileName;
+	bool bPreviousProfileWasCustom = false;
+	bool bCapturedEveryResponse = false;
+	FString PreviousStateDigest;
+	// Every collision field this action can write, in one string. Only ever
+	// compared against itself, so the format is irrelevant as long as it covers
+	// the same ground the writes below do.
+	const auto DescribeCollisionState = [](UPrimitiveComponent* Component) -> FString
+	{
+		FString Digest = Component->GetCollisionProfileName().ToString();
+		Digest += FString::Printf(TEXT("|%d|%d"),
+			(int32)Component->GetCollisionEnabled(), (int32)Component->GetCollisionObjectType());
+		for (int32 Channel = 0; Channel < (int32)ECC_MAX; ++Channel)
+		{
+			Digest += FString::Printf(TEXT("|%d"),
+				(int32)Component->GetCollisionResponseToChannel((ECollisionChannel)Channel));
+		}
+		return Digest;
+	};
+	{
+		const auto EnabledToString = [](ECollisionEnabled::Type Value) -> const TCHAR*
+		{
+			switch (Value)
+			{
+			case ECollisionEnabled::NoCollision:     return TEXT("NoCollision");
+			case ECollisionEnabled::QueryOnly:       return TEXT("QueryOnly");
+			case ECollisionEnabled::PhysicsOnly:     return TEXT("PhysicsOnly");
+			case ECollisionEnabled::QueryAndPhysics: return TEXT("QueryAndPhysics");
+			default:                                 return TEXT("NoCollision");
+			}
+		};
+		const auto ResponseToString = [](ECollisionResponse Value) -> const TCHAR*
+		{
+			switch (Value)
+			{
+			case ECR_Block:   return TEXT("Block");
+			case ECR_Overlap: return TEXT("Overlap");
+			default:          return TEXT("Ignore");
+			}
+		};
+
+		UPrimitiveComponent* First = Targets[0];
+		UEnum* ChannelEnum = StaticEnum<ECollisionChannel>();
+		PreviousProfileName = First->GetCollisionProfileName();
+
+		// Writing a profile RESETS every channel response on the component (the
+		// apply loop below relies on exactly that ordering), and so does
+		// responseToAllChannels. Either one therefore has to carry the whole
+		// response table, not just the channels the caller named, or the
+		// overrides it wiped are gone with nothing to put them back.
+		const bool bWritesEveryResponse = !Profile.IsEmpty() || bSetAllResponse;
+
+		// "Custom" is the sentinel UPrimitiveComponent reports once a component
+		// carries per-channel overrides. It names no profile the engine can look
+		// up, so restoring it would restore nothing. The state is fully
+		// described by collisionEnabled + objectType + the response table
+		// instead, and those are carried unconditionally whenever a profile is
+		// written for exactly that reason.
+		bPreviousProfileWasCustom =
+			(PreviousProfileName == UCollisionProfile::CustomCollisionProfileName);
+		if (!Profile.IsEmpty() && !bPreviousProfileWasCustom)
+		{
+			RollbackPayload->SetStringField(TEXT("collisionProfile"), PreviousProfileName.ToString());
+		}
+		if (bSetEnabled || !Profile.IsEmpty())
+		{
+			RollbackPayload->SetStringField(TEXT("collisionEnabled"), EnabledToString(First->GetCollisionEnabled()));
+		}
+		if ((bSetObjectType || !Profile.IsEmpty()) && ChannelEnum)
+		{
+			RollbackPayload->SetStringField(TEXT("objectType"),
+				ChannelEnum->GetNameStringByValue((int64)First->GetCollisionObjectType()));
+		}
+
+		if (bWritesEveryResponse || ChannelResponses.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> PreviousResponses = MakeShared<FJsonObject>();
+			if (bWritesEveryResponse && ChannelEnum)
+			{
+				for (int32 Index = 0; Index < ChannelEnum->NumEnums(); ++Index)
+				{
+					const int64 Value = ChannelEnum->GetValueByIndex(Index);
+					if (Value < 0 || Value >= (int64)ECC_MAX) continue;
+					const FString ChannelName = ChannelEnum->GetNameStringByIndex(Index);
+					if (ChannelName.IsEmpty() || ChannelName.EndsWith(TEXT("_MAX"))) continue;
+					PreviousResponses->SetStringField(ChannelName,
+						ResponseToString(First->GetCollisionResponseToChannel((ECollisionChannel)Value)));
+				}
+			}
+			// Named channels last, so an explicit entry wins over the sweep
+			// above when both apply. They agree, but the order makes that
+			// independent of enum iteration.
+			for (const TPair<ECollisionChannel, ECollisionResponse>& CR : ChannelResponses)
+			{
+				const FString ChannelName = ChannelEnum
+					? ChannelEnum->GetNameStringByValue((int64)CR.Key) : FString();
+				if (ChannelName.IsEmpty()) continue;
+				PreviousResponses->SetStringField(ChannelName,
+					ResponseToString(First->GetCollisionResponseToChannel(CR.Key)));
+			}
+			if (PreviousResponses->Values.Num() > 0)
+			{
+				RollbackPayload->SetObjectField(TEXT("responses"), PreviousResponses);
+			}
+			bCapturedEveryResponse = bWritesEveryResponse;
+		}
+
+		// The whole collision state of the first target as one comparable
+		// string, so the idempotency marker below reports a real before/after
+		// rather than "the caller asked for something".
+		PreviousStateDigest = DescribeCollisionState(First);
+	}
+
 	TArray<FString> Applied;
 	for (UPrimitiveComponent* Prim : Targets)
 	{
@@ -469,13 +696,71 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollision(const TSharedPtr<FJsonObje
 		SaveAssetPackage(Blueprint);
 	}
 
+	// Read the same digest back off the same component. A call that wrote the
+	// settings the component already had moved nothing, and saying so is what
+	// keeps a replayed flow step from reading as an edit.
+	const bool bChanged = DescribeCollisionState(Targets[0]) != PreviousStateDigest;
+
 	auto Result = MCPSuccess();
-	MCPSetUpdated(Result);
+	if (bChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), !bChanged);
 	Result->SetStringField(TEXT("target"), TargetDesc);
 	Result->SetNumberField(TEXT("componentsModified"), Targets.Num());
 	TArray<TSharedPtr<FJsonValue>> AppliedArr;
 	for (const FString& A : Applied) AppliedArr.Add(MakeShared<FJsonValueString>(A));
 	Result->SetArrayField(TEXT("applied"), AppliedArr);
+
+	if (!bChanged)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The component already held every setting this call wrote, so nothing changed and there is nothing "
+				 "to undo."));
+		return MCPResult(Result);
+	}
+
+	// The inverse is this same action carrying the settings that were there,
+	// addressed at the same target. The selector is echoed exactly as it came
+	// in, so a Blueprint template edit rolls back on the template and a placed
+	// actor rolls back on the actor.
+	if (Blueprint)
+	{
+		RollbackPayload->SetStringField(TEXT("assetPath"), AssetPath);
+		RollbackPayload->SetStringField(TEXT("componentName"), ComponentName);
+	}
+	else
+	{
+		RollbackPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		if (!ComponentName.IsEmpty()) RollbackPayload->SetStringField(TEXT("componentName"), ComponentName);
+	}
+	MCPSetRollback(Result, TEXT("set_collision"), RollbackPayload);
+	Result->SetBoolField(TEXT("rollbackCarriesEveryResponse"), bCapturedEveryResponse);
+	Result->SetBoolField(TEXT("previousProfileWasCustom"), bPreviousProfileWasCustom);
+
+	// Two independent ways this can fall short of exact, reported separately
+	// rather than folded into one flag.
+	const bool bLossy = Targets.Num() > 1 || bPreviousProfileWasCustom;
+	Result->SetBoolField(TEXT("rollbackLossy"), bLossy);
+	if (bLossy)
+	{
+		FString Note;
+		if (Targets.Num() > 1)
+		{
+			Note += FString::Printf(
+				TEXT("The record carries the settings read from the FIRST of %d component(s) written. Components that "
+					 "differed from each other before this call all come back with that one's values. Name a single "
+					 "'componentName' to get an exact inverse. "),
+				Targets.Num());
+		}
+		if (bPreviousProfileWasCustom)
+		{
+			Note += TEXT("The component's profile NAME was the 'Custom' sentinel, which names no profile the engine "
+						 "can look up, so no collisionProfile is carried. Its behaviour is restored in full from the "
+						 "collision mode, object type and the complete per-channel response table, and the profile "
+						 "reads as Custom again afterwards.");
+		}
+		Result->SetStringField(TEXT("rollbackNote"), Note.TrimEnd());
+	}
 	return MCPResult(Result);
 }
 
@@ -590,17 +875,46 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 	if (ComponentsModified == 0)
 	{
 		Result->SetStringField(TEXT("warning"), TEXT("No PrimitiveComponents with BodyInstance found on actor"));
+		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The actor has no PrimitiveComponent with a BodyInstance, so nothing was written and there is "
+				 "nothing to undo."));
 	}
 	else if (PropertiesSet.Num() > 0)
 	{
 		MCPSetUpdated(Result);
-		MCPSetRollback(Result, TEXT("set_body_properties"), PrevPayload);
+		Result->SetBoolField(TEXT("unchanged"), false);
+		// The inverse is this same action carrying the values that were there,
+		// under the REGISTERED method name - gameplay(set_physics_properties).
+		// The payload's mass/linearDamping/angularDamping/enableGravity are that
+		// handler's own parameter names, and only the ones this call was asked
+		// to write are in it.
+		PrevPayload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+		MCPSetRollback(Result, TEXT("set_physics_properties"), PrevPayload);
+		// The previous values are read from the FIRST component with a body, and
+		// every one of them is written, so components that differed all come back
+		// with that one's numbers.
+		Result->SetBoolField(TEXT("rollbackLossy"), ComponentsModified > 1);
+		if (ComponentsModified > 1)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("The record carries the values read from the FIRST of %d component body(s) written. Components "
+					 "that differed from each other before this call all come back with that one's values."),
+				ComponentsModified));
+		}
 	}
 	else
 	{
 		// No properties were actually requested
 		MCPSetExisted(Result);
 		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("None of mass, linearDamping, angularDamping or enableGravity was passed, so nothing was written "
+				 "and there is nothing to undo."));
 	}
 
 	return MCPResult(Result);
@@ -660,6 +974,11 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::AddImpulse(const TSharedPtr<FJsonObject
 	const FString BoneName = OptionalString(Params, TEXT("boneName"));
 	const FName Bone = BoneName.IsEmpty() ? NAME_None : FName(*BoneName);
 
+	// Read before the push, so the response can report a MEASURED effect rather
+	// than the request that was made.
+	const FVector VelocityBefore = Prim->GetPhysicsLinearVelocity();
+	const FVector AngularBefore = Prim->GetPhysicsAngularVelocityInDegrees();
+
 	const TSharedPtr<FJsonObject>* AtLoc = nullptr;
 	if (Params->TryGetObjectField(TEXT("location"), AtLoc) && AtLoc)
 	{
@@ -681,6 +1000,43 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::AddImpulse(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("component"), Prim->GetName());
 	Result->SetStringField(TEXT("mode"), Mode);
 	Result->SetObjectField(TEXT("vector"), MCPVec3ToJsonObject(Vec));
-	Result->SetObjectField(TEXT("linearVelocity"), MCPVec3ToJsonObject(Prim->GetPhysicsLinearVelocity()));
+	const FVector VelocityAfter = Prim->GetPhysicsLinearVelocity();
+	const FVector AngularAfter = Prim->GetPhysicsAngularVelocityInDegrees();
+	Result->SetObjectField(TEXT("linearVelocity"), MCPVec3ToJsonObject(VelocityAfter));
+	Result->SetObjectField(TEXT("previousLinearVelocity"), MCPVec3ToJsonObject(VelocityBefore));
+	Result->SetObjectField(TEXT("angularVelocity"), MCPVec3ToJsonObject(AngularAfter));
+	Result->SetObjectField(TEXT("previousAngularVelocity"), MCPVec3ToJsonObject(AngularBefore));
+
+	// The idempotency marker is MEASURED, not asserted: the body's linear and
+	// angular velocity are read either side of the push. A force in 'force'
+	// mode is integrated over the next substep rather than immediately, and a
+	// vector the solver rejects as below its own threshold moves nothing, so
+	// both legitimately report unchanged. What this does NOT claim is that
+	// repeating the call is safe: two impulses are two impulses, which is why
+	// there is no already* flag and why the note below says so.
+	const bool bMotionChanged =
+		!VelocityAfter.Equals(VelocityBefore, UE_KINDA_SMALL_NUMBER)
+		|| !AngularAfter.Equals(AngularBefore, UE_KINDA_SMALL_NUMBER);
+	Result->SetBoolField(TEXT("unchanged"), !bMotionChanged);
+	if (!bMotionChanged)
+	{
+		Result->SetStringField(TEXT("unchangedNote"),
+			TEXT("Neither the linear nor the angular velocity moved. In 'force' mode that is expected: a force is "
+				 "integrated over the next physics substep rather than applied instantly, so sample the motion with "
+				 "level(read_actor_motion) instead of reading it back here. In 'impulse' mode it means the solver "
+				 "absorbed the vector - check that it is large enough for the body's mass."));
+	}
+
+	// No inverse. This injects a one-shot push into a simulating body. The
+	// solver has already integrated it, so the body has moved and collided; an
+	// equal and opposite impulse cancels the velocity it added but restores
+	// neither the position the body would have had nor anything it hit on the
+	// way. Two calls are two impulses, not a repeated state change, so nothing
+	// here is an already* flag.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("An impulse is applied to a live physics body and the solver integrates it immediately. There is no call "
+			 "that un-applies one: an equal and opposite impulse cancels the velocity but not the motion that already "
+			 "happened. Read the actor's transform before the impulse if it has to be put back."));
 	return MCPResult(Result);
 }

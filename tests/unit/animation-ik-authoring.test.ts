@@ -17,7 +17,12 @@ describe("animation IK and retarget authoring", () => {
 
   it("validates typed IK and retarget payloads", () => {
     expect(animationTool.schema.autoSetup.safeParse("full_body").success).toBe(true);
-    expect(animationTool.schema.autoSetup.safeParse("reflection").success).toBe(false);
+    // configure_ik_rig refuses an unknown pass and names both it takes. The MCP
+    // SDK validates arguments before the tool callback runs, so a strict enum
+    // here would replace that message with a transport schema dump.
+    expect(animationTool.schema.autoSetup.safeParse("reflection").success).toBe(true);
+    expect(animationTool.schema.autoSetup.description).toContain("retarget");
+    expect(animationTool.schema.autoSetup.description).toContain("full_body");
     expect(animationTool.schema.fullBodyIK.safeParse({
       rootBone: "pelvis",
       goals: [{

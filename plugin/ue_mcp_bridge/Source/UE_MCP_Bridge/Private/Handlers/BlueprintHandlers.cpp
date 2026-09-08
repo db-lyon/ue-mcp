@@ -2,6 +2,7 @@
 #include "BlueprintHandlers_Internal.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 #include "HandlerJsonProperty.h"
 #include "JsonSerializer.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -165,6 +166,37 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 
 	// #945: project-wide call-site audit (BlueprintHandlers_Search.cpp).
 	Registry.RegisterHandlerWithTimeout(TEXT("search_blueprint_call_sites"), &SearchCallSites, SearchCallSitesTimeoutSeconds);
+
+	// V9 Blueprint depth (BlueprintHandlers_Depth.cpp). Interface removal and
+	// listing, function flags and metadata, parameter CRUD across functions,
+	// macros, dispatcher signatures and custom events, member and local
+	// variable rename plus metadata, dispatcher removal, custom events with a
+	// typed signature, and macro authoring.
+	Registry.RegisterHandler(TEXT("list_blueprint_interfaces"), &ListBlueprintInterfaces);
+	Registry.RegisterHandler(TEXT("remove_blueprint_interface"), &RemoveBlueprintInterface);
+	Registry.RegisterHandler(TEXT("set_function_properties"), &SetFunctionProperties);
+	Registry.RegisterHandler(TEXT("list_graph_parameters"), &ListGraphParameters);
+	Registry.RegisterHandler(TEXT("edit_graph_parameters"), &EditGraphParameters);
+	Registry.RegisterHandler(TEXT("rename_blueprint_variable"), &RenameBlueprintVariable);
+	Registry.RegisterHandler(TEXT("get_blueprint_variable_metadata"), &GetBlueprintVariableMetadata);
+	Registry.RegisterHandler(TEXT("set_blueprint_variable_metadata"), &SetBlueprintVariableMetadata);
+	Registry.RegisterHandler(TEXT("edit_local_variable"), &EditLocalVariable);
+	Registry.RegisterHandler(TEXT("list_event_dispatchers"), &ListEventDispatchers);
+	Registry.RegisterHandler(TEXT("remove_event_dispatcher"), &RemoveEventDispatcher);
+	Registry.RegisterHandler(TEXT("add_custom_event"), &AddCustomEvent);
+	Registry.RegisterHandler(TEXT("create_macro"), &CreateMacro);
+	Registry.RegisterHandler(TEXT("delete_macro"), &DeleteMacro);
+
+	// V14 user-type authoring (BlueprintHandlers_UserTypes.cpp). Creation and
+	// the coarse entry CRUD stay on the asset category; these cover ordering,
+	// entry and field metadata, field defaults, and the whole-definition read.
+	Registry.RegisterHandler(TEXT("read_user_defined_enum"), &ReadUserDefinedEnum);
+	Registry.RegisterHandler(TEXT("reorder_enum_values"), &ReorderEnumValues);
+	Registry.RegisterHandler(TEXT("set_enum_metadata"), &SetEnumMetadata);
+	Registry.RegisterHandler(TEXT("read_user_defined_struct"), &ReadUserDefinedStruct);
+	Registry.RegisterHandler(TEXT("set_struct_field_default"), &SetStructFieldDefault);
+	Registry.RegisterHandler(TEXT("reorder_struct_fields"), &ReorderStructFields);
+	Registry.RegisterHandler(TEXT("edit_struct_metadata"), &EditStructMetadata);
 }
 
 // ---------------------------------------------------------------------------
@@ -1429,6 +1461,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("path"), AssetPath);
+		// delete_variable reads the variable name from `name`. The `variableName`
+		// key below is what this handler REPORTS, and a payload carrying only
+		// that spelling made the inverse fail its own required-parameter check
+		// every time a flow tried to replay it.
+		Payload->SetStringField(TEXT("name"), VarName);
 		Payload->SetStringField(TEXT("variableName"), VarName);
 		MCPSetRollback(Result, TEXT("delete_variable"), Payload);
 
@@ -1620,6 +1657,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprint(const TSharedPtr<FJs
 		return BlueprintNotFoundError(AssetPath);
 	}
 
+	// Asked before the compile, because afterwards every Blueprint reads as up
+	// to date. BS_UpToDateWithWarnings is a DISTINCT status from BS_UpToDate,
+	// so a Blueprint that compiles clean with warnings has to be counted here
+	// too or it reports itself stale forever.
+	const bool bWasUpToDate =
+		Blueprint->Status == EBlueprintStatus::BS_UpToDate
+		|| Blueprint->Status == EBlueprintStatus::BS_UpToDateWithWarnings;
+
 	// #703: capture the compiler log and report real status instead of always
 	// returning success. Mirrors the batch compile_blueprints path.
 	FCompilerResultsLog CompileLog;
@@ -1643,6 +1688,36 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprint(const TSharedPtr<FJs
 	Result->SetNumberField(TEXT("errors"), CompileLog.NumErrors);
 	Result->SetNumberField(TEXT("warnings"), CompileLog.NumWarnings);
 	Result->SetArrayField(TEXT("messages"), Messages);
+
+	// No no-op flag is reported here, and the earlier draft that reported one
+	// was wrong. FKismetEditorUtilities::CompileBlueprint rebuilds the generated
+	// class and reinstances every live object of it on every call, whatever the
+	// Blueprint's status was: there is no path through it that does nothing.
+	// `wasUpToDate` is the honest fact - what the status said on the way in -
+	// and it is not a claim that this call did no work.
+	Result->SetBoolField(TEXT("wasUpToDate"), bWasUpToDate);
+	Result->SetBoolField(TEXT("idempotent"), false);
+	// The two questions a caller has are different and both get an answer.
+	// `idempotent` is about the work: a compile always rebuilds the generated
+	// class and reinstances its objects, so calling twice does real work twice.
+	// `changed` is about the outcome: a Blueprint that came in up to date and
+	// compiled clean ends where it started, so a retry after a timeout learns
+	// that its second call moved nothing even though it was not free.
+	Result->SetBoolField(TEXT("changed"), !bWasUpToDate || !bCompiled);
+	Result->SetStringField(TEXT("idempotencyNote"),
+		TEXT("A compile always rebuilds the generated class and reinstances its objects, so calling twice does real "
+		     "work twice and there is no 'already compiled' short circuit to report. wasUpToDate says what the "
+		     "Blueprint's status was before this ran, and changed says whether that status moved; neither claims the "
+		     "call itself was free."));
+
+	// A compile has no inverse. It rebuilds the generated class from the graphs
+	// that are already saved; there is no call that un-compiles a Blueprint, and
+	// the previous generated class is not kept anywhere to restore from.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Compiling rebuilds the generated class from graphs that were already saved. There is no inverse action: "
+		     "nothing un-compiles a Blueprint, and the pre-compile generated class is not retained to restore from. "
+		     "Undo the graph edits that made the compile necessary instead."));
 	return MCPResult(Result);
 }
 
@@ -1730,6 +1805,10 @@ namespace MCPNodeSearch
 	{
 		int32 Score = 0;
 		FString SortName;
+		// The row's stable identity for paging: the function's or node class's
+		// full object path. Two classes can each declare a Cast function, and a
+		// page boundary has to name exactly one of them.
+		FString Id;
 		TSharedPtr<FJsonObject> Entry;
 	};
 }
@@ -1756,7 +1835,6 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchNodeTypes(const TSharedPtr<FJso
 		if (!NormToken.IsEmpty()) NormTokens.Add(NormToken);
 	}
 
-	const int32 Limit = FMath::Clamp(OptionalInt(Params, TEXT("limit"), 50), 1, 500);
 	const bool bIncludeGraphNodes = OptionalBool(Params, TEXT("includeGraphNodes"), true);
 
 	// Optional narrowing to one owning class, by short name or object path.
@@ -1774,6 +1852,19 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchNodeTypes(const TSharedPtr<FJso
 		{
 			return MCPError(FString::Printf(TEXT("Class not found: %s"), *ClassFilter));
 		}
+	}
+
+	// T3: paged. This used to score every match, return the top `limit` and set
+	// `truncated`, which told a caller there was more without giving it any way
+	// to read the rest. The whole ranked list is enumerated and paged instead.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("search_node_types|query=%s|className=%s|includeGraphNodes=%d"),
+				*Query, *ClassFilter, bIncludeGraphNodes ? 1 : 0),
+			/*DefaultLimit*/ 50, /*MaxLimit*/ 500, Page))
+	{
+		return Err;
 	}
 
 	static const FName NAME_KeywordsMeta(TEXT("Keywords"));
@@ -1874,7 +1965,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchNodeTypes(const TSharedPtr<FJso
 			AddNodeCall->SetObjectField(TEXT("nodeParams"), NodeParams);
 			Entry->SetObjectField(TEXT("addNode"), AddNodeCall);
 
-			Hits.Add(FHit{ Score, FuncName, Entry });
+			Hits.Add(FHit{ Score, FuncName, Func->GetPathName(), Entry });
 		}
 	}
 
@@ -1910,30 +2001,33 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchNodeTypes(const TSharedPtr<FJso
 			AddNodeCall->SetStringField(TEXT("nodeClass"), ClassName);
 			Entry->SetObjectField(TEXT("addNode"), AddNodeCall);
 
-			Hits.Add(FHit{ Score, ClassName, Entry });
+			Hits.Add(FHit{ Score, ClassName, NodeClass->GetPathName(), Entry });
 		}
 	}
 
+	// TObjectIterator walks the object hash, whose order is not a contract, so
+	// the ranking is completed by the object path: without that last tiebreak
+	// two functions of the same name and score can swap places between two
+	// calls, and a page anchor cannot resume into a sequence that reshuffles.
 	Hits.Sort([](const FHit& A, const FHit& B)
 	{
 		if (A.Score != B.Score) return A.Score > B.Score;
 		if (A.SortName.Len() != B.SortName.Len()) return A.SortName.Len() < B.SortName.Len();
-		return A.SortName < B.SortName;
+		if (A.SortName != B.SortName) return A.SortName < B.SortName;
+		return A.Id < B.Id;
 	});
 
-	const int32 TotalMatches = Hits.Num();
-	TArray<TSharedPtr<FJsonValue>> MatchingTypes;
-	for (int32 Index = 0; Index < FMath::Min(TotalMatches, Limit); ++Index)
+	TArray<MCPPagination::FPageRow> Rows;
+	Rows.Reserve(Hits.Num());
+	for (const FHit& Hit : Hits)
 	{
-		MatchingTypes.Add(MakeShared<FJsonValueObject>(Hits[Index].Entry));
+		Rows.Add({ Hit.Id, MakeShared<FJsonValueObject>(Hit.Entry) });
 	}
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("query"), Query);
-	Result->SetArrayField(TEXT("results"), MatchingTypes);
-	Result->SetNumberField(TEXT("count"), MatchingTypes.Num());
-	Result->SetNumberField(TEXT("totalMatches"), TotalMatches);
-	Result->SetBoolField(TEXT("truncated"), TotalMatches > MatchingTypes.Num());
+	Result->SetNumberField(TEXT("totalMatches"), Hits.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("results"), Result);
 	return MCPResult(Result);
 }
 
@@ -1941,7 +2035,18 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListNodeTypes(const TSharedPtr<FJsonO
 {
 	FString Category = OptionalString(Params, TEXT("category"), TEXT("Utilities"));
 
-	TArray<TSharedPtr<FJsonValue>> NodeTypes;
+	// T3: paged. KismetMathLibrary alone declares several hundred callable
+	// functions, so the default category returns a list no caller reads whole.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_node_types|category=%s"), *Category),
+			/*DefaultLimit*/ 100, /*MaxLimit*/ 1000, Page))
+	{
+		return Err;
+	}
+
+	TArray<MCPPagination::FPageRow> Rows;
 	FString LowerCategory = Category.ToLower();
 
 	// Map categories to relevant classes and function sets
@@ -1975,6 +2080,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListNodeTypes(const TSharedPtr<FJsonO
 		ClassesToSearch.Add(UGameplayStatics::StaticClass());
 	}
 
+	// TFieldIterator here includes inherited functions, and the default
+	// category searches three classes that share a base, so one function can be
+	// reached twice. A page anchor has to name exactly one row, so the second
+	// sighting is dropped rather than emitted as a duplicate.
+	TSet<FString> SeenFunctionPaths;
 	for (UClass* SearchClass : ClassesToSearch)
 	{
 		if (!SearchClass) continue;
@@ -1983,18 +2093,31 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListNodeTypes(const TSharedPtr<FJsonO
 			UFunction* Func = *FuncIt;
 			if (!Func) continue;
 			if (!Func->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure)) continue;
+			bool bAlreadySeen = false;
+			SeenFunctionPaths.Add(Func->GetPathName(), &bAlreadySeen);
+			if (bAlreadySeen) continue;
 
 			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
 			Entry->SetStringField(TEXT("name"), Func->GetName());
 			Entry->SetStringField(TEXT("class"), SearchClass->GetName());
-			NodeTypes.Add(MakeShared<FJsonValueObject>(Entry));
+			Entry->SetStringField(TEXT("fullPath"), Func->GetPathName());
+			// The function's object path is the page anchor: it names the
+			// declaring class as well as the function, and TFieldIterator can
+			// reach the same name through two of the classes searched.
+			Rows.Add({ Func->GetPathName(), MakeShared<FJsonValueObject>(Entry) });
 		}
 	}
 
+	// TFieldIterator walks a class's field list, whose order is not a contract
+	// and which recompiles differently for a Blueprint-declared class, so the
+	// rows are sorted before paging. The path sorts by declaring class first,
+	// which keeps the old grouping.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
+
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("category"), Category);
-	Result->SetArrayField(TEXT("nodeTypes"), NodeTypes);
-	Result->SetNumberField(TEXT("count"), NodeTypes.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("nodeTypes"), Result);
 	return MCPResult(Result);
 }
 
@@ -2205,13 +2328,25 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintVariables(const TSharedP
 	// verification loop asks for the values it needs.
 	const bool bIncludeValues = OptionalBool(Params, TEXT("includeValues"), false);
 
+	// T3: paged. A Blueprint carrying a hundred variables with includeValues on
+	// is one of the largest reads on this category.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_blueprint_variables|path=%s|includeValues=%d"),
+				*AssetPath, bIncludeValues ? 1 : 0),
+			/*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
+
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
 	{
 		return BlueprintNotFoundError(AssetPath);
 	}
 
-	TArray<TSharedPtr<FJsonValue>> Variables;
+	TArray<MCPPagination::FPageRow> Rows;
 	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
 	{
 		TSharedPtr<FJsonObject> VarObj = MakeShared<FJsonObject>();
@@ -2288,14 +2423,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintVariables(const TSharedP
 			}
 		}
 
-		Variables.Add(MakeShared<FJsonValueObject>(VarObj));
+		// The variable NAME is the page anchor. NewVariables is authored order,
+		// which carries meaning in the details panel, so the rows are
+		// deliberately not sorted; a name is unique within that array and a
+		// reorder is exactly the change the anchor is there to report.
+		Rows.Add({ Var.VarName.ToString(), MakeShared<FJsonValueObject>(VarObj) });
 	}
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AssetPath);
 	AnnotateResolvedBlueprint(Result, Blueprint);
-	Result->SetArrayField(TEXT("variables"), Variables);
-	Result->SetNumberField(TEXT("count"), Variables.Num());
+	MCPPagination::EmitPage(Page, Rows, TEXT("variables"), Result);
 	if (bIncludeValues)
 	{
 		// Persistence is a property of the package, not of any one variable, so
@@ -2347,6 +2485,75 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		return MCPResult(Noop);
 	}
 
+	// Read the identity the inverse needs BEFORE the node is destroyed: which
+	// class to re-add, under which SCS parent, and how much of the node the
+	// re-add cannot bring back.
+	const FString RemovedClassPath = TargetNode->ComponentTemplate->GetClass()->GetPathName();
+	const FString RemovedVariableName = TargetNode->GetVariableName().ToString();
+	const int32 RemovedChildCount = TargetNode->GetChildNodes().Num();
+	FString RemovedParentName;
+	bool bParentAddressable = false;
+	bool bParentIsNative = false;
+
+	// FindParentNode only ever answers with another USCS_Node, and the ordinary
+	// case does not have one. A component attached under a NATIVE inherited
+	// component - anything under a Character's Mesh or CapsuleComponent - is
+	// itself an SCS ROOT that records its parent in bIsParentComponentNative
+	// plus ParentComponentOrVariableName, so FindParentNode returns nullptr and
+	// the previous parent looked like "there wasn't one". The rollback then put
+	// the component back at the root under a different parent and said nothing,
+	// which is the silent wrong-parent restore this whole check exists to stop.
+	if (TargetNode->bIsParentComponentNative && !TargetNode->ParentComponentOrVariableName.IsNone())
+	{
+		RemovedParentName = TargetNode->ParentComponentOrVariableName.ToString();
+		bParentIsNative = true;
+		// Deliberately NOT addressable. add_component matches parentComponent
+		// against subobject OBJECT names, and a native component's object name
+		// is not its variable name (a Character's "Mesh" is "CharacterMesh0"),
+		// so the name recorded here would either miss and fall back to the root
+		// or prefix-match something unrelated. Saying so beats guessing.
+	}
+	else if (USCS_Node* ParentNode = SCS->FindParentNode(TargetNode))
+	{
+		RemovedParentName = ParentNode->GetVariableName().ToString();
+
+		// add_component does not resolve parentComponent against the SCS
+		// variable name. It walks the subobject handles and takes the FIRST
+		// object whose name equals the string or merely STARTS WITH it, and
+		// falls back to the actor root when nothing matches. A parent named
+		// "Mesh" therefore prefix-matches a sibling's "Mesh2_GEN_VARIABLE", and
+		// a rollback built on that would succeed while silently reparenting the
+		// component under the wrong node. So the name is tested here, against
+		// the same handle set and the same rule add_component will apply, and
+		// it is only sent when it selects the intended template and nothing
+		// else.
+		if (USubobjectDataSubsystem* ParentProbe = GEngine->GetEngineSubsystem<USubobjectDataSubsystem>())
+		{
+			TArray<FSubobjectDataHandle> ProbeHandles;
+			ParentProbe->K2_GatherSubobjectDataForBlueprint(Blueprint, ProbeHandles);
+			const UObject* ParentTemplate = ParentNode->ComponentTemplate;
+			int32 NameMatches = 0;
+			bool bFirstMatchIsParent = false;
+			for (const FSubobjectDataHandle& ProbeHandle : ProbeHandles)
+			{
+				const FSubobjectData* ProbeData = ProbeHandle.GetData();
+				if (!ProbeData) continue;
+				UObject* ProbeObject = const_cast<UObject*>(ProbeData->GetObject());
+				if (!ProbeObject) continue;
+				const FString ProbeName = ProbeObject->GetName();
+				if (ProbeName == RemovedParentName || ProbeName.StartsWith(RemovedParentName))
+				{
+					if (NameMatches == 0)
+					{
+						bFirstMatchIsParent = (ProbeObject == ParentTemplate);
+					}
+					++NameMatches;
+				}
+			}
+			bParentAddressable = (NameMatches == 1 && bFirstMatchIsParent);
+		}
+	}
+
 	// Remove via SubobjectDataSubsystem if available
 	bool bRemoved = false;
 	if (USubobjectDataSubsystem* Subsystem = GEngine->GetEngineSubsystem<USubobjectDataSubsystem>())
@@ -2386,7 +2593,57 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveComponent(const TSharedPtr<FJso
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("componentName"), ComponentName);
 		Result->SetBoolField(TEXT("deleted"), true);
-		// No rollback: component removal is not reversible by default.
+
+		// The inverse is add_component, which re-adds a component of the same
+		// class under the same SCS parent with the same variable name. What it
+		// cannot do is restore the template's property values, so this rollback
+		// is lossy and says so.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("path"), AssetPath);
+		Payload->SetStringField(TEXT("componentClass"), RemovedClassPath);
+		Payload->SetStringField(TEXT("componentName"), RemovedVariableName);
+		if (bParentAddressable)
+		{
+			Payload->SetStringField(TEXT("parentComponent"), RemovedParentName);
+		}
+		MCPSetRollback(Result, TEXT("add_component"), Payload);
+		Result->SetStringField(TEXT("previousParent"), RemovedParentName);
+		Result->SetBoolField(TEXT("previousParentAddressable"), bParentAddressable);
+		Result->SetBoolField(TEXT("previousParentIsNative"), bParentIsNative);
+		Result->SetBoolField(TEXT("hadParent"), !RemovedParentName.IsEmpty());
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+
+		FString LossyNote = FString::Printf(TEXT(
+			"add_component re-adds a default-constructed '%s' named '%s'. Every property override on the removed "
+			"template is gone, and any Blueprint node that referenced the component is not restored by re-adding it."),
+			*RemovedClassPath, *RemovedVariableName);
+		if (RemovedChildCount > 0)
+		{
+			LossyNote += FString::Printf(TEXT(
+				" The %d component(s) parented under it went with it: the inverse restores one component, not the "
+				"subtree."),
+				RemovedChildCount);
+		}
+		if (bParentIsNative)
+		{
+			LossyNote += FString::Printf(TEXT(
+				" It was attached under the NATIVE inherited component '%s' and comes back at the SCS root instead. "
+				"add_component resolves parentComponent against subobject object names, which for a native "
+				"component is not its variable name, so no parent is sent rather than one that would land it "
+				"somewhere else. reparent_component cannot put it back either - that action only resolves SCS "
+				"nodes - so re-attaching to '%s' has to be done in the editor."),
+				*RemovedParentName, *RemovedParentName);
+		}
+		else if (!RemovedParentName.IsEmpty() && !bParentAddressable)
+		{
+			LossyNote += FString::Printf(TEXT(
+				" It also comes back at the SCS ROOT rather than under '%s': add_component matches parentComponent "
+				"by name prefix against the component templates and that name does not select this one uniquely, so "
+				"sending it would have reparented under a sibling instead. Follow the rollback with "
+				"reparent_component to put it back."),
+				*RemovedParentName);
+		}
+		Result->SetStringField(TEXT("rollbackNote"), LossyNote);
 		return MCPResult(Result);
 	}
 	else
@@ -2414,11 +2671,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 	}
 
 	bool bFound = false;
+	FEdGraphPinType RemovedType;
 	for (const FBPVariableDescription& Var : Blueprint->NewVariables)
 	{
 		if (Var.VarName.ToString() == VarName)
 		{
 			bFound = true;
+			RemovedType = Var.VarType;
 			break;
 		}
 	}
@@ -2443,7 +2702,55 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("variableName"), VarName);
 	Result->SetBoolField(TEXT("deleted"), true);
-	// No rollback: variable deletion is not reversible by default.
+
+	// The inverse is add_variable, which re-declares the variable with the same
+	// name and type. It is offered only when the type survives the round trip
+	// through add_variable's own vocabulary: that param goes through MakePinType,
+	// which reads scalars, so a container variable has no spelling to hand back
+	// and a rollback naming one would fail on replay.
+	bool bTypeRoundTrips = true;
+	const FString RemovedTypeSpec = PinTypeSpec(RemovedType, bTypeRoundTrips);
+	const bool bScalar = RemovedType.ContainerType == EPinContainerType::None;
+	if (bTypeRoundTrips && bScalar)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("path"), AssetPath);
+		Payload->SetStringField(TEXT("name"), VarName);
+		Payload->SetStringField(TEXT("type"), RemovedTypeSpec);
+		MCPSetRollback(Result, TEXT("add_variable"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+
+		FString VarLossyNote = FString::Printf(TEXT(
+			"add_variable re-declares '%s' as %s and nothing else. The default value, category, tooltip, "
+			"instance-editable and replication flags are gone, and RemoveMemberVariable already deleted every get "
+			"and set node that referenced the variable: re-declaring it does not put those nodes back."),
+			*VarName, *RemovedTypeSpec);
+
+		// "float" is not a round trip. PinTypeSpec spells both PC_Float and a
+		// float-subcategoried PC_Real as "float", and MakePinType turns "float"
+		// into PC_Real with the DOUBLE subcategory, which is what the editor
+		// gives you for a Float variable in UE5. The width differs from what was
+		// deleted, so it is named rather than left for the caller to discover.
+		const bool bWasNarrowFloat =
+			RemovedType.PinCategory == UEdGraphSchema_K2::PC_Float
+			|| (RemovedType.PinCategory == UEdGraphSchema_K2::PC_Real
+				&& RemovedType.PinSubCategory == UEdGraphSchema_K2::PC_Float);
+		if (bWasNarrowFloat)
+		{
+			VarLossyNote += TEXT(
+				" The variable was a single-precision float and comes back as the double-precision Real that "
+				"add_variable's 'float' maps to, so anything binding to its exact pin type has to be rewired.");
+		}
+		Result->SetStringField(TEXT("rollbackNote"), VarLossyNote);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(TEXT(
+			"No rollback offered: the deleted variable's type is '%s', which add_variable's 'type' parameter cannot "
+			"express, so the inverse would fail on replay rather than restore anything."),
+			*RemovedTypeSpec));
+	}
 	return MCPResult(Result);
 }
 TSharedPtr<FJsonValue> FBlueprintHandlers::DuplicateBlueprint(const TSharedPtr<FJsonObject>& Params)
@@ -2545,7 +2852,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddLocalVariable(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("path"), AssetPath);
 	Result->SetStringField(TEXT("functionName"), FunctionName);
 	Result->SetStringField(TEXT("name"), VarName);
-	// No rollback: no paired remove_local_variable handler yet.
+
+	// edit_local_variable op=remove is the paired remove this handler used to
+	// say it did not have. It drops the declaration from the same function
+	// entry node this call added it to, and is itself idempotent.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("assetPath"), AssetPath);
+	Payload->SetStringField(TEXT("functionName"), FunctionName);
+	Payload->SetStringField(TEXT("name"), VarName);
+	Payload->SetStringField(TEXT("op"), TEXT("remove"));
+	MCPSetRollback(Result, TEXT("edit_local_variable"), Payload);
 	return MCPResult(Result);
 }
 
@@ -2648,6 +2964,23 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentComponent(const TSharedPtr<FJ
 	if (!Child) return MCPError(FString::Printf(TEXT("Component not found: %s"), *ComponentName));
 	if (!Parent) return MCPError(FString::Printf(TEXT("Parent not found: %s"), *NewParent));
 
+	// Where it hung before, which is both the idempotency answer and the exact
+	// inverse. An SCS root node has no parent name to hand back, and newParent
+	// is required, so that case gets no rollback rather than a guessed one.
+	USCS_Node* PreviousParent = SCS->FindParentNode(Child);
+	const FString PreviousParentName = PreviousParent ? PreviousParent->GetVariableName().ToString() : FString();
+
+	if (PreviousParent == Parent)
+	{
+		auto NoOp = MCPSuccess();
+		MCPSetExisted(NoOp);
+		NoOp->SetBoolField(TEXT("unchanged"), true);
+		NoOp->SetStringField(TEXT("path"), AssetPath);
+		NoOp->SetStringField(TEXT("componentName"), ComponentName);
+		NoOp->SetStringField(TEXT("newParent"), NewParent);
+		return MCPResult(NoOp);
+	}
+
 	SCS->RemoveNode(Child);
 	Parent->AddChildNode(Child);
 
@@ -2660,7 +2993,29 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentComponent(const TSharedPtr<FJ
 	MCPSetUpdated(Result);
 	Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetStringField(TEXT("newParent"), NewParent);
+	if (!PreviousParentName.IsEmpty())
+	{
+		Result->SetStringField(TEXT("previousParent"), PreviousParentName);
+	}
 	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
+
+	if (!PreviousParentName.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("path"), AssetPath);
+		Payload->SetStringField(TEXT("componentName"), ComponentName);
+		Payload->SetStringField(TEXT("newParent"), PreviousParentName);
+		MCPSetRollback(Result, TEXT("reparent_component"), Payload);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(TEXT(
+			"'%s' was a root node of the SimpleConstructionScript, not a child of another component. "
+			"reparent_component requires a newParent, and there is no component name that means 'back to the root', "
+			"so no inverse is offered rather than one that would reparent it under the wrong node."),
+			*ComponentName));
+	}
 	return MCPResult(Result);
 }
 
@@ -2742,6 +3097,41 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReparentBlueprint(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("previousParent"), OldParent->GetPathName());
 	}
 	MCPNoteSaveOutcome(Result, AssetPath, bSaved, SaveReason);
+
+	// Reparenting back to the previous class restores the hierarchy. The
+	// deprecated-class check above guards NewParent only, and reparenting AWAY
+	// from a deprecated base is the ordinary migration case, so the OLD parent
+	// is tested here as well: naming a class this handler would refuse on
+	// replay is a rollback that cannot run. What the round trip does not restore
+	// is the data the first reparent dropped, so it is marked lossy.
+	const bool bOldParentReusable = OldParent
+		&& !OldParent->HasAnyClassFlags(CLASS_Deprecated | CLASS_NewerVersionExists);
+	if (bOldParentReusable)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("path"), AssetPath);
+		Payload->SetStringField(TEXT("parentClass"), OldParent->GetPathName());
+		MCPSetRollback(Result, TEXT("reparent_blueprint"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(TEXT(
+			"Reparenting back to '%s' restores the class hierarchy, not the state this reparent discarded. "
+			"CDO overrides for properties that exist only on the old parent were reset when the class was rebuilt, "
+			"and inherited component overrides and graph nodes that lost their target function stay broken."),
+			*OldParent->GetPathName()));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), OldParent
+			? FString::Printf(TEXT(
+				"The previous parent '%s' is deprecated or superseded, and this handler refuses those as a "
+				"parentClass. Naming it as the inverse would produce a rollback that errors instead of restoring "
+				"anything, so none is offered: this reparent was a migration off a dead class and is meant to stick."),
+				*OldParent->GetPathName())
+			: FString(TEXT(
+				"This Blueprint had no ParentClass to reparent back to, so there is no previous value for the "
+				"inverse to restore and none is guessed.")));
+	}
 	return MCPResult(Result);
 }
 
@@ -2760,10 +3150,18 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushInheritableComponentHandler(cons
 	UInheritableComponentHandler* ICH = Blueprint->GetInheritableComponentHandler(/*bCreateIfNecessary=*/false);
 	if (!ICH)
 	{
+		// The genuine no-op: nothing to flush, nothing touched, nothing saved.
 		auto NoIch = MCPSuccess();
+		MCPSetExisted(NoIch);
 		NoIch->SetStringField(TEXT("path"), AssetPath);
 		NoIch->SetBoolField(TEXT("hadInheritableComponentHandler"), false);
 		NoIch->SetBoolField(TEXT("flushed"), false);
+		NoIch->SetBoolField(TEXT("unchanged"), true);
+		NoIch->SetNumberField(TEXT("recordsRemoved"), 0);
+		NoIch->SetBoolField(TEXT("rollbackPossible"), false);
+		NoIch->SetStringField(TEXT("rollbackNote"),
+			TEXT("This Blueprint has no InheritableComponentHandler, so nothing was flushed and there is nothing "
+			     "to undo."));
 		return MCPResult(NoIch);
 	}
 
@@ -2779,6 +3177,32 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushInheritableComponentHandler(cons
 	};
 
 	const int32 Before = CountRecords();
+
+	// A handler with no records has nothing to validate, so the whole
+	// Modify/ValidateTemplates/compile/save sequence is skipped rather than run
+	// for its own sake. This is the difference between "unchanged" meaning the
+	// record set is the same and "unchanged" meaning the call did no work; the
+	// second is the one a replayed flow step needs, and it was not true before
+	// because the compile and the save happened either way.
+	if (Before == 0)
+	{
+		auto NoOp = MCPSuccess();
+		MCPSetExisted(NoOp);
+		NoOp->SetStringField(TEXT("path"), AssetPath);
+		NoOp->SetBoolField(TEXT("hadInheritableComponentHandler"), true);
+		NoOp->SetBoolField(TEXT("flushed"), false);
+		NoOp->SetBoolField(TEXT("isEmpty"), ICH->IsEmpty());
+		NoOp->SetNumberField(TEXT("recordsBefore"), 0);
+		NoOp->SetNumberField(TEXT("recordsAfter"), 0);
+		NoOp->SetNumberField(TEXT("recordsRemoved"), 0);
+		NoOp->SetBoolField(TEXT("unchanged"), true);
+		NoOp->SetBoolField(TEXT("rollbackPossible"), false);
+		NoOp->SetStringField(TEXT("rollbackNote"),
+			TEXT("The InheritableComponentHandler held no override records, so nothing was flushed, the Blueprint "
+			     "was not recompiled or saved, and there is nothing to undo."));
+		return MCPResult(NoOp);
+	}
+
 	Blueprint->Modify();
 	ICH->ValidateTemplates();
 	const int32 After = CountRecords();
@@ -2792,12 +3216,29 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushInheritableComponentHandler(cons
 	Result->SetBoolField(TEXT("hadInheritableComponentHandler"), true);
 	Result->SetBoolField(TEXT("flushed"), true);
 	Result->SetBoolField(TEXT("isEmpty"), ICH->IsEmpty());
+	Result->SetBoolField(TEXT("recordCountKnown"), Before >= 0);
 	if (Before >= 0)
 	{
 		Result->SetNumberField(TEXT("recordsBefore"), Before);
 		Result->SetNumberField(TEXT("recordsAfter"), After);
 		Result->SetNumberField(TEXT("recordsRemoved"), FMath::Max(0, Before - After));
+		Result->SetBoolField(TEXT("recordsUnchanged"), Before == After);
 	}
+	// Reached only when there WAS something to validate, so this call always
+	// recompiled and saved the Blueprint. `recordsUnchanged` above says whether
+	// any record was actually dropped; it does not say the call was a no-op,
+	// and the flat `unchanged` that used to sit here claimed exactly that.
+	Result->SetBoolField(TEXT("unchanged"), false);
+
+	// ValidateTemplates drops override records whose component key no longer
+	// resolves to anything. They were already dead, and no action re-creates an
+	// override for a component that does not exist, so there is nothing to undo
+	// to and none is invented.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), TEXT(
+		"This drops InheritableComponentHandler records whose component key no longer resolves, which is why the "
+		"engine considers them invalid. No action re-creates an override for a component that does not exist, and "
+		"the dropped records are not retained anywhere, so there is no inverse call."));
 	return MCPResult(Result);
 }
 
@@ -2861,8 +3302,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushComponentTemplates(const TShared
 	}
 	if (Blueprint->GeneratedClass)
 	{
+		// Through the shared helper rather than GetObjectsWithOuter directly:
+		// EGetObjectsFlags is 5.8 and later only, and the helper in
+		// HandlerUtils.h is the one place that spelling is gated.
 		TArray<UObject*> OwnedObjects;
-		GetObjectsWithOuter(Blueprint->GeneratedClass, OwnedObjects, EGetObjectsFlags::None);
+		MCPGetDirectSubobjects(Blueprint->GeneratedClass, OwnedObjects);
 		for (UObject* OwnedObject : OwnedObjects)
 		{
 			UActorComponent* Template = Cast<UActorComponent>(OwnedObject);
@@ -2938,6 +3382,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushComponentTemplates(const TShared
 		Result->SetNumberField(TEXT("recordsRemoved"), RemovedTemplates.Num());
 		Result->SetArrayField(TEXT("removedTemplates"), RemovedTemplates);
 		Result->SetBoolField(TEXT("reloadedAfterCleanup"), !OrphanTemplates.IsEmpty());
+		Result->SetBoolField(TEXT("unchanged"), false);
+		// Orphan templates are renamed into the transient package and the
+		// Blueprint's package is reloaded on top of the result. Nothing brings
+		// a transient object back, and no action re-registers a component
+		// template that no Add Component node refers to.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT(
+			"Orphan component templates are renamed into the transient package and the Blueprint package is reloaded "
+			"afterwards, so the removed templates no longer exist to restore. No action re-registers a component "
+			"template that no Add Component node refers to, and none is invented here."));
 		return MCPResult(Result);
 	}
 
@@ -2949,6 +3403,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushComponentTemplates(const TShared
 	Result->SetNumberField(TEXT("recordsRemoved"), RemovedTemplates.Num());
 	Result->SetArrayField(TEXT("removedTemplates"), RemovedTemplates);
 	Result->SetBoolField(TEXT("reloadedAfterCleanup"), false);
+	Result->SetBoolField(TEXT("unchanged"), true);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), TEXT(
+		"Nothing was flushed, so there is nothing to undo."));
 	return MCPResult(Result);
 }
 
@@ -3053,6 +3511,29 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RunConstructionScript(const TSharedPt
 	Result->SetStringField(TEXT("className"), SpawnClass->GetName());
 	Result->SetArrayField(TEXT("components"), ComponentsArr);
 	Result->SetNumberField(TEXT("componentCount"), ComponentsArr.Num());
+
+	// Nothing to undo, and the reason is worth stating rather than leaving as
+	// an absent field. This spawns one RF_Transient actor, reads the component
+	// list its construction script produced, and destroys it above before
+	// building this result. The blueprint is not touched, nothing is saved, and
+	// the probe actor does not outlive the call.
+	//
+	// It stays classified as a MUTATION even so, because the construction
+	// script is the user's own graph and it runs. A graph that spawns child
+	// actors, writes to a referenced asset or drives an editor subsystem has
+	// done that by the time this returns, and none of it is visible from here.
+	// So the routing gate keeps asking for an explicit editor, on the grounds
+	// that arbitrary user code should not run in whichever project happens to
+	// be active, and this note says the probe itself left nothing behind.
+	MCPSetNoRollback(Result, TEXT(
+		"Spawned a transient actor from the generated class, read the components its construction script "
+		"built, and destroyed it before returning. The blueprint was not modified and nothing was saved, "
+		"so there is nothing to undo. Whatever the construction script itself did while it ran is not "
+		"observable from here and is not covered by this statement."));
+	MCPSetIdempotencyUnobservable(Result, TEXT(
+		"Every call spawns a fresh probe actor and runs the construction script again, so the work is "
+		"repeated rather than skipped. Whether that run changed anything outside the probe is decided by "
+		"the user's own graph and is not reported back to this handler."));
 
 	return MCPResult(Result);
 }

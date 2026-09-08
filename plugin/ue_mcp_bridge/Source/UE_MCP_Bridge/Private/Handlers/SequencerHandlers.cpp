@@ -541,6 +541,20 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddTrack(const TSharedPtr<FJsonObject
 	const FString ActorPath = OptionalString(Params, TEXT("actorPath"));
 	auto Result = MCPSuccess();
 
+	// Stamped here rather than at each return, because every path out of this
+	// handler answers the same way. The bridge registers no action that removes
+	// a MovieScene track or a possessable binding - the sequencer surface is
+	// create_level_sequence, get_sequence_info, add_sequence_track,
+	// add_sequence_section, set_sequence_keyframes, set_sequence_playback_range
+	// and the two transport actions - so there is no inverse call to name, and
+	// naming one would send a flow at a method that does not exist. This also
+	// covers the "track already existed" returns, which can still have created
+	// the actor's possessable binding on the way to finding the track.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("No action removes a MovieScene track or an actor's possessable binding, so an added track cannot be taken back out by a call. ")
+		TEXT("Delete and rebuild the sequence with asset(delete) plus editor(create_sequence) if a track has to go."));
+
 	if (!ActorLabel.IsEmpty() || !ActorPath.IsEmpty())
 	{
 		// Find the binding for this actor
@@ -684,6 +698,13 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SequenceControl(const TSharedPtr<FJso
 		return MCPError(TEXT("No Level Sequence is open in Sequencer. Pass sequencePath to open one, or open it in the editor first."));
 	}
 
+	// The transport as it stands before the verb runs. Both halves are needed:
+	// the rollback restores the play/pause state, and the playhead is what stop
+	// throws away.
+	const bool bWasPlaying = ULevelSequenceEditorBlueprintLibrary::IsPlaying();
+	const double PreviousFrame =
+		ULevelSequenceEditorBlueprintLibrary::GetGlobalPosition(EMovieSceneTimeUnit::DisplayRate).Frame.AsDecimal();
+
 	if (bPlay)
 	{
 		ULevelSequenceEditorBlueprintLibrary::Play();
@@ -706,6 +727,25 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SequenceControl(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("sequencePath"), Current->GetPathName());
 	// Read the transport back rather than reporting what was asked for.
 	Result->SetBoolField(TEXT("playing"), ULevelSequenceEditorBlueprintLibrary::IsPlaying());
+	Result->SetBoolField(TEXT("wasPlaying"), bWasPlaying);
+	Result->SetNumberField(TEXT("previousFrame"), PreviousFrame);
+	// A play on a sequence that is already playing, or a pause on one that is
+	// already paused, moved nothing.
+	Result->SetBoolField(TEXT("unchanged"), (bPlay && bWasPlaying) || (bPause && !bWasPlaying));
+
+	// The transport verb that was in force before. `action` is this handler's
+	// own parameter name, which is what the payload has to carry: a rollback
+	// payload goes straight to the bridge rather than through an action's
+	// parameter mapping.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("sequencePath"), Current->GetPathName());
+	Payload->SetStringField(TEXT("action"), bWasPlaying ? TEXT("play") : TEXT("pause"));
+	MCPSetRollback(Result, TEXT("play_sequence"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The rollback restores the play/pause state this call found, and nothing else. It does NOT put the playhead back where it was ")
+		TEXT("- stop rewinds to frame 0 and play has moved it on since - so follow it with editor(scrub_sequence) at previousFrame if the ")
+		TEXT("position matters. It also opens the sequence, which is what this action does too."));
 	return MCPResult(Result);
 }
 
@@ -792,6 +832,12 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ScrubSequence(const TSharedPtr<FJsonO
 		TargetDisplay = FFrameTime(FFrameNumber(static_cast<int32>(FMath::RoundToDouble(RequestedFrame))));
 	}
 
+	// Where the playhead is now, in display-rate frames, which is exactly what
+	// this action's own 'frame' parameter takes with timeUnit 'display'.
+	const bool bWasPlaying = ULevelSequenceEditorBlueprintLibrary::IsPlaying();
+	const double PreviousDisplayFrame =
+		ULevelSequenceEditorBlueprintLibrary::GetGlobalPosition(EMovieSceneTimeUnit::DisplayRate).Frame.AsDecimal();
+
 	// Pause before scrubbing: a playing sequence moves the playhead again on the
 	// next tick, and the capture would not be at the time that was asked for.
 	ULevelSequenceEditorBlueprintLibrary::Pause();
@@ -812,6 +858,14 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ScrubSequence(const TSharedPtr<FJsonO
 	Result->SetNumberField(TEXT("frame"), TargetDisplay.AsDecimal());
 	Result->SetNumberField(TEXT("tick"), TargetTicks.AsDecimal());
 	Result->SetBoolField(TEXT("evaluated"), true);
+	// `unchanged` has to answer for everything this call changed, and the Pause()
+	// above runs whatever the playhead does. So a scrub that arrived on a PLAYING
+	// sequence stopped playback and is a change even when the frame it was asked
+	// for is the frame it was already on. Both halves, or it would contradict the
+	// wasPlaying and rollbackNote fields on this same result.
+	const bool bPlayheadMoved = !FMath::IsNearlyEqual(TargetDisplay.AsDecimal(), PreviousDisplayFrame);
+	Result->SetBoolField(TEXT("playheadMoved"), bPlayheadMoved);
+	Result->SetBoolField(TEXT("unchanged"), !bPlayheadMoved && !bWasPlaying);
 	// Read the transport back rather than reporting what was asked for.
 	Result->SetBoolField(TEXT("playing"), ULevelSequenceEditorBlueprintLibrary::IsPlaying());
 
@@ -852,6 +906,35 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ScrubSequence(const TSharedPtr<FJsonO
 			"did nothing. playbackRange above is in ticks; seconds are given alongside."));
 	}
 
+	// Scrubbing back to where the playhead was is this same action with the
+	// captured display frame. The 'frame' parameter is read as a number and
+	// rounded to a whole display frame, so a sub-frame position comes back
+	// rounded; the transport was also paused to take the scrub and that is not
+	// restored either.
+	Result->SetBoolField(TEXT("wasPlaying"), bWasPlaying);
+	Result->SetNumberField(TEXT("previousFrame"), PreviousDisplayFrame);
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("sequencePath"), Current->GetPathName());
+	Payload->SetNumberField(TEXT("frame"), PreviousDisplayFrame);
+	Payload->SetStringField(TEXT("timeUnit"), TEXT("display"));
+	MCPSetRollback(Result, TEXT("scrub_sequence"), Payload);
+
+	const bool bSubFrame = !FMath::IsNearlyEqual(PreviousDisplayFrame, FMath::RoundToDouble(PreviousDisplayFrame));
+	Result->SetBoolField(TEXT("rollbackLossy"), bSubFrame || bWasPlaying);
+	if (bSubFrame || bWasPlaying)
+	{
+		FString Note = TEXT("The rollback scrubs back to previousFrame.");
+		if (bSubFrame)
+		{
+			Note += TEXT(" The playhead was at a sub-frame position and 'frame' is rounded to a whole display frame, so it lands on the nearest one.");
+		}
+		if (bWasPlaying)
+		{
+			Note += TEXT(" The sequence was playing when this call arrived and scrubbing pauses it, so the rollback leaves it paused; editor(play_sequence) with sequenceAction 'play' resumes it.");
+		}
+		Result->SetStringField(TEXT("rollbackNote"), Note);
+	}
+
 	return MCPResult(Result);
 }
 
@@ -873,8 +956,50 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetPlaybackRange(const TSharedPtr<FJs
 	}
 
 	const FFrameRate Tick = MovieScene->GetTickResolution();
+
+	// The range in place before the write, in the same seconds this action takes
+	// in, so it replays through this same action.
+	//
+	// GetLowerBoundValue / GetUpperBoundValue hand back the stored bound VALUE
+	// and say nothing about whether it is included. The write below builds
+	// TRange<FFrameNumber>(Start, End), which is inclusive-lower and
+	// exclusive-upper, so a range stored with an INCLUSIVE upper bound would
+	// come back one tick short if its value were replayed as it stands, and one
+	// with an exclusive lower bound one tick long. Normalise both bounds to the
+	// form this action writes before converting them to seconds.
+	const TRange<FFrameNumber> PreviousRange = MovieScene->GetPlaybackRange();
+	const bool bHadPreviousRange = PreviousRange.HasLowerBound() && PreviousRange.HasUpperBound();
+	FFrameNumber PreviousLower(0);
+	FFrameNumber PreviousUpper(0);
+	if (bHadPreviousRange)
+	{
+		// The +1 is guarded against the top of the frame-number space. A bound
+		// already at MAX_int32 has no next tick to normalise to, and signed
+		// overflow is undefined behaviour rather than a wrap, so such a bound is
+		// left at its stored value. It is not reachable from any real sequence:
+		// at the default 24000 tick resolution MAX_int32 ticks is about 24 hours
+		// of playback.
+		PreviousLower = (PreviousRange.GetLowerBound().IsExclusive()
+			&& PreviousRange.GetLowerBoundValue().Value < MAX_int32)
+			? FFrameNumber(PreviousRange.GetLowerBoundValue().Value + 1)
+			: PreviousRange.GetLowerBoundValue();
+		PreviousUpper = (PreviousRange.GetUpperBound().IsInclusive()
+			&& PreviousRange.GetUpperBoundValue().Value < MAX_int32)
+			? FFrameNumber(PreviousRange.GetUpperBoundValue().Value + 1)
+			: PreviousRange.GetUpperBoundValue();
+	}
+	const double PreviousStartSeconds = bHadPreviousRange ? Tick.AsSeconds(FFrameTime(PreviousLower)) : 0.0;
+	const double PreviousEndSeconds = bHadPreviousRange ? Tick.AsSeconds(FFrameTime(PreviousUpper)) : 0.0;
+
 	const FFrameNumber Start = Tick.AsFrameNumber(StartSeconds);
 	const FFrameNumber End = Tick.AsFrameNumber(EndSeconds);
+	// Compared against the NORMALISED bounds, because that is what this write
+	// produces: a range stored inclusive-upper over the same frames is not a
+	// no-op, it is a change of bound form.
+	const bool bUnchanged = bHadPreviousRange
+		&& PreviousLower == Start
+		&& PreviousUpper == End;
+
 	MovieScene->SetPlaybackRange(TRange<FFrameNumber>(Start, End));
 	Sequence->GetOutermost()->MarkPackageDirty();
 
@@ -883,6 +1008,30 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetPlaybackRange(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("sequencePath"), Path);
 	Result->SetNumberField(TEXT("startSeconds"), StartSeconds);
 	Result->SetNumberField(TEXT("endSeconds"), EndSeconds);
+	Result->SetBoolField(TEXT("unchanged"), bUnchanged);
+
+	if (bHadPreviousRange)
+	{
+		Result->SetNumberField(TEXT("previousStartSeconds"), PreviousStartSeconds);
+		Result->SetNumberField(TEXT("previousEndSeconds"), PreviousEndSeconds);
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("sequencePath"), Path);
+		Payload->SetNumberField(TEXT("startSeconds"), PreviousStartSeconds);
+		Payload->SetNumberField(TEXT("endSeconds"), PreviousEndSeconds);
+		MCPSetRollback(Result, TEXT("set_sequence_playback_range"), Payload);
+		// Seconds are converted back through the same tick resolution that
+		// produced them, and both bounds were normalised to the inclusive-lower,
+		// exclusive-upper form this action writes, so the restored range covers
+		// exactly the frames the original covered.
+		Result->SetBoolField(TEXT("rollbackLossy"), false);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The sequence's playback range was unbounded on one or both ends before this call, and set_sequence_playback_range takes ")
+			TEXT("two finite seconds values, so it cannot put an open bound back."));
+	}
 	return MCPResult(Result);
 }
 
@@ -993,6 +1142,14 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 	if (!ActorLabel.IsEmpty()) Result->SetStringField(TEXT("bindingGuid"), BindingGuid.ToString());
 	Result->SetNumberField(TEXT("sectionIndex"), SectionIndex);
 	Result->SetArrayField(TEXT("channels"), ChannelNames);
+
+	// Same reason as add_sequence_track: nothing in the bridge removes a
+	// MovieScene section, a track, or a possessable binding, and this call can
+	// create all three. There is no method to name, so none is named.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("No action removes a MovieScene section, and this call also creates the track and the actor binding when they were absent. ")
+		TEXT("Nothing can take any of the three back out, so no rollback is offered. editor(get_sequence_info) reports what the sequence holds."));
 	return MCPResult(Result);
 }
 
@@ -1061,6 +1218,26 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetKeyframes(const TSharedPtr<FJsonOb
 	Section->Modify();
 
 	int32 KeysAdded = 0;
+	// The keys this call overwrote, as {seconds, value} pairs this same action
+	// takes back in. A frame that carried no key before is counted separately:
+	// writing a value there added a key, and no action removes one, so the
+	// restore cannot undo that half.
+	TArray<TSharedPtr<FJsonValue>> OverwrittenKeys;
+	int32 NewKeyFrames = 0;
+	// Frames THIS call has already written. Two keyframe entries naming the same
+	// seconds resolve to the same frame number: the first creates the key, and
+	// without this the second would find that key and record it as pre-existing,
+	// so the rollback would write a value at a frame that originally held
+	// nothing and keysOverwritten would count a key this call made.
+	TSet<int32> FramesWrittenHere;
+	// The three reported counts do not all count the same thing, so this closes
+	// the arithmetic instead of leaving a caller to work it out. keysAdded
+	// counts INPUT ENTRIES written; keysOverwritten and keyFramesCreated count
+	// DISTINCT FRAMES, because the guard above only classifies a frame once.
+	// This is every entry that landed on a frame an earlier entry in the same
+	// batch had already written, so
+	// keysAdded == keysOverwritten + keyFramesCreated + duplicateFrameWrites.
+	int32 DuplicateFrameWrites = 0;
 	FMovieSceneChannelProxy& Proxy = Section->GetChannelProxy();
 
 	// Try double channels (transform) by metadata name.
@@ -1079,6 +1256,32 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetKeyframes(const TSharedPtr<FJsonOb
 				(*Kf)->TryGetNumberField(TEXT("seconds"), Sec);
 				(*Kf)->TryGetNumberField(TEXT("value"), Val);
 				const FFrameNumber Frame = Tick.AsFrameNumber(Sec);
+
+				// Read what is on that frame before writing it, skipping a frame this
+				// call has already written: that key is this call's own work, not state
+				// to restore.
+				if (!FramesWrittenHere.Contains(Frame.Value))
+				{
+					TMovieSceneChannelData<FMovieSceneDoubleValue> ChannelData = DoubleChannels[i]->GetData();
+					const int32 ExistingKey = ChannelData.FindKey(Frame);
+					if (ExistingKey != INDEX_NONE)
+					{
+						TSharedPtr<FJsonObject> Prior = MakeShared<FJsonObject>();
+						Prior->SetNumberField(TEXT("seconds"), Sec);
+						Prior->SetNumberField(TEXT("value"), ChannelData.GetValues()[ExistingKey].Value);
+						OverwrittenKeys.Add(MakeShared<FJsonValueObject>(Prior));
+					}
+					else
+					{
+						++NewKeyFrames;
+					}
+					FramesWrittenHere.Add(Frame.Value);
+				}
+				else
+				{
+					++DuplicateFrameWrites;
+				}
+
 				if (bLinear) DoubleChannels[i]->AddLinearKey(Frame, Val);
 				else DoubleChannels[i]->AddCubicKey(Frame, Val);
 				++KeysAdded;
@@ -1110,6 +1313,30 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetKeyframes(const TSharedPtr<FJsonOb
 				(*Kf)->TryGetNumberField(TEXT("seconds"), Sec);
 				(*Kf)->TryGetNumberField(TEXT("value"), Val);
 				const FFrameNumber Frame = Tick.AsFrameNumber(Sec);
+
+				// Same duplicate-frame guard as the double path above.
+				if (!FramesWrittenHere.Contains(Frame.Value))
+				{
+					TMovieSceneChannelData<FMovieSceneFloatValue> ChannelData = FloatChannels[ChosenIdx]->GetData();
+					const int32 ExistingKey = ChannelData.FindKey(Frame);
+					if (ExistingKey != INDEX_NONE)
+					{
+						TSharedPtr<FJsonObject> Prior = MakeShared<FJsonObject>();
+						Prior->SetNumberField(TEXT("seconds"), Sec);
+						Prior->SetNumberField(TEXT("value"), ChannelData.GetValues()[ExistingKey].Value);
+						OverwrittenKeys.Add(MakeShared<FJsonValueObject>(Prior));
+					}
+					else
+					{
+						++NewKeyFrames;
+					}
+					FramesWrittenHere.Add(Frame.Value);
+				}
+				else
+				{
+					++DuplicateFrameWrites;
+				}
+
 				if (bLinear) FloatChannels[ChosenIdx]->AddLinearKey(Frame, (float)Val);
 				else FloatChannels[ChosenIdx]->AddCubicKey(Frame, (float)Val);
 				++KeysAdded;
@@ -1132,5 +1359,48 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetKeyframes(const TSharedPtr<FJsonOb
 	Result->SetStringField(TEXT("channel"), ChannelName);
 	Result->SetNumberField(TEXT("sectionIndex"), SectionIndex);
 	Result->SetNumberField(TEXT("keysAdded"), KeysAdded);
+	Result->SetNumberField(TEXT("keysOverwritten"), OverwrittenKeys.Num());
+	Result->SetNumberField(TEXT("keyFramesCreated"), NewKeyFrames);
+	Result->SetNumberField(TEXT("duplicateFrameWrites"), DuplicateFrameWrites);
+	Result->SetStringField(TEXT("keyCountsNote"), FString::Printf(
+		TEXT("keysAdded counts input keyframe entries written (%d). keysOverwritten (%d) and keyFramesCreated (%d) count DISTINCT frames, ")
+		TEXT("since each frame is classified once. duplicateFrameWrites (%d) is the entries that landed on a frame an earlier entry in this ")
+		TEXT("same batch had already written, which is what closes the sum: %d = %d + %d + %d."),
+		KeysAdded, OverwrittenKeys.Num(), NewKeyFrames, DuplicateFrameWrites,
+		KeysAdded, OverwrittenKeys.Num(), NewKeyFrames, DuplicateFrameWrites));
+
+	if (OverwrittenKeys.Num() > 0)
+	{
+		// Writing the old values back over the same frames restores the keys this
+		// call replaced. It cannot delete the keys it created on frames that had
+		// none, because no action removes a keyframe, so the note says so and
+		// keyFramesCreated says how many.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("sequencePath"), Path);
+		Payload->SetStringField(TEXT("trackType"), TrackType);
+		Payload->SetStringField(TEXT("channel"), ChannelName);
+		Payload->SetNumberField(TEXT("sectionIndex"), SectionIndex);
+		if (!ActorLabel.IsEmpty()) Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		if (!ActorPath.IsEmpty()) Payload->SetStringField(TEXT("actorPath"), ActorPath);
+		Payload->SetStringField(TEXT("interpolation"), bLinear ? TEXT("linear") : TEXT("cubic"));
+		Payload->SetArrayField(TEXT("keyframes"), OverwrittenKeys);
+		MCPSetRollback(Result, TEXT("set_sequence_keyframes"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("The rollback writes the %d previous key value(s) back over the frames this call replaced. It does NOT remove the %d key(s) ")
+			TEXT("this call created on frames that had none - no action removes a key from a Level Sequence channel - and it re-adds every ")
+			TEXT("restored key with '%s' ")
+			TEXT("interpolation rather than the tangents each one originally carried."),
+			OverwrittenKeys.Num(), NewKeyFrames, bLinear ? TEXT("linear") : TEXT("cubic")));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("Every one of the %d key(s) this call wrote landed on a frame that had none, so there is no previous value to restore, and ")
+			TEXT("no action removes a key from a Level Sequence channel. editor(get_sequence_info) with includeSectionDetails reports the key ")
+			TEXT("times a channel holds."),
+			NewKeyFrames));
+	}
 	return MCPResult(Result);
 }

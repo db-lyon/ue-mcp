@@ -154,6 +154,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::BuildLighting(const TSharedPtr<FJsonObje
 	Result->SetStringField(TEXT("quality"), Quality);
 	Result->SetStringField(TEXT("command"), Command);
 	Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Lighting build triggered (%s)"), *Quality));
+	// A build is a trigger, not a state write: there is no "already built" the
+	// handler could find and skip, and every call starts another build.
+	Result->SetBoolField(TEXT("changed"), true);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("A lighting build overwrites the map's built lighting data in place. The previous build is not kept anywhere the bridge can reach, so no call restores it. Recover it from source control, or rebuild at the quality the map had before."));
 	return MCPResult(Result);
 }
 
@@ -169,6 +175,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::BuildAll(const TSharedPtr<FJsonObject>& 
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("message"), TEXT("Build All triggered (geometry + lighting + navigation)"));
+	// A build is a trigger, not a state write: there is no "already built" the
+	// handler could find and skip, and every call starts another build.
+	Result->SetBoolField(TEXT("changed"), true);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Geometry, lighting and navigation data are each overwritten in place. The state before the build is not kept anywhere the bridge can reach, so no call restores it. Recover the map from source control instead."));
 	return MCPResult(Result);
 }
 
@@ -343,7 +355,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::ValidateAssets(const TSharedPtr<FJsonObj
 		DetailsArray.Add(MakeShared<FJsonValueObject>(DetailObject));
 	}
 	Result->SetArrayField(TEXT("assets"), DetailsArray);
+#if UE_MCP_HAS_5_8_API
 	Result->SetArrayField(TEXT("validatorMessages"), MCPValidationMessageArray(ValidationResults.ValidatorMessages));
+#else
+	// FValidateAssetsResults::ValidatorMessages arrived in 5.8. Earlier engines
+	// keep no bucket for a message a validator raised outside any one asset, so
+	// the field is omitted rather than sent as an empty array, which would read
+	// as "every validator ran and none had anything to say".
+	Result->SetStringField(TEXT("validatorMessagesNote"),
+		TEXT("validatorMessages omitted: cross-asset validator messages need UE 5.8, and this editor is older. Per-asset messages are still reported under assets[].messages."));
+#endif
 	Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Validated %d assets"), ValidationResults.NumRequested));
 	return MCPResult(Result);
 }
@@ -362,6 +383,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::CookContent(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("platform"), Platform);
 	Result->SetStringField(TEXT("command"), Command);
 	Result->SetStringField(TEXT("message"), FString::Printf(TEXT("Cook triggered for %s"), *Platform));
+	// A cook is a trigger, not a state write: there is no "already cooked" the
+	// handler could find and skip, and every call starts another cook.
+	Result->SetBoolField(TEXT("changed"), true);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("A cook writes into the platform's cooked output directory. Nothing in the bridge un-cooks content or restores the previous cooked output, and no inverse call exists."));
 	return MCPResult(Result);
 }
 
@@ -376,6 +403,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::HotReload(const TSharedPtr<FJsonObject>&
 		{
 			auto Result = MCPSuccess();
 			Result->SetStringField(TEXT("message"), TEXT("Live Coding compile already in progress"));
+			// Nothing was started: the compile already under way is left alone.
+			Result->SetBoolField(TEXT("alreadyRunning"), true);
+			Result->SetBoolField(TEXT("changed"), false);
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
 			return MCPResult(Result);
 		}
 
@@ -383,6 +414,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::HotReload(const TSharedPtr<FJsonObject>&
 		LiveCoding->Compile();
 		auto Result = MCPSuccess();
 		Result->SetStringField(TEXT("message"), TEXT("Live Coding compile triggered"));
+		Result->SetBoolField(TEXT("alreadyRunning"), false);
+		Result->SetBoolField(TEXT("changed"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("Patched code is loaded into the running editor process and cannot be unloaded. There is no inverse call; restart the editor to get back to the binary on disk."));
 		return MCPResult(Result);
 	}
 	else
@@ -395,6 +431,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::HotReload(const TSharedPtr<FJsonObject>&
 			UKismetSystemLibrary::ExecuteConsoleCommand(World, TEXT("LiveCoding.Compile"), nullptr);
 			auto Result = MCPSuccess();
 			Result->SetStringField(TEXT("message"), TEXT("Hot reload triggered via console command (Live Coding module not active in session)"));
+			Result->SetBoolField(TEXT("changed"), true);
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("Patched code is loaded into the running editor process and cannot be unloaded. There is no inverse call; restart the editor to get back to the binary on disk."));
 			return MCPResult(Result);
 		}
 		else
@@ -413,6 +453,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::BuildGeometry(const TSharedPtr<FJsonObje
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("message"), TEXT("Geometry rebuild triggered"));
+	// A build is a trigger, not a state write: there is no "already built" the
+	// handler could find and skip, and every call starts another build.
+	Result->SetBoolField(TEXT("changed"), true);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("MAP REBUILD regenerates the BSP model from the brushes in place. The previous model is not retained, so no call restores it; rebuilding again reproduces it only if the brushes are unchanged."));
 	return MCPResult(Result);
 }
 
@@ -425,6 +471,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::BuildHlod(const TSharedPtr<FJsonObject>&
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("message"), TEXT("HLOD build triggered"));
+	// A build is a trigger, not a state write: there is no "already built" the
+	// handler could find and skip, and every call starts another build.
+	Result->SetBoolField(TEXT("changed"), true);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("An HLOD build regenerates the proxy meshes and their actors in place. The previous generation is not retained, so no call restores it. Recover the map and its HLOD packages from source control instead."));
 	return MCPResult(Result);
 }
 
@@ -495,6 +547,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::BuildProject(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("configuration"), Configuration);
 	Result->SetStringField(TEXT("platform"), Platform);
 	Result->SetStringField(TEXT("note"), TEXT("Build launched asynchronously. Check output log for progress."));
+	// Every call launches another UnrealBuildTool process; there is no
+	// "already built" state this handler could find and skip.
+	Result->SetBoolField(TEXT("changed"), true);
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("UnrealBuildTool overwrites the binaries and intermediates it produces. The previous build output is not kept, and the process is asynchronous, so by the time a rollback ran there would be nothing to restore and nothing to cancel."));
 	return MCPResult(Result);
 }
 
@@ -553,6 +611,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::GenerateProjectFiles(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("args"), Args);
 		Result->SetStringField(TEXT("projectPath"), ProjectPath);
 		Result->SetStringField(TEXT("note"), TEXT("Project file generation launched. Check output log for progress."));
+		// Every call launches another generation pass; there is no "already
+		// generated" state this handler could find and skip.
+		Result->SetBoolField(TEXT("changed"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The generated solution and project files are overwritten in place, and the generation runs asynchronously in another process. The previous files are not kept, so no call restores them."));
 		return MCPResult(Result);
 	}
 	else
@@ -571,6 +635,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::GenerateProjectFiles(const TSharedPtr<FJ
 		Result->SetStringField(TEXT("args"), Args);
 		Result->SetStringField(TEXT("projectPath"), ProjectPath);
 		Result->SetStringField(TEXT("note"), TEXT("Project file generation launched. Check output log for progress."));
+		// Every call launches another generation pass; there is no "already
+		// generated" state this handler could find and skip.
+		Result->SetBoolField(TEXT("changed"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The generated solution and project files are overwritten in place, and the generation runs asynchronously in another process. The previous files are not kept, so no call restores them."));
 		return MCPResult(Result);
 	}
 }

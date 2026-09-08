@@ -1,6 +1,7 @@
 #include "LandscapeHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Editor.h"
@@ -412,6 +413,40 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandlerWithTimeout(TEXT("refresh_landscape_physical_material_collision"), &RefreshPhysicalMaterialCollision, 600.0f);
 	Registry.RegisterHandlerWithTimeout(TEXT("sculpt_landscape"), &Sculpt, 120.0f);
 	Registry.RegisterHandlerWithTimeout(TEXT("paint_landscape_layer"), &PaintLayer, 120.0f);
+
+	// V1 region surface. Three of these names are load-bearing beyond dispatch:
+	// set_landscape_height_region, set_landscape_layer_weight_region and
+	// set_landscape_holes are the inverse methods the rollback records in
+	// LandscapeHandlers_Sculpt.cpp emit, so renaming one here breaks every
+	// undo those actions hand back without breaking anything that would show
+	// up at the call site.
+	Registry.RegisterHandlerWithTimeout(TEXT("get_landscape_height_region"), &GetHeightRegion, 120.0f);
+	Registry.RegisterHandlerWithTimeout(TEXT("set_landscape_height_region"), &SetHeightRegion, 300.0f);
+	Registry.RegisterHandler(TEXT("get_landscape_height_at_point"), &GetHeightAtPoint);
+	Registry.RegisterHandler(TEXT("get_landscape_normal_at_point"), &GetNormalAtPoint);
+	Registry.RegisterHandler(TEXT("get_landscape_slope_at_point"), &GetSlopeAtPoint);
+	Registry.RegisterHandlerWithTimeout(TEXT("get_landscape_slope_map"), &GetSlopeMap, 120.0f);
+	Registry.RegisterHandlerWithTimeout(TEXT("sculpt_landscape_region"), &SculptRegion, 300.0f);
+	// Erosion is O(vertices x iterations) on the game thread, and import and
+	// export move whole heightmaps through a codec and the filesystem, so these
+	// three get the long budgets. A client that gives up at the default while
+	// the editor is still writing leaves a half-applied terrain nobody asked
+	// about.
+	Registry.RegisterHandlerWithTimeout(TEXT("apply_landscape_erosion"), &ApplyErosion, 600.0f);
+	Registry.RegisterHandlerWithTimeout(TEXT("import_landscape_heightmap"), &ImportHeightmap, 600.0f);
+	Registry.RegisterHandlerWithTimeout(TEXT("export_landscape_heightmap"), &ExportHeightmap, 300.0f);
+	Registry.RegisterHandlerWithTimeout(TEXT("analyze_landscape_terrain"), &AnalyzeTerrain, 120.0f);
+	Registry.RegisterHandlerWithTimeout(TEXT("get_landscape_layer_weight_region"), &GetLayerWeightRegion, 120.0f);
+	Registry.RegisterHandlerWithTimeout(TEXT("set_landscape_layer_weight_region"), &SetLayerWeightRegion, 300.0f);
+	Registry.RegisterHandler(TEXT("landscape_layer_exists"), &LayerExists);
+	Registry.RegisterHandler(TEXT("remove_landscape_layer"), &RemoveLayer);
+	Registry.RegisterHandlerWithTimeout(TEXT("get_landscape_holes"), &GetHoles, 120.0f);
+	Registry.RegisterHandlerWithTimeout(TEXT("set_landscape_holes"), &SetHoles, 300.0f);
+
+	// V17 core half: plan a landscape from a real-world heightmap, and convert
+	// geographic coordinates into that landscape's world space.
+	Registry.RegisterHandlerWithTimeout(TEXT("plan_real_world_landscape"), &PlanRealWorldLandscape, 120.0f);
+	Registry.RegisterHandler(TEXT("project_geo_coordinates"), &ProjectGeoCoordinates);
 }
 
 TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeInfo(const TSharedPtr<FJsonObject>& Params)
@@ -1024,9 +1059,17 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::AddLandscapeLayerInfo(const TSharedPt
 		if (ExistingLayer.LayerInfoObj && ExistingLayer.GetLayerName().ToString() == LayerName)
 		{
 			auto Result = MCPSuccess();
+			MCPSetExisted(Result);
 			Result->SetStringField(TEXT("layerName"), LayerName);
 			Result->SetStringField(TEXT("path"), ExistingLayer.LayerInfoObj->GetPathName());
 			Result->SetStringField(TEXT("note"), TEXT("Layer already exists on this landscape"));
+			// Nothing was registered, so nothing has to be un-registered. Saying
+			// so keeps a replayed flow step from carrying a record that would
+			// delete a layer this call did not create.
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("The layer was already registered on this landscape, so nothing changed and there is nothing to "
+					 "undo."));
 			return MCPResult(Result);
 		}
 	}
@@ -1039,6 +1082,9 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::AddLandscapeLayerInfo(const TSharedPt
 
 	// Check if the asset already exists
 	ULandscapeLayerInfoObject* LayerInfoObj = LoadObject<ULandscapeLayerInfoObject>(nullptr, *(PackageFullPath + TEXT(".") + AssetName));
+	// Whether the LayerInfo ASSET is created here matters to the rollback: the
+	// inverse un-registers the layer but leaves the asset on disk.
+	const bool bCreatedLayerInfoAsset = (LayerInfoObj == nullptr);
 	if (!LayerInfoObj)
 	{
 		UPackage* Package = CreatePackage(*PackageFullPath);
@@ -1078,10 +1124,45 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	TargetLandscape->MarkPackageDirty();
 
 	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("layerName"), LayerName);
 	Result->SetStringField(TEXT("path"), LayerInfoObj->GetPathName());
 	Result->SetStringField(TEXT("landscapeName"), TargetLandscape->GetName());
 	Result->SetNumberField(TEXT("layerIndex"), LayerIndex);
+	Result->SetBoolField(TEXT("layerInfoAssetCreated"), bCreatedLayerInfoAsset);
+
+	// The inverse un-registers the layer from the landscape. remove_layer
+	// addresses an ALandscape, and the actor scanned above can be a streaming
+	// proxy, so the record names the parent landscape actor rather than whatever
+	// proxy happened to be found first.
+	ALandscape* ParentLandscape = TargetLandscape->GetLandscapeActor();
+	if (ParentLandscape)
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("actorPath"), ParentLandscape->GetPathName());
+		Payload->SetStringField(TEXT("layerName"), LayerName);
+		MCPSetRollback(Result, TEXT("remove_landscape_layer"), Payload);
+		// Removing the registration is exact for a layer that was just added and
+		// has no weights painted yet. What it does not do is delete the
+		// ULandscapeLayerInfoObject asset, which this call may have created.
+		Result->SetBoolField(TEXT("rollbackLossy"), bCreatedLayerInfoAsset);
+		if (bCreatedLayerInfoAsset)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("The layer is un-registered from the landscape, but the '%s' asset this call created stays on "
+					 "disk - landscape(remove_layer) deliberately leaves it so the layer can be re-registered. Delete "
+					 "it with asset(delete) as well if the rollback has to leave no trace."),
+				*LayerInfoObj->GetPathName()));
+		}
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("'%s' has no parent ALandscape actor, and landscape(remove_layer) resolves an ALandscape, so no "
+				 "inverse can address this registration."),
+			*TargetLandscape->GetName()));
+	}
 
 	return MCPResult(Result);
 }
@@ -1392,10 +1473,19 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::GetMaterialUsageSummary(const TShared
 // the count + bounds to reason about coverage.
 TSharedPtr<FJsonValue> FLandscapeHandlers::ListLandscapeProxies(const TSharedPtr<FJsonObject>& Params)
 {
+	// T3: paged. A World Partition landscape is one proxy per grid cell, so a
+	// large map streams in hundreds of them.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params, TEXT("list_landscape_proxies"), /*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
+
 	REQUIRE_EDITOR_WORLD(World);
 
 	int32 ParentLandscapes = 0;
-	TArray<TSharedPtr<FJsonValue>> Proxies;
+	TArray<MCPPagination::FPageRow> Proxies;
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
 		AActor* Actor = *It;
@@ -1413,6 +1503,9 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ListLandscapeProxies(const TSharedPtr
 
 		TSharedPtr<FJsonObject> ProxyObj = MakeShared<FJsonObject>();
 		ProxyObj->SetStringField(TEXT("label"), Proxy->GetActorLabel());
+		// The object path, reported alongside the label because labels are not
+		// unique and this is also what the page anchors on.
+		ProxyObj->SetStringField(TEXT("objectPath"), Proxy->GetPathName());
 		ProxyObj->SetBoolField(TEXT("loaded"), true);
 
 		TSharedPtr<FJsonObject> Bounds = MakeShared<FJsonObject>();
@@ -1428,13 +1521,18 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ListLandscapeProxies(const TSharedPtr
 		Bounds->SetObjectField(TEXT("extent"), ExtentObj);
 		ProxyObj->SetObjectField(TEXT("worldBounds"), Bounds);
 
-		Proxies.Add(MakeShared<FJsonValueObject>(ProxyObj));
+		Proxies.Add({ Proxy->GetPathName(), MakeShared<FJsonValueObject>(ProxyObj) });
 	}
+
+	// TActorIterator walks the level's actor array, whose order moves as cells
+	// stream in and out, so the rows are sorted by object path before paging.
+	Proxies.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
 
 	auto Result = MCPSuccess();
 	Result->SetNumberField(TEXT("loadedProxies"), Proxies.Num());
 	Result->SetNumberField(TEXT("parentLandscapes"), ParentLandscapes);
-	Result->SetArrayField(TEXT("proxies"), Proxies);
+	MCPPagination::EmitPage(Page, Proxies, TEXT("proxies"), Result);
 	Result->SetStringField(TEXT("note"), TEXT("World Partition unloaded proxies are not spawned as actors, so only loaded proxies are listed."));
 	return MCPResult(Result);
 }
@@ -2059,6 +2157,18 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::RefreshPhysicalMaterialCollision(cons
 		Note = TEXT("Collision and physical-material data were rebuilt in memory and matched packages may now be dirty. No packages were saved. Unloaded proxies were not changed.");
 	}
 	Result->SetStringField(TEXT("note"), Note);
+	// No inverse. Collision and physical-material data are DERIVED from the
+	// landscape's weightmaps and heights, which this call does not touch - it
+	// recomputes the output of a build step whose input is unchanged, and the
+	// data it replaced was the stale result of the same computation. Nothing
+	// restores a previous physical-material build, and the height-collision
+	// verification above is what proves the terrain itself came through
+	// untouched.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("This rebuilds derived collision and physical-material data from weightmaps this call never writes. "
+			 "There is no call that restores the previous build, and none is needed: rebuilding again from the same "
+			 "landscape produces the same result. No packages were saved."));
 	return MCPResult(Result);
 #endif // UE_MCP_HAS_5_8_API
 }

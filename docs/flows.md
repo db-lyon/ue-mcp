@@ -32,11 +32,20 @@ That's it. The config is **hot-reloaded on every call** - edit the YAML and run 
 
 The response carries a `summary` line per step plus a `steps` array holding what each step answered, so an action called inside a flow returns the same data it returns when called directly.
 
+## The rest of the `flow` tool
+
+Running flows is three of the tool's seventeen actions: `run`, `plan` and `list`. The other fourteen are two surfaces that sit beside them.
+
+- **[Journal](journal.md)** - the nine `journal_*` actions, the record a run leaves behind: what was done, what it produced, and how it ended. Every `flow(action="run")` writes one automatically; open one by hand for work that is not a flow.
+- **[Skill packs](skill-packs.md)** - the five `skill_*` actions, covering the written workflows that say which calls to make in what order, including verifying that the calls they teach still exist.
+
+Neither surface reaches the editor, so both work with the editor down.
+
 ## Concepts
 
 ### Tasks
 
-A task is a named unit of work. UE-MCP ships with **<!-- count:actions -->845+<!-- /count --> built-in tasks** across <!-- count:tools -->24<!-- /count --> categories - every action available through the MCP tools is also a flow task.
+A task is a named unit of work. UE-MCP ships with **<!-- count:actions -->1920+<!-- /count --> built-in tasks** across <!-- count:tools -->26<!-- /count --> categories - every action available through the MCP tools is also a flow task.
 
 Tasks are defined in the `tasks:` section of your config:
 
@@ -59,7 +68,7 @@ The fields:
 | `group` | No | Category for organization |
 | `options` | No | Default options passed to the task (can be overridden per-step) |
 
-You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->845+<!-- /count --> actions. You define tasks when you want to **override** or **add** custom ones.
+You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->1920+<!-- /count --> actions. You define tasks when you want to **override** or **add** custom ones.
 
 ### Flows
 
@@ -270,6 +279,33 @@ steps:
 
 Omit `retryOn` to retry on any error. The actual attempt count surfaces on `result.steps[i].attempts`.
 
+## Expected Failures (`ignore_failure`)
+
+The fourth per-step option, beside `retries` / `retryDelay` / `retryOn`. A step declares that its own failure is expected and must not stop the run:
+
+```yaml
+steps:
+  1:
+    task: editor.stop_editor
+    ignore_failure: true    # nothing running is a failure, and this step expects it
+  2: { task: editor.build_project }
+  3: { task: editor.start_editor }
+```
+
+Stop, build, start is the case it exists for. `editor(stop_editor)` closed no editor when none was running, so it answers `success: false` with `alreadyStopped: true`, and that is the correct answer: the call did not do the thing. Whether that matters is the caller's question, and only the caller knows. So a step whose failure is expected marks itself, rather than the handler reporting a success for something it did not do. The same shape covers `editor(start_editor)` on an editor already up (`alreadyRunning`), and both halves of `editor(play_in_editor)`.
+
+This is not what the [flow-level hooks](#flow-level-hooks) do. `on_failure` fires once the FLOW has failed and `finally` after either outcome, which in both cases is after the run has already stopped, so they compensate and clean up but cannot keep a later step running. `ignore_failure` is per step, and it is the only thing that keeps step 2 running when step 1 fails.
+
+What it does, and does not do:
+
+- The step is still **recorded as failed**. It keeps `success: false`, its error message, and the handler's whole body under `steps[i].data`; the run response marks it `ignoredFailure: true` and prints it as `FAILED (ignored)`. It is not converted into a pass, and it is not skipped - it ran.
+- The run **continues**, and the flow's own outcome is unaffected: `result.success` stays true if nothing else fails.
+- `failedStep` names the step that **stopped** the run, so an ignored failure never appears there.
+- It applies **after** `retries` are exhausted, so a step can retry first and only then be absorbed.
+- It covers a `success: false` body, a thrown error, and a `when:` expression that throws. The runner reads it on main steps only.
+
+Use it for the step whose failure you predicted. A step that fails for a reason you did not predict should still stop the run, which is why this is per step and not a flow-level switch.
+
 ## Rollback on Failure
 
 Mutating bridge handlers emit a `rollback: { method, payload }` record on success. When a flow sets `rollback_on_failure: true` (or the caller passes it) and a later step fails, the runner invokes the collected inverses **in reverse order**, best-effort, and reports the outcome in `result.rollback`:
@@ -286,6 +322,44 @@ flows:
 ```
 
 If step 3 fails: the `delete_actor` inverses for B and A run, leaving the level as it was. Handlers without an inverse (`execute_command`, `shell`, some deletes) simply don't contribute records; their steps are left as-is when rollback runs.
+
+### What counts as a failed step
+
+A step fails when the call throws AND when the handler answers `{ success: false }` in its body. The bridge resolves a refusal like any other reply, so the verdict is read off the answer: a destructive action that reported its own failure stops the run, fires `on_failure`, and arms `rollback_on_failure`, instead of being walked past as a pass.
+
+A handler that did the work it was asked for reports `success: true` with a marker saying nothing changed - `alreadyExists`, `alreadyRemoved`, `existed` - because the thing the caller wanted exists and this call is why it is safe to ask twice. The editor lifecycle actions are the other case: `start_editor` on a running editor launched nothing and `stop_editor` on a stopped one closed nothing, so they fail, carrying `alreadyRunning` / `alreadyStopped` to say the failure was a no-op rather than a broken call. Absorb those at the step with [`ignore_failure`](#expected-failures-ignore_failure). See [docs/handler-conventions.md](handler-conventions.md).
+
+### The failing step's own inverse
+
+`rollback_on_failure` unwinds the steps before the failure **and** the failing step itself, and the failing step's own inverse goes **first**.
+
+A few handlers attach a rollback record to a `success: false` body on purpose, because the mutation partly applied: `asset(rename)` on a World that moved some external actor packages before the rename gave up, the hygiene fixer's already-applied moves, the lightmap UV builder's changed settings, the mesh fracturer's written pieces. The runner collects that record like any other and invokes the collection in reverse, so the partial write is undone before the steps around it unwind. That order is the point: undoing an earlier step while the half-applied change is still in place is what leaves the inconsistent state behind.
+
+Either way the record is reported on the step that emitted it:
+
+```
+steps[i].partialWriteRollback = {
+  record: { taskName, payload },        # the record the handler emitted
+  step: '{ task: "ue-mcp.bridge", options: { method: ..., ... } }',
+  replayed: true | false,
+  note: ...
+}
+```
+
+`replayed` is the whole question, and it is `rollback_on_failure` that answers it:
+
+- **Armed.** The runner already ran the undo, ahead of every other inverse. `rollback.attempted` counts it, and `rollback.errors` says whether it worked.
+- **Not armed.** Nothing replayed it. Run it as the step shown, or call the bridge method named in `record.payload.method` with the rest of the payload.
+
+The same call is appended to that step's `error.message` and printed under the step in the summary, because a message survives a summary line and a journal entry where a field does not. A task cannot see `rollback_on_failure`, so the message names both outcomes and the `replayed` flag says which one happened.
+
+A step carrying `ignore_failure: true` contributes its record on the same terms. The flag says the run may walk past that failure, not that what the step half-wrote should survive a rollback. Because an ignored step does not stop the run, a LATER real failure is what arms `rollback_on_failure`, and the unwind then covers the ignored step's partial write alongside the successful steps before it.
+
+A **nested** flow behaves the same way. Its records bubble to the parent, so arming rollback on the outer flow reaches a partial write made inside a child, and the child's own steps arrive on `steps[i].nestedSteps`, each reported exactly like a top-level step. The child's run error still carries the undo call in its text as well.
+
+The outermost flow with rollback armed is the one that invokes the inverses, including the ones a child handed up. A child does not also unwind them itself: the parent holds the full reverse order, and running each inverse at both levels would undo state the first pass had already restored. A nested flow whose parents asked for no rollback still unwinds its own, so `rollback_on_failure` on a child flow means what it says.
+
+Requires `@db-lyon/flowkit` 0.17.2 or newer. 0.17.1 unwound a failed child's records at both levels. Up to 0.17.0 the runner harvested an inverse only from a step that succeeded, so a failing step's record was discarded on every run and `replayed` was always `false`.
 
 Conventions for handlers - natural keys, the `onConflict: skip|update|error` option, and rollback record shape - live in [docs/handler-conventions.md](handler-conventions.md).
 
@@ -633,7 +707,7 @@ Configuration is loaded with [`@db-lyon/flowkit`'s config loader](https://github
 
 | Layer | File | Purpose |
 |-------|------|---------|
-| 1 (base) | Built-in defaults | All <!-- count:actions -->845+<!-- /count --> tasks, no flows |
+| 1 (base) | Built-in defaults | All <!-- count:actions -->1920+<!-- /count --> tasks, no flows |
 | 2 | `ue-mcp.yml` | Your project config |
 | 3 | `ue-mcp.{env}.yml` | Environment overlay (set `UE_MCP_ENV`) |
 | 4 | `ue-mcp.local.yml` | Local-only overrides (gitignore this) |

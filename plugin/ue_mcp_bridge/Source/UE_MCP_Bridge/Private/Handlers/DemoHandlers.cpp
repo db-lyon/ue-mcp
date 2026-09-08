@@ -145,6 +145,25 @@ bool FDemoHandlers::EnsureHomeLevelLoaded(FString& OutError)
 // demo_go_home: switch the editor to /Game/MCP_Home (creating it on first use).
 TSharedPtr<FJsonValue> FDemoHandlers::DemoGoHome(const TSharedPtr<FJsonObject>& Params)
 {
+	// What was open before the swap, and whether the home level had to be
+	// created. Both are read here rather than inside EnsureHomeLevelLoaded,
+	// which demo_cleanup also calls and which must keep reporting nothing.
+	const bool bHomeExisted = UEditorAssetLibrary::DoesAssetExist(DemoConstants::HOME_LEVEL);
+	FString PreviousLevelPath;
+	if (UWorld* PreviousWorld = GetEditorWorld())
+	{
+		if (UPackage* PreviousPackage = PreviousWorld->GetOutermost())
+		{
+			const FString PreviousName = PreviousPackage->GetName();
+			// A world under /Temp/ is an unsaved map that no path can reopen,
+			// which is the same rule level(load) applies to its own inverse.
+			if (PreviousName.StartsWith(TEXT("/Game/")) || PreviousName.StartsWith(TEXT("/Engine/")))
+			{
+				PreviousLevelPath = PreviousName;
+			}
+		}
+	}
+
 	FString Err;
 	if (!EnsureHomeLevelLoaded(Err))
 	{
@@ -152,6 +171,37 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoGoHome(const TSharedPtr<FJsonObject>& 
 	}
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("levelPath"), DemoConstants::HOME_LEVEL);
+	Result->SetStringField(TEXT("previousLevelPath"), PreviousLevelPath);
+	Result->SetBoolField(TEXT("homeLevelCreated"), !bHomeExisted);
+	// Idempotency: already standing in the home level means this opened nothing.
+	const bool bAlreadyHome = PreviousLevelPath == DemoConstants::HOME_LEVEL;
+	Result->SetBoolField(TEXT("alreadyOpen"), bAlreadyHome);
+
+	if (!bAlreadyHome && !PreviousLevelPath.IsEmpty())
+	{
+		// "Open the home level" inverts to opening the level that was open,
+		// which is exactly what level(load) does and what its own rollback
+		// record carries.
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("levelPath"), PreviousLevelPath);
+		MCPSetRollback(Result, TEXT("load_level"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), !bHomeExisted);
+		if (!bHomeExisted)
+		{
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("The previous level is reopened, but '%s' was created on disk by this call and stays there. "
+					 "Delete it with asset(delete) as well if the rollback has to leave no trace."),
+				*DemoConstants::HOME_LEVEL));
+		}
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), bAlreadyHome
+			? TEXT("The home level was already open, so nothing changed and there is nothing to undo.")
+			: TEXT("The level that was open has no content path to reopen - an unsaved or Untitled map - so no "
+				   "inverse can name it."));
+	}
 	return MCPResult(Result);
 }
 
@@ -259,6 +309,44 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoStep(const TSharedPtr<FJsonObject>& Pa
 		{
 			StepResult->SetStringField(TEXT("stepId"), Defs[StepIndex - 1].Id);
 		}
+
+		// Demo steps always CREATE. Nothing looks for an existing Demo_ actor
+		// before spawning one, so a replayed step leaves two of everything;
+		// saying created rather than a bare success is what makes that visible
+		// instead of leaving a rerun to look like it did nothing new.
+		bool bStepOk = true;
+		StepResult->TryGetBoolField(TEXT("success"), bStepOk);
+		if (bStepOk)
+		{
+			MCPSetCreated(StepResult);
+			StepResult->SetStringField(TEXT("replayNote"),
+				TEXT("Demo steps are not idempotent: running this step again spawns a second set of Demo_ actors. "
+					 "Run demo(cleanup) before replaying."));
+		}
+		else
+		{
+			StepResult->SetBoolField(TEXT("created"), false);
+			StepResult->SetBoolField(TEXT("existed"), false);
+		}
+
+		// No executable inverse. demo(cleanup) is what an operator runs to undo
+		// a demo, and it is named here as guidance, but it is NOT emitted as a
+		// rollback record: the flow runner invokes a record without reading any
+		// note first, and cleanup does three things this step did not. It
+		// removes the ENTIRE demo scene rather than this step's share, because
+		// no step tracks what it alone created. It calls EnsureHomeLevelLoaded,
+		// which CREATES /Game/MCP_Home when absent and SWITCHES the editor's
+		// open level. And it then deletes by "Demo_" label prefix in whatever
+		// level is open by that point, which is not confined to what this step
+		// made. Handing that to a runner as an undo would do more damage than
+		// leaving the step in place.
+		StepResult->SetBoolField(TEXT("rollbackPossible"), false);
+		StepResult->SetStringField(TEXT("rollbackNote"),
+			TEXT("No inverse is emitted. Demo steps all write into the same /Game/Demo folder and the same Demo_ "
+				 "actors and none records what it alone created, so nothing can undo one step. demo(cleanup) removes "
+				 "the whole demo scene and, on the way, creates /Game/MCP_Home if it is missing and switches the "
+				 "editor to it, then deletes by label prefix in whatever level is then open - run it deliberately "
+				 "when you mean to discard the entire demo, not as a rollback for one step."));
 	}
 
 	return MCPResult(StepResult);
@@ -272,6 +360,20 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 	// Anchor the editor to the saved home level FIRST. Otherwise deleting
 	// the demo level under it leaves the editor on an Untitled map and
 	// every subsequent action triggers a "save Untitled?" dialog.
+	//
+	// That anchoring is itself a change to the project and to the editor, so it
+	// is measured here: a cleanup that created the home level and moved the
+	// editor into it did something, whatever the delete counts say.
+	const bool bHomeExisted = UEditorAssetLibrary::DoesAssetExist(DemoConstants::HOME_LEVEL);
+	FString PreviousLevelPath;
+	if (UWorld* PreviousWorld = GetEditorWorld())
+	{
+		if (UPackage* PreviousPackage = PreviousWorld->GetOutermost())
+		{
+			PreviousLevelPath = PreviousPackage->GetName();
+		}
+	}
+	const bool bLevelSwitched = PreviousLevelPath != DemoConstants::HOME_LEVEL;
 	{
 		FString HomeErr;
 		EnsureHomeLevelLoaded(HomeErr);
@@ -342,6 +444,24 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoCleanup(const TSharedPtr<FJsonObject>&
 	auto Result = MCPSuccess();
 	Result->SetNumberField(TEXT("actorsDeleted"), ActorsDeleted);
 	Result->SetNumberField(TEXT("assetsDeleted"), AssetsDeleted);
+	Result->SetStringField(TEXT("previousLevelPath"), PreviousLevelPath);
+	Result->SetBoolField(TEXT("homeLevelCreated"), !bHomeExisted);
+	Result->SetBoolField(TEXT("levelSwitched"), bLevelSwitched);
+	// Idempotency, counting the anchoring as well as the deletes: cleaning an
+	// already-clean project while already standing in the home level does
+	// nothing at all. Creating that level, or moving the editor into it, is a
+	// change even when nothing was deleted.
+	Result->SetBoolField(TEXT("unchanged"),
+		ActorsDeleted == 0 && AssetsDeleted == 0 && bHomeExisted && !bLevelSwitched);
+
+	// No inverse. The demo scene comes back by running demo(step) 1 through 19
+	// again, which is nineteen calls rather than one, and nothing restores the
+	// deleted packages in place - they are rebuilt from scratch.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Cleanup deletes the demo level, its assets and its actors. The scene is rebuilt by running demo(step) "
+			 "1 through 19 again, which is nineteen calls rather than one inverse, and nothing restores the deleted "
+			 "packages themselves."));
 
 	return MCPResult(Result);
 }

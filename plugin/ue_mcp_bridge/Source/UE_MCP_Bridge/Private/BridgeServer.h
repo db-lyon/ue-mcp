@@ -115,19 +115,46 @@ struct FMCPBridgePortChoice
 };
 
 /**
+ * Takes the handle out of the live connection set.
+ *
+ * Declared LAST of the connection thread's guards and therefore destroyed
+ * FIRST, so the handle leaves the set while it is still open: half-closing a
+ * handle number the operating system has already handed to someone else is
+ * worse than not waking it at all.
+ */
+class FMCPConnectionUnlist
+{
+public:
+	FMCPConnectionUnlist(FMCPBridgeServer& InServer, FMCPSocketHandle InHandle);
+	~FMCPConnectionUnlist();
+
+	FMCPConnectionUnlist(const FMCPConnectionUnlist&) = delete;
+	FMCPConnectionUnlist& operator=(const FMCPConnectionUnlist&) = delete;
+
+private:
+	FMCPBridgeServer& Server;
+	FMCPSocketHandle Handle;
+};
+
+/**
  * Releases the connection record the accept loop made before it spawned this
  * thread.
  *
  * The accept loop registers, so a shutdown racing an accept can never conclude
- * that nothing is running. This object is declared after the socket guard and
- * therefore destroyed before it, so the handle leaves the live set while it is
- * still open: half-closing a handle number the operating system has already
- * handed to someone else is worse than not waking it at all.
+ * that nothing is running. Dropping the count is what lets
+ * WaitForConnectionsToFinish return, and once it returns the module is free to
+ * finish ShutdownModule and let the DLL unload - so nothing this thread still
+ * has to execute may live in the module's code pages after that point. This
+ * object is therefore declared FIRST of the thread's guards and destroyed
+ * LAST, after the handle has left the live set and after closesocket. Only the
+ * lambda's own return sequence follows, which is why the count is dropped here
+ * and not inside the unlist guard where a blocking closesocket still came
+ * after it.
  */
 class FMCPConnectionRelease
 {
 public:
-	FMCPConnectionRelease(FMCPBridgeServer& InServer, FMCPSocketHandle InHandle);
+	explicit FMCPConnectionRelease(FMCPBridgeServer& InServer);
 	~FMCPConnectionRelease();
 
 	FMCPConnectionRelease(const FMCPConnectionRelease&) = delete;
@@ -135,11 +162,11 @@ public:
 
 private:
 	FMCPBridgeServer& Server;
-	FMCPSocketHandle Handle;
 };
 
 class FMCPBridgeServer : public FRunnable
 {
+	friend class FMCPConnectionUnlist;
 	friend class FMCPConnectionRelease;
 
 public:
@@ -222,6 +249,10 @@ public:
 	 * timestamp, this instance's identity, and the action list the running
 	 * binary actually registered.
 	 */
+	/** The refusal every non-modal-safe method gets while a modal is up. */
+	TSharedPtr<FJsonObject> BuildDialogGateRefusal(
+		const FString& Method, const FString& Title, const FString& Message, const TArray<FString>& Buttons);
+
 	TSharedPtr<FJsonObject> BuildCapabilitiesPayload();
 
 	// ── Framing ──────────────────────────────────────────────────────────────
@@ -253,7 +284,10 @@ public:
 	/** Frame a control opcode (close, ping, pong) with its payload. */
 	static TArray<uint8> CreateControlFrame(EMCPWebSocketOpcode Opcode, const TArray<uint8>& Payload);
 
-	/** The largest assembled message the bridge will hold for one connection. */
+	/** The largest message the bridge will accept on one connection, whether it
+	 *  arrives as one frame or as fragments. A message of exactly this size is
+	 *  receivable: the unparsed receive buffer is bounded a frame header higher
+	 *  so the decoder can hold a full-size frame whole. */
 	static int64 MaxMessageBytes();
 
 private:
@@ -313,7 +347,13 @@ private:
 	// shutdown has to be able to find them, wake them, and wait for them. The
 	// module frees this object the moment Shutdown returns.
 	void RegisterConnection(FMCPSocketHandle Handle);
-	void UnregisterConnection(FMCPSocketHandle Handle);
+
+	/** Take the handle out of the live set. Does not drop the count. */
+	void UnlistConnection(FMCPSocketHandle Handle);
+
+	/** Drop the count. The last thing a connection thread does that touches
+	 *  this object, and the point after which shutdown may unload the module. */
+	void ReleaseConnectionSlot();
 
 	/** Half-close every live client socket so a blocked recv returns now
 	 *  rather than at the end of its next one-second select. */

@@ -16,7 +16,21 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { warn, debug } from "./log.js";
 
-const CACHE_FILE = path.join(os.tmpdir(), "ue-mcp-version-check.json");
+/**
+ * Where the answer is cached.
+ *
+ * NOT the OS temp dir any more. It was a fixed name in a directory every local
+ * user can write to, so on Linux and macOS somebody else on the box could
+ * pre-create it and choose the string this module interpolates into a message
+ * the agent reads as an instruction. The user's own `~/.ue-mcp/` is the same
+ * directory state.json already lives in, is not shared, and is where a value
+ * this process later treats as trusted belongs.
+ */
+function cacheFile(): string {
+  const override = process.env.UE_MCP_VERSION_CACHE;
+  if (override && override.trim() !== "") return override;
+  return path.join(os.homedir(), ".ue-mcp", "version-check.json");
+}
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5000;
 const REGISTRY_URL = "https://registry.npmjs.org/ue-mcp/latest";
@@ -29,19 +43,43 @@ interface CacheEntry {
 let pendingNotice: string | null = null;
 
 function readCache(): CacheEntry | null {
+  const file = cacheFile();
   try {
-    const raw = fs.readFileSync(CACHE_FILE, "utf8");
+    // A symlink here is somebody else choosing what this process reads. The
+    // file is ours or it is not read.
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile()) return null;
+    const raw = fs.readFileSync(file, "utf8");
     const parsed = JSON.parse(raw) as CacheEntry;
-    if (typeof parsed.checkedAt !== "number") return null;
-    return parsed;
+    if (typeof parsed.checkedAt !== "number" || !Number.isFinite(parsed.checkedAt)) return null;
+    // The SAME validation the fetch path applies, for the same reason. The
+    // cache is a file on disk, which is a less trustworthy source than the
+    // registry response, not a more trustworthy one: validating only the
+    // fetched value left the shape check on the trusted half and none on the
+    // untrusted half, so a cache entry went straight into the notice the
+    // agent is told to relay.
+    if (parsed.latest === null || parsed.latest === undefined) {
+      return { checkedAt: parsed.checkedAt, latest: null };
+    }
+    if (typeof parsed.latest !== "string" || !STRICT_SEMVER_RE.test(parsed.latest)) {
+      warn("update", `cached latest version is not a plain semver string; ignoring the cache`);
+      return null;
+    }
+    return { checkedAt: parsed.checkedAt, latest: parsed.latest };
   } catch {
     return null;
   }
 }
 
 function writeCache(entry: CacheEntry): void {
+  const file = cacheFile();
   try {
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(entry));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    // Owner-only, and written through a temp file so a reader never sees a
+    // half-written entry.
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(entry), { mode: 0o600 });
+    fs.renameSync(tmp, file);
   } catch {
     // best-effort; cache miss next run is fine
   }
@@ -50,6 +88,7 @@ function writeCache(entry: CacheEntry): void {
 // Strict semver: the registry value is interpolated into a string the agent
 // reads as a system-level message, so anything that doesn't match this shape
 // is dropped to close a prompt-injection channel through a poisoned response.
+// Applied to BOTH sources of the value - the fetch and the cache.
 const STRICT_SEMVER_RE = /^(\d{1,8})\.(\d{1,8})\.(\d{1,8})(?:-[A-Za-z0-9.-]{1,32})?$/;
 
 async function fetchLatest(): Promise<string | null> {

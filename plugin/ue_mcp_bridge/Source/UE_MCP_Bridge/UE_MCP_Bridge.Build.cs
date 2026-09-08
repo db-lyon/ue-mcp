@@ -1,5 +1,23 @@
 using UnrealBuildTool;
 
+// New source files (UBT caches the module file list and will not pick one up
+// until this file changes): GameplayHandlers_EQS.cpp,
+// GameplayHandlers_BTRuntime.cpp, GameplayHandlers_Perception.cpp,
+// EditorHandlers_ViewportControl.cpp, NiagaraHandlers_Advanced.cpp,
+// AudioHandlers_MetaSoundRead.cpp, AssetHandlers_UV.cpp,
+// AnimationHandlers_Skeleton.cpp.
+//
+// And the backlog wave: NiagaraHandlers_Compile.cpp,
+// GameplayHandlers_Mass.cpp, AssetHandlers_GeometryScript.cpp,
+// AssetHandlers_Hygiene.cpp, AnimationHandlers_Depth.cpp,
+// AudioHandlers_Depth.cpp, BlueprintHandlers_Depth.cpp,
+// BlueprintHandlers_UserTypes.cpp, StateTreeHandlers_Depth.cpp,
+// FoliageHandlers_Depth.cpp, EditorHandlers_Profiling.cpp,
+// MaterialHandlers_RVT.cpp, GasHandlers_Abilities.cpp,
+// GasHandlers_Snapshot.cpp, ReflectionHandlers_Schema.cpp,
+// ProjectHandlers_Plugins.cpp, WidgetHandlers_Animation.cpp,
+// WidgetHandlers_CommonUI.cpp.
+
 public class UE_MCP_Bridge : ModuleRules
 {
 	// Touched when Private/EngineStatus.cpp was added, and again for
@@ -158,12 +176,21 @@ public class UE_MCP_Bridge : ModuleRules
 				"NavigationSystem",
 				"Niagara",
 				"NiagaraEditor",
+				// FNiagaraCompileEventSeverity lives here, and reading a compile
+				// event's severity through StaticEnum needs the module that
+				// generated its reflection data, not just the header.
+				"NiagaraShader",
 				"PCG",
 				"PCGEditor",
 				"PoseSearch",
 				"PoseSearchEditor",
 				"PropertyBindingUtils",
 				"PropertyEditor",
+				// IPluginManager, IProjectManager and FProjectDescriptor, which
+				// project(enable_plugin) writes and widget(audit_commonui) reads.
+				// UnrealEd exposes these headers transitively but does not export
+				// the symbols, so the include compiles and the link fails.
+				"Projects",
 				"PythonScriptPlugin",
 				"Sequencer",
 				"Settings",
@@ -177,6 +204,10 @@ public class UE_MCP_Bridge : ModuleRules
 				"ClothingSystemRuntimeInterface",
 				"SubobjectDataInterface",
 				"ToolMenus",
+				// UE::Trace::IsChannel, ToggleChannel, EnumerateChannels and
+				// GetStatistics, which editor(start_trace) and its channel actions
+				// call. Core includes the header but does not re-export these.
+				"TraceLog",
 				// The engine-status snapshot, in its own module so it can load
 				// at PostConfigInit and cover the startup window that exists
 				// before this module does.

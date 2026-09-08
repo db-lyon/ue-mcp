@@ -12,6 +12,7 @@ import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const CPP_HANDLERS = path.join(ROOT, "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers");
+const BRIDGE_SERVER = path.join(ROOT, "plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/BridgeServer.cpp");
 
 // ── TS side ───────────────────────────────────────────────────────────────────
 // `bp("desc", "method_name", ...)` and `bridge: "method_name"`. Action keys
@@ -31,12 +32,17 @@ function tsBridgeMethods() {
       const src = fs.readFileSync(full, "utf8");
       const rel = path.relative(path.join(ROOT, "src"), full).replace(/\\/g, "/");
 
-      // bp("desc", "method_name", ...) - the dominant pattern in tools/*.ts.
-      // The 2nd string arg is the C++ bridge method. The description must be
-      // matched with escape awareness: a naive "[^"]*" stops at the first \"
-      // inside the prose, so any action whose description quotes something
-      // (parentPath=\"None\") was reported as an unbridged handler.
-      for (const m of src.matchAll(/\bbp\(\s*"(?:[^"\\]|\\.)*"\s*,\s*"([a-z_][a-z0-9_]*)"/g)) {
+      // bp("effect", "desc", "method_name", ...) - the dominant pattern in
+      // tools/*.ts. The effect leads, the description is optional, and the
+      // bridge method is the bare lowercase literal after them. The
+      // description must be matched with escape awareness: a naive "[^"]*"
+      // stops at the first \" inside the prose, so any action whose
+      // description quotes something (parentPath=\"None\") was reported as an
+      // unbridged handler. It can also be a paged(...) wrapper rather than a
+      // literal, so that shape is spelled out too.
+      const BP_CALL =
+        /\bbp\(\s*"(?:read|mutate|unknown)"\s*,\s*(?:(?:"(?:[^"\\]|\\.)*"|paged\((?:[^()]|\([^()]*\))*\))\s*,\s*)?"([a-z_][a-z0-9_]*)"/g;
+      for (const m of src.matchAll(BP_CALL)) {
         const method = m[1];
         if (!methods.has(method)) methods.set(method, []);
         methods.get(method).push({ file: rel });
@@ -50,6 +56,22 @@ function tsBridgeMethods() {
       // ctx.bridge.call("method_name", ...) and bridge.call("...", ...)
       // are direct calls in custom handlers (asset.list, asset.search, etc.).
       for (const m of src.matchAll(/\bbridge\.call\(\s*"([a-z_][a-z0-9_]*)"/g)) {
+        const method = m[1];
+        if (!methods.has(method)) methods.set(method, []);
+        methods.get(method).push({ file: rel });
+      }
+      // `JSON.stringify({ id, method: "x", params })` written straight onto the
+      // socket. The handshake does this rather than going through bridge.call,
+      // because it runs before the call machinery is available - so a scanner
+      // that reads only bridge.call reports get_bridge_capabilities as an
+      // unreachable C++ handler when it is the first thing every connection
+      // asks for.
+      //
+      // Anchored on the JSON.stringify envelope rather than on `method:` alone.
+      // A bare `method:` also appears in prose, including inside the C++ files
+      // plugin-cli.ts scaffolds for a new plugin, and reading a doc comment as
+      // a call is how an audit invents a missing handler.
+      for (const m of src.matchAll(/JSON\.stringify\(\s*\{[^}]*\bmethod:\s*"([a-z_][a-z0-9_]*)"/g)) {
         const method = m[1];
         if (!methods.has(method)) methods.set(method, []);
         methods.get(method).push({ file: rel });
@@ -89,8 +111,40 @@ function cppRegistrations() {
   return { methods, aliases };
 }
 
+/**
+ * Methods the dispatcher answers itself, before the registry is consulted.
+ *
+ * A handful of questions are served on the SOCKET thread rather than being
+ * queued onto the game thread, because they are the questions worth asking
+ * exactly when the game thread cannot answer: `get_engine_state` when it is
+ * inside a modal dialog or a hang, `get_bridge_capabilities` on connect. They
+ * are dispatched by a plain `Method == TEXT("...")` comparison in
+ * BridgeServer.cpp and never reach `Registry.RegisterHandler`.
+ *
+ * A scanner that reads only the registry therefore reports them as TS calls
+ * with no C++ handler, which is the one class this audit is meant to catch,
+ * and reports it with the same words: "NO C++ handler". `get_engine_state` sat
+ * in that list, the audit exited 1 every run, and the exit code stopped meaning
+ * anything. Reading the dispatcher too is what puts the signal back.
+ *
+ * Read from the source rather than hard-coded, so a fifth fast path added
+ * tomorrow needs no edit here.
+ */
+function socketThreadFastPaths() {
+  const out = new Map();
+  if (!fs.existsSync(BRIDGE_SERVER)) return out;
+  const src = fs.readFileSync(BRIDGE_SERVER, "utf8");
+  for (const m of src.matchAll(/\bMethod\s*==\s*TEXT\("([a-z_][a-z0-9_]*)"\)/g)) {
+    if (!out.has(m[1])) out.set(m[1], [{ file: "BridgeServer.cpp (socket-thread fast path)" }]);
+  }
+  return out;
+}
+
 const ts = tsBridgeMethods();
 const { methods: cpp, aliases } = cppRegistrations();
+for (const [method, sites] of socketThreadFastPaths()) {
+  if (!cpp.has(method)) cpp.set(method, sites);
+}
 
 const tsOnly = [];   // bridge methods declared in TS but not registered in C++ -> "Unknown method" at runtime
 const cppOnly = [];  // C++ handlers with no TS exposure -> unreachable handler

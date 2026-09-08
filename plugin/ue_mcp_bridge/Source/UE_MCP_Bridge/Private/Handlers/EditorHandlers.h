@@ -38,6 +38,11 @@ public:
 	{
 		FScopeLock Lock(&CritSection);
 		FMCPLogLine Entry;
+		// The absolute write index is the line's identity in the log stream:
+		// unique, monotonic, and unchanged by later lines arriving. Cursor
+		// paging over the buffer anchors on it, and a line that has scrolled
+		// out of the ring is then reported as gone rather than guessed at.
+		Entry.Sequence = (int32)WriteIndex;
 		Entry.Message = V;
 		Entry.Category = Category.ToString();
 		switch (Verbosity)
@@ -57,6 +62,8 @@ public:
 		FString Message;
 		FString Category;
 		FString Verbosity;
+		/** Absolute position in the log stream, counted from editor start. */
+		int32 Sequence = 0;
 	};
 
 	TArray<FMCPLogLine> GetRecentLines(int32 Count) const
@@ -139,6 +146,49 @@ private:
 	static TSharedPtr<FJsonValue> SetViewportCamera(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> Undo(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> Redo(const TSharedPtr<FJsonObject>& Params);
+
+	// Viewport control, in EditorHandlers_ViewportControl.cpp. FEditorViewportClient
+	// fields are not UPROPERTYs, so set_property cannot reach them. This is what
+	// makes a screenshot comparable between runs.
+	static TSharedPtr<FJsonValue> GetViewportState(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetViewMode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetViewportExposure(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetViewportView(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetGameView(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RedrawViewport(const TSharedPtr<FJsonObject>& Params);
+
+	// General-purpose transaction and undo-stack control. The existing undo/redo
+	// are bare calls returning a bool; material's begin/end pair has no cancel,
+	// so an aborted flow could only ever commit.
+	static TSharedPtr<FJsonValue> BeginEditorTransaction(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> EndEditorTransaction(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CancelEditorTransaction(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetUndoState(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> UndoRedoSteps(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetTransactionHistory(const TSharedPtr<FJsonObject>& Params);
+
+	// Insights trace control, frame timing and standalone profiling runs, in
+	// EditorHandlers_Profiling.cpp. None of this is a property write:
+	// FTraceAuxiliary and UE::Trace are static C++ APIs with no UObject in
+	// front of them, the frame timers are engine globals, and a child process
+	// is not reflected state at all. The one thing that IS a property write -
+	// the unfocused-editor CPU throttle - is deliberately left to
+	// editor(set_property) and only REPORTED here, by get_frame_timing.
+	static TSharedPtr<FJsonValue> StartInsightsTrace(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> StopInsightsTrace(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> PauseInsightsTrace(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetInsightsTraceStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListTraceChannels(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetTraceChannels(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> BeginProfileRegion(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> EndProfileRegion(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddTraceBookmark(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetFrameTiming(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> TriggerHitch(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> LaunchStandaloneGame(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetStandaloneStatus(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> StopStandaloneGame(const TSharedPtr<FJsonObject>& Params);
+
 	static TSharedPtr<FJsonValue> ReloadHandlers(const TSharedPtr<FJsonObject>& Params);
 	// #378: flush dirty packages and report per-package success/failure
 	static TSharedPtr<FJsonValue> SaveDirty(const TSharedPtr<FJsonObject>& Params);

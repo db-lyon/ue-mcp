@@ -221,7 +221,7 @@ namespace
 		Object->SetObjectField(TEXT("worldTransform"), TransformObject);
 
 		Object->SetObjectField(TEXT("localBounds"), MCPRefreshDescribeBounds(Component->GetLocalBounds()));
-		Object->SetObjectField(TEXT("worldBounds"), MCPRefreshDescribeBounds(Component->GetBounds()));
+		Object->SetObjectField(TEXT("worldBounds"), MCPRefreshDescribeBounds(MCPComponentWorldBounds(*Component)));
 
 		// #914's original ask: the UNSCALED authored extent, which is what the
 		// details panel shows and what no existing read returned.
@@ -384,6 +384,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 		Result->SetStringField(TEXT("saveNote"),
 			TEXT("Reconstructed actors leave the level dirty and it is NOT saved. Call level(save) when you are done."));
 	}
+	// Rerunning a construction script rebuilds an actor's generated components
+	// from its class and its instance properties. What it replaced was the
+	// previous generated output, which nothing captured and no action rebuilds:
+	// calling this again produces the CURRENT output, not the old one.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("There is no call that restores the generated components a construction script replaced. Running this again reruns the script and produces its current output. Any edit made directly to a generated component was already discarded by the rerun."));
 	return MCPResult(Result);
 }
 
@@ -580,6 +587,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::RecreatePhysicsState(const TSharedPtr<FJs
 		Result->SetStringField(TEXT("traceNote"),
 			TEXT("Re-run the trace that gave the wrong answer. A false-negative line_trace caused by stale collision looks exactly like a real miss, so the only proof this worked is the trace."));
 	}
+	Result->SetBoolField(TEXT("unchanged"), bDryRun || Recreated == 0);
+	// This rebuilds a component's physics state from its current collision
+	// settings. What it replaced was a stale body, and there is no call that
+	// puts a stale body back: running this again rebuilds from the same
+	// settings and lands on the same state.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Recreating physics state discards a stale body and rebuilds it from the component's collision settings, which this call does not change. There is nothing to restore and no call that would restore it."));
 	return MCPResult(Result);
 }
 
@@ -681,8 +696,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::TestComponentOverlap(const TSharedPtr<FJs
 
 	if (Method == TEXT("AABB"))
 	{
-		const FBox BoxA = ComponentA->GetBounds().GetBox();
-		const FBox BoxB = ComponentB->GetBounds().GetBox();
+		const FBox BoxA = MCPComponentWorldBounds(*ComponentA).GetBox();
+		const FBox BoxB = MCPComponentWorldBounds(*ComponentB).GetBox();
 		bOverlap = BoxA.Intersect(BoxB);
 		// Per-axis gap or overlap depth, which is what a caller tuning a
 		// placement actually wants back.

@@ -114,7 +114,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::InspectRuntimeInstances(const TSharedPtr
 	UWorld* World = ResolveWorldFromParams(Params, TEXT("pie"));
 	if (!World || (World->WorldType != EWorldType::PIE && World->WorldType != EWorldType::Game))
 	{
-		return MCPError(TEXT("No live PIE/Game world. Runtime widget inspection reads a running session only: start PIE, or pass a pieInstance that exists."));
+		return MCPError(TEXT("No live PIE/Game world. Runtime widget inspection reads a running session only: start PIE, or pass a pieInstance that exists. 'world' accepts pie (the default), game or auto; any other value resolves to the editor world, which is never a valid target here."));
 	}
 
 	const FString WidgetName = OptionalString(Params, TEXT("widgetName"));

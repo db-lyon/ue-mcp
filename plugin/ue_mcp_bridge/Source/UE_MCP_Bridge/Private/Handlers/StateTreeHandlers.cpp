@@ -1,6 +1,7 @@
 #include "StateTreeHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerPagination.h"
 
 // StateTree authoring depends on UStateTreeEditingSubsystem (compile +
 // validate entry points) and editor property binding support, both
@@ -31,6 +32,7 @@
 #include "StateTreeEvaluatorBase.h"
 #include "StateTreeTaskBase.h"
 #include "StateTreeEditorTypes.h"
+#include "HandlerStateTreeSchema.h"
 
 #define UE_MCP_HAS_STATETREE_STATE_DESCRIPTION (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
 #define UE_MCP_HAS_STATETREE_STATE_CUSTOM_TICK_RATE (ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
@@ -88,8 +90,23 @@ void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("remove_state_tree_state_parameter"), &RemoveStateParameter);
 	Registry.RegisterHandler(TEXT("set_state_tree_state_parameter"), &SetStateParameter);
 	Registry.RegisterHandler(TEXT("set_state_tree_root_parameters"), &SetRootParameters);
+	Registry.RegisterHandler(TEXT("set_state_tree_schema"), &SetSchema);
 	Registry.RegisterHandler(TEXT("compile_state_tree"), &CompileStateTree);
 	Registry.RegisterHandler(TEXT("validate_state_tree"), &ValidateStateTree);
+
+	// V8 depth (StateTreeHandlers_Depth.cpp). Everything above could author a
+	// tree; these close the parts of it that had no route at all.
+	Registry.RegisterHandler(TEXT("list_state_tree_node_types"), &ListStateTreeNodeTypes);
+	Registry.RegisterHandler(TEXT("read_state_tree_state"), &ReadState);
+	Registry.RegisterHandler(TEXT("add_state_tree_consideration"), &AddConsideration);
+	Registry.RegisterHandler(TEXT("remove_state_tree_consideration"), &RemoveConsideration);
+	Registry.RegisterHandler(TEXT("remove_state_tree_transition_condition"), &RemoveTransitionCondition);
+	Registry.RegisterHandler(TEXT("set_state_tree_state_link"), &SetStateLink);
+	Registry.RegisterHandler(TEXT("move_state_tree_state"), &MoveState);
+	Registry.RegisterHandler(TEXT("set_state_tree_node_class"), &SetNodeClass);
+	Registry.RegisterHandler(TEXT("read_state_tree_runtime"), &ReadRuntime);
+	Registry.RegisterHandler(TEXT("send_state_tree_event"), &SendEvent);
+	Registry.RegisterHandler(TEXT("request_state_tree_transition"), &RequestTransition);
 #endif // UE_MCP_HAS_5_5_API
 }
 
@@ -106,6 +123,42 @@ UStateTreeEditorData* FStateTreeHandlers::GetEditorData(UStateTree* StateTree)
 {
 	if (!StateTree) return nullptr;
 	return Cast<UStateTreeEditorData>(StateTree->EditorData);
+}
+
+// #833: a StateTree with no editor data reached every authoring action as a
+// bare "EditorData not found", which reads like a bug in the action rather
+// than a fact about the asset. asset(create_asset_by_class) writes exactly
+// this shape, and the fix is one call, so the message names it.
+FString FStateTreeHandlers::MissingEditorDataMessage(const FString& AssetPath)
+{
+	return FString::Printf(
+		TEXT("StateTree '%s' has no editor data, so it has no schema, no states, and cannot compile. ")
+		TEXT("A tree created through the generic asset(create_asset_by_class) route lands in this state. ")
+		TEXT("Repair it with statetree(set_schema, assetPath=\"%s\"), which attaches the editor data, a schema ")
+		TEXT("and a root state, or create trees with gameplay(create_state_tree), which does that up front."),
+		*AssetPath, *AssetPath);
+}
+
+// The compiler refuses a schema-less tree by logging to LogStateTreeEditor and
+// returning false with an EMPTY compiler log, so a caller saw compiled=false
+// and errors=[] and had nothing to act on. Answer with the reason before
+// handing the asset to a compiler that cannot report it.
+TSharedPtr<FJsonValue> FStateTreeHandlers::RequireSchema(UStateTree* StateTree, const FString& AssetPath)
+{
+	UStateTreeEditorData* EditorData = GetEditorData(StateTree);
+	if (!EditorData)
+	{
+		return MCPError(MissingEditorDataMessage(AssetPath));
+	}
+	if (!EditorData->Schema)
+	{
+		return MCPError(FString::Printf(
+			TEXT("StateTree '%s' has no schema, and the compiler cannot build a tree without one ")
+			TEXT("(it logs \"does not have a schema\" and stops). Attach one with ")
+			TEXT("statetree(set_schema, assetPath=\"%s\")."),
+			*AssetPath, *AssetPath));
+	}
+	return nullptr;
 }
 
 UStateTreeState* FStateTreeHandlers::FindStateByID(UStateTreeEditorData* EditorData, const FGuid& StateID)
@@ -360,6 +413,38 @@ static EStateTreeTransitionTrigger ParseTransitionTrigger(const FString& Str)
 		return Combined != EStateTreeTransitionTrigger::None ? Combined : EStateTreeTransitionTrigger::OnStateCompleted;
 	}
 	return ParseTransitionTriggerSingle(Str);
+}
+
+// The priority parser AddTransition writes through, and the one RemoveTransition
+// round-trips against. Deliberately ONE function rather than a writer plus a
+// replica: a round trip against a copy is only as good as the copy's tracking of
+// the original, and this enum already has a third, divergent parser in
+// StateTreeHandlers_Depth.cpp (case-insensitive, and it REJECTS an unrecognised
+// value instead of defaulting, which is a validating contract this authoring one
+// deliberately does not share).
+//
+// Anything unrecognised maps to Normal, which is exactly why None - and any
+// priority a later engine adds - does not survive the round trip.
+static EStateTreeTransitionPriority ParseTransitionPriority(const FString& Str)
+{
+	if (Str == TEXT("Low")) return EStateTreeTransitionPriority::Low;
+	if (Str == TEXT("Medium")) return EStateTreeTransitionPriority::Medium;
+	if (Str == TEXT("High")) return EStateTreeTransitionPriority::High;
+	if (Str == TEXT("Critical")) return EStateTreeTransitionPriority::Critical;
+	return EStateTreeTransitionPriority::Normal;
+}
+
+static FString TransitionPriorityToString(EStateTreeTransitionPriority Priority)
+{
+	switch (Priority)
+	{
+	case EStateTreeTransitionPriority::Low: return TEXT("Low");
+	case EStateTreeTransitionPriority::Normal: return TEXT("Normal");
+	case EStateTreeTransitionPriority::Medium: return TEXT("Medium");
+	case EStateTreeTransitionPriority::High: return TEXT("High");
+	case EStateTreeTransitionPriority::Critical: return TEXT("Critical");
+	default: return TEXT("None");
+	}
 }
 
 static EStateTreeTransitionType ParseTransitionType(const FString& Str)
@@ -695,7 +780,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ReadStateTree(const TSharedPtr<FJsonO
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
 
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
-	if (!EditorData) return MCPError(TEXT("EditorData not found on StateTree"));
+	if (!EditorData) return MCPError(MissingEditorDataMessage(AssetPath));
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
@@ -788,8 +873,18 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStates(const TSharedPtr<FJsonObje
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
+	// T3: paged.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_state_tree_states|assetPath=%s"), *AssetPath),
+			/*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
+
 	auto Result = MCPSuccess();
-	TArray<TSharedPtr<FJsonValue>> StatesArr;
+	TArray<MCPPagination::FPageRow> Rows;
 
 	TFunction<void(const UStateTreeState*)> CollectStates = [&](const UStateTreeState* State)
 	{
@@ -799,7 +894,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStates(const TSharedPtr<FJsonObje
 		SObj->SetStringField(TEXT("id"), GuidToString(State->ID));
 		SObj->SetStringField(TEXT("path"), GetStatePath(State));
 		SObj->SetStringField(TEXT("type"), StateTypeToString(State->Type));
-		StatesArr.Add(MakeShared<FJsonValueObject>(SObj));
+		// The state's GUID is the page anchor: it survives a rename and a move
+		// to another parent, which the state path does not.
+		Rows.Add({ GuidToString(State->ID), MakeShared<FJsonValueObject>(SObj) });
 
 		for (const TObjectPtr<UStateTreeState>& Child : State->Children)
 		{
@@ -811,8 +908,11 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListStates(const TSharedPtr<FJsonObje
 	{
 		CollectStates(SubTree);
 	}
+	// Depth-first in the tree's own authored order, which is the order the
+	// StateTree editor shows and the order selection evaluates in, so the rows
+	// are deliberately NOT sorted.
 
-	Result->SetArrayField(TEXT("states"), StatesArr);
+	MCPPagination::EmitPage(Page, Rows, TEXT("states"), Result);
 	return MCPResult(Result);
 }
 
@@ -892,6 +992,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 	Result->SetStringField(TEXT("stateId"), GuidToString(NewState->ID));
 	Result->SetStringField(TEXT("statePath"), GetStatePath(NewState));
 	Result->SetStringField(TEXT("stateName"), NewState->Name.ToString());
+
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(NewState->ID));
+		MCPSetRollback(Result, TEXT("remove_state_tree_state"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -909,6 +1016,17 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveState(const TSharedPtr<FJsonObj
 	if (!State) return MCPError(TEXT("State not found"));
 
 	UStateTreeState* Parent = State->Parent;
+
+	// Captured before the removal: the inverse has to name the parent and the
+	// sibling slot, and neither is readable once the state is detached.
+	const FString PriorName = State->Name.ToString();
+	const FString PriorType = StateTypeToString(State->Type);
+	const FString PriorBehavior = SelectionBehaviorToString(State->SelectionBehavior);
+	const FString PriorParentId = Parent ? GuidToString(Parent->ID) : FString();
+	const int32 PriorIndex = Parent
+		? Parent->Children.IndexOfByKey(State)
+		: EditorData->SubTrees.IndexOfByKey(State);
+
 	if (Parent)
 	{
 		Parent->Modify();
@@ -923,8 +1041,75 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveState(const TSharedPtr<FJsonObj
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("removed"), true);
+
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		// add_state_tree_state reads `stateId` as the PARENT to add under, and
+		// adds a root subtree when it is absent.
+		if (!PriorParentId.IsEmpty()) Payload->SetStringField(TEXT("stateId"), PriorParentId);
+		Payload->SetStringField(TEXT("name"), PriorName);
+		Payload->SetStringField(TEXT("stateType"), PriorType);
+		Payload->SetStringField(TEXT("selectionBehavior"), PriorBehavior);
+		if (!PriorParentId.IsEmpty() && PriorIndex >= 0)
+		{
+			Payload->SetNumberField(TEXT("insertIndex"), PriorIndex);
+		}
+		MCPSetRollback(Result, TEXT("add_state_tree_state"), Payload);
+	}
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	{
+		FString StateNote = PriorParentId.IsEmpty()
+			? TEXT("statetree(add_state) re-creates an EMPTY state with a NEW stateId, appended as a root subtree. It has no insertIndex for root subtrees, so this state's position among them is not restored. ")
+			: TEXT("statetree(add_state) re-creates an EMPTY state with a NEW stateId, under the same parent and at the same name, type, selection behaviour and sibling index. ");
+		StateNote += TEXT("Its tasks, enter conditions, transitions, utility considerations, state parameters and child states are not restored, nor is any binding or transition elsewhere that named its old id. ");
+		// The new GUID is what breaks a multi-step rollback, not just this record.
+		StateNote += TEXT("Because the id changes, a rollback record from another step in the same flow that names this state or any state that was under it fails with \"State not found\" and leaves the chain half applied. ");
+		StateNote += TEXT("Read the branch with statetree(read) before removing it if it has to come back whole.");
+		Result->SetStringField(TEXT("rollbackNote"), StateNote);
+	}
 	return MCPResult(Result);
+}
+
+// The current value of one state property, in the same string form
+// set_state_tree_state_property parses, so the inverse round-trips through the
+// same action. False means there is no value the inverse could replay.
+static bool StateTreeCapturePriorStateProperty(const UStateTreeState* State, const FString& PropName, FString& OutValue)
+{
+	if (!State) return false;
+	if (PropName == TEXT("name")) { OutValue = State->Name.ToString(); return true; }
+	if (PropName == TEXT("type")) { OutValue = StateTypeToString(State->Type); return true; }
+	if (PropName == TEXT("selectionBehavior")) { OutValue = SelectionBehaviorToString(State->SelectionBehavior); return true; }
+	if (PropName == TEXT("bEnabled")) { OutValue = State->bEnabled ? TEXT("true") : TEXT("false"); return true; }
+	if (PropName == TEXT("bCheckPrerequisitesWhenActivatingChildDirectly"))
+	{
+		OutValue = State->bCheckPrerequisitesWhenActivatingChildDirectly ? TEXT("true") : TEXT("false");
+		return true;
+	}
+	if (PropName == TEXT("weight")) { OutValue = FString::SanitizeFloat(State->Weight); return true; }
+	if (PropName == TEXT("linkedAsset"))
+	{
+		// The setter rejects a path it cannot load, so a state that was not
+		// linked has no prior value this action can be replayed with.
+		if (!State->LinkedAsset) return false;
+		OutValue = State->LinkedAsset->GetPathName();
+		return true;
+	}
+	if (PropName == TEXT("tag")) { OutValue = State->Tag.IsValid() ? State->Tag.ToString() : FString(); return true; }
+	if (PropName == TEXT("color")) { OutValue = State->ColorRef.ID.IsValid() ? GuidToString(State->ColorRef.ID) : FString(); return true; }
+#if UE_MCP_HAS_STATETREE_STATE_DESCRIPTION
+	if (PropName == TEXT("description")) { OutValue = State->Description; return true; }
+#endif
+#if UE_MCP_HAS_STATETREE_STATE_CUSTOM_TICK_RATE
+	if (PropName == TEXT("customTickRate"))
+	{
+		OutValue = State->bHasCustomTickRate ? FString::SanitizeFloat(State->CustomTickRate) : FString();
+		return true;
+	}
+#endif
+	return false;
 }
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJsonObject>& Params)
@@ -944,6 +1129,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 
 	const FString PropName = Params->GetStringField(TEXT("propertyName"));
 	const FString Value = Params->GetStringField(TEXT("value"));
+
+	// Read before the write, so the inverse replays what was actually there.
+	FString PriorValue;
+	const bool bHasPriorValue = StateTreeCapturePriorStateProperty(State, PropName, PriorValue);
 
 	if (PropName == TEXT("name"))
 	{
@@ -1068,6 +1257,24 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	if (bHasPriorValue)
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetStringField(TEXT("propertyName"), PropName);
+		Payload->SetStringField(TEXT("value"), PriorValue);
+		MCPSetRollback(Result, TEXT("set_state_tree_state_property"), Payload);
+	}
+	else
+	{
+		// Only reachable for linkedAsset: every other property name either has
+		// a prior value or was rejected above.
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("This state had no linkedAsset before the call, and statetree(set_state_property) cannot be replayed with an empty one, so there is no inverse value. ")
+			TEXT("Clear the link with statetree(set_state_link, linkType=\"none\")."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1084,16 +1291,50 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ClearStateNodes(const TSharedPtr<FJso
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	State->Modify();
-	State->Tasks.Empty();
-	State->EnterConditions.Empty();
-	State->Transitions.Empty();
-	State->SingleTask.Reset();
+	const int32 ClearedTasks = State->Tasks.Num();
+	const int32 ClearedEnterConditions = State->EnterConditions.Num();
+	const int32 ClearedTransitions = State->Transitions.Num();
+	// SingleTask.Reset() clears Node, Instance, InstanceObject and ID together, so
+	// testing Node alone would let a malformed slot survive under unchanged:true.
+	const bool bHadSingleTask =
+		State->SingleTask.Node.IsValid()
+		|| State->SingleTask.Instance.IsValid()
+		|| State->SingleTask.InstanceObject != nullptr
+		|| State->SingleTask.ID.IsValid();
 
-	UStateTreeEditingSubsystem::ValidateStateTree(ST);
+	// Nothing to clear means nothing to do: Modify() and ValidateStateTree would
+	// dirty the package, which would make the unchanged report below untrue.
+	const bool bAnythingToClear =
+		(ClearedTasks + ClearedEnterConditions + ClearedTransitions) > 0 || bHadSingleTask;
+	if (bAnythingToClear)
+	{
+		State->Modify();
+		State->Tasks.Empty();
+		State->EnterConditions.Empty();
+		State->Transitions.Empty();
+		State->SingleTask.Reset();
+
+		UStateTreeEditingSubsystem::ValidateStateTree(ST);
+	}
 
 	auto Result = MCPSuccess();
-	Result->SetBoolField(TEXT("cleared"), true);
+	Result->SetBoolField(TEXT("cleared"), bAnythingToClear);
+	Result->SetNumberField(TEXT("clearedTasks"), ClearedTasks);
+	Result->SetNumberField(TEXT("clearedEnterConditions"), ClearedEnterConditions);
+	Result->SetNumberField(TEXT("clearedTransitions"), ClearedTransitions);
+	if (bAnythingToClear)
+	{
+		MCPSetUpdated(Result);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("unchanged"), true);
+	}
+
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("This drops every task, enter condition and transition plus the single-task slot in one call, and no single action rebuilds them: their struct types, instance values, operands, order and node ids are all gone. ")
+		TEXT("Read the state with statetree(read_state) BEFORE clearing it and replay statetree(add_task) / statetree(add_enter_condition) / statetree(add_transition) from that."));
 	return MCPResult(Result);
 }
 
@@ -1134,6 +1375,20 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTask(const TSharedPtr<FJsonObject>
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("nodeId"), GuidToString(NewNode->ID));
 	Result->SetNumberField(TEXT("taskIndex"), State->Tasks.Num() - 1);
+
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetNumberField(TEXT("taskIndex"), State->Tasks.Num() - 1);
+		MCPSetRollback(Result, TEXT("remove_state_tree_task"), Payload);
+	}
+	// remove_state_tree_task addresses a task by position, and the bridge has no
+	// remove-by-nodeId action to address it by identity instead.
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The inverse names this task by INDEX into the state's task list. ")
+		TEXT("A later step that removes a task BELOW it shifts it down, and statetree(remove_task)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different task and remove the wrong one. ")
+		TEXT("There is no remove-task-by-nodeId action to address it by identity instead."));
 	return MCPResult(Result);
 }
 
@@ -1178,7 +1433,50 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEnterCondition(const TSharedPtr<FJ
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("nodeId"), GuidToString(NewNode->ID));
+	Result->SetNumberField(TEXT("conditionIndex"), State->EnterConditions.Num() - 1);
+
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetNumberField(TEXT("conditionIndex"), State->EnterConditions.Num() - 1);
+		MCPSetRollback(Result, TEXT("remove_state_tree_enter_condition"), Payload);
+	}
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The inverse names this condition by INDEX into the state's enter-condition list. ")
+		TEXT("A later step that removes an enter condition BELOW it shifts it down, and statetree(remove_enter_condition)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different condition and remove the wrong one. ")
+		TEXT("There is no remove-enter-condition-by-nodeId action to address it by identity instead."));
 	return MCPResult(Result);
+}
+
+// Every UPROPERTY of a node's instance data, in the string form the
+// instanceProperties map accepts. UObject-backed (Blueprint-wrapped) nodes keep
+// their values on InstanceObject rather than in the Instance struct, and
+// AddEditorNodeToArray writes both back through that same map, so reading only
+// the struct returned an empty map for every Blueprint node.
+static TSharedPtr<FJsonObject> StateTreeCaptureNodeInstanceProperties(const FStateTreeEditorNode& Node)
+{
+	auto Props = MakeShared<FJsonObject>();
+	if (UObject* InstanceObj = Node.InstanceObject)
+	{
+		for (TFieldIterator<FProperty> It(InstanceObj->GetClass()); It; ++It)
+		{
+			FString ValueStr;
+			It->ExportTextItem_Direct(ValueStr, It->ContainerPtrToValuePtr<void>(InstanceObj), nullptr, nullptr, PPF_None);
+			Props->SetStringField(It->GetName(), ValueStr);
+		}
+		return Props;
+	}
+	if (Node.Instance.IsValid() && Node.Instance.GetScriptStruct() && Node.Instance.GetMemory())
+	{
+		for (TFieldIterator<FProperty> It(Node.Instance.GetScriptStruct()); It; ++It)
+		{
+			FString ValueStr;
+			It->ExportTextItem_Direct(ValueStr, It->ContainerPtrToValuePtr<void>(Node.Instance.GetMemory()), nullptr, nullptr, PPF_None);
+			Props->SetStringField(It->GetName(), ValueStr);
+		}
+	}
+	return Props;
 }
 
 TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEnterCondition(const TSharedPtr<FJsonObject>& Params)
@@ -1201,12 +1499,44 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEnterCondition(const TSharedPtr
 			ConditionIndex, State->EnterConditions.Num()));
 	}
 
+	// Captured before the removal so the inverse can rebuild the node.
+	const FStateTreeEditorNode& DoomedCondition = State->EnterConditions[ConditionIndex];
+	const UScriptStruct* DoomedCondStruct = DoomedCondition.Node.IsValid() ? DoomedCondition.Node.GetScriptStruct() : nullptr;
+	const FString DoomedCondStructName = DoomedCondStruct ? DoomedCondStruct->GetName() : FString();
+	const FString DoomedCondOperand = DoomedCondition.ExpressionOperand == EStateTreeExpressionOperand::Or ? TEXT("Or") : TEXT("And");
+	const bool bCondHadInstanceObject = DoomedCondition.InstanceObject != nullptr;
+	auto DoomedCondProps = StateTreeCaptureNodeInstanceProperties(DoomedCondition);
+
 	State->Modify();
 	State->EnterConditions.RemoveAt(ConditionIndex);
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("removed"), true);
+	Result->SetStringField(TEXT("structType"), DoomedCondStructName);
+	Result->SetNumberField(TEXT("conditionCount"), State->EnterConditions.Num());
+
+	if (!DoomedCondStructName.IsEmpty())
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetStringField(TEXT("structType"), DoomedCondStructName);
+		Payload->SetStringField(TEXT("operand"), DoomedCondOperand);
+		Payload->SetObjectField(TEXT("instanceProperties"), DoomedCondProps);
+		MCPSetRollback(Result, TEXT("add_state_tree_enter_condition"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), bCondHadInstanceObject
+			? TEXT("The removed condition was Blueprint-backed. Its instance values ARE captured in the payload, but replaying adds the wrapper without its class, and statetree(set_node_class) reallocates the instance data when you set the class, discarding them. Set the class first, then write the values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the list with a NEW nodeId, so its position in the And/Or expression and any binding that named the old id are not restored.")
+			: TEXT("Replaying this appends the condition at the END of the list with a NEW nodeId, so its position in the And/Or expression and any property binding that named the old id are not restored."));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The removed condition carried no node struct, so there is no structType statetree(add_enter_condition) could be replayed with."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1229,12 +1559,42 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTask(const TSharedPtr<FJsonObje
 		return MCPError(FString::Printf(TEXT("Invalid taskIndex: %d (state has %d tasks)"), TaskIndex, State->Tasks.Num()));
 	}
 
+	// Captured before the removal so the inverse can rebuild the node.
+	const FStateTreeEditorNode& DoomedTask = State->Tasks[TaskIndex];
+	const UScriptStruct* DoomedTaskStruct = DoomedTask.Node.IsValid() ? DoomedTask.Node.GetScriptStruct() : nullptr;
+	const FString DoomedTaskStructName = DoomedTaskStruct ? DoomedTaskStruct->GetName() : FString();
+	const bool bTaskHadInstanceObject = DoomedTask.InstanceObject != nullptr;
+	auto DoomedTaskProps = StateTreeCaptureNodeInstanceProperties(DoomedTask);
+
 	State->Modify();
 	State->Tasks.RemoveAt(TaskIndex);
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("removed"), true);
+	Result->SetStringField(TEXT("structType"), DoomedTaskStructName);
+	Result->SetNumberField(TEXT("taskCount"), State->Tasks.Num());
+
+	if (!DoomedTaskStructName.IsEmpty())
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetStringField(TEXT("structType"), DoomedTaskStructName);
+		Payload->SetObjectField(TEXT("instanceProperties"), DoomedTaskProps);
+		MCPSetRollback(Result, TEXT("add_state_tree_task"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), bTaskHadInstanceObject
+			? TEXT("The removed task was Blueprint-backed. Its instance values ARE captured in the payload, but replaying adds the wrapper without its class, and statetree(set_node_class) reallocates the instance data when you set the class, discarding them. Set the class first, then write the values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the task list with a NEW nodeId, so its taskIndex and any property binding that named the old id are not restored.")
+			: TEXT("Replaying this appends the task at the END of the list with a NEW nodeId, so its taskIndex and any property binding that named the old id are not restored. Node-struct flags written with statetree(set_task_property) are not part of the payload either."));
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The removed task carried no node struct, so there is no structType statetree(add_task) could be replayed with."));
+	}
 	return MCPResult(Result);
 }
 
@@ -1277,10 +1637,22 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskInstanceProperty(const TShared
 	}
 
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(InstMem);
+	// Exported before the import so the inverse replays the value that was there.
+	FString PriorValue;
+	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
 	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetNumberField(TEXT("taskIndex"), TaskIndex);
+		Payload->SetStringField(TEXT("propertyName"), PropName);
+		Payload->SetStringField(TEXT("value"), PriorValue);
+		MCPSetRollback(Result, TEXT("set_state_tree_task_instance_property"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -1330,6 +1702,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskProperty(const TSharedPtr<FJso
 	State->Modify();
 
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(NodeMem);
+	// Exported before the import so the inverse replays the value that was there.
+	FString PriorValue;
+	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
 	const TCHAR* ImportResult = Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
 	if (!ImportResult)
 	{
@@ -1342,6 +1717,15 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskProperty(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("structType"), NodeStruct->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropName);
 	Result->SetStringField(TEXT("value"), Value);
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetNumberField(TEXT("taskIndex"), TaskIndex);
+		Payload->SetStringField(TEXT("propertyName"), PropName);
+		Payload->SetStringField(TEXT("value"), PriorValue);
+		MCPSetRollback(Result, TEXT("set_state_tree_task_property"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -1390,6 +1774,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEvaluator(const TSharedPtr<FJsonOb
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("nodeId"), GuidToString(NewNode->ID));
+
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("nodeId"), GuidToString(NewNode->ID));
+		MCPSetRollback(Result, TEXT("remove_state_tree_evaluator"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -1414,12 +1805,41 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEvaluator(const TSharedPtr<FJso
 	{
 		if (EditorData->Evaluators[i].ID == NodeId)
 		{
+			// Captured before the removal so the inverse can rebuild the node.
+			const FStateTreeEditorNode& Doomed = EditorData->Evaluators[i];
+			const UScriptStruct* DoomedStruct = Doomed.Node.IsValid() ? Doomed.Node.GetScriptStruct() : nullptr;
+			const FString DoomedStructName = DoomedStruct ? DoomedStruct->GetName() : FString();
+			const bool bHadInstanceObject = Doomed.InstanceObject != nullptr;
+			auto DoomedProps = StateTreeCaptureNodeInstanceProperties(Doomed);
+
 			EditorData->Modify();
 			EditorData->Evaluators.RemoveAt(i);
 			UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
 			auto Result = MCPSuccess();
+			MCPSetUpdated(Result);
 			Result->SetBoolField(TEXT("removed"), true);
+			Result->SetStringField(TEXT("structType"), DoomedStructName);
+			Result->SetNumberField(TEXT("evaluatorCount"), EditorData->Evaluators.Num());
+
+			if (!DoomedStructName.IsEmpty())
+			{
+				auto Payload = MakeShared<FJsonObject>();
+				Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+				Payload->SetStringField(TEXT("structType"), DoomedStructName);
+				Payload->SetObjectField(TEXT("instanceProperties"), DoomedProps);
+				MCPSetRollback(Result, TEXT("add_state_tree_evaluator"), Payload);
+				Result->SetBoolField(TEXT("rollbackLossy"), true);
+				Result->SetStringField(TEXT("rollbackNote"), bHadInstanceObject
+					? TEXT("The removed evaluator was Blueprint-backed. Its instance values ARE captured in the payload, but replaying adds the wrapper without its class, and statetree(set_node_class) reallocates the instance data when you set the class, discarding them. Set the class first, then write the values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the evaluator list with a NEW nodeId, so its evaluation order and any property binding that named the old id are not restored.")
+					: TEXT("Replaying this appends the evaluator at the END of the list with a NEW nodeId, so its evaluation order and any property binding that named the old id are not restored. Node-struct fields written with statetree(set_evaluator_property) are not part of the payload either."));
+			}
+			else
+			{
+				Result->SetBoolField(TEXT("rollbackPossible"), false);
+				Result->SetStringField(TEXT("rollbackNote"),
+					TEXT("The removed evaluator carried no node struct, so there is no structType statetree(add_evaluator) could be replayed with."));
+			}
 			return MCPResult(Result);
 		}
 	}
@@ -1468,10 +1888,21 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorInstanceProperty(const TS
 
 	EditorData->Modify();
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(InstMem);
+	// Exported before the import so the inverse replays the value that was there.
+	FString PriorValue;
+	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
 	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("nodeId"), NodeIdStr);
+		Payload->SetStringField(TEXT("propertyName"), PropName);
+		Payload->SetStringField(TEXT("value"), PriorValue);
+		MCPSetRollback(Result, TEXT("set_state_tree_evaluator_instance_property"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -1521,6 +1952,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorProperty(const TSharedPtr
 
 	EditorData->Modify();
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(NodeMem);
+	// Exported before the import so the inverse replays the value that was there.
+	FString PriorValue;
+	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
 	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
 
 	auto Result = MCPSuccess();
@@ -1528,6 +1962,14 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorProperty(const TSharedPtr
 	Result->SetStringField(TEXT("structType"), NodeStruct->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropName);
 	Result->SetStringField(TEXT("value"), Value);
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("nodeId"), NodeIdStr);
+		Payload->SetStringField(TEXT("propertyName"), PropName);
+		Payload->SetStringField(TEXT("value"), PriorValue);
+		MCPSetRollback(Result, TEXT("set_state_tree_evaluator_property"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -1576,6 +2018,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddGlobalTask(const TSharedPtr<FJsonO
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("nodeId"), GuidToString(NewNode->ID));
+
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("nodeId"), GuidToString(NewNode->ID));
+		MCPSetRollback(Result, TEXT("remove_state_tree_global_task"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -1600,12 +2049,41 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveGlobalTask(const TSharedPtr<FJs
 	{
 		if (EditorData->GlobalTasks[i].ID == NodeId)
 		{
+			// Captured before the removal so the inverse can rebuild the node.
+			const FStateTreeEditorNode& Doomed = EditorData->GlobalTasks[i];
+			const UScriptStruct* DoomedStruct = Doomed.Node.IsValid() ? Doomed.Node.GetScriptStruct() : nullptr;
+			const FString DoomedStructName = DoomedStruct ? DoomedStruct->GetName() : FString();
+			const bool bHadInstanceObject = Doomed.InstanceObject != nullptr;
+			auto DoomedProps = StateTreeCaptureNodeInstanceProperties(Doomed);
+
 			EditorData->Modify();
 			EditorData->GlobalTasks.RemoveAt(i);
 			UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
 			auto Result = MCPSuccess();
+			MCPSetUpdated(Result);
 			Result->SetBoolField(TEXT("removed"), true);
+			Result->SetStringField(TEXT("structType"), DoomedStructName);
+			Result->SetNumberField(TEXT("globalTaskCount"), EditorData->GlobalTasks.Num());
+
+			if (!DoomedStructName.IsEmpty())
+			{
+				auto Payload = MakeShared<FJsonObject>();
+				Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+				Payload->SetStringField(TEXT("structType"), DoomedStructName);
+				Payload->SetObjectField(TEXT("instanceProperties"), DoomedProps);
+				MCPSetRollback(Result, TEXT("add_state_tree_global_task"), Payload);
+				Result->SetBoolField(TEXT("rollbackLossy"), true);
+				Result->SetStringField(TEXT("rollbackNote"), bHadInstanceObject
+					? TEXT("The removed global task was Blueprint-backed. Its instance values ARE captured in the payload, but replaying adds the wrapper without its class, and statetree(set_node_class) reallocates the instance data when you set the class, discarding them. Set the class first, then write the values through editor(set_property) at the instanceObjectPath that statetree(set_node_class) returns, because the per-property setters reach a node's Instance struct only and reject a Blueprint-backed node with \"has no instance data\". It also appends at the END of the global task list with a NEW nodeId, so its order and any property binding that named the old id are not restored.")
+					: TEXT("Replaying this appends the global task at the END of the list with a NEW nodeId, so its order and any property binding that named the old id are not restored. Node-struct fields written with statetree(set_global_task_property) are not part of the payload either."));
+			}
+			else
+			{
+				Result->SetBoolField(TEXT("rollbackPossible"), false);
+				Result->SetStringField(TEXT("rollbackNote"),
+					TEXT("The removed global task carried no node struct, so there is no structType statetree(add_global_task) could be replayed with."));
+			}
 			return MCPResult(Result);
 		}
 	}
@@ -1654,10 +2132,21 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskInstanceProperty(const T
 
 	EditorData->Modify();
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(InstMem);
+	// Exported before the import so the inverse replays the value that was there.
+	FString PriorValue;
+	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
 	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("nodeId"), NodeIdStr);
+		Payload->SetStringField(TEXT("propertyName"), PropName);
+		Payload->SetStringField(TEXT("value"), PriorValue);
+		MCPSetRollback(Result, TEXT("set_state_tree_global_task_instance_property"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -1707,6 +2196,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskProperty(const TSharedPt
 
 	EditorData->Modify();
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(NodeMem);
+	// Exported before the import so the inverse replays the value that was there.
+	FString PriorValue;
+	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
 	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
 
 	auto Result = MCPSuccess();
@@ -1714,6 +2206,14 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskProperty(const TSharedPt
 	Result->SetStringField(TEXT("structType"), NodeStruct->GetName());
 	Result->SetStringField(TEXT("propertyName"), PropName);
 	Result->SetStringField(TEXT("value"), Value);
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("nodeId"), NodeIdStr);
+		Payload->SetStringField(TEXT("propertyName"), PropName);
+		Payload->SetStringField(TEXT("value"), PriorValue);
+		MCPSetRollback(Result, TEXT("set_state_tree_global_task_property"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -1774,12 +2274,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonO
 
 	if (Params->HasField(TEXT("priority")))
 	{
-		const FString PriorityStr = Params->GetStringField(TEXT("priority"));
-		if (PriorityStr == TEXT("Low")) Trans->Priority = EStateTreeTransitionPriority::Low;
-		else if (PriorityStr == TEXT("Medium")) Trans->Priority = EStateTreeTransitionPriority::Medium;
-		else if (PriorityStr == TEXT("High")) Trans->Priority = EStateTreeTransitionPriority::High;
-		else if (PriorityStr == TEXT("Critical")) Trans->Priority = EStateTreeTransitionPriority::Critical;
-		else Trans->Priority = EStateTreeTransitionPriority::Normal;
+		Trans->Priority = ParseTransitionPriority(Params->GetStringField(TEXT("priority")));
 	}
 
 	if (Params->HasField(TEXT("bDelayTransition")))
@@ -1795,6 +2290,18 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonO
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("transitionId"), GuidToString(Trans->ID));
 	Result->SetNumberField(TEXT("transitionIndex"), State->Transitions.Num() - 1);
+
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetNumberField(TEXT("transitionIndex"), State->Transitions.Num() - 1);
+		MCPSetRollback(Result, TEXT("remove_state_tree_transition"), Payload);
+	}
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The inverse names this transition by INDEX into the state's transition list. ")
+		TEXT("A later step that removes a transition BELOW it shifts it down, and statetree(remove_transition)'s own rollback re-adds by APPENDING rather than reinserting, so in a flow mixing the two this index can end up naming a different transition and remove the wrong one. ")
+		TEXT("There is no remove-transition-by-transitionId action to address it by identity instead."));
 	return MCPResult(Result);
 }
 
@@ -1845,6 +2352,20 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransitionCondition(const TSharedP
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("nodeId"), GuidToString(NewNode->ID));
+	Result->SetNumberField(TEXT("conditionIndex"), State->Transitions[TransIndex].Conditions.Num() - 1);
+
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetNumberField(TEXT("transitionIndex"), TransIndex);
+		Payload->SetNumberField(TEXT("conditionIndex"), State->Transitions[TransIndex].Conditions.Num() - 1);
+		MCPSetRollback(Result, TEXT("remove_state_tree_transition_condition"), Payload);
+	}
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The inverse names this condition by TWO indices: the transition's position in the state, and the condition's position in that transition. ")
+		TEXT("A later step that removes a transition BELOW this one, or a condition BELOW this one inside the same transition, shifts it down, and the rollbacks of statetree(remove_transition) and statetree(remove_transition_condition) re-add by APPENDING rather than reinserting, so in a flow mixing the two this pair can end up naming a different condition and remove the wrong one. ")
+		TEXT("There is no remove-transition-condition-by-nodeId action to address it by identity instead."));
 	return MCPResult(Result);
 }
 
@@ -1867,12 +2388,76 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTransition(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("Invalid transitionIndex: %d"), TransIndex));
 	}
 
+	// Captured before the removal so the inverse can rebuild the transition.
+	const FStateTreeTransition& Doomed = State->Transitions[TransIndex];
+	const FString DoomedTrigger = TransitionTriggerToString(Doomed.Trigger);
+	// The trigger is replayed as a STRING, and the string form covers only the
+	// four flags TransitionTriggerToString knows. Round-tripping it here is what
+	// catches a trigger carrying anything else - OnDelegate, or a flag a later
+	// engine adds: OnTick|OnDelegate stringifies to "OnTick" and would replay as
+	// a transition that no longer fires on the delegate.
+	const bool bTriggerRoundTrips = ParseTransitionTrigger(DoomedTrigger) == Doomed.Trigger;
+	// The same round trip for the priority. None sorts BELOW Low and replays as
+	// Normal, which is a silent escalation; testing the round trip rather than
+	// naming None catches a priority a later engine adds as well.
+	const FString DoomedPriority = TransitionPriorityToString(Doomed.Priority);
+	const bool bPriorityRoundTrips = ParseTransitionPriority(DoomedPriority) == Doomed.Priority;
+	const FString DoomedType = TransitionTypeToString(Doomed.State.LinkType);
+	const FString DoomedTargetId = Doomed.State.ID.IsValid() ? GuidToString(Doomed.State.ID) : FString();
+	const FString DoomedEventTag = Doomed.RequiredEvent.Tag.IsValid() ? Doomed.RequiredEvent.Tag.ToString() : FString();
+	const bool bDoomedDelay = Doomed.bDelayTransition;
+	const float DoomedDelayDuration = Doomed.DelayDuration;
+	const int32 DoomedConditionCount = Doomed.Conditions.Num();
+
 	State->Modify();
 	State->Transitions.RemoveAt(TransIndex);
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
 	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
 	Result->SetBoolField(TEXT("removed"), true);
+	Result->SetNumberField(TEXT("transitionCount"), State->Transitions.Num());
+
+	if (bTriggerRoundTrips)
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetStringField(TEXT("trigger"), DoomedTrigger);
+		Payload->SetStringField(TEXT("transitionType"), DoomedType);
+		if (!DoomedTargetId.IsEmpty()) Payload->SetStringField(TEXT("targetStateId"), DoomedTargetId);
+		if (!DoomedEventTag.IsEmpty()) Payload->SetStringField(TEXT("eventTag"), DoomedEventTag);
+		Payload->SetStringField(TEXT("priority"), bPriorityRoundTrips ? DoomedPriority : TEXT("Normal"));
+		Payload->SetBoolField(TEXT("bDelayTransition"), bDoomedDelay);
+		Payload->SetNumberField(TEXT("delayDuration"), DoomedDelayDuration);
+		MCPSetRollback(Result, TEXT("add_state_tree_transition"), Payload);
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+
+		FString LossyNote =
+			TEXT("Replaying this appends the transition at the END of the state's list with a NEW transitionId, so its transitionIndex is not restored. ")
+			TEXT("The payload carries the trigger, transition type, target state, event tag, priority, bDelayTransition and delayDuration, and nothing else on the transition: ")
+			TEXT("its conditions, its delegate listener, RequiredEvent.PayloadStruct, RequiredEvent.bConsumeEventOnSelect, DelayRandomVariance, bTransitionEnabled and ReactivateTargetState are all left at their defaults.");
+		if (DoomedConditionCount > 0)
+		{
+			LossyNote += FString::Printf(
+				TEXT(" The %d condition(s) on it are gone; replay each with statetree(add_transition_condition)."), DoomedConditionCount);
+		}
+		if (!bPriorityRoundTrips)
+		{
+			LossyNote += FString::Printf(
+				TEXT(" Its priority ('%s') does not survive the string form statetree(add_transition) takes, which reads any unrecognised priority back as Normal, so the restored transition takes Normal and outranks anything at Low."),
+				*DoomedPriority);
+		}
+		Result->SetStringField(TEXT("rollbackNote"), LossyNote);
+	}
+	else
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("This transition's trigger does not survive the string form statetree(add_transition) takes: it stringifies to '%s', which reads back as a DIFFERENT trigger. ")
+			TEXT("A trigger carrying OnDelegate, or carrying no flags at all, has that shape. Replaying an inverse here would create a transition that fires on different conditions, so none is offered: rebuild it by hand."),
+			*DoomedTrigger));
+	}
 	return MCPResult(Result);
 }
 
@@ -1905,6 +2490,29 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObje
 	if (!TargetPath.FromString(TargetPathStr))
 	{
 		return MCPError(FString::Printf(TEXT("Failed to parse target path: %s"), *TargetPathStr));
+	}
+
+	// A target property carries at most one binding, so adding over an existing
+	// one replaces it. Read before the write: the inverse clears this binding
+	// and cannot put the earlier one back.
+	FString ReplacedSourceStructId;
+	FString ReplacedSourcePath;
+	bool bReplacedBinding = false;
+	if (const FStateTreeEditorPropertyBindings* ExistingBindings = EditorData->GetPropertyEditorBindings())
+	{
+		const FGuid TargetStructGuid = ParseGuid(TargetStructIdStr);
+		const FString TargetPathString = TargetPath.ToString();
+		for (const FStateTreePropertyPathBinding& B : ExistingBindings->GetBindings())
+		{
+			if (B.GetTargetPath().GetStructID() == TargetStructGuid
+				&& B.GetTargetPath().ToString() == TargetPathString)
+			{
+				bReplacedBinding = true;
+				ReplacedSourceStructId = GuidToString(B.GetSourcePath().GetStructID());
+				ReplacedSourcePath = B.GetSourcePath().ToString();
+				break;
+			}
+		}
 	}
 
 	EditorData->Modify();
@@ -1957,6 +2565,22 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObje
 	auto Result = MCPSuccess();
 	MCPSetCreated(Result);
 	Result->SetBoolField(TEXT("bindingChangedNotified"), bNotified);
+	Result->SetBoolField(TEXT("replacedExistingBinding"), bReplacedBinding);
+
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("targetStructId"), TargetStructIdStr);
+		Payload->SetStringField(TEXT("targetPath"), TargetPathStr);
+		MCPSetRollback(Result, TEXT("remove_state_tree_binding"), Payload);
+	}
+	if (bReplacedBinding)
+	{
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+			TEXT("This target property was already bound to %s:%s and that binding was replaced. statetree(remove_binding) clears the binding on this target without restoring the earlier one; put it back with statetree(add_binding, sourceStructId=\"%s\", sourcePath=\"%s\")."),
+			*ReplacedSourceStructId, *ReplacedSourcePath, *ReplacedSourceStructId, *ReplacedSourcePath));
+	}
 	return MCPResult(Result);
 }
 
@@ -1972,10 +2596,21 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListBindableSources(const TSharedPtr<
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
+	// T3: paged.
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_state_tree_bindable_sources|assetPath=%s"), *AssetPath),
+			/*DefaultLimit*/ 200, /*MaxLimit*/ 2000, Page))
+	{
+		return Err;
+	}
+
 	TMap<FGuid, const FStateTreeDataView> AllValues;
 	EditorData->GetAllStructValues(AllValues);
 
-	TArray<TSharedPtr<FJsonValue>> Sources;
+	TArray<MCPPagination::FPageRow> Rows;
+	Rows.Reserve(AllValues.Num());
 	for (const TPair<FGuid, const FStateTreeDataView>& Pair : AllValues)
 	{
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -1983,13 +2618,18 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListBindableSources(const TSharedPtr<
 		const UStruct* S = Pair.Value.GetStruct();
 		Obj->SetStringField(TEXT("structType"), S ? S->GetName() : TEXT("(none)"));
 		Obj->SetStringField(TEXT("structPath"), S ? S->GetPathName() : TEXT(""));
-		Sources.Add(MakeShared<FJsonValueObject>(Obj));
+		// The struct GUID is the page anchor: it is what add_binding addresses
+		// and it names one source across two enumerations.
+		Rows.Add({ Pair.Key.ToString(), MakeShared<FJsonValueObject>(Obj) });
 	}
+	// TMap iterates in hash order, which is not a contract and moves as nodes
+	// are added, so the rows are sorted by struct id before paging.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
-	Result->SetNumberField(TEXT("count"), Sources.Num());
-	Result->SetArrayField(TEXT("sources"), Sources);
+	MCPPagination::EmitPage(Page, Rows, TEXT("sources"), Result);
 	return MCPResult(Result);
 }
 
@@ -2019,6 +2659,31 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonO
 		return MCPError(TEXT("No bindings found on EditorData"));
 	}
 
+	// Read the bindings this is about to drop, so the inverse can name the
+	// source each one came from.
+	const FGuid TargetStructGuid = ParseGuid(TargetStructIdStr);
+	const FString TargetPathString = TargetPath.ToString();
+	TArray<TSharedPtr<FJsonValue>> RemovedBindings;
+	FString FirstSourceStructId;
+	FString FirstSourcePath;
+	for (const FStateTreePropertyPathBinding& B : Bindings->GetBindings())
+	{
+		if (B.GetTargetPath().GetStructID() != TargetStructGuid
+			|| B.GetTargetPath().ToString() != TargetPathString)
+		{
+			continue;
+		}
+		if (FirstSourceStructId.IsEmpty())
+		{
+			FirstSourceStructId = GuidToString(B.GetSourcePath().GetStructID());
+			FirstSourcePath = B.GetSourcePath().ToString();
+		}
+		auto BObj = MakeShared<FJsonObject>();
+		BObj->SetStringField(TEXT("sourceStructId"), GuidToString(B.GetSourcePath().GetStructID()));
+		BObj->SetStringField(TEXT("sourcePath"), B.GetSourcePath().ToString());
+		RemovedBindings.Add(MakeShared<FJsonValueObject>(BObj));
+	}
+
 	EditorData->Modify();
 #if UE_MCP_HAS_STATETREE_GENERAL_PROPERTY_BINDING
 	Bindings->RemoveBindings(TargetPath);
@@ -2028,6 +2693,35 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonO
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("removed"), true);
+	Result->SetArrayField(TEXT("removedBindings"), RemovedBindings);
+
+	if (RemovedBindings.Num() == 0)
+	{
+		// Nothing was bound to this target, so there is no source for an
+		// inverse to name.
+		Result->SetBoolField(TEXT("alreadyRemoved"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("No binding on this target path was found to remove, so there is no source path statetree(add_binding) could be replayed with."));
+	}
+	else
+	{
+		MCPSetUpdated(Result);
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("sourceStructId"), FirstSourceStructId);
+		Payload->SetStringField(TEXT("sourcePath"), FirstSourcePath);
+		Payload->SetStringField(TEXT("targetStructId"), TargetStructIdStr);
+		Payload->SetStringField(TEXT("targetPath"), TargetPathStr);
+		MCPSetRollback(Result, TEXT("add_state_tree_binding"), Payload);
+		if (RemovedBindings.Num() > 1)
+		{
+			Result->SetBoolField(TEXT("rollbackLossy"), true);
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("%d bindings targeted this property and statetree(add_binding) restores one, the first, because a target carries a single binding. The rest are listed in removedBindings."),
+				RemovedBindings.Num()));
+		}
+	}
 	return MCPResult(Result);
 }
 
@@ -2139,6 +2833,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddColor(const TSharedPtr<FJsonObject
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("colorId"), GuidToString(NewColor.ColorRef.ID));
 	Result->SetStringField(TEXT("displayName"), NewColor.DisplayName);
+
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("The bridge has no action that removes a palette entry, so there is no inverse to emit. The added colour is inert until a state references it: clear that reference with statetree(set_state_property, propertyName=\"color\", value=\"\")."));
 	return MCPResult(Result);
 }
 
@@ -2261,6 +2959,14 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJ
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("paramName"), ParamName);
 	Result->SetStringField(TEXT("paramType"), ParamType);
+
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetStringField(TEXT("paramName"), ParamName);
+		MCPSetRollback(Result, TEXT("remove_state_tree_state_parameter"), Payload);
+	}
 	return MCPResult(Result);
 }
 
@@ -2285,6 +2991,44 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveStateParameter(const TSharedPtr
 	const FString ParamName = Params->GetStringField(TEXT("paramName"));
 	if (ParamName.IsEmpty()) return MCPError(TEXT("paramName is required"));
 
+	// Read the descriptor and the current value before the removal: the inverse
+	// has to name the type, and the value is worth reporting since the inverse
+	// cannot carry it.
+	FString PriorType;
+	FString PriorValue;
+	bool bParamExisted = false;
+	{
+		const FInstancedPropertyBag& Bag = State->Parameters.Parameters;
+		if (const UPropertyBag* BagStruct = Bag.GetPropertyBagStruct())
+		{
+			if (const FPropertyBagPropertyDesc* Desc = BagStruct->FindPropertyDescByName(FName(*ParamName)))
+			{
+				bParamExisted = true;
+				// Only the types add_state_tree_state_parameter accepts can be
+				// replayed; anything else leaves PriorType empty on purpose.
+				switch (Desc->ValueType)
+				{
+				case EPropertyBagPropertyType::Bool:   PriorType = TEXT("Bool"); break;
+				case EPropertyBagPropertyType::Int32:  PriorType = TEXT("Int32"); break;
+				case EPropertyBagPropertyType::Int64:  PriorType = TEXT("Int64"); break;
+				case EPropertyBagPropertyType::Float:  PriorType = TEXT("Float"); break;
+				case EPropertyBagPropertyType::Double: PriorType = TEXT("Double"); break;
+				case EPropertyBagPropertyType::Name:   PriorType = TEXT("Name"); break;
+				case EPropertyBagPropertyType::String: PriorType = TEXT("String"); break;
+				case EPropertyBagPropertyType::Text:   PriorType = TEXT("Text"); break;
+				default: break;
+				}
+				if (const uint8* BagMem = Bag.GetValue().GetMemory())
+				{
+					if (FProperty* Prop = BagStruct->FindPropertyByName(Desc->Name))
+					{
+						Prop->ExportTextItem_Direct(PriorValue, Prop->ContainerPtrToValuePtr<void>(BagMem), nullptr, nullptr, PPF_None);
+					}
+				}
+			}
+		}
+	}
+
 	State->Modify();
 	State->Parameters.Parameters.RemovePropertyByName(FName(*ParamName));
 
@@ -2292,6 +3036,41 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveStateParameter(const TSharedPtr
 
 	auto Result = MCPSuccess();
 	Result->SetBoolField(TEXT("removed"), true);
+
+	if (!bParamExisted)
+	{
+		Result->SetBoolField(TEXT("alreadyRemoved"), true);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			FString::Printf(TEXT("The state had no parameter named '%s', so this call changed nothing and there is nothing to restore."), *ParamName));
+	}
+	else
+	{
+		MCPSetUpdated(Result);
+		Result->SetStringField(TEXT("paramType"), PriorType);
+		Result->SetStringField(TEXT("priorValue"), PriorValue);
+		if (!PriorType.IsEmpty())
+		{
+			auto Payload = MakeShared<FJsonObject>();
+			Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+			Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+			Payload->SetStringField(TEXT("paramName"), ParamName);
+			Payload->SetStringField(TEXT("paramType"), PriorType);
+			MCPSetRollback(Result, TEXT("add_state_tree_state_parameter"), Payload);
+			Result->SetBoolField(TEXT("rollbackLossy"), true);
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+				TEXT("statetree(add_state_parameter) recreates the parameter at its type default and appends it to the bag, so the value ('%s', reported as priorValue) and the parameter's position and id do not come back. ")
+				TEXT("Follow the rollback with statetree(set_state_parameter, paramName=\"%s\", value=\"%s\"), and re-add any binding that named the old parameter id."),
+				*PriorValue, *ParamName, *PriorValue));
+		}
+		else
+		{
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"),
+				TEXT("statetree(add_state_parameter) creates Bool, Int32, Int64, Float, Double, Name, String and Text parameters only, and this parameter is none of those, so it cannot recreate it. ")
+				TEXT("Its type is reported as `type` by statetree(list_state_parameters); rebuild it in the editor or through editor(set_property) on the state's parameter bag."));
+		}
+	}
 	return MCPResult(Result);
 }
 
@@ -2329,9 +3108,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateParameter(const TSharedPtr<FJ
 	State->Modify();
 	uint8* BagMem = Bag.GetMutableValue().GetMemory();
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(BagMem);
+	// Exported before the import so the inverse replays the value that was there.
+	FString PriorValue;
+	Prop->ExportTextItem_Direct(PriorValue, ValuePtr, nullptr, nullptr, PPF_None);
 	Prop->ImportText_Direct(*Value, ValuePtr, nullptr, PPF_None);
 
-	if (State->Parameters.bFixedLayout)
+	const bool bFixedLayout = State->Parameters.bFixedLayout;
+	if (bFixedLayout)
 	{
 		const FPropertyBagPropertyDesc* Desc = BagStruct->FindPropertyDescByName(FName(*ParamName));
 		if (Desc)
@@ -2342,6 +3125,20 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateParameter(const TSharedPtr<FJ
 
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
+	{
+		auto Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("stateId"), GuidToString(State->ID));
+		Payload->SetStringField(TEXT("paramName"), ParamName);
+		Payload->SetStringField(TEXT("value"), PriorValue);
+		MCPSetRollback(Result, TEXT("set_state_tree_state_parameter"), Payload);
+	}
+	if (bFixedLayout)
+	{
+		Result->SetBoolField(TEXT("rollbackLossy"), true);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("This is a fixed-layout (linked) state, so the call also marked the parameter as overridden. The inverse restores the value and marks it overridden again: it does not return the parameter to inheriting from the linked target."));
+	}
 	return MCPResult(Result);
 }
 
@@ -2395,6 +3192,15 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetRootParameters(const TSharedPtr<FJ
 	auto Result = MCPSuccess();
 	MCPSetUpdated(Result);
 	Result->SetNumberField(TEXT("parameterCount"), Descs.Num());
+
+	// CreateRootProperties adds the named properties to the root bag. Nothing
+	// in the surface removes a root parameter, so replaying this action with
+	// the previous list would leave the newly created ones in place rather than
+	// undo them, and no other action gets back to the previous bag.
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("There is no action that removes a root parameter, so the parameters this call created cannot be taken back out. ")
+		TEXT("Read the tree with statetree(read) before calling it if the previous root parameter list has to be recoverable."));
 	return MCPResult(Result);
 }
 
@@ -2406,9 +3212,23 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::CompileStateTree(const TSharedPtr<FJs
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
+	if (auto SchemaErr = RequireSchema(ST, AssetPath)) return SchemaErr;
 
 	auto Result = MCPSuccess();
-	CompileAndSave(ST, Result);
+	// CompileAndSave gates SaveAssetPackage on success, so `saved` is a fact this
+	// handler can state. Whether a FAILED compile left the asset's in-memory
+	// compiled data intact is not: the compiler resets it before rebuilding, and
+	// nothing here can observe the outcome, so no claim is made about it.
+	const bool bCompiled = CompileAndSave(ST, Result);
+	Result->SetBoolField(TEXT("saved"), bCompiled);
+	if (bCompiled)
+	{
+		MCPSetUpdated(Result);
+	}
+
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("Compiling regenerates the asset's runtime data from its editor data and saves the package. There is no action that restores the previous compiled data, and recompiling produces this same result rather than the earlier one."));
 	return MCPResult(Result);
 }
 
@@ -2418,6 +3238,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ValidateStateTree(const TSharedPtr<FJ
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	UStateTree* ST = LoadStateTree(AssetPath);
 	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
+	if (auto SchemaErr = RequireSchema(ST, AssetPath)) return SchemaErr;
 
 	UStateTreeEditingSubsystem::ValidateStateTree(ST);
 
@@ -2434,6 +3255,74 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ValidateStateTree(const TSharedPtr<FJ
 		}
 	}
 	Result->SetBoolField(TEXT("validated"), true);
+	return MCPResult(Result);
+}
+
+// #833: set_state_tree_schema. The schema is what makes a StateTree compilable,
+// and until now nothing in the surface could write one: every Schema reference
+// in these handlers read it back. A tree that arrived without one - from
+// asset(create_asset_by_class), or from any route that did not go through
+// gameplay(create_state_tree) - was unrepairable through the bridge and had to
+// be rebuilt by hand in the editor.
+TSharedPtr<FJsonValue> FStateTreeHandlers::SetSchema(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
+	UStateTree* ST = LoadStateTree(AssetPath);
+	if (!ST) return MCPError(FString::Printf(TEXT("StateTree not found: %s"), *AssetPath));
+
+	MCPStateTreeSchema::FResolution Schema = MCPStateTreeSchema::Resolve(
+		OptionalString(Params, TEXT("schema")));
+	if (!Schema.SchemaClass)
+	{
+		return MCPStateTreeSchema::UnresolvedError(Schema);
+	}
+
+	ST->Modify();
+	const MCPStateTreeSchema::FAttachOutcome Attach =
+		MCPStateTreeSchema::AttachSchema(ST, Schema.SchemaClass);
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("assetPath"), ST->GetPathName());
+	Result->SetStringField(TEXT("schema"), Schema.SchemaClass->GetPathName());
+	Result->SetStringField(TEXT("schemaSource"), Schema.Source);
+	Result->SetBoolField(TEXT("createdEditorData"), Attach.bCreatedEditorData);
+	Result->SetBoolField(TEXT("createdRootState"), Attach.bCreatedRootState);
+	Result->SetStringField(TEXT("previousSchema"), Attach.PreviousSchemaPath);
+	if (!Schema.Note.IsEmpty())
+	{
+		Result->SetStringField(TEXT("schemaNote"), Schema.Note);
+		Result->SetArrayField(TEXT("availableSchemas"), MCPStateTreeSchema::ConcreteSchemaPathsJson());
+	}
+
+	// Compile here rather than leaving it to the caller: the point of writing a
+	// schema is that the tree can be built, and an asset saved without compiled
+	// data still reports "failed to link" to anything that loads it.
+	// CompileAndSave saves only on success. The schema landed either way, and a
+	// tree that does not compile yet is a normal in-progress shape (an empty
+	// root state with no tasks), so the write is saved regardless - otherwise
+	// the repair would be lost on the next reload.
+	const bool bCompiled = CompileAndSave(ST, Result);
+	if (!bCompiled) SaveAssetPackage(ST);
+	Result->SetBoolField(TEXT("saved"), true);
+	if (Attach.bSchemaChanged || Attach.bCreatedEditorData) MCPSetUpdated(Result);
+	else Result->SetBoolField(TEXT("updated"), false);
+
+	if (Attach.PreviousSchemaPath.IsEmpty())
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The tree had no schema before this call, and nothing in this surface removes a schema: a StateTree ")
+			TEXT("without one cannot compile, so putting it back is not a state worth restoring. Delete the asset if ")
+			TEXT("the create was wrong."));
+	}
+	else
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("assetPath"), ST->GetPathName());
+		Payload->SetStringField(TEXT("schema"), Attach.PreviousSchemaPath);
+		MCPSetRollback(Result, TEXT("set_state_tree_schema"), Payload);
+	}
 	return MCPResult(Result);
 }
 

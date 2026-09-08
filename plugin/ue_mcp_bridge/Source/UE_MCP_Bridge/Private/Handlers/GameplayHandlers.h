@@ -13,6 +13,42 @@ class FGameplayHandlers
 public:
 	static void RegisterHandlers(class FMCPHandlerRegistry& Registry);
 
+	// Environment Query System authoring and execution, in
+	// GameplayHandlers_EQS.cpp. The bridge could create an EQS asset and list
+	// the ones that exist; a query with no generator produces no items, so
+	// what it could create was an empty asset.
+	//
+	// There are no typed setters for generator or test parameters on purpose:
+	// every tunable is a UPROPERTY, read_eqs_query returns each object's path,
+	// and editor(set_property) writes a property at an object path.
+	static TSharedPtr<FJsonValue> ListEqsTypes(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReadEqsQuery(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddEqsGenerator(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddEqsTest(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveEqsTest(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveEqsOption(const TSharedPtr<FJsonObject>& Params);
+
+	// BehaviorTree RUNTIME, in GameplayHandlers_BTRuntime.cpp. The authoring
+	// actions build a tree; these answer whether it actually runs, which is
+	// what "authored a tree, cannot tell whether it works" needed.
+	static TSharedPtr<FJsonValue> GetBtRuntime(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetLiveBlackboard(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetLiveBlackboard(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RunBehaviorTree(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> StopBehaviorTree(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ListAiAgents(const TSharedPtr<FJsonObject>& Params);
+
+	// AI Perception readback and runtime, in GameplayHandlers_Perception.cpp.
+	// No per-parameter sense setters: every tunable is a UPROPERTY and
+	// read_perception returns each sense config's objectPath for set_property.
+	static TSharedPtr<FJsonValue> ReadPerception(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveSense(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetPerceivedActors(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CheckPerception(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReportNoiseEvent(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReorderEqsTests(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RunEqsQuery(const TSharedPtr<FJsonObject>& Params);
+
 	// BehaviorTree introspection primitives, shared by the BT handlers and
 	// exercised directly by the automation tests in Private/Tests, which build
 	// nodes in memory rather than round-tripping an asset through disk.
@@ -75,6 +111,32 @@ private:
 	static TSharedPtr<FJsonValue> RemoveImcMapping(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetImcMappingKey(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetImcMappingAction(const TSharedPtr<FJsonObject>& Params);
+
+	// Enhanced Input depth (V11), in GameplayHandlers_Input.cpp. No typed
+	// setters for ValueType, the consumption flags, AccumulationBehavior or
+	// any tunable on an existing trigger/modifier: those are UPROPERTYs and
+	// read_input_action returns the objectPath editor(set_property) writes at.
+	// set_action_triggers earns its place because the ACTION's own Triggers
+	// and Modifiers are Instanced arrays, and the JSON property setter can
+	// only assign an object it can LOAD FROM A PATH, never mint one.
+	static TSharedPtr<FJsonValue> ReadInputAction(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetActionTriggers(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ApplyMappingContext(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveMappingContext(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetActionValue(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ValidateInput(const TSharedPtr<FJsonObject>& Params);
+
+	// Mass Entity trait-list CRUD and Zone Graph lane queries (T18), in
+	// GameplayHandlers_Mass.cpp. Creation and trait authoring already ship in
+	// MassHandlers.cpp (ensure_mass_entity_config / read_mass_entity_config);
+	// these are the removal, reorder, discovery, audit and query halves that
+	// no property write can reach. Mass and ZoneGraph classes are resolved by
+	// reflection so the bridge still loads where those plugins are off.
+	static TSharedPtr<FJsonValue> ListMassTypes(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveMassTrait(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ReorderMassTraits(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> ValidateMassEntityConfig(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> QueryZoneGraph(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateBlackboard(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateBehaviorTree(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateEqsQuery(const TSharedPtr<FJsonObject>& Params);
@@ -115,6 +177,7 @@ private:
 	static TSharedPtr<FJsonValue> RemoveSmartObjectSlot(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListSmartObjectSlots(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AddSmartObjectSlotBehavior(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddSmartObjectDefaultBehavior(const TSharedPtr<FJsonObject>& Params);
 
 	// IMC read/write, PIE inspection, anim state, subsystem state - moved to pie-studio
 

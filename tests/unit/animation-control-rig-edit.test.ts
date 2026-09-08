@@ -420,7 +420,12 @@ describe("animation Control Rig edit workflow", () => {
     }] }]).success).toBe(false);
     expect(animationTool.schema.rigMode.safeParse("fk").success).toBe(true);
     expect(animationTool.schema.rigMode.safeParse("asset").success).toBe(true);
-    expect(animationTool.schema.rigMode.safeParse("python").success).toBe(false);
+    // begin_control_rig_edit refuses a third mode and names both it takes. The
+    // MCP SDK validates arguments before the tool callback runs, so a strict
+    // enum here would replace that message with a transport schema dump.
+    expect(animationTool.schema.rigMode.safeParse("python").success).toBe(true);
+    expect(animationTool.schema.rigMode.description).toContain("fk");
+    expect(animationTool.schema.rigMode.description).toContain("asset");
   });
 
   it("maps begin/read/apply/bake parameters exactly to the native contracts", async () => {

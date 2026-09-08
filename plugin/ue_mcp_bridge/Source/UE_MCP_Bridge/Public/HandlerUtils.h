@@ -13,11 +13,18 @@
 #include "Engine/Blueprint.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "Components/SceneComponent.h"
 #include "EditorAssetLibrary.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
+#include "Kismet2/KismetEditorUtilities.h"
+#include "Misc/Guid.h"
+#include "UObject/UObjectHash.h"
+#include "Templates/Casts.h"
 
-// Engine API tiers. One macro per supported minor version, so a gate reads the
+#include <type_traits>
+
+// Engine API version gates. One macro per supported minor version, so a gate reads the
 // same everywhere and nobody writes a second scheme. The supported range is
 // UE 5.4 through 5.8; 5.4 is the floor, which is why UE_MCP_HAS_5_4_API is
 // true for every engine the plugin builds against and exists only so a gate
@@ -30,7 +37,7 @@
 // UPCGEditorGraphNodeBase, UIKRetargeterController::AssignIKRigToAllOps, etc.
 #define UE_MCP_HAS_5_5_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 5))
 
-// True on UE 5.6+ (and any future 6.x). The tier between 5.5 and 5.7, kept so
+// True on UE 5.6+ (and any future 6.x). The gate between 5.5 and 5.7, kept so
 // an API that arrived in 5.6 is gated by name rather than by an open-coded
 // ENGINE_MINOR_VERSION test.
 #define UE_MCP_HAS_5_6_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6))
@@ -91,6 +98,28 @@ inline void MCPSetRollback(
 	Result->SetObjectField(TEXT("rollback"), Rollback);
 }
 
+/** State that this mutation has no inverse, and say why.
+ *
+ *  The counterpart to MCPSetRollback, and the difference between a mutation
+ *  that FORGOT its inverse and one that DECIDED it has none. Both emit no
+ *  rollback record, so from the outside they are indistinguishable unless the
+ *  second one says so in the result body.
+ *
+ *  The reason is a required argument rather than an optional one. A bare
+ *  `rollbackPossible: false` tells a caller that recovery is off the table
+ *  without telling it why, which is the half of the answer that decides what
+ *  the caller does next; and a handler that sets the flag and forgets the note
+ *  still reads as considered to anything auditing the pair. Taking both in one
+ *  call is what makes them inseparable.
+ *
+ *  Keep the note concrete: what was changed, and what call would have to exist
+ *  for it to be undone. See docs/handler-conventions.md. */
+inline void MCPSetNoRollback(TSharedPtr<FJsonObject> Result, const FString& Reason)
+{
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"), Reason);
+}
+
 /** Mark a result as "already existed, nothing created" - idempotent replay. */
 inline void MCPSetExisted(TSharedPtr<FJsonObject> Result)
 {
@@ -109,6 +138,34 @@ inline void MCPSetCreated(TSharedPtr<FJsonObject> Result)
 inline void MCPSetUpdated(TSharedPtr<FJsonObject> Result)
 {
 	Result->SetBoolField(TEXT("updated"), true);
+}
+
+/** State that whether this call changed anything CANNOT BE READ, and say why.
+ *
+ *  The idempotency counterpart to MCPSetNoRollback, and it exists for the same
+ *  reason: a handler that cannot answer and says so has finished the job, and
+ *  one that says nothing has not, but from the outside the two look identical.
+ *
+ *  The cases are real and narrow. epic(call_tool) dispatches a wrapped engine
+ *  tool whose writes it never sees, and the Fab module publishes no
+ *  authentication or library state this build can read back. Both are asking
+ *  about somebody else's code, so a fabricated `unchanged: false` would be a
+ *  claim rather than a reading, which is worse than an honest absence.
+ *
+ *  This is NOT the escape hatch for a handler that could measure its effect and
+ *  did not. If the state is readable, read it before and after and report what
+ *  moved. The reason is a required argument for the same purpose it is on
+ *  MCPSetNoRollback: the flag alone tells a caller that replay safety is
+ *  unknown without telling it why, and the pair cannot come apart if one call
+ *  sets both.
+ *
+ *  The spelling was already in use in FabHandlers before this helper existed,
+ *  which is exactly how the earlier rollbackPossible drift started: an idiom
+ *  spread by copy while the convention audit recognised none of it. */
+inline void MCPSetIdempotencyUnobservable(TSharedPtr<FJsonObject> Result, const FString& Reason)
+{
+	Result->SetBoolField(TEXT("idempotencyObservable"), false);
+	Result->SetStringField(TEXT("idempotencyNote"), Reason);
 }
 
 /** Check for an existing asset at `PackagePath/Name`. Returns a fully-formed
@@ -525,10 +582,10 @@ inline AActor* MCPFindActorByPath(UWorld* World, const FString& Path)
  *  is the same on every run rather than whatever the actor iterator happened
  *  to produce that time.
  *
- *  The tiers do not blend: a token that is one actor's label and another
+ *  The passes do not blend: a token that is one actor's label and another
  *  actor's internal name resolves to the label match alone, because the label
  *  is what the outliner shows and what a caller types. Name and path answer
- *  only when the label tier found nothing (#806). */
+ *  only when the label pass found nothing (#806). */
 inline void MCPCollectActorsByToken(
 	UWorld* World,
 	const FString& Token,
@@ -557,7 +614,7 @@ inline void MCPCollectActorsByToken(
 	});
 }
 
-/** Which tier of MCPCollectActorsByToken produced a match, for the message. */
+/** Which pass of MCPCollectActorsByToken produced a match, for the message. */
 inline const TCHAR* MCPDescribeActorMatchTier(const FString& Token, AActor* Match)
 {
 	if (Match && Match->GetActorLabel() == Token) return TEXT("editor label");
@@ -932,6 +989,17 @@ inline T* LoadBlueprintCDO(const FString& BlueprintPath, TSharedPtr<FJsonValue>&
 }
 
 // ── Parameter extraction ─────────────────────────────────────────────────────
+//
+// Every helper below treats an unset Params the same way it treats an empty
+// one: a required key is missing, an optional key falls back to its default.
+//
+// From the socket an unset pointer cannot arrive, because ProcessMessage
+// substitutes a fresh FJsonObject on every path. This header is public and
+// shipped, though, and its neighbours here - ResolveWorldFromParams,
+// MCPResolveActor, ReadPageRequest - all test validity first. A caller that
+// reads those and concludes the file guards, then hands an unset pointer to a
+// nested dispatch or a test, was one line from a null dereference on the game
+// thread. One rule for the whole header is the thing that stops that.
 
 /** Extract a required string parameter.  Returns error JSON on failure, nullptr on success. */
 inline TSharedPtr<FJsonValue> RequireString(
@@ -939,7 +1007,7 @@ inline TSharedPtr<FJsonValue> RequireString(
 	const TCHAR* Key,
 	FString& OutValue)
 {
-	if (Params->TryGetStringField(Key, OutValue) && !OutValue.IsEmpty())
+	if (Params.IsValid() && Params->TryGetStringField(Key, OutValue) && !OutValue.IsEmpty())
 		return nullptr;
 	return MCPError(FString::Printf(TEXT("Missing required parameter '%s'"), Key));
 }
@@ -951,10 +1019,13 @@ inline TSharedPtr<FJsonValue> RequireStringAlt(
 	const TCHAR* Key2,
 	FString& OutValue)
 {
-	if (Params->TryGetStringField(Key1, OutValue) && !OutValue.IsEmpty())
-		return nullptr;
-	if (Params->TryGetStringField(Key2, OutValue) && !OutValue.IsEmpty())
-		return nullptr;
+	if (Params.IsValid())
+	{
+		if (Params->TryGetStringField(Key1, OutValue) && !OutValue.IsEmpty())
+			return nullptr;
+		if (Params->TryGetStringField(Key2, OutValue) && !OutValue.IsEmpty())
+			return nullptr;
+	}
 	return MCPError(FString::Printf(TEXT("Missing required parameter '%s' (or '%s')"), Key1, Key2));
 }
 
@@ -965,7 +1036,7 @@ inline FString OptionalString(
 	const FString& DefaultValue = TEXT(""))
 {
 	FString Value;
-	return Params->TryGetStringField(Key, Value) ? Value : DefaultValue;
+	return (Params.IsValid() && Params->TryGetStringField(Key, Value)) ? Value : DefaultValue;
 }
 
 /** Extract an optional int32, returning DefaultValue if absent. */
@@ -975,7 +1046,7 @@ inline int32 OptionalInt(
 	int32 DefaultValue = 0)
 {
 	int32 Value;
-	return Params->TryGetNumberField(Key, Value) ? Value : DefaultValue;
+	return (Params.IsValid() && Params->TryGetNumberField(Key, Value)) ? Value : DefaultValue;
 }
 
 /** Extract an optional double, returning DefaultValue if absent. */
@@ -985,7 +1056,7 @@ inline double OptionalNumber(
 	double DefaultValue = 0.0)
 {
 	double Value;
-	return Params->TryGetNumberField(Key, Value) ? Value : DefaultValue;
+	return (Params.IsValid() && Params->TryGetNumberField(Key, Value)) ? Value : DefaultValue;
 }
 
 /** Extract an optional bool, returning DefaultValue if absent. */
@@ -995,7 +1066,7 @@ inline bool OptionalBool(
 	bool DefaultValue = false)
 {
 	bool Value;
-	return Params->TryGetBoolField(Key, Value) ? Value : DefaultValue;
+	return (Params.IsValid() && Params->TryGetBoolField(Key, Value)) ? Value : DefaultValue;
 }
 
 /**
@@ -1162,7 +1233,7 @@ inline FVector OptionalVec3(
 	const FVector& DefaultValue = FVector::ZeroVector)
 {
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
-	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
+	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
 	FVector Out = DefaultValue;
 	ReadVec3Fields(*Obj, Out);
 	return Out;
@@ -1175,7 +1246,7 @@ inline TSharedPtr<FJsonValue> RequireVec3(
 	FVector& Out)
 {
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
-	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid())
+	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid())
 		return MCPError(FString::Printf(TEXT("Missing required vector parameter '%s' ({x,y,z})"), Key));
 	Out = FVector::ZeroVector;
 	if (!ReadVec3Fields(*Obj, Out))
@@ -1189,7 +1260,7 @@ inline FRotator OptionalRotator(
 	const FRotator& DefaultValue = FRotator::ZeroRotator)
 {
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
-	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
+	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
 	FRotator Out = DefaultValue;
 	ReadRotatorFields(*Obj, Out);
 	return Out;
@@ -1201,7 +1272,7 @@ inline TSharedPtr<FJsonValue> RequireRotator(
 	FRotator& Out)
 {
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
-	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid())
+	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid())
 		return MCPError(FString::Printf(TEXT("Missing required rotator parameter '%s' ({pitch,yaw,roll})"), Key));
 	Out = FRotator::ZeroRotator;
 	if (!ReadRotatorFields(*Obj, Out))
@@ -1215,7 +1286,7 @@ inline FLinearColor OptionalLinearColor(
 	const FLinearColor& DefaultValue = FLinearColor::White)
 {
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
-	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
+	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
 	FLinearColor Out = DefaultValue;
 	ReadLinearColorFields(*Obj, Out);
 	return Out;
@@ -1258,7 +1329,7 @@ inline FTransform OptionalTransform(
 	const TCHAR* Key)
 {
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
-	if (!Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return FTransform::Identity;
+	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return FTransform::Identity;
 	FVector  Loc   = FVector::ZeroVector;
 	FRotator Rot   = FRotator::ZeroRotator;
 	FVector  Scale = FVector::OneVector;
@@ -1758,6 +1829,7 @@ inline TSharedPtr<FJsonValue> MCPAssetLoadError(const FString& AssetPath, const 
  *  gets element 0 and nothing else, and the value reads as a plain scalar.
  *
  *  That is how #927 hid two thirds of RecastNavMesh's NavMeshResolutionParams:
+ *  lint-prose-allow: tier  RecastNavMesh's own name for its three generation tiers
  *  the Low tier was reported as if it were the whole property while the engine
  *  was generating from Default and High, so a navmesh diagnosis was performed
  *  against numbers the engine was not using.
@@ -2001,22 +2073,42 @@ inline void MCPNoteSaveOutcome(
 
 /** RAII: root a UObject on construction, unroot on scope exit. Prevents the
  *  AddToRoot/RemoveFromRoot pairs from leaking when an early return (validation
- *  error, import failure) sneaks into the middle of the pair. */
+ *  error, import failure) sneaks into the middle of the pair.
+ *
+ *  Clears only what it set. The root set is a single flag, not a reference
+ *  count: UObjectBaseUtility::AddToRoot is SetRootSet() and RemoveFromRoot is
+ *  ClearRootSet(), each one atomic set or clear of
+ *  EInternalObjectFlags::RootSet. So a scope that unconditionally cleared on
+ *  exit would unroot an object some other party had rooted for its own
+ *  reasons, and two nested scopes over the same object would leave it
+ *  collectable the moment the INNER one exited while the outer one still
+ *  believed it was protected. Recording whether this scope was the one that
+ *  set the flag makes both cases correct: the inner scope is a no-op and the
+ *  outer keeps its guarantee, and an object rooted elsewhere is left alone.
+ *
+ *  What it does not promise: if another party clears the flag during the
+ *  scope, the object is unrooted from that moment. A single flag cannot
+ *  express two owners, and no version of this class ever could. */
 class FGCRootScope
 {
 public:
 	explicit FGCRootScope(UObject* InObject) : Object(InObject)
 	{
-		if (Object) Object->AddToRoot();
+		if (Object && !Object->IsRooted())
+		{
+			Object->AddToRoot();
+			bRootedHere = true;
+		}
 	}
 	~FGCRootScope()
 	{
-		if (Object && Object->IsRooted()) Object->RemoveFromRoot();
+		if (bRootedHere && Object && Object->IsRooted()) Object->RemoveFromRoot();
 	}
 	FGCRootScope(const FGCRootScope&) = delete;
 	FGCRootScope& operator=(const FGCRootScope&) = delete;
 private:
 	UObject* Object = nullptr;
+	bool bRootedHere = false;
 };
 
 // ── Reflection helpers ───────────────────────────────────────────────────────
@@ -2052,3 +2144,487 @@ inline FProperty* FindPropertyChecked(
  *  assertion surfaces the bug loudly rather than producing a silent race. */
 #define MCP_CHECK_GAME_THREAD() \
 	checkf(IsInGameThread(), TEXT("MCP handler ran off the game thread - UObject access would be racy"))
+
+// ── Object graph ─────────────────────────────────────────────────────────────
+
+/** Objects an outer owns directly, skipping nested subobjects and anything
+ *  already garbage. Spelled the way each engine wants it: 5.8 deprecated the
+ *  bool form of GetObjectsWithOuter in favour of EGetObjectsFlags, and the enum
+ *  does not exist before it. */
+inline void MCPGetDirectSubobjects(const UObjectBase* Outer, TArray<UObject*>& OutObjects)
+{
+	if (!Outer)
+	{
+		return;
+	}
+#if UE_MCP_HAS_5_8_API
+	GetObjectsWithOuter(Outer, OutObjects, EGetObjectsFlags::None,
+		RF_NoFlags, EInternalObjectFlags::Garbage);
+#else
+	GetObjectsWithOuter(Outer, OutObjects, /*bIncludeNestedObjects*/ false,
+		RF_NoFlags, EInternalObjectFlags::Garbage);
+#endif
+}
+
+/** Every object under an outer, descending through nested subobjects, skipping
+ *  anything already garbage. The twin of MCPGetDirectSubobjects for the callers
+ *  that need the whole tree - a Control Rig's RigVM models, for instance, hang
+ *  off collapsed nodes and the function library rather than off the blueprint
+ *  directly, so a direct-only walk finds none of them.
+ *
+ *  Both spellings live here and nowhere else. This module is a unity build, so
+ *  a file-local copy in a second .cpp is a C2084 redefinition the moment the
+ *  adaptive-unity working set puts the two files in one blob. */
+inline void MCPGetNestedSubobjects(const UObjectBase* Outer, TArray<UObject*>& OutObjects)
+{
+	if (!Outer)
+	{
+		return;
+	}
+#if UE_MCP_HAS_5_8_API
+	GetObjectsWithOuter(Outer, OutObjects, EGetObjectsFlags::IncludeNestedObjects,
+		RF_NoFlags, EInternalObjectFlags::Garbage);
+#else
+	GetObjectsWithOuter(Outer, OutObjects, /*bIncludeNestedObjects*/ true,
+		RF_NoFlags, EInternalObjectFlags::Garbage);
+#endif
+}
+
+// ── Component bounds ─────────────────────────────────────────────────────────
+
+/** A scene component's cached world-space bounds, spelled the way each engine
+ *  wants it. 5.8 added USceneComponent::GetBounds(), an inline getter that
+ *  returns a const reference to the public Bounds member; 5.7 and earlier offer
+ *  the member alone. Both branches read the same field, so every supported
+ *  engine returns the same value at the same freshness - the accessor is a
+ *  rename, and UpdateBounds is still what refreshes what either one reads.
+ *
+ *  Bounds is public on 5.8 too, so the gate decides which spelling is used
+ *  rather than which one compiles. Preferring the accessor there is what keeps
+ *  these call sites correct on the engine that eventually makes the member
+ *  private, which is the reason Epic added the getter.
+ *
+ *  Both spellings live here and nowhere else. This module is a unity build, so
+ *  a file-local copy in a second .cpp is a C2084 redefinition the moment the
+ *  adaptive-unity working set puts the two files in one blob. */
+inline const FBoxSphereBounds& MCPComponentWorldBounds(const USceneComponent& Component)
+{
+#if UE_MCP_HAS_5_8_API
+	return Component.GetBounds();
+#else
+	return Component.Bounds;
+#endif
+}
+
+// ── Widget variable GUID metadata (#728, #799) ───────────────────────────────
+//
+// A UWidgetBlueprint keeps WidgetVariableNameToGuidMap so external references
+// to a widget variable survive a rename of that widget. The
+// WidgetBlueprintCompiler validates the map on every compile and raises
+//
+//   "Widget [X] was added but did not get a GUID"
+//
+// for any widget variable it is about to generate that owns no entry. That is
+// an engine ensure, so the editor survives it, but the asset is left in a state
+// the UMG editor does not consider valid and every later compile repeats it.
+//
+// The set the compiler validates is the blueprint's SOURCE widgets, which
+// UBaseWidgetBlueprint gathers without walking the hierarchy. Its own header
+// says the accessor "avoids calling virtual functions on instances and is
+// therefore safe to use throughout compilation", so the set is every UWidget
+// the WidgetTree still OWNS, not the widgets a walk down from RootWidget
+// reaches. The two part company the moment a widget is detached from its parent
+// without being moved out of the tree: the walk stops seeing it while the
+// compiler still generates a variable for it. Bookkeeping driven by the walk
+// alone therefore deletes the GUID of a widget that still needs one, which is
+// how the ensure fires on a widget that was just removed. The enumeration below
+// is by outer for that reason, with the walk folded in as a union rather than
+// used on its own.
+//
+// The map is editor-only data that landed in 5.5, so its presence is detected
+// at compile time here rather than tracked with a hand-maintained version
+// window.
+namespace MCPWidgetGuidMap
+{
+	template <typename T, typename = void>
+	struct THasMap : std::false_type {};
+
+	template <typename T>
+	struct THasMap<T, std::void_t<decltype(T::WidgetVariableNameToGuidMap)>> : std::true_type {};
+
+	/** What a sync changed, and what it could not fix. */
+	struct FSyncReport
+	{
+		/** False when this engine has no WidgetVariableNameToGuidMap at all. */
+		bool bSupported = false;
+		/** True once CompileChecked has actually run the compile. */
+		bool bCompiled = false;
+		int32 Added = 0;
+		int32 Pruned = 0;
+		/** Widgets moved out of the tree because nothing reached them. */
+		int32 Evicted = 0;
+		/** Entries whose stored GUID was not a valid GUID and was replaced. */
+		int32 Repaired = 0;
+		/** Variables whose map entry the compiler will refuse, after the sync
+		 *  has done everything it can. A non-empty list means the next compile
+		 *  of this asset ensures. */
+		TArray<FName> Unusable;
+		/** What is actually wrong, one clause per defect, for the message. */
+		TArray<FString> Defects;
+
+		bool IsClean() const { return Unusable.Num() == 0; }
+
+		FString DefectList() const
+		{
+			return Defects.Num() ? FString::Join(Defects, TEXT("; ")) : FString(TEXT("(none)"));
+		}
+
+		FString UnusableList() const
+		{
+			TArray<FString> Names;
+			Names.Reserve(Unusable.Num());
+			for (const FName& Name : Unusable)
+			{
+				Names.Add(Name.ToString());
+			}
+			return Names.Num() ? FString::Join(Names, TEXT(", ")) : FString(TEXT("(none)"));
+		}
+	};
+
+	/** Every name the compiler will generate a variable for: each widget the
+	 *  WidgetTree owns (reachable from the root or not), plus each animation. */
+	template <typename TWidgetBP>
+	TSet<FName> RequiredNames(TWidgetBP* WidgetBP)
+	{
+		TSet<FName> Names;
+		if (!WidgetBP)
+		{
+			return Names;
+		}
+
+		// UWidgetTree and UWidget named without naming them. This header is
+		// included by every handler and must not drag the UMG headers into all
+		// of them, and a type spelled off the template parameter stays
+		// dependent, so the lookup happens where UMG is included.
+		using FTreeType = std::remove_reference_t<decltype(*WidgetBP->WidgetTree)>;
+		using FWidgetType = std::remove_reference_t<decltype(*WidgetBP->WidgetTree->RootWidget)>;
+
+		if (FTreeType* Tree = WidgetBP->WidgetTree)
+		{
+			TArray<UObject*> Owned;
+			MCPGetDirectSubobjects(Tree, Owned);
+			for (UObject* Object : Owned)
+			{
+				if (FWidgetType* Widget = Cast<FWidgetType>(Object))
+				{
+					Names.Add(Widget->GetFName());
+				}
+			}
+
+			Tree->ForEachWidget([&Names](FWidgetType* Widget)
+			{
+				if (Widget)
+				{
+					Names.Add(Widget->GetFName());
+				}
+			});
+		}
+
+		// TObjectPtr::GetFName reads the name off the object handle, so it does
+		// not need UWidgetAnimation defined. WidgetBlueprint.h only forward
+		// declares that class, and dereferencing the pointer here would force
+		// every translation unit that includes this header to pull in UMG.
+		for (const auto& Animation : WidgetBP->Animations)
+		{
+			const FName AnimationName = Animation.GetFName();
+			if (!AnimationName.IsNone())
+			{
+				Names.Add(AnimationName);
+			}
+		}
+		return Names;
+	}
+
+	/**
+	 * Make the map say exactly what the compiler is about to check: give every
+	 * required name the GUID it lacks, and drop every entry no live name backs.
+	 * Call immediately before a compile, and again after, because the compile
+	 * itself can rename a widget whose name collided.
+	 */
+	template <typename TWidgetBP>
+	FSyncReport Sync(TWidgetBP* WidgetBP)
+	{
+		FSyncReport Report;
+		if constexpr (THasMap<TWidgetBP>::value)
+		{
+			if (!WidgetBP)
+			{
+				return Report;
+			}
+			Report.bSupported = true;
+
+			const TSet<FName> Required = RequiredNames(WidgetBP);
+			for (const FName& Name : Required)
+			{
+				if (Name.IsNone())
+				{
+					continue;
+				}
+				if (!WidgetBP->WidgetVariableNameToGuidMap.Contains(Name))
+				{
+					WidgetBP->WidgetVariableNameToGuidMap.Add(Name, FGuid::NewGuid());
+					++Report.Added;
+				}
+			}
+
+			// Pruning is measured against a wider set: an entry naming one of
+			// the blueprint's own declared variables is not proof of drift, so
+			// it is left alone rather than dropped and re-added.
+			TSet<FName> Known = Required;
+			for (const auto& Variable : WidgetBP->NewVariables)
+			{
+				Known.Add(Variable.VarName);
+			}
+
+			TArray<FName> Stale;
+			for (const auto& Entry : WidgetBP->WidgetVariableNameToGuidMap)
+			{
+				if (!Known.Contains(Entry.Key))
+				{
+					Stale.Add(Entry.Key);
+				}
+			}
+			for (const FName& Name : Stale)
+			{
+				WidgetBP->WidgetVariableNameToGuidMap.Remove(Name);
+			}
+			Report.Pruned = Stale.Num();
+
+			// What the compiler actually checks, and which half of it the fill
+			// above cannot cover.
+			//
+			// FWidgetBlueprintCompilerContext::ValidateAndFixUpVariableGuids
+			// raises ensureAlways on three conditions:
+			//   1. a source widget or animation with no entry;
+			//   2. an entry whose stored GUID is not valid;
+			//   3. two entries carrying the same GUID.
+			//
+			// Condition 1 cannot survive the fill loop above, which adds a
+			// fresh GUID for every required name and prunes nothing from that
+			// set, so re-testing it here would be a guard that can never fire.
+			// The two the fill loop says nothing about are the ones worth
+			// checking, because both arrive with the asset rather than with
+			// the mutation:
+			//
+			// Condition 2 is repairable. An invalid GUID references nothing, so
+			// replacing it breaks nothing; the engine replaces it too, after
+			// ensuring.
+			//
+			// Condition 3 is not. The GUID is how external assets refer to a
+			// variable across a rename, so reassigning one of a colliding pair
+			// silently breaks whichever references chose that one. The engine
+			// does not repair it either - its own message tells the user to
+			// delete and recreate one of the two variables - so this is the
+			// state in which the map cannot be made to match what the compiler
+			// checks, and it is what stops the compile.
+			TMap<FGuid, FName> GuidOwners;
+			for (auto& Entry : WidgetBP->WidgetVariableNameToGuidMap)
+			{
+				if (!Entry.Value.IsValid())
+				{
+					Entry.Value = FGuid::NewGuid();
+					++Report.Repaired;
+				}
+				if (const FName* Owner = GuidOwners.Find(Entry.Value))
+				{
+					Report.Unusable.Add(Entry.Key);
+					Report.Defects.Add(FString::Printf(
+						TEXT("'%s' carries the same variable GUID as '%s'"),
+						*Entry.Key.ToString(), *Owner->ToString()));
+					continue;
+				}
+				GuidOwners.Add(Entry.Value, Entry.Key);
+			}
+		}
+		return Report;
+	}
+
+	/**
+	 * Move every widget the tree no longer reaches out of the WidgetTree and
+	 * into the transient package, and report the ones that would not move.
+	 *
+	 * Detaching a widget from its parent panel does not end its membership of
+	 * the blueprint: ownership is what makes the compiler generate a variable
+	 * for it, so a detached widget still outered to the tree is still compiled,
+	 * still needs a GUID, and still holds its name against a later add. Only a
+	 * handler whose contract is removal may call this, since it is destructive
+	 * by design.
+	 */
+	template <typename TWidgetBP>
+	TArray<FName> EvictUnreachableWidgets(TWidgetBP* WidgetBP, int32& OutEvicted)
+	{
+		OutEvicted = 0;
+		TArray<FName> Stuck;
+		if (!WidgetBP || !WidgetBP->WidgetTree)
+		{
+			return Stuck;
+		}
+
+		using FTreeType = std::remove_reference_t<decltype(*WidgetBP->WidgetTree)>;
+		using FWidgetType = std::remove_reference_t<decltype(*WidgetBP->WidgetTree->RootWidget)>;
+
+		FTreeType* Tree = WidgetBP->WidgetTree;
+
+		TSet<const UObject*> Reachable;
+		Tree->ForEachWidget([&Reachable](FWidgetType* Widget)
+		{
+			if (Widget)
+			{
+				Reachable.Add(Widget);
+			}
+		});
+		// Named slot content hangs off the tree rather than off the root, so it
+		// is reachable in every sense that matters even where the root walk
+		// never visits it. Evicting it would delete authored content.
+		for (const auto& Binding : Tree->NamedSlotBindings)
+		{
+			if (Binding.Value)
+			{
+				Reachable.Add(Binding.Value);
+				FTreeType::ForWidgetAndChildren(Binding.Value, [&Reachable](FWidgetType* Widget)
+				{
+					if (Widget)
+					{
+						Reachable.Add(Widget);
+					}
+				});
+			}
+		}
+
+		TArray<UObject*> Owned;
+		MCPGetDirectSubobjects(Tree, Owned);
+		for (UObject* Object : Owned)
+		{
+			FWidgetType* Widget = Cast<FWidgetType>(Object);
+			if (!Widget || Reachable.Contains(Widget))
+			{
+				continue;
+			}
+
+			// A unique name rather than the one it has: the transient package is
+			// shared, and the same widget name is evicted from the same asset
+			// on every run of a script that adds and removes it.
+			const FName EvictedName = Widget->GetFName();
+			const FName ParkedName = MakeUniqueObjectName(
+				GetTransientPackage(), Widget->GetClass(), EvictedName);
+			Widget->Rename(*ParkedName.ToString(), GetTransientPackage(),
+				REN_DontCreateRedirectors | REN_NonTransactional);
+			if (Widget->GetOuter() == Tree)
+			{
+				Stuck.Add(EvictedName);
+			}
+			else
+			{
+				++OutEvicted;
+			}
+		}
+		return Stuck;
+	}
+
+	/**
+	 * Sync, compile, sync again.
+	 *
+	 * When the map cannot be made to match what the compiler checks - which in
+	 * practice means two variables carrying one GUID, the one defect neither
+	 * the sync nor the engine can repair without picking which set of external
+	 * references to break - the compile does NOT run and bCompiled stays false.
+	 * The ensure inside the compiler is the thing this exists to prevent, and a
+	 * handler that compiled anyway would be reporting success on an asset it
+	 * had just broken.
+	 */
+	template <typename TWidgetBP>
+	FSyncReport CompileChecked(TWidgetBP* WidgetBP)
+	{
+		FSyncReport Report = Sync(WidgetBP);
+		if (!Report.IsClean())
+		{
+			return Report;
+		}
+
+		FKismetEditorUtilities::CompileBlueprint(WidgetBP);
+
+		const FSyncReport After = Sync(WidgetBP);
+		Report.Added += After.Added;
+		Report.Pruned += After.Pruned;
+		Report.Repaired += After.Repaired;
+		Report.Unusable = After.Unusable;
+		Report.Defects = After.Defects;
+		Report.bCompiled = true;
+		return Report;
+	}
+
+	/** The error a handler returns when CompileChecked refused to compile. */
+	inline TSharedPtr<FJsonValue> BlockedError(const FString& AssetPath, const FSyncReport& Report)
+	{
+		return MCPError(FString::Printf(
+			TEXT("Refusing to compile '%s': %s. Two widget variables cannot share a GUID - the UMG ")
+			TEXT("compiler reports it and external assets that reference either one by GUID resolve to ")
+			TEXT("whichever it reaches first, so the bridge will not reassign one behind your back. ")
+			TEXT("Nothing was compiled or saved. Open the asset in the UMG editor and delete and ")
+			TEXT("recreate one of %s."),
+			*AssetPath, *Report.DefectList(), *Report.UnusableList()));
+	}
+}
+
+/** Stamp GUID bookkeeping onto a widget mutation result, and withdraw the
+ *  success claim when a variable the compiler generates was left with a map
+ *  entry the compiler will refuse. Silence there is what turns into an editor
+ *  ensure the next time anything compiles the asset. */
+inline void MCPSetWidgetGuidOutcome(
+	const TSharedPtr<FJsonObject>& Result,
+	const MCPWidgetGuidMap::FSyncReport& Report,
+	const FString& AssetPath)
+{
+	if (!Result.IsValid())
+	{
+		return;
+	}
+
+	// Only when there was something to report: a property write that changed no
+	// metadata should not carry three zeroes describing the metadata it left
+	// alone.
+	if (Report.Pruned > 0)
+	{
+		Result->SetNumberField(TEXT("prunedGuidEntries"), Report.Pruned);
+	}
+	if (Report.Added > 0)
+	{
+		Result->SetNumberField(TEXT("widgetGuidEntriesAdded"), Report.Added);
+	}
+	if (Report.Evicted > 0)
+	{
+		Result->SetNumberField(TEXT("evictedWidgets"), Report.Evicted);
+	}
+	if (Report.Repaired > 0)
+	{
+		Result->SetNumberField(TEXT("repairedGuidEntries"), Report.Repaired);
+	}
+	if (Report.IsClean())
+	{
+		return;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Missing;
+	for (const FName& Name : Report.Unusable)
+	{
+		Missing.Add(MakeShared<FJsonValueString>(Name.ToString()));
+	}
+	Result->SetArrayField(TEXT("widgetsWithUnusableGuid"), Missing);
+	Result->SetBoolField(TEXT("success"), false);
+	Result->SetStringField(TEXT("error"), FString::Printf(
+		TEXT("'%s' was changed, but its widget variable GUID bookkeeping is not in a state the UMG ")
+		TEXT("compiler accepts: %s. The bridge does not reassign a shared GUID on its own, because ")
+		TEXT("external assets reference these variables by GUID across renames. This asset reports the ")
+		TEXT("failure on every compile until one of %s is deleted and recreated in the UMG editor."),
+		*AssetPath, *Report.DefectList(), *Report.UnusableList()));
+}

@@ -474,5 +474,16 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixupRedirectors(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("deletedRedirectorCount"), ConfirmedDeleted);
 	Result->SetArrayField(TEXT("redirectors"), RedirectorStatuses);
 	MCPSetUpdated(Result);
+	// Two irreversible writes, neither of which the bridge can undo. The
+	// referencer packages were saved over their previous bytes, and no copy of
+	// those was kept; the redirector packages were deleted from disk once
+	// nothing pointed at them. Restoring the old state needs a call that
+	// recreates an ObjectRedirector at a vacated path and a call that rewinds a
+	// package to its pre-save contents, and neither exists.
+	MCPSetNoRollback(Result, FString::Printf(
+		TEXT("Rewrote and saved %d referencer package(s) over their previous contents and deleted %d redirector ")
+		TEXT("package(s). Undoing this needs an action that recreates an ObjectRedirector at an old path and one that ")
+		TEXT("restores a package's pre-save bytes; neither exists, and no copy of the overwritten packages was kept."),
+		SavedCount, ConfirmedDeleted));
 	return MCPResult(Result);
 }

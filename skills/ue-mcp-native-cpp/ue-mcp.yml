@@ -1,0 +1,7 @@
+categories: [project, asset, blueprint, level, reflection, editor]
+unrealClasses:
+  - UObject
+  - AActor
+  - UActorComponent
+engine: ">=5.4"
+triggers: [c++, uclass, uproperty, ufunction, live coding, module dependency, build.cs]

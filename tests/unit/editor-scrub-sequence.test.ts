@@ -8,10 +8,11 @@ import type { ToolContext } from "../../src/types.js";
  * evaluated world races realtime playback and lands wherever the tick left it.
  *
  * scrub_sequence is a separate action rather than a fourth sequenceAction verb:
- * that enum is closed at play|pause|stop and widening it is a contract change
- * on the transport, while a scrub carries a time the transport verbs have no
- * use for. The enum staying closed is asserted here so a later change has to
- * be deliberate.
+ * the transport verbs are play|pause|stop and a scrub carries a time they have
+ * no use for. play_sequence still refuses a fourth verb, but it refuses it in
+ * the handler, which names the three it takes, rather than in the schema. The
+ * MCP SDK validates arguments before the tool callback runs, so a strict enum
+ * spent that refusal on a transport schema dump the caller cannot act on.
  */
 describe("editor.scrub_sequence", () => {
   it("forwards the sequence and the requested time", async () => {
@@ -51,15 +52,23 @@ describe("editor.scrub_sequence", () => {
     }, undefined);
   });
 
-  it("accepts only the two time units the handler knows", () => {
+  it("advertises the two time units and leaves the refusal to the handler", () => {
     expect(editorTool.schema.timeUnit.safeParse("display").success).toBe(true);
     expect(editorTool.schema.timeUnit.safeParse("tick").success).toBe(true);
-    expect(editorTool.schema.timeUnit.safeParse("frames").success).toBe(false);
+    // scrub_sequence names both units when it rejects a third, and that message
+    // is worth more than a schema dump, so the parse lets the value through.
+    expect(editorTool.schema.timeUnit.safeParse("frames").success).toBe(true);
+    expect(editorTool.schema.timeUnit.description).toContain("display");
+    expect(editorTool.schema.timeUnit.description).toContain("tick");
   });
 
-  it("leaves the play_sequence transport enum closed", () => {
+  it("documents the three play_sequence verbs and lets the handler refuse a fourth", () => {
     expect(editorTool.schema.sequenceAction.safeParse("play").success).toBe(true);
-    expect(editorTool.schema.sequenceAction.safeParse("scrub").success).toBe(false);
+    expect(editorTool.schema.sequenceAction.safeParse("scrub").success).toBe(true);
+    const described = editorTool.schema.sequenceAction.description ?? "";
+    for (const verb of ["play", "pause", "stop"]) {
+      expect(described).toContain(verb);
+    }
   });
 
   it("classifies as a mutation, so it cannot land in an unnamed editor", () => {
