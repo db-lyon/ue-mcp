@@ -141,6 +141,7 @@ private:
 	static TSharedPtr<FJsonValue> AddCustomEvent(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateMacro(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DeleteMacro(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DeleteGraph(const TSharedPtr<FJsonObject>& Params);
 
 	// V14 user-type authoring. Defined in BlueprintHandlers_UserTypes.cpp.
 	// Creation and the coarse entry CRUD stay in the asset category; these are

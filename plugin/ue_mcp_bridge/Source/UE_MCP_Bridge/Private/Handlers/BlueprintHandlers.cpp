@@ -187,6 +187,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_custom_event"), &AddCustomEvent);
 	Registry.RegisterHandler(TEXT("create_macro"), &CreateMacro);
 	Registry.RegisterHandler(TEXT("delete_macro"), &DeleteMacro);
+	Registry.RegisterHandler(TEXT("delete_graph"), &DeleteGraph);
 
 	// V14 user-type authoring (BlueprintHandlers_UserTypes.cpp). Creation and
 	// the coarse entry CRUD stay on the asset category; these cover ordering,

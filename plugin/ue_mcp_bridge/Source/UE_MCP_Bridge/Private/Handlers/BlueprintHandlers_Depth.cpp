@@ -42,6 +42,7 @@
 
 #include "BlueprintHandlers.h"
 #include "BlueprintHandlers_Internal.h"
+#include "K2Node_Composite.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
@@ -2496,6 +2497,160 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateMacro(const TSharedPtr<FJsonObj
 // ─────────────────────────────────────────────────────────────────────────────
 // delete_macro
 // ─────────────────────────────────────────────────────────────────────────────
+
+// #1010: delete a graph the other delete actions cannot reach.
+//
+// A collapsed subgraph is owned by its UK2Node_Composite, not by the
+// Blueprint, so it is in none of the lists the existing deletes search:
+// delete_function walks FunctionGraphs, delete_macro walks MacroGraphs, and
+// both answer alreadyDeleted for a graph that is plainly still there in
+// list_graphs. delete_node is the right call while the composite node still
+// exists, because UK2Node_Composite::DestroyNode takes the bound graph with
+// it - but once that node is gone the graph outlives it with nothing pointing
+// at it, and nothing in the surface could remove it. Leftover variable gets
+// inside such an orphan then block delete_variable, which is how the report
+// found it.
+//
+// So this addresses a graph the way list_graphs names one, and says what it
+// found before removing it.
+TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteGraph(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace MCPBlueprintDepth;
+
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+
+	FString Requested = OptionalString(Params, TEXT("graphSelector"), TEXT(""));
+	if (Requested.IsEmpty()) Requested = OptionalString(Params, TEXT("graphName"), TEXT(""));
+	if (Requested.IsEmpty())
+	{
+		return MCPError(TEXT("Name the graph to delete with 'graphName', or 'graphSelector' for the exact selector list_graphs reports when two graphs share a name"));
+	}
+
+	UBlueprint* const Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+
+	const bool bForce = OptionalBool(Params, TEXT("force"), false);
+
+	TArray<UEdGraph*> AllGraphs;
+	Blueprint->GetAllGraphs(AllGraphs);
+	TMap<FString, int32> NameCounts;
+	CountGraphNames(AllGraphs, NameCounts);
+	TMap<FString, int32> SeenCounts;
+
+	UEdGraph* Target = nullptr;
+	FString TargetSelector;
+	int32 NameMatches = 0;
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		if (!Graph) continue;
+		const FString Name = Graph->GetName();
+		const int32 DuplicateIndex = SeenCounts.FindOrAdd(Name)++;
+		const FString Selector = MakeGraphSelector(Name, DuplicateIndex, NameCounts.FindRef(Name));
+		if (!Selector.Equals(Requested, ESearchCase::IgnoreCase) && !Name.Equals(Requested, ESearchCase::IgnoreCase)) continue;
+		if (Name.Equals(Requested, ESearchCase::IgnoreCase)) ++NameMatches;
+		if (!Target)
+		{
+			Target = Graph;
+			TargetSelector = Selector;
+		}
+		// An exact selector match always wins over a bare name match.
+		if (Selector.Equals(Requested, ESearchCase::IgnoreCase))
+		{
+			Target = Graph;
+			TargetSelector = Selector;
+			NameMatches = 1;
+			break;
+		}
+	}
+
+	// Idempotent, like the other deletes: a graph that is already gone is not
+	// an error, because that is the state the caller asked for.
+	if (!Target)
+	{
+		auto Noop = MCPSuccess();
+		Noop->SetStringField(TEXT("path"), AssetPath);
+		Noop->SetStringField(TEXT("graphName"), Requested);
+		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
+		return MCPResult(Noop);
+	}
+	if (NameMatches > 1)
+	{
+		// Deleting whichever one came first would be a coin flip over a
+		// destructive call.
+		return MCPError(FString::Printf(
+			TEXT("'%s' names %d graphs in this Blueprint. Pass 'graphSelector' with the exact selector list_graphs reports for the one to delete."),
+			*Requested, NameMatches));
+	}
+
+	// The ubergraph is the Blueprint's event graph. Removing it does not leave
+	// a tidier asset, it leaves one whose events have nowhere to live.
+	if (Blueprint->UbergraphPages.Contains(Target) && !bForce)
+	{
+		return MCPError(FString::Printf(
+			TEXT("'%s' is an event graph. Deleting one leaves the Blueprint's events with nowhere to live; pass force=true if that is really what you want."),
+			*TargetSelector));
+	}
+
+	// Whatever still points at this graph. A composite node that owns it means
+	// delete_node is the call to make: UK2Node_Composite::DestroyNode removes
+	// the bound graph itself, and deleting the graph out from under a live node
+	// leaves the node behind instead.
+	UEdGraphNode* OwningNode = nullptr;
+	for (UEdGraph* Graph : AllGraphs)
+	{
+		if (!Graph || Graph == Target) continue;
+		for (UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (!Node) continue;
+			if (Node->GetSubGraphs().Contains(Target))
+			{
+				OwningNode = Node;
+				break;
+			}
+		}
+		if (OwningNode) break;
+	}
+	if (OwningNode && !bForce)
+	{
+		return MCPError(FString::Printf(
+			TEXT("'%s' is still owned by the node '%s' in '%s'. Delete that node with blueprint(delete_node) instead, which takes this graph with it. Pass force=true to remove the graph and leave the node."),
+			*TargetSelector,
+			*OwningNode->GetNodeTitle(ENodeTitleType::ListView).ToString(),
+			*OwningNode->GetGraph()->GetName()));
+	}
+
+	const FString Kind =
+		Blueprint->FunctionGraphs.Contains(Target) ? TEXT("function")
+		: Blueprint->MacroGraphs.Contains(Target) ? TEXT("macro")
+		: Blueprint->UbergraphPages.Contains(Target) ? TEXT("ubergraph")
+		: Blueprint->DelegateSignatureGraphs.Contains(Target) ? TEXT("delegateSignature")
+		: TEXT("subgraph");
+	const int32 DeletedNodeCount = Target->Nodes.Num();
+	const bool bWasOrphaned = OwningNode == nullptr && Kind == TEXT("subgraph");
+
+	FBlueprintEditorUtils::RemoveGraph(Blueprint, Target);
+	RecompileAfterStructuralEdit(Blueprint);
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("graphName"), Target->GetName());
+	Result->SetStringField(TEXT("graphSelector"), TargetSelector);
+	Result->SetStringField(TEXT("kind"), Kind);
+	Result->SetBoolField(TEXT("deleted"), true);
+	Result->SetBoolField(TEXT("wasOrphaned"), bWasOrphaned);
+	Result->SetNumberField(TEXT("deletedNodeCount"), DeletedNodeCount);
+	if (OwningNode)
+	{
+		Result->SetBoolField(TEXT("ownerNodeLeftBehind"), true);
+		Result->SetStringField(TEXT("ownerNodeTitle"), OwningNode->GetNodeTitle(ENodeTitleType::ListView).ToString());
+	}
+	Result->SetBoolField(TEXT("rollbackPossible"), false);
+	Result->SetStringField(TEXT("rollbackNote"),
+		TEXT("A deleted graph and the nodes in it are gone; nothing in the surface re-creates a collapsed subgraph, and no inverse is offered rather than one that would restore a name and an empty body. Undo in the editor is the only route back."));
+	return MCPResult(Result);
+}
 
 TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteMacro(const TSharedPtr<FJsonObject>& Params)
 {
