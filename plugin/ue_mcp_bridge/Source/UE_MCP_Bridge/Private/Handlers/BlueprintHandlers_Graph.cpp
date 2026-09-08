@@ -240,13 +240,34 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 					}
 				}
 
-				// 2. Try blueprint parent class
+				// 2. #996: the Blueprint OWN functions. A function declared on the
+				// Blueprint by create_function lives on its generated class, and on
+				// the SKELETON class from the moment it is declared - before a full
+				// compile has produced the generated one. Neither was searched, so
+				// "declare a function, then add a call to it" produced an unbound
+				// stub with no title and no pins.
+				//
+				// ExcludeSuper on purpose: this step is only for what the Blueprint
+				// itself declares, so an inherited name keeps resolving through the
+				// parent-class step below exactly as it did before.
+				if (!FoundFunc && Blueprint->SkeletonGeneratedClass)
+				{
+					FoundFunc = Blueprint->SkeletonGeneratedClass->FindFunctionByName(
+						FName(*FunctionName), EIncludeSuperFlag::ExcludeSuper);
+				}
+				if (!FoundFunc && Blueprint->GeneratedClass)
+				{
+					FoundFunc = Blueprint->GeneratedClass->FindFunctionByName(
+						FName(*FunctionName), EIncludeSuperFlag::ExcludeSuper);
+				}
+
+				// 3. Try blueprint parent class
 				if (!FoundFunc && Blueprint->ParentClass)
 				{
 					FoundFunc = Blueprint->ParentClass->FindFunctionByName(FName(*FunctionName));
 				}
 
-				// 3. Search common library classes
+				// 4. Search common library classes
 				if (!FoundFunc)
 				{
 					static UClass* LibraryClasses[] = {
@@ -263,7 +284,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 					}
 				}
 
-				// 4. #546: search the Blueprint's own component classes - a very
+				// 5. #546: search the Blueprint's own component classes - a very
 				// common case is calling a BlueprintCallable UFUNCTION on a custom
 				// C++ component the BP owns, without naming the class explicitly.
 				if (!FoundFunc && Blueprint->SimpleConstructionScript)
@@ -278,7 +299,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 					}
 				}
 
-				// 5. #546: last resort - scan loaded classes for a single
+				// 6. #546: last resort - scan loaded classes for a single
 				// BlueprintCallable function with this exact name. Resolves
 				// freshly-compiled custom C++ UFUNCTIONs that the palette index
 				// has not picked up. Only binds on an unambiguous match.

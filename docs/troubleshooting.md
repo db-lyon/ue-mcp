@@ -317,6 +317,28 @@ widget(action="remove_widget", assetPath="/Game/UI/WBP_ComputerTaskbar", widgetN
 
 The widget is already gone, so the call reports `alreadyDeleted: true`, drops the dead entries, and saves. `prunedGuidEntries` in the result says how many it removed; `0` means the map was already clean and nothing was written.
 
+## A Call Node Came Back With No Title and No Pins
+
+**Symptom:** `blueprint(add_node)` reports `created: true`, but the node it made has the title `None`, carries no pins, and cannot be wired to anything.
+
+That is an unbound stub: the node class was created, but no `UFunction` was attached to it, so there is nothing for it to call and nothing to draw pins from. The report is `created: true` because a node genuinely was added - the binding is the part that failed, and it used to fail silently.
+
+The case this used to happen in is a function the Blueprint declares itself:
+
+```
+blueprint(action="create_function", assetPath="/Game/BP_Thing", functionName="ComputeAimOffset")
+blueprint(action="add_node", assetPath="/Game/BP_Thing", graphName="EventGraph",
+          nodeClass="K2Node_CallFunction", nodeParams={"functionName": "ComputeAimOffset"})
+```
+
+The resolver looked at an explicit target class, the parent class, the common Kismet libraries, the Blueprint's component classes, and every loaded class - but not at the Blueprint itself. A function declared on a Blueprint lives on its generated class, and on the skeleton class from the moment it is declared, and both are searched now, so the sequence above binds without needing a compile in between.
+
+If you still get a stub, the function name is the thing to check first. `blueprint(action="list_functions", assetPath=...)` reports what the Blueprint actually declares, and for a C++ `UFUNCTION` on a class the Blueprint does not own, naming it explicitly is the reliable form:
+
+```
+nodeParams={"functionName": "MyFunction", "className": "/Script/MyModule.MyClass"}
+```
+
 ## Search Not Finding Assets
 
 If `asset(action="search")` misses assets in plugin directories:
