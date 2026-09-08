@@ -96,6 +96,7 @@ export const REGISTERED_HANDLER_TIMEOUT_SECONDS: Readonly<Record<string, number>
   sculpt_landscape: 120,
   sculpt_landscape_region: 300,
   search_blueprint_call_sites: 600,
+  search_blueprint_nodes: 600,
   set_actor_hlod_layer: 300,
   set_component_materials: 300,
   set_landscape_height_region: 300,
