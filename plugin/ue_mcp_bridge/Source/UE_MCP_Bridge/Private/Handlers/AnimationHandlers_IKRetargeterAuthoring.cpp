@@ -580,6 +580,38 @@ namespace
 					*Prepared.OpName);
 				return false;
 			}
+
+			// Every property name is resolved here, against the settings struct this
+			// op actually carries, so a typo is refused before a transaction opens.
+			// Leaving it to the apply loop would be worse than slow: a transaction
+			// that records no change is not pushed onto the undo stack, so the
+			// UndoTransaction that unwinds a failed call would roll back whatever
+			// the PREVIOUS call did instead. The apply loop still checks, because
+			// ensureDefaultOps can rebuild the stack in between.
+			const FIKRetargetOpBase* const ParsedOp = Ops[Prepared.OpIndex].GetPtr<FIKRetargetOpBase>();
+			const UScriptStruct* const ParsedSettingsType = ParsedOp ? ParsedOp->GetSettingsType() : nullptr;
+			if ((Prepared.Settings.Num() > 0 || Prepared.ChainSettings.Num() > 0) && !ParsedSettingsType)
+			{
+				OutError = FString::Printf(
+					TEXT("retarget op '%s' exposes no settings struct on this engine build"), *Prepared.OpName);
+				return false;
+			}
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Prepared.Settings)
+			{
+				if (ParsedSettingsType->FindPropertyByName(FName(*Pair.Key))) continue;
+				OutError = FString::Printf(
+					TEXT("retarget op '%s' has no setting '%s'; read_ik_retargeter reports the settings each op carries"),
+					*Prepared.OpName, *Pair.Key);
+				return false;
+			}
+			if (Prepared.ChainSettings.Num() > 0
+				&& !CastField<FArrayProperty>(ParsedSettingsType->FindPropertyByName(FName(TEXT("ChainsToRetarget")))))
+			{
+				OutError = FString::Printf(
+					TEXT("chainSettings is only meaningful on an op whose settings carry ChainsToRetarget; '%s' does not"),
+					*Prepared.OpName);
+				return false;
+			}
 			OutPrepared.Add(MoveTemp(Prepared));
 		}
 		return true;
