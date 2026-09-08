@@ -27,6 +27,12 @@ import { DialogGatedBridge } from "./guarded-bridge.js";
 import { McpError, ErrorCode } from "../errors.js";
 import { debug } from "../log.js";
 import type { GuardDeclarations, GuardHook } from "./guard-schema.js";
+import {
+  GUARD_CALL_KEY,
+  GUARD_CONFIG_KEY,
+  type GuardHookPayload,
+  type GuardPhase,
+} from "../guard-task.js";
 
 /** Where a declaration came from, so an error can say which file to open. */
 export interface GuardSource {
@@ -75,17 +81,42 @@ function hookContext(cc: CallContext, deps: BuildGuardsDeps): FlowContext {
   };
 }
 
-/** What a hook is told about the call it is guarding. */
-function hookOptions(cc: CallContext, declared: Record<string, unknown>, result?: unknown): Record<string, unknown> {
+/**
+ * What a hook is told about the call it is guarding.
+ *
+ * Two shapes, deliberately. The flattened keys are what a guard written
+ * against `UeMcpTask` reads, and they keep their old meaning exactly: the
+ * declaration goes in first so the call being guarded wins a collision, which
+ * is the behaviour those guards were written against.
+ *
+ * The two reserved keys are what `UeMcpGuard` reads, and they exist because
+ * that flattening is a hazard: a guard whose option is named `method` loses
+ * it, and the phase can only be inferred from `result` happening to be there.
+ * Nested, the configuration and the subject cannot touch each other, and the
+ * phase is stated rather than detected.
+ */
+function hookOptions(
+  cc: CallContext,
+  declared: Record<string, unknown>,
+  phase: GuardPhase,
+  result?: unknown,
+): Record<string, unknown> {
+  const paths = cc.writeFiles();
   return {
-    // The declaration first, so the call being guarded always wins a
-    // collision: a guard reads its configuration and its subject from one
-    // object, and the subject is never masked by a stale default.
     ...declared,
     method: cc.method,
     params: cc.params,
-    paths: cc.writeFiles(),
+    paths,
     ...(result !== undefined ? { result } : {}),
+    [GUARD_CALL_KEY]: {
+      phase,
+      method: cc.method,
+      params: cc.params,
+      paths,
+      session: cc.session,
+      ...(result !== undefined ? { result } : {}),
+    } satisfies GuardHookPayload,
+    [GUARD_CONFIG_KEY]: declared,
   };
 }
 
@@ -94,12 +125,13 @@ async function runHook(
   hook: GuardHook,
   cc: CallContext,
   deps: BuildGuardsDeps,
+  phase: GuardPhase,
   result?: unknown,
 ): Promise<HookResult> {
   const task = await deps.registry.create(
     hook.class_path,
     hookContext(cc, deps) as never,
-    hookOptions(cc, hook.options, result),
+    hookOptions(cc, hook.options, phase, result),
   );
   return (await task.execute()) as HookResult;
 }
@@ -170,7 +202,7 @@ export async function buildGuards(
             before: async (cc: CallContext): Promise<void> => {
               let answered: HookResult;
               try {
-                answered = await runHook(decl.before!, cc, deps);
+                answered = await runHook(decl.before!, cc, deps, "before");
               } catch (e) {
                 // A hook that threw denies the call. It is the same outcome as
                 // returning failure, and a guard that errors is not a guard
@@ -198,7 +230,7 @@ export async function buildGuards(
             after: async (cc: CallContext, result: unknown): Promise<unknown | void> => {
               let answered: HookResult;
               try {
-                answered = await runHook(decl.after!, cc, deps, result);
+                answered = await runHook(decl.after!, cc, deps, "after", result);
               } catch (e) {
                 // The call already happened. Failing it now would report a
                 // mutation as not having occurred, which is worse than an
