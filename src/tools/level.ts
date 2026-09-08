@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
-import { Vec3, Rotator, Color } from "../schemas.js";
+import { Vec3, Rotator, Color, SplinePoint } from "../schemas.js";
 import { PAGINATION_SCHEMA, paged } from "../pagination.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/level.generated.js";
 
@@ -61,7 +61,7 @@ export const levelTool: ToolDef = categoryTool(
     set_water_body_property: bp("mutate", "Set a property on an actor's WaterBodyComponent (ShapeDilation, WaterLevel, etc.). Params: actorLabel OR actorPath, propertyName, value. Requires Water plugin. For spline edits use level(set_spline_points) (#151)", "set_water_body_property", (p) => ({ actorLabel: p.actorLabel, actorPath: p.actorPath, propertyName: p.propertyName, value: p.value })),
     build_lighting:     bp("mutate", "Build lights. Params: quality?", "build_lighting"),
     get_spline_info:    bp("read", "Read a spline component's points, closedLoop, length, and per-point tangents/types. Works in editor or PIE (#553). Optional componentName picks a specific (custom) spline; projectPoint (Vec3) returns the closest location, inputKey, distanceAlongSpline, distanceToSpline, and tangent (#555). Params: actorLabel OR actorPath, componentName?, world? (editor|pie), projectPoint?", "get_spline_info", (p) => ({ actorLabel: p.actorLabel, actorPath: p.actorPath, componentName: p.componentName, world: p.world, pieInstance: p.pieInstance, projectPoint: p.projectPoint })),
-    set_spline_points:  bp("mutate", "Set spline points. Params: actorLabel OR actorPath, points[], closedLoop?", "set_spline_points"),
+    set_spline_points:  bp("mutate", "Set spline points. A point is either a bare {x,y,z} or the typed form, which keeps what a position alone loses: pointType (Linear|Curve|Constant|CurveClamped|CurveCustomTangent), arriveTangent, leaveTangent, rotation and scale. The whole batch is validated before any existing geometry is cleared, so a malformed request leaves the spline as it was, and the edit goes through an editor transaction so Undo reaches it. componentName picks one spline on an actor carrying several. Params: actorLabel OR actorPath, points[], componentName?, closedLoop?, loopPosition?, loopPositionOverride? (#1029)", "set_spline_points"),
     set_actor_material: bp("mutate", "Set material on actor. Params: actorLabel OR actorPath, materialPath, slotIndex?", "set_actor_material"),
     get_world_settings: bp("read", "Read world settings (GameMode, KillZ, gravity, etc.). Params: none", "get_world_settings"),
     set_world_settings: bp("mutate", "Set world settings. Params: defaultGameMode?, killZ?, globalGravityZ?, enableWorldBoundsChecks?", "set_world_settings"),
@@ -376,8 +376,16 @@ export const levelTool: ToolDef = categoryTool(
     attenuationRadius: z.number().optional(),
     innerConeAngle: z.number().optional(), outerConeAngle: z.number().optional(),
     quality: z.string().optional(),
-    points: z.array(Vec3).optional(),
+    // SplinePoint accepts a bare {x,y,z} as well as the typed form, so it is
+    // one schema rather than a union of the two. A union would have been
+    // worse than verbose: zod matches Vec3 first and strips the keys it does
+    // not declare, so a typed point would arrive as a position with its
+    // interpolation, tangents, rotation and scale silently gone - which is
+    // the same class of bug as the args/input hatches this replaces (#1029).
+    points: z.array(SplinePoint).optional(),
     closedLoop: z.boolean().optional(),
+    loopPosition: z.number().optional().describe("set_spline_points: the input key a closed loop closes at, when the spline's own last key is not where it should close (#1029)"),
+    loopPositionOverride: z.boolean().optional().describe("set_spline_points: use loopPosition rather than the spline's own last key (#1029)"),
     staticMesh: z.string().optional().describe("Asset path for static mesh (e.g. /Engine/BasicShapes/Cube.Cube)"),
     material: z.string().optional().describe("Asset path for material to apply at slot 0"),
     weight: z.number().optional().describe("add_post_process_blendable: blend weight (default 1)"),
