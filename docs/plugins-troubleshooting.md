@@ -72,3 +72,9 @@ The C++ side didn't compile in. Two common causes:
 2. The build failed silently because the deployed bridge is older than the plugin expects. Run `ue-mcp deploy` to refresh `MCPHandlerRegistration.h`, then `ue-mcp build`.
 
 If the rebuild succeeds but `Unknown method` persists, you've hit a stale Live Coding patch: delete `<projectDir>/Binaries/Win64/*.patch_*` and rebuild clean. UBT's incremental build can otherwise shadow a freshly built DLL with a leftover patch.
+
+### Find the whole gap in one call
+
+`project(action="get_status")` reports a `deployedPlugin` object describing the plugin that answered: the methods it registered, the methods this server advertises, and the difference in both directions. An advertised action the plugin never registered is named there, so a version skew is one read rather than a discovery made one failed call at a time.
+
+That is a different question from `pluginBuildStale`, and the two disagree in a case worth knowing about. `pluginBuildStale` compares timestamps: is the compiled bridge older than its source. A plugin built cleanly from an older tag is not stale by that measure and can still be missing handlers a newer server advertises, which is why `pluginBuildStale: false` is not on its own proof that the surface you were handed is the surface that answers.
