@@ -21,11 +21,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { callBridge, disconnectBridge, getBridge, resultArray } from "../setup.js";
+import { callBridge, disconnectBridge, getBridge, resultArray, TEST_PREFIX } from "../setup.js";
 import type { EditorBridge } from "../../src/bridge.js";
 
-/** Shipped with the engine, so it is here on every machine. */
+// The flags are read off a copy inside the test project rather than off the
+// engine material it is duplicated from. set_usage writes, and a write to
+// engine content dirties a package outside the disposable project - which
+// then blocks a clean editor shutdown even though the file on disk is
+// read-only and never actually changed.
 const ENGINE_MATERIAL = "/Engine/EngineMaterials/DefaultMaterial";
+const TEST_MATERIAL = `${TEST_PREFIX}/M_UsageProbe`;
 
 type UsageRow = { usage?: string; propertyName?: string; enabled?: boolean };
 type CVarRow = { name?: string; value?: string; defaultValue?: string; isDefault?: boolean; setBy?: string; type?: string };
@@ -72,18 +77,28 @@ beforeAll(async () => {
   scriptDir = mkdtempSync(join(tmpdir(), "ue-mcp-entrypoint-"));
   scriptPath = join(scriptDir, "entry_probe.py");
   writeFileSync(scriptPath, PROBE_SCRIPT, "utf8");
+
+  await callBridge(bridge, "delete_asset", { assetPath: TEST_MATERIAL, force: true });
+  const copy = await callBridge(bridge, "duplicate_asset", {
+    sourcePath: ENGINE_MATERIAL,
+    destinationPath: TEST_MATERIAL,
+  });
+  expect(copy.ok, copy.error).toBe(true);
 });
 
-afterAll(() => {
+afterAll(async () => {
   if (scriptDir) rmSync(scriptDir, { recursive: true, force: true });
-  if (bridge) disconnectBridge();
+  if (bridge) {
+    await callBridge(bridge, "delete_asset", { assetPath: TEST_MATERIAL, force: true });
+    disconnectBridge();
+  }
 });
 
 describe("material usage flags come from the engine (#1004)", () => {
   let usages: UsageRow[] = [];
 
   beforeAll(async () => {
-    const read = await callBridge(bridge, "get_material_usage", { assetPath: ENGINE_MATERIAL });
+    const read = await callBridge(bridge, "get_material_usage", { assetPath: TEST_MATERIAL });
     expect(read.ok, read.error).toBe(true);
     usages = (resultArray(read.result, "usages") ?? []) as UsageRow[];
   });
@@ -119,7 +134,7 @@ describe("material usage flags come from the engine (#1004)", () => {
 
   it("accepts a usage name set_usage can also take", async () => {
     const applied = await callBridge(bridge, "set_material_usage", {
-      assetPath: ENGINE_MATERIAL,
+      assetPath: TEST_MATERIAL,
       usage: "VolumetricCloud",
     });
     // Either it applied or it was already set; what must NOT happen is the
