@@ -118,6 +118,7 @@ private:
 	// BlueprintHandlers_Search.cpp.
 	static TSharedPtr<FJsonValue> SearchCallSites(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SearchNodes(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> GetConnections(const TSharedPtr<FJsonObject>& Params);
 
 	// #419: SetCapsuleSize on CapsuleComponent BP templates (UFUNCTION setter
 	// path; raw property writes leave the visualizer stale)

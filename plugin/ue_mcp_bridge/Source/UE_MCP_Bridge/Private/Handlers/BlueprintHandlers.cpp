@@ -167,6 +167,7 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #945: project-wide call-site audit (BlueprintHandlers_Search.cpp).
 	Registry.RegisterHandlerWithTimeout(TEXT("search_blueprint_call_sites"), &SearchCallSites, SearchCallSitesTimeoutSeconds);
 	Registry.RegisterHandlerWithTimeout(TEXT("search_blueprint_nodes"), &SearchNodes, SearchCallSitesTimeoutSeconds);
+	Registry.RegisterHandlerWithTimeout(TEXT("get_blueprint_connections"), &GetConnections, SearchCallSitesTimeoutSeconds);
 
 	// V9 Blueprint depth (BlueprintHandlers_Depth.cpp). Interface removal and
 	// listing, function flags and metadata, parameter CRUD across functions,
