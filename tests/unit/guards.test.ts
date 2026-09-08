@@ -430,7 +430,12 @@ describe("what a hook is told about the call", () => {
     await guard.before!(callCtx("save_asset", { assetPath: "/Game/Foo" }));
 
     expect(seen).toHaveLength(1);
-    expect(seen[0]).toEqual({
+    // The flattened keys are the contract a guard written against UeMcpTask
+    // reads, and they have to keep their exact meaning. Asserted by inclusion
+    // rather than by equality: `UeMcpGuard` reads two reserved keys alongside
+    // them, and a guard that never heard of those is unaffected by their being
+    // there.
+    expect(seen[0]).toMatchObject({
       method: "save_asset",
       params: { assetPath: "/Game/Foo" },
       paths: ["C:/proj/Content/Foo.uasset"],

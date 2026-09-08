@@ -89,19 +89,26 @@ guards:
 
 ```ts
 // tasks/PolicyGuard.ts
-import { UeMcpTask, type TaskResult } from "ue-mcp/task";
+import { UeMcpGuard, type GuardedCall } from "ue-mcp/guard";
 
-export default class PolicyGuard extends UeMcpTask<{ paths?: string[]; method?: string }> {
+export default class PolicyGuard extends UeMcpGuard<{ allow?: string[] }> {
   get taskName() { return "policy-guard"; }
-  async execute(): Promise<TaskResult> {
-    const outside = (this.options.paths ?? []).filter((p) => !p.includes("/Content/Sandbox/"));
+  async before(call: GuardedCall) {
+    const allow = this.config.allow ?? ["/Content/Sandbox/"];
+    const outside = call.paths.filter((p) => !allow.some((a) => p.includes(a)));
     if (outside.length) {
-      return { success: false, error: new Error(`writes outside the sandbox are not allowed: ${outside.join(", ")}`) };
+      return this.deny(`writes outside the sandbox are not allowed: ${outside.join(", ")}`);
     }
-    return { success: true };
+    return this.allow();
   }
 }
 ```
+
+`this.config` is what the declaration's `options` said, and `call` is the call being guarded. They are separate objects on purpose: they used to be one, and the call won any name collision, so a guard with an option called `method` silently read the guarded call's method instead of its own setting.
+
+`before` and `after` are separate methods, so a guard that wants both is one class with two of them and never has to work out which phase it is in.
+
+A guard written against `UeMcpTask` with a single `execute()` still works. It reads `this.options.method`, `this.options.params` and `this.options.paths` exactly as it always did.
 
 ## An observe guard (audit)
 
@@ -118,15 +125,16 @@ guards:
 
 ```ts
 // tasks/AuditGuard.ts
-import { UeMcpTask, type TaskResult } from "ue-mcp/task";
+import { UeMcpGuard, type GuardedCall } from "ue-mcp/guard";
 import { appendFileSync } from "node:fs";
 
-export default class AuditGuard extends UeMcpTask<{ method?: string; paths?: string[] }> {
+export default class AuditGuard extends UeMcpGuard<{ file?: string }> {
   get taskName() { return "audit-guard"; }
-  async execute(): Promise<TaskResult> {
-    const line = JSON.stringify({ method: this.options.method, paths: this.options.paths });
-    appendFileSync("ue-mcp-audit.log", line + "\n");
-    return { success: true };
+  async after(call: GuardedCall, result: unknown) {
+    const line = JSON.stringify({ method: call.method, paths: call.paths });
+    appendFileSync(this.config.file ?? "ue-mcp-audit.log", line + "\n");
+    // Returning nothing leaves the call's own result standing. Return an
+    // object to replace it.
   }
 }
 ```

@@ -110,6 +110,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "action-schema.ts": "Derives one action's parameter schema from whichever tool graph it is handed; holds nothing of its own.",
   "bridge-timeouts.ts": "The call budget table and its resolution; the same answer for every editor.",
   "asset-path.ts": "Pure Unreal path handling.",
+  "guard-task.ts": "The base class a guard is written against; pure over the call it is handed.",
   "epic-input.ts": "Pure argument shaping for one wrapped engine tool call; no editor to scope it to.",
   "path-params.ts": "Pure separator repair over a parameter bag; the same rule in every editor.",
   "field-select.ts": "Pure projection over whatever result it is handed; no editor to scope it to.",
