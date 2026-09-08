@@ -127,6 +127,7 @@ private:
 	// edits live in a LevelSequence until explicitly baked to a new AnimSequence.
 	static TSharedPtr<FJsonValue> BeginControlRigEdit(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReadControlRigEdit(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CaptureControlRigPose(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ApplyControlRigEdits(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> BakeControlRigEdit(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> AnalyzeAnimation(const TSharedPtr<FJsonObject>& Params);

@@ -6,6 +6,7 @@ import type { ToolContext } from "../../src/types.js";
 const workflowActions = [
   "begin_control_rig_edit",
   "read_control_rig_edit",
+  "capture_control_rig_pose",
   "apply_control_rig_edits",
   "bake_control_rig_edit",
 ] as const;
@@ -428,6 +429,66 @@ describe("animation Control Rig edit workflow", () => {
     expect(animationTool.schema.rigMode.description).toContain("asset");
   });
 
+  it("validates fail-closed live pose propagation snapshots", () => {
+    const snapshot = {
+      captureVersion: 1 as const,
+      sequencePath: "/Game/MCP/LS_Wave_Edit",
+      bindingTag: "mcp.manny.wave",
+      bindingGuid: "A-B-C-D",
+      trackPath: "/Game/MCP/LS_Wave_Edit.Track",
+      sectionPath: "/Game/MCP/LS_Wave_Edit.Section",
+      controlRigClass: "/Game/Rigs/CR_Manny.CR_Manny_C",
+      controlRigObjectPath: "/Game/MCP/LS_Wave_Edit.RigInstance",
+      controlRigObjectId: 42,
+      currentFrame: 12,
+      currentSubFrame: 0,
+      selectedControls: ["finger_ctrl", "wrist_ctrl"],
+      controls: [{
+        control: "finger_ctrl",
+        controlType: "Rotator",
+        valueType: "transform" as const,
+        transform: {
+          translation: { x: 0, y: 0, z: 0 },
+          rotationQuaternion: { x: 0, y: 0, z: 0, w: 1 },
+          scale: { x: 1, y: 1, z: 1 },
+        },
+      }],
+    };
+    const operation = {
+      op: "propagate_pose",
+      baseline: snapshot,
+      accepted: {
+        ...snapshot,
+        controls: [{
+          ...snapshot.controls[0],
+          transform: {
+            ...snapshot.controls[0].transform,
+            rotationQuaternion: { x: 0, y: 0, z: 0.258819, w: 0.965926 },
+          },
+        }],
+      },
+      controls: [{ control: "finger_ctrl", mode: "fixed", donorFrames: [0, 12, 24] }],
+    };
+    expect(animationTool.schema.operations.safeParse([operation]).success).toBe(true);
+    expect(animationTool.schema.operations.safeParse([{ ...operation, baseline: { ...snapshot, currentFrame: Number.NaN } }]).success).toBe(false);
+    expect(animationTool.schema.operations.safeParse([{ ...operation, accepted: { ...operation.accepted, bindingGuid: "other" } }]).success).toBe(true);
+    expect(animationTool.schema.operations.safeParse([{ ...operation, controls: [{ ...operation.controls[0], donorFrames: [12, 12] }] }]).success).toBe(false);
+    expect(animationTool.schema.operations.safeParse([{ ...operation, controls: [operation.controls[0], operation.controls[0]] }]).success).toBe(false);
+
+    const source = readFileSync(
+      new URL(
+        "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Private/Handlers/AnimationHandlers_ControlRigSequencer.cpp",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    expect(source).toContain("Baseline.ControlRigObjectId != Session.ControlRig->GetUniqueID()");
+    expect(source).toContain("BaselineValue->ValueType != ExpectedValueType");
+    expect(source).toContain("Snapshot selection is provenance metadata");
+    expect(source).not.toContain("Baseline.SelectedControls != Accepted.SelectedControls");
+    expect(source).toContain("ControlRigSequencerReadLocalControlValues(Session, Control, Write.Frames, Write.Before)");
+  });
+
   it("maps begin/read/apply/bake parameters exactly to the native contracts", async () => {
     const call = vi.fn().mockResolvedValue({ success: true });
     const ctx = { bridge: { call } } as unknown as ToolContext;
@@ -476,6 +537,19 @@ describe("animation Control Rig edit workflow", () => {
       controlNames: ["hand_r_ctrl", "foot_l_ctrl"],
       frames: [0, 12, 30],
       space: "global",
+    }, undefined);
+
+    await animationTool.handler(ctx, {
+      action: "capture_control_rig_pose",
+      sequencePath: "/Game/MCP/LS_Wave_Edit",
+      bindingTag: "mcp.manny.wave",
+      controlNames: ["hand_r_ctrl", "foot_l_ctrl"],
+      frames: [999],
+    });
+    expect(call).toHaveBeenLastCalledWith("capture_control_rig_pose", {
+      sequencePath: "/Game/MCP/LS_Wave_Edit",
+      bindingTag: "mcp.manny.wave",
+      controlNames: ["hand_r_ctrl", "foot_l_ctrl"],
     }, undefined);
 
     const operations = [{

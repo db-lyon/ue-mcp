@@ -189,6 +189,54 @@ const ControlRigSetIntEdit = z.object({
   { message: "set_int operations require exactly one of frame or frames" },
 );
 
+const LiveControlRigTransform = z.object({
+  translation: ControlRigVec3,
+  rotationQuaternion: ControlRigQuaternion,
+  scale: ControlRigVec3,
+}).strict();
+
+const LiveControlRigPoseValue = z.union([
+  z.object({ control: z.string().min(1), controlType: z.string().min(1), valueType: z.literal("transform"), transform: LiveControlRigTransform }).strict(),
+  z.object({ control: z.string().min(1), controlType: z.string().min(1), valueType: z.literal("bool"), value: z.boolean() }).strict(),
+  z.object({ control: z.string().min(1), controlType: z.string().min(1), valueType: z.literal("float"), value: z.number().finite() }).strict(),
+  z.object({ control: z.string().min(1), controlType: z.string().min(1), valueType: z.union([z.literal("int"), z.literal("enum")]), value: z.number().int() }).strict(),
+]);
+
+const LiveControlRigPoseSnapshot = z.object({
+  captureVersion: z.literal(1),
+  sequencePath: z.string().min(1),
+  bindingTag: z.string().min(1),
+  bindingGuid: z.string().min(1),
+  trackPath: z.string().min(1),
+  sectionPath: z.string().min(1),
+  controlRigClass: z.string().min(1),
+  controlRigObjectPath: z.string().min(1),
+  controlRigObjectId: z.number().int().nonnegative(),
+  currentFrame: z.number().int(),
+  currentSubFrame: z.number().finite(),
+  selectedControls: z.array(z.string().min(1)),
+  controls: z.array(LiveControlRigPoseValue).min(1),
+}).strict();
+
+const ControlRigPropagatePoseEdit = z.object({
+  op: z.literal("propagate_pose"),
+  baseline: LiveControlRigPoseSnapshot,
+  accepted: LiveControlRigPoseSnapshot,
+  controls: z.array(z.object({
+    control: z.string().min(1),
+    mode: z.union([z.literal("fixed"), z.literal("local_delta")]),
+    donorFrames: z.array(z.number().int()).min(1),
+  }).strict().refine(
+    (entry) => entry.donorFrames.every((frame, index) => index === 0 || frame > entry.donorFrames[index - 1]),
+    { message: "donorFrames must be strictly increasing" },
+  )).min(1),
+}).strict().superRefine((edit, context) => {
+  const names = edit.controls.map((entry) => entry.control.toLowerCase());
+  if (new Set(names).size !== names.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["controls"], message: "propagation controls must be unique" });
+  }
+});
+
 const ControlRigEditOperation = z.union([
   ControlRigSetEdit,
   ControlRigSetKeysEdit,
@@ -197,6 +245,7 @@ const ControlRigEditOperation = z.union([
   ControlRigSetBoolEdit,
   ControlRigSetFloatEdit,
   ControlRigSetIntEdit,
+  ControlRigPropagatePoseEdit,
 ]);
 
 const IKRigAuthoringChain = z.object({
@@ -356,7 +405,8 @@ export const animationTool: ToolDef = categoryTool(
     read_control_rig_hierarchy: bp("read", "Read a Control Rig's per-element hierarchy metadata: each element's name, type (Bone|Control|Null|Curve...), index, and parent. Params: assetPath (#619)", "read_control_rig_hierarchy", (p) => ({ assetPath: p.assetPath })),
     begin_control_rig_edit: bp("mutate", "UE 5.8 only. Create a Sequencer Control Rig editing session over a source AnimSequence; native returns unsupported_engine_version on older engines. Baseline first: before this call, reuse or create a Control Rig for the target character, bind/import the exact target skeleton, add the intended controls, author Forward Solve, add Backward/Inverse Solve, verify it with read_control_rig_hierarchy/read_control_rig_graph, and pass an unchanged source round-trip. For a new baseline, the bundled Epic 5.8 controlrig actions include epic_create, epic_import_bones_from_asset, epic_add_control, and epic_add_backward_solve_graph; epic_create alone is not a usable rig. There is no silent fallback to raw bone-key authoring. rigMode='fk' uses UFKControlRig only when generated FK controls are sufficient; rigMode='asset' requires the verified controlRigPath and rejects rigs without inverse execution. bindingTag is the stable natural key for replay. onConflict is skip|error (default error); existing sessions are never modified. layered defaults false. startFrame is inclusive and endFrame is exclusive. Params: sequencePath, skeletalMeshPath, sourceAnimationPath, rigMode ('fk'|'asset'), controlRigPath?, layered?, startFrame?, endFrame?, displayRate?, bindingTag?, onConflict?. Returns the resolved bindingTag/binding GUID, rig, frame range, controls and created/existed status.", "begin_control_rig_edit", (p) => ({ sequencePath: p.sequencePath, skeletalMeshPath: p.skeletalMeshPath, sourceAnimationPath: p.sourceAnimationPath, rigMode: p.rigMode, controlRigPath: p.controlRigPath, layered: p.layered, startFrame: p.startFrame, endFrame: p.endFrame, displayRate: p.displayRate, bindingTag: p.bindingTag, onConflict: p.onConflict })),
     read_control_rig_edit: bp("read", "UE 5.8 only. Read transform, bool, float/scale-float, and integer/enum controls from a Control Rig editing session without changing editor state; native returns unsupported_engine_version on older engines and has no silent fallback. Params: sequencePath, bindingTag, controlNames?, frames?, space? ('local'|'global'). Scalar samples return value instead of transform. Control metadata includes native controlType, animatable, and enum path/options where applicable. Returns session identity, layered mode, range/rate, filtered control metadata, and requested frame samples.", "read_control_rig_edit", (p) => ({ sequencePath: p.sequencePath, bindingTag: p.bindingTag, controlNames: p.controlNames, frames: p.frames, space: p.space })),
-    apply_control_rig_edits: bp("mutate", "UE 5.8 only. Apply typed Control Rig edits in one transaction; native returns unsupported_engine_version on older engines. There is no silent fallback to raw bone tracks. set_keys writes strictly ordered full per-frame transforms from normalized quaternions and preserves shortest-arc quaternion continuity. A set operation writes one full absolute transform at frame or frames. An offset operation applies translation/rotation/scale deltas across an inclusive frame range with optional edge blends. contact_lock densely constrains a translatable driver control, or an optional driven bone/socket reference, to a fixed component-space target or a moving source bone/socket target with smooth edge blends and optional pole/control stabilization. With targetReference, target is relative to that reference; omit target to preserve the first-frame subject-to-reference offset. Driver and stabilizer keys are read back transactionally. A drivenReference contact returns verification='bake_and_analyze_required'; bake it and analyze every constrained frame before accepting the bone/socket result. set_bool, set_float, and set_int key matching scalar controls; enum controls use set_int with one of the integer values reported in enumOptions. Params: sequencePath, bindingTag, operations[] (each element is one of: set_keys={op:'set_keys',control,keys:[{frame,transform:{translation,rotationQuaternion,scale}}],space?}, set={op:'set',control,frame|frames,transform:{translation,rotationDegrees,scale},space?}, offset={op:'offset',control,startFrame,endFrame,translationCm?,rotationDegrees?,scaleMultiplier?,space?,blendInFrames?,blendOutFrames?}, contact_lock={op:'contact_lock',control,drivenReference?,startFrame,endFrame,target?,targetReference?,blendInFrames?,blendOutFrames?,stabilizeControls?,positionToleranceCm?,rotationToleranceDegrees?}, set_bool={op:'set_bool',control,frame|frames,value}, set_float={op:'set_float',control,frame|frames,value}, or set_int={op:'set_int',control,frame|frames,value}). Sequencer's current interpolation mode is retained. Returns per-operation counts, affected controls/frames, and contactQa summaries; a failed key/readback batch is undone.", "apply_control_rig_edits", (p) => ({ sequencePath: p.sequencePath, bindingTag: p.bindingTag, operations: p.operations })),
+    capture_control_rig_pose: bp("read", "UE 5.8 only. Capture current live local UControlRig values without opening, scrubbing, refreshing, or evaluating Sequencer; native returns unsupported_engine_version on older engines and has no silent fallback. The addressed LevelSequence must already be focused. Omit controlNames to capture the current Control Rig selection. Returns an immutable captureVersion=1 snapshot with sequence, binding, track, section, rig-object, current-frame, selection, control-type, and typed-value identity for later propagate_pose validation. Params: sequencePath, bindingTag, controlNames?.", "capture_control_rig_pose", (p) => ({ sequencePath: p.sequencePath, bindingTag: p.bindingTag, controlNames: p.controlNames })),
+    apply_control_rig_edits: bp("mutate", "UE 5.8 only. Apply typed Control Rig edits in one transaction; native returns unsupported_engine_version on older engines. There is no silent fallback to raw bone tracks. set_keys writes strictly ordered full per-frame transforms from normalized quaternions and preserves shortest-arc quaternion continuity. A set operation writes one full absolute transform at frame or frames. An offset operation applies translation/rotation/scale deltas across an inclusive frame range with optional edge blends. propagate_pose validates caller-held baseline and accepted live snapshots from the same session, exact rig instance, frame, and complete control set, then keys only controls whose values changed across each control's explicit original donorFrames. Snapshot selection is provenance metadata; the explicit propagation controls are authoritative. mode='fixed' copies the accepted changed channels; mode='local_delta' preserves donor motion while applying the captured local delta. Bool, enum, and int controls support fixed only. contact_lock densely constrains a translatable driver control, or an optional driven bone/socket reference, to a fixed component-space target with smooth edge blends and optional pole/control stabilization. Driver and stabilizer keys are read back transactionally. A drivenReference contact returns verification='bake_and_analyze_required'; bake it and analyze every constrained frame before accepting the bone/socket result. set_bool, set_float, and set_int key matching scalar controls; enum controls use set_int with one of the integer values reported in enumOptions. Params: sequencePath, bindingTag, operations[]. Sequencer's current interpolation mode is retained. Returns per-operation counts, affected controls/frames and changedChannels; a failed key/readback batch is undone.", "apply_control_rig_edits", (p) => ({ sequencePath: p.sequencePath, bindingTag: p.bindingTag, operations: p.operations })),
     bake_control_rig_edit: bp("mutate", "UE 5.8 only. Bake the evaluated Control Rig session to a new AnimSequence asset; native returns unsupported_engine_version on older engines and has no raw-track fallback. The source LevelSequence remains unchanged. outputAssetPath is the output natural key; onConflict is skip|error (default error), never overwrite. Key reduction and Sequencer links are not supported yet, so reduceKeys/createLink must be false or omitted. Params: sequencePath, bindingTag, outputAssetPath, frameRate?, reduceKeys?, tolerance?, createLink?, onConflict?. Returns output asset metadata, frame/rate counts, status, and delete-created-asset rollback.", "bake_control_rig_edit", (p) => ({ sequencePath: p.sequencePath, bindingTag: p.bindingTag, outputAssetPath: p.outputAssetPath, frameRate: p.frameRate, reduceKeys: p.reduceKeys, tolerance: p.tolerance, createLink: p.createLink, onConflict: p.onConflict })),
     analyze_animation: bp("unknown", "Cross-version, data-driven AnimSequence inspection using the native animation APIs available in the compiled engine. Samples an AnimSequence and reports deterministic numeric motion diagnostics without Python or viewport inference. Params: assetPath (required AnimSequence), skeletalMeshPath?, boneNames?, frames?, sampleRate?, loop?, outputDirectory? (must resolve under Project/Saved/Codex/AnimationQA and must not already contain artifacts). Returns source/rate/range metadata, sampled local/component transforms, root-motion and continuity metrics, and any written analysis artifacts.", "analyze_animation", (p) => ({ assetPath: p.assetPath, skeletalMeshPath: p.skeletalMeshPath, boneNames: p.boneNames, frames: p.frames, sampleRate: p.sampleRate, loop: p.loop, outputDirectory: p.outputDirectory })),
     set_root_motion:    bp("mutate", "Set root motion settings on AnimSequence. Params: assetPath, enableRootMotion?, forceRootLock?, useNormalizedRootMotionScale?, rootMotionRootLock?", "set_root_motion_settings", (p) => ({ path: p.assetPath, enableRootMotion: p.enableRootMotion, forceRootLock: p.forceRootLock, useNormalizedRootMotionScale: p.useNormalizedRootMotionScale, rootMotionRootLock: p.rootMotionRootLock })),
@@ -614,8 +664,8 @@ export const animationTool: ToolDef = categoryTool(
     endFrame: z.number().int().optional().describe("begin_control_rig_edit: optional exclusive edit range end frame."),
     displayRate: z.number().positive().optional().describe("begin_control_rig_edit: optional LevelSequence display rate in frames per second."),
     bindingTag: z.string().min(1).optional().describe("Stable Control Rig edit-session natural key used by begin/read/apply/bake."),
-    controlNames: z.array(z.string().min(1)).min(1).optional().describe("read_control_rig_edit: optional controls to sample; omit to read every control."),
-    operations: z.array(ControlRigEditOperation).min(1).optional().describe("apply_control_rig_edits: typed transform/bool/float/int edit operations, including quaternion set_keys."),
+    controlNames: z.array(z.string().min(1)).min(1).optional().describe("read_control_rig_edit: optional controls to sample; omit to read every control. capture_control_rig_pose: optional live controls; omit to capture the current selection."),
+    operations: z.array(ControlRigEditOperation).min(1).optional().describe("apply_control_rig_edits: typed transform/bool/float/int edits, quaternion set_keys, or validated live-pose propagation."),
     outputAssetPath: z.string().optional().describe("bake_control_rig_edit: required destination AnimSequence asset path."),
     reduceKeys: z.literal(false).optional().describe("bake_control_rig_edit: key reduction is not supported yet; omit or pass false."),
     tolerance: z.number().nonnegative().optional().describe("bake_control_rig_edit: key-reduction tolerance."),

@@ -26,6 +26,8 @@ namespace
 #include "Algo/Reverse.h"
 #include "AnimPose.h"
 #include "FABRIK.h"
+#include "EulerTransform.h"
+#include "TransformNoScale.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/Skeleton.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -47,6 +49,7 @@ namespace
 #include "MovieScene.h"
 #include "MovieSceneBindingProxy.h"
 #include "MovieSceneObjectBindingID.h"
+#include "MovieSceneSequencePlayer.h"
 #include "MovieSceneSpawnable.h"
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
@@ -113,6 +116,38 @@ namespace
 		TArray<bool> BoolBefore;
 		TArray<float> FloatBefore;
 		TArray<int32> IntBefore;
+		TArray<bool> BoolAfter;
+		TArray<float> FloatAfter;
+		TArray<int32> IntAfter;
+		TArray<FString> ChangedChannels;
+		FString PropagationMode;
+	};
+
+	struct FControlRigLivePoseValue
+	{
+		FName Control;
+		ERigControlType ControlType = ERigControlType::Transform;
+		EControlRigPreparedValueType ValueType = EControlRigPreparedValueType::Transform;
+		FTransform Transform = FTransform::Identity;
+		bool BoolValue = false;
+		float FloatValue = 0.0f;
+		int32 IntValue = 0;
+	};
+
+	struct FControlRigLivePoseSnapshot
+	{
+		FString SequencePath;
+		FString BindingTag;
+		FString BindingGuid;
+		FString TrackPath;
+		FString SectionPath;
+		FString ControlRigClass;
+		FString ControlRigObjectPath;
+		uint32 ControlRigObjectId = 0;
+		int32 CurrentFrame = 0;
+		double CurrentSubFrame = 0.0;
+		TArray<FName> SelectedControls;
+		TMap<FName, FControlRigLivePoseValue> Controls;
 	};
 
 	struct FControlRigContactMetrics
@@ -506,6 +541,232 @@ namespace
 		return Object;
 	}
 
+	TSharedPtr<FJsonObject> ControlRigSequencerLiveTransformJson(const FTransform& Transform)
+	{
+		auto Object = MakeShared<FJsonObject>();
+		const FVector Translation = Transform.GetTranslation();
+		const FQuat Rotation = Transform.GetRotation().GetNormalized();
+		const FVector Scale = Transform.GetScale3D();
+		auto TranslationObject = MakeShared<FJsonObject>();
+		TranslationObject->SetNumberField(TEXT("x"), Translation.X);
+		TranslationObject->SetNumberField(TEXT("y"), Translation.Y);
+		TranslationObject->SetNumberField(TEXT("z"), Translation.Z);
+		auto RotationObject = MakeShared<FJsonObject>();
+		RotationObject->SetNumberField(TEXT("x"), Rotation.X);
+		RotationObject->SetNumberField(TEXT("y"), Rotation.Y);
+		RotationObject->SetNumberField(TEXT("z"), Rotation.Z);
+		RotationObject->SetNumberField(TEXT("w"), Rotation.W);
+		auto ScaleObject = MakeShared<FJsonObject>();
+		ScaleObject->SetNumberField(TEXT("x"), Scale.X);
+		ScaleObject->SetNumberField(TEXT("y"), Scale.Y);
+		ScaleObject->SetNumberField(TEXT("z"), Scale.Z);
+		Object->SetObjectField(TEXT("translation"), TranslationObject);
+		Object->SetObjectField(TEXT("rotationQuaternion"), RotationObject);
+		Object->SetObjectField(TEXT("scale"), ScaleObject);
+		return Object;
+	}
+
+	bool ControlRigSequencerCurrentFrame(
+		const FControlRigSequenceSession& Session,
+		int32& OutFrame,
+		double& OutSubFrame,
+		FString& OutError)
+	{
+		if (ULevelSequenceEditorBlueprintLibrary::GetFocusedLevelSequence() != Session.Sequence)
+		{
+			OutError = TEXT("The addressed LevelSequence must already be focused; live capture never opens or evaluates Sequencer");
+			return false;
+		}
+		const FMovieSceneSequencePlaybackParams Position =
+			ULevelSequenceEditorBlueprintLibrary::GetLocalPosition(EMovieSceneTimeUnit::DisplayRate);
+		const FFrameTime FrameTime = Position.GetPlaybackPosition(Session.Sequence);
+		OutFrame = FrameTime.GetFrame().Value;
+		OutSubFrame = FrameTime.GetSubFrame();
+		if (!FMath::IsFinite(OutSubFrame))
+		{
+			OutError = TEXT("Sequencer returned a non-finite current sub-frame");
+			return false;
+		}
+		return true;
+	}
+
+	bool ControlRigSequencerReadStringArray(
+		const TSharedPtr<FJsonObject>& Object,
+		const TCHAR* Field,
+		TArray<FName>& OutValues,
+		FString& OutError)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Object->TryGetArrayField(Field, Values) || !Values)
+		{
+			OutError = FString::Printf(TEXT("'%s' must be an array"), Field);
+			return false;
+		}
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			if (!Value.IsValid() || Value->Type != EJson::String || Value->AsString().IsEmpty())
+			{
+				OutError = FString::Printf(TEXT("Every item in '%s' must be a non-empty string"), Field);
+				return false;
+			}
+			const FName Name(*Value->AsString());
+			if (OutValues.Contains(Name))
+			{
+				OutError = FString::Printf(TEXT("'%s' contains duplicate control '%s'"), Field, *Name.ToString());
+				return false;
+			}
+			OutValues.Add(Name);
+		}
+		OutValues.Sort(FNameLexicalLess());
+		return true;
+	}
+
+	bool ControlRigSequencerReadLiveSnapshot(
+		const TSharedPtr<FJsonObject>& Object,
+		FControlRigLivePoseSnapshot& OutSnapshot,
+		FString& OutError)
+	{
+		double Version = 0.0;
+		double Frame = 0.0;
+		if (!Object.IsValid()
+			|| !Object->TryGetNumberField(TEXT("captureVersion"), Version)
+			|| Version != 1.0
+			|| !Object->TryGetStringField(TEXT("sequencePath"), OutSnapshot.SequencePath)
+			|| !Object->TryGetStringField(TEXT("bindingTag"), OutSnapshot.BindingTag)
+			|| !Object->TryGetStringField(TEXT("bindingGuid"), OutSnapshot.BindingGuid)
+			|| !Object->TryGetStringField(TEXT("trackPath"), OutSnapshot.TrackPath)
+			|| !Object->TryGetStringField(TEXT("sectionPath"), OutSnapshot.SectionPath)
+			|| !Object->TryGetStringField(TEXT("controlRigClass"), OutSnapshot.ControlRigClass)
+			|| !Object->TryGetStringField(TEXT("controlRigObjectPath"), OutSnapshot.ControlRigObjectPath)
+			|| !Object->TryGetNumberField(TEXT("currentFrame"), Frame)
+			|| !Object->TryGetNumberField(TEXT("currentSubFrame"), OutSnapshot.CurrentSubFrame))
+		{
+			OutError = TEXT("Snapshot identity is incomplete or captureVersion is not 1");
+			return false;
+		}
+		double ObjectId = -1.0;
+		if (!Object->TryGetNumberField(TEXT("controlRigObjectId"), ObjectId)
+			|| !FMath::IsFinite(ObjectId) || !FMath::IsNearlyEqual(ObjectId, FMath::RoundToDouble(ObjectId))
+			|| ObjectId < 0.0 || ObjectId > static_cast<double>(MAX_uint32))
+		{
+			OutError = TEXT("Snapshot controlRigObjectId must be an unsigned 32-bit integer");
+			return false;
+		}
+		OutSnapshot.ControlRigObjectId = static_cast<uint32>(ObjectId);
+		if (!FMath::IsFinite(Frame) || !FMath::IsNearlyEqual(Frame, FMath::RoundToDouble(Frame))
+			|| Frame < static_cast<double>(MIN_int32) || Frame > static_cast<double>(MAX_int32)
+			|| !FMath::IsFinite(OutSnapshot.CurrentSubFrame))
+		{
+			OutError = TEXT("Snapshot frame identity must contain finite currentFrame and currentSubFrame values");
+			return false;
+		}
+		OutSnapshot.CurrentFrame = FMath::RoundToInt(Frame);
+		if (!ControlRigSequencerReadStringArray(Object, TEXT("selectedControls"), OutSnapshot.SelectedControls, OutError))
+		{
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Controls = nullptr;
+		if (!Object->TryGetArrayField(TEXT("controls"), Controls) || !Controls || Controls->IsEmpty())
+		{
+			OutError = TEXT("Snapshot controls must be a non-empty array");
+			return false;
+		}
+		for (int32 Index = 0; Index < Controls->Num(); ++Index)
+		{
+			const TSharedPtr<FJsonObject> ValueObject = (*Controls)[Index].IsValid()
+				? (*Controls)[Index]->AsObject() : nullptr;
+			FString ControlString;
+			FString ControlTypeString;
+			FString ValueTypeString;
+			if (!ValueObject.IsValid()
+				|| !ValueObject->TryGetStringField(TEXT("control"), ControlString) || ControlString.IsEmpty()
+				|| !ValueObject->TryGetStringField(TEXT("controlType"), ControlTypeString) || ControlTypeString.IsEmpty()
+				|| !ValueObject->TryGetStringField(TEXT("valueType"), ValueTypeString) || ValueTypeString.IsEmpty())
+			{
+				OutError = FString::Printf(TEXT("Snapshot controls[%d] identity is incomplete"), Index);
+				return false;
+			}
+			FControlRigLivePoseValue Value;
+			Value.Control = FName(*ControlString);
+			if (OutSnapshot.Controls.Contains(Value.Control))
+			{
+				OutError = FString::Printf(TEXT("Snapshot contains duplicate control '%s'"), *ControlString);
+				return false;
+			}
+			const int64 ControlTypeValue = StaticEnum<ERigControlType>()->GetValueByNameString(ControlTypeString);
+			if (ControlTypeValue == INDEX_NONE)
+			{
+				OutError = FString::Printf(TEXT("Snapshot control '%s' has unknown controlType '%s'"), *ControlString, *ControlTypeString);
+				return false;
+			}
+			Value.ControlType = static_cast<ERigControlType>(ControlTypeValue);
+			if (ValueTypeString == TEXT("transform"))
+			{
+				const TSharedPtr<FJsonObject>* TransformObject = nullptr;
+				FVector Translation;
+				FVector Scale;
+				FQuat Rotation;
+				if (!ValueObject->TryGetObjectField(TEXT("transform"), TransformObject)
+					|| !TransformObject || !TransformObject->IsValid()
+					|| !ControlRigSequencerReadVector(*TransformObject, TEXT("translation"), Translation, OutError)
+					|| !ControlRigSequencerReadNormalizedQuaternion(*TransformObject, Rotation, OutError)
+					|| !ControlRigSequencerReadVector(*TransformObject, TEXT("scale"), Scale, OutError))
+				{
+					OutError = FString::Printf(TEXT("Snapshot control '%s' has an invalid transform: %s"), *ControlString, *OutError);
+					return false;
+				}
+				Value.ValueType = EControlRigPreparedValueType::Transform;
+				Value.Transform = FTransform(Rotation, Translation, Scale);
+			}
+			else if (ValueTypeString == TEXT("bool"))
+			{
+				if (!ValueObject->TryGetBoolField(TEXT("value"), Value.BoolValue))
+				{
+					OutError = FString::Printf(TEXT("Snapshot control '%s' must contain a bool value"), *ControlString);
+					return false;
+				}
+				Value.ValueType = EControlRigPreparedValueType::Bool;
+			}
+			else if (ValueTypeString == TEXT("float"))
+			{
+				double Number = 0.0;
+				if (!ValueObject->TryGetNumberField(TEXT("value"), Number) || !FMath::IsFinite(Number))
+				{
+					OutError = FString::Printf(TEXT("Snapshot control '%s' must contain a finite float value"), *ControlString);
+					return false;
+				}
+				Value.FloatValue = static_cast<float>(Number);
+				if (!FMath::IsFinite(Value.FloatValue))
+				{
+					OutError = FString::Printf(TEXT("Snapshot control '%s' float is outside native range"), *ControlString);
+					return false;
+				}
+				Value.ValueType = EControlRigPreparedValueType::Float;
+			}
+			else if (ValueTypeString == TEXT("int") || ValueTypeString == TEXT("enum"))
+			{
+				double Number = 0.0;
+				if (!ValueObject->TryGetNumberField(TEXT("value"), Number) || !FMath::IsFinite(Number)
+					|| !FMath::IsNearlyEqual(Number, FMath::RoundToDouble(Number))
+					|| Number < static_cast<double>(MIN_int32) || Number > static_cast<double>(MAX_int32))
+				{
+					OutError = FString::Printf(TEXT("Snapshot control '%s' must contain a 32-bit integer value"), *ControlString);
+					return false;
+				}
+				Value.IntValue = FMath::RoundToInt(Number);
+				Value.ValueType = EControlRigPreparedValueType::Integer;
+			}
+			else
+			{
+				OutError = FString::Printf(TEXT("Snapshot control '%s' has unsupported valueType '%s'"), *ControlString, *ValueTypeString);
+				return false;
+			}
+			OutSnapshot.Controls.Add(Value.Control, Value);
+		}
+		return true;
+	}
+
 	bool ControlRigSequencerReadFrames(
 		const TSharedPtr<FJsonObject>& Object,
 		TArray<FFrameNumber>& OutFrames,
@@ -700,6 +961,61 @@ namespace
 	{
 		return Control && (Control->Settings.ControlType == ERigControlType::Float
 			|| Control->Settings.ControlType == ERigControlType::ScaleFloat);
+	}
+
+	bool ControlRigSequencerReadLocalControlValues(
+		const FControlRigSequenceSession& Session,
+		const FRigControlElement* Control,
+		const TArray<FFrameNumber>& Frames,
+		TArray<FTransform>& OutValues)
+	{
+		if (!Control) return false;
+		const FName Name = Control->GetFName();
+		switch (Control->Settings.ControlType)
+		{
+			case ERigControlType::Position:
+			{
+				const TArray<FVector> Values = UControlRigSequencerEditorLibrary::GetLocalControlRigPositions(
+					Session.Sequence, Session.ControlRig, Name, Frames, EMovieSceneTimeUnit::DisplayRate);
+				for (const FVector& Value : Values) OutValues.Add(FTransform(FQuat::Identity, Value));
+				break;
+			}
+			case ERigControlType::Scale:
+			{
+				const TArray<FVector> Values = UControlRigSequencerEditorLibrary::GetLocalControlRigScales(
+					Session.Sequence, Session.ControlRig, Name, Frames, EMovieSceneTimeUnit::DisplayRate);
+				for (const FVector& Value : Values) OutValues.Add(FTransform(FQuat::Identity, FVector::ZeroVector, Value));
+				break;
+			}
+			case ERigControlType::Rotator:
+			{
+				const TArray<FRotator> Values = UControlRigSequencerEditorLibrary::GetLocalControlRigRotators(
+					Session.Sequence, Session.ControlRig, Name, Frames, EMovieSceneTimeUnit::DisplayRate);
+				for (const FRotator& Value : Values) OutValues.Add(FTransform(Value));
+				break;
+			}
+			case ERigControlType::Transform:
+				OutValues = UControlRigSequencerEditorLibrary::GetLocalControlRigTransforms(
+					Session.Sequence, Session.ControlRig, Name, Frames, EMovieSceneTimeUnit::DisplayRate);
+				break;
+			case ERigControlType::TransformNoScale:
+			{
+				const TArray<FTransformNoScale> Values = UControlRigSequencerEditorLibrary::GetLocalControlRigTransformNoScales(
+					Session.Sequence, Session.ControlRig, Name, Frames, EMovieSceneTimeUnit::DisplayRate);
+				for (const FTransformNoScale& Value : Values) OutValues.Add(Value.ToFTransform());
+				break;
+			}
+			case ERigControlType::EulerTransform:
+			{
+				const TArray<FEulerTransform> Values = UControlRigSequencerEditorLibrary::GetLocalControlRigEulerTransforms(
+					Session.Sequence, Session.ControlRig, Name, Frames, EMovieSceneTimeUnit::DisplayRate);
+				for (const FEulerTransform& Value : Values) OutValues.Add(Value.ToFTransform());
+				break;
+			}
+			default:
+				return false;
+		}
+		return OutValues.Num() == Frames.Num();
 	}
 
 	bool ControlRigSequencerIsEnumOption(const UEnum* Enum, int32 Index)
@@ -1180,6 +1496,134 @@ namespace
 		}
 		return Object;
 	}
+
+	bool ControlRigSequencerPreparePropagatedTransforms(
+		const FControlRigLivePoseValue& Baseline,
+		const FControlRigLivePoseValue& Accepted,
+		const FString& Mode,
+		const TArray<FTransform>& DonorValues,
+		TArray<FTransform>& OutValues,
+		TArray<FString>& OutChangedChannels,
+		FString& OutError)
+	{
+		const bool bTranslation = ControlRigSequencerControlHasTranslation(Baseline.ControlType)
+			&& !Baseline.Transform.GetTranslation().Equals(Accepted.Transform.GetTranslation(), 0.0001);
+		const bool bRotation = ControlRigSequencerControlHasRotation(Baseline.ControlType)
+			&& ControlRigSequencerRotationErrorDegrees(
+				Baseline.Transform.GetRotation(), Accepted.Transform.GetRotation()) > 0.001;
+		const bool bScale = (Baseline.ControlType == ERigControlType::Scale
+			|| Baseline.ControlType == ERigControlType::Transform
+			|| Baseline.ControlType == ERigControlType::EulerTransform)
+			&& !Baseline.Transform.GetScale3D().Equals(Accepted.Transform.GetScale3D(), 0.0001);
+		if (bTranslation) OutChangedChannels.Add(TEXT("translation"));
+		if (bRotation) OutChangedChannels.Add(TEXT("rotation"));
+		if (bScale) OutChangedChannels.Add(TEXT("scale"));
+		if (OutChangedChannels.IsEmpty()) return true;
+
+		const FVector TranslationDelta = Accepted.Transform.GetTranslation() - Baseline.Transform.GetTranslation();
+		const FQuat RotationDelta = (Baseline.Transform.GetRotation().Inverse()
+			* Accepted.Transform.GetRotation()).GetNormalized();
+		FVector ScaleMultiplier = FVector::OneVector;
+		if (bScale && Mode == TEXT("local_delta"))
+		{
+			const FVector BaselineScale = Baseline.Transform.GetScale3D();
+			if (FMath::IsNearlyZero(BaselineScale.X) || FMath::IsNearlyZero(BaselineScale.Y) || FMath::IsNearlyZero(BaselineScale.Z))
+			{
+				OutError = TEXT("Cannot derive local_delta scale from a zero baseline scale component");
+				return false;
+			}
+			ScaleMultiplier = Accepted.Transform.GetScale3D() / BaselineScale;
+		}
+
+		OutValues.Reserve(DonorValues.Num());
+		for (const FTransform& Donor : DonorValues)
+		{
+			FTransform Value = Donor;
+			if (Mode == TEXT("fixed"))
+			{
+				if (bTranslation) Value.SetTranslation(Accepted.Transform.GetTranslation());
+				if (bRotation) Value.SetRotation(Accepted.Transform.GetRotation().GetNormalized());
+				if (bScale) Value.SetScale3D(Accepted.Transform.GetScale3D());
+			}
+			else
+			{
+				if (bTranslation) Value.AddToTranslation(TranslationDelta);
+				if (bRotation) Value.SetRotation((Value.GetRotation() * RotationDelta).GetNormalized());
+				if (bScale) Value.SetScale3D(Value.GetScale3D() * ScaleMultiplier);
+			}
+			if (Value.GetTranslation().ContainsNaN() || Value.GetRotation().ContainsNaN() || Value.GetScale3D().ContainsNaN())
+			{
+				OutError = TEXT("Pose propagation produced a non-finite transform");
+				return false;
+			}
+			OutValues.Add(Value);
+		}
+		return true;
+	}
+
+	bool ControlRigSequencerValidateLiveSnapshots(
+		const FControlRigSequenceSession& Session,
+		const FControlRigLivePoseSnapshot& Baseline,
+		const FControlRigLivePoseSnapshot& Accepted,
+		FString& OutError)
+	{
+		auto IdentityMatches = [](const FControlRigLivePoseSnapshot& A, const FControlRigLivePoseSnapshot& B)
+		{
+			return A.SequencePath == B.SequencePath && A.BindingTag == B.BindingTag
+				&& A.BindingGuid == B.BindingGuid && A.TrackPath == B.TrackPath
+				&& A.SectionPath == B.SectionPath && A.ControlRigClass == B.ControlRigClass
+				&& A.ControlRigObjectPath == B.ControlRigObjectPath
+				&& A.ControlRigObjectId == B.ControlRigObjectId;
+		};
+		if (!IdentityMatches(Baseline, Accepted)
+			|| Baseline.CurrentFrame != Accepted.CurrentFrame
+			|| !FMath::IsNearlyEqual(Baseline.CurrentSubFrame, Accepted.CurrentSubFrame, 1e-6)
+			)
+		{
+			OutError = TEXT("Baseline and accepted snapshots must identify the same session, rig instance, and frame");
+			return false;
+		}
+		// Snapshot selection is provenance metadata. The explicit propagation
+		// control list is authoritative because a user may select several controls
+		// while making one accepted viewport pose.
+		if (Baseline.Controls.Num() != Accepted.Controls.Num())
+		{
+			OutError = TEXT("Baseline and accepted snapshots have incomplete or different control sets");
+			return false;
+		}
+		for (const TPair<FName, FControlRigLivePoseValue>& Pair : Baseline.Controls)
+		{
+			const FControlRigLivePoseValue* AcceptedValue = Accepted.Controls.Find(Pair.Key);
+			if (!AcceptedValue || AcceptedValue->ControlType != Pair.Value.ControlType
+				|| AcceptedValue->ValueType != Pair.Value.ValueType)
+			{
+				OutError = FString::Printf(TEXT("Snapshot control '%s' is missing or changed type"), *Pair.Key.ToString());
+				return false;
+			}
+		}
+		if (Baseline.SequencePath != Session.Sequence->GetPathName()
+			|| Baseline.BindingTag != Session.BindingTag
+			|| Baseline.BindingGuid != Session.BindingGuid.ToString()
+			|| Baseline.TrackPath != Session.Track->GetPathName()
+			|| Baseline.SectionPath != Session.Section->GetPathName()
+			|| Baseline.ControlRigClass != Session.ControlRig->GetClass()->GetPathName()
+			|| Baseline.ControlRigObjectPath != Session.ControlRig->GetPathName()
+			|| Baseline.ControlRigObjectId != Session.ControlRig->GetUniqueID())
+		{
+			OutError = TEXT("Live pose snapshots do not match the resolved Control Rig session and rig instance");
+			return false;
+		}
+		int32 CurrentFrame = 0;
+		double CurrentSubFrame = 0.0;
+		if (!ControlRigSequencerCurrentFrame(Session, CurrentFrame, CurrentSubFrame, OutError)) return false;
+		if (CurrentFrame != Accepted.CurrentFrame
+			|| !FMath::IsNearlyEqual(CurrentSubFrame, Accepted.CurrentSubFrame, 1e-6))
+		{
+			OutError = TEXT("Sequencer playhead moved after live pose capture; capture again before propagation");
+			return false;
+		}
+		return true;
+	}
 }
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -1252,6 +1696,62 @@ bool FUEMCPControlRigMovingReferenceTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("Moving target preserves the subject scale"),
 		MovedSubject.GetScale3D().Equals(FVector(2.0, 2.0, 2.0), 0.001));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FUEMCPControlRigLivePosePropagationTest,
+	"UE_MCP.Animation.ControlRig.LivePosePropagation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUEMCPControlRigLivePosePropagationTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+	FControlRigLivePoseValue FingerBaseline;
+	FingerBaseline.Control = TEXT("finger_ctrl");
+	FingerBaseline.ControlType = ERigControlType::Rotator;
+	FingerBaseline.Transform = FTransform(FRotator(0.0, 0.0, 5.0));
+	FControlRigLivePoseValue FingerAccepted = FingerBaseline;
+	FingerAccepted.Transform = FTransform(FRotator(0.0, 0.0, 35.0));
+	const TArray<FTransform> FingerDonor{
+		FTransform(FRotator(0.0, 0.0, -10.0)),
+		FTransform(FRotator(0.0, 0.0, 15.0)),
+	};
+	TArray<FTransform> FingerKeys;
+	TArray<FString> FingerChannels;
+	FString Error;
+	TestTrue(TEXT("Fixed mode prepares the accepted finger value for donor keys"),
+		ControlRigSequencerPreparePropagatedTransforms(
+			FingerBaseline, FingerAccepted, TEXT("fixed"), FingerDonor, FingerKeys, FingerChannels, Error));
+	TestTrue(TEXT("Only the changed rotation channel is keyed"),
+		FingerChannels.Num() == 1 && FingerChannels[0] == TEXT("rotation"));
+	TestTrue(TEXT("Every prepared finger donor receives the accepted value"),
+		FingerKeys.Num() == 2
+		&& ControlRigSequencerRotationErrorDegrees(FingerKeys[0].GetRotation(), FingerAccepted.Transform.GetRotation()) < 0.001
+		&& ControlRigSequencerRotationErrorDegrees(FingerKeys[1].GetRotation(), FingerAccepted.Transform.GetRotation()) < 0.001);
+
+	FControlRigLivePoseValue WristBaseline;
+	WristBaseline.Control = TEXT("wrist_ctrl");
+	WristBaseline.ControlType = ERigControlType::Transform;
+	WristBaseline.Transform = FTransform(FRotator(0.0, 10.0, 0.0), FVector(1.0, 2.0, 3.0));
+	FControlRigLivePoseValue WristAccepted = WristBaseline;
+	WristAccepted.Transform = FTransform(FRotator(0.0, 25.0, 0.0), FVector(4.0, 2.0, 3.0));
+	const TArray<FTransform> WristDonor{
+		FTransform(FRotator(0.0, -20.0, 0.0), FVector(10.0, 0.0, 0.0)),
+		FTransform(FRotator(0.0, 40.0, 0.0), FVector(20.0, 5.0, 0.0)),
+	};
+	TArray<FTransform> WristKeys;
+	TArray<FString> WristChannels;
+	TestTrue(TEXT("Wrist local delta prepares donor keys"),
+		ControlRigSequencerPreparePropagatedTransforms(
+			WristBaseline, WristAccepted, TEXT("local_delta"), WristDonor, WristKeys, WristChannels, Error));
+	TestTrue(TEXT("Wrist donor translation motion is preserved"),
+		(WristKeys[1].GetTranslation() - WristKeys[0].GetTranslation()).Equals(
+			WristDonor[1].GetTranslation() - WristDonor[0].GetTranslation(), 0.001));
+	const FTransform UntouchedBefore(FRotator(3.0, 4.0, 5.0), FVector(6.0, 7.0, 8.0));
+	const FTransform UntouchedAfter = UntouchedBefore;
+	TestTrue(TEXT("An unlisted control remains unchanged outside propagation"),
+		UntouchedAfter.Equals(UntouchedBefore, 0.0));
 	return true;
 }
 #endif
@@ -1786,6 +2286,119 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigEdit(const TSharedPtr<F
 #endif
 }
 
+TSharedPtr<FJsonValue> FAnimationHandlers::CaptureControlRigPose(const TSharedPtr<FJsonObject>& Params)
+{
+#if !UE_MCP_HAS_5_8_API
+	return ControlRigSequencerUnsupported();
+#else
+	FControlRigSequenceSession Session;
+	FString Error;
+	if (!ControlRigSequencerResolveSession(Params, Session, Error)) return MCPError(Error);
+	int32 CurrentFrame = 0;
+	double CurrentSubFrame = 0.0;
+	if (!ControlRigSequencerCurrentFrame(Session, CurrentFrame, CurrentSubFrame, Error)) return MCPError(Error);
+
+	TArray<FName> SelectedControls = Session.ControlRig->CurrentControlSelection();
+	SelectedControls.Sort(FNameLexicalLess());
+	TArray<FName> CaptureControls;
+	const TArray<TSharedPtr<FJsonValue>>* RequestedControls = nullptr;
+	if (Params->TryGetArrayField(TEXT("controlNames"), RequestedControls) && RequestedControls)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *RequestedControls)
+		{
+			if (!Value.IsValid() || Value->Type != EJson::String || Value->AsString().IsEmpty())
+				return MCPError(TEXT("Every item in 'controlNames' must be a non-empty string"));
+			const FName Control(*Value->AsString());
+			if (CaptureControls.Contains(Control))
+				return MCPError(FString::Printf(TEXT("'controlNames' contains duplicate control '%s'"), *Control.ToString()));
+			CaptureControls.Add(Control);
+		}
+	}
+	else
+	{
+		CaptureControls = SelectedControls;
+	}
+	if (CaptureControls.IsEmpty())
+		return MCPError(TEXT("No controls were requested or selected for live capture"));
+	CaptureControls.Sort(FNameLexicalLess());
+
+	auto Snapshot = MakeShared<FJsonObject>();
+	Snapshot->SetNumberField(TEXT("captureVersion"), 1);
+	Snapshot->SetStringField(TEXT("sequencePath"), Session.Sequence->GetPathName());
+	Snapshot->SetStringField(TEXT("bindingTag"), Session.BindingTag);
+	Snapshot->SetStringField(TEXT("bindingGuid"), Session.BindingGuid.ToString());
+	Snapshot->SetStringField(TEXT("trackPath"), Session.Track->GetPathName());
+	Snapshot->SetStringField(TEXT("sectionPath"), Session.Section->GetPathName());
+	Snapshot->SetStringField(TEXT("controlRigClass"), Session.ControlRig->GetClass()->GetPathName());
+	Snapshot->SetStringField(TEXT("controlRigObjectPath"), Session.ControlRig->GetPathName());
+	Snapshot->SetNumberField(TEXT("controlRigObjectId"), Session.ControlRig->GetUniqueID());
+	Snapshot->SetNumberField(TEXT("currentFrame"), CurrentFrame);
+	Snapshot->SetNumberField(TEXT("currentSubFrame"), CurrentSubFrame);
+	TArray<TSharedPtr<FJsonValue>> SelectedValues;
+	for (const FName Name : SelectedControls)
+	{
+		SelectedValues.Add(MakeShared<FJsonValueString>(Name.ToString()));
+	}
+	Snapshot->SetArrayField(TEXT("selectedControls"), SelectedValues);
+
+	TArray<TSharedPtr<FJsonValue>> ControlValues;
+	for (const FName ControlName : CaptureControls)
+	{
+		FRigControlElement* Control = Session.ControlRig->FindControl(ControlName);
+		if (!Control) return MCPError(FString::Printf(TEXT("Control not found: %s"), *ControlName.ToString()));
+		if (!Control->Settings.IsAnimatable())
+			return MCPError(FString::Printf(TEXT("Control is not animatable: %s"), *ControlName.ToString()));
+		const FRigControlValue Value = Session.ControlRig->GetControlValue(Control, ERigControlValueType::Current);
+		auto ControlObject = MakeShared<FJsonObject>();
+		ControlObject->SetStringField(TEXT("control"), ControlName.ToString());
+		ControlObject->SetStringField(TEXT("controlType"), StaticEnum<ERigControlType>()->GetNameStringByValue(
+			static_cast<int64>(Control->Settings.ControlType)));
+		if (ControlRigSequencerIsTransformControl(Control))
+		{
+			const FTransform Transform = Value.GetAsTransform(Control->Settings.ControlType, Control->Settings.PrimaryAxis);
+			const FVector Translation = Transform.GetTranslation();
+			const FQuat Rotation = Transform.GetRotation();
+			const FVector Scale = Transform.GetScale3D();
+			if (Translation.ContainsNaN() || Rotation.ContainsNaN() || Scale.ContainsNaN()
+				|| Rotation.SizeSquared() <= UE_SMALL_NUMBER)
+			{
+				return MCPError(FString::Printf(TEXT("Live control '%s' contains a non-finite or invalid transform"), *ControlName.ToString()));
+			}
+			ControlObject->SetStringField(TEXT("valueType"), TEXT("transform"));
+			ControlObject->SetObjectField(TEXT("transform"), ControlRigSequencerLiveTransformJson(Transform));
+		}
+		else if (Control->Settings.ControlType == ERigControlType::Bool)
+		{
+			ControlObject->SetStringField(TEXT("valueType"), TEXT("bool"));
+			ControlObject->SetBoolField(TEXT("value"), Value.Get<bool>());
+		}
+		else if (ControlRigSequencerIsFloatControl(Control))
+		{
+			const float Number = Value.Get<float>();
+			if (!FMath::IsFinite(Number))
+				return MCPError(FString::Printf(TEXT("Live control '%s' contains a non-finite float"), *ControlName.ToString()));
+			ControlObject->SetStringField(TEXT("valueType"), TEXT("float"));
+			ControlObject->SetNumberField(TEXT("value"), Number);
+		}
+		else if (Control->Settings.ControlType == ERigControlType::Integer)
+		{
+			ControlObject->SetStringField(TEXT("valueType"), Control->Settings.ControlEnum != nullptr ? TEXT("enum") : TEXT("int"));
+			ControlObject->SetNumberField(TEXT("value"), Value.Get<int32>());
+		}
+		else
+		{
+			return MCPError(FString::Printf(TEXT("Control type is not supported by live capture: %s"), *ControlName.ToString()));
+		}
+		ControlValues.Add(MakeShared<FJsonValueObject>(ControlObject));
+	}
+	Snapshot->SetArrayField(TEXT("controls"), ControlValues);
+	auto Result = MCPSuccess();
+	Result->SetObjectField(TEXT("snapshot"), Snapshot);
+	Result->SetNumberField(TEXT("capturedControlCount"), CaptureControls.Num());
+	return MCPResult(Result);
+#endif
+}
+
 TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr<FJsonObject>& Params)
 {
 #if !UE_MCP_HAS_5_8_API
@@ -1825,12 +2438,172 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 			? (*Operations)[OperationIndex]->AsObject() : nullptr;
 		if (!Operation.IsValid()) return MCPError(FString::Printf(TEXT("operations[%d] must be an object"), OperationIndex));
 		FString Op;
-		FString ControlString;
 		if (!Operation->TryGetStringField(TEXT("op"), Op) || Op.IsEmpty())
 			return MCPError(FString::Printf(TEXT("operations[%d].op is required"), OperationIndex));
+		Op.ToLowerInline();
+		if (Op == TEXT("propagate_pose"))
+		{
+			const TSharedPtr<FJsonObject>* BaselineObject = nullptr;
+			const TSharedPtr<FJsonObject>* AcceptedObject = nullptr;
+			if (!Operation->TryGetObjectField(TEXT("baseline"), BaselineObject) || !BaselineObject || !BaselineObject->IsValid()
+				|| !Operation->TryGetObjectField(TEXT("accepted"), AcceptedObject) || !AcceptedObject || !AcceptedObject->IsValid())
+			{
+				return MCPError(FString::Printf(TEXT("operations[%d] requires baseline and accepted live snapshots"), OperationIndex));
+			}
+			FControlRigLivePoseSnapshot Baseline;
+			FControlRigLivePoseSnapshot Accepted;
+			if (!ControlRigSequencerReadLiveSnapshot(*BaselineObject, Baseline, Error))
+				return MCPError(FString::Printf(TEXT("operations[%d].baseline: %s"), OperationIndex, *Error));
+			if (!ControlRigSequencerReadLiveSnapshot(*AcceptedObject, Accepted, Error))
+				return MCPError(FString::Printf(TEXT("operations[%d].accepted: %s"), OperationIndex, *Error));
+			if (!ControlRigSequencerValidateLiveSnapshots(Session, Baseline, Accepted, Error))
+				return MCPError(FString::Printf(TEXT("operations[%d]: %s"), OperationIndex, *Error));
+
+			const TArray<TSharedPtr<FJsonValue>>* PropagationControls = nullptr;
+			if (!Operation->TryGetArrayField(TEXT("controls"), PropagationControls)
+				|| !PropagationControls || PropagationControls->IsEmpty())
+			{
+				return MCPError(FString::Printf(TEXT("operations[%d].controls must be a non-empty array"), OperationIndex));
+			}
+			TSet<FName> SeenControls;
+			for (int32 ControlIndex = 0; ControlIndex < PropagationControls->Num(); ++ControlIndex)
+			{
+				const TSharedPtr<FJsonObject> Entry = (*PropagationControls)[ControlIndex].IsValid()
+					? (*PropagationControls)[ControlIndex]->AsObject() : nullptr;
+				FString ControlString;
+				FString Mode;
+				if (!Entry.IsValid()
+					|| !Entry->TryGetStringField(TEXT("control"), ControlString) || ControlString.IsEmpty()
+					|| !Entry->TryGetStringField(TEXT("mode"), Mode) || Mode.IsEmpty())
+				{
+					return MCPError(FString::Printf(TEXT("operations[%d].controls[%d] requires control and mode"), OperationIndex, ControlIndex));
+				}
+				Mode.ToLowerInline();
+				if (Mode != TEXT("fixed") && Mode != TEXT("local_delta"))
+					return MCPError(FString::Printf(TEXT("operations[%d].controls[%d].mode must be 'fixed' or 'local_delta'"), OperationIndex, ControlIndex));
+				const FName ControlName(*ControlString);
+				if (SeenControls.Contains(ControlName))
+					return MCPError(FString::Printf(TEXT("operations[%d] contains duplicate propagation control '%s'"), OperationIndex, *ControlString));
+				SeenControls.Add(ControlName);
+				FRigControlElement* Control = Session.ControlRig->FindControl(ControlName);
+				const FControlRigLivePoseValue* BaselineValue = Baseline.Controls.Find(ControlName);
+				const FControlRigLivePoseValue* AcceptedValue = Accepted.Controls.Find(ControlName);
+				if (!Control || !BaselineValue || !AcceptedValue)
+					return MCPError(FString::Printf(TEXT("operations[%d] control '%s' is absent from the rig or either complete snapshot"), OperationIndex, *ControlString));
+				if (!Control->Settings.IsAnimatable() || Control->Settings.ControlType != BaselineValue->ControlType)
+					return MCPError(FString::Printf(TEXT("operations[%d] control '%s' is no longer the captured animatable type"), OperationIndex, *ControlString));
+				const EControlRigPreparedValueType ExpectedValueType = ControlRigSequencerIsTransformControl(Control)
+					? EControlRigPreparedValueType::Transform
+					: Control->Settings.ControlType == ERigControlType::Bool
+						? EControlRigPreparedValueType::Bool
+						: ControlRigSequencerIsFloatControl(Control)
+							? EControlRigPreparedValueType::Float
+							: EControlRigPreparedValueType::Integer;
+				if (BaselineValue->ValueType != ExpectedValueType)
+					return MCPError(FString::Printf(TEXT("operations[%d] control '%s' snapshot valueType does not match its native controlType"), OperationIndex, *ControlString));
+
+				const TArray<TSharedPtr<FJsonValue>>* DonorFrameValues = nullptr;
+				if (!Entry->TryGetArrayField(TEXT("donorFrames"), DonorFrameValues)
+					|| !DonorFrameValues || DonorFrameValues->IsEmpty())
+				{
+					return MCPError(FString::Printf(TEXT("operations[%d].controls[%d].donorFrames must be a non-empty array"), OperationIndex, ControlIndex));
+				}
+				FControlRigPreparedWrite Write;
+				Write.Control = ControlName;
+				Write.Op = TEXT("propagate_pose");
+				Write.PropagationMode = Mode;
+				Write.ValueType = BaselineValue->ValueType;
+				Write.Space = EControlRigTransformSpace::Local;
+				int32 PreviousFrame = MIN_int32;
+				for (int32 FrameIndex = 0; FrameIndex < DonorFrameValues->Num(); ++FrameIndex)
+				{
+					const TSharedPtr<FJsonValue>& FrameValue = (*DonorFrameValues)[FrameIndex];
+					if (!FrameValue.IsValid() || FrameValue->Type != EJson::Number
+						|| !FMath::IsFinite(FrameValue->AsNumber())
+						|| !FMath::IsNearlyEqual(FrameValue->AsNumber(), FMath::RoundToDouble(FrameValue->AsNumber()))
+						|| FrameValue->AsNumber() < static_cast<double>(MIN_int32)
+						|| FrameValue->AsNumber() > static_cast<double>(MAX_int32))
+					{
+						return MCPError(FString::Printf(TEXT("operations[%d].controls[%d].donorFrames[%d] must be a 32-bit integer"), OperationIndex, ControlIndex, FrameIndex));
+					}
+					const int32 Frame = FMath::RoundToInt(FrameValue->AsNumber());
+					if ((FrameIndex > 0 && Frame <= PreviousFrame) || Frame < RangeStart || Frame >= RangeEndExclusive)
+					{
+						return MCPError(FString::Printf(TEXT("operations[%d].controls[%d].donorFrames must be strictly increasing within [%d, %d)"), OperationIndex, ControlIndex, RangeStart, RangeEndExclusive));
+					}
+					PreviousFrame = Frame;
+					Write.Frames.Add(FFrameNumber(Frame));
+				}
+				if (Write.Frames.Num() > ControlRigSequencerMaxFrames)
+					return MCPError(FString::Printf(TEXT("operations[%d].controls[%d] exceeds the %d-frame limit"), OperationIndex, ControlIndex, ControlRigSequencerMaxFrames));
+				if (!ControlRigSequencerRegisterWriteFrames(WrittenKeys, ControlName, Write.Frames, OperationIndex, Error))
+					return MCPError(Error);
+
+				if (Write.ValueType == EControlRigPreparedValueType::Transform)
+				{
+					if (!ControlRigSequencerReadLocalControlValues(Session, Control, Write.Frames, Write.Before))
+						return MCPError(FString::Printf(TEXT("Could not sample donor frames for propagation control '%s'"), *ControlString));
+					if (!ControlRigSequencerPreparePropagatedTransforms(
+						*BaselineValue, *AcceptedValue, Mode, Write.Before, Write.After, Write.ChangedChannels, Error))
+					{
+						return MCPError(FString::Printf(TEXT("operations[%d] control '%s': %s"), OperationIndex, *ControlString, *Error));
+					}
+				}
+				else if (Write.ValueType == EControlRigPreparedValueType::Bool)
+				{
+					if (Mode != TEXT("fixed")) return MCPError(FString::Printf(TEXT("Bool propagation control '%s' supports fixed mode only"), *ControlString));
+					if (BaselineValue->BoolValue != AcceptedValue->BoolValue) Write.ChangedChannels.Add(TEXT("value"));
+					Write.BoolBefore = UControlRigSequencerEditorLibrary::GetLocalControlRigBools(
+						Session.Sequence, Session.ControlRig, ControlName, Write.Frames, EMovieSceneTimeUnit::DisplayRate);
+					Write.BoolAfter.Init(AcceptedValue->BoolValue, Write.Frames.Num());
+				}
+				else if (Write.ValueType == EControlRigPreparedValueType::Float)
+				{
+					if (!FMath::IsNearlyEqual(BaselineValue->FloatValue, AcceptedValue->FloatValue, 1e-6f)) Write.ChangedChannels.Add(TEXT("value"));
+					Write.FloatBefore = UControlRigSequencerEditorLibrary::GetLocalControlRigFloats(
+						Session.Sequence, Session.ControlRig, ControlName, Write.Frames, EMovieSceneTimeUnit::DisplayRate);
+					if (Mode == TEXT("fixed")) Write.FloatAfter.Init(AcceptedValue->FloatValue, Write.Frames.Num());
+					else
+					{
+						const float Delta = AcceptedValue->FloatValue - BaselineValue->FloatValue;
+						for (const float Donor : Write.FloatBefore)
+						{
+							const float Propagated = Donor + Delta;
+							if (!FMath::IsFinite(Propagated))
+								return MCPError(FString::Printf(TEXT("Float propagation produced a non-finite value for '%s'"), *ControlString));
+							Write.FloatAfter.Add(Propagated);
+						}
+					}
+				}
+				else
+				{
+					if (Mode != TEXT("fixed")) return MCPError(FString::Printf(TEXT("Integer/enum propagation control '%s' supports fixed mode only"), *ControlString));
+					if (BaselineValue->IntValue != AcceptedValue->IntValue) Write.ChangedChannels.Add(TEXT("value"));
+					if (const UEnum* ControlEnum = Control->Settings.ControlEnum.Get())
+					{
+						if (!ControlRigSequencerIsValidEnumValue(ControlEnum, AcceptedValue->IntValue))
+							return MCPError(FString::Printf(TEXT("Accepted value for '%s' is not a selectable enum option"), *ControlString));
+					}
+					Write.IntBefore = UControlRigSequencerEditorLibrary::GetLocalControlRigInts(
+						Session.Sequence, Session.ControlRig, ControlName, Write.Frames, EMovieSceneTimeUnit::DisplayRate);
+					Write.IntAfter.Init(AcceptedValue->IntValue, Write.Frames.Num());
+				}
+				const int32 BeforeCount = Write.ValueType == EControlRigPreparedValueType::Transform ? Write.Before.Num()
+					: Write.ValueType == EControlRigPreparedValueType::Bool ? Write.BoolBefore.Num()
+					: Write.ValueType == EControlRigPreparedValueType::Float ? Write.FloatBefore.Num()
+					: Write.IntBefore.Num();
+				if (BeforeCount != Write.Frames.Num())
+					return MCPError(FString::Printf(TEXT("Could not sample every donor frame for propagation control '%s'"), *ControlString));
+				if (Write.ChangedChannels.IsEmpty())
+					return MCPError(FString::Printf(TEXT("Propagation control '%s' did not change between baseline and accepted snapshots"), *ControlString));
+				Prepared.Add(MoveTemp(Write));
+			}
+			continue;
+		}
+
+		FString ControlString;
 		if (!Operation->TryGetStringField(TEXT("control"), ControlString) || ControlString.IsEmpty())
 			return MCPError(FString::Printf(TEXT("operations[%d].control is required"), OperationIndex));
-		Op.ToLowerInline();
 		const FName ControlName(*ControlString);
 		FRigControlElement* Control = Session.ControlRig->FindControl(ControlName);
 		if (!Control) return MCPError(FString::Printf(TEXT("Control not found: %s"), *ControlString));
@@ -1846,7 +2619,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 			&& !bBoolOperation && !bFloatOperation && !bIntOperation)
 		{
 			return MCPError(FString::Printf(
-				TEXT("operations[%d].op must be 'set_keys', 'set', 'offset', 'contact_lock', 'set_bool', 'set_float', or 'set_int'"),
+				TEXT("operations[%d].op must be 'set_keys', 'set', 'offset', 'contact_lock', 'set_bool', 'set_float', 'set_int', or 'propagate_pose'"),
 				OperationIndex));
 		}
 		if (bBoolOperation)
@@ -2802,8 +3575,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 		{
 			if (Write.ValueType == EControlRigPreparedValueType::Bool)
 			{
-				TArray<bool> Values;
-				Values.Init(Write.BoolValue, Write.Frames.Num());
+				TArray<bool> Values = Write.BoolAfter;
+				if (Values.IsEmpty()) Values.Init(Write.BoolValue, Write.Frames.Num());
 				Session.Track->SetSectionToKey(Session.Section, Write.Control);
 				UControlRigSequencerEditorLibrary::SetLocalControlRigBools(
 					Session.Sequence, Session.ControlRig, Write.Control, Write.Frames, Values,
@@ -2821,8 +3594,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 			}
 			if (Write.ValueType == EControlRigPreparedValueType::Float)
 			{
-				TArray<float> Values;
-				Values.Init(Write.FloatValue, Write.Frames.Num());
+				TArray<float> Values = Write.FloatAfter;
+				if (Values.IsEmpty()) Values.Init(Write.FloatValue, Write.Frames.Num());
 				Session.Track->SetSectionToKey(Session.Section, Write.Control);
 				UControlRigSequencerEditorLibrary::SetLocalControlRigFloats(
 					Session.Sequence, Session.ControlRig, Write.Control, Write.Frames, Values,
@@ -2845,8 +3618,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 			}
 			if (Write.ValueType == EControlRigPreparedValueType::Integer)
 			{
-				TArray<int32> Values;
-				Values.Init(Write.IntValue, Write.Frames.Num());
+				TArray<int32> Values = Write.IntAfter;
+				if (Values.IsEmpty()) Values.Init(Write.IntValue, Write.Frames.Num());
 				Session.Track->SetSectionToKey(Session.Section, Write.Control);
 				UControlRigSequencerEditorLibrary::SetLocalControlRigInts(
 					Session.Sequence, Session.ControlRig, Write.Control, Write.Frames, Values,
@@ -2875,16 +3648,25 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 				break;
 			}
 			{
-				const TArray<FName> OneControl{Write.Control};
-				const TArray<FArrayOfRigControlTransforms> Actual = UControlRigSequencerEditorLibrary::BatchGetControlTransforms(
-					Session.Sequence, Session.ControlRig, OneControl, Write.Frames, Write.Space,
-					EMovieSceneTimeUnit::DisplayRate);
 				const FRigControlElement* Control = Session.ControlRig->FindControl(Write.Control);
-				bool bMatches = Control && Actual.Num() == 1 && Actual[0].Transforms.Num() == Write.After.Num();
+				TArray<FTransform> PropagationActual;
+				const bool bPropagationRead = !Write.PropagationMode.IsEmpty()
+					&& ControlRigSequencerReadLocalControlValues(Session, Control, Write.Frames, PropagationActual);
+				const TArray<FName> OneControl{Write.Control};
+				const TArray<FArrayOfRigControlTransforms> Actual = !Write.PropagationMode.IsEmpty()
+					? TArray<FArrayOfRigControlTransforms>()
+					: UControlRigSequencerEditorLibrary::BatchGetControlTransforms(
+						Session.Sequence, Session.ControlRig, OneControl, Write.Frames, Write.Space,
+						EMovieSceneTimeUnit::DisplayRate);
+				bool bMatches = Control && (bPropagationRead
+					? PropagationActual.Num() == Write.After.Num()
+					: Actual.Num() == 1 && Actual[0].Transforms.Num() == Write.After.Num());
 				for (int32 Index = 0; bMatches && Index < Write.After.Num(); ++Index)
 				{
+					const FTransform& ActualTransform = bPropagationRead
+						? PropagationActual[Index] : Actual[0].Transforms[Index];
 					bMatches = ControlRigSequencerTransformMatches(
-						Write.After[Index], Actual[0].Transforms[Index], Control->Settings.ControlType);
+						Write.After[Index], ActualTransform, Control->Settings.ControlType);
 				}
 				if (!bMatches)
 				{
@@ -3028,6 +3810,16 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 		Object->SetStringField(TEXT("op"), Write.Op);
 		Object->SetStringField(TEXT("control"), Write.Control.ToString());
 		Object->SetNumberField(TEXT("keyedFrameCount"), Write.Frames.Num());
+		if (!Write.PropagationMode.IsEmpty())
+		{
+			Object->SetStringField(TEXT("mode"), Write.PropagationMode);
+			TArray<TSharedPtr<FJsonValue>> Channels;
+			for (const FString& Channel : Write.ChangedChannels)
+			{
+				Channels.Add(MakeShared<FJsonValueString>(Channel));
+			}
+			Object->SetArrayField(TEXT("changedChannels"), Channels);
+		}
 		Applied.Add(MakeShared<FJsonValueObject>(Object));
 	}
 	Result->SetNumberField(TEXT("keyedSampleCount"), KeyedSamples);
