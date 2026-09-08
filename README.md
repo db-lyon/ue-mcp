@@ -5,7 +5,7 @@
 [![stars](https://img.shields.io/github/stars/db-lyon/ue-mcp)](https://github.com/db-lyon/ue-mcp/stargazers)
 [![MIT](https://img.shields.io/npm/l/ue-mcp)](LICENSE)
 
-**Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->24<!-- /count --> category tools covering <!-- count:actions -->1091+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows and an npm plugin system for extending the surface.
+**Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->26<!-- /count --> category tools covering <!-- count:actions -->1921+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows and an npm plugin system for extending the surface.
 
 On UE 5.8+ it also wraps Epic's entire native AI Toolset Registry - 830 official Unreal tools, called in-process and surfaced as `epic_*` actions in the matching category: Sequencer in `animation`, PCG in `pcg`, static meshes in `asset`.
 
@@ -51,6 +51,8 @@ Then talk to your AI in plain English:
 ```bash
 npx ue-mcp doctor
 ```
+
+Documentation lives at **https://ue-mcp.com/docs/**, one page per file in `docs/`, published automatically on release. Link there rather than to a file in this repository.
 
 Most first-run failures are one of three things: the editor hasn't been restarted since `init`, the bridge plugin failed to compile (check the editor's Output Log for `UE_MCP_Bridge`), or the editor is open on a different project than the one configured. See [Troubleshooting](https://ue-mcp.com/docs/troubleshooting/).
 
@@ -137,7 +139,7 @@ flows:
 flow(action="run", flowName="build_and_check")
 ```
 
-Every one of the <!-- count:actions -->1091+<!-- /count --> actions is also a flow task. Flows support step references, retries, rollback, custom tasks in your own `.js`/`.ts`, and shell steps. See [Flows](https://ue-mcp.com/docs/flows/).
+Every one of the <!-- count:actions -->1921+<!-- /count --> actions is also a flow task. Flows support step references, retries, rollback, custom tasks in your own `.js`/`.ts`, and shell steps. See [Flows](https://ue-mcp.com/docs/flows/).
 
 ## Plugins
 
@@ -177,7 +179,7 @@ Details: [Guards](https://ue-mcp.com/docs/plugins-guards/) and [Handler Conventi
 
 | | |
 |---|---|
-| **Unreal Engine** | 5.4-5.8 (Windows), 5.6+ (Linux and macOS). Compiled and verified on 5.7 and 5.8; 5.4 to 5.6 are version-gated in source but not built here. `epic` category needs 5.8+. |
+| **Unreal Engine** | 5.4-5.8 (Windows), 5.6+ (Linux and macOS). `epic` category needs 5.8+. |
 | **Node.js** | 18 or newer |
 | **UE plugins** | `PythonScriptPlugin` (ships with the engine); `init` enables the rest for you |
 | **C++ toolchain** | Required - the bridge is a C++ plugin and compiles on first editor launch. On Windows that means Visual Studio with the C++ workload; on macOS, Xcode command line tools. |

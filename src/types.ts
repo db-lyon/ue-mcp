@@ -81,6 +81,8 @@ export interface ToolContext {
    *  `plugins` introspection category. Session-scoped for the same reason
    *  as getFlows: `plugins:` is per project. */
   getPlugins?: (forSession?: EditorSession) => PluginInfo[];
+  /** Enabled source categories for the addressed editor, including injected actions. */
+  getToolGraph?: (forSession?: EditorSession) => ToolDef[];
   /** The per-call timeout budget the caller asked for, in milliseconds (#989).
    *  Set by the category dispatcher when a call carried `timeoutMs`. A handler
    *  that makes its own bridge calls should pass it through; one that does not
@@ -217,11 +219,71 @@ export function cloneToolGraph(tools: ToolDef[]): ToolDef[] {
   return tools.map(cloneToolDef);
 }
 
-export interface ActionSpec {
+/**
+ * What an action does to the editor it is addressed to.
+ *
+ *   read    observes. Changes neither the editor, its project on disk, nor its
+ *           process. Landing one in the wrong editor returns the wrong answer
+ *           and changes nothing.
+ *   mutate  may change any of those, or has an effect outside the editor
+ *           (writes a file, posts an issue, launches or quits a process).
+ *   unknown decided by a PARAMETER rather than by the action, so the
+ *           declaration cannot say. An arbitrary python string, a console
+ *           command and a wrapped third-party tool are the real cases. Gated
+ *           as `mutate` everywhere, so the honest label costs nothing at a
+ *           gate.
+ *
+ * Two rules settle the cases that come up while declaring one:
+ *
+ *   Declare what the action is FOR. An action that offers a `dryRun` is still
+ *   a `mutate`: previewing is a mode, not the purpose. `unknown` is for an
+ *   action with no inherent direction at all, where a parameter supplies the
+ *   whole of what it does.
+ *
+ *   A response written to a file is still a response. An action whose only
+ *   write is the caller-named destination for its own result reads;
+ *   `asset(bulk_read_properties)` spilling rows to `outputPath` is a large
+ *   answer, not an edit. An action that writes into the addressed project or
+ *   into the editor's own state mutates, even when what it writes was derived
+ *   from a read.
+ *
+ * Every variant of `ActionSpec` requires this, which is the point of it. It
+ * used to live nowhere, and three separate places each guessed it by matching
+ * an action's NAME against a list of verbs. A list of verbs is open-ended and
+ * the set of actions is not, so every verb missing from a list was an action
+ * classified by accident: a guard asked to stand in front of every mutation
+ * matched 542 of 1090 actions and let `write_cpp_file`, `build`, `sculpt`,
+ * `place_actor` and every bare verb like `save` and `create` past it.
+ *
+ * The lesson was already written down one field below, on `destinationEditor`:
+ * "Declared on the action rather than assumed from its name." It was applied to
+ * a routing flag that affects one action, and not to the field that decides
+ * whether a guard sees a call at all.
+ */
+export type ActionEffect = "read" | "mutate" | "unknown";
+
+/**
+ * Where an `effect` value came from.
+ *
+ * `declared` is a person's answer, written at the declaration and reviewable in
+ * a diff. It is the default, and the only thing an action in `ALL_TOOLS` is
+ * allowed to be.
+ *
+ * `inferred` is the name lexicon's answer, and exists only for actions this
+ * package never declares: Epic's wrapped engine tools, read out of a live
+ * registry at startup and possibly from a toolset no release has seen, and a
+ * plugin action whose manifest did not say. Recording which is which is what
+ * keeps a guess from being read back later as a fact.
+ */
+export type ActionEffectSource = "declared" | "inferred";
+
+/** What every action carries, whatever it dispatches to. */
+interface ActionSpecBase {
+  /** What this action does to the addressed editor. Required, always. */
+  effect: ActionEffect;
+  /** Omitted means `declared`. Set to `inferred` only by runtime injection. */
+  effectSource?: ActionEffectSource;
   description?: string;
-  bridge?: string;
-  mapParams?: (p: Record<string, unknown>) => Record<string, unknown>;
-  handler?: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
   /** Override the bridge call timeout in milliseconds. Defaults to 30s. */
   timeoutMs?: number;
   /**
@@ -233,6 +295,45 @@ export interface ActionSpec {
    */
   destinationEditor?: boolean;
 }
+
+/** Forwards to a C++ bridge method over the WebSocket. Built by `bp`. */
+export interface BridgeActionSpec extends ActionSpecBase {
+  kind: "bridge";
+  bridge: string;
+  mapParams?: (p: Record<string, unknown>) => Record<string, unknown>;
+  handler?: never;
+}
+
+/** Runs in this Node process. It may still call the bridge itself. */
+export interface HandlerActionSpec extends ActionSpecBase {
+  kind: "handler";
+  handler: (ctx: ToolContext, params: Record<string, unknown>) => Promise<unknown>;
+  bridge?: never;
+  mapParams?: never;
+}
+
+/**
+ * Dispatched through the task registry under `${category}.${action}`, which is
+ * how a plugin contributes one. It carries no bridge method and no closure of
+ * its own on purpose: the registry owns both, and `categoryTool`'s dispatcher
+ * refuses a direct call with NO_HANDLER exactly as it always did.
+ */
+export interface RegistryActionSpec extends ActionSpecBase {
+  kind: "registry";
+  bridge?: never;
+  handler?: never;
+  mapParams?: never;
+}
+
+/**
+ * One action.
+ *
+ * A tagged union rather than a bag of six optional fields, so the two shapes
+ * that were expressible and meaningless are now unwritable: an action with both
+ * a bridge method and a handler, and an action with neither that does not say
+ * it is a registry action. `{}` no longer type-checks either.
+ */
+export type ActionSpec = BridgeActionSpec | HandlerActionSpec | RegistryActionSpec;
 
 /**
  * The per-call editor target (#817). Injected into every category tool only
@@ -521,7 +622,10 @@ export function categoryTool(
       const normalized = pipeline.params;
       const finish = (raw: unknown): unknown => finishCall(raw, pipeline);
 
-      if (spec.handler) {
+      // Dispatch reads the tag rather than probing for whichever field happens
+      // to be set. The two are the same answer today and only one of them
+      // stays the same answer when a variant is added.
+      if (spec.kind === "handler") {
         // The budget travels on the context, not in the parameters: a custom
         // handler that forwards its params to the bridge must not turn it into
         // a bridge argument (#989).
@@ -529,7 +633,7 @@ export function categoryTool(
           await spec.handler(requestedTimeout === undefined ? ctx : { ...ctx, callTimeoutMs: requestedTimeout }, normalized),
         );
       }
-      if (spec.bridge) {
+      if (spec.kind === "bridge") {
         const mapped = spec.mapParams ? spec.mapParams(normalized) : stripAction(normalized);
         // The caller's budget wins over the action's authored one: an action
         // that declares 120s is stating a floor it needs, not a ceiling the
@@ -558,7 +662,7 @@ function stripAction(params: Record<string, unknown>): Record<string, unknown> {
  * another project's editor.
  */
 export function sessionContext(ctx: ToolContext, session: EditorSession): ToolContext {
-  const { getFlows, getPlugins } = ctx;
+  const { getFlows, getPlugins, getToolGraph } = ctx;
   return {
     ...ctx,
     bridge: session.guarded,
@@ -569,6 +673,7 @@ export function sessionContext(ctx: ToolContext, session: EditorSession): ToolCo
     // flows and plugins under another editor's name.
     getFlows: getFlows ? () => getFlows(session) : undefined,
     getPlugins: getPlugins ? () => getPlugins(session) : undefined,
+    getToolGraph: getToolGraph ? (forSession) => getToolGraph(forSession ?? session) : undefined,
   };
 }
 
@@ -579,15 +684,36 @@ export function stripEditorTarget(params: Record<string, unknown>): Record<strin
   return rest;
 }
 
-export function bp(bridge: string, mapParams?: (p: Record<string, unknown>) => Record<string, unknown>): ActionSpec;
-export function bp(description: string, bridge: string, mapParams?: (p: Record<string, unknown>) => Record<string, unknown>): ActionSpec;
-export function bp(...args: unknown[]): ActionSpec {
-  // bp(bridge) or bp(bridge, mapParams) - no description
-  // bp(description, bridge) or bp(description, bridge, mapParams) - with description
+type MapParams = (p: Record<string, unknown>) => Record<string, unknown>;
+
+/**
+ * Declare an action that forwards to a bridge method.
+ *
+ * The effect comes FIRST and there is no overload without it, which is what
+ * forces the answer at every one of the thousand-odd call sites rather than
+ * leaving it to a verb list somewhere else to work out afterwards. It is the
+ * only argument a caller cannot derive from the rest of the line.
+ */
+export function bp(effect: ActionEffect, bridge: string, mapParams?: MapParams): BridgeActionSpec;
+export function bp(effect: ActionEffect, description: string, bridge: string, mapParams?: MapParams): BridgeActionSpec;
+export function bp(effect: ActionEffect, ...args: unknown[]): BridgeActionSpec {
+  // bp(effect, bridge) or bp(effect, bridge, mapParams) - no description
+  // bp(effect, description, bridge[, mapParams]) - with description
   if (args.length >= 2 && typeof args[0] === "string" && typeof args[1] === "string") {
-    return { description: args[0] as string, bridge: args[1] as string, mapParams: args[2] as ((p: Record<string, unknown>) => Record<string, unknown>) | undefined };
+    return {
+      kind: "bridge",
+      effect,
+      description: args[0] as string,
+      bridge: args[1] as string,
+      mapParams: args[2] as MapParams | undefined,
+    };
   }
-  return { bridge: args[0] as string, mapParams: args[1] as ((p: Record<string, unknown>) => Record<string, unknown>) | undefined };
+  return {
+    kind: "bridge",
+    effect,
+    bridge: args[0] as string,
+    mapParams: args[1] as MapParams | undefined,
+  };
 }
 
 /* ── Directive response ─────────────────────────────────────────────

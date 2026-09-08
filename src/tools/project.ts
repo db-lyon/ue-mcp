@@ -26,7 +26,7 @@ import {
 } from "../engine-analysis.js";
 import { readDeployedBridgeApiVersion } from "../plugin/bridge-api.js";
 import { CLIENT_PROTOCOL_VERSION, describeProtocolMismatch } from "../bridge.js";
-import { searchTools, type ToolSearchHit } from "../tool-search.js";
+import { searchTools, searchToolGraph, type ToolSearchHit } from "../tool-search.js";
 import { actionSchema, resolveActionRef, suggestActions } from "../action-schema.js";
 import { availabilityReport } from "../offline.js";
 import { inspectInstall } from "../install-check.js";
@@ -36,6 +36,7 @@ import { readLogState, readEngineSnapshot } from "../engine-observer.js";
 import { switchProject, isTargetDiverged } from "../project-switch.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "../project.js";
 import { CURSOR_PARAM, paged } from "../pagination.js";
+import { actions as epicActions, schema as epicSchema } from "./epic/project.generated.js";
 
 /**
  * The environment variables flattening every registered editor into one, right
@@ -154,6 +155,8 @@ export const projectTool: ToolDef = categoryTool(
   "Project status and editor connection: get_status (is the editor connected?), set_project (switch/redirect the bridge to another .uproject), get_info. Also config INI files, module load state, and C++ source inspection. Call project(get_status) first in any session.",
   {
     get_status: {
+      kind: "handler",
+      effect: "read",
       description: "Check server mode and editor connection. Also reports pluginBuildStale when the compiled bridge is older than its source, which is the real cause of 'Unknown method' on handlers that do exist. Params: none (#785)",
       handler: async (ctx) => {
         const flows = ctx.getFlows?.() ?? [];
@@ -257,6 +260,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     set_project: {
+      kind: "handler",
+      effect: "mutate",
       description: "Switch project: moves both path resolution and the editor connection to the new .uproject. Params: projectPath",
       handler: async (ctx, p) => {
         const projectPath = p.projectPath as string;
@@ -304,6 +309,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     list_editors: {
+      kind: "handler",
+      effect: "read",
       description: "List every editor session this server drives: name, project, bridge port, whether the socket is connected, whether anything is answering on that port, and which session untargeted calls fall through to. Params: none (#817)",
       handler: async (ctx) => {
         if (!ctx.sessions) {
@@ -353,6 +360,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     use_editor: {
+      kind: "handler",
+      effect: "mutate",
       description: "Make one editor session the default target for untargeted calls. Does not change the session set and never touches any editor process. Params: editorTarget (session name, project name, or .uproject path) (#817)",
       handler: async (ctx, p) => {
         if (!ctx.sessions) throw new Error("This server drives one editor; there is nothing to switch between.");
@@ -369,6 +378,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     add_editor: {
+      kind: "handler",
+      effect: "mutate",
       description: "Register another project as an addressable editor session, with its own bridge connection and port. Optionally launch its editor. Every category then accepts editor=\"<name>\" to run a call there. Params: projectPath, editorName? (defaults to the project name), start? (launch the editor and wait for it to be ready), timeout? (seconds, default 300) (#817)",
       handler: async (ctx, p) => {
         if (!ctx.sessions) throw new Error("This server was built without a session registry.");
@@ -439,6 +450,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     drop_editor: {
+      kind: "handler",
+      effect: "mutate",
       description: "Forget an editor session and close its bridge socket. The editor process is LEFT RUNNING and untouched - this detaches, it does not stop anything (use editor(stop_editor) for that). Params: editorTarget (#817)",
       handler: async (ctx, p) => {
         if (!ctx.sessions) throw new Error("This server drives one editor; there is nothing to drop.");
@@ -456,6 +469,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     get_info: {
+      kind: "handler",
+      effect: "read",
       description: "Read .uproject file details. Params: none",
       handler: async (ctx) => {
         ctx.project.ensureLoaded();
@@ -463,6 +478,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     read_config: {
+      kind: "handler",
+      effect: "read",
       description: "Read INI config. Params: configName (e.g. 'Engine', 'Game')",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
@@ -473,6 +490,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     search_config: {
+      kind: "handler",
+      effect: "read",
       description: "Search INI files. Params: query",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
@@ -492,6 +511,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     list_config_tags: {
+      kind: "handler",
+      effect: "read",
       description: "Extract gameplay tags from config. Params: none",
       handler: async (ctx) => {
         ctx.project.ensureLoaded();
@@ -512,6 +533,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     read_cpp_header: {
+      kind: "handler",
+      effect: "read",
       description: "Parse a .h file. Params: headerPath",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
@@ -527,6 +550,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     read_module: {
+      kind: "handler",
+      effect: "read",
       description: "Read module source. Params: moduleName",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
@@ -543,6 +568,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     list_modules: {
+      kind: "handler",
+      effect: "read",
       description: "List C++ modules. Params: none",
       handler: async (ctx) => {
         ctx.project.ensureLoaded();
@@ -560,6 +587,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     search_cpp: {
+      kind: "handler",
+      effect: "read",
       description: "Search .h/.cpp files. Params: query, directory?",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
@@ -607,6 +636,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     read_engine_header: {
+      kind: "handler",
+      effect: "read",
       description: "Parse a .h file from the engine source tree. Params: headerPath (relative to Engine/Source, or absolute)",
       handler: async (ctx, p) => {
         const engineRoot = requireEngineRoot(ctx);
@@ -620,6 +651,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     find_engine_symbol: {
+      kind: "handler",
+      effect: "read",
       description: "Grep engine headers for a symbol. Params: symbol, maxResults?",
       handler: async (ctx, p) => {
         const engineRoot = requireEngineRoot(ctx);
@@ -650,6 +683,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     list_engine_modules: {
+      kind: "handler",
+      effect: "read",
       description: "List modules in Engine/Source/Runtime. Params: none",
       handler: async (ctx) => {
         const engineRoot = requireEngineRoot(ctx);
@@ -662,6 +697,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     search_engine_cpp: {
+      kind: "handler",
+      effect: "read",
       description: "Search engine .h/.cpp/.inl files across Runtime/Editor/Developer/Plugins. Params: query, tree? (Runtime|Editor|Developer|Plugins|all - default Runtime), subdirectory?, maxResults? (default 500)",
       handler: async (ctx, p) => {
         const engineRoot: string = requireEngineRoot(ctx);
@@ -715,11 +752,15 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     search_tools: {
+      kind: "handler",
+      effect: "read",
       description: "Search every ue-mcp tool + action by keyword or task INTENT (a synonym layer maps 'screenshot'->capture_scene_png, 'tile a texture'->the texture-bomb flow, etc.) and return ranked matches (tool, action, description, score). The first step before editor(execute_python); most tasks already have a dedicated action. Params: query (space-separated keywords/intent), limit? (default 20) (#704)",
       handler: async (_ctx, p) => {
         const query = (p.query as string) ?? "";
         if (!query.trim()) throw new Error("Missing 'query'");
-        const results = await searchTools(query, (p.limit as number) ?? 20);
+        const graph = _ctx.getToolGraph?.();
+        const limit = (p.limit as number) ?? 20;
+        const results = graph ? searchToolGraph(graph, query, limit) : await searchTools(query, limit);
         return {
           query,
           resultCount: results.length,
@@ -729,6 +770,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     describe_action: {
+      kind: "handler",
+      effect: "read",
       description:
         "Return the live parameter schema for one action: every parameter it accepts, "
         + "with type, required/optional, description, allowed values and default, plus the "
@@ -745,10 +788,7 @@ export const projectTool: ToolDef = categoryTool(
         + "Params: name (required), category? (return every action of one category instead of one action)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         const { getLiveToolGraph } = await import("../tools.js");
-        // The advertised graph, which is the union across every registered
-        // editor: exactly the set of actions the connected client is able to
-        // call, so a schema is never reported for something it cannot reach.
-        const graph: ToolDef[] = getLiveToolGraph();
+        const graph: ToolDef[] = ctx.getToolGraph?.() ?? getLiveToolGraph();
 
         const category = (p.category as string | undefined)?.trim();
         if (category) {
@@ -791,6 +831,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     list_available_actions: {
+      kind: "handler",
+      effect: "read",
       description:
         "Report which actions this server can serve RIGHT NOW and why the rest cannot. With no editor "
         + "attached the surface is advertised in full but most of it cannot run, and this is the line "
@@ -838,6 +880,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     list_content_assets: {
+      kind: "handler",
+      effect: "read",
       description:
         "List the project's assets from the package files on DISK, which is the one asset query that "
         + "works with no editor running. Takes a mount path (/Game, /Game/Characters, or a plugin's "
@@ -857,6 +901,8 @@ export const projectTool: ToolDef = categoryTool(
       }),
     },
     check_install: {
+      kind: "handler",
+      effect: "read",
       description:
         "Answer whether this project can run the bridge at all, from disk, with no editor running and "
         + "nothing compiled. Reports the project kind (a project declaring no native modules of its own "
@@ -876,6 +922,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     execute_python_report: {
+      kind: "handler",
+      effect: "read",
       description: "Measurement for #704: reads this session's execute_python calls and, for each, runs its taskSummary back through search_tools to flag calls that OVERLAPPED an existing dedicated action ('you used Python for X, but tool Y does X'). Returns totalCalls, overlapping[] and an overlapRate. Params: none (#704)",
       handler: async (ctx) => {
         const entries = getWorkarounds(ctx);
@@ -898,6 +946,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     list_files: {
+      kind: "handler",
+      effect: "read",
       description: "List files on disk under a directory, optionally filtered by extension(s). Runs in the MCP server process (no editor round-trip). Params: directory (absolute, or relative to the project dir), extensions? (e.g. ['png','exr'] or 'png'), recursive? (default false), maxResults? (default 1000) (#608)",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
@@ -928,8 +978,10 @@ export const projectTool: ToolDef = categoryTool(
         return { directory: base, extensions: exts, recursive, count: results.length, files: results };
       },
     },
-    set_config: bp("Write to INI. Params: configName, section, key, value", "set_config"),
+    set_config: bp("mutate", "Write to INI. Params: configName, section, key, value", "set_config"),
     build: {
+      kind: "handler",
+      effect: "mutate",
       // #958: this used to be dispatched over the editor bridge, so it failed
       // with ECONNREFUSED whenever the editor was down. That made it unusable
       // for its only real job: UnrealBuildTool refuses to link while an editor
@@ -950,12 +1002,14 @@ export const projectTool: ToolDef = categoryTool(
         return { ...result, output: lines.join("") };
       },
     },
-    generate_project_files: bp("Generate IDE project files (Visual Studio, Xcode, etc.). Params: none", "generate_project_files"),
+    generate_project_files: bp("mutate", "Generate IDE project files (Visual Studio, Xcode, etc.). Params: none", "generate_project_files"),
 
     // v0.7.13 - native C++ authoring. Bridge handlers wrap
     // GameProjectUtils / ILiveCodingModule (same APIs used by the editor's
     // File → New C++ Class and Live Coding menus).
     create_cpp_class: {
+      kind: "bridge",
+      effect: "mutate",
       description: "Create a new native UCLASS in a project module. Uses the same engine template path as File → New C++ Class. Writes .h + .cpp; returns both paths plus needsEditorRestart (true unless Live Coding successfully hot-reloaded). Params: className (no prefix), parentClass? (default UObject; accepts short names like 'Actor' or /Script/<Module>.<Class> paths), moduleName? (default: first project module, use list_project_modules to pick), classDomain? ('public'|'private'|'classes', default public), subPath?",
       bridge: "create_cpp_class",
       // AddCodeToProject regenerates IDE project files synchronously - can
@@ -969,54 +1023,58 @@ export const projectTool: ToolDef = categoryTool(
         subPath: p.subPath,
       }),
     },
-    list_project_modules: bp(
+    list_project_modules: bp("read", 
       paged("List native modules in the current project (name, host type, source path), in the .uproject's own declaration order. Feed moduleName from here into create_cpp_class."),
       "list_project_modules",
       (p) => ({ cursor: p.cursor, limit: p.limit }),
     ),
-    list_loaded_modules: bp(
+    list_loaded_modules: bp("read", 
       paged("Enumerate ALL engine+project modules with runtime load state (loaded/gameModule), not just uproject-declared ones. Params: filter? (case-insensitive substring), loadedOnly? (default false) (#689)"),
       "list_loaded_modules",
       (p) => ({ filter: p.filter, loadedOnly: p.loadedOnly, cursor: p.cursor, limit: p.limit }),
     ),
-    is_module_loaded: bp(
+    is_module_loaded: bp("read", 
       "Report whether a named module is currently loaded in the editor. Params: moduleName (#689)",
       "is_module_loaded",
       (p) => ({ moduleName: p.moduleName }),
     ),
-    list_available_plugins: bp(
+    list_available_plugins: bp("read", 
       paged("List every plugin installed in this engine or project, sorted by name, with its category, version, type, whether it is enabled in THIS editor session, whether it is enabled by default, and the .uproject's current reference to it under projectReference {present, enabled}. Those two disagree after enable_plugin until the editor restarts, which is the point of reporting both. Params: filter?, pluginCategory?, enabledOnly?, limit? (default 200, max 2000)"),
       "list_available_plugins",
       (p) => ({ filter: p.filter, pluginCategory: p.pluginCategory, enabledOnly: p.enabledOnly, cursor: p.cursor, limit: p.limit }),
     ),
-    enable_plugin: bp(
+    enable_plugin: bp("mutate", 
       "Enable a plugin in the .uproject. Plugin enablement is neither a UPROPERTY nor an INI key, it is a JSON array in the .uproject read once at startup, so set_config cannot reach it and without this a plugin-gated capability stays permanently unreachable through the bridge. Idempotent: a plugin already enabled, or enabled by default with no entry, reports existed and writes nothing. The change is a file change, so modules, classes, content and settings appear only after editor(restart_editor), which the result says. Params: pluginName",
       "enable_plugin",
       (p) => ({ pluginName: p.pluginName }),
     ),
-    disable_plugin: bp(
+    disable_plugin: bp("mutate", 
       "Disable a plugin in the .uproject. removeReference deletes the entry outright instead of writing an explicit disable, which is the difference between handing a default-on plugin back to its default and overriding it, and the two are not the same file. Idempotent against whichever of the two was asked for. Refuses to disable the bridge itself, since that would leave no way to undo it. Takes effect on the next editor start. Params: pluginName, removeReference?",
       "disable_plugin",
       (p) => ({ pluginName: p.pluginName, removeReference: p.removeReference }),
     ),
     live_coding_compile: {
+      kind: "bridge",
+      effect: "mutate",
       description: "Trigger a Live Coding compile (Windows only). Hot-patches method bodies of existing UCLASSes without editor restart - the fast inner loop for UFUNCTION implementations. Does NOT reliably register brand-new UCLASSes; use build_project + editor restart for those. Params: wait? (default false - fire and return 'in_progress').",
       bridge: "live_coding_compile",
       timeoutMs: 300_000,
       mapParams: (p) => ({ wait: p.wait }),
     },
-    live_coding_status: bp(
+    live_coding_status: bp("read", 
       "Report Live Coding availability/state (available, started, enabledForSession, compiling). Helps choose between live_coding_compile and build_project. Params: none",
       "live_coding_status",
       () => ({}),
     ),
-    resolve_collision_profile: bp(
+    resolve_collision_profile: bp("read", 
       "Read one collision profile's resolved per-channel responses: collisionEnabled, objectType, and every channel with Block/Overlap/Ignore. This is the project-side half of blueprint(get_component_collision) (#925): a component's ResponseArray only lists the channels it OVERRIDES, so the profile is where an inherited response actually comes from. Project trace and object channels appear under their configured names, with enumName (ECC_GameTraceChannel1) alongside so a caller can key on something stable. By default the eight engine channels plus every channel the project configured are returned; includeAllChannels=true adds the unused slots. channel narrows it to one. A profile that does not exist lists the ones that do. Params: profileName, channel?, includeAllChannels?",
       "resolve_collision_profile",
       (p) => ({ profileName: p.profileName, channel: p.channel, includeAllChannels: p.includeAllChannels }),
     ),
 
     write_cpp_file: {
+      kind: "handler",
+      effect: "mutate",
       description:
         "Write a .h / .cpp / .inl file under the project's Source/ tree. Used to append UPROPERTYs/UFUNCTIONs or method bodies after create_cpp_class. Writes are scoped to Source/ for safety. Params: path (relative to Source/ or absolute within Source/), content (full file contents). After editing, call live_coding_compile (for existing classes) or build_project (for new classes).",
       handler: async (ctx, p) => {
@@ -1050,6 +1108,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     read_cpp_source: {
+      kind: "handler",
+      effect: "read",
       description: "Read a .cpp file from the project Source/ tree. Companion to read_cpp_header for round-trip edits. Params: sourcePath (relative to Source/ or absolute).",
       handler: async (ctx, p) => {
         ctx.project.ensureLoaded();
@@ -1067,6 +1127,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     write_source_file: {
+      kind: "handler",
+      effect: "mutate",
       description:
         "Write a .h/.cpp/.inl into a named module's Public/Private folder (resolves the module dir for you, including plugin modules under Plugins/*/Source/ that write_cpp_file refuses). After a new file, build_project + restart; after a body edit, live_coding_compile. Params: module (module name, default the project's primary module), visibility (Public|Private, default Private), fileName, content.",
       handler: async (ctx, p) => {
@@ -1100,6 +1162,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     read_source_file: {
+      kind: "handler",
+      effect: "read",
       description:
         "Read a .h/.cpp/.inl from a named module's folder (companion to write_source_file; resolves plugin modules too). With no visibility it tries Public then Private then the module root. Params: module, visibility?, fileName.",
       handler: async (ctx, p) => {
@@ -1122,6 +1186,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     build_engine_index: {
+      kind: "handler",
+      effect: "mutate",
       description:
         "Build or refresh the engine symbol index that verify_symbols, lint_cpp_header and "
         + "suggest_build_deps read. Scans roughly 31,000 headers across Runtime, Editor, Developer "
@@ -1150,6 +1216,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     verify_symbols: {
+      kind: "handler",
+      effect: "read",
       description:
         "Check that engine symbols exist BEFORE writing C++ that uses them, and get back what you "
         + "need to write it: the header to #include, the owning module for Build.cs, the exact "
@@ -1169,6 +1237,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     suggest_build_deps: {
+      kind: "handler",
+      effect: "mutate",
       description:
         "Given the engine symbols a module uses, report which modules its Build.cs has to depend on "
         + "and which of those it does not list yet, plus the AddRange line to paste. Core and "
@@ -1192,6 +1262,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     find_example_usage: {
+      kind: "handler",
+      effect: "read",
       description:
         "Find real call sites for an engine symbol in the engine's own .cpp files, which answers "
         + "'how is this actually used' with code that compiles. Better than a signature for anything "
@@ -1216,6 +1288,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     class_hierarchy: {
+      kind: "handler",
+      effect: "read",
       description:
         "Report what a class derives from and what derives from it, which is the question behind "
         + "'what should I subclass' and 'what already does this'. Ancestors are the full chain up "
@@ -1249,6 +1323,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     find_references: {
+      kind: "handler",
+      effect: "read",
       description:
         "Find every line in the engine tree that names a symbol, which answers 'how is this woven "
         + "into the engine' and 'what would break if this changed'. Broader than find_callers on "
@@ -1276,6 +1352,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     find_callers: {
+      kind: "handler",
+      effect: "read",
       description:
         "Find who calls a function, and from which enclosing function, which is how to see the "
         + "conventions around a call before writing one: what is checked first, what is passed, "
@@ -1303,6 +1381,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     find_callees: {
+      kind: "handler",
+      effect: "read",
       description:
         "Report what a function calls, by reading its body and looking every called name back up "
         + "in the engine index. Answers 'what does doing this properly actually involve': the "
@@ -1331,6 +1411,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     symbol_context: {
+      kind: "handler",
+      effect: "read",
       description:
         "Return the lines of engine source around a declaration, so the API surrounding a symbol "
         + "can be read without opening the file: the sibling overloads, the UPROPERTY above it, the "
@@ -1359,6 +1441,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     lint_cpp_header: {
+      kind: "handler",
+      effect: "read",
       description:
         "Check a header you just wrote against the engine it has to build against, and report what "
         + "the compiler would before the compiler runs. Covers the structural mistakes that produce "
@@ -1390,6 +1474,8 @@ export const projectTool: ToolDef = categoryTool(
       },
     },
     add_module_dependency: {
+      kind: "handler",
+      effect: "mutate",
       description:
         "Add a module to a target module's Build.cs dependency array. Params: moduleName (the Build.cs to edit - must exist in the project), dependency (module name to add, e.g. 'UMG'), access? ('public'|'private', default 'private'). Creates the corresponding AddRange block if missing. Rebuild required afterward.",
       handler: async (ctx, p) => {
@@ -1447,6 +1533,8 @@ export const projectTool: ToolDef = categoryTool(
     },
 
     add_cpp_member: {
+      kind: "handler",
+      effect: "mutate",
       // #423: append a UPROPERTY / UFUNCTION declaration to an existing UCLASS
       // header in the right access-specifier block. The recurring trap is that
       // raw appending lands the declaration in whatever access section the
@@ -1534,9 +1622,11 @@ export const projectTool: ToolDef = categoryTool(
         };
       },
     },
+    ...epicActions,
   },
   undefined,
   {
+    ...epicSchema,
     projectPath: z.string().optional().describe("For set_project / add_editor / check_install: path to .uproject"),
     editorName: z.string().optional().describe("For add_editor: name to address the new session by (default the project name) (#817)"),
     editorTarget: z.string().optional().describe("For use_editor / drop_editor: session name, project name, or .uproject path (#817)"),

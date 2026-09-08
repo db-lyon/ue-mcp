@@ -27,6 +27,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The release gates compare this branch against what it will merge
+          # into. A bare checkout on a pull request fetches only the merge ref
+          # and creates no origin/main, so every gate reported "no base to
+          # compare against" and exited 0.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -43,13 +49,33 @@ jobs:
           rm -f package-lock.json
           npm install --include=optional
 
+      - name: Prose rules
+        # Also in .husky/pre-commit and .husky/pre-push, and repeated here on
+        # purpose: hooks can be skipped with --no-verify and are not installed
+        # in every clone. dist/ is checked separately in the publish job, once
+        # there is a dist/ to check.
+        run: node scripts/lint-prose.mjs
+
+      - name: Tracked config carries no personal settings
+        run: node scripts/check-tracked-config.mjs
+
+      - name: Flow rules
+        run: node scripts/check-flows.mjs
+
+      - name: Release gates
+        # Patch-only bumps, stamped counts that match the surface, and a docs
+        # change beside any surface change. Each of these used to be a rule
+        # somebody had to remember before bumping, and each was broken at
+        # least once by somebody who had read it.
+        run: node scripts/check-release-gates.mjs all
+
       - name: Type-check
         run: npx tsc --noEmit
 
       - name: Unit tests
         run: npm run test:unit
 
-      - name: Multi-editor tier
+      - name: Multi-editor tests
         # Two bridges on two loopback sockets, driven from one test process
         # (#817, plan item 7.1). This gates merges on the routing property that
         # multi-editor exists for: a call addressed to one editor arrives at
@@ -61,7 +87,7 @@ jobs:
         # no editor to start and no second one to address. Everything above the
         # handler is real; only the engine behind it is stubbed.
         #
-        # #871 settled that deliberately. The engine-dependent tier is
+        # #871 settled that deliberately. The engine-dependent suite is
         # LOCAL-ONLY by decision, not by omission awaiting a runner. It is
         # `npm run test:smoke` plus `npm run test:live` against tests/ue_mcp,
         # run on a machine that has an engine, before a release is cut. A
@@ -70,7 +96,7 @@ jobs:
         # and CI cannot compile the plugin either, so the runner would gate on
         # a build it could not itself produce.
         #
-        # If that calculus changes, the tier to add is the existing live
+        # If that calculus changes, the suite to add is the existing live
         # harness pointed at tests/ue_mcp only, and nothing here needs to move.
         run: npm run test:multi-editor
 
@@ -215,6 +241,13 @@ jobs:
           fi
           echo "Draft release v$VERSION present (${#DRAFT_BODY} chars of body)."
 
+          # The body is about to become a public release page, so it goes
+          # through the same prose rules as everything else that ships. Checked
+          # here rather than at publish time, where the only way to fix it is
+          # to edit a page people have already seen.
+          printf '%s' "$DRAFT_BODY" > /tmp/release-body.md
+          node scripts/lint-prose.mjs --release-body /tmp/release-body.md
+
           # Parse + validate the headline frontmatter; step outputs go to
           # $GITHUB_OUTPUT in the standard key=value form.
           printf '%s' "$DRAFT_BODY" | node scripts/release-headline.mjs >> "$GITHUB_OUTPUT"
@@ -227,6 +260,26 @@ jobs:
           rm -f package-lock.json
           npm install --include=optional
           npx tsc
+
+      - name: Prose rules, against what will be published
+        if: steps.version.outputs.should_publish == 'true'
+        # The generated output, not the source it came from. A banned string
+        # was taken out of src/ once and shipped anyway in a .d.ts, because
+        # every check until now ran against a tree with no dist/ in it.
+        #
+        # The generators run first: prepublishOnly produces two more dist files
+        # at publish time, so linting before them checked a dist/ that was
+        # missing part of what ships.
+        run: |
+          npx tsx scripts/generate-default-config.ts
+          npx tsx scripts/generate-tool-metadata.ts
+          mapfile -t built < <(find dist -type f \( -name '*.js' -o -name '*.d.ts' -o -name '*.md' -o -name '*.yml' -o -name '*.json' \))
+          if [ ${#built[@]} -eq 0 ]; then
+            echo "dist/ has no files to check, which means the build did not run" >&2
+            exit 1
+          fi
+          echo "linting ${#built[@]} published files"
+          node scripts/lint-prose.mjs --files "${built[@]}"
 
       - name: Verify build output
         if: steps.version.outputs.should_publish == 'true'

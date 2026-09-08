@@ -45,7 +45,7 @@ Neither surface reaches the editor, so both work with the editor down.
 
 ### Tasks
 
-A task is a named unit of work. UE-MCP ships with **<!-- count:actions -->1091+<!-- /count --> built-in tasks** across <!-- count:tools -->24<!-- /count --> categories - every action available through the MCP tools is also a flow task.
+A task is a named unit of work. UE-MCP ships with **<!-- count:actions -->1921+<!-- /count --> built-in tasks** across <!-- count:tools -->26<!-- /count --> categories - every action available through the MCP tools is also a flow task.
 
 Tasks are defined in the `tasks:` section of your config:
 
@@ -68,7 +68,7 @@ The fields:
 | `group` | No | Category for organization |
 | `options` | No | Default options passed to the task (can be overridden per-step) |
 
-You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->1091+<!-- /count --> actions. You define tasks when you want to **override** or **add** custom ones.
+You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->1921+<!-- /count --> actions. You define tasks when you want to **override** or **add** custom ones.
 
 ### Flows
 
@@ -357,7 +357,9 @@ A step carrying `ignore_failure: true` contributes its record on the same terms.
 
 A **nested** flow behaves the same way. Its records bubble to the parent, so arming rollback on the outer flow reaches a partial write made inside a child, and the child's own steps arrive on `steps[i].nestedSteps`, each reported exactly like a top-level step. The child's run error still carries the undo call in its text as well.
 
-Requires `@db-lyon/flowkit` 0.17.1 or newer. Up to 0.17.0 the runner harvested an inverse only from a step that succeeded, so a failing step's record was discarded on every run and `replayed` was always `false`.
+The outermost flow with rollback armed is the one that invokes the inverses, including the ones a child handed up. A child does not also unwind them itself: the parent holds the full reverse order, and running each inverse at both levels would undo state the first pass had already restored. A nested flow whose parents asked for no rollback still unwinds its own, so `rollback_on_failure` on a child flow means what it says.
+
+Requires `@db-lyon/flowkit` 0.17.2 or newer. 0.17.1 unwound a failed child's records at both levels. Up to 0.17.0 the runner harvested an inverse only from a step that succeeded, so a failing step's record was discarded on every run and `replayed` was always `false`.
 
 Conventions for handlers - natural keys, the `onConflict: skip|update|error` option, and rollback record shape - live in [docs/handler-conventions.md](handler-conventions.md).
 
@@ -705,7 +707,7 @@ Configuration is loaded with [`@db-lyon/flowkit`'s config loader](https://github
 
 | Layer | File | Purpose |
 |-------|------|---------|
-| 1 (base) | Built-in defaults | All <!-- count:actions -->1091+<!-- /count --> tasks, no flows |
+| 1 (base) | Built-in defaults | All <!-- count:actions -->1921+<!-- /count --> tasks, no flows |
 | 2 | `ue-mcp.yml` | Your project config |
 | 3 | `ue-mcp.{env}.yml` | Environment overlay (set `UE_MCP_ENV`) |
 | 4 | `ue-mcp.local.yml` | Local-only overrides (gitignore this) |

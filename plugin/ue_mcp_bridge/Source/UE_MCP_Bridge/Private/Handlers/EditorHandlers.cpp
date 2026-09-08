@@ -3183,14 +3183,25 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	Height = FMath::Clamp(Height, 16, 8192);
 
 	const double Fov = OptionalNumber(Params, TEXT("fov"), 90.0);
+	const float CaptureFov = static_cast<float>(Fov);
+	if (!FMath::IsFinite(CaptureFov) || CaptureFov <= 0.0f || CaptureFov >= 180.0f)
+	{
+		return MCPError(TEXT("fov must be finite and between 0 and 180 degrees (exclusive)"));
+	}
 
 	FVector Location = OptionalVec3(Params, TEXT("location"));
 	FRotator Rotation = OptionalRotator(Params, TEXT("rotation"));
+	const double FocusMargin = OptionalNumber(Params, TEXT("focusMargin"), 1.5);
+	if (!FMath::IsFinite(FocusMargin) || FocusMargin <= 0.0)
+	{
+		return MCPError(TEXT("focusMargin must be finite and greater than zero"));
+	}
 
 	// #599: focusActorLabel frames the capture on a specific actor by computing
 	// a camera position from the actor's bounds and looking at its center.
 	const FString FocusLabel = OptionalString(Params, TEXT("focusActorLabel"));
 	const FString FocusPath = OptionalString(Params, TEXT("focusActorPath"));
+	TSharedPtr<FJsonObject> FocusMetadata;
 	if (!FocusLabel.IsEmpty() || !FocusPath.IsEmpty())
 	{
 		// #983: framing on the wrong copy of a duplicated label is a capture
@@ -3206,13 +3217,21 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 		Focus->GetActorBounds(false, Origin, Extent);
 		const double Radius = FMath::Max(Extent.Size(), 50.0);
 		// Distance so the bounds fill the frame at the given FOV, with margin.
-		const double Distance = (Radius / FMath::Tan(FMath::DegreesToRadians(Fov * 0.5))) * OptionalNumber(Params, TEXT("focusMargin"), 1.5);
+		const double Distance = (Radius / FMath::Tan(FMath::DegreesToRadians(Fov * 0.5))) * FocusMargin;
 		// Default framing direction (front-ish, slightly above); overridable.
 		FVector Dir = OptionalVec3(Params, TEXT("focusDirection"), FVector(-1.0, -1.0, 0.6));
+		if (Dir.ContainsNaN() || !FMath::IsFinite(Distance)) return MCPError(TEXT("Focus framing must produce finite coordinates"));
 		if (!Dir.Normalize()) Dir = FVector(-1, -1, 0.6).GetSafeNormal();
 		Location = Origin + Dir * Distance;
 		Rotation = (Origin - Location).Rotation();
+		FocusMetadata = MakeShared<FJsonObject>();
+		FocusMetadata->SetStringField(TEXT("actorPath"), Focus->GetPathName());
+		FocusMetadata->SetStringField(TEXT("actorLabel"), Focus->GetActorLabel());
+		FocusMetadata->SetObjectField(TEXT("boundsOrigin"), MCPVec3ToJsonObject(Origin));
+		FocusMetadata->SetObjectField(TEXT("boundsExtent"), MCPVec3ToJsonObject(Extent));
+		FocusMetadata->SetObjectField(TEXT("directionWorld"), MCPVec3ToJsonObject(Dir));
 	}
+	if (Location.ContainsNaN() || Rotation.ContainsNaN()) return MCPError(TEXT("Capture camera location and rotation must be finite"));
 
 	// #966: the capture actor used to be spawned once and LEFT IN THE LEVEL.
 	// It is a level actor, so it was saved into the map and committed to source
@@ -3334,6 +3353,29 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	Result->SetNumberField(TEXT("width"), Width);
 	Result->SetNumberField(TEXT("height"), Height);
 	Result->SetNumberField(TEXT("sizeBytes"), (double)Size);
+	// Pair the image with the camera that rendered it. The editor viewport is
+	// a different camera and cannot be used to deproject this image's pixels.
+	auto CaptureMetadata = MakeShared<FJsonObject>();
+	CaptureMetadata->SetStringField(TEXT("worldPath"), World->GetPathName());
+	CaptureMetadata->SetStringField(TEXT("world"), World->IsGameWorld() ? TEXT("pie") : TEXT("editor"));
+	if (const FWorldContext* Context = GEngine->GetWorldContextFromWorld(World))
+	{
+		if (Context->WorldType == EWorldType::PIE)
+			CaptureMetadata->SetNumberField(TEXT("pieInstance"), Context->PIEInstance);
+	}
+	CaptureMetadata->SetStringField(TEXT("projection"), TEXT("perspective"));
+	CaptureMetadata->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(Comp->GetComponentLocation()));
+	CaptureMetadata->SetObjectField(TEXT("rotation"), MCPRotatorToJsonObject(Comp->GetComponentRotation()));
+	CaptureMetadata->SetObjectField(TEXT("forward"), MCPVec3ToJsonObject(Comp->GetForwardVector()));
+	CaptureMetadata->SetObjectField(TEXT("right"), MCPVec3ToJsonObject(Comp->GetRightVector()));
+	CaptureMetadata->SetObjectField(TEXT("up"), MCPVec3ToJsonObject(Comp->GetUpVector()));
+	CaptureMetadata->SetNumberField(TEXT("fovDegrees"), Comp->FOVAngle);
+	CaptureMetadata->SetNumberField(TEXT("width"), RT->SizeX);
+	CaptureMetadata->SetNumberField(TEXT("height"), RT->SizeY);
+	CaptureMetadata->SetNumberField(TEXT("worldTimeSeconds"), World->GetTimeSeconds());
+	CaptureMetadata->SetBoolField(TEXT("fullyLoadTextures"), bFullyLoadTextures);
+	if (FocusMetadata) CaptureMetadata->SetObjectField(TEXT("focus"), FocusMetadata);
+	Result->SetObjectField(TEXT("captureMetadata"), CaptureMetadata);
 	// The capture actor is gone by the time this reaches the caller, so say so
 	// rather than naming an actor they could go and look for.
 	Result->SetBoolField(TEXT("captureActorRemoved"), true);

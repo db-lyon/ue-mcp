@@ -127,13 +127,17 @@ The feedback approval mode (`interactive` / `auto-approve` / `defer`) is intenti
 
 ### Dialog handling mode
 
-How a modal dialog blocking the Unreal Editor is handled is the same shape and lives in the same place, for the same reason: whether somebody is at the keyboard to answer a modal is a property of your machine and your session, not project policy a collaborator should inherit.
+A modal dialog blocks Unreal's game thread, so every action is refused until it is answered. One guard per editor enforces that, and every route to the editor passes it, including each step of a running flow and the first call the server makes. This mode decides what happens next.
+
+It lives with the feedback mode and for the same reason: whether somebody is at the keyboard to answer a modal is a property of your machine, not project policy a collaborator should inherit.
+
+`editor(set_dialog_policy)` is the exception. A dialog matching an armed pattern is answered immediately under every mode. Nothing else presses a button on its own, and there are no built-in policies.
 
 | Mode | What happens to a blocking dialog |
 |------|-----------------------------------|
-| `interactive` | The dialog is put to you in an MCP elicitation form carrying its exact title, its complete message and its real buttons as the choices, plus an option to leave it open. Only the button you pick is pressed. |
-| `auto` | The call returns the dialog whole, every button paired with the exact `editor(action='respond_to_dialog')` call that presses it, and the agent chooses and answers. The server presses nothing on its own. |
-| `defer` | Nothing is pressed and nothing is elicited. The dialog is reported for recognition rather than actuation (exact title, complete message, every button label in order, and no call that presses one) and you answer it in the Unreal Editor window yourself. |
+| `interactive` | You get an elicitation form with the dialog's buttons as the choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. |
+| `auto` | The refusal includes the `editor(action='respond_to_dialog')` call for each button. The agent picks one and makes that call. Nothing is pressed until it does. |
+| `defer` | The refusal names the dialog and its buttons but not the calls that press them. Answer it in the Unreal Editor window. |
 
 Read in this order (highest wins): the `UE_MCP_DIALOG_MODE` env var, `dialog.mode` for this project in `~/.ue-mcp/state.json`, `dialog.mode` for this user in the same file, then the default. **The default is `interactive` when your MCP client advertises the elicitation capability and `defer` when it does not. It never resolves to `auto`**: with no channel to a person, the fallback is the mode that suspends, not the one that lets the agent decide. `auto` applies only when you name it.
 
@@ -186,13 +190,20 @@ Everything the server injects at session start - the `initialize` instructions p
 
 | Strategy | Seed (test project) | What's advertised | Cost to use |
 |----------|--------------------|-------------------|-------------|
-| **`full`** (default) | ~45k tokens | all <!-- count:tools -->24<!-- /count --> category tools, every action + parameter inline | zero discovery calls |
-| **`lean`** | ~23k tokens | the same <!-- count:tools -->24<!-- /count --> tools with their validated `action` enums, but descriptions collapsed to a summary; a `catalog` tool (`search` / `describe` / `list_categories`) and a per-category `describe` action serve the details on demand | ~1 round-trip to learn a category |
-| **`micro`** | ~1k tokens | a single `tools` gateway - `list_categories`, `describe`, and `call` - fronting every category; nothing else | discovery for everything |
+| **`full`** (default) | ~45k tokens | all <!-- count:tools -->26<!-- /count --> category tools, every action + parameter inline | zero discovery calls |
+| **`lean`** | ~23k tokens | the same <!-- count:tools -->26<!-- /count --> tools with their validated `action` enums, but descriptions collapsed to a summary; a `catalog` tool (`search` / `describe` / `list_categories`) and a per-category `describe` action serve the details on demand | ~1 round-trip to learn a category |
+| **`micro`** | ~1k tokens | a single `tools` gateway - `search`, `list_categories`, `describe`, and `call` - fronting every category | discovery for everything |
 
 - **full** is best when the agent should see the entire surface up front and you are not token-constrained.
 - **lean** keeps action names visible (so the model can often call directly, and unknown actions are still rejected up front) while dropping the prose. A solid middle ground.
-- **micro** mirrors the native MCP toolset gateway (`list_toolsets` / `describe_toolset` / `call_tool`): the agent calls `tools(action="list_categories")`, then `tools(action="describe", category="blueprint")`, then `tools(action="call", category="blueprint", method="create", args={ ... })`. Smallest possible seed, most discovery traffic.
+- **micro** mirrors the native MCP toolset gateway (`list_toolsets` / `describe_toolset` / `call_tool`): the agent calls `tools(action="search", query="rotate clockwise")`, then `tools(action="describe", category="level", method="nudge_component")`, then `tools(action="call", category="level", method="nudge_component", args={ ... })`. Omit `method` from describe to list a whole category. Smallest possible seed, most discovery traffic.
+- Lean reaches the same search and single-action describe through `catalog`. Both compact modes rank with the full-mode intent search and read nested argument fields off the declared schemas, so a narrow lookup never costs a whole category dump.
+
+The seed figures are measured on this repo's test project and move with the
+plugins and Epic toolsets you have enabled - `npm run context-tax` reports
+yours. A smaller seed is not automatically a cheaper session: count the
+discovery round-trips as well. All three modes carry the same short spatial
+interpretation and verification guidance.
 
 Set the strategy with the standalone command (writes `ue-mcp.yml` for you):
 
@@ -350,6 +361,14 @@ Both builds run UnrealBuildTool as a separate process, so they work with the
 editor stopped. That is the case that matters: UnrealBuildTool cannot link while
 an editor holds the module DLLs, so a full rebuild has to happen with the editor
 down.
+
+### Build parallelism
+
+UnrealBuildTool compiles one file per physical core by default, and each of those processes maps Unreal's precompiled header, which costs several GB. On a machine with fewer GB than cores, the compiler does not wait for room: it fails with `C3859` or `C1076` several minutes in, and the message names a paging file, so it reads as a broken machine rather than a default that does not fit it.
+
+ue-mcp computes a safe number from the machine's memory and core count and passes it to every build, including `ue-mcp build`, `ue-mcp update --build` and `editor(build_project)`. The cap is applied only when it is below what UnrealBuildTool would have chosen, so a machine with headroom builds exactly as before. There is nothing to configure.
+
+Set `UE_MCP_MAX_PARALLEL_ACTIONS` to a positive integer to override it, for a machine where the estimate is wrong in either direction. A build that runs out of room anyway reports what happened and what to change, rather than leaving the compiler's wording as the only explanation.
 
 ## Which Engine A Project Uses
 

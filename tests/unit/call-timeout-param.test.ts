@@ -38,8 +38,8 @@ function recordingBridge(): IBridge & { calls: Recorded[] } {
 
 function fixture(): ToolDef {
   return categoryTool("demo", "Demo", {
-    quick: bp("A normal action", "quick_method"),
-    slow: { description: "An action that already asks for longer", bridge: "slow_method", timeoutMs: 120_000 },
+    quick: bp("read", "A normal action", "quick_method"),
+    slow: { kind: "bridge", effect: "read", description: "An action that already asks for longer", bridge: "slow_method", timeoutMs: 120_000 },
   });
 }
 
@@ -80,7 +80,7 @@ describe("timeoutMs on a category call (#989)", () => {
   it("never forwards the budget to a custom handler's parameters", async () => {
     let seen: Record<string, unknown> | undefined;
     const tool = categoryTool("demo", "Demo", {
-      local: { description: "Local handler", handler: async (_ctx, p) => { seen = p; return { ok: true }; } },
+      local: { kind: "handler", effect: "read", description: "Local handler", handler: async (_ctx, p) => { seen = p; return { ok: true }; } },
     });
     await tool.handler!(ctxFor(recordingBridge()), { action: "local", name: "x", timeoutMs: 600_000 });
     expect(seen).toEqual({ action: "local", name: "x" });

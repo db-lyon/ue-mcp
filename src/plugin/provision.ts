@@ -5,6 +5,7 @@ import {
   compileSchemaFields,
   type ManifestProvidedCategory,
 } from "./manifest.js";
+import { inferActionEffect } from "../action-class.js";
 
 /**
  * Per-category provision plan derived from one plugin's `provides:` block.
@@ -35,6 +36,11 @@ export function buildProvidedTool(plan: ProvisionPlan): ToolDef {
 
   for (const [actionName, actionSpec] of Object.entries(plan.spec.actions)) {
     actions[actionName] = {
+      kind: "registry",
+      // The plugin author's answer when the manifest gives one, the name
+      // lexicon's otherwise, marked as the guess it is.
+      effect: actionSpec.effect ?? inferActionEffect(plan.category, actionName),
+      effectSource: actionSpec.effect ? "declared" : "inferred",
       description:
         actionSpec.description ?? `Plugin action from ${plan.pluginName}`,
     };

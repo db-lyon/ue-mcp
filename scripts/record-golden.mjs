@@ -11,8 +11,8 @@
  * of the surface capture, and the baseline would then only prove the two
  * implementations agree with each other.
  *
- * The connected half goes through scripts/live-tier.mjs, so it gets the same
- * preflight as the rest of the live tier: the editor is found, proved to have
+ * The connected half goes through scripts/live-tests.mjs, so it gets the same
+ * preflight as the rest of the live tests: the editor is found, proved to have
  * tests/ue_mcp open, and named before anything is recorded from it.
  *
  * Review the resulting diff before committing. It is the contract every client
@@ -29,7 +29,7 @@ const result = connected
   ? spawnSync(
       process.execPath,
       [
-        path.join(repoRoot, "scripts", "live-tier.mjs"),
+        path.join(repoRoot, "scripts", "live-tests.mjs"),
         "--record-golden",
         "--only",
         "tests/live/golden-connected.test.ts",

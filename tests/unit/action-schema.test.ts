@@ -19,6 +19,8 @@
  * agent session six weeks later.
  */
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
+import { categoryTool, bp } from "../../src/types.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { requiresExplicitEditor } from "../../src/action-class.js";
 import {
@@ -218,12 +220,12 @@ describe("parseParamsClause", () => {
 
 describe("forwardedParams", () => {
   it("reads the keys a mapParams closure pulls off its bag", () => {
-    const names = forwardedParams({ bridge: "x", mapParams: (p) => ({ a: p.alpha, b: p.beta }) });
+    const names = forwardedParams({ kind: "bridge", effect: "read", bridge: "x", mapParams: (p) => ({ a: p.alpha, b: p.beta }) });
     expect(names.sort()).toEqual(["alpha", "beta"]);
   });
 
   it("reports both spellings of an alias", () => {
-    const names = forwardedParams({ bridge: "x", mapParams: (p) => ({ assetPath: p.assetPath ?? p.path }) });
+    const names = forwardedParams({ kind: "bridge", effect: "read", bridge: "x", mapParams: (p) => ({ assetPath: p.assetPath ?? p.path }) });
     expect(names.sort()).toEqual(["assetPath", "path"]);
   });
 
@@ -238,16 +240,48 @@ describe("forwardedParams", () => {
   });
 
   it("reads a local handler's second argument", () => {
-    const names = forwardedParams({ handler: async (_ctx, p) => p.slotName });
+    const names = forwardedParams({ kind: "handler", effect: "read", handler: async (_ctx, p) => p.slotName });
     expect(names).toEqual(["slotName"]);
   });
 
   it("is empty for an action that takes no parameters", () => {
-    expect(forwardedParams({ bridge: "x" })).toEqual([]);
+    expect(forwardedParams({ kind: "bridge", effect: "read", bridge: "x" })).toEqual([]);
   });
 });
 
 describe("actionSchema", () => {
+  it("preserves nested fields, array items, enums, defaults and required nullable values", () => {
+    const tool = categoryTool("example", "Example", {
+      inspect: bp("read", "Inspect. Params: request", "inspect"),
+    }, undefined, {
+      request: z.object({
+        targets: z.array(z.object({
+          name: z.string().nullable(),
+          axis: z.enum(["forward", "right", "up"]),
+          amount: z.number().default(5),
+        })),
+        mode: z.union([z.literal("preview"), z.literal("apply")]).optional(),
+      }).optional(),
+    });
+    const request = actionSchema(tool, "inspect").params.find((p) => p.name === "request")!;
+    expect(request.required).toBe(true);
+    const fields = request.properties!.targets.items!.properties!;
+    expect(fields.name.required).toBe(true);
+    expect(fields.axis.enumValues).toEqual(["forward", "right", "up"]);
+    expect(fields.amount).toMatchObject({ required: false, default: 5 });
+    expect(request.properties!.mode).toMatchObject({ required: false, enumValues: ["preview", "apply"] });
+  });
+
+  it("bounds nested discovery and explicitly marks omitted detail", () => {
+    let nested: z.ZodTypeAny = z.string();
+    for (let i = 0; i < 10; i++) nested = z.object({ child: nested });
+    const tool = categoryTool("example", "Example", { inspect: bp("read", "Inspect. Params: request", "inspect") }, undefined, { request: nested });
+    let result = actionSchema(tool, "inspect").params.find((p) => p.name === "request")!;
+    for (let i = 0; i < 6; i++) result = result.properties!.child as typeof result;
+    expect(result.truncated).toBe(true);
+    expect(result.properties).toBeUndefined();
+  });
+
   it("reports the bridge method and required parameters of a real action", () => {
     const asset = ALL_TOOLS.find((t) => t.name === "asset")!;
     const schema = actionSchema(asset, "set_property");
@@ -390,8 +424,24 @@ describe("action class", () => {
     expect(requiresExplicitEditor(actionSchema(editor, "invoke_function").class)).toBe(true);
   });
 
-  it("gates arbitrary python as a mutation rather than leaving it unlabelled", () => {
+  it("calls arbitrary python unknown, and gates it as a mutation anyway", () => {
+    // It used to be labelled `mutate`, which was a guess dressed as a fact:
+    // the effect of running a python string is the string. `unknown` is what
+    // the declaration can honestly say, and it is gated identically, so the
+    // honest label costs nothing at the gate. Same for a console command.
     const editor = ALL_TOOLS.find((t) => t.name === "editor")!;
-    expect(actionSchema(editor, "execute_python").class).toBe("mutate");
+    for (const action of ["execute_python", "execute_command"]) {
+      expect(actionSchema(editor, action).class, action).toBe("unknown");
+      expect(requiresExplicitEditor(actionSchema(editor, action).class), action).toBe(true);
+    }
+  });
+
+  it("says whether an effect was declared or inferred", () => {
+    // Everything ue-mcp declares is a person's answer. `inferred` is reserved
+    // for Epic's runtime-injected tools and a silent plugin manifest, so a
+    // caller building an approval policy can tell the two apart.
+    const editor = ALL_TOOLS.find((t) => t.name === "editor")!;
+    expect(actionSchema(editor, "execute_python").classSource).toBe("declared");
+    expect(actionSchema(editor, "get_viewport").classSource).toBe("declared");
   });
 });

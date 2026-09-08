@@ -14,6 +14,11 @@ export interface ToolSearchHit {
   score: number;
 }
 
+type SearchableTool = {
+  name: string;
+  actions?: Record<string, { description?: string; bridge?: string }>;
+};
+
 // Task-verb / noun synonyms. When a query contains the KEY (or any value), the
 // whole group is added to the term set before scoring, so intent words bridge
 // to the implementation words that appear in action names/descriptions.
@@ -41,6 +46,7 @@ const SYNONYM_GROUPS: string[][] = [
   ["run", "invoke", "call", "fire", "trigger", "execute"],
   ["preview", "thumbnail", "lit"],
   ["config", "setting", "property", "param", "parameter"],
+  ["nudge", "clockwise", "counterclockwise", "viewpoint"],
 ];
 
 // Words too common/short to discriminate. "a"/"an"/"as" as substrings match
@@ -77,6 +83,12 @@ const DEPRIORITIZE = new Set(["execute_python", "run_python_file", "execute_comm
  * (tools.ts imports the project tool, which imports this).
  */
 export async function searchTools(query: string, limit = 20): Promise<ToolSearchHit[]> {
+  const { getLiveToolGraph } = await import("./tools.js");
+  return searchToolGraph(getLiveToolGraph(), query, limit);
+}
+
+/** Rank the graph supplied by the caller, including that session's plugins. */
+export function searchToolGraph(tools: SearchableTool[], query: string, limit = 20): ToolSearchHit[] {
   const q = (query ?? "").toLowerCase().trim();
   if (!q) return [];
   const rawTerms = meaningfulTerms(q.split(/\s+/).filter(Boolean));
@@ -86,10 +98,9 @@ export async function searchTools(query: string, limit = 20): Promise<ToolSearch
   // The live graph, not the pristine declaration: discovery has to see the
   // Epic and plugin actions the server actually advertises, and with one graph
   // per editor session those are no longer the same objects (#817).
-  const { getLiveToolGraph } = await import("./tools.js");
   const hitsByHandler = new Map<string, ToolSearchHit>();
 
-  for (const tool of getLiveToolGraph() as Array<{ name: string; actions?: Record<string, { description?: string; bridge?: string }> }>) {
+  for (const tool of tools) {
     for (const [actionName, spec] of Object.entries(tool.actions ?? {})) {
       if (DEPRIORITIZE.has(actionName)) continue;
       const desc = spec?.description ?? "";

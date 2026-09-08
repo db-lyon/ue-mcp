@@ -125,6 +125,8 @@ describe("dispatch integration", () => {
     let seen: unknown;
     const tool = categoryTool("probe", "test", {
       go: {
+        kind: "handler",
+        effect: "read",
         description: "Params: assetPath",
         handler: async (_c, p) => {
           seen = p.assetPath;
@@ -141,7 +143,7 @@ describe("dispatch integration", () => {
 
   it("adds nothing to the result of a call whose paths were already correct", async () => {
     const tool = categoryTool("probe", "test", {
-      go: { description: "Params: assetPath", handler: async () => ({ ok: true }) },
+      go: { kind: "handler", effect: "read", description: "Params: assetPath", handler: async () => ({ ok: true }) },
     });
     const out = await tool.handler(ctx, { action: "go", assetPath: "/Game/UI/X" }) as Record<string, unknown>;
     expect(out).toEqual({ ok: true });
@@ -153,7 +155,7 @@ describe("dispatch integration", () => {
     let seenByCategory: unknown;
     const tool = categoryTool(
       "probe", "test",
-      { go: { description: "Params: assetPath", handler: async () => ({ ok: true }) } },
+      { go: { kind: "handler", effect: "read", description: "Params: assetPath", handler: async () => ({ ok: true }) } },
       undefined,
       undefined,
       {
@@ -169,8 +171,8 @@ describe("dispatch integration", () => {
 
   it("suggests the closest action on an unknown one instead of listing them all", async () => {
     const tool = categoryTool("probe", "test", {
-      sculpt: { description: "Params: none", handler: async () => ({}) },
-      paint_layer: { description: "Params: none", handler: async () => ({}) },
+      sculpt: { kind: "handler", effect: "read", description: "Params: none", handler: async () => ({}) },
+      paint_layer: { kind: "handler", effect: "read", description: "Params: none", handler: async () => ({}) },
     });
     await expect(tool.handler(ctx, { action: "sculp" })).rejects.toThrow(/Did you mean: sculpt\?/);
   });

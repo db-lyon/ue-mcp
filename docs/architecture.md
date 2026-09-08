@@ -14,7 +14,7 @@ flowchart LR
 
 **Entry point:** `src/index.ts`
 
-The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), registers <!-- count:tools -->24<!-- /count --> category tools plus a `flow` tool, and communicates with the AI client over stdio.
+The server creates an `McpServer` instance (from `@modelcontextprotocol/sdk`), registers <!-- count:tools -->26<!-- /count --> category tools plus a `flow` tool, and communicates with the AI client over stdio.
 
 ### Key Modules
 
@@ -136,7 +136,7 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 
 ### Handler Categories
 
-34 C++ handler groups are registered in `BridgeServer.cpp`. Together they expose <!-- count:actions -->1091+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
+34 C++ handler groups are registered in `BridgeServer.cpp`. Together they expose <!-- count:actions -->1921+<!-- /count --> method names (some of which are aliases mapped onto a smaller number of canonical handlers):
 
 | Handler group | Coverage |
 |---------|----------|

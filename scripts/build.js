@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import { spawn, exec } from 'child_process';
+import path from 'path';
 import { log, logSection, assertTestProject, createTestBuildPlan } from './build-utils.js';
+import { runHygiene } from './pre-build-hygiene.mjs';
 
 function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -92,6 +94,17 @@ async function main() {
     log('Engine changes: blocked (-NoEngineChanges)');
   }
   log('');
+
+  // Two states that make a successful build lie about what the editor runs:
+  // a Live Coding patch loaded on top of a fresh DLL, and a source file in the
+  // deployed tree that plugin/ does not have. Both were a recipe somebody was
+  // meant to follow by hand after the symptom appeared.
+  runHygiene({
+    binariesDir: path.join(projectRoot, 'Binaries', 'Win64'),
+    sourceDir: path.join(process.cwd(), 'plugin', 'ue_mcp_bridge'),
+    deployedDir: path.join(projectRoot, 'Plugins', 'UE_MCP_Bridge'),
+    log: (msg) => log(msg, 'yellow'),
+  });
 
   log('Starting build...');
   log(`Command: ${buildTool} ${buildArgs.join(' ')}`);

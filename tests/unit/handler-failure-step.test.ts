@@ -67,9 +67,9 @@ function probeTool(handlerAnswer: () => Promise<unknown>): ToolDef {
     "probe",
     "Test-only category standing in for a bridge-backed one.",
     {
-      wipe: { description: "A destructive bridge action.", bridge: "wipe_the_thing" },
-      touch: { description: "A benign bridge action.", bridge: "touch_the_thing" },
-      list: { description: "A read that answers without a success key.", bridge: "list_the_things" },
+      wipe: { kind: "bridge", effect: "read", description: "A destructive bridge action.", bridge: "wipe_the_thing" },
+      touch: { kind: "bridge", effect: "read", description: "A benign bridge action.", bridge: "touch_the_thing" },
+      list: { kind: "bridge", effect: "read", description: "A read that answers without a success key.", bridge: "list_the_things" },
       refuse: { description: "A direct handler that refuses by returning.", handler: handlerAnswer },
     },
     undefined,
@@ -462,6 +462,48 @@ describe("the inverse a FAILING step carries", () => {
     expect(body.success).toBe(false);
     expect(bridge.calls.map((c) => c.method)).toContain("rename_asset");
     expect(body.steps[0].nestedSteps![0].partialWriteRollback!.replayed).toBe(true);
+  });
+
+  it("runs a nested flow's inverse ONCE when the run arms rollback, not once per level", async () => {
+    // Regression for the double-undo. A child bubbles its records to the
+    // parent, and it also unwound them itself, so the same inverse ran twice
+    // against state the first pass had already restored. For the shipped
+    // handlers this class of record belongs to, that second pass is a repeat
+    // `bulk_rename_assets` or `delete_asset_batch`.
+    //
+    // The trigger is rollback_on_failure arriving as a RUN PARAM rather than in
+    // the flow YAML, because run options spread into every nested run. That is
+    // the documented way a caller arms it per-run, and it is what
+    // flow(action="run", rollback_on_failure=true) does. Fixed in flowkit
+    // 0.17.2: the outermost armed flow owns the unwind.
+    const bridge = fakeBridge({
+      touch_the_thing: { success: true, rollback: { method: "untouch_the_thing", payload: { id: 7 } } },
+      wipe_the_thing: PARTIAL,
+      untouch_the_thing: { success: true },
+      rename_asset: { success: true },
+    });
+    const body = await runFlow(probeTool(ACCEPTED), bridge, {
+      child: {
+        description: "the inner flow, which fails after a partial write",
+        steps: { "1": { task: "probe.wipe" } },
+      },
+      parent: {
+        description: "the outer flow",
+        steps: { "1": { task: "probe.touch" }, "2": { flow: "child" } },
+      },
+    }, "parent", { rollback_on_failure: true });
+
+    expect(body.success).toBe(false);
+    // Each inverse exactly once, and in the parent's reverse order: the child's
+    // undo leads, the step before it unwinds behind it.
+    expect(bridge.calls.map((c) => c.method)).toEqual([
+      "touch_the_thing",
+      "wipe_the_thing",
+      "rename_asset",
+      "untouch_the_thing",
+    ]);
+    expect(body.rollback).toMatchObject({ attempted: 2, succeeded: 2 });
+    expect(body.steps[1].nestedSteps![0].partialWriteRollback!.replayed).toBe(true);
   });
 
   it("leaves a SUCCEEDING step's record alone: that one is replayed, not reported", async () => {

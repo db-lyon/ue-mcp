@@ -72,8 +72,8 @@ describe("readCategory", () => {
       + '  "foliage",\n'
       + '  "Grass is authored elsewhere: material(add_expression, expressionType=\\"LandscapeGrassOutput\\").",\n'
       + "  {\n"
-      + '    list_types: bp("List foliage types. Params: cursor?", "list_foliage_types"),\n'
-      + '    get_settings: bp("Read settings. Params: foliageTypeName", "get_foliage_type_settings"),\n'
+      + '    list_types: bp("read", "List foliage types. Params: cursor?", "list_foliage_types"),\n'
+      + '    get_settings: bp("read", "Read settings. Params: foliageTypeName", "get_foliage_type_settings"),\n'
       + "  },\n"
       + ");\n",
     );
@@ -114,7 +114,7 @@ describe("readCategory", () => {
       + '  "asset",\n'
       + '  "Assets.",\n'
       + "  {\n"
-      + "    duplicate: bp(\n"
+      + '    duplicate: bp("read",' + "\n"
       + '      "Duplicate an asset, keeping every reference the original carried "\n'
       + '      + "and reporting what it renamed. "\n'
       + '      + "Params: assetPath, destinationPath, onConflict?",\n'
@@ -128,7 +128,7 @@ describe("readCategory", () => {
   });
 
   it("reads the description out of a bp() spread into an object", () => {
-    // `{ ...bp(...), timeoutMs: N }`. Reading only a leading `bp(` left every
+    // `{ ...bp("read", ...), timeoutMs: N }`. Reading only a leading `bp(` left every
     // action with a timeout override describing nothing, and landscape alone
     // then reported fourteen documented parameters as invented.
     const file = fixture(
@@ -137,7 +137,7 @@ describe("readCategory", () => {
       + '  "Landscape.",\n'
       + "  {\n"
       + "    get_height_region: {\n"
-      + '      ...bp("Read heights. Params: actorLabel?, region?", "get_landscape_height_region"),\n'
+      + '      ...bp("read", "Read heights. Params: actorLabel?, region?", "get_landscape_height_region"),\n'
       + "      timeoutMs: 120_000,\n"
       + "    },\n"
       + "  },\n"
@@ -154,8 +154,8 @@ describe("readCategory", () => {
       + '  "asset",\n'
       + '  "Assets.",\n'
       + "  {\n"
-      + '    list: bp(paged("List assets. Params: directory?"), "list_assets"),\n'
-      + '    create: bp("Create an asset. Params: name", "create_asset"),\n'
+      + '    list: bp("read", paged("List assets. Params: directory?"), "list_assets"),\n'
+      + '    create: bp("read", "Create an asset. Params: name", "create_asset"),\n'
       + "  },\n"
       + ");\n",
     );
@@ -224,7 +224,7 @@ describe("blindness is a failure, not an empty result", () => {
   });
 
   it("returns null when the name argument is not a plain literal", () => {
-    const file = fixture('export const t = categoryTool(NAME, "Assets.", { list: bp("x", "y") });\n');
+    const file = fixture('export const t = categoryTool(NAME, "Assets.", { list: bp("read", "x", "y") });\n');
     expect(readCategory(file)).toBeNull();
   });
 });

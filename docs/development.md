@@ -96,7 +96,7 @@ src/
 ├── auth.ts               # GitHub OAuth device flow + ~/.ue-mcp/auth.json token cache
 ├── init.ts / update.ts / resolve.ts / hook-handler.ts  # CLI subcommands
 ├── flow/                 # Flow engine (registry, loader, task factory, HTTP)
-└── tools/                # <!-- count:tools -->24<!-- /count --> tool category implementations
+└── tools/                # <!-- count:tools -->26<!-- /count --> tool category implementations
     ├── project.ts
     ├── asset.ts
     ├── blueprint.ts
@@ -188,9 +188,9 @@ file was in (missing, malformed, or stale with a dead pid), and every port it
 tried. `--port` on the runner and `UE_MCP_TEST_PORT` for the Vitest suites still
 pin the port for unusual setups, and neither weakens the project check above.
 
-### Live Tier
+### Live tests
 
-The live tier drives a real editor through the shipped server: the advertised
+The live tests drives a real editor through the shipped server: the advertised
 surface with an editor attached, per-path dispatch, addressing, gating, and the
 records the bridge publishes.
 

@@ -5,7 +5,7 @@ description: Use when driving Unreal Engine editor via the ue-mcp MCP server. Co
 
 # ue-mcp workflow
 
-The `ue-mcp` MCP exposes 24 category tools (action-dispatch style) that drive a live Unreal Engine editor via a C++ bridge plugin. Every tool takes an `action` parameter.
+The `ue-mcp` MCP exposes 26 category tools (action-dispatch style) that drive a live Unreal Engine editor via a C++ bridge plugin. Every tool takes an `action` parameter.
 
 ## Start every session with a status check
 

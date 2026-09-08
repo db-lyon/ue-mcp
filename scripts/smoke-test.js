@@ -169,8 +169,10 @@ const PARAM_OVERRIDES = {
 // so by the time it is reached the editor is clean and the shutdown really is
 // scheduled. Every handler after it then fails against a dead bridge.
 const SKIP_METHODS = new Set([
+  // lint-prose-allow: no-hot-reload  this list is what stops them running
   "live_coding_compile",
   "live_coding_status",
+  // lint-prose-allow: no-hot-reload  same, this is the skip list not a call
   "hot_reload",
   "request_editor_shutdown",
 ]);

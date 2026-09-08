@@ -1407,6 +1407,54 @@ FString FMCPBridgeServer::CreateJsonRpcError(const TSharedPtr<FJsonObject>& Requ
 	return OutputString;
 }
 
+/**
+ * The one answer every non-modal-safe method gets while a dialog is up.
+ *
+ * Shaped so a caller does not have to parse prose to act: `dialogBlocking` is
+ * the flag to branch on, `buttons` is the dialog's own order, and `choices`
+ * pairs each label with the literal call that presses it. Nothing here ranks
+ * the buttons or hints at one, because the gate does not know which is right
+ * and guessing is what this whole mechanism exists to stop.
+ */
+TSharedPtr<FJsonObject> FMCPBridgeServer::BuildDialogGateRefusal(
+	const FString& Method, const FString& Title, const FString& Message, const TArray<FString>& Buttons)
+{
+	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+	Out->SetBoolField(TEXT("success"), false);
+	Out->SetBoolField(TEXT("dialogBlocking"), true);
+	Out->SetStringField(TEXT("refusedMethod"), Method);
+	Out->SetStringField(TEXT("dialogTitle"), Title);
+	Out->SetStringField(TEXT("dialogMessage"), Message);
+
+	TArray<TSharedPtr<FJsonValue>> ButtonValues;
+	TArray<TSharedPtr<FJsonValue>> Choices;
+	for (const FString& Label : Buttons)
+	{
+		ButtonValues.Add(MakeShared<FJsonValueString>(Label));
+
+		TSharedPtr<FJsonObject> Choice = MakeShared<FJsonObject>();
+		Choice->SetStringField(TEXT("buttonLabel"), Label);
+		// Single quotes around the label would break on "Don't Save", which is
+		// a real button on the prompt this fires for most often.
+		Choice->SetStringField(
+			TEXT("respondWith"),
+			FString::Printf(TEXT("editor(action='respond_to_dialog', buttonLabel=\"%s\")"), *Label));
+		Choices.Add(MakeShared<FJsonValueObject>(Choice));
+	}
+	Out->SetArrayField(TEXT("buttons"), ButtonValues);
+	Out->SetArrayField(TEXT("choices"), Choices);
+
+	Out->SetStringField(
+		TEXT("error"),
+		FString::Printf(
+			TEXT("A modal dialog is blocking the editor, so '%s' was refused without running. ")
+			TEXT("Unreal cannot execute anything else until the dialog is answered. ")
+			TEXT("Read it in dialogMessage, choose a button, and press it with the call beside it in choices. ")
+			TEXT("Every other action returns this same refusal until then."),
+			*Method));
+	return Out;
+}
+
 TSharedPtr<FJsonObject> FMCPBridgeServer::BuildCapabilitiesPayload()
 {
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
@@ -1581,6 +1629,36 @@ FString FMCPBridgeServer::ProcessMessage(const FString& Message)
 		TEXT("clear_dialog_policy"),
 	};
 	const bool bModalSafe = ModalSafeMethods.Contains(Method);
+
+	// THE DIALOG GATE.
+	//
+	// Every bridge method arrives here, so this is the one place that can make
+	// the guarantee: while a modal is up, nothing else runs. Any tool, any
+	// flow, any action, whatever raised the dialog.
+	//
+	// Before this, a call landing during a modal was queued behind a game
+	// thread parked in the modal loop and died on the 30 second timeout, and
+	// the caller got a timeout that reads like the editor is slow. Nothing
+	// obliged the caller to notice the dialog at all, so an agent could
+	// timeout, retry, and time out again forever while the answer sat one
+	// respond_to_dialog away.
+	//
+	// Refusing immediately is what makes it deterministic. The refusal names
+	// the dialog, quotes it whole, lists its buttons in the dialog's own order
+	// and hands back the exact call for each, and it is the identical answer
+	// on every method, so the only way forward is through the dialog.
+	if (!bModalSafe)
+	{
+		FString ModalTitle, ModalMessage;
+		TArray<FString> ModalButtons;
+		if (FMCPEngineStatus::Get().GetActiveModal(ModalTitle, ModalMessage, ModalButtons))
+		{
+			return CreateJsonRpcResponse(
+				Request,
+				MakeShared<FJsonValueObject>(
+					BuildDialogGateRefusal(Method, ModalTitle, ModalMessage, ModalButtons)));
+		}
+	}
 
 	FMCPEngineStatus::Get().NoteHandlerBegin(Method);
 	TSharedPtr<FJsonValue> Result = GameThreadExecutor.ExecuteOnGameThread(

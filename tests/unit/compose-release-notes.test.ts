@@ -1,20 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  ComposeError,
-  bulletKey,
-  comparePrereleaseIds,
-  compareVersions,
-  composeReleaseNotes,
-  fetchHeadline,
-  fetchPrereleases,
-  issueRefs,
-  mergeBodies,
-  mergeHeadlines,
-  parseBullets,
-  parseSections,
-  prereleaseTagsFor,
-  retitle,
-} from "../../scripts/compose-release-notes.mjs";
+import { ComposeError, bulletKey, comparePrereleaseIds, compareVersions, composeReleaseNotes, fetchHeadline, fetchPrereleases, issueRefs, mergeBodies, mergeHeadlines, parseBullets, parseSections, prereleaseTagsFor, contributorsBetween, previousStableTag, renderSection, renderContributions, retitle, classifySection, TOP_SECTIONS } from "../../scripts/compose-release-notes.mjs";
 import { processBody } from "../../scripts/release-headline.mjs";
 
 /** A published prerelease body, frontmatter already stripped by CI. */
@@ -297,9 +282,9 @@ describe("composeReleaseNotes", () => {
       "",
       "### Internals",
       "",
-      "- A new test tier.",
+      "- A new test suite.",
     ].join("\n"),
-    ["Multi-editor sessions", "Two-bridge test tier"]
+    ["Multi-editor sessions", "Two-bridge test suite"]
   );
 
   const LOCAL = [
@@ -328,14 +313,17 @@ describe("composeReleaseNotes", () => {
 
     const { headline, strippedBody } = processBody(result.body);
     expect(headline).toBe(
-      "Multi-editor sessions · Struct-keyed TMap safety · Two-bridge test tier · Landed after the betas"
+      "Multi-editor sessions · Struct-keyed TMap safety · Two-bridge test suite · Landed after the betas"
     );
     expect(strippedBody).toContain("## v1.2.0\n");
     expect(strippedBody).not.toContain("v1.2.0-beta");
     expect(strippedBody).toContain("The stable summary.");
 
-    const headings = [...strippedBody.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
-    expect(headings).toEqual(["Multi-editor", "Bug fixes", "Internals", "Server"]);
+    const tops = [...strippedBody.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+    expect(tops).toEqual(["v1.2.0", "Features", "Fixes", "Mentions"]);
+    const headings = [...strippedBody.matchAll(/^<summary><b>(.+?)<\/b><\/summary>$/gm)].map((m) => m[1]);
+    // Grouped, not in merge order: the features lead, the internals trail.
+    expect(headings).toEqual(["Multi-editor", "Server", "Bug fixes", "Internals"]);
 
     // The reworded #820 bullet collapsed to the longer variant.
     expect(strippedBody).toContain("the stored count is verified (#820)");
@@ -343,10 +331,12 @@ describe("composeReleaseNotes", () => {
     expect(result.duplicates).toHaveLength(1);
   });
 
-  it("falls back to the newest prerelease summary and says so", () => {
+  it("writes no summary rather than inheriting a beta's", () => {
     const result = composeReleaseNotes({ version: "1.2.0", prereleases: [BETA, BETA2] });
-    expect(result.preambleFrom).toBe("v1.2.0-beta.2");
-    expect(processBody(result.body).strippedBody).toContain("The second beta summary.");
+    expect(result.preambleFrom).toBeNull();
+    const { strippedBody } = processBody(result.body);
+    expect(strippedBody).not.toContain("The second beta summary.");
+    expect(strippedBody).toContain("## v1.2.0");
   });
 
   it("passes a stable release with no prereleases straight through", () => {
@@ -435,5 +425,282 @@ describe("GitHub reads", () => {
     const found = fetchPrereleases("db-lyon/ue-mcp", "1.2.0", fakeGh({}));
     expect(found.map((r) => r.tag)).toEqual(["v1.2.0-beta.2", "v1.2.0-beta.10"]);
     expect(found[0].body).toBe("body of v1.2.0-beta.2");
+  });
+});
+
+describe("top-level section grouping", () => {
+  it("files a heading under features, fixes or mentions", () => {
+    expect(classifySection("landscape (20 new)")).toBe("Features");
+    expect(classifySection("Server")).toBe("Features");
+    expect(classifySection("Across every action")).toBe("Features");
+    expect(classifySection("Bug fixes")).toBe("Fixes");
+    expect(classifySection("Editor stability")).toBe("Fixes");
+    expect(classifySection("Correctness")).toBe("Fixes");
+    expect(classifySection("Breaking changes")).toBe("Mentions");
+    expect(classifySection("Internals")).toBe("Mentions");
+    expect(classifySection("The engine range")).toBe("Mentions");
+  });
+
+  it("reads 'Bug fixes' as a fix rather than a mention", () => {
+    // Both patterns could claim it; fixes are tested first on purpose.
+    expect(classifySection("Bug fixes")).toBe("Fixes");
+  });
+
+  it("prints features before fixes before mentions, whatever order they merged in", () => {
+    // The shape that broke v1.3.1: a late beta introduced a feature section, so
+    // merge order printed it after the internals of an earlier one.
+    const { body } = composeReleaseNotes({
+      version: "9.9.9",
+      prereleases: [
+        release("v9.9.9-beta.1", "## v9.9.9-beta.1\n\n### Internals\n\n- Groundwork.\n", ["First"]),
+        release("v9.9.9-beta.2", "## v9.9.9-beta.2\n\n### Server\n\n- A new action.\n", ["Second"]),
+      ],
+    });
+    const features = body.indexOf("## Features");
+    const mentions = body.indexOf("## Mentions");
+    expect(features).toBeGreaterThan(-1);
+    expect(mentions).toBeGreaterThan(-1);
+    expect(features).toBeLessThan(mentions);
+    expect(body.indexOf("<b>Server</b>")).toBeLessThan(body.indexOf("<b>Internals</b>"));
+    expect(TOP_SECTIONS).toEqual(["Features", "Fixes", "Mentions", "Contributions"]);
+  });
+});
+
+describe("the stable summary", () => {
+  it("never inherits the newest prerelease's summary", () => {
+    // v1.3.1 shipped "Three contract fixes ..." over a release of hundreds of
+    // changes, because the last beta's paragraph was carried forward.
+    const { body, preambleFrom } = composeReleaseNotes({
+      version: "9.9.9",
+      prereleases: [
+        release("v9.9.9-beta.1", "## v9.9.9-beta.1\n\nThree contract fixes.\n\n### Server\n\n- A.\n", ["First"]),
+      ],
+    });
+    expect(body).not.toContain("Three contract fixes");
+    expect(preambleFrom).toBeNull();
+    expect(body).toContain("## v9.9.9");
+  });
+
+  it("keeps a summary the local notes file supplies", () => {
+    const { body, preambleFrom } = composeReleaseNotes({
+      version: "9.9.9",
+      prereleases: [release("v9.9.9-beta.1", "## v9.9.9-beta.1\n\nBeta prose.\n\n### Server\n\n- A.\n", ["First"])],
+      localNotes: "## v9.9.9\n\nUnreal Engine 5.4 to 5.8.\n\n### Server\n\n- B.\n",
+    });
+    expect(body).toContain("Unreal Engine 5.4 to 5.8.");
+    expect(body).not.toContain("Beta prose");
+    expect(preambleFrom).toBe("local notes");
+  });
+});
+
+describe("contributions", () => {
+  it("names each contributor once, linked, with a counted noun", () => {
+    expect(renderContributions(["alexkenley"])).toBe(
+      "Thanks to 1 contributor: [@alexkenley](https://github.com/alexkenley).",
+    );
+    expect(renderContributions(["a", "b", "a"])).toBe(
+      "Thanks to 2 contributors: [@a](https://github.com/a), [@b](https://github.com/b).",
+    );
+  });
+
+  it("emits the section only when there are contributors", () => {
+    const withNone = composeReleaseNotes({
+      version: "9.9.9",
+      prereleases: [release("v9.9.9-beta.1", "## v9.9.9-beta.1\n\n### Server\n\n- A.\n", ["First"])],
+    });
+    expect(withNone.body).not.toContain("## Contributions");
+
+    const withOne = composeReleaseNotes({
+      version: "9.9.9",
+      prereleases: [release("v9.9.9-beta.1", "## v9.9.9-beta.1\n\n### Server\n\n- A.\n", ["First"])],
+      contributors: ["alexkenley"],
+    });
+    expect(withOne.body).toContain("## Contributions");
+    expect(withOne.body).toContain("[@alexkenley](https://github.com/alexkenley)");
+    // Last section in the body, per the documented order.
+    expect(withOne.body.trimEnd().indexOf("## Contributions")).toBeGreaterThan(
+      withOne.body.indexOf("## Features"),
+    );
+  });
+});
+
+describe("reading contributors off the range", () => {
+  const gh = (args: string[]) => {
+    if (args[0] === "release" && args[1] === "list") {
+      return JSON.stringify([
+        { tagName: "v1.3.0", isDraft: false },
+        { tagName: "v1.2.4", isDraft: false },
+        { tagName: "v1.3.1-beta.1", isDraft: false },
+        { tagName: "v9.0.0", isDraft: false },
+        { tagName: "v1.3.1", isDraft: true },
+      ]);
+    }
+    if (args[0] === "api") {
+      return JSON.stringify({
+        commits: [
+          { author: { login: "alexkenley" } },
+          { author: { login: "bing" } },
+          { author: { login: "AlexKenley" } },
+          { author: null },
+        ],
+      });
+    }
+    throw new Error(`unexpected gh ${args.join(" ")}`);
+  };
+
+  it("picks the newest stable below the version, ignoring prereleases and drafts", () => {
+    expect(previousStableTag("o/r", "1.3.1", gh)).toBe("v1.3.0");
+  });
+
+  it("returns null when nothing stable precedes it", () => {
+    const only = () => JSON.stringify([{ tagName: "v2.0.0", isDraft: false }]);
+    expect(previousStableTag("o/r", "1.0.0", only)).toBeNull();
+  });
+
+  it("dedupes case-insensitively, drops maintainers, and skips authorless commits", () => {
+    expect(contributorsBetween("o/r", "v1.3.0", "HEAD", { exclude: ["bing"], run: gh })).toEqual([
+      "alexkenley",
+    ]);
+  });
+
+  it("yields nobody rather than failing the cut when the API will not answer", () => {
+    const boom = () => {
+      throw new Error("network");
+    };
+    expect(contributorsBetween("o/r", "a", "b", { run: boom })).toEqual([]);
+  });
+});
+
+
+describe("collapsing sections", () => {
+  const rows = Array.from({ length: 20 }, (_, i) => `| a${i} | does a thing |`);
+  const long = { heading: "landscape (20 new)", lead: "", bullets: rows };
+  const short = { heading: "reflection (1 new)", lead: "", bullets: ["| x | one |"] };
+
+  it("puts a section behind a disclosure, keeping its name visible", () => {
+    const out = renderSection(long);
+    expect(out[0]).toBe("<details>");
+    expect(out[1]).toBe("<summary><b>landscape (20 new)</b></summary>");
+    // GitHub renders markdown inside details only when a blank line follows
+    // the summary, so this one is load-bearing rather than cosmetic.
+    expect(out[2]).toBe("");
+    expect(out.at(-2)).toBe("</details>");
+  });
+
+  it("collapses a short section too, so nothing is left half open", () => {
+    const out = renderSection(short);
+    expect(out[0]).toBe("<details>");
+    expect(out[1]).toBe("<summary><b>reflection (1 new)</b></summary>");
+  });
+
+  it("leaves no bare h3 anywhere in a composed body", () => {
+    const beta = [
+      "## v9.9.9-beta.1",
+      "",
+      "### landscape (20 new)",
+      "",
+      ...rows,
+      "",
+      "### Bug fixes",
+      "",
+      "- Fixed a thing.",
+      "",
+      "### Internals",
+      "",
+      "- Reworked a thing.",
+      "",
+    ].join("\n");
+    const { body } = composeReleaseNotes({
+      version: "9.9.9",
+      prereleases: [release("v9.9.9-beta.1", beta, ["First"])],
+    });
+    expect(body).not.toMatch(/^### /m);
+    expect(body.match(/<details>/g)).toHaveLength(3);
+    expect(body.match(/<\/details>/g)).toHaveLength(3);
+    // The four top-level headings stay open; only the sections fold.
+    expect([...body.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual([
+      "v9.9.9",
+      "Features",
+      "Fixes",
+      "Mentions",
+    ]);
+  });
+});
+
+/**
+ * The composer writes sections as disclosures and used to read only markdown
+ * subheadings, so it could not parse its own output nor the notes this project
+ * publishes. Every section fell into the preamble and was dropped: composing a
+ * stable release from its betas kept the headline and lost the content.
+ */
+describe("reading the notes this project actually writes", () => {
+  const beta = [
+    "## v1.3.6-beta.1",
+    "",
+    "Unreal Engine 5.4 to 5.8.",
+    "",
+    "## Features",
+    "",
+    "<details>",
+    "<summary><b>Guards</b></summary>",
+    "",
+    "| Feature | What |",
+    "|---|---|",
+    "| `guards:` | Declared, not named. |",
+    "",
+    "</details>",
+    "",
+    "## Fixes",
+    "",
+    "<details>",
+    "<summary><b>Editor lifecycle</b></summary>",
+    "",
+    "| Fix | |",
+    "|---|---|",
+    "| Building closed every editor | It asks now. |",
+    "",
+    "</details>",
+  ].join("\n");
+
+  it("finds a section behind a disclosure", () => {
+    const { sections } = parseSections(beta);
+    expect(sections.map((s) => s.heading)).toEqual(["Guards", "Editor lifecycle"]);
+  });
+
+  it("keeps a table, which is what these sections are made of", () => {
+    const { sections } = parseSections(beta);
+    expect(sections[0].body).toContain("| `guards:` | Declared, not named. |");
+  });
+
+  it("remembers which top section the input filed each under", () => {
+    const { sections } = parseSections(beta);
+    expect(sections.map((s) => s.top)).toEqual(["Features", "Fixes"]);
+  });
+
+  it("files them by what the input said, not by guessing at the name", () => {
+    // "Editor lifecycle" reads like a feature and is a fix. The input says so.
+    expect(classifySection("Editor lifecycle", "Fixes")).toBe("Fixes");
+    expect(classifySection("Packaging", "Fixes")).toBe("Fixes");
+    // With nothing said, the heuristic still applies.
+    expect(classifySection("Correctness", null)).toBe("Fixes");
+    expect(classifySection("Breaking changes", null)).toBe("Mentions");
+  });
+
+  it("drops the four headings it re-emits, so a merge cannot stack copies", () => {
+    const { preamble } = parseSections(beta);
+    expect(preamble).toContain("## v1.3.6-beta.1");
+    expect(preamble).not.toContain("## Features");
+    expect(preamble).not.toContain("## Fixes");
+  });
+
+  it("round-trips: what renderSection writes, parseSections reads", () => {
+    const rendered = renderSection({
+      heading: "Guards",
+      lead: "| A | B |\n|---|---|\n| x | y |",
+      bullets: [],
+    }).join("\n");
+    const { sections } = parseSections(rendered);
+    expect(sections.map((s) => s.heading)).toEqual(["Guards"]);
+    expect(sections[0].body).toContain("| x | y |");
   });
 });

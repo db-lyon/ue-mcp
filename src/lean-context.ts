@@ -2,6 +2,8 @@ import { z } from "zod";
 import { actionEnum, categoryTool, takeTimeout, type ActionSpec, type ToolDef } from "./types.js";
 import { applyCategoryFolding } from "./call-pipeline.js";
 import { McpError, ErrorCode } from "./errors.js";
+import { actionSchema } from "./action-schema.js";
+import { searchToolGraph } from "./tool-search.js";
 
 /**
  * Lean context strategy.
@@ -65,6 +67,8 @@ function leanTool(tool: ToolDef): ToolDef {
   if (!actions.describe) {
     const lines = actionLines(tool);
     actions.describe = {
+      kind: "handler",
+      effect: "read",
       description: `List every action in the ${tool.name} category with its description (lean-mode discovery).`,
       handler: async () => ({ category: tool.name, count: lines.length, actions: lines }),
     };
@@ -87,48 +91,10 @@ function leanTool(tool: ToolDef): ToolDef {
   };
 }
 
-interface CatalogEntry {
-  category: string;
-  action: string;
-  description: string;
-  haystack: string;
-}
-
-/** Flatten every action across every tool into a searchable index. */
-function buildIndex(tools: ToolDef[]): CatalogEntry[] {
-  return tools.flatMap((t) =>
-    Object.entries(t.actions).map(([action, spec]) => ({
-      category: t.name,
-      action,
-      description: spec.description ?? "",
-      haystack: `${t.name} ${action} ${spec.description ?? ""}`.toLowerCase(),
-    })),
+function discoveryResults(tools: ToolDef[], query: string, limit: number) {
+  return searchToolGraph(tools, query, limit).map(({ tool, action, description }) =>
+    ({ category: tool, action, description }),
   );
-}
-
-/**
- * Lightweight keyword ranking with no embedding model and no native deps. Scores each
- * action against the query tokens: an exact category/action token match weighs
- * more than a substring hit in the description. Deterministic and cheap.
- */
-function rank(index: CatalogEntry[], query: string, limit: number): Array<Omit<CatalogEntry, "haystack">> {
-  const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return [];
-  const scored = index
-    .map((e) => {
-      let score = 0;
-      for (const tok of tokens) {
-        if (e.category === tok || e.action === tok) score += 5;
-        else if (e.action.includes(tok)) score += 3;
-        else if (e.category.includes(tok)) score += 2;
-        else if (e.description.toLowerCase().includes(tok)) score += 1;
-      }
-      return { e, score };
-    })
-    .filter((s) => s.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
-  return scored.map(({ e }) => ({ category: e.category, action: e.action, description: e.description }));
 }
 
 /**
@@ -137,12 +103,13 @@ function rank(index: CatalogEntry[], query: string, limit: number): Array<Omit<C
  * leaned tools hide them.
  */
 export function buildCatalogTool(tools: ToolDef[]): ToolDef {
-  const index = buildIndex(tools);
   const summaries = tools.map((t) => ({ category: t.name, summary: splitDescription(t.description).summary }));
   const byName = new Map(tools.map((t) => [t.name, t] as const));
 
   const actions: Record<string, ActionSpec> = {
     search: {
+      kind: "handler",
+      effect: "read",
       description: 'Rank actions across every category by keyword. Params: query (string), limit (default 20).',
       handler: async (_ctx, p) => {
         const query = typeof p.query === "string" ? p.query : "";
@@ -150,23 +117,28 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
         if (!query.trim()) {
           return { error: 'Provide a "query" string, e.g. catalog(action="search", query="spawn actor").' };
         }
-        const results = rank(index, query, limit);
+        const results = discoveryResults(tools, query, limit);
         return { query, count: results.length, results };
       },
     },
     describe: {
-      description: "List every action in one category. Params: category (string).",
+      kind: "handler",
+      effect: "read",
+      description: "List a category, or return one action's parameter schema. Params: category (string), method? (action name).",
       handler: async (_ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
         const tool = byName.get(category);
         if (!tool) {
           return { error: `Unknown category "${category}". Use catalog(action="list_categories").`, categories: summaries.map((s) => s.category) };
         }
+        if (typeof p.method === "string" && p.method) return actionSchema(tool, p.method);
         const lines = actionLines(tool);
         return { category, count: lines.length, actions: lines };
       },
     },
     list_categories: {
+      kind: "handler",
+      effect: "read",
       description: "List all category tools with their one-line summaries.",
       handler: async () => ({ count: summaries.length, categories: summaries }),
     },
@@ -180,6 +152,7 @@ export function buildCatalogTool(tools: ToolDef[]): ToolDef {
     {
       query: z.string().optional().describe("Keyword query for action=search"),
       category: z.string().optional().describe("Category name for action=describe"),
+      method: z.string().optional().describe("describe: return only this action's parameter schema"),
       limit: z.number().int().min(1).max(100).optional().describe("Max results for action=search (default 20)"),
     },
   );
@@ -223,7 +196,21 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
   const summaries = tools.map((t) => ({ category: t.name, summary: splitDescription(t.description).summary }));
 
   const actions: Record<string, ActionSpec> = {
+    search: {
+      kind: "handler",
+      effect: "read",
+      description: "Find actions by keyword or intent without listing whole categories. Params: query, limit? (default 20).",
+      handler: async (_ctx, p) => {
+        const query = typeof p.query === "string" ? p.query : "";
+        if (!query.trim()) throw new Error("Provide a query to search for actions.");
+        const limit = typeof p.limit === "number" && p.limit > 0 ? Math.min(p.limit, 100) : 20;
+        const results = discoveryResults(tools, query, limit);
+        return { query, count: results.length, results };
+      },
+    },
     list_categories: {
+      kind: "handler",
+      effect: "read",
       description: "List every category with a one-line summary.",
       handler: async () => ({
         count: summaries.length,
@@ -232,13 +219,16 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
       }),
     },
     describe: {
-      description: "List a category's actions and how to call them. Params: category.",
+      kind: "handler",
+      effect: "read",
+      description: "List a category's actions, or return one action's parameter schema. Params: category, method? (action name).",
       handler: async (_ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
         const tool = byName.get(category);
         if (!tool) {
           return { error: `Unknown category "${category}".`, categories: summaries.map((s) => s.category) };
         }
+        if (typeof p.method === "string" && p.method) return actionSchema(tool, p.method);
         return {
           category,
           actions: Object.entries(tool.actions).map(([name, s]) => (s.description ? `${name}: ${s.description}` : name)),
@@ -247,6 +237,8 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
       },
     },
     call: {
+      kind: "handler",
+      effect: "unknown",
       description: "Invoke any action. Params: category, method (the action name), args (object of the action's params).",
       handler: async (ctx, p) => {
         const category = typeof p.category === "string" ? p.category : "";
@@ -287,13 +279,15 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
 
   return categoryTool(
     MICRO_GATEWAY_TOOL,
-    "Gateway to every ue-mcp category (micro context mode). Discover with list_categories/describe, then invoke with call.",
+    "Gateway to every ue-mcp category (micro context mode). Find actions with search, inspect parameters with describe, then invoke with call.",
     actions,
     undefined,
     {
       category: z.string().optional().describe('Category name for describe/call, e.g. "blueprint"'),
-      method: z.string().optional().describe('Action name for call, e.g. "create"'),
+      method: z.string().optional().describe('Action name for call or a single-action describe, e.g. "create"'),
       args: z.record(z.unknown()).optional().describe("Params object passed to the called action"),
+      query: z.string().optional().describe("Keyword or intent for search"),
+      limit: z.number().int().min(1).max(100).optional().describe("Max search results (default 20)"),
     },
     // Every real parameter of a gateway call is one level down, so the path
     // repair, the field projection and the per-call budget have to be applied

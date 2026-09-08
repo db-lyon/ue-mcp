@@ -6,12 +6,12 @@
  * and ignores the rest, so a routing key forwarded into a bridge call succeeds,
  * returns the right answer, and is invisible to every assertion that can be
  * made on the response. Plan item 0.8 exists to give that assertion an oracle,
- * and this is the tier that can use it, because the oracle is the running
+ * and this is the suite that can use it, because the oracle is the running
  * editor's own record of the parameter names each dispatch arrived with.
  *
  * Every path in the plan's 3.2 table is exercised here. The two that a client
  * drives end to end go through a real server over stdio; the rest are driven
- * in process against the same live bridge, which is where the engine-free tier
+ * in process against the same live bridge, which is where the engine-free tests
  * drives them too, but with a real editor answering and the echo reading back
  * what it received.
  *
@@ -204,7 +204,7 @@ describe.skipIf(echoUnavailable !== null)("the client consumes the routing key, 
     const load = loadFlowConfig(ALL_TOOLS, live.project.projectDir ?? undefined);
     const registry = buildFlowRegistry(ALL_TOOLS);
     const flowTool = createFlowTool(registry, () => load.config);
-    const started = startFlowHttpServer(flowTool, ctx, { port: 0, token: "live-tier-token" });
+    const started = startFlowHttpServer(flowTool, ctx, { port: 0, token: "live-tests-token" });
     await new Promise<void>((resolve) => started.server.once("listening", () => resolve()));
     const address = started.server.address();
     const port = typeof address === "object" && address !== null ? address.port : 0;

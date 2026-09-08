@@ -33,7 +33,7 @@
     <rect x="610" y="180" width="400" height="360" rx="22" fill="#14283f" stroke="#34d399" stroke-width="2"/>
     <text x="642" y="225" fill="#34d399" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">2 · NORMALIZE SIX FIELDS</text>
     <g font-family="Segoe UI, Arial, sans-serif" font-size="22">
-      <text x="642" y="274" fill="#94a3b8">Target</text><text x="790" y="274" fill="#f8fafc" font-weight="600">Player / LeatherHood</text>
+      <text x="642" y="274" fill="#94a3b8">Target</text><text x="790" y="274" fill="#f8fafc" font-weight="600">Player / HeadMesh</text>
       <text x="642" y="318" fill="#94a3b8">Frame</text><text x="790" y="318" fill="#f8fafc" font-weight="600">actor</text>
       <text x="642" y="362" fill="#94a3b8">Viewpoint</text><text x="790" y="362" fill="#f8fafc" font-weight="600">top-down</text>
       <text x="642" y="406" fill="#94a3b8">Operation</text><text x="790" y="406" fill="#f8fafc" font-weight="600">rotate about up</text>
@@ -50,7 +50,7 @@
     <g fill="#dbeafe" font-family="Cascadia Mono, Consolas, monospace" font-size="18">
       <text x="1152" y="278">level(action="nudge_component",</text>
       <text x="1180" y="316">actorLabel="Player",</text>
-      <text x="1180" y="354">componentName="LeatherHood",</text>
+      <text x="1180" y="354">componentName="HeadMesh",</text>
       <text x="1180" y="392">frame="actor",</text>
       <text x="1180" y="430">axisRotation={</text>
       <text x="1210" y="468">axis:"up", degrees:15</text>

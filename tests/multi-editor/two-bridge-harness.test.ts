@@ -8,7 +8,7 @@
  * two actually received a call.
  *
  * No engine is involved, which is deliberate: CI runners have no Unreal
- * install, so a tier that needs one cannot gate merges. Everything that a
+ * install, so a suite that needs one cannot gate merges. Everything that a
  * second engine would add is behind the handler; everything routing depends on
  * (port discovery, socket identity, per-session dispatch) is real here.
  */
@@ -19,6 +19,19 @@ import * as path from "node:path";
 import { FakeBridge } from "../fake-bridge.js";
 import { SessionRegistry } from "../../src/session.js";
 import { getBridgeFor, resetTestBridges } from "../setup.js";
+
+/**
+ * What a session actually sent, minus the dialog guard's own probe.
+ *
+ * Every gated call asks `list_dialogs` first, because whether a modal is up is
+ * decided per call rather than assumed. That probe is the gate working and is
+ * not traffic these tests are about; the assertion that no probe reaches the
+ * OTHER editor is left strict, since that is the isolation claim.
+ */
+function sent(methods: string[]): string[] {
+  return methods.filter((m) => m !== "list_dialogs");
+}
+
 
 let root: string;
 let alpha: FakeBridge;
@@ -69,8 +82,8 @@ describe("two bridges in one process", () => {
     await a.guarded.call("alpha_only_call", { marker: "a" });
     await b.guarded.call("beta_only_call", { marker: "b" });
 
-    expect(alpha.methods).toEqual(["alpha_only_call"]);
-    expect(beta.methods).toEqual(["beta_only_call"]);
+    expect(sent(alpha.methods)).toEqual(["alpha_only_call"]);
+    expect(sent(beta.methods)).toEqual(["beta_only_call"]);
 
     a.bridge.disconnect();
     b.bridge.disconnect();
@@ -87,7 +100,7 @@ describe("two bridges in one process", () => {
     const target = sessions.resolve("Beta");
     await target.guarded.call("place_actor", {});
 
-    expect(beta.methods).toEqual(["place_actor"]);
+    expect(sent(beta.methods)).toEqual(["place_actor"]);
     expect(alpha.methods).toEqual([]);
 
     for (const s of sessions.list()) s.bridge.disconnect();
@@ -100,12 +113,12 @@ describe("two bridges in one process", () => {
     for (const s of sessions.list()) await s.bridge.connect(5000);
 
     await sessions.resolve(undefined).guarded.call("first", {});
-    expect(alpha.methods).toEqual(["first"]);
+    expect(sent(alpha.methods)).toEqual(["first"]);
 
     sessions.use("Beta");
     await sessions.resolve(undefined).guarded.call("second", {});
-    expect(beta.methods).toEqual(["second"]);
-    expect(alpha.methods).toEqual(["first"]);
+    expect(sent(beta.methods)).toEqual(["second"]);
+    expect(sent(alpha.methods)).toEqual(["first"]);
 
     for (const s of sessions.list()) s.bridge.disconnect();
   });
@@ -138,8 +151,8 @@ describe("the smoke harness accessor", () => {
 
     await one.call("from_one", {});
     await two.call("from_two", {});
-    expect(alpha.methods).toEqual(["from_one"]);
-    expect(beta.methods).toEqual(["from_two"]);
+    expect(sent(alpha.methods)).toEqual(["from_one"]);
+    expect(sent(beta.methods)).toEqual(["from_two"]);
   });
 
   it("reuses the connection for a project it already reached", async () => {

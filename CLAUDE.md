@@ -4,7 +4,7 @@ Operating guide for Claude Code (and any AI agent) working in this repo. Shared 
 
 ## Repo at a glance
 
-- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->24<!-- /count --> category tools with <!-- count:actions -->1091+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
+- **TS server** (`src/`) - the MCP server. Wraps the UE bridge over WebSocket, exposes <!-- count:tools -->26<!-- /count --> category tools with <!-- count:actions -->1921+<!-- /count --> actions. The numbers between those markers are stamped by `scripts/generate-tool-metadata.ts` from `ALL_TOOLS`; do not hand-edit them, and do not remove the markers, because a hand-written count here is the first thing every agent reads and the last thing anyone remembers to update.
 - **C++ plugin** (`plugin/ue_mcp_bridge/`) - the editor-side bridge. Lives in `Private/Handlers/*.cpp`, registers actions with `FMCPHandlerRegistry`.
 - **Test project** (`tests/ue_mcp/`) - the dedicated UE project used for smoke testing. The plugin is deployed here from `plugin/` via the deployer. This is the **only** safe target for live tests.
 - **Docs** (`docs/`) - MkDocs site. `docs/release-notes-X.Y.Z.md` is the canonical release body.
@@ -49,7 +49,7 @@ The merge style follows the commit count, and writing five commits only to squas
 
 - Target **only** `tests/ue_mcp/ue_mcp.uproject`. Confirm the MCP connection via `project(get_status)` before running. If the editor is connected to anything else (the user's real project, another workspace), abort.
 - Smoke tests execute real mutations (create blueprints, delete assets, modify levels). A misrouted run against a real project can corrupt an active editor session.
-- <!-- count:bridgeActions -->1030<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
+- <!-- count:bridgeActions -->1860<!-- /count --> bridge actions. Pass = every handler responds either with success or an expected parameter-validation error. Any timeout or `Unknown method` is a real failure.
 
 ### Golden baseline - the advertised surface
 
@@ -59,16 +59,16 @@ The merge style follows the commit count, and writing five commits only to squas
 - **Re-record intentionally** with `npm run golden:record`, then review the diff before committing it. Never edit the JSON by hand.
 - The recording is hermetic: a throwaway project in a temp directory, `UE_MCP_PORT=1` so nothing can be listening, every inherited `UE_MCP_*` variable dropped, and the user-scoped config/state/auth files redirected. Absolute paths are rewritten before serialization and asserted absent, so the file verifies on any machine.
 - The `epic_*` actions enrichment injects are **sorted in the recording**, alongside the path, port and timestamp rewrites. Unreal's toolset registry promises the set of tools, not the sequence, and a restart that reshuffles it would otherwise report a surface change on a healthy editor. Only the snapshot is normalised; the server advertises exactly what it always did. A category's own actions keep their declared order, which is authored and does carry meaning.
-- The editor-connected half (`tests/golden/editor-connected.json`) is the same recording made with a live editor attached, guarded by `tests/live/golden-connected.test.ts` in the live tier because it needs a running editor. Re-record it with `npm run golden:record -- --connected`. The recorder asserts the surface really was enriched from the live editor rather than a cache or the baked snapshot, so the two baselines cannot be recorded from the same source by accident.
+- The editor-connected half (`tests/golden/editor-connected.json`) is the same recording made with a live editor attached, guarded by `tests/live/golden-connected.test.ts` in the live tests because it needs a running editor. Re-record it with `npm run golden:record -- --connected`. The recorder asserts the surface really was enriched from the live editor rather than a cache or the baked snapshot, so the two baselines cannot be recorded from the same source by accident.
 
-### Live tier
+### Live tests
 
 `npm run test:live` runs `tests/live/` against an editor that is **already running**, through the shipped server: the connected golden baseline, per-path dispatch and leak assertions, addressing, gating, the union surface, and the records the bridge publishes. It never starts or stops an editor.
 
 - Targets `tests/ue_mcp` only, verified by asking the editor which project it has open, and aborts before sending anything otherwise.
 - One editor is enough. Cases needing more than one use a second session for a project whose editor is not running, since the session count is what arms targeting and gating.
 - The leak assertions need the parameter echo, which is armed at editor startup: launch with `UE_MCP_PARAM_ECHO=1` to include them. Without it they skip and say why.
-- `tests/live/matrix.ts` is the written form of plan item 7.3 of #817: every case, and where its assertion lives (live, engine-free and referenced, owned by the C++ tier, or pending on unshipped work). `tests/live/coverage.test.ts` fails when a reference stops resolving.
+- `tests/live/matrix.ts` is the written form of plan item 7.3 of #817: every case, and where its assertion lives (live, engine-free and referenced, owned by the C++ suite, or pending on unshipped work). `tests/live/coverage.test.ts` fails when a reference stops resolving.
 
 ### Clean plugin rebuild recipe
 
@@ -116,7 +116,14 @@ CI **gates the publish job** on a single pre-staged input: the draft GitHub rele
 
 4. **CI validates → publishes → promotes.** If the headline frontmatter is missing or malformed, the publish job fails with a pointer to the offending item *before* npm publish runs. On success, the published release page shows the body with frontmatter stripped, and the `landing/headline` commit status is posted automatically.
 
-Release notes structure (below the frontmatter): one-line summary, then `### Server` / `### Bug fixes` / `### Internals` sections. See prior releases on GitHub for the style. (The `docs/release-notes-*.md` files in the repo predate this flow and are kept as references only.)
+Release notes structure (below the frontmatter): **`## Features` / `## Fixes` / `## Mentions` / `## Contributions`**, in that order. Read `docs/release-notes-style.md` before writing any of it. The rules that get broken most:
+
+- **The engine range is 5.4 to 5.8.** Say the range. Never annotate it with which versions have been compiled, verified or gated. A user on 5.5 who hits a problem files an issue; that is the system working, not something to pre-empt in public copy.
+- **No thesis sentence, no three-part summary.** The opening is a compatibility line, an install block, and at most one plain sentence of scale. "N new actions across M categories, every X doing Y, and the Z now W" is a bulleted list flattened into prose.
+- **Cumulative, not archaeological.** A stable release never mentions its own betas or what an earlier release got wrong.
+- **Credit contributors** from `gh api repos/OWNER/REPO/compare/vPREV...vNEW --jq '.commits[].author.login'`, not from memory.
+
+`.github/RELEASE_TEMPLATE.md` is the skeleton, `.github/PULL_REQUEST_TEMPLATE.md` collects the notes line per PR. (The `docs/release-notes-*.md` files in the repo predate this flow and are kept as references only.)
 
 ### Prereleases
 
@@ -155,7 +162,7 @@ Each category has a paired `Private/Handlers/<Category>Handlers.{h,cpp}`. Handle
 ### Writing style - public artifacts
 
 - **No em dashes (`—`).** Use hyphens (` - `), colons, parentheses, or split into sentences. Applies to commit messages, release notes, docs, PR bodies, code comments. <!-- em-dash-allowed: the rule has to show the character it bans -->
-  Git hooks enforce this locally, not CI. `.husky/pre-commit` scans the staged files and `.husky/commit-msg` scans the message, so a bad character is rejected before the commit exists rather than after a runner picks the job up. Run `npm run audit:em-dash` for the whole tracked tree, and `npm run audit:em-dash -- --explain` for the exemption policy.
+  Git hooks enforce this locally, not CI. `.husky/pre-commit` scans the staged files and `.husky/commit-msg` scans the message, so a bad character is rejected before the commit exists rather than after a runner picks the job up. Run `npm run lint:prose` for the whole tracked tree, and `npm run lint:prose -- --explain` for every rule and the exemption policy.
 - **Never name competitor or comparison projects in public artifacts.** Commit messages, release notes, PR bodies, GitHub release bodies, code comments, docs - any of these. Even when the work is literally closing a gap against another project, describe the work on its own terms ("adds module input authoring"), not as "catching up to X" or "matching Y". Gap-analysis context belongs in private discussion, never in public git history.
 
 ### MCP design principle
@@ -170,7 +177,7 @@ npm run up:build        # Stop editor, build plugin, relaunch
 npm run build           # Build the UE C++ plugin only
 npx tsc --noEmit        # Type-check TS
 npm run test:smoke      # Live smoke tests (tests/ue_mcp only)
-npm run test:live       # Live tier against a running editor (tests/ue_mcp only)
+npm run test:live       # Live tests against a running editor (tests/ue_mcp only)
 npm run golden:record   # Re-record tests/golden/editor-down.json (review the diff)
 npm run release:notes   # Compose cumulative stable notes from a version's prereleases
 npm test                # Vitest unit tests

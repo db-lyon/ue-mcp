@@ -9,7 +9,7 @@
  * throwaway project whose editor is not running, and every assertion about
  * "beyond one editor" is made with a real editor on one side of it.
  *
- * What that buys over the engine-free tier: these run through the shipped
+ * What that buys over the engine-free tests: these run through the shipped
  * entry point rather than through the routing functions directly, so a refusal
  * that is never wired in, a union that advertises what dispatch cannot serve,
  * or an attribution block that never reaches the client all fail here.
@@ -66,7 +66,7 @@ describe("two sessions, one of them a live editor", () => {
     const stopped = body.editors.find((e) => e.name === SECOND)!;
     expect(liveEditor.port).toBe(target.port);
     expect(stopped.connected).toBe(false);
-    // Two sessions on one port cannot be told apart, so a live tier that
+    // Two sessions on one port cannot be told apart, so a live test run that
     // silently collapsed onto one would prove nothing about routing.
     expect(stopped.port).not.toBe(liveEditor.port);
   }, 120_000);
@@ -130,6 +130,26 @@ describe("gating beyond one editor", () => {
 });
 
 describe("the union surface", () => {
+  it("keeps disabled categories out of lean catalog discovery", async () => {
+    const lean = await LiveServer.start({ projects: [target.uproject, second.uproject], env: { UE_MCP_CONTEXT_STRATEGY: "lean" } });
+    try {
+      const search = resultJson<any>(await lean.call("catalog", { action: "search", query: "niagara", editor: SECOND }));
+      expect(search.results.some((hit: any) => hit.category === "niagara")).toBe(false);
+      const schema = resultJson<any>(await lean.call("catalog", { action: "describe", category: "niagara", editor: SECOND }));
+      expect(schema.error).toContain("Unknown category");
+    } finally { await lean.close(); }
+  }, 240_000);
+
+  it("discovers only actions enabled in the addressed session", async () => {
+    for (const editor of [LIVE, SECOND]) {
+      const search = resultJson<any>(await server.call("project", { action: "search_tools", query: "niagara", editor }));
+      expect(search.results.some((hit: any) => hit.tool === "niagara")).toBe(editor === LIVE);
+      const schema = await server.call("project", { action: "describe_action", category: "niagara", editor });
+      expect(!!schema.isError).toBe(editor === SECOND);
+      if (editor === SECOND) expect(schema.text).toContain("Unknown category");
+    }
+  }, 120_000);
+
   it("advertises the live editor's toolsets even though the other project has none", async () => {
     const tools = await server.listTools();
     const names = tools.map((t) => t.name);
