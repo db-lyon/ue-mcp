@@ -3242,7 +3242,22 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	UObject* Asset = MCPRequireAssetObject(AssetPath, LoadError);
 	if (!Asset) return LoadError;
 
+	// An asset nothing can reimport is refused here rather than handed to the
+	// manager. FReimportManager::Reimport on an asset with no registered handler
+	// - a Blueprint, say - does not return promptly: it wedges the game thread,
+	// so the bridge stops answering and the caller sees a timeout rather than an
+	// answer about their asset. CanReimport is the question actually being asked.
+	if (!FReimportManager::Instance()->CanReimport(Asset))
+	{
+		return MCPError(FString::Printf(
+			TEXT("Nothing can reimport a %s: '%s' has no registered reimport handler. ")
+			TEXT("Reimport rebuilds an asset from the file it was imported from, so it only applies to ")
+			TEXT("imported assets - a Blueprint or any other asset authored in the editor has no such file."),
+			*Asset->GetClass()->GetName(), *AssetPath));
+	}
+
 	// Optionally override the source file path
+	bool bSourceFileUpdated = false;
 	FString NewSourcePath;
 	if (Params->TryGetStringField(TEXT("filePath"), NewSourcePath) || Params->TryGetStringField(TEXT("filename"), NewSourcePath))
 	{
@@ -3271,10 +3286,21 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 			}
 		}
 
-		if (ImportData)
+		if (!ImportData)
 		{
-			ImportData->Update(NewSourcePath);
+			// #1008: a filePath that lands nowhere used to be dropped here, and the
+			// reimport below then re-read the file the asset was ORIGINALLY imported
+			// from and reported success. The caller was told their new source file
+			// had been used when it had not been read at all.
+			return MCPError(FString::Printf(
+				TEXT("%s carries no AssetImportData, so '%s' cannot be recorded as its source file. ")
+				TEXT("Reimporting anyway would have re-read the file this asset was originally imported from ")
+				TEXT("and reported success. Import it as a new asset instead, or call reimport without filePath ")
+				TEXT("to rebuild it from the source it already has."),
+				*Asset->GetClass()->GetName(), *NewSourcePath));
 		}
+		ImportData->Update(NewSourcePath);
+		bSourceFileUpdated = true;
 	}
 
 	// Use FReimportManager to reimport
@@ -3285,6 +3311,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
 	Result->SetBoolField(TEXT("success"), bSuccess);
+	// Whether this call changed which file the asset reimports from, so a
+	// caller can tell "rebuilt from the same source" from "repointed and
+	// rebuilt" without inferring it from what it passed.
+	Result->SetBoolField(TEXT("sourceFileUpdated"), bSourceFileUpdated);
+	if (bSourceFileUpdated) Result->SetStringField(TEXT("sourceFile"), NewSourcePath);
 	if (!bSuccess)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Reimport failed -- check that the asset has a valid source file"));
