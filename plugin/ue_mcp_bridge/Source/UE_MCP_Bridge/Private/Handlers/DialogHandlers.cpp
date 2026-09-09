@@ -599,6 +599,65 @@ TSharedPtr<FJsonValue> FDialogHandlers::GetDialogPolicy(const TSharedPtr<FJsonOb
 	return MCPResult(Result);
 }
 
+// A NAMED namespace: this module is a unity build, so an anonymous one here
+// would merge with whatever other .cpp shares the blob.
+namespace MCPDialogWindows
+{
+	/**
+	 * Every window the editor is holding the user with, gathered recursively.
+	 *
+	 * A REGULAR window that is either on the modal stack or parented to another
+	 * window is something the editor put up and is waiting on. Menus, tooltips
+	 * and notifications are not regular windows, so they are not mistaken for
+	 * questions.
+	 *
+	 * Visibility is deliberately NOT consulted. A window that is up but undrawn,
+	 * or drawn behind the editor, still holds whatever raised it, and "the user
+	 * cannot see it" is the worst possible reason to let a quit through.
+	 */
+	static void Gather(const TArray<TSharedRef<SWindow>>& Roots, TArray<TSharedPtr<SWindow>>& Out)
+	{
+		for (const TSharedRef<SWindow>& Window : Roots)
+		{
+			const bool bBlocks = Window->IsRegularWindow()
+				&& (Window->IsModalWindow() || Window->GetParentWindow().IsValid());
+			if (bBlocks)
+			{
+				Out.AddUnique(TSharedPtr<SWindow>(Window));
+			}
+			Gather(Window->GetChildWindows(), Out);
+		}
+	}
+
+	/**
+	 * The window blocking the editor, by every route it can be blocked.
+	 *
+	 * GetActiveModalWindow leads, because a window on the modal stack is one
+	 * Slate itself calls blocking. It is NOT the whole answer and never was: it
+	 * reports only what was pushed with AddModalWindow, so a dialog raised any
+	 * other way came back as no dialog at all. Every layer above then read that
+	 * as "the screen is clear" and sent a quit at an editor sitting on a save
+	 * prompt, while the same editor had the window on screen. One narrow
+	 * detector was the whole system's eyes, and absence of evidence from it was
+	 * being reported as evidence of absence.
+	 */
+	static TSharedPtr<SWindow> FindBlocking()
+	{
+		if (!FSlateApplication::IsInitialized())
+		{
+			return nullptr;
+		}
+		FSlateApplication& Slate = FSlateApplication::Get();
+		TArray<TSharedPtr<SWindow>> Found;
+		if (TSharedPtr<SWindow> Modal = Slate.GetActiveModalWindow())
+		{
+			Found.AddUnique(Modal);
+		}
+		Gather(Slate.GetInteractiveTopLevelWindows(), Found);
+		return Found.Num() > 0 ? Found[0] : nullptr;
+	}
+}
+
 TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FString& OutMessage, TArray<FModalButton>& OutButtons)
 {
 	OutTitle.Empty();
@@ -610,7 +669,7 @@ TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FStri
 		return nullptr;
 	}
 
-	TSharedPtr<SWindow> ActiveModal = FSlateApplication::Get().GetActiveModalWindow();
+	TSharedPtr<SWindow> ActiveModal = MCPDialogWindows::FindBlocking();
 	if (!ActiveModal.IsValid())
 	{
 		return nullptr;
