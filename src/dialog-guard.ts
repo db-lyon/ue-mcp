@@ -80,14 +80,7 @@ const BRIDGE_ALLOWED_WHILE_BLOCKED = new Set([
   "get_param_echo",
 ]);
 
-/** The actions that exist to get a stuck editor moving again. */
-const RECOVERY_ACTIONS = new Set([
-  "editor.start_editor",
-  "editor.stop_editor",
-  "editor.restart_editor",
-]);
-
-/** Tool actions that stay callable, or the dialog could never be answered. */
+/** Reads and the press. Nothing that acts on the editor, with no exceptions. */
 const ACTIONS_ALLOWED_WHILE_BLOCKED = new Set([
   // Read the dialog and answer it.
   "editor.list_dialogs",
@@ -96,14 +89,6 @@ const ACTIONS_ALLOWED_WHILE_BLOCKED = new Set([
   // Work out what is going on.
   "editor.get_engine_state",
   "project.get_status",
-  // Editor lifecycle. Permitted because they are how a caller gets out of a
-  // stuck editor, and refusing them leaves no way back at all. They are NOT
-  // invisible to the dialog: every allowed subject still probes, and every
-  // allowed result carries the same "the editor is blocked" stamp, so a modal
-  // is reported on these routes rather than passed over.
-  "editor.start_editor",
-  "editor.stop_editor",
-  "editor.restart_editor",
 ]);
 
 /**
@@ -412,19 +397,6 @@ export class DialogGuard {
    */
   private needsRelay(): boolean {
     return elicitationNeedsRelay(this.deps.elicit?.()?.client?.());
-  }
-
-  /**
-   * Recovery actions: always permitted, whatever is latched.
-   *
-   * Relaunching or stopping an editor is how a caller gets out of a state
-   * where the editor is stuck. An editor whose socket has parked while its
-   * status thread keeps publishing holds the latch fresh indefinitely, so
-   * gating these refused the only way back forever. They still report the
-   * dialog through the same stamp every allowed read carries.
-   */
-  static isRecoveryAction(taskName: string): boolean {
-    return RECOVERY_ACTIONS.has(taskName);
   }
 
   /**

@@ -279,6 +279,39 @@ describe("the gate is wired into the real server", () => {
     expect(body(res).dialogBlocking).toBe(true);
     expect(bridge.seen).not.toContain("set_dialog_policy");
   }, 60_000);
+
+  // The editor lifecycle actions. Gated like everything else; no coverage of
+  // these existed through the real gate while they were exempt.
+
+  it("refuses stop_editor, and the quit never reaches the editor", async () => {
+    const before = bridge.seen.length;
+    const res = await client.callTool({ name: "editor", arguments: { action: "stop_editor" } });
+    const out = body(res);
+
+    expect(out.dialogBlocking).toBe(true);
+    expect(out.dialogTitle).toBe("Save Content");
+    expect(out.buttons).toEqual(DIALOG.buttons);
+
+    // The assertion that matters: no quit reaches an editor sitting on a modal.
+    const attempted = bridge.seen.slice(before).filter((m) => m !== "list_dialogs");
+    expect(attempted, `editor was asked to: ${attempted.join(", ")}`).toEqual([]);
+    expect(bridge.seen).not.toContain("request_editor_shutdown");
+  }, 60_000);
+
+  it("refuses restart_editor, which is stop_editor with a relaunch after it", async () => {
+    const before = bridge.seen.length;
+    const res = await client.callTool({ name: "editor", arguments: { action: "restart_editor" } });
+
+    expect(body(res).dialogBlocking).toBe(true);
+    const attempted = bridge.seen.slice(before).filter((m) => m !== "list_dialogs");
+    expect(attempted, `editor was asked to: ${attempted.join(", ")}`).toEqual([]);
+    expect(bridge.seen).not.toContain("request_editor_shutdown");
+  }, 60_000);
+
+  it("refuses start_editor, so a second editor is not launched over a stuck one", async () => {
+    const res = await client.callTool({ name: "editor", arguments: { action: "start_editor" } });
+    expect(body(res).dialogBlocking).toBe(true);
+  }, 60_000);
 });
 
 describe("micro mode can still answer its own dialog", () => {

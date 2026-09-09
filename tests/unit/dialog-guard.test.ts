@@ -27,7 +27,7 @@ const listing = (title = "Save Content") => ({
 
 const empty = { dialogs: [] };
 
-function make(over: Partial<GuardDeps> & { mode?: DialogMode } = {}) {
+function make(over: Omit<Partial<GuardDeps>, "mode"> & { mode?: DialogMode } = {}) {
   const deps: GuardDeps = {
     mode: () => (over.mode ?? "auto") as DialogMode,
     // Default: a dialog IS up. The probe is authoritative, so a test about
@@ -83,8 +83,9 @@ describe("a failing probe never disarms the guard", () => {
     // The wedge: a latched dialog plus an editor that went away refused every
     // action forever, including the two the refusal told you to make and the
     // relaunch. A dialog is a statement about a RUNNING editor.
+    // No snapshot reader at all: with nothing to consult and no isConnected,
+    // an absent snapshot is the only evidence available and the latch clears.
     const guard = make({
-      statusFile: () => null,
       probe: async () => {
         throw new Error("NOT_CONNECTED");
       },
@@ -95,18 +96,30 @@ describe("a failing probe never disarms the guard", () => {
     expect(guard.current).toBeNull();
   });
 
-  it("always lets the recovery actions run, or there is no way out", async () => {
-    // An editor whose socket has parked while its status thread keeps
-    // publishing holds the latch fresh indefinitely. Gating these refused the
-    // only way back, forever. They are permitted, and they still REPORT the
-    // dialog: every allowed subject probes, and the caller is stamped.
+  it("refuses the editor lifecycle actions too, which used to be exempt", async () => {
+    // No exemption: a dialog blocks everything that acts. Answering it is the way out.
     const guard = make();
     guard.note(DIALOG);
     for (const action of ["editor.start_editor", "editor.stop_editor", "editor.restart_editor"]) {
-      expect((await guard.check(action, "action")).allow, action).toBe(true);
-      expect(DialogGuard.isRecoveryAction(action), action).toBe(true);
+      expect((await guard.check(action, "action")).allow, action).toBe(false);
     }
-    expect(DialogGuard.isRecoveryAction("level.place_actor")).toBe(false);
+  });
+
+  it("still lets the dialog be read and answered, which is how the block ends", async () => {
+    // The reads are not an exception to blocking. They are how a person sees
+    // what is being asked and answers it, and without them a modal would be a
+    // dead end rather than a question.
+    const guard = make();
+    guard.note(DIALOG);
+    for (const action of [
+      "editor.list_dialogs",
+      "editor.respond_to_dialog",
+      "editor.get_dialog_policy",
+      "editor.get_engine_state",
+      "project.get_status",
+    ]) {
+      expect((await guard.check(action, "action")).allow, action).toBe(true);
+    }
   });
 
   it("refreshes what it knows even for a subject it will not refuse", async () => {
@@ -332,7 +345,7 @@ describe("detection does not depend on somebody making a call", () => {
     const missing = path.join(dir, "status.json");
     try {
       const guard = make({
-        statusFile: () => missing,
+        readSnapshot: () => (fs.existsSync(missing) ? { modal: {} } : null),
         probe: async () => {
           throw new Error("NOT_CONNECTED");
         },
@@ -365,7 +378,8 @@ describe("detection does not depend on somebody making a call", () => {
     fs.utimesSync(file, new Date(old), new Date(old));
     try {
       const guard = make({
-        statusFile: () => file,
+        // A snapshot that still names a modal, aged past the staleness bound.
+        readSnapshot: () => ({ modal: { title: "Save Content" }, ageSeconds: 60 }),
         probe: async () => {
           throw new Error("NOT_CONNECTED");
         },
