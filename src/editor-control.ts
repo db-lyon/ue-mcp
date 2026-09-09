@@ -1171,6 +1171,25 @@ export interface DialogPress {
  */
 const fallbackGuards = new Map<string, DialogGuard>();
 
+/**
+ * Editors that have been asked to quit and have not gone yet.
+ *
+ * Whether a quit went out is a fact about the EDITOR, not about the call that
+ * sent it, and handing the dialog over before asking about it splits one stop
+ * across two calls: the quit goes out on the first, and the second writes the
+ * report. Read per call, that second call says the editor was never asked to
+ * quit, which is the opposite of what happened, next to a dialog that only
+ * exists because it was.
+ *
+ * Keyed by editor and cleared when it goes, so a relaunched one starts clean.
+ */
+const quitsInFlight = new Set<string>();
+
+/** Whether this editor has a quit out that has not taken effect. */
+export function quitIsInFlight(key: string): boolean {
+  return quitsInFlight.has(key);
+}
+
 function fallbackGuard(key: string, deps: ConstructorParameters<typeof DialogGuard>[0]): DialogGuard {
   const existing = fallbackGuards.get(key);
   if (existing) {
@@ -1768,6 +1787,8 @@ export async function stopEditor(
    * them differently: one is retried to raise the form, the other is waited on.
    */
   let dialogPhase: DialogPhase = "asking";
+  /** This editor, for the records that outlive one call. */
+  const editorKey = `${host}:${port}`;
 
   /**
    * What every return below says about the dialog, gated on WHAT HAPPENED
@@ -1841,7 +1862,10 @@ export async function stopEditor(
         message:
           describeBlockingDialog(dialog, { pressCalls, answeredByUser, unconfirmedPress }) +
           "\n\n" +
-          dialogModeGuidance(dialogMode, canElicit),
+          // Whether a quit is out is read from the editor, not from this call.
+          // The relay means the call that sent it and the call that reports it
+          // are different ones.
+          dialogModeGuidance(dialogMode, canElicit, { quitSent: quitsInFlight.has(editorKey) }),
       };
     }
   }
@@ -1912,10 +1936,16 @@ export async function stopEditor(
     }
   }
 
+  // The quit is out. Remembered against the editor rather than this call, so a
+  // retry that finds a dialog raised behind it reports that the quit went out
+  // instead of claiming the editor was never asked.
+  quitsInFlight.add(editorKey);
+
   // Confirm via the project's own bridge port closing - specific to this editor.
   for (let i = 0; i < 20; i++) {
     await new Promise((resolve) => setTimeout(resolve, confirmPollMs));
     if (!(await isBridgeAvailable(host, port))) {
+      quitsInFlight.delete(editorKey);
       return {
         success: true,
         message:

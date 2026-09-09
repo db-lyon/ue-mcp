@@ -1350,12 +1350,12 @@ describe("no result denies the press it just made", () => {
     expect(result.message).not.toContain("nothing here presses a button for you");
     expect(result.message).toContain("Discard Changes");
 
-    // KNOWN WART, pinned so it is not mistaken for a passing detail: the quit
-    // went out on the relayed call, and this message is written per call, so it
-    // says the editor was not asked to quit. True of this call, misleading
-    // across the pair. Reporting it correctly means carrying the quit's state
-    // between calls, which nothing does yet.
-    expect(result.message).toContain("The editor was not asked to quit");
+    // The quit went out on the RELAYED call and this report is written by the
+    // retry, so a quit tracked per call would have this say the editor was
+    // never asked to quit, next to a dialog that only exists because it was.
+    // It is tracked against the editor instead.
+    expect(result.message).not.toContain("The editor was not asked to quit");
+    expect(result.message).toContain("The quit went out before this dialog appeared");
   });
 });
 
