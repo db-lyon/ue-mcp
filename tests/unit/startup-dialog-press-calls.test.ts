@@ -11,7 +11,7 @@ import { waitForEditorReady } from "../../src/editor-control.js";
  * and no test, so a mode that promises no actuation could still hand the
  * buttons over on the one route a caller reaches while nothing else is up.
  */
-describe("a dialog met during startup honours the press-calls rule", () => {
+describe("a dialog met during startup is named, never pressed", () => {
   let dir: string;
   let projectPath: string;
 
@@ -43,28 +43,25 @@ describe("a dialog met during startup honours the press-calls rule", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it("names the dialog and hands over the presses when press calls are on", async () => {
-    const r = await waitForEditorReady(projectPath, dir, 5, { showProgress: false, pressCalls: true });
+  it("names the dialog so the launch failure says what is holding it", async () => {
+    const r = await waitForEditorReady(projectPath, dir, 5, { showProgress: false });
     expect(r.ready).toBe(false);
     expect(r.reason).toContain("Restore Packages");
     expect(r.reason).toContain("Some packages were not saved.");
-    expect(r.reason).toContain("respond_to_dialog");
     expect(r.reason).toContain("Restore");
   });
 
-  it("names the dialog and carries nothing that presses it when they are off", async () => {
-    const r = await waitForEditorReady(projectPath, dir, 5, { showProgress: false, pressCalls: false });
-    expect(r.ready).toBe(false);
-    // Recognition survives.
-    expect(r.reason).toContain("Restore Packages");
-    expect(r.reason).toContain("Some packages were not saved.");
-    expect(r.reason).toContain("Restore");
-    // Actuation does not. This is the whole promise of the no-actuation modes.
+  it("carries nothing that presses it, under every mode", async () => {
+    // A startup report never hands back a press call. There is no bridge yet,
+    // so the call it would name cannot be delivered, and answering a prompt
+    // this early is dialogPolicy's job.
+    const r = await waitForEditorReady(projectPath, dir, 5, { showProgress: false });
     expect(r.reason, "a startup dialog leaked the press call").not.toContain("respond_to_dialog");
   });
 
   it("drops the blank button the editor pads its list with", async () => {
-    const r = await waitForEditorReady(projectPath, dir, 5, { showProgress: false, pressCalls: true });
-    expect(r.reason).not.toMatch(/respond_to_dialog\(\s*""/);
+    const r = await waitForEditorReady(projectPath, dir, 5, { showProgress: false });
+    expect(r.reason).not.toMatch(/,\s*,/);
+    expect(r.reason).not.toMatch(/Buttons: ,/);
   });
 });

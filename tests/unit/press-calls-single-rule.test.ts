@@ -49,13 +49,11 @@ describe("the press-calls rule has exactly one implementation", () => {
       .toEqual([]);
   });
 
-  it("names the guard on every route that has a mode to consult", () => {
-    // A route that resolves a dialog mode has something to decide, so it must
-    // reach the one rule rather than reading the mode and branching on it.
+  it("is not decided in the editor lifecycle at all", () => {
+    // The lifecycle actions have no dialog behaviour, so editor-control has
+    // nothing to decide about press calls and must not reach the rule either.
     const control = fs.readFileSync(path.join(SRC, "editor-control.ts"), "utf-8");
-    const resolves = (control.match(/resolveDialogMode\(/g) ?? []).length;
-    const asks = (control.match(/DialogGuard\.handsOverPressCalls\(/g) ?? []).length;
-    expect(resolves).toBeGreaterThan(0);
-    expect(asks, "a route resolved a mode without asking the guard what it means").toBeGreaterThanOrEqual(2);
+    expect(control).not.toContain("handsOverPressCalls");
+    expect(control).not.toMatch(/pressCalls:/);
   });
 });
