@@ -105,6 +105,17 @@ const ACTIONS_ALLOWED_WHILE_BLOCKED = new Set([
   "editor.restart_editor",
 ]);
 
+/**
+ * The allow-listed actions that ANSWER the dialog rather than describe it.
+ *
+ * Being allow-listed says a call is safe to send while the game thread is
+ * parked. It does not say who may make it. These are the ones that press a
+ * button, so they are additionally subject to the mode: under interactive and
+ * defer the answer is the person's to give, and a press arriving on the action
+ * route is an agent giving it instead.
+ */
+const PRESS_ACTIONS = new Set(["editor.respond_to_dialog"]);
+
 /** True for the refusal the plugin's own gate emits. */
 export function isDialogRefusal(v: unknown): boolean {
   return typeof v === "object" && v !== null
@@ -240,20 +251,26 @@ export class DialogGuard {
   }
 
   /**
-   * Whether this mode hands over the calls that press a dialog's buttons.
+   * Whether the AGENT gets to answer the dialog in this mode.
    *
-   * The one place that rule lives. stop_editor computed `mode !== "defer"`
-   * itself, so the same decision existed twice and could drift: the guard's
-   * defer branch omits `choices` entirely while the other kept a stripped
-   * version of them.
+   * The one place that rule lives, and it settles two things that used to be
+   * settled separately: whether a refusal advertises the calls that press the
+   * buttons, and whether a press arriving as a tool call is accepted. They are
+   * the same question. Advertising without enforcing is how an agent came to
+   * answer a modal under interactive, which is the one outcome that mode
+   * exists to prevent.
    *
-   * Not conditioned on elicitation. `auto` exists precisely for a caller
-   * with nobody to ask, so withholding the press calls from it would leave
-   * that caller no way to answer at all. Routes with nobody on them are
-   * handled where they are known about, in `refusal`.
+   * `auto` is the only mode whose contract hands the choice to the agent.
+   * interactive puts the question to the person over an elicitation form and
+   * presses only what they pick; defer waits for them at the editor's own
+   * window. In neither is a button the agent chose an acceptable answer, so
+   * neither names the press calls and neither accepts one.
+   *
+   * canElicit is still read, because interactive with nobody to ask is defer
+   * (see effectiveMode) rather than a quiet promotion to auto.
    */
   static handsOverPressCalls(mode: DialogMode, canElicit = true): boolean {
-    return DialogGuard.effectiveMode(mode, canElicit) !== "defer";
+    return DialogGuard.effectiveMode(mode, canElicit) === "auto";
   }
 
   /**
@@ -300,9 +317,40 @@ export class DialogGuard {
     // game thread was parked) and a stale one was never corrected (so the very
     // call that answered the dialog came back stamped as blocked).
     const dialog = await this.currentDialog();
-    if (allowed) return { allow: true };
+    if (allowed) {
+      // Allow-listed means "safe to send while the game thread is parked", not
+      // "may answer the question". respond_to_dialog is both, so who presses is
+      // still the mode's decision, and it was not being asked: an agent could
+      // press a button under interactive, which is exactly what that mode
+      // promises cannot happen.
+      //
+      // Only the ACTION route is gated. The press the guard itself makes, on
+      // the button the person picked in the elicitation form, goes over the
+      // bridge; gating that would refuse the one press interactive exists to
+      // make.
+      if (
+        dialog
+        && kind === "action"
+        && PRESS_ACTIONS.has(subject)
+        && !DialogGuard.handsOverPressCalls(this.deps.mode(), this.canAsk(opts))
+      ) {
+        return { allow: false, refusal: this.refusal(subject, dialog, opts) };
+      }
+      return { allow: true };
+    }
     if (!dialog) return { allow: true };
     return this.decideFor(subject, dialog, opts);
+  }
+
+  /**
+   * Whether this call has a person on it who can be shown a form.
+   *
+   * Both halves matter: the route has to carry somebody (an HTTP request does
+   * not) and the client has to have advertised elicitation. Computed once here
+   * so the gate and the refusal cannot answer it differently.
+   */
+  private canAsk(opts: { canElicit?: boolean }): boolean {
+    return opts.canElicit !== false && this.deps.elicit?.() !== undefined;
   }
 
   /**
@@ -549,8 +597,7 @@ export class DialogGuard {
     dialog: BlockingDialog,
     opts: { canElicit?: boolean } = {},
   ): Record<string, unknown> {
-    const canAsk = opts.canElicit !== false && this.deps.elicit?.() !== undefined;
-    return DialogGuard.describeRefusal(subject, dialog, this.deps.mode(), canAsk);
+    return DialogGuard.describeRefusal(subject, dialog, this.deps.mode(), this.canAsk(opts));
   }
 
   /**
@@ -583,14 +630,34 @@ export class DialogGuard {
       `A modal dialog is blocking the editor, so '${subject}' was refused without running. `
       + "Unreal cannot execute anything else until the dialog is answered. ";
 
+    // Only auto hands the decision over, so only auto is told how to press.
+    //
+    // The other two used to be handed it as well: defer withheld `choices` and
+    // then named editor(respond_to_dialog) in the next sentence, and
+    // interactive shared auto's branch outright, so a person who declined the
+    // form had their refusal converted into the agent's authority to answer.
+    // Naming the call is what makes it happen, and the gate in `check` now
+    // refuses it either way, so saying it would only describe a call that
+    // comes back refused.
+    if (mode === "interactive") {
+      return {
+        ...common,
+        error:
+          preamble
+          + "Dialog mode is interactive, so the question belongs to the person: it is put to them "
+          + "in a form and only the button THEY choose is pressed. Nothing here can answer it, and "
+          + "a press sent from here is refused. Wait for them, or let them answer it in the Unreal "
+          + "Editor window. Every other action returns this same refusal until then.",
+      };
+    }
     if (mode === "defer") {
       return {
         ...common,
         error:
           preamble
           + "Dialog mode is defer, so this names the dialog but not the calls that press its "
-          + "buttons: answer it in the Unreal Editor window. To answer it from here instead, "
-          + "read it with editor(list_dialogs) and press with editor(respond_to_dialog).",
+          + "buttons, and a press sent from here is refused: a person answers it in the Unreal "
+          + "Editor window. Every other action returns this same refusal until then.",
       };
     }
     return {
@@ -598,8 +665,9 @@ export class DialogGuard {
       choices: dialog.choices,
       error:
         preamble
-        + "Read it in dialogMessage, choose a button, and press it with the call beside it in "
-        + "choices. Every other action returns this same refusal until then.",
+        + "Dialog mode is auto, so the decision is yours. Read it in dialogMessage, choose a "
+        + "button, and press it with the call beside it in choices. Every other action returns "
+        + "this same refusal until then.",
     };
   }
 
@@ -736,16 +804,31 @@ export function withoutDialogActuation<T extends IBridge>(session: EditorSession
  * cannot carry the fields: an array is `typeof "object"`, so it took the
  * properties and then lost them silently in JSON.stringify.
  */
-export function stampBlockedEditor(data: unknown, dialog: BlockingDialog | null): unknown {
+export function stampBlockedEditor(
+  data: unknown,
+  dialog: BlockingDialog | null,
+  mode: DialogMode = "defer",
+): unknown {
   if (!dialog) return data;
   if (data === null || typeof data !== "object" || Array.isArray(data)) return data;
   const out = data as Record<string, unknown>;
   out.editorBlockedByDialog = true;
   out.dialogTitle = dialog.title;
   out.dialogMessage = dialog.message;
-  out.dialogNote =
-    "A modal dialog is blocking this editor. Every other action is refused until it is "
-    + "answered: read it with editor(list_dialogs) and press with editor(respond_to_dialog).";
+  // The note takes the mode for the same reason the refusal does, and it
+  // matters more here: this rides on get_status, the first call every client
+  // makes. It used to name editor(respond_to_dialog) under every mode, so the
+  // opening read of an interactive session handed the agent the one call that
+  // mode forbids it, before anything had been refused.
+  //
+  // Defaults to defer, the mode that says least, so a caller that has not
+  // resolved a mode cannot leak a wider one by omission.
+  out.dialogNote = DialogGuard.handsOverPressCalls(mode)
+    ? "A modal dialog is blocking this editor. Every other action is refused until it is "
+      + "answered: read it with editor(list_dialogs) and press with editor(respond_to_dialog)."
+    : "A modal dialog is blocking this editor. Every other action is refused until it is "
+      + `answered, and in ${mode} mode it is answered by a person, not from here: read it with `
+      + "editor(list_dialogs) if you need to see it, but a press sent from here is refused.";
   return out;
 }
 

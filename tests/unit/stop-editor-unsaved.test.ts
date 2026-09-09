@@ -1360,10 +1360,15 @@ describe("stop_editor defers the mode decision instead of pre-judging it", () =>
         buttons: ["Cancel"],
         choices: [{ buttonLabel: "Cancel", respondWith: "x" }],
       });
-      // Every mode reaches a decision, and only defer withholds the calls.
+      // Every mode reaches a decision, and only auto hands over the calls.
+      //
+      // The elicit above DECLINES, which is the case this is really about:
+      // interactive used to answer a declined form by handing the agent the
+      // press calls and telling it to choose, so the person saying no was what
+      // promoted the agent to decider.
       expect(decision.allow, mode).toBe(false);
       const refusal = (decision as { refusal: Record<string, unknown> }).refusal;
-      expect(refusal.choices === undefined, mode).toBe(mode === "defer");
+      expect(refusal.choices === undefined, mode).toBe(mode !== "auto");
     }
   });
 
@@ -1372,8 +1377,12 @@ describe("stop_editor defers the mode decision instead of pre-judging it", () =>
     // One rule, one place. stop_editor computed `mode !== "defer"` itself, so
     // the same decision existed twice and the renderings disagreed about what
     // defer strips.
+    //
+    // auto alone. interactive puts the question to the person and presses only
+    // what they pick; defer waits for them at the editor's own window. Neither
+    // has an outcome where a button the agent chose is the right answer.
     expect(DialogGuard.handsOverPressCalls("auto")).toBe(true);
-    expect(DialogGuard.handsOverPressCalls("interactive")).toBe(true);
+    expect(DialogGuard.handsOverPressCalls("interactive")).toBe(false);
     expect(DialogGuard.handsOverPressCalls("defer")).toBe(false);
   });
 

@@ -131,13 +131,15 @@ A modal dialog blocks Unreal's game thread, so every action is refused until it 
 
 It lives with the feedback mode and for the same reason: whether somebody is at the keyboard to answer a modal is a property of your machine, not project policy a collaborator should inherit.
 
+**Who may press is enforced, not just described.** `editor(action='respond_to_dialog')` is accepted only in `auto`. Under `interactive` and `defer` it comes back refused like any other action, because the answer belongs to the person: interactive asks them in a form, defer waits for them at the editor's own window. `editor(action='list_dialogs')` stays available in every mode, so the dialog can always be READ; only the press is withheld.
+
 `editor(set_dialog_policy)` is the exception. A dialog matching an armed pattern is answered immediately under every mode. Nothing else presses a button on its own, and there are no built-in policies.
 
 | Mode | What happens to a blocking dialog |
 |------|-----------------------------------|
-| `interactive` | You get an elicitation form with the dialog's buttons as the choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. |
+| `interactive` | You get an elicitation form with the dialog's buttons as the choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. The agent cannot press it for you: `editor(respond_to_dialog)` is refused in this mode. |
 | `auto` | The refusal includes the `editor(action='respond_to_dialog')` call for each button. The agent picks one and makes that call. Nothing is pressed until it does. |
-| `defer` | The refusal names the dialog and its buttons but not the calls that press them. Answer it in the Unreal Editor window. |
+| `defer` | The refusal names the dialog and its buttons but not the calls that press them, and `editor(respond_to_dialog)` is refused. Answer it in the Unreal Editor window. |
 
 Read in this order (highest wins): the `UE_MCP_DIALOG_MODE` env var, `dialog.mode` for this project in `~/.ue-mcp/state.json`, `dialog.mode` for this user in the same file, then the default. **The default is `interactive` when your MCP client advertises the elicitation capability and `defer` when it does not. It never resolves to `auto`**: with no channel to a person, the fallback is the mode that suspends, not the one that lets the agent decide. `auto` applies only when you name it.
 

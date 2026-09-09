@@ -77,9 +77,11 @@ The **dialog handling mode** decides what happens next.
 
 | Mode | What happens to a blocking dialog |
 |------|-----------------------------------|
-| `interactive` | You get an elicitation form with the dialog's buttons as the choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. Decline or leave it open and you get the refusal instead. Default when your client advertises elicitation. |
+| `interactive` | You get an elicitation form with the dialog's buttons as the choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. Decline or leave it open and you get the refusal instead, and the agent cannot press the button for you: `editor(respond_to_dialog)` is refused in this mode. Default when your client advertises elicitation. |
 | `auto` | The refusal includes the `editor(action='respond_to_dialog')` call for each button. The agent picks one and makes that call. Nothing is pressed until it does. Only applies if you name it. |
-| `defer` | The refusal names the dialog and its buttons but not the calls that press them. Answer it in the Unreal Editor window. Default when your client does not advertise elicitation. |
+| `defer` | The refusal names the dialog and its buttons but not the calls that press them, and `editor(respond_to_dialog)` is refused. Answer it in the Unreal Editor window. Procedurally this is interactive with the editor's own window as the form, which is where a client that cannot be elicited lands. Default when your client does not advertise elicitation. |
+
+**Who may press is enforced, not just described.** `editor(action='respond_to_dialog')` is accepted only in `auto`. Under `interactive` and `defer` it comes back refused like any other action, because the answer belongs to the person: interactive asks them in a form, defer waits for them at the editor's own window. `editor(action='list_dialogs')` stays available in every mode, so the dialog can always be READ; only the press is withheld.
 
 **Armed policies are the exception.** `editor(set_dialog_policy)` arms a pattern, and a dialog matching it is answered immediately, under every mode, with no elicitation and no refusal. That is the point of it: you decide the answer in advance. Nothing else presses a button on its own, and there are no built-in policies, so the list is empty until you put something in it.
 

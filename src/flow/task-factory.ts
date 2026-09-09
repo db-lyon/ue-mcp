@@ -30,7 +30,10 @@ async function refuseStepIfBlocked(
   const subject = taskName === "tools.call"
     ? `${String(options.category ?? "")}.${String(options.method ?? "")}`
     : taskName;
-  if (DialogGuard.actionAllowed(subject)) return null;
+  // No early return for an allow-listed subject. `check` already exempts them,
+  // and it additionally applies the mode to the one allow-listed subject that
+  // PRESSES a button, so short-circuiting here let a flow step answer a modal
+  // under interactive by walking around the gate rather than through it.
   const guard = await ensureGuard(session);
   const decision = await guard.check(subject, "action");
   return decision.allow ? null : (decision.refusal ?? null);

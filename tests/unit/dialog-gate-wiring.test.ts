@@ -595,6 +595,11 @@ describe("answering a dialog does not answer the next one for you", () => {
             UE_MCP_HOST: "127.0.0.1",
             UE_MCP_STATE_DIR: path.join(sandbox4, "state"),
             UE_MCP_CONFIG_DIR: path.join(sandbox4, "config"),
+            // auto, because this case is about the RE-PROBE after a press and
+            // auto is the only mode in which the agent gets to press at all.
+            // The client still advertises elicitation, so a form remains
+            // possible and "no form was raised" still asserts something.
+            UE_MCP_DIALOG_MODE: "auto",
           },
           stderr: fs.openSync(path.join(sandbox4, "server.log"), "a"),
         }),
@@ -615,6 +620,62 @@ describe("answering a dialog does not answer the next one for you", () => {
       await c.close().catch(() => {});
       await b.close();
       fs.rmSync(sandbox4, { recursive: true, force: true });
+    }
+  }, 120_000);
+});
+
+describe("a tool call is the agent, so interactive refuses it the button", () => {
+  it("never sends the press to the editor when the person is the one being asked", async () => {
+    // The whole leak, end to end. editor.respond_to_dialog was on the
+    // always-allowed list and the list never consulted the mode, so an agent
+    // could answer a modal under interactive: the mode decided whether a form
+    // went up first and nothing else. Allow-listed means "safe to send while
+    // the game thread is parked", which is not "may answer the question".
+    const b = await StubBridge.start();
+    const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-gate-press-"));
+    const uproject = writeFixtureProject(sandbox);
+    const c = new Client(
+      { name: "ue-mcp-gate-press", version: "1.0.0" },
+      { capabilities: { elicitation: {} } },
+    );
+    const { ElicitRequestSchema } = await import("@modelcontextprotocol/sdk/types.js");
+    // Accepting would prove nothing: the point is that the agent's press is
+    // refused before any of this, so no form is raised for it either.
+    c.setRequestHandler(ElicitRequestSchema, async () => ({ action: "decline" }));
+    try {
+      await c.connect(
+        new StdioClientTransport({
+          command: process.execPath,
+          args: ["--import", "tsx", path.join(REPO_ROOT, "src", "index.ts"), uproject],
+          cwd: REPO_ROOT,
+          env: {
+            ...(process.env as Record<string, string>),
+            UE_MCP_PORT: String(b.port),
+            UE_MCP_HOST: "127.0.0.1",
+            UE_MCP_STATE_DIR: path.join(sandbox, "state"),
+            UE_MCP_CONFIG_DIR: path.join(sandbox, "config"),
+            UE_MCP_DIALOG_MODE: "interactive",
+          },
+          stderr: fs.openSync(path.join(sandbox, "server.log"), "a"),
+        }),
+      );
+
+      const before = b.seen.filter((m) => m === "respond_to_dialog").length;
+      const res = await c.callTool({
+        name: "editor",
+        arguments: { action: "respond_to_dialog", buttonLabel: "Cancel" },
+      });
+      const text = JSON.stringify(res.content);
+
+      expect(b.seen.filter((m) => m === "respond_to_dialog").length).toBe(before);
+      expect(text).toContain("dialogBlocking");
+      expect(text).toContain("interactive");
+      // And it does not hand back the calls that would do it anyway.
+      expect(text).not.toContain("respondWith");
+    } finally {
+      await c.close().catch(() => {});
+      await b.close();
+      fs.rmSync(sandbox, { recursive: true, force: true });
     }
   }, 120_000);
 });

@@ -885,7 +885,11 @@ async function main() {
             await guard.refresh();
           }
           const seen = guard.current;
-          if (result.success) stampBlockedEditor(result.data, seen);
+          // The mode goes with it. The note names the call that presses a
+          // button, and get_status is the first call every client makes, so
+          // stamping it mode-blind told an interactive session's agent how to
+          // answer the dialog before it had been refused anything.
+          if (result.success) stampBlockedEditor(result.data, seen, guard.mode);
         }
 
         // Whatever the route, the caller gets ONE refusal shape, built here.

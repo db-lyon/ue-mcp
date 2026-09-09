@@ -49,6 +49,14 @@ export type FeedbackMode = "interactive" | "auto-approve" | "defer";
  *                 answer it. The server presses nothing.
  *   defer       - suspend: press nothing, elicit nothing, and tell the user a
  *                 dialog is blocking the editor and needs answering by hand.
+ *                 Procedurally interactive with the editor's own window as the
+ *                 form, which is where a client that cannot be elicited lands.
+ *
+ * Who may press is the whole difference, and it is ENFORCED, not described:
+ * only auto accepts editor(respond_to_dialog) from an agent, and only auto is
+ * told the calls that press the buttons. In the other two the answer is a
+ * person's to give, so a press arriving as a tool call is refused. See
+ * DialogGuard.handsOverPressCalls, which is the one place that rule lives.
  *
  * Same three-value shape as FeedbackMode, read the same way, defaulted in one
  * place (resolveDialogMode in editor-control.ts).

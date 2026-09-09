@@ -623,12 +623,35 @@ describe("interactive with nobody to ask is not interactive", () => {
 describe("stamping a result as coming from a blocked editor", () => {
   it("adds the fields to an object result", () => {
     const data: Record<string, unknown> = { success: true, dialogs: [] };
-    stampBlockedEditor(data, DIALOG);
+    stampBlockedEditor(data, DIALOG, "auto");
     expect(data.editorBlockedByDialog).toBe(true);
     expect(data.dialogTitle).toBe("Save Content");
     expect(String(data.dialogNote)).toContain("respond_to_dialog");
     // And leaves the payload alone.
     expect(data.success).toBe(true);
+  });
+
+  it("names the press call in auto only, because only auto may press", () => {
+    // This note rides on get_status, the first call any client makes. Written
+    // mode-blind it told an interactive session's agent how to answer the
+    // dialog before anything had been refused, which is the whole leak: the
+    // mode never gated the press, it only decided whether a form went up first.
+    for (const mode of ["interactive", "defer"] as const) {
+      const data: Record<string, unknown> = { success: true };
+      stampBlockedEditor(data, DIALOG, mode);
+      expect(String(data.dialogNote), mode).not.toContain("editor(respond_to_dialog)");
+      expect(String(data.dialogNote), mode).toContain("refused");
+      // It still says a dialog is up, and still says how to READ it.
+      expect(data.editorBlockedByDialog, mode).toBe(true);
+      expect(String(data.dialogNote), mode).toContain("list_dialogs");
+    }
+  });
+
+  it("says the least when no mode was resolved", () => {
+    // Omitting the mode must not leak the widest one. The default is defer.
+    const data: Record<string, unknown> = { success: true };
+    stampBlockedEditor(data, DIALOG);
+    expect(String(data.dialogNote)).not.toContain("editor(respond_to_dialog)");
   });
 
   it("leaves an array alone, because the fields would be silently lost", () => {
@@ -688,5 +711,73 @@ describe("refreshing state is not the same as deciding", () => {
     guard.note(DIALOG);
     await guard.refresh();
     expect(guard.current).toBeNull();
+  });
+});
+
+describe("who may press the button is the mode's decision, not the allow list's", () => {
+  it("refuses an agent's press under interactive and defer", async () => {
+    // The bug this exists for: editor.respond_to_dialog sat on the
+    // always-allowed list and never consulted the mode, so an agent could
+    // answer a modal under interactive. The mode decided whether a form went
+    // up first, and nothing more. Allow-listed means "safe to send while the
+    // game thread is parked", which is a different question from "may answer".
+    for (const mode of ["interactive", "defer"] as const) {
+      const guard = make({ mode, elicit: accept("Cancel") });
+      const decision = await guard.check("editor.respond_to_dialog", "action");
+      expect(decision.allow, mode).toBe(false);
+      const refusal = (decision as { refusal: Record<string, unknown> }).refusal;
+      // And the refusal does not then explain how to do it anyway.
+      expect(refusal.choices, mode).toBeUndefined();
+      expect(String(refusal.error), mode).toContain("refused");
+    }
+  });
+
+  it("lets the agent press in auto, which is the mode that says it may", async () => {
+    const guard = make({ mode: "auto" });
+    expect((await guard.check("editor.respond_to_dialog", "action")).allow).toBe(true);
+  });
+
+  it("still lets the guard press the button the PERSON picked", async () => {
+    // The gate is on the action route only. The guard's own press, on the
+    // button chosen in the elicitation form, travels over the bridge, and
+    // gating that would refuse the one press interactive exists to make.
+    const press = vi.fn(async () => ({ success: true, answered: true }));
+    const guard = make({ mode: "interactive", elicit: accept("Cancel"), press });
+    expect((await guard.check("respond_to_dialog", "bridge")).allow).toBe(true);
+    // End to end: a person answers, the button is pressed, the call proceeds.
+    const guard2 = make({
+      mode: "interactive",
+      elicit: accept("Cancel"),
+      press,
+      probe: async () => listing(),
+    });
+    expect((await guard2.check("asset.list", "action")).allow).toBe(true);
+    expect(press).toHaveBeenCalledWith("Cancel");
+  });
+
+  it("keeps reading the dialog available in every mode", async () => {
+    // Withholding the press must not withhold the question. A person deciding
+    // in the editor window is still entitled to have the agent tell them what
+    // it says.
+    for (const mode of ["interactive", "defer", "auto"] as const) {
+      const guard = make({ mode });
+      expect((await guard.check("editor.list_dialogs", "action")).allow, mode).toBe(true);
+      expect((await guard.check("project.get_status", "action")).allow, mode).toBe(true);
+    }
+  });
+
+  it("never names the press call to a mode that cannot make it", async () => {
+    // Withholding `choices` and then naming editor(respond_to_dialog) in the
+    // next sentence is not withholding anything. defer did exactly that.
+    for (const mode of ["interactive", "defer"] as const) {
+      const refusal = DialogGuard.describeRefusal("asset.list", DIALOG, mode);
+      expect(String(refusal.error), mode).not.toContain("editor(respond_to_dialog)");
+      expect(String(refusal.error), mode).not.toContain("editor(list_dialogs)");
+      expect(refusal.choices, mode).toBeUndefined();
+      // The dialog itself is still fully reported, which is what a person
+      // needs to recognise the window.
+      expect(refusal.dialogTitle, mode).toBe("Save Content");
+      expect(refusal.buttons, mode).toEqual(DIALOG.buttons);
+    }
   });
 });
