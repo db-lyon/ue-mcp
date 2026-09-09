@@ -813,3 +813,76 @@ describe("the elicitation form leads with the question, not the boilerplate", ()
     expect(second).toContain("/Game/A");
   });
 });
+
+describe("dismissing the form is not the end of the session", () => {
+  it("recovers as soon as the person answers the dialog in the editor window", async () => {
+    // Now that no agent press can rescue a declined form, this is THE way out,
+    // so it is pinned rather than left to be inferred from the clearing rules.
+    //
+    // The sequence: a form goes up, the person declines it, and they answer
+    // the modal in Unreal's own window instead. Every gated call probes before
+    // deciding, so the next one finds a clear editor and runs.
+    let onScreen = true;
+    const guard = make({
+      mode: "interactive",
+      probe: async () => (onScreen ? listing() : empty),
+      elicit: () => (async () => ({ action: "decline" })) as never,
+    });
+
+    // Declined, so nothing was pressed and the call is refused.
+    expect((await guard.check("asset.list", "action")).allow).toBe(false);
+    expect(guard.lastPressed).toBeNull();
+
+    // Answered by hand. The probe is what notices, and one call is enough.
+    onScreen = false;
+    expect((await guard.check("asset.list", "action")).allow).toBe(true);
+    expect(guard.current).toBeNull();
+  });
+
+  it("asks again for the NEXT dialog, rather than staying quiet for the session", async () => {
+    // The asked-once record is keyed on the dialog and reset when the editor
+    // reports a clear screen. A person who declines one form must still be
+    // asked about the next prompt, or declining once silently downgrades the
+    // rest of the session to a mode nobody chose.
+    let phase: "first" | "clear" | "second" = "first";
+    const forms: string[] = [];
+    const guard = make({
+      mode: "interactive",
+      probe: async () =>
+        phase === "clear" ? empty : phase === "first" ? listing("Save Content") : listing("Delete Assets"),
+      elicit: () => (async (req: { message: string }) => {
+        forms.push(req.message);
+        return { action: "decline" };
+      }) as never,
+    });
+
+    await guard.check("asset.list", "action");
+    expect(forms).toHaveLength(1);
+
+    phase = "clear";
+    expect((await guard.check("asset.list", "action")).allow).toBe(true);
+
+    phase = "second";
+    await guard.check("asset.list", "action");
+    expect(forms, "the second dialog never reached the person").toHaveLength(2);
+    expect(forms[1]).toContain("Delete Assets");
+  });
+
+  it("does not re-ask while the same dialog is still on screen", async () => {
+    // The other half of the same rule. A single call is checked twice, once
+    // before dispatch and once at the bridge, and asking per check put two
+    // forms up and pressed two buttons for one action.
+    const forms: string[] = [];
+    const guard = make({
+      mode: "interactive",
+      probe: async () => listing(),
+      elicit: () => (async (req: { message: string }) => {
+        forms.push(req.message);
+        return { action: "decline" };
+      }) as never,
+    });
+    await guard.check("asset.list", "action");
+    await guard.check("asset.list", "action");
+    expect(forms).toHaveLength(1);
+  });
+});
