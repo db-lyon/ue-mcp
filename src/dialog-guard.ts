@@ -116,6 +116,20 @@ const ACTIONS_ALLOWED_WHILE_BLOCKED = new Set([
  */
 const PRESS_ACTIONS = new Set(["editor.respond_to_dialog"]);
 
+/**
+ * A dialog's message flattened onto one line, for a client that shows one.
+ *
+ * Unreal's own prompts are laid out over many lines (the shutdown Save Content
+ * prompt lists a package per line), and a renderer that keeps two of them shows
+ * two package names and hides the question. Flattened, the same budget carries
+ * the question itself.
+ */
+export function oneLine(text: string, limit = 220): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length <= limit) return flat;
+  return `${flat.slice(0, limit).trimEnd()} [continues below]`;
+}
+
 /** True for the refusal the plugin's own gate emits. */
 export function isDialogRefusal(v: unknown): boolean {
   return typeof v === "object" && v !== null
@@ -529,17 +543,25 @@ export class DialogGuard {
     if (!elicit || dialog.buttons.length === 0) return { shown: false, press: null };
     const LEAVE_OPEN = "Leave the dialog open";
     let answer;
+    // Which line comes FIRST is the only lever there is over how this reads.
+    //
+    // A client renders the elicitation message itself, and at least one shows
+    // the opening line or two and collapses the rest behind "(+N more lines)".
+    // This used to open with two lines of boilerplate, so what got collapsed
+    // was the dialog's own title and text: the person was asked to choose a
+    // button for a question they could not see. Nothing in the protocol asks a
+    // client for more room and there is no richer rendering to fall back on, so
+    // the title and the gist go first and the boilerplate goes last.
+    const full = dialog.message === "" ? "(no message text)" : dialog.message;
+    const gist = oneLine(full);
+    const message = [`Unreal is blocked: ${dialog.title === "" ? "(untitled dialog)" : dialog.title}`, gist];
+    // Repeated whole only when compacting actually dropped something, so a
+    // client that shows the lot does not read the same sentence twice.
+    if (gist !== full) message.push("", full);
+    message.push("", "Nothing else can run until this is answered, and nothing is pressed unless you choose it.");
     try {
       answer = await elicit({
-        message: [
-          "Unreal Editor is blocked on a modal dialog and is waiting for an answer.",
-          "Nothing else can run until it is answered.",
-          "",
-          `Title: ${dialog.title}`,
-          dialog.message === "" ? "(no message text)" : dialog.message,
-          "",
-          "Choose the button to press. Nothing is pressed unless you choose it.",
-        ].join("\n"),
+        message: message.join("\n"),
         requestedSchema: {
           type: "object",
           properties: {

@@ -781,3 +781,35 @@ describe("who may press the button is the mode's decision, not the allow list's"
     }
   });
 });
+
+describe("the elicitation form leads with the question, not the boilerplate", () => {
+  it("puts the title and the dialog's own text in the first two lines", async () => {
+    // A client renders this message itself, and at least one keeps the opening
+    // line or two and collapses the rest behind "(+N more lines)". Opening
+    // with boilerplate meant the part that got collapsed was the question, and
+    // the person was asked to choose a button for something they could not
+    // read.
+    let seen = "";
+    const guard = make({
+      mode: "interactive",
+      probe: async () => ({
+        dialogs: [{
+          title: "Save Content",
+          message: ["Select the assets to save.", "/Game/A", "/Game/B", "/Game/C"].join("\n"),
+          buttons: DIALOG.buttons,
+          choices: DIALOG.choices,
+        }],
+      }),
+      elicit: () => (async (req: { message: string }) => {
+        seen = req.message;
+        return { action: "decline" };
+      }) as never,
+    });
+    await guard.check("asset.list", "action");
+    const [first, second] = seen.split("\n");
+    expect(first).toContain("Save Content");
+    expect(second).toContain("Select the assets to save.");
+    // Flattened, so one line carries the question rather than one package path.
+    expect(second).toContain("/Game/A");
+  });
+});
