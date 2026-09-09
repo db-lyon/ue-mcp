@@ -45,6 +45,24 @@ function make(over: Partial<GuardDeps> & { mode?: DialogMode } = {}) {
 const accept = (button: string) =>
   () => (vi.fn(async () => ({ action: "accept", content: { button } })) as unknown as ReturnType<NonNullable<GuardDeps["elicit"]>>);
 
+/**
+ * Get past the relay, so a case about the FORM is about the form.
+ *
+ * Under interactive the first gated call for a dialog hands its whole text
+ * back and refuses without asking anything, because an elicitation form is a
+ * few lines tall and a client may collapse the rest of it. The form goes up on
+ * the next call. A case about what the person is shown therefore starts one
+ * call earlier than it used to, and this makes that call rather than letting
+ * every such case open with an unexplained duplicate line.
+ *
+ * The relay decision is returned, not swallowed: a case that wants to assert
+ * on it can, and one that ignores it still pays for it visibly.
+ */
+async function relay(guard: DialogGuard, subject = "asset.list") {
+  const decision = await guard.check(subject, "action");
+  return decision;
+}
+
 describe("a failing probe never disarms the guard", () => {
   it("keeps the dialog when the probe throws but the editor is still publishing", async () => {
     // Conflating "no dialog" with "could not ask" let a dropped socket clear
@@ -195,6 +213,11 @@ describe("the mode decides, and only interactive presses anything", () => {
     const press = vi.fn(async () => ({ success: true }));
     const guard = make({ mode: "interactive", press, elicit: accept("Cancel") });
     guard.note(DIALOG);
+    // First call: the dialog comes back whole and nothing is asked or pressed.
+    const relayed = await relay(guard);
+    expect(relayed.allow).toBe(false);
+    expect(press).not.toHaveBeenCalled();
+    // Second: the form goes up over what the caller has already been given.
     const decision = await guard.check("asset.list", "action");
     expect(decision.allow).toBe(true);
     expect(press).toHaveBeenCalledWith("Cancel");
@@ -392,6 +415,7 @@ describe("a route with nobody to ask never elicits", () => {
     const press = vi.fn(async () => ({ success: true, answered: true }));
     const guard = make({ mode: "interactive", press, elicit: () => elicit as never });
     guard.note(DIALOG);
+    await relay(guard, "level.get_outliner");
     await guard.check("level.get_outliner", "action");
     expect(elicit).toHaveBeenCalled();
   });
@@ -411,12 +435,14 @@ describe("being asked is not the same as having answered", () => {
     const press = vi.fn(async () => ({ success: true, answered: true }));
     const guard = make({ mode: "interactive", press, elicit: () => elicit as never });
     guard.note(DIALOG);
+    await relay(guard);
 
     const first = await guard.check("asset.list", "action");
     expect(first.allow).toBe(false);
     expect(press).not.toHaveBeenCalled();
 
-    // Same dialog, second attempt: the person must still get asked.
+    // Same dialog, second attempt: the person must still get asked. The relay
+    // is spent, so this is a second FORM rather than a second telling.
     const second = await guard.check("asset.list", "action");
     expect(elicit).toHaveBeenCalledTimes(2);
     expect(second.allow).toBe(true);
@@ -479,6 +505,13 @@ describe("one dialog, one ask, however many callers", () => {
 
     const other = { ...DIALOG, title: "Delete Assets", message: "different" };
     guard.note(DIALOG);
+    // Each dialog is relayed once before it is ever asked about, and they are
+    // relayed separately: the record is keyed on the dialog, so telling the
+    // caller about one must not consume the other's turn.
+    await guard.decideFor("asset.list", DIALOG);
+    await guard.decideFor("asset.list", other);
+    expect(shown).toHaveLength(0);
+
     const a = guard.decideFor("asset.list", DIALOG);
     const b = guard.decideFor("asset.list", other);
     await Promise.all([a, b]);
@@ -751,6 +784,7 @@ describe("who may press the button is the mode's decision, not the allow list's"
       press,
       probe: async () => listing(),
     });
+    await relay(guard2);
     expect((await guard2.check("asset.list", "action")).allow).toBe(true);
     expect(press).toHaveBeenCalledWith("Cancel");
   });
@@ -805,6 +839,7 @@ describe("the elicitation form leads with the question, not the boilerplate", ()
         return { action: "decline" };
       }) as never,
     });
+    await relay(guard);
     await guard.check("asset.list", "action");
     const [first, second] = seen.split("\n");
     expect(first).toContain("Save Content");
@@ -856,13 +891,18 @@ describe("dismissing the form is not the end of the session", () => {
       }) as never,
     });
 
+    await relay(guard);
     await guard.check("asset.list", "action");
     expect(forms).toHaveLength(1);
 
     phase = "clear";
     expect((await guard.check("asset.list", "action")).allow).toBe(true);
 
+    // A clear screen forgets BOTH records, so the next dialog is relayed and
+    // then asked about, exactly as the first was. Forgetting only the asked-once
+    // record would ask about a dialog the caller was never given.
     phase = "second";
+    await relay(guard);
     await guard.check("asset.list", "action");
     expect(forms, "the second dialog never reached the person").toHaveLength(2);
     expect(forms[1]).toContain("Delete Assets");

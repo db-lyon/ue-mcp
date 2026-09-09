@@ -413,10 +413,36 @@ describe("interactive mode, end to end, with a client that can be asked", () => 
     fs.rmSync(liveSandbox, { recursive: true, force: true });
   });
 
+  it("hands the whole dialog back before it asks anything", async () => {
+    // End to end, through the shipped server: the first call a client makes
+    // against a blocked editor answers with the dialog in full and raises no
+    // form. The form is a few lines tall and the client decides how many of
+    // them to draw, so the text goes where nothing can truncate it first.
+    forms.length = 0;
+    const before = bridge.seen.filter((m) => m === "respond_to_dialog").length;
+
+    const res = await liveClient.callTool({
+      name: "level",
+      arguments: { action: "get_outliner", limit: 1 },
+    });
+    const out = body(res);
+
+    expect(forms.length, "a form went up before the dialog had been handed over").toBe(0);
+    expect(out.dialogBlocking).toBe(true);
+    expect(out.dialogPhase).toBe("relay");
+    expect(out.dialogTitle).toBe(DIALOG.title);
+    expect(out.dialogMessage).toBe(DIALOG.message);
+    expect(out.buttons).toEqual(DIALOG.buttons);
+    // Nothing was pressed, and the press calls are still not named.
+    expect(bridge.seen.filter((m) => m === "respond_to_dialog").length).toBe(before);
+    expect(String(out.error)).not.toContain("editor(respond_to_dialog)");
+  }, 60_000);
+
   it("puts the dialog to the user and presses the button they picked", async () => {
     forms.length = 0;
     const before = bridge.seen.filter((m) => m === "respond_to_dialog").length;
 
+    // The relay is spent, so this call is the one that raises the form.
     await liveClient.callTool({ name: "level", arguments: { action: "get_outliner", limit: 1 } });
 
     expect(forms.length, "no elicitation form was shown").toBeGreaterThan(0);
