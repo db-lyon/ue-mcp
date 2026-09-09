@@ -619,6 +619,11 @@ export async function startEditor(
     };
   }
 
+  // Past both "one is already up" checks, so this call really is launching a
+  // new editor. Whatever the previous one was told or was in the middle of
+  // does not belong to it, and its port is very likely the same one.
+  forgetPreviousEditors();
+
   const editorExe = findEditorExecutable(project);
   if (!editorExe) {
     return {
@@ -1185,9 +1190,22 @@ const fallbackGuards = new Map<string, DialogGuard>();
  */
 const quitsInFlight = new Set<string>();
 
-/** Whether this editor has a quit out that has not taken effect. */
-export function quitIsInFlight(key: string): boolean {
-  return quitsInFlight.has(key);
+/**
+ * Drop everything remembered about the editors that were here before.
+ *
+ * Both records above are keyed by where an editor listens, and a port is
+ * reused: the next editor for a project usually publishes the same one. A
+ * relaunched editor would otherwise inherit its predecessor's records and be
+ * told a quit is in flight for a process that no longer exists, or skip
+ * handing over the first dialog it raises because the previous editor's was
+ * already handed over.
+ *
+ * A launch is the one moment that is certainly a new editor, whatever killed
+ * the last one, so it is where both are cleared.
+ */
+function forgetPreviousEditors(): void {
+  quitsInFlight.clear();
+  fallbackGuards.clear();
 }
 
 function fallbackGuard(key: string, deps: ConstructorParameters<typeof DialogGuard>[0]): DialogGuard {
