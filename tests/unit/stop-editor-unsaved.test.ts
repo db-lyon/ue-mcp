@@ -580,7 +580,7 @@ describe("a state.json that parses to something that is not a state object", () 
 
     // The point is that a malformed state file does not throw. What the stop
     // then decides is the ordinary path, not this case.
-    const result = await stopEditor(projectDir, { elicit: makeGate(false).fn });
+    const result = await stopEditor(projectDir);
 
     expect(result.success).toBe(false);
     expect(typeof result.message).toBe("string");
