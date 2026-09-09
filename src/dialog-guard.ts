@@ -172,6 +172,17 @@ export interface DialogPress {
   confirmed: boolean;
 }
 
+/**
+ * Where interactive has got to with one dialog.
+ *
+ *   relay    the whole dialog has just been handed back, nothing asked yet
+ *   asking   the caller has had it, so the form is up or has been
+ *
+ * Reported as `dialogPhase` so a caller can tell "you have not seen this yet"
+ * from "the person is looking at it", which are otherwise the same refusal.
+ */
+export type DialogPhase = "relay" | "asking";
+
 /** What a caller must do about this call. */
 export type GuardDecision =
   | { allow: true }
@@ -214,6 +225,16 @@ export class DialogGuard {
   private pressed: DialogPress | null = null;
   /** Identity of the dialog the last press was aimed at. */
   private lastAsked: string | null = null;
+  /**
+   * Every dialog whose full text has already gone back to a caller.
+   *
+   * A SET, not the one slot `lastAsked` uses, because two dialogs can be in
+   * play at once (parallel callers, or a prompt raised behind another) and one
+   * slot thrashes between them: telling the caller about the second forgets the
+   * first, so the first is relayed a second time and its form never goes up.
+   * Bounded by the same clean screen that resets everything else.
+   */
+  private told = new Set<string>();
   /** The ask in flight, so parallel calls share it instead of each asking. */
   private asking: Promise<AskOutcome> | null = null;
   /** Which dialog that in-flight ask is about. */
@@ -262,6 +283,21 @@ export class DialogGuard {
    */
   clear(): void {
     this.blocking = null;
+  }
+
+  /**
+   * Forget what has been said about a dialog, so the next one starts over.
+   *
+   * Both records are per-dialog and both are reset together: told-but-not-asked
+   * is a real state (the caller has the text and has not retried yet), and
+   * clearing one without the other either asks about a dialog nobody has read
+   * or re-reads one already answered.
+   *
+   * Only ever called where the screen is PROVEN clear, alongside `clear`.
+   */
+  private forgetDialogRecords(): void {
+    this.lastAsked = null;
+    this.told.clear();
   }
 
   /**
@@ -408,6 +444,37 @@ export class DialogGuard {
     // MCP client last touched this guard and press a real button on its
     // answer, for a request that client never made.
     const mayAsk = opts.canElicit !== false;
+    // For a dialog the form cannot hold, it goes up on the SECOND call.
+    //
+    // An elicitation form is a few lines tall and the client decides how many
+    // of them to draw; one keeps the opening line or two and collapses the
+    // rest behind "(+N more lines)" with no way to expand it. Ordering the
+    // lines buys the title and a flattened gist, and that is all it can buy:
+    // a long prompt still has a tail nothing in the form can reach.
+    //
+    // A tool result has no such budget, and the assistant's own reply has none
+    // either. So a dialog that does not fit answers the first gated call whole
+    // and refuses, which ends that call and puts the text in front of the
+    // person through the transcript. The next call raises the form over what
+    // they have already read.
+    //
+    // EVERY dialog, with no exemption for the action that met it and none for
+    // a message that looks short enough to fit. Both exemptions were tried and
+    // both were wrong: stop_editor is where Unreal's own Save Content prompt
+    // appears, so exempting the recovery actions exempts the case this exists
+    // for, and "short enough" is a guess about a budget the client never
+    // states, where a line that fits logically still wraps on screen. A rule
+    // that holds for some dialogs is one nobody can rely on for any.
+    //
+    // Whichever call relays also refuses, so the two phases cannot both land
+    // inside one: a refusal never reaches the bridge, and the second check that
+    // a dispatched call would make never happens.
+    const interactive =
+      DialogGuard.effectiveMode(this.deps.mode(), this.canAsk(opts)) === "interactive";
+    if (interactive && !this.told.has(identity)) {
+      this.told.add(identity);
+      return { allow: false, refusal: this.refusal(subject, dialog, opts, "relay") };
+    }
     if (mayAsk && this.deps.mode() === "interactive" && this.lastAsked !== identity) {
       // Parallel tool calls share one ask. Clients batch calls, and asking per
       // call put three forms in front of the person and pressed three real
@@ -483,7 +550,7 @@ export class DialogGuard {
       // names, with no way back but restarting the server.
       if (this.staleStatus) {
         this.clear();
-        this.lastAsked = null;
+        this.forgetDialogRecords();
         return null;
       }
       return this.blocking;
@@ -510,7 +577,7 @@ export class DialogGuard {
       const socketUp = this.deps.isConnected?.() === true;
       if (!socketUp && (this.staleStatus || this.deps.readSnapshot === undefined)) {
         this.clear();
-        this.lastAsked = null;
+        this.forgetDialogRecords();
         return null;
       }
       return this.blocking;
@@ -529,7 +596,7 @@ export class DialogGuard {
       // a press must not reset it, or the next check re-prompts for a dialog
       // that press was meant to answer and presses a second button.
       this.clear();
-      this.lastAsked = null;
+      this.forgetDialogRecords();
       return null;
     }
     const dialog = asDialog(first);
@@ -618,8 +685,15 @@ export class DialogGuard {
     subject: string,
     dialog: BlockingDialog,
     opts: { canElicit?: boolean } = {},
+    phase: DialogPhase = "asking",
   ): Record<string, unknown> {
-    return DialogGuard.describeRefusal(subject, dialog, this.deps.mode(), this.canAsk(opts));
+    return DialogGuard.describeRefusal(
+      subject,
+      dialog,
+      this.deps.mode(),
+      this.canAsk(opts),
+      phase,
+    );
   }
 
   /**
@@ -637,13 +711,19 @@ export class DialogGuard {
     dialog: BlockingDialog,
     resolvedMode: DialogMode,
     canElicit = true,
+    phase: DialogPhase = "asking",
   ): Record<string, unknown> {
     const mode = DialogGuard.effectiveMode(resolvedMode, canElicit);
+    // Only interactive has two phases. auto and defer say everything they have
+    // to say on the first refusal and repeat it, so a phase they never enter
+    // must not appear in what they report.
+    const dialogPhase = mode === "interactive" ? phase : "asking";
     const common = {
       success: false,
       dialogBlocking: true,
       refusedMethod: subject,
       dialogMode: mode,
+      dialogPhase,
       dialogTitle: dialog.title,
       dialogMessage: dialog.message,
       buttons: dialog.buttons,
@@ -662,6 +742,24 @@ export class DialogGuard {
     // refuses it either way, so saying it would only describe a call that
     // comes back refused.
     if (mode === "interactive") {
+      // Phase one. The form is a few lines tall and the client decides how many
+      // it draws, so the dialog is handed over here, where nothing is truncated,
+      // and the form goes up on the next call. Quoting it is the point of the
+      // round trip: an assistant's own reply has no line budget either, and it
+      // is what the person actually reads.
+      if (dialogPhase === "relay") {
+        return {
+          ...common,
+          error:
+            preamble
+            + "Dialog mode is interactive, so the question belongs to the person, and their form "
+            + "goes up on the NEXT call rather than this one. The form is only a few lines tall "
+            + "and a client may collapse the rest of it, so read dialogTitle and dialogMessage "
+            + "above and QUOTE THEM IN FULL in your reply, then retry this action to raise the "
+            + "form over what you quoted. Do not recommend a button and do not answer it: nothing "
+            + "here can, and a press sent from here is refused.",
+        };
+      }
       return {
         ...common,
         error:
