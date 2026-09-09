@@ -145,6 +145,10 @@ Read in this order (highest wins): the `UE_MCP_DIALOG_MODE` env var, `dialog.mod
 
 Set it with `npx ue-mcp dialog mode <interactive|auto|defer>` (add `--editor <name>` to scope it to one project, `default` to clear it). An env value that names no mode is ignored, and the result says so.
 
+Under `interactive` the dialog is handed back whole on one call and the form goes up on the next, so its text lands somewhere nothing truncates it. An elicitation form is a few lines tall and the client decides how many of them it draws; one that keeps the opening line or two and collapses the rest would otherwise collapse the question itself. `dialogPhase` on the refusal says which call you are on: `relay` or `asking`.
+
+A client known to render the whole message skips that round trip. Every other client, including one nobody has checked, gets the handover: relaying needlessly costs one call, and not relaying against a client that collapses the message asks someone to choose a button for a question they cannot see. `UE_MCP_DIALOG_RELAY=off` turns the handover off whatever the client is, and `=on` forces it back on.
+
 
 ### User-machine state (`~/.ue-mcp/`)
 

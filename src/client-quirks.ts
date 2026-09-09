@@ -72,3 +72,44 @@ export function progressRenderingNote(client: ClientInfo | undefined): string | 
     "restores the live view."
   );
 }
+
+/**
+ * Clients that render a whole elicitation message, so the dialog does not need
+ * handing over on a call of its own first.
+ *
+ * The relay costs a round trip. It is worth it against a client that draws the
+ * opening line or two of an elicitation and collapses the rest behind "(+N
+ * more lines)", because there the person is otherwise choosing between buttons
+ * for a question they cannot read. Against a client that draws the lot it buys
+ * nothing and delays the form.
+ *
+ * The DEFAULT IS TO RELAY, and an unknown client relays. The two failure modes
+ * are not equal: relaying needlessly costs one call, and not relaying against a
+ * client that truncates puts a question in front of someone with the question
+ * missing. A client earns its way onto this list by being checked, not by being
+ * absent from the other one.
+ *
+ * Names are matched against the `clientInfo.name` a client sends at
+ * initialize, lowercased. Each entry needs verifying against the real string
+ * that client sends rather than the name it goes by in conversation.
+ */
+const RENDERS_WHOLE_ELICITATION = [
+  "pi-coding-agent",
+];
+
+/**
+ * Whether the elicitation form has to be preceded by handing the dialog over.
+ *
+ * `UE_MCP_DIALOG_RELAY=off` turns it off whatever the client is, so a client
+ * whose rendering is fine does not have to wait for a release to say so, and
+ * `=on` forces it back on. Anything else, including unset, leaves the decision
+ * to the client.
+ */
+export function elicitationNeedsRelay(client: ClientInfo | undefined): boolean {
+  const override = (process.env.UE_MCP_DIALOG_RELAY ?? "").trim().toLowerCase();
+  if (override === "off" || override === "0" || override === "false") return false;
+  if (override === "on" || override === "1" || override === "true") return true;
+  if (!client) return true;
+  const name = client.name.toLowerCase();
+  return !RENDERS_WHOLE_ELICITATION.some((known) => name.includes(known));
+}

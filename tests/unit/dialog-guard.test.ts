@@ -926,3 +926,36 @@ describe("dismissing the form is not the end of the session", () => {
     expect(forms).toHaveLength(1);
   });
 });
+
+describe("the handover is skipped for a client that renders the whole message", () => {
+  /** A gate that names its client, the way the server's does. */
+  const elicitAs = (name: string, forms: string[]) => () => {
+    const fn = (async (req: { message: string }) => {
+      forms.push(req.message);
+      return { action: "decline" };
+    }) as unknown as NonNullable<ReturnType<NonNullable<GuardDeps["elicit"]>>>;
+    (fn as unknown as { client: () => { name: string } }).client = () => ({ name });
+    return fn;
+  };
+
+  it("asks on the FIRST call, with no dialog handed over first", async () => {
+    // The round trip exists to get the text past a client that collapses it.
+    // Against one that draws the lot it buys nothing and delays the form.
+    const forms: string[] = [];
+    const guard = make({ mode: "interactive", elicit: elicitAs("pi-coding-agent", forms) });
+    guard.note(DIALOG);
+    await guard.check("asset.list", "action");
+    expect(forms, "the form should have gone up on the first call").toHaveLength(1);
+    expect(forms[0]).toContain("Save Content");
+  });
+
+  it("still hands it over first for a client nobody has checked", async () => {
+    const forms: string[] = [];
+    const guard = make({ mode: "interactive", elicit: elicitAs("some-new-agent", forms) });
+    guard.note(DIALOG);
+    await guard.check("asset.list", "action");
+    expect(forms, "an unchecked client must not be assumed to render").toHaveLength(0);
+    await guard.check("asset.list", "action");
+    expect(forms).toHaveLength(1);
+  });
+});

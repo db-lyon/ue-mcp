@@ -383,6 +383,9 @@ async function main() {
     // like an elicitation client and a mode that is meant to fall back to defer
     // would resolve to interactive for clients that advertised nothing.
     elicit.clientAdvertisesElicitation = () => !!mcp.server.getClientCapabilities()?.elicitation;
+    // Who is on the other end, read live for the same reason as the capability
+    // above: this is built before anyone has connected.
+    elicit.client = () => mcp.server.getClientVersion();
     return elicit;
   };
 

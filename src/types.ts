@@ -37,6 +37,15 @@ export interface ElicitFn {
    * function was handed over deliberately and is taken at face value.
    */
   clientAdvertisesElicitation?: () => boolean;
+
+  /**
+   * Who is on the other end, as they named themselves at initialize.
+   *
+   * Read to decide how much the client can be trusted to RENDER, which is a
+   * different question from what it advertised support for. Absent on a gate
+   * built outside the server, where nothing knows.
+   */
+  client?: () => { name: string; version?: string } | undefined;
 }
 
 export interface ElicitParams {

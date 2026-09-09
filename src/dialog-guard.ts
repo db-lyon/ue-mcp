@@ -28,6 +28,7 @@ import type { EditorSession } from "./session.js";
 import type { IBridge } from "./bridge.js";
 import type { ElicitFn } from "./types.js";
 import type { DialogMode } from "./user-state.js";
+import { elicitationNeedsRelay } from "./client-quirks.js";
 
 /** The dialog, as every layer describes it. */
 export interface BlockingDialog {
@@ -404,6 +405,16 @@ export class DialogGuard {
   }
 
   /**
+   * Whether this client's rendering makes the handover worth a call.
+   *
+   * Asked of the live elicit function rather than stored, because the client is
+   * only knowable once one has connected and this guard outlives connections.
+   */
+  private needsRelay(): boolean {
+    return elicitationNeedsRelay(this.deps.elicit?.()?.client?.());
+  }
+
+  /**
    * Recovery actions: always permitted, whatever is latched.
    *
    * Relaunching or stopping an editor is how a caller gets out of a state
@@ -469,9 +480,14 @@ export class DialogGuard {
     // Whichever call relays also refuses, so the two phases cannot both land
     // inside one: a refusal never reaches the bridge, and the second check that
     // a dispatched call would make never happens.
+    //
+    // Whether this client needs it is the client's question, not the mode's. A
+    // client that renders the whole message gains nothing from the round trip,
+    // and the default for one nobody has checked is to relay: the two failure
+    // modes are not equal.
     const interactive =
       DialogGuard.effectiveMode(this.deps.mode(), this.canAsk(opts)) === "interactive";
-    if (interactive && !this.told.has(identity)) {
+    if (interactive && this.needsRelay() && !this.told.has(identity)) {
       this.told.add(identity);
       return { allow: false, refusal: this.refusal(subject, dialog, opts, "relay") };
     }
