@@ -9,7 +9,7 @@ import { evaluateGate, gateRefusalMessage } from "../python-gate.js";
 import { Vec3, Rotator } from "../schemas.js";
 import { FunctionArgs, normalizeFunctionArgs, normalizePythonArgs } from "../function-args.js";
 import { CURSOR_PARAM, paged } from "../pagination.js";
-import { existingGuard, DialogGuard } from "../dialog-guard.js";
+import { DialogGuard } from "../dialog-guard.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/editor.generated.js";
 
 /** Where a caller declares a standing opt-in to the Blueprint-error bypass.
@@ -30,22 +30,9 @@ export const editorTool: ToolDef = categoryTool(
         const timeout = typeof p?.timeout === "number" && p.timeout > 0 ? p.timeout : 300;
         const dialogPolicy = typeof p?.dialogPolicy === "string" && p.dialogPolicy.trim() !== "" ? p.dialogPolicy.trim() : undefined;
         const paramEcho = p?.paramEcho === true;
-        // The mode decides whether a startup dialog comes back with the calls
-        // that press its buttons. Passing nothing defaulted to handing them
-        // over under every mode, including defer, whose whole contract is that
-        // nothing presses anything without a person. restart_editor remembered
-        // to pass this; the direct action did not.
-        const startMode = resolveDialogMode({
-          projectDir: ctx.project.projectDir ?? null,
-          canElicit: clientAdvertisesElicitation(ctx.elicit),
-        });
         const result = await startEditor(ctx.project, timeout, ctx.onProgress, {
           dialogPolicy,
           paramEcho,
-          pressCalls: DialogGuard.handsOverPressCalls(
-            startMode.mode,
-            clientAdvertisesElicitation(ctx.elicit),
-          ),
         });
 
         // The call blocks for as long as the editor takes, so when its progress
@@ -100,25 +87,17 @@ export const editorTool: ToolDef = categoryTool(
     stop_editor: {
       kind: "handler",
       effect: "mutate",
-      description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill). Acts only on the editor for the loaded project, resolved from the port lockfile that editor published at <project>/Saved/UE_MCP_Bridge/port.json. With no lockfile there is no port to aim at and the call refuses, naming the file it checked, rather than probing a default port that another project's editor could answer on (#819). It never discards unsaved work and it never presses a button nobody named. With no editor of this project running there is nothing to quit, and the call fails saying so, with alreadyStopped=true marking that reason apart from a running editor that cannot be reached or refuses on unsaved work. A flow that stops the editor before building sets ignore_failure: true on the stop step, which records the failure and walks on. Two questions are asked before anything is sent: is a modal dialog blocking the editor, and is any package unsaved. Unsaved work refuses in under a second, names every dirty package, and sends no quit, so nothing hangs and nothing is lost; save them with editor(save_dirty), or close the editor yourself and answer its prompt by hand. There is deliberately no flag that discards. What happens to a blocking dialog is the dialog handling mode's decision, resolved from UE_MCP_DIALOG_MODE, then ~/.ue-mcp/state.json, then the default (interactive when the client advertised MCP elicitation, otherwise defer, never auto). interactive puts the dialog to the person over elicitation with its own buttons as the choices and presses only the button THEY pick. It takes TWO calls: the first refuses and hands back the whole dialog, because an elicitation form is a few lines tall and a client may collapse the rest of it, so quote dialogTitle and dialogMessage to the person and call again to raise the form over what they have read. dialogPhase says which call you are on, relay or asking. auto hands the dialog back whole, every button paired with the exact respond_to_dialog call, and the agent decides; the server presses nothing. defer presses nothing and asks nothing, quoting the dialog for recognition only (title, whole message, buttons in order, no press calls) so a person answers it in the editor. Who may press is enforced and not merely described: only auto accepts editor(respond_to_dialog) from an agent, and in interactive and defer that call is refused like any other, because the answer is the person's to give. The same mode governs a dialog raised behind the quit. Every result that met a dialog reports dialogMode, dialogModeSource, and dialogAnsweredByUser when the user answered one. Params: none",
+      description: "Close Unreal Editor gracefully (asks the editor to quit itself via the bridge; never an OS kill). Acts only on the editor for the loaded project, resolved from the port lockfile that editor published at <project>/Saved/UE_MCP_Bridge/port.json. With no lockfile there is no port to aim at and the call refuses, naming the file it checked, rather than probing a default port that another project's editor could answer on (#819). With no editor of this project running there is nothing to quit, and the call fails saying so, with alreadyStopped=true marking that reason apart from a running editor that cannot be reached or refuses on unsaved work. A flow that stops the editor before building sets ignore_failure: true on the stop step. Unsaved work: the quit is sent and the EDITOR decides. It refuses inside the engine and names every dirty package without scheduling a close, so nothing is lost and no quit is left pending; save them with editor(save_dirty), or close the editor yourself and answer its save prompt by hand. There is deliberately no flag that discards. This action has no dialog behaviour of its own: a modal blocks it exactly as it blocks every other action, refused by the same gate with the same fields. Read the dialog with editor(list_dialogs) and answer it with editor(respond_to_dialog). Params: none",
       handler: async (ctx: ToolContext) => {
-        return stopEditor(ctx.project.projectDir ?? undefined, {
-          elicit: ctx.elicit,
-          // The editor's own guard, so this route does not build a second.
-          guard: ctx.session ? existingGuard(ctx.session) : undefined,
-        });
+        return stopEditor(ctx.project.projectDir ?? undefined);
       },
     },
     restart_editor: {
       kind: "handler",
       effect: "mutate",
-      description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages or a blocking dialog and reports them rather than acting on either, and an editor that was already down is not a reason to refuse the start. Params: none",
+      description: "Stop then start the editor for the loaded project. Editors for other projects are left alone: the stop is aimed by this project's port lockfile, and the decision to start is made from the process holding this project's .uproject open, never from whether some editor is running (#819). The stop half is editor(stop_editor) exactly as it behaves on its own, so a restart refuses on unsaved packages and reports them rather than acting on them, and an editor that was already down is not a reason to refuse the start. Like the stop half it has no dialog behaviour of its own: a modal blocks it through the same gate as every other action. Params: none",
       handler: async (ctx: ToolContext) => {
-        return restartEditor(ctx.project, ctx.bridge, {
-          elicit: ctx.elicit,
-          // The editor's own guard, so the stop half does not build a second.
-          guard: ctx.session ? existingGuard(ctx.session) : undefined,
-        });
+        return restartEditor(ctx.project, ctx.bridge);
       },
     },
     build_project: {
@@ -439,7 +418,7 @@ export const editorTool: ToolDef = categoryTool(
     request_editor_shutdown: {
       kind: "handler",
       effect: "mutate",
-      description: "Ask the editor to close itself from inside the engine, after it has checked that closing is safe. Refuses by default when any content or map package is dirty (including an unsaved /Temp world) and reports which ones, so nothing is lost to a silent discard. Ends an active PIE/SIE session first and closes only once play has actually stopped. The response is returned before the process exits. Aimed at the same editor stop_editor aims at, through the same ownership check, so the two can never disagree about which editor belongs to the loaded project (#967), including what happens when none is running: both fail with alreadyStopped=true rather than one succeeding and the other refusing. This IS the dirty check stop_editor runs: stop_editor calls it with requireClean=true before it sends anything, so both actions refuse on the same packages for the same reason, and neither has a way to close over unsaved work. Use editor(stop_editor) for the full stop-and-confirm flow; this action is the in-engine half of it. Params: requireClean? (default true), endPIE? (default true)",
+      description: "Ask the editor to close itself from inside the engine, after it has checked that closing is safe. Refuses by default when any content or map package is dirty (including an unsaved /Temp world) and reports which ones, so nothing is lost to a silent discard. Ends an active PIE/SIE session first and closes only once play has actually stopped. The response is returned before the process exits. Aimed at the same editor stop_editor aims at, through the same ownership check, so the two can never disagree about which editor belongs to the loaded project (#967), including what happens when none is running: both fail with alreadyStopped=true rather than one succeeding and the other refusing. This IS what stop_editor sends: stop_editor calls it with requireClean=false, so the editor schedules its own close and raises its own save prompt for anything dirty rather than the server refusing in its place. Called directly it defaults to requireClean=true, which refuses and names the dirty packages without scheduling anything. Use editor(stop_editor) for the full stop-and-confirm flow; this action is the in-engine half of it. Params: requireClean? (default true), endPIE? (default true)",
       handler: async (ctx: ToolContext, p: Record<string, unknown>) => {
         // #967/#970: stop_editor refused on an ownership check this action did
         // not perform at all, so the two actions gave opposite answers about
