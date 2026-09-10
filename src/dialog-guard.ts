@@ -31,11 +31,29 @@ import type { DialogMode } from "./user-state.js";
 import { elicitationNeedsRelay } from "./client-quirks.js";
 
 /** The dialog, as every layer describes it. */
+/** One tickable row of a dialog that asks a question per item. */
+export interface DialogItem {
+  index: number;
+  /** The row's first cell, which is the asset name on a save prompt. */
+  label: string;
+  /** Every cell in Slate order: name, package path, class path. */
+  cells: string[];
+  checked: boolean;
+}
+
 export interface BlockingDialog {
   title: string;
   message: string;
   buttons: string[];
   choices: Array<{ buttonLabel: string; respondWith: string }>;
+  /**
+   * The rows this dialog lets a person tick, when it has any.
+   *
+   * Save Content is N questions, not one: a checkbox per unsaved package, and
+   * "Save Selected" saves whatever is ticked. Without these the only honest
+   * offer was all or nothing.
+   */
+  items?: DialogItem[];
 }
 
 /**
@@ -170,6 +188,11 @@ export function isDialogRefusal(v: unknown): boolean {
 }
 
 /** Read a dialog out of whatever shape reported it. */
+/** Schema key for one tickable row. Kept in one place so both ends agree. */
+function itemKey(index: number): string {
+  return `item_${index}`;
+}
+
 function asDialog(v: unknown): BlockingDialog | null {
   if (typeof v !== "object" || v === null) return null;
   const r = v as Record<string, unknown>;
@@ -185,6 +208,9 @@ function asDialog(v: unknown): BlockingDialog | null {
     choices: Array.isArray(r.choices)
       ? (r.choices as Array<{ buttonLabel: string; respondWith: string }>)
       : [],
+    ...(Array.isArray(r.items) && r.items.length > 0
+      ? { items: (r.items as DialogItem[]) }
+      : {}),
   };
 }
 
@@ -226,8 +252,17 @@ export interface GuardDeps {
   mode: () => DialogMode;
   /** Reads the live dialog list. Modal-safe, so it answers while parked. */
   probe: () => Promise<unknown>;
-  /** Presses one button by label. */
-  press: (buttonLabel: string) => Promise<unknown>;
+  /**
+   * Presses one button by label, applying any per-item ticks first.
+   *
+   * One call, because a modal is exactly where a caller cannot be relied on
+   * to come back: setting the ticks and pressing the button either both
+   * happen or neither does.
+   */
+  press: (
+    buttonLabel: string,
+    items?: Array<{ index: number; checked: boolean }>,
+  ) => Promise<unknown>;
   /** Present only when the connected client advertised elicitation. */
   elicit?: () => ElicitFn | undefined;
   /**
@@ -680,12 +715,31 @@ export class DialogGuard {
       body,
     ];
     message.push("", "Nothing else can run until this is answered, and nothing is pressed unless you choose it.");
+    // One toggle per row the dialog lets a person tick.
+    //
+    // Save Content is N questions, not one, and "Save Selected" saves whatever
+    // is ticked. Offering the buttons alone made it all or nothing, so a person
+    // who wanted two of five files had no way to say so.
+    //
+    // Only rows carrying a path: the header's select-all box owns the column
+    // headings, and a toggle labelled "Asset" is not a question anybody asked.
+    const tickable = (dialog.items ?? []).filter((i) => i.cells.some((c) => c.startsWith("/")));
+    const itemProps: Record<string, unknown> = {};
+    for (const item of tickable) {
+      itemProps[itemKey(item.index)] = {
+        type: "boolean",
+        title: item.label === "" ? `Item ${item.index}` : item.label,
+        description: item.cells.find((c) => c.startsWith("/")) ?? "",
+        default: item.checked,
+      };
+    }
     try {
       answer = await elicit({
         message: message.join("\n"),
         requestedSchema: {
           type: "object",
           properties: {
+            ...itemProps,
             button: {
               type: "string",
               title: "Button",
@@ -715,7 +769,17 @@ export class DialogGuard {
     // Collapsing the third into "not pressed" claims the editor is untouched
     // when it may not be.
     try {
-      const reply = await this.deps.press(chosen);
+      // What the person ticked travels WITH the button. Sending it separately
+      // would leave a modal holding a selection nobody had pressed anything on.
+      const selections = tickable.map((item) => ({
+        index: item.index,
+        checked: answer.content?.[itemKey(item.index)] === true,
+      }));
+      // Called with ONE argument when there is nothing to tick, so a dialog
+      // that offers no items presses exactly as it always did.
+      const reply = selections.length > 0
+        ? await this.deps.press(chosen, selections)
+        : await this.deps.press(chosen);
       const r = typeof reply === "object" && reply !== null
         ? (reply as Record<string, unknown>)
         : {};
@@ -1032,7 +1096,8 @@ export async function ensureGuard(session: EditorSession): Promise<DialogGuard> 
   const guard = guardFor(session, {
     mode: () => resolveDialogMode({ projectDir: session.projectDir, canElicit: false }).mode,
     probe: () => session.guarded.call("list_dialogs", {}),
-    press: (buttonLabel: string) => session.guarded.call("respond_to_dialog", { buttonLabel }),
+    press: (buttonLabel: string, items?: Array<{ index: number; checked: boolean }>) =>
+      session.guarded.call("respond_to_dialog", { buttonLabel, ...(items ? { items } : {}) }),
     isConnected: () => session.bridge.isConnected,
     readSnapshot: () => {
       const proj = session.project.projectPath ?? session.bridge.getTarget().projectPath ?? null;

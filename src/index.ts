@@ -408,8 +408,8 @@ async function main() {
     const guard = guardFor(forSession, {
       mode: () => resolveDialogMode({ projectDir: forSession.projectDir, canElicit }).mode,
       probe: () => forSession.guarded.call("list_dialogs", {}),
-      press: (buttonLabel: string) =>
-        forSession.guarded.call("respond_to_dialog", { buttonLabel }),
+      press: (buttonLabel: string, items?: Array<{ index: number; checked: boolean }>) =>
+        forSession.guarded.call("respond_to_dialog", { buttonLabel, ...(items ? { items } : {}) }),
       elicit: () => (canElicit ? ctx.elicit : undefined),
       isConnected: () => forSession.bridge.isConnected,
       // The instance-aware reader, not a second one: it prefers

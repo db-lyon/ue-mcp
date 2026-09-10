@@ -987,3 +987,69 @@ describe("the handover is skipped for a client that renders the whole message", 
     expect(forms, "the person was not asked on the call that met the dialog").toHaveLength(1);
   });
 });
+
+describe("a dialog that asks a question per item", () => {
+  const SAVE_ITEMS = {
+    title: "Save Content",
+    message: "Select Content to Save",
+    buttons: ["Save Selected", "Don't Save", "Cancel"],
+    choices: DIALOG.choices,
+    items: [
+      { index: 0, label: "Asset", cells: ["Asset", "File", "Type"], checked: true },
+      { index: 1, label: "L_Test", cells: ["L_Test", "/Game/Maps/L_Test", "/Script/Engine.World"], checked: true },
+      { index: 2, label: "M_Rock", cells: ["M_Rock", "/Game/Mat/M_Rock", "/Script/Engine.Material"], checked: true },
+    ],
+  };
+
+  it("offers a toggle per tickable row, and none for the select-all header", async () => {
+    let schema: any;
+    const guard = make({
+      mode: "interactive",
+      probe: async () => ({ dialogs: [SAVE_ITEMS] }),
+      elicit: () => (async (req: any) => {
+        schema = req.requestedSchema;
+        return { action: "decline" };
+      }) as never,
+    });
+
+    await guard.check("asset.list", "action");
+
+    // The two real rows, keyed by index, titled by the asset.
+    expect(schema.properties.item_1).toMatchObject({ type: "boolean", title: "L_Test", default: true });
+    expect(schema.properties.item_2).toMatchObject({ type: "boolean", title: "M_Rock" });
+    // The header row carries no path, so it is not a question.
+    expect(schema.properties.item_0).toBeUndefined();
+    // The buttons are still the decision.
+    expect(schema.properties.button.enum).toContain("Save Selected");
+  });
+
+  it("sends what the person ticked WITH the button, in one press", async () => {
+    const press = vi.fn(async () => ({ success: true, answered: true }));
+    const guard = make({
+      mode: "interactive",
+      press,
+      probe: async () => ({ dialogs: [SAVE_ITEMS] }),
+      elicit: () => (async () => ({
+        action: "accept",
+        content: { button: "Save Selected", item_1: true, item_2: false },
+      })) as never,
+    });
+
+    await guard.check("asset.list", "action");
+
+    expect(press).toHaveBeenCalledWith("Save Selected", [
+      { index: 1, checked: true },
+      { index: 2, checked: false },
+    ]);
+  });
+
+  it("presses with one argument when the dialog has nothing to tick", async () => {
+    const press = vi.fn(async () => ({ success: true, answered: true }));
+    const guard = make({ mode: "interactive", press, elicit: accept("Cancel") });
+    guard.note(DIALOG);
+
+    await guard.check("asset.list", "action");
+
+    expect(press).toHaveBeenCalledWith("Cancel");
+  });
+});

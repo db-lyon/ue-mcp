@@ -5,6 +5,7 @@
 #include "Dom/JsonObject.h"
 
 class SButton;
+class SCheckBox;
 class SWindow;
 
 class FDialogHandlers
@@ -64,6 +65,25 @@ public:
 		FString Label;
 	};
 
+	/**
+	 * One tickable row of a modal that offers a per-item choice.
+	 *
+	 * The Save Content prompt is the case this exists for: it is not one
+	 * question but N, a checkbox per unsaved package, and "Save Selected"
+	 * honours whatever is ticked. Reporting only the buttons made it look like
+	 * an all-or-nothing choice, so a person could save everything or nothing
+	 * and never the two files they actually wanted.
+	 *
+	 * Cells are the row's text in Slate order, which for the save prompt is
+	 * asset name, package path, class path.
+	 */
+	struct FModalItem
+	{
+		TSharedPtr<SCheckBox> Box;
+		TArray<FString> Cells;
+		bool bChecked = false;
+	};
+
 private:
 	// Dialog policy: pattern -> response mapping
 	struct FDialogPolicy
@@ -101,7 +121,7 @@ private:
 	// Shared modal walk. One traversal answers DescribeActiveModal,
 	// list_dialogs, respond_to_dialog and the policy applier, so the four
 	// cannot disagree about which buttons a dialog has.
-	static TSharedPtr<SWindow> CollectActiveModal(FString& OutTitle, FString& OutMessage, TArray<FModalButton>& OutButtons);
+	static TSharedPtr<SWindow> CollectActiveModal(FString& OutTitle, FString& OutMessage, TArray<FModalButton>& OutButtons, TArray<FModalItem>* OutItems = nullptr);
 
 	/** First policy whose pattern appears in the title or the message. */
 	static const FDialogPolicy* FindMatchingPolicy(const FString& Title, const FString& Message);
