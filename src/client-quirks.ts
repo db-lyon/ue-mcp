@@ -95,6 +95,10 @@ export function progressRenderingNote(client: ClientInfo | undefined): string | 
  */
 const RENDERS_WHOLE_ELICITATION = [
   "pi-coding-agent",
+  // pi-mcp-adapter, which names its client pi-mcp-<server> rather than after
+  // pi itself. It passes the elicitation message through whole into pi's TUI,
+  // so the handover buys nothing and only delays the form.
+  "pi-mcp-",
 ];
 
 /**

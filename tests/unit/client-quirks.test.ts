@@ -56,6 +56,10 @@ describe("elicitationNeedsRelay", () => {
     // Matched as a substring of the name the client sends, which is rarely
     // exactly the name it goes by.
     expect(elicitationNeedsRelay({ name: "Pi-Coding-Agent/2" })).toBe(false);
+    // pi-mcp-adapter names its client after the SERVER it is bridging, not
+    // after pi, so the name is pi-mcp-<server> and never mentions pi-coding-agent.
+    // It hands the message to pi's TUI whole.
+    expect(elicitationNeedsRelay({ name: "pi-mcp-ue-mcp", version: "2.32.1" })).toBe(false);
   });
 
   it("lets the environment settle it either way, without waiting for a release", () => {
