@@ -28,37 +28,71 @@ import { ALL_TOOLS, enumerateBridgeActions } from "../src/tools.js";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "..");
 
-interface Counts {
+/** Every wrapped Epic tool is spelled `epic_<name>`; nothing else is. */
+const EPIC_ACTION_PREFIX = "epic_";
+
+export interface Counts {
   tools: number;
+  /** Every action the server advertises, ue-mcp's own AND the wrapped Epic
+   *  tools. This is a TOTAL, not an addend: since commit 023d86d4 the `epic_*`
+   *  actions are declared in `ALL_TOOLS` like any other, so quoting this
+   *  number next to `nativeToolActions` with an "also" or a "plus" claims a
+   *  surface that is 830 actions larger than the one that ships. */
   actions: number;
+  /** ue-mcp's own actions: `actions` minus the wrapped Epic tools. This is the
+   *  number to quote when the copy names Epic's 830 separately. */
+  ownActions: number;
   bridgeActions: number;
   localActions: number;
   perTool: Record<string, number>;
-  /** Official Unreal 5.8 ToolsetRegistry toolsets ue-mcp wraps (from the baked
-   *  catalog snapshot). These surface as first-class actions at runtime but are
-   *  not part of the static `actions` count. */
+  /** Official Unreal 5.8 ToolsetRegistry toolsets ue-mcp wraps. */
   nativeToolsets: number;
-  /** Total official Epic tools wrapped across all native toolsets. */
+  /** Official Epic tools wrapped across those toolsets, counted inside
+   *  `actions`. */
   nativeToolActions: number;
   generatedAt: string;
   version: string;
 }
 
-/** Count the wrapped Epic tools from the shipped catalog snapshot. */
+/**
+ * Count the wrapped Epic tools.
+ *
+ * The tool total comes from `ALL_TOOLS`, the same graph the server advertises,
+ * so it cannot disagree with what a client is handed. The toolset total comes
+ * from the recorded catalog, which is the only place that grouping is written
+ * down, and the two are cross-checked.
+ *
+ * This used to read `assets/epic-catalog.snapshot.json` inside a `try` that
+ * returned zeros. The catalog moved to `tests/golden/epic-catalog.json` when
+ * the wrapped tools became declared actions, the read started throwing, the
+ * `catch` swallowed it, and `dist/tool-counts.json` published
+ * `nativeToolActions: 0` for every release after that - which the landing site
+ * rendered, live, as "all 0 of Epic's native 5.8 tools wrapped in-process".
+ * A count that silently degrades to zero is worse than one that fails the
+ * build, so a missing or disagreeing catalog now throws.
+ */
 function computeNativeCounts(): { nativeToolsets: number; nativeToolActions: number } {
-  try {
-    const snap = JSON.parse(
-      fs.readFileSync(path.join(repo, "assets", "epic-catalog.snapshot.json"), "utf8"),
-    ) as { toolsets?: Array<{ tools?: unknown[] }> };
-    const toolsets = snap.toolsets ?? [];
-    const tools = toolsets.reduce((n, t) => n + (t.tools?.length ?? 0), 0);
-    return { nativeToolsets: toolsets.length, nativeToolActions: tools };
-  } catch {
-    return { nativeToolsets: 0, nativeToolActions: 0 };
+  const declared = ALL_TOOLS.reduce(
+    (n, t) => n + Object.keys(t.actions).filter((a) => a.startsWith(EPIC_ACTION_PREFIX)).length,
+    0,
+  );
+  const catalogPath = path.join(repo, "tests", "golden", "epic-catalog.json");
+  const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8")) as {
+    toolsets?: Array<{ tools?: unknown[] }>;
+  };
+  const toolsets = catalog.toolsets ?? [];
+  const recorded = toolsets.reduce((n, t) => n + (t.tools?.length ?? 0), 0);
+  if (recorded !== declared || declared === 0) {
+    throw new Error(
+      `Wrapped Epic tool count disagrees: ALL_TOOLS declares ${declared} ${EPIC_ACTION_PREFIX}* ` +
+        `actions, tests/golden/epic-catalog.json records ${recorded}. ` +
+        `Run \`npm run epic:generate\` (or re-record the catalog) before regenerating metadata.`,
+    );
   }
+  return { nativeToolsets: toolsets.length, nativeToolActions: declared };
 }
 
-function computeCounts(): Counts {
+export function computeCounts(): Counts {
   const perTool: Record<string, number> = {};
   let total = 0;
   for (const t of ALL_TOOLS) {
@@ -72,6 +106,7 @@ function computeCounts(): Counts {
   return {
     tools: ALL_TOOLS.length,
     actions: total,
+    ownActions: total - native.nativeToolActions,
     bridgeActions: bridge,
     localActions: total - bridge,
     perTool,
@@ -181,6 +216,16 @@ function applyCountMarkers(text: string, counts: Counts): string {
   return text
     .replace(/<!--\s*count:tools\s*-->[^<]*<!--\s*\/count\s*-->/g, `<!-- count:tools -->${counts.tools}<!-- /count -->`)
     .replace(/<!--\s*count:actions\s*-->[^<]*<!--\s*\/count\s*-->/g, `<!-- count:actions -->${counts.actions}+<!-- /count -->`)
+    // ue-mcp's own actions, for the sentences that also name Epic's wrapped
+    // tools. `count:actions` is the total and already contains them.
+    .replace(
+      /<!--\s*count:ownActions\s*-->[^<]*<!--\s*\/count\s*-->/g,
+      `<!-- count:ownActions -->${counts.ownActions}+<!-- /count -->`,
+    )
+    .replace(
+      /<!--\s*count:nativeToolActions\s*-->[^<]*<!--\s*\/count\s*-->/g,
+      `<!-- count:nativeToolActions -->${counts.nativeToolActions}<!-- /count -->`,
+    )
     // The actions that dispatch to the C++ bridge, which is what the smoke
     // suite exercises and therefore the number CLAUDE.md quotes for it.
     .replace(
@@ -201,6 +246,7 @@ const MARKER_FILES = [
   "docs/configuration.md",
   "docs/development.md",
   "docs/flows.md",
+  "docs/plugins-guards.md",
   "docs/tool-reference.md",
 ];
 
@@ -282,6 +328,10 @@ function main(): void {
   const upluginChanged = updatePluginDescriptor(counts);
 
   console.log(`tools=${counts.tools} actions=${counts.actions} (bridge=${counts.bridgeActions}, local=${counts.localActions})`);
+  console.log(
+    `  of those: own=${counts.ownActions}, wrapped Epic=${counts.nativeToolActions} ` +
+      `across ${counts.nativeToolsets} toolsets`,
+  );
   console.log(`wrote ${path.relative(repo, json)}`);
   console.log(`wrote ${path.relative(repo, ref)}`);
   if (updated.length) console.log(`stamped markers in: ${updated.join(", ")}`);
@@ -289,4 +339,8 @@ function main(): void {
   if (upluginChanged) console.log(`updated UE_MCP_Bridge.uplugin version and description`);
 }
 
-main();
+// Only when run as a script. `computeCounts` is imported by
+// tests/unit/tool-counts.test.ts, which must not rewrite the tree to read it.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}
