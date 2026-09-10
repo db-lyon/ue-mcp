@@ -17,6 +17,23 @@ import { ALL_TOOLS } from "./tools.js";
 const CATEGORY_COUNT = ALL_TOOLS.length;
 const ACTION_COUNT = ALL_TOOLS.reduce((n, t) => n + Object.keys(t.actions).length, 0);
 
+/**
+ * Unreal's own toolset registry, wrapped. Every wrapped tool is spelled
+ * `epic_<name>` and nothing else is, so the split is readable off the same
+ * graph rather than transcribed.
+ *
+ * These stopped being a bolt-on when they became declared actions: they are
+ * inside ACTION_COUNT now. Saying "N actions, PLUS the wrapped Epic tools"
+ * therefore advertises a surface EPIC_ACTION_COUNT larger than the one that
+ * ships, which is exactly what this text and the landing site both did. Quote
+ * OWN_ACTION_COUNT whenever the wrapped tools are named separately.
+ */
+const EPIC_ACTION_COUNT = ALL_TOOLS.reduce(
+  (n, t) => n + Object.keys(t.actions).filter((a) => a.startsWith("epic_")).length,
+  0,
+);
+const OWN_ACTION_COUNT = ACTION_COUNT - EPIC_ACTION_COUNT;
+
 /** Every category name, wrapped so the block reads the way it always has. */
 function categoryList(): string {
   const names = ALL_TOOLS.map((t) => t.name);
@@ -34,7 +51,7 @@ function categoryList(): string {
   if (line) lines.push(line);
   return lines.join("\n").replace(
     /\bepic\b(?![\w-])/,
-    "epic (830 wrapped Unreal 5.8 tools; UE 5.8+)",
+    `epic (the registry itself; its ${EPIC_ACTION_COUNT} wrapped tools sit on the categories they belong to)`,
   );
 }
 
@@ -48,7 +65,7 @@ Echo the resolved interpretation. Ask only for missing context that changes the 
 After applying, check readback and matching, lit close views with the pose held fixed.
 A successful transform write is not visual verification. Do not infer 3D contact from one image.`;
 
-export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) - ${CATEGORY_COUNT} category tools covering ${ACTION_COUNT} actions, plus 830 official Unreal 5.8 tools wrapped in-process (UE 5.8+; see the epic category).
+export const SERVER_INSTRUCTIONS = `UE-MCP: Unreal Engine editor bridge (C++ plugin) - ${CATEGORY_COUNT} category tools covering ${ACTION_COUNT} actions: ${OWN_ACTION_COUNT} of ue-mcp's own, plus ${EPIC_ACTION_COUNT} official Unreal 5.8 tools wrapped in-process as \`epic_*\` actions (UE 5.8+; see the epic category).
 
 Every tool takes an "action" parameter that selects the operation. Call project(action="get_status") first.
 

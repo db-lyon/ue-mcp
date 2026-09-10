@@ -7,7 +7,7 @@
 
 **Unreal Engine Model Context Protocol Server** - gives AI assistants deep read/write access to the Unreal Editor through <!-- count:tools -->26<!-- /count --> category tools covering <!-- count:actions -->1930+<!-- /count --> actions, plus a YAML flow engine for multi-step workflows and an npm plugin system for extending the surface.
 
-On UE 5.8+ it also wraps Epic's entire native AI Toolset Registry - 830 official Unreal tools, called in-process and surfaced as `epic_*` actions in the matching category: Sequencer in `animation`, PCG in `pcg`, static meshes in `asset`.
+That total is <!-- count:ownActions -->1100+<!-- /count --> actions of ue-mcp's own plus Epic's entire native AI Toolset Registry: on UE 5.8+ its <!-- count:nativeToolActions -->830<!-- /count --> official Unreal tools are called in-process and surfaced as `epic_*` actions in the matching category, Sequencer in `animation`, PCG in `pcg`, static meshes in `asset`.
 
 ```mermaid
 flowchart LR

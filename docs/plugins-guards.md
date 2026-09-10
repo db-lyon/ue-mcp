@@ -55,7 +55,7 @@ guards:
 
 ### Unreal's wrapped tools are in these scopes like anything else
 
-The 830 actions wrapping Unreal's own toolsets all dispatch through one bridge method, `epic_call_tool`, because the plugin registers a single reflective handler for the whole registry rather than one per tool: Unreal discovers that registry at runtime and it varies with the engine plugins a project enables, so there is nothing to compile a handler against.
+The <!-- count:nativeToolActions -->830<!-- /count --> actions wrapping Unreal's own toolsets all dispatch through one bridge method, `epic_call_tool`, because the plugin registers a single reflective handler for the whole registry rather than one per tool: Unreal discovers that registry at runtime and it varies with the engine plugins a project enables, so there is nothing to compile a handler against.
 
 That is invisible here. A scope is decided by what the CALL does, method and arguments together, and the argument names which tool is being invoked. `gas(epic_list_attributes)` is in `reads` and out of `mutations`; `widget(epic_add_widget)` is the reverse. Neither is in `unknown`, because their effects are declared, reviewed and known.
 
