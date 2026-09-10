@@ -226,11 +226,8 @@ describe("the mode decides, and only interactive presses anything", () => {
     const press = vi.fn(async () => ({ success: true }));
     const guard = make({ mode: "interactive", press, elicit: accept("Cancel") });
     guard.note(DIALOG);
-    // First call: the dialog comes back whole and nothing is asked or pressed.
-    const relayed = await relay(guard);
-    expect(relayed.allow).toBe(false);
-    expect(press).not.toHaveBeenCalled();
-    // Second: the form goes up over what the caller has already been given.
+    // One call. This dialog fits a form, so there is no handover round trip
+    // and nothing a caller has to know to repeat.
     const decision = await guard.check("asset.list", "action");
     expect(decision.allow).toBe(true);
     expect(press).toHaveBeenCalledWith("Cancel");
@@ -429,7 +426,6 @@ describe("a route with nobody to ask never elicits", () => {
     const press = vi.fn(async () => ({ success: true, answered: true }));
     const guard = make({ mode: "interactive", press, elicit: () => elicit as never });
     guard.note(DIALOG);
-    await relay(guard, "level.get_outliner");
     await guard.check("level.get_outliner", "action");
     expect(elicit).toHaveBeenCalled();
   });
@@ -449,7 +445,6 @@ describe("being asked is not the same as having answered", () => {
     const press = vi.fn(async () => ({ success: true, answered: true }));
     const guard = make({ mode: "interactive", press, elicit: () => elicit as never });
     guard.note(DIALOG);
-    await relay(guard);
 
     const first = await guard.check("asset.list", "action");
     expect(first.allow).toBe(false);
@@ -519,13 +514,10 @@ describe("one dialog, one ask, however many callers", () => {
 
     const other = { ...DIALOG, title: "Delete Assets", message: "different" };
     guard.note(DIALOG);
-    // Each dialog is relayed once before it is ever asked about, and they are
-    // relayed separately: the record is keyed on the dialog, so telling the
-    // caller about one must not consume the other's turn.
-    await guard.decideFor("asset.list", DIALOG);
-    await guard.decideFor("asset.list", other);
-    expect(shown).toHaveLength(0);
-
+    // Both fit a form, so each is asked about on the call that meets it. What
+    // matters is that they are asked SEPARATELY: the in-flight ask is keyed on
+    // the dialog, so two concurrent callers seeing different prompts each get
+    // their own form rather than one inheriting the other's answer.
     const a = guard.decideFor("asset.list", DIALOG);
     const b = guard.decideFor("asset.list", other);
     await Promise.all([a, b]);
@@ -798,7 +790,6 @@ describe("who may press the button is the mode's decision, not the allow list's"
       press,
       probe: async () => listing(),
     });
-    await relay(guard2);
     expect((await guard2.check("asset.list", "action")).allow).toBe(true);
     expect(press).toHaveBeenCalledWith("Cancel");
   });
@@ -853,13 +844,14 @@ describe("the elicitation form leads with the question, not the boilerplate", ()
         return { action: "decline" };
       }) as never,
     });
-    await relay(guard);
     await guard.check("asset.list", "action");
-    const [first, second] = seen.split("\n");
-    expect(first).toContain("Save Content");
-    expect(second).toContain("Select the assets to save.");
-    // Flattened, so one line carries the question rather than one package path.
-    expect(second).toContain("/Game/A");
+    const lines = seen.split(String.fromCharCode(10));
+    expect(lines[0]).toContain("Save Content");
+    // The question is the SECOND line, the last one a collapsing client is
+    // guaranteed to show.
+    expect(lines[1]).toContain("Select the assets to save.");
+    // The packages follow it a line each, rather than flattened into it.
+    expect(seen).toContain("/Game/A");
   });
 });
 
@@ -905,7 +897,6 @@ describe("dismissing the form is not the end of the session", () => {
       }) as never,
     });
 
-    await relay(guard);
     await guard.check("asset.list", "action");
     expect(forms).toHaveLength(1);
 
@@ -916,7 +907,6 @@ describe("dismissing the form is not the end of the session", () => {
     // then asked about, exactly as the first was. Forgetting only the asked-once
     // record would ask about a dialog the caller was never given.
     phase = "second";
-    await relay(guard);
     await guard.check("asset.list", "action");
     expect(forms, "the second dialog never reached the person").toHaveLength(2);
     expect(forms[1]).toContain("Delete Assets");
@@ -963,13 +953,37 @@ describe("the handover is skipped for a client that renders the whole message", 
     expect(forms[0]).toContain("Save Content");
   });
 
-  it("still hands it over first for a client nobody has checked", async () => {
+  it("still hands a BIG dialog over first for a client nobody has checked", async () => {
+    // Two conditions now, not one: the client collapses long messages AND this
+    // message is long enough to be collapsed.
+    const big = {
+      ...DIALOG,
+      message: ["Select Content to Save"]
+        .concat(Array.from({ length: 40 }, (_, n) => `/Game/Pkg/Asset_${n}`))
+        .join(String.fromCharCode(10)),
+    };
     const forms: string[] = [];
-    const guard = make({ mode: "interactive", elicit: elicitAs("some-new-agent", forms) });
-    guard.note(DIALOG);
+    // The probe is authoritative, so a case about THIS dialog has to serve it.
+    const guard = make({
+      mode: "interactive",
+      elicit: elicitAs("some-new-agent", forms),
+      probe: async () => ({ dialogs: [big] }),
+    });
+    guard.note(big);
     await guard.check("asset.list", "action");
     expect(forms, "an unchecked client must not be assumed to render").toHaveLength(0);
     await guard.check("asset.list", "action");
     expect(forms).toHaveLength(1);
+  });
+
+  it("asks an unchecked client immediately when the dialog fits a form", async () => {
+    // The handover leaves raising the form to whoever calls again, which is
+    // not something to depend on. A prompt small enough to render whole is put
+    // to the person on the spot, whatever the client.
+    const forms: string[] = [];
+    const guard = make({ mode: "interactive", elicit: elicitAs("some-new-agent", forms) });
+    guard.note(DIALOG);
+    await guard.check("asset.list", "action");
+    expect(forms, "the person was not asked on the call that met the dialog").toHaveLength(1);
   });
 });

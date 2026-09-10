@@ -116,6 +116,53 @@ export function oneLine(text: string, limit = 220): string {
   return `${flat.slice(0, limit).trimEnd()} [continues below]`;
 }
 
+/**
+ * A blocking dialog, rendered for a person to read.
+ *
+ * Unreal flattens a Slate dialog into lines, so a save prompt arrives as its
+ * prompt, then the column headers, then one line per cell, then the button
+ * labels. Printed raw that is an unreadable run of paths. This pulls the asset
+ * rows back out and lays them in a table, and passes anything it does not
+ * recognise through untouched.
+ */
+export function renderDialog(dialog: BlockingDialog): string {
+  const raw = dialog.message.split("\n").map((l) => l.trim()).filter((l) => l !== "");
+  const buttons = new Set(dialog.buttons.map((b) => b.trim()));
+  // The button labels are repeated at the end of the flattened text.
+  const body = raw.filter((l) => !buttons.has(l));
+
+  // An asset row is a name followed by two object paths: the package and the
+  // class. That shape is what makes a row findable without knowing the column
+  // count in advance.
+  const rows: Array<[string, string, string]> = [];
+  const consumed = new Set<number>();
+  for (let i = 0; i + 2 < body.length; i++) {
+    // The THIRD cell has to be a class path. Without that the rule matched any
+    // sentence followed by two paths, so a prompt that merely lists packages
+    // had its own question eaten as if it were an asset name.
+    if (!body[i].startsWith("/") && body[i + 1].startsWith("/") && body[i + 2].startsWith("/Script/")) {
+      rows.push([body[i], body[i + 1], body[i + 2]]);
+      consumed.add(i).add(i + 1).add(i + 2);
+      i += 2;
+    }
+  }
+
+  const HEADERS = ["Asset", "File", "Type"];
+  const prose = body.filter((l, i) => !consumed.has(i) && !HEADERS.includes(l));
+  const out: string[] = [];
+  if (prose.length > 0) out.push(prose.join("\n"));
+  if (rows.length > 0) {
+    const cols = HEADERS.map((h, c) => Math.max(h.length, ...rows.map((r) => r[c].length)));
+    const line = (cells: string[]) =>
+      "  " + cells.map((cell, c) => cell.padEnd(cols[c])).join("  ").trimEnd();
+    out.push("");
+    out.push(line(HEADERS));
+    out.push(line(cols.map((w) => "-".repeat(w))));
+    for (const r of rows) out.push(line(r));
+  }
+  return out.join("\n");
+}
+
 /** True for the refusal the plugin's own gate emits. */
 export function isDialogRefusal(v: unknown): boolean {
   return typeof v === "object" && v !== null
@@ -202,6 +249,10 @@ export interface GuardDeps {
  * flushes it on a timer while running, so anything older is a leftover.
  */
 export const STATUS_STALE_AFTER_MS = 15_000;
+
+/** How big a rendered dialog has to be before a form cannot carry it. */
+const RELAY_OVER_LINES = 12;
+const RELAY_OVER_CHARS = 700;
 
 export class DialogGuard {
   private blocking: BlockingDialog | null = null;
@@ -395,8 +446,21 @@ export class DialogGuard {
    * Asked of the live elicit function rather than stored, because the client is
    * only knowable once one has connected and this guard outlives connections.
    */
-  private needsRelay(): boolean {
-    return elicitationNeedsRelay(this.deps.elicit?.()?.client?.());
+  /**
+   * Whether the text has to go back before a form can carry it.
+   *
+   * Two conditions, not one. A client that collapses a long elicitation is
+   * only a problem when there IS a long elicitation: a save prompt renders as
+   * a line and a short table, which every client shows in full, and relaying
+   * that costs a round trip AND leaves raising the form to the agent, which is
+   * not something to depend on. So the form goes up on the first call unless
+   * the rendered block is genuinely too big for one.
+   */
+  private needsRelay(dialog: BlockingDialog): boolean {
+    if (!elicitationNeedsRelay(this.deps.elicit?.()?.client?.())) return false;
+    const rendered = renderDialog(dialog);
+    return rendered.split("\n").length > RELAY_OVER_LINES
+      || rendered.length > RELAY_OVER_CHARS;
   }
 
   /**
@@ -459,7 +523,7 @@ export class DialogGuard {
     // modes are not equal.
     const interactive =
       DialogGuard.effectiveMode(this.deps.mode(), this.canAsk(opts)) === "interactive";
-    if (interactive && this.needsRelay() && !this.told.has(identity)) {
+    if (interactive && this.needsRelay(dialog) && !this.told.has(identity)) {
       this.told.add(identity);
       return { allow: false, refusal: this.refusal(subject, dialog, opts, "relay") };
     }
@@ -607,12 +671,14 @@ export class DialogGuard {
     // button for a question they could not see. Nothing in the protocol asks a
     // client for more room and there is no richer rendering to fall back on, so
     // the title and the gist go first and the boilerplate goes last.
-    const full = dialog.message === "" ? "(no message text)" : dialog.message;
-    const gist = oneLine(full);
-    const message = [`Unreal is blocked: ${dialog.title === "" ? "(untitled dialog)" : dialog.title}`, gist];
-    // Repeated whole only when compacting actually dropped something, so a
-    // client that shows the lot does not read the same sentence twice.
-    if (gist !== full) message.push("", full);
+    const rendered = renderDialog(dialog);
+    const body = rendered === "" ? "(no message text)" : rendered;
+    // No blank line between them. A client that keeps only the opening line or
+    // two must spend both on the title and the question, not one on padding.
+    const message = [
+      `Unreal is blocked: ${dialog.title === "" ? "(untitled dialog)" : dialog.title}`,
+      body,
+    ];
     message.push("", "Nothing else can run until this is answered, and nothing is pressed unless you choose it.");
     try {
       answer = await elicit({

@@ -446,44 +446,37 @@ describe("interactive mode, end to end, with a client that can be asked", () => 
     fs.rmSync(liveSandbox, { recursive: true, force: true });
   });
 
-  it("hands the whole dialog back before it asks anything", async () => {
-    // End to end, through the shipped server: the first call a client makes
-    // against a blocked editor answers with the dialog in full and raises no
-    // form. The form is a few lines tall and the client decides how many of
-    // them to draw, so the text goes where nothing can truncate it first.
+  it("raises the form on the first call and presses only the chosen button", async () => {
+    // End to end, through the shipped server. This dialog renders small enough
+    // for a form to carry whole, so there is no handover round trip: the person
+    // is asked on the call that met it, and nothing depends on anyone knowing
+    // to call again.
     forms.length = 0;
     const before = bridge.seen.filter((m) => m === "respond_to_dialog").length;
 
-    const res = await liveClient.callTool({
+    await liveClient.callTool({
       name: "level",
       arguments: { action: "get_outliner", limit: 1 },
     });
-    const out = body(res);
 
-    expect(forms.length, "a form went up before the dialog had been handed over").toBe(0);
-    expect(out.dialogBlocking).toBe(true);
-    expect(out.dialogPhase).toBe("relay");
-    expect(out.dialogTitle).toBe(DIALOG.title);
-    expect(out.dialogMessage).toBe(DIALOG.message);
-    expect(out.buttons).toEqual(DIALOG.buttons);
-    // Nothing was pressed, and the press calls are still not named.
-    expect(bridge.seen.filter((m) => m === "respond_to_dialog").length).toBe(before);
-    expect(String(out.error)).not.toContain("editor(respond_to_dialog)");
-  }, 60_000);
-
-  it("puts the dialog to the user and presses the button they picked", async () => {
-    forms.length = 0;
-    const before = bridge.seen.filter((m) => m === "respond_to_dialog").length;
-
-    // The relay is spent, so this call is the one that raises the form.
-    await liveClient.callTool({ name: "level", arguments: { action: "get_outliner", limit: 1 } });
-
-    expect(forms.length, "no elicitation form was shown").toBeGreaterThan(0);
+    expect(forms.length, "no elicitation form was shown").toBe(1);
     // The dialog's own buttons, plus the option to leave it alone.
     expect(forms[0].buttons).toEqual([...DIALOG.buttons, "Leave the dialog open"]);
-    expect(forms[0].message).toContain(DIALOG.title);
-    // And the button they chose was actually pressed.
+    // Title first, then the question, which are the two lines a client that
+    // collapses the rest is guaranteed to draw.
+    const lines = forms[0].message.split(String.fromCharCode(10));
+    expect(lines[0]).toContain(DIALOG.title);
+    expect(lines[1]).toContain("Select Content to Save");
+    // And the button they chose was actually pressed. Exactly one.
     expect(bridge.seen.filter((m) => m === "respond_to_dialog").length).toBe(before + 1);
+  }, 60_000);
+
+  it("does not raise a second form for a dialog already asked about", async () => {
+    forms.length = 0;
+    const before = bridge.seen.filter((m) => m === "respond_to_dialog").length;
+    await liveClient.callTool({ name: "level", arguments: { action: "get_outliner", limit: 1 } });
+    expect(forms.length, "the person was asked twice for one dialog").toBe(0);
+    expect(bridge.seen.filter((m) => m === "respond_to_dialog").length).toBe(before);
   }, 60_000);
 
   it("resolves the mode to interactive, not the defer fallback", async () => {
