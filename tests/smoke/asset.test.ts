@@ -110,7 +110,10 @@ describe("asset - write (with cleanup)", () => {
     expect(replayResult.created).toBe(false);
 
     const conflict = await callBridge(bridge, "create_render_target_2d", { ...params, onConflict: "error" });
-    expect(conflict.ok).toBe(false);
+    expect(conflict.ok, conflict.error).toBe(true);
+    const conflictResult = conflict.result as Record<string, unknown>;
+    expect(conflictResult.success).toBe(false);
+    expect(String(conflictResult.error)).toContain("already exists");
   });
 
   it("create_render_target_2d rejects an unsupported format and an out-of-range size", async () => {
@@ -119,14 +122,22 @@ describe("asset - write (with cleanup)", () => {
       packagePath: TEST_PREFIX,
       format: "BC7",
     });
-    expect(badFormat.ok).toBe(false);
+    expect(badFormat.ok, badFormat.error).toBe(true);
+    const badFormatResult = badFormat.result as Record<string, unknown>;
+    expect(badFormatResult.success).toBe(false);
+    expect(String(badFormatResult.error)).toContain("format must be one of");
 
     const badSize = await callBridge(bridge, "create_render_target_2d", {
       name: `RenderTargetBadSize_${Date.now()}`,
       packagePath: TEST_PREFIX,
       width: 16384,
     });
-    expect(badSize.ok).toBe(false);
+    expect(badSize.ok, badSize.error).toBe(true);
+    const badSizeResult = badSize.result as Record<string, unknown>;
+    expect(badSizeResult.success).toBe(false);
+    expect(String(badSizeResult.error)).toContain("width and height must be between");
+  });
+
   it("bulk_set_asset_properties rejects an invalid batch before mutation and reports every item", async () => {
     const r = await callBridge(bridge, "bulk_set_asset_properties", {
       items: [
