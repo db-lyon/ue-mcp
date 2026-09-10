@@ -84,7 +84,9 @@ describe("asset - append reflected TArray elements", () => {
     expect(result.appendedCount).toBe(2);
     expect(result.newNum).toBe(2);
     expect(result.appendedIndices).toEqual([0, 1]);
-    expect(result.saved).toBe(false);
+    // save? defaults to true, so the append is persisted and `saved` reports it.
+    expect(result.saved).toBe(true);
+    expect(result.persisted).toBe(true);
 
     const slots = await readSlots();
     expect(slots).toHaveLength(2);

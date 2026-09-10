@@ -28,7 +28,9 @@ describe("audio - list_sound_assets directory + pagination (#730)", () => {
     expect(r.ok, r.error).toBe(true);
     const result = r.result as Record<string, unknown>;
     expect((result.assets as unknown[]).length).toBeLessThanOrEqual(1);
-    expect(result.maxResults).toBe(1);
+    // maxResults is the deprecated spelling of limit; the page reports the cap
+    // it actually applied, whichever spelling asked for it.
+    expect(result.limit).toBe(1);
   });
 
   it("scopes results to a non-existent directory (empty page, no error)", async () => {
