@@ -1457,6 +1457,20 @@ namespace MCPClassResolve
 				{
 					Add(Trimmed + TEXT("_C"));
 				}
+
+				// A /Script path names a module, and modules move between them:
+				// UPhysicalMaterial is /Script/PhysicsCore.PhysicalMaterial, not
+				// /Script/Engine.PhysicalMaterial, which is the spelling older
+				// documentation uses and the one this resolver's own "not found"
+				// text recommends. The leaf name is added LAST, so an exact path
+				// still wins and this is only reached when no spelling of the
+				// path matched anything at all.
+				if (PackagePart.StartsWith(TEXT("/Script/")))
+				{
+					Add(ObjectPart);
+					const FString StrippedLeaf = StripPrefix(ObjectPart);
+					if (StrippedLeaf != ObjectPart) Add(StrippedLeaf);
+				}
 			}
 			else
 			{

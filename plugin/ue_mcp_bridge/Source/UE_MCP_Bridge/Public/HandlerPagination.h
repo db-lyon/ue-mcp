@@ -221,16 +221,24 @@ namespace MCPPagination
 		Out.CollectionKey = CollectionKey;
 		Out.Limit = DefaultLimit;
 
-		if (Params.IsValid() && Params->HasField(TEXT("limit")))
+		// 'maxResults' is the older spelling of 'limit'. The tool layer already
+		// translates one into the other, but the bridge is also called directly,
+		// and there a page cap that is read by nobody is a silent wrong answer:
+		// the caller asks for one row and is handed the default page.
+		const TCHAR* LimitField = nullptr;
+		if (Params.IsValid() && Params->HasField(TEXT("limit"))) LimitField = TEXT("limit");
+		else if (Params.IsValid() && Params->HasField(TEXT("maxResults"))) LimitField = TEXT("maxResults");
+
+		if (LimitField)
 		{
 			double Raw = 0.0;
-			if (!Params->TryGetNumberField(TEXT("limit"), Raw) ||
+			if (!Params->TryGetNumberField(LimitField, Raw) ||
 				!FMath::IsFinite(Raw) || FMath::TruncToDouble(Raw) != Raw ||
 				Raw < 1.0 || Raw > static_cast<double>(MaxLimit))
 			{
 				return MCPError(FString::Printf(
-					TEXT("'limit' must be a whole number between 1 and %d. Omit it for the default of %d."),
-					MaxLimit, DefaultLimit));
+					TEXT("'%s' must be a whole number between 1 and %d. Omit it for the default of %d."),
+					LimitField, MaxLimit, DefaultLimit));
 			}
 			Out.Limit = static_cast<int32>(Raw);
 		}
@@ -353,6 +361,9 @@ namespace MCPPagination
 
 		Result->SetArrayField(ArrayField, Page);
 		Result->SetNumberField(TEXT("count"), Page.Num());
+		// The page size actually applied, whichever spelling asked for it, so a
+		// caller can see the cap it got rather than infer it from a short page.
+		Result->SetNumberField(TEXT("limit"), Request.Limit);
 		Result->SetNumberField(TEXT("pageOffset"), Start);
 
 		const bool bHasMore = bRowsAreComplete ? (End < Rows.Num()) : (End < Rows.Num() || Page.Num() == Request.Limit);
