@@ -36,6 +36,7 @@ import * as nodePath from "node:path";
 import {
   DialogGuard,
   guardFor,
+  type GuardDecision,
   existingGuard,
   isDialogRefusal,
   stampBlockedEditor,
@@ -855,10 +856,16 @@ async function main() {
         // busy and suggests a bigger timeoutMs, which is the retry loop this
         // gate exists to end. The task runner returns no data on a throw, so
         // the refusal cannot be recognised from the result: ask the guard.
+        // KEPT, not just tested. This is where the guard decides what to do
+        // about the dialog: hand the text back first, or raise the form. The
+        // returned refusal used to be rebuilt below with guard.refusal(), whose
+        // phase argument defaults to "asking", so every relay was reported as an
+        // ask and the prose claimed a form had gone up when none had.
+        let postRunDecision: GuardDecision | null = null;
         const failedUnderDialog = !result.success
           && !isDialogRefusal(result.data)
           && !DialogGuard.actionAllowed(effectiveTaskName(tool, params))
-          && (await guard.check(effectiveTaskName(tool, params), "action")).allow === false;
+          && (postRunDecision = await guard.check(effectiveTaskName(tool, params), "action")).allow === false;
         if (!result.success && !isDialogRefusal(result.data) && !failedUnderDialog) {
           const msg = result.error?.message ?? `Task ${taskName} failed`;
           return {
@@ -912,6 +919,15 @@ async function main() {
           if (fromPlugin) guard.observe("__refused__", fromPlugin);
           const blocking = guard.current;
           if (blocking) {
+
+            // The guard's OWN decision when it took one, so the phase, the mode
+            // and the prose all describe what actually happened. Only a call that
+            // succeeded and met a dialog anyway has no decision yet.
+            const decision = postRunDecision
+              ?? (await guard.check(effectiveTaskName(tool, params), "action"));
+            const refusalForReturn = decision.allow === false
+              ? decision.refusal
+              : guard.refusal(effectiveTaskName(tool, params), blocking);
             // A refusal means nothing ran. Anything else means the call had
             // already started when the dialog appeared, so it may have applied
             // part of its work; say so rather than implying it did nothing.
@@ -923,7 +939,7 @@ async function main() {
                   text: JSON.stringify(
                     started
                       ? {
-                          ...guard.refusal(effectiveTaskName(tool, params), blocking),
+                          ...refusalForReturn,
                           partiallyApplied: true,
                           note:
                             `'${taskName}' had already started when the dialog appeared, so it may `
@@ -934,7 +950,7 @@ async function main() {
                           // path it created in here.
                           partialResult: result.data ?? null,
                         }
-                      : guard.refusal(effectiveTaskName(tool, params), blocking),
+                      : refusalForReturn,
                     null,
                     2,
                   ),
