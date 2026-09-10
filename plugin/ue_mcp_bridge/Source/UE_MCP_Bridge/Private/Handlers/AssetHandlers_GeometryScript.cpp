@@ -869,7 +869,7 @@ UStaticMesh* MCPGeoWriteMeshOut(
 	Create.SetStructBool(TEXT("Options"), TEXT("bEnableNanite"),
 		Request.NaniteMode == TEXT("enable")
 		|| (Request.NaniteMode == TEXT("inherit")
-			&& Request.SourceMesh && Request.SourceMesh->GetNaniteSettings().bEnabled));
+			&& Request.SourceMesh && MCPGetNaniteSettings(Request.SourceMesh).bEnabled));
 	Create.SetObject(TEXT("Debug"), Debug);
 	Create.Invoke();
 	Messages.Append(MCPGeoDrainDebug(Debug));
@@ -919,16 +919,16 @@ void MCPGeoFinishWrite(
 
 	bool bNaniteChanged = false;
 	{
-		FMeshNaniteSettings Settings = Written->GetNaniteSettings();
+		FMeshNaniteSettings Settings = MCPGetNaniteSettings(Written);
 		const bool bWant =
 			Request.NaniteMode == TEXT("enable") ? true :
 			Request.NaniteMode == TEXT("disable") ? false :
-			Request.SourceMesh->GetNaniteSettings().bEnabled;
+			MCPGetNaniteSettings(Request.SourceMesh).bEnabled;
 		if (Settings.bEnabled != bWant)
 		{
 			Settings.bEnabled = bWant;
 			Written->Modify();
-			Written->SetNaniteSettings(Settings);
+			MCPSetNaniteSettings(Written, Settings);
 			bNaniteChanged = true;
 		}
 	}

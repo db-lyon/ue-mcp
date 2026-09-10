@@ -19,9 +19,37 @@
 #include "CoreMinimal.h"
 #include "UObject/UnrealType.h"
 #include "PoseSearch/PoseSearchSchema.h"
+#include "HandlerUtils.h"
 
 namespace MCPPoseSearch
 {
+	/** The schema's per-role skeletons.
+	 *
+	 *  5.5 added GetRoledSkeletons(). On 5.4 the Skeletons array is private
+	 *  with no accessor at all, so it is read through the property system -
+	 *  FPoseSearchRoledSkeleton itself is public there, only the member is not.
+	 *  Returned by value so both engines present the same signature; the
+	 *  callers are read paths over a handful of roles. */
+	inline TArray<FPoseSearchRoledSkeleton> RoledSkeletons(const UPoseSearchSchema* Schema)
+	{
+		TArray<FPoseSearchRoledSkeleton> Out;
+		if (!Schema) return Out;
+#if UE_MCP_HAS_5_5_API
+		Out = Schema->GetRoledSkeletons();
+#else
+		if (const FArrayProperty* Prop = FindFProperty<FArrayProperty>(UPoseSearchSchema::StaticClass(), TEXT("Skeletons")))
+		{
+			FScriptArrayHelper Helper(Prop, Prop->ContainerPtrToValuePtr<void>(Schema));
+			Out.Reserve(Helper.Num());
+			for (int32 Index = 0; Index < Helper.Num(); ++Index)
+			{
+				Out.Add(*reinterpret_cast<const FPoseSearchRoledSkeleton*>(Helper.GetRawPtr(Index)));
+			}
+		}
+#endif
+		return Out;
+	}
+
 	/** Recompute FinalizedChannels and SchemaCardinality after a channel or
 	 *  skeleton edit. Finalize() itself is private; PostEditChangeProperty is
 	 *  the public door onto it. */
@@ -44,7 +72,7 @@ namespace MCPPoseSearch
 		TArray<FString> Problems;
 
 		bool bHasSkeleton = false;
-		for (const FPoseSearchRoledSkeleton& Roled : Schema->GetRoledSkeletons())
+		for (const FPoseSearchRoledSkeleton& Roled : RoledSkeletons(Schema))
 		{
 			if (Roled.Skeleton)
 			{

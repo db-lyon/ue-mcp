@@ -1187,8 +1187,40 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyAnimationModifier(const TSharedP
 	bool bRegistered = false;
 	if (!Instance)
 	{
+#if UE_MCP_HAS_5_5_API
 		UAnimationModifiersAssetUserData::AddAnimationModifierOfClass(Seq, ModClass);
 		bRegistered = true;
+#else
+		// 5.4 has no static AddAnimationModifierOfClass, and its member
+		// AddAnimationModifier is protected. That member does exactly one
+		// thing - append to the reflected AnimationModifierInstances array -
+		// so the registration is done through the property system here, and
+		// the sequence keeps the same modifier list the editor tab shows.
+		bRegistered = false;
+		{
+			UAnimationModifiersAssetUserData* Data = Seq->GetAssetUserData<UAnimationModifiersAssetUserData>();
+			if (!Data)
+			{
+				Data = NewObject<UAnimationModifiersAssetUserData>(
+					Seq, UAnimationModifiersAssetUserData::StaticClass(), NAME_None, RF_Transactional);
+				Seq->AddAssetUserData(Data);
+			}
+			FArrayProperty* InstancesProp = FindFProperty<FArrayProperty>(
+				UAnimationModifiersAssetUserData::StaticClass(), TEXT("AnimationModifierInstances"));
+			FObjectProperty* InstanceEntryProp = InstancesProp
+				? CastField<FObjectProperty>(InstancesProp->Inner) : nullptr;
+			if (Data && InstanceEntryProp)
+			{
+				UAnimationModifier* NewModifier = NewObject<UAnimationModifier>(
+					Data, ModClass, NAME_None, RF_Transactional);
+				Data->Modify();
+				FScriptArrayHelper ArrayHelper(InstancesProp, InstancesProp->ContainerPtrToValuePtr<void>(Data));
+				const int32 NewIndex = ArrayHelper.AddValue();
+				InstanceEntryProp->SetObjectPropertyValue(ArrayHelper.GetRawPtr(NewIndex), NewModifier);
+				bRegistered = true;
+			}
+		}
+#endif
 		UserData = Seq->GetAssetUserData<UAnimationModifiersAssetUserData>();
 		if (UserData)
 		{

@@ -206,7 +206,9 @@ namespace
 		const bool bStillDirty = Package->IsDirty();
 		Entry->SetBoolField(TEXT("dirtyAfter"), bStillDirty);
 
-		const bool bOk = IsSuccessful(SaveResult.Result);
+		// FSavePackageResultStruct::IsSuccessful() exists on every supported
+		// engine; the free IsSuccessful(ESavePackageResult) does not.
+		const bool bOk = SaveResult.IsSuccessful();
 		Entry->SetBoolField(TEXT("saved"), bOk);
 		if (Diagnostics.Lines.Num() > 0)
 		{

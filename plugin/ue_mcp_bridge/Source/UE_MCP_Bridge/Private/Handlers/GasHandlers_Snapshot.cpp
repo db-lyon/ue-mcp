@@ -152,7 +152,7 @@ namespace
 			TSharedPtr<FJsonObject> Row = MCPGas::DescribeAbilitySpec(Spec);
 			Row->SetNumberField(TEXT("activeCount"), Spec.ActiveCount);
 			Row->SetBoolField(TEXT("inputPressed"), Spec.InputPressed != 0);
-			MCPGasSnapSetTags(Row, TEXT("dynamicTags"), Spec.GetDynamicSpecSourceTags());
+			MCPGasSnapSetTags(Row, TEXT("dynamicTags"), MCPGasDynamicSpecSourceTags(Spec));
 			Abilities.Add(MakeShared<FJsonValueObject>(Row));
 		}
 		Snap->SetArrayField(TEXT("abilities"), Abilities);

@@ -38,7 +38,7 @@
 
 #include "Engine/UserDefinedEnum.h"
 #include "Kismet2/EnumEditorUtils.h"
-#include "StructUtils/UserDefinedStruct.h"
+#include "MCPEngineCompat.h"
 #include "Kismet2/StructureEditorUtils.h"
 #include "UserDefinedStructure/UserDefinedStructEditorData.h"
 #include "EdGraph/EdGraphNode.h"
@@ -348,10 +348,15 @@ static TSharedPtr<FJsonObject> FieldJson(const FStructVariableDescription& Desc,
 	V->SetBoolField(TEXT("invalid"), (bool)Desc.bInvalidMember);
 
 	TSharedPtr<FJsonObject> Meta = MakeShared<FJsonObject>();
+#if UE_MCP_HAS_5_5_API
 	for (const TPair<FName, FString>& Pair : Desc.MetaData)
 	{
 		Meta->SetStringField(Pair.Key.ToString(), Pair.Value);
 	}
+#else
+	// 5.4's FStructVariableDescription carries no metadata map, so there is
+	// nothing to report and the field stays empty rather than absent.
+#endif
 	V->SetObjectField(TEXT("metadata"), Meta);
 	return V;
 }
@@ -1198,6 +1203,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditStructMetadata(const TSharedPtr<F
 			const TSharedPtr<FJsonObject>* MetaObj = nullptr;
 			if ((*Obj)->TryGetObjectField(TEXT("metadata"), MetaObj) && MetaObj && MetaObj->IsValid())
 			{
+#if !UE_MCP_HAS_5_5_API
+				// Member metadata on a user-defined struct is 5.5 and newer:
+				// 5.4 has neither the storage nor the accessors. Refusing is
+				// the only honest answer, because writing the rest of the field
+				// and dropping the metadata would report a success that left
+				// the ClampMin or EditCondition the caller asked for unset.
+				return MCPError(FString::Printf(
+					TEXT("fields[%d] sets metadata, which requires Unreal Engine 5.5 or newer: 5.4's user-defined struct members do not store metadata. Remove the metadata object to author the rest of the field."),
+					Slot));
+#endif
 				for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*MetaObj)->Values)
 				{
 					if (Pair.Key.IsEmpty())
@@ -1213,10 +1228,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditStructMetadata(const TSharedPtr<F
 					}
 					const FName Key(*Pair.Key);
 					Plan.Metadata.Add(Key, Value);
+#if UE_MCP_HAS_5_5_API
 					if (const FString* Prev = FStructureEditorUtils::GetMetaData(Struct, Guid, Key))
 					{
 						Plan.PrevMetadata.Add(Key, *Prev);
 					}
+#endif
 				}
 			}
 
@@ -1281,12 +1298,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditStructMetadata(const TSharedPtr<F
 		{
 			FStructureEditorUtils::Change3dWidgetEnabled(Struct, Plan.Guid, Plan.bWidget3D);
 		}
+#if UE_MCP_HAS_5_5_API
 		for (const TPair<FName, FString>& Pair : Plan.Metadata)
 		{
 			const FString* Prev = Plan.PrevMetadata.Find(Pair.Key);
 			if (Prev && *Prev == Pair.Value) continue;
 			FStructureEditorUtils::SetMetaData(Struct, Plan.Guid, Pair.Key, Pair.Value);
 		}
+#endif
 	}
 
 	UEditorAssetLibrary::SaveLoadedAsset(Struct);

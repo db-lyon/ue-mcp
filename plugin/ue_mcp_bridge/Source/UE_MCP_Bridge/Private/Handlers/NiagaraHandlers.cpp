@@ -58,6 +58,38 @@ namespace
 		}
 		return NewObject<UFactory>(GetTransientPackage(), FactoryClass);
 	}
+
+#if !UE_MCP_HAS_5_5_API
+	/** One user parameter off a component's override store.
+	 *
+	 *  5.5 added the UNiagaraComponent::GetVariable* getters. On 5.4 only the
+	 *  setters exist, so the previous value is read straight out of the store
+	 *  those setters write into. CopyParameterData is used rather than a raw
+	 *  offset read because it is the call that converts a stored LWC struct
+	 *  back to the type the caller asked for. The store is keyed with the
+	 *  "User." namespace the setters redirect into, and the bare name is tried
+	 *  as well for a parameter that was written without the redirection. */
+	template <typename ValueType>
+	bool MCPNiagaraReadUserParameter(
+		const UNiagaraComponent* Component,
+		FName ParameterName,
+		const FNiagaraTypeDefinition& Type,
+		ValueType& OutValue)
+	{
+		if (!Component) return false;
+		const FNiagaraParameterStore& Store = Component->GetOverrideParameters();
+
+		const FNiagaraVariable UserVariable(
+			Type, FName(*FString::Printf(TEXT("User.%s"), *ParameterName.ToString())));
+		if (Store.CopyParameterData(UserVariable, reinterpret_cast<uint8*>(&OutValue)))
+		{
+			return true;
+		}
+
+		const FNiagaraVariable BareVariable(Type, ParameterName);
+		return Store.CopyParameterData(BareVariable, reinterpret_cast<uint8*>(&OutValue));
+	}
+#endif
 }
 
 void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
@@ -611,7 +643,14 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 			return MCPError(TEXT("Missing 'value' parameter for float type"));
 		}
 		bool bIsValid = false;
+#if UE_MCP_HAS_5_5_API
 		const float PreviousFloat = NiagaraComp->GetVariableFloat(ParamFName, bIsValid);
+#else
+		float PreviousFloatRead = 0.f;
+		bIsValid = MCPNiagaraReadUserParameter(NiagaraComp, ParamFName,
+			FNiagaraTypeDefinition::GetFloatDef(), PreviousFloatRead);
+		const float PreviousFloat = PreviousFloatRead;
+#endif
 		if (bIsValid)
 		{
 			bHadPreviousValue = true;
@@ -630,7 +669,14 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 		Params->TryGetNumberField(TEXT("valueZ"), VZ);
 		FVector VecValue(VX, VY, VZ);
 		bool bIsValid = false;
+#if UE_MCP_HAS_5_5_API
 		const FVector PreviousVec = NiagaraComp->GetVariableVec3(ParamFName, bIsValid);
+#else
+		FVector3f PreviousVecRead(0.f);
+		bIsValid = MCPNiagaraReadUserParameter(NiagaraComp, ParamFName,
+			FNiagaraTypeDefinition::GetVec3Def(), PreviousVecRead);
+		const FVector PreviousVec(PreviousVecRead);
+#endif
 		if (bIsValid)
 		{
 			bHadPreviousValue = true;
@@ -651,7 +697,14 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 	{
 		bool bValue = OptionalBool(Params, TEXT("value"), false);
 		bool bIsValid = false;
+#if UE_MCP_HAS_5_5_API
 		const bool bPreviousBool = NiagaraComp->GetVariableBool(ParamFName, bIsValid);
+#else
+		FNiagaraBool PreviousBoolRead;
+		bIsValid = MCPNiagaraReadUserParameter(NiagaraComp, ParamFName,
+			FNiagaraTypeDefinition::GetBoolDef(), PreviousBoolRead);
+		const bool bPreviousBool = PreviousBoolRead.GetValue();
+#endif
 		if (bIsValid)
 		{
 			bHadPreviousValue = true;
@@ -666,7 +719,14 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 	{
 		double IntValue = OptionalNumber(Params, TEXT("value"), 0.0);
 		bool bIsValid = false;
+#if UE_MCP_HAS_5_5_API
 		const int32 PreviousInt = NiagaraComp->GetVariableInt(ParamFName, bIsValid);
+#else
+		int32 PreviousIntRead = 0;
+		bIsValid = MCPNiagaraReadUserParameter(NiagaraComp, ParamFName,
+			FNiagaraTypeDefinition::GetIntDef(), PreviousIntRead);
+		const int32 PreviousInt = PreviousIntRead;
+#endif
 		if (bIsValid)
 		{
 			bHadPreviousValue = true;
@@ -1704,6 +1764,15 @@ namespace
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::ListModuleInputs(const TSharedPtr<FJsonObject>& Params)
 {
+#if !UE_MCP_HAS_5_5_API
+	// FNiagaraStackGraphUtilities::GetStackFunctionInputs and
+	// FNiagaraStackFunctionInputBinder are declared but not exported in 5.4, and no reflected API stands in for them.
+	TSharedPtr<FJsonObject> Unsupported = MakeShared<FJsonObject>();
+	Unsupported->SetBoolField(TEXT("success"), false);
+	Unsupported->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
+	Unsupported->SetStringField(TEXT("error"), TEXT("niagara module input actions require Unreal Engine 5.5 or newer: the NiagaraEditor stack API they read and write through is not exported in 5.4."));
+	return MCPResult(Unsupported);
+#else
 	FString SystemPath;
 	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
 	FString EmitterName = OptionalString(Params, TEXT("emitterName"), TEXT(""));
@@ -1838,10 +1907,20 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::ListModuleInputs(const TSharedPtr<FJson
 	Res->SetArrayField(TEXT("modules"), ModulesArr);
 	Res->SetNumberField(TEXT("moduleCount"), ModulesArr.Num());
 	return MCPResult(Res);
+#endif
 }
 
 TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonObject>& Params)
 {
+#if !UE_MCP_HAS_5_5_API
+	// FNiagaraStackGraphUtilities::GetStackFunctionInputs and
+	// FNiagaraStackFunctionInputBinder are declared but not exported in 5.4, and no reflected API stands in for them.
+	TSharedPtr<FJsonObject> Unsupported = MakeShared<FJsonObject>();
+	Unsupported->SetBoolField(TEXT("success"), false);
+	Unsupported->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
+	Unsupported->SetStringField(TEXT("error"), TEXT("niagara module input actions require Unreal Engine 5.5 or newer: the NiagaraEditor stack API they read and write through is not exported in 5.4."));
+	return MCPResult(Unsupported);
+#else
 	FString SystemPath;
 	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
 	FString ModuleName;
@@ -2071,6 +2150,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleInput(const TSharedPtr<FJsonOb
 			*InputName, SetCount, *PrevValue));
 	}
 	return MCPResult(Res);
+#endif
 }
 
 namespace

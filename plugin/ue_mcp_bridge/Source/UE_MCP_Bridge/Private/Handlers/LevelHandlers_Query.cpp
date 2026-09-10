@@ -694,8 +694,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 				UStaticMeshComponent* StaticMeshComponent = Cast<UStaticMeshComponent>(Component);
 				UStaticMesh* StaticMesh = StaticMeshComponent ? StaticMeshComponent->GetStaticMesh() : nullptr;
 				const bool bMeshNanite = StaticMesh ? StaticMesh->IsNaniteEnabled() : false;
-				const bool bDisallow = StaticMeshComponent ? StaticMeshComponent->IsDisallowNanite() : false;
-				const bool bForceDisable = StaticMeshComponent ? StaticMeshComponent->IsForceDisableNanite() : false;
+				const bool bDisallow = MCPIsDisallowNanite(StaticMeshComponent);
+				const bool bForceDisable = MCPIsForceDisableNanite(StaticMeshComponent);
 				NaniteObject->SetStringField(TEXT("staticMeshPath"), StaticMesh ? StaticMesh->GetPathName() : FString());
 				NaniteObject->SetBoolField(TEXT("meshNaniteEnabled"), bMeshNanite);
 				NaniteObject->SetBoolField(TEXT("componentDisallowNanite"), bDisallow);

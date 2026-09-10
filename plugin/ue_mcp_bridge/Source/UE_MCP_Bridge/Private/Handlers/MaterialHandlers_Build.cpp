@@ -316,7 +316,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 		}
 		// A UDIM set cannot be built without virtual texturing, so it samples
 		// as virtual whether or not the flag has been round-tripped yet.
+#if UE_MCP_HAS_5_5_API
 		if (Slot.Texture->RequiresVirtualTexturing())
+#else
+		// 5.4 has no RequiresVirtualTexturing; a multi-block source is the
+		// condition that forces it.
+		if (UdimBlocks > 1)
+#endif
 		{
 			bVirtualTexture = true;
 		}

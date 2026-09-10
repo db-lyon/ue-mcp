@@ -823,6 +823,62 @@ static TArray<FString> SkeletonBoneNames(const USkeleton* Skeleton)
 	return Out;
 }
 
+// ── Curve metadata flags ─────────────────────────────────────────────────────
+//
+// 5.5 added the named accessors (GetCurveMetaDataMaterial and friends). On 5.4
+// the same two bits live in FCurveMetaData::Type, reached through the mutable
+// GetCurveMetaData, so the flags read and write the same asset data either way.
+
+static bool MCPGetCurveFlagMaterial(const USkeleton* Skeleton, FName CurveName)
+{
+	if (!Skeleton) return false;
+#if UE_MCP_HAS_5_5_API
+	return Skeleton->GetCurveMetaDataMaterial(CurveName);
+#else
+	const FCurveMetaData* MetaData = Skeleton->GetCurveMetaData(CurveName);
+	return MetaData ? MetaData->Type.bMaterial : false;
+#endif
+}
+
+static bool MCPGetCurveFlagMorphTarget(const USkeleton* Skeleton, FName CurveName)
+{
+	if (!Skeleton) return false;
+#if UE_MCP_HAS_5_5_API
+	return Skeleton->GetCurveMetaDataMorphTarget(CurveName);
+#else
+	const FCurveMetaData* MetaData = Skeleton->GetCurveMetaData(CurveName);
+	return MetaData ? MetaData->Type.bMorphtarget : false;
+#endif
+}
+
+static void MCPSetCurveFlagMaterial(USkeleton* Skeleton, FName CurveName, bool bValue)
+{
+	if (!Skeleton) return;
+#if UE_MCP_HAS_5_5_API
+	Skeleton->SetCurveMetaDataMaterial(CurveName, bValue);
+#else
+	if (FCurveMetaData* MetaData = Skeleton->GetCurveMetaData(CurveName))
+	{
+		Skeleton->Modify();
+		MetaData->Type.bMaterial = bValue;
+	}
+#endif
+}
+
+static void MCPSetCurveFlagMorphTarget(USkeleton* Skeleton, FName CurveName, bool bValue)
+{
+	if (!Skeleton) return;
+#if UE_MCP_HAS_5_5_API
+	Skeleton->SetCurveMetaDataMorphTarget(CurveName, bValue);
+#else
+	if (FCurveMetaData* MetaData = Skeleton->GetCurveMetaData(CurveName))
+	{
+		Skeleton->Modify();
+		MetaData->Type.bMorphtarget = bValue;
+	}
+#endif
+}
+
 } // namespace UE_MCP_SkeletonEdit
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -2572,7 +2628,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditCurveMetadata(const TSharedPtr<FJ
 			Row->SetStringField(TEXT("curve"), Curve);
 			// Returns false when an entry already existed, which is the
 			// idempotent case rather than a failure.
-			const bool bNew = Skeleton->AddCurveMetaData(FName(*Curve), false);
+#if UE_MCP_HAS_5_5_API
+			const bool bNew = Skeleton->AddCurveMetaData(FName(*Curve), /*bTransact*/ false);
+#else
+			// 5.4 has no bTransact parameter; the call transacts either way.
+			const bool bNew = Skeleton->AddCurveMetaData(FName(*Curve));
+#endif
 			Row->SetBoolField(TEXT("created"), bNew);
 			Row->SetBoolField(TEXT("existed"), !bNew);
 			bNew ? ++Added : ++AlreadyPresent;
@@ -2587,23 +2648,23 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditCurveMetadata(const TSharedPtr<FJ
 			bool bChanged = false;
 			if (Flag.bMaterial.IsSet())
 			{
-				const bool Prior = Skeleton->GetCurveMetaDataMaterial(FName(*Flag.Curve));
+				const bool Prior = MCPGetCurveFlagMaterial(Skeleton, FName(*Flag.Curve));
 				Row->SetBoolField(TEXT("priorMaterial"), Prior);
 				Row->SetBoolField(TEXT("material"), Flag.bMaterial.GetValue());
 				if (Prior != Flag.bMaterial.GetValue())
 				{
-					Skeleton->SetCurveMetaDataMaterial(FName(*Flag.Curve), Flag.bMaterial.GetValue());
+					MCPSetCurveFlagMaterial(Skeleton, FName(*Flag.Curve), Flag.bMaterial.GetValue());
 					bChanged = true;
 				}
 			}
 			if (Flag.bMorphTarget.IsSet())
 			{
-				const bool Prior = Skeleton->GetCurveMetaDataMorphTarget(FName(*Flag.Curve));
+				const bool Prior = MCPGetCurveFlagMorphTarget(Skeleton, FName(*Flag.Curve));
 				Row->SetBoolField(TEXT("priorMorphTarget"), Prior);
 				Row->SetBoolField(TEXT("morphTarget"), Flag.bMorphTarget.GetValue());
 				if (Prior != Flag.bMorphTarget.GetValue())
 				{
-					Skeleton->SetCurveMetaDataMorphTarget(FName(*Flag.Curve), Flag.bMorphTarget.GetValue());
+					MCPSetCurveFlagMorphTarget(Skeleton, FName(*Flag.Curve), Flag.bMorphTarget.GetValue());
 					bChanged = true;
 				}
 			}

@@ -22,7 +22,9 @@
 #include "LandscapeInfo.h"
 #include "LandscapeLayerInfoObject.h"
 #include "LandscapeProxy.h"
+#if UE_MCP_HAS_5_5_API
 #include "LandscapeEditLayer.h"
+#endif
 #include "LandscapeDataAccess.h"
 #include "ScopedTransaction.h"
 
@@ -149,7 +151,26 @@ namespace
 		const FString WantedName = OptionalString(Params, TEXT("editLayer"));
 		const int32 WantedIndex = OptionalInt(Params, TEXT("editLayerIndex"), 0);
 
-		const TArray<const ULandscapeEditLayerBase*> Layers = Landscape->GetEditLayersConst();
+		// 5.5 turned edit layers into ULandscapeEditLayerBase objects reached
+		// through GetEditLayersConst. 5.4 keeps them as FLandscapeLayer structs
+		// behind GetLayerCount/GetLayer. Both carry the same two things this
+		// needs: a name and the GUID the write is addressed to.
+		struct FMCPEditLayerRef { FString Name; FGuid Guid; };
+		TArray<FMCPEditLayerRef> Layers;
+#if UE_MCP_HAS_5_5_API
+		for (const ULandscapeEditLayerBase* Layer : Landscape->GetEditLayersConst())
+		{
+			if (Layer) Layers.Add({ Layer->GetName().ToString(), Layer->GetGuid() });
+		}
+#else
+		for (int32 Index = 0; Index < static_cast<int32>(Landscape->GetLayerCount()); ++Index)
+		{
+			if (const FLandscapeLayer* Layer = Landscape->GetLayer(Index))
+			{
+				Layers.Add({ Layer->Name.ToString(), Layer->Guid });
+			}
+		}
+#endif
 		if (Layers.Num() == 0)
 		{
 			OutError = TEXT("Landscape has no edit layers; cannot write a sculpt/paint edit that would survive the next layer update");
@@ -158,28 +179,28 @@ namespace
 
 		if (!WantedName.IsEmpty())
 		{
-			for (const ULandscapeEditLayerBase* Layer : Layers)
+			for (const FMCPEditLayerRef& Layer : Layers)
 			{
-				if (Layer && Layer->GetName().ToString().Equals(WantedName, ESearchCase::IgnoreCase))
+				if (Layer.Name.Equals(WantedName, ESearchCase::IgnoreCase))
 				{
-					OutGuid = Layer->GetGuid();
-					OutName = Layer->GetName().ToString();
+					OutGuid = Layer.Guid;
+					OutName = Layer.Name;
 					return true;
 				}
 			}
 			TArray<FString> Names;
-			for (const ULandscapeEditLayerBase* Layer : Layers) { if (Layer) Names.Add(Layer->GetName().ToString()); }
+			for (const FMCPEditLayerRef& Layer : Layers) { Names.Add(Layer.Name); }
 			OutError = FString::Printf(TEXT("Edit layer '%s' not found. Available: [%s]"), *WantedName, *FString::Join(Names, TEXT(", ")));
 			return false;
 		}
 
-		if (!Layers.IsValidIndex(WantedIndex) || !Layers[WantedIndex])
+		if (!Layers.IsValidIndex(WantedIndex))
 		{
 			OutError = FString::Printf(TEXT("editLayerIndex %d is out of range (%d edit layers)"), WantedIndex, Layers.Num());
 			return false;
 		}
-		OutGuid = Layers[WantedIndex]->GetGuid();
-		OutName = Layers[WantedIndex]->GetName().ToString();
+		OutGuid = Layers[WantedIndex].Guid;
+		OutName = Layers[WantedIndex].Name;
 		return true;
 	}
 

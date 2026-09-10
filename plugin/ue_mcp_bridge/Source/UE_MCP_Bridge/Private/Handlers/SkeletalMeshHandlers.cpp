@@ -4,6 +4,8 @@
 #include "HandlerUtils.h"
 
 #include "Engine/SkeletalMesh.h"
+// FSkeletalMeshLODInfo. 5.5+ reaches it transitively; 5.4 does not.
+#include "Engine/SkinnedAssetCommon.h"
 #include "SkeletalMeshEditorSubsystem.h"
 
 #if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_4_API
@@ -823,12 +825,17 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::SetSkinWeights(const TSharedPtr<FJ
 		}
 
 		USkeletalMesh::FCommitMeshDescriptionParams CommitParams;
+#if UE_MCP_HAS_5_5_API
 		CommitParams.bUpdateMorphTargets = false;
 		// A named profile needs mesh-level profile metadata synchronized for rebuilt
 		// render data. This does not write another profile's source weights.
 		CommitParams.bUpdateSkinWeightProfiles = !Target.ProfileName.IsNone();
 		CommitParams.bUpdateVertexAttributes = false;
 		CommitParams.bUpdateVertexColors = false;
+#else
+		// 5.4's params carry only bMarkPackageDirty and bForceUpdate; it always
+		// refreshes the derived data the four flags above select on 5.5+.
+#endif
 		CommitParams.bForceUpdate = true;
 		if (!Target.Mesh->CommitMeshDescription(Target.LodIndex, CommitParams))
 		{

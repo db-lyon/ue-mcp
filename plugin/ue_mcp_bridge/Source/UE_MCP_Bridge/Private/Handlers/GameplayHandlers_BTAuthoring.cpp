@@ -396,8 +396,21 @@ namespace
 	{
 		if (Category == TEXT("composite"))
 		{
-			return RuntimeClass && RuntimeClass->IsChildOf(UBTComposite_SimpleParallel::StaticClass())
-				? UBehaviorTreeGraphNode_SimpleParallel::StaticClass()
+#if UE_MCP_HAS_5_5_API
+			UClass* const SimpleParallelNodeClass = UBehaviorTreeGraphNode_SimpleParallel::StaticClass();
+#else
+			// 5.4 declares UBehaviorTreeGraphNode_SimpleParallel without an
+			// export macro, so its StaticClass() does not link outside
+			// BehaviorTreeEditor. The class is registered like any other, so it
+			// is resolved by path there; a null result falls back to the plain
+			// composite node, which is what the caller got before this branch
+			// existed.
+			UClass* const SimpleParallelNodeClass = FindObject<UClass>(
+				nullptr, TEXT("/Script/BehaviorTreeEditor.BehaviorTreeGraphNode_SimpleParallel"));
+#endif
+			return SimpleParallelNodeClass
+				&& RuntimeClass && RuntimeClass->IsChildOf(UBTComposite_SimpleParallel::StaticClass())
+				? SimpleParallelNodeClass
 				: UBehaviorTreeGraphNode_Composite::StaticClass();
 		}
 		if (Category == TEXT("task"))

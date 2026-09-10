@@ -12,6 +12,21 @@
 // type for every use inside the namespace, in this header and in every .cpp
 // that includes it first.
 #include "GameplayAbilitySpec.h"
+#include "HandlerUtils.h"
+
+/**
+ * The spec's dynamic source tags. 5.5 renamed FGameplayAbilitySpec's
+ * DynamicAbilityTags to DynamicSpecSourceTags and put it behind an accessor;
+ * 5.4 has only the member.
+ */
+inline const FGameplayTagContainer& MCPGasDynamicSpecSourceTags(const FGameplayAbilitySpec& Spec)
+{
+#if UE_MCP_HAS_5_5_API
+	return Spec.GetDynamicSpecSourceTags();
+#else
+	return Spec.DynamicAbilityTags;
+#endif
+}
 
 class AActor;
 class UAbilitySystemComponent;

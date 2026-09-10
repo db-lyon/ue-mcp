@@ -776,7 +776,13 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SampleLandscape(const TSharedPtr<FJso
 			LayerObj->SetNumberField(TEXT("weight"), Weight);
 			LayerObj->SetNumberField(TEXT("weight255"), RawWeight);
 			LayerObj->SetStringField(TEXT("layerInfo"), LayerInfo->GetPathName());
-			if (UPhysicalMaterial* PhysMat = LayerInfo->GetPhysicalMaterial())
+#if UE_MCP_HAS_5_5_API
+			UPhysicalMaterial* const LayerPhysMaterial = LayerInfo->GetPhysicalMaterial();
+#else
+			// 5.4 keeps PhysMaterial as a public member with no accessor.
+			UPhysicalMaterial* const LayerPhysMaterial = LayerInfo->PhysMaterial;
+#endif
+			if (UPhysicalMaterial* PhysMat = LayerPhysMaterial)
 			{
 				LayerObj->SetStringField(TEXT("physicalMaterial"), PhysMat->GetPathName());
 			}
@@ -1367,9 +1373,22 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	double Hardness = 0.0;
 	if (Params->TryGetNumberField(TEXT("hardness"), Hardness))
 	{
+#if UE_MCP_HAS_5_5_API
 		// Hardness is becoming private; the setter also handles Modify() and the
 		// property-change notification the direct write skipped.
 		LayerInfo->SetHardness(static_cast<float>(Hardness), /*bInModify=*/true, EPropertyChangeType::ValueSet);
+#else
+		// 5.4 has no setter: Hardness is a public member, so the Modify() and
+		// the change notification are done here instead of by the engine.
+		LayerInfo->Modify();
+		LayerInfo->Hardness = static_cast<float>(Hardness);
+		{
+			FProperty* HardnessProperty = FindFProperty<FProperty>(
+				ULandscapeLayerInfoObject::StaticClass(), TEXT("Hardness"));
+			FPropertyChangedEvent ChangeEvent(HardnessProperty, EPropertyChangeType::ValueSet);
+			LayerInfo->PostEditChangeProperty(ChangeEvent);
+		}
+#endif
 	}
 
 	FAssetRegistryModule::AssetCreated(LayerInfo);

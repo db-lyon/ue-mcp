@@ -10,7 +10,7 @@
 #include "UObject/UnrealType.h"
 #include "UObject/PropertyPortFlags.h"
 #include "UObject/SoftObjectPtr.h"
-#include "StructUtils/InstancedStruct.h"
+#include "MCPEngineCompat.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"
 #include "Engine/Blueprint.h"

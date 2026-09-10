@@ -14,7 +14,7 @@
 #include "RigEditor/IKRigAutoCharacterizer.h"
 #include "RigEditor/IKRigController.h"
 #include "ScopedTransaction.h"
-#include "StructUtils/InstancedStruct.h"
+#include "MCPEngineCompat.h"
 #endif
 
 namespace UE_MCP_IKRigAuthoring

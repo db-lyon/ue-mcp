@@ -38,19 +38,29 @@
 #include "AudioHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+
+#if UE_MCP_HAS_5_5_API
 #include "HandlerAssetCreate.h"
 #include "EditorScriptingUtilities/Public/EditorAssetLibrary.h"
 
 #include "Factories/Factory.h"
 
 #include "MetasoundBuilderSubsystem.h"
+#if UE_MCP_HAS_5_5_API
 #include "MetasoundBuilderBase.h"
+#else
+// 5.4 declares UMetaSoundBuilderBase in the subsystem header and ships no
+// MetasoundBuilderBase.h.
+#include "MetasoundBuilderSubsystem.h"
+#endif
 // MetasoundDocumentBuilderRegistry.h, and never MetasoundFrontendDocumentBuilderRegistry.h:
 // the frontend header ships on 5.8 only. This MetasoundEngine header reaches
 // Metasound::Frontend::IDocumentBuilderRegistry on every supported engine, by
 // including the frontend header on 5.8 and MetasoundDocumentInterface.h, where
 // 5.7 and earlier declare the class, on all of them.
+#if UE_MCP_HAS_5_5_API
 #include "MetasoundDocumentBuilderRegistry.h"
+#endif
 #include "MetasoundDocumentInterface.h"
 #include "MetasoundSource.h"
 #include "MetasoundFrontendLiteral.h"
@@ -118,6 +128,7 @@ namespace
 		{
 			return nullptr;
 		}
+#if UE_MCP_HAS_5_5_API
 		IDocumentBuilderRegistry* Registry = IDocumentBuilderRegistry::Get();
 		if (!Registry)
 		{
@@ -127,6 +138,24 @@ namespace
 		Metasound::Engine::FDocumentBuilderRegistry& EngineRegistry =
 			static_cast<Metasound::Engine::FDocumentBuilderRegistry&>(*Registry);
 		return &EngineRegistry.FindOrBeginBuilding<UMetaSoundSourceBuilder>(*Source);
+#else
+		// 5.4 has no document builder registry. The builder subsystem is the
+		// attach point there, and it returns the already-attached builder when
+		// there is one, which is the same guarantee FindOrBeginBuilding gives.
+		UMetaSoundBuilderSubsystem* Subsystem = UMetaSoundBuilderSubsystem::Get();
+		if (!Subsystem)
+		{
+			OutError = MCPError(TEXT("The MetaSound builder subsystem is not available, so no MetaSound can be authored. Enable the MetaSound plugin."));
+			return nullptr;
+		}
+		UMetaSoundSourceBuilder* Builder = Subsystem->AttachSourceBuilderToAsset(Source);
+		if (!Builder)
+		{
+			OutError = MCPError(FString::Printf(
+				TEXT("Could not attach a MetaSound builder to '%s'."), *Source->GetPathName()));
+		}
+		return Builder;
+#endif
 #else
 		OutError = MCPError(TEXT("MetaSound authoring requires an editor build."));
 		return nullptr;
@@ -181,10 +210,17 @@ namespace
 			return false;
 		}
 		TScriptInterface<IMetaSoundDocumentInterface> DocIface(Asset);
+#if UE_MCP_HAS_5_5_API
 		if (Metasound::Frontend::IDocumentBuilderRegistry* Registry = Metasound::Frontend::IDocumentBuilderRegistry::Get())
 		{
 			return Registry->FindBuilder(DocIface) != nullptr;
 		}
+#else
+		if (const UMetaSoundBuilderSubsystem* Subsystem = UMetaSoundBuilderSubsystem::GetConst())
+		{
+			return Subsystem->FindBuilderOfDocument(DocIface) != nullptr;
+		}
+#endif
 		return false;
 	}
 
@@ -1168,3 +1204,93 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundListNodeClasses(const TSharedPtr
 	Res->SetStringField(TEXT("note"), TEXT("Curated common set. Use add_node with name + namespace 'UE' + variant. Any registered class name also works."));
 	return MCPResult(Res);
 }
+
+#else
+
+// The MetaSound authoring and introspection surface this file writes through
+// is 5.5 and newer. 5.4 has a different document model (no graph pages, no
+// document builder registry, protected builder access, and four-argument
+// finders instead of five), so the same calls cannot be spelled against it.
+// Rather than half-author a document on 5.4, the actions stay registered and
+// report the engine requirement, which is what an agent can act on.
+
+namespace
+{
+	TSharedPtr<FJsonValue> MSAuthorUnsupportedEngine(const TCHAR* Action)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("audio(%s) requires Unreal Engine 5.5 or newer. %s"), Action,
+			TEXT("The MetaSound document model it drives (graph pages and the document builder registry) does not exist in 5.4.")));
+		return MCPResult(Result);
+	}
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::CreateMetaSoundSource(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("create_metasound_source"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAuthor(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_author"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAddNode(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_add_node"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAddGraphInput(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_add_graph_input"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAddGraphOutput(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_add_graph_output"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundConnect(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_connect"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundConnectGraphInput(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_connect_graph_input"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundConnectGraphOutput(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_connect_graph_output"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundConnectAudioOut(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_connect_audio_out"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundSetInputDefault(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_set_input_default"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundBuild(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_build"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundGetGraph(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_get_graph"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundListNodeClasses(const TSharedPtr<FJsonObject>&)
+{
+	return MSAuthorUnsupportedEngine(TEXT("metasound_list_node_classes"));
+}
+
+#endif

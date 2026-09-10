@@ -25,7 +25,7 @@
 #include "PropertyBindingPath.h"
 #include "PropertyBindingTypes.h"
 #endif
-#include "StructUtils/InstancedStruct.h"
+#include "MCPEngineCompat.h"
 #include "UObject/UObjectIterator.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"

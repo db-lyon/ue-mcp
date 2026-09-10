@@ -986,7 +986,7 @@ TSharedPtr<FJsonValue> FGasHandlers::GetAscState(const TSharedPtr<FJsonObject>& 
 		A->SetNumberField(TEXT("activeCount"), Spec.ActiveCount);
 
 		TArray<TSharedPtr<FJsonValue>> DynTags;
-		for (const FGameplayTag& T : Spec.GetDynamicSpecSourceTags())
+		for (const FGameplayTag& T : MCPGasDynamicSpecSourceTags(Spec))
 		{
 			DynTags.Add(MakeShared<FJsonValueString>(T.ToString()));
 		}

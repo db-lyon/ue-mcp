@@ -24,7 +24,7 @@
 #include "UObject/StrongObjectPtr.h"
 
 #include "Chooser.h"
-#include "StructUtils/InstancedStruct.h"
+#include "MCPEngineCompat.h"
 #include "EditorAssetLibrary.h"
 #include "ScopedTransaction.h"
 #include "UObject/UnrealType.h"
@@ -209,8 +209,9 @@ namespace
 		if (!Root || Depth > 8 || Out.Contains(Root)) return;
 		Out.Add(Root);
 
-#if WITH_EDITORONLY_DATA
-		// Declared nested tables.
+#if WITH_EDITORONLY_DATA && UE_MCP_HAS_5_5_API
+		// Declared nested tables. 5.4's UChooserTable has no NestedChoosers
+		// member at all; there, only the referenced-table walk below applies.
 		for (const TObjectPtr<UChooserTable>& Nested : Root->NestedChoosers)
 		{
 			CollectNestedChoosers(Nested, Out, Depth + 1);

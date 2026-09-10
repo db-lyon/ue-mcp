@@ -51,6 +51,7 @@
 #include "Editor/EditorEngine.h"
 #include "Editor/EditorPerformanceSettings.h"
 #include "Engine/Engine.h"
+#include "EngineGlobals.h"
 #include "GPUProfiler.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
@@ -219,7 +220,10 @@ namespace
 		{
 		case FTraceAuxiliary::EConnectionType::Network:       return TEXT("network");
 		case FTraceAuxiliary::EConnectionType::File:          return TEXT("file");
+#if UE_MCP_HAS_5_5_API
+		// Relay tracing is a 5.5 addition to the enum.
 		case FTraceAuxiliary::EConnectionType::Relay:         return TEXT("relay");
+#endif
 #if UE_MCP_HAS_5_8_API
 		// Secure tracing is a 5.8 addition; the enumerator does not exist before it.
 		case FTraceAuxiliary::EConnectionType::SecureNetwork: return TEXT("secureNetwork");
@@ -229,9 +233,17 @@ namespace
 		}
 	}
 
-	const TCHAR* MCPProfilingSystemStatusName(FTraceAuxiliary::ETraceSystemStatus Status)
+	/** The trace system's own status, as a name.
+	 *
+	 *  FTraceAuxiliary::ETraceSystemStatus and GetTraceSystemStatus arrived in
+	 *  5.5. On 5.4 the same distinctions are reconstructed from the two state
+	 *  questions the engine does answer there, which covers every value except
+	 *  "notAvailable" (5.4 gives no way to tell a trace system that is absent
+	 *  from one that is present and idle).  */
+	const TCHAR* MCPProfilingSystemStatusName()
 	{
-		switch (Status)
+#if UE_MCP_HAS_5_5_API
+		switch (FTraceAuxiliary::GetTraceSystemStatus())
 		{
 		case FTraceAuxiliary::ETraceSystemStatus::NotAvailable:           return TEXT("notAvailable");
 		case FTraceAuxiliary::ETraceSystemStatus::Available:              return TEXT("available");
@@ -244,6 +256,18 @@ namespace
 		case FTraceAuxiliary::ETraceSystemStatus::TracingToCustomRelay:   return TEXT("tracingToCustomRelay");
 		default:                                                          return TEXT("unknown");
 		}
+#else
+		if (!FTraceAuxiliary::IsConnected())
+		{
+			return TEXT("available");
+		}
+		switch (FTraceAuxiliary::GetConnectionType())
+		{
+		case FTraceAuxiliary::EConnectionType::Network: return TEXT("tracingToServer");
+		case FTraceAuxiliary::EConnectionType::File:    return TEXT("tracingToFile");
+		default:                                        return TEXT("unknown");
+		}
+#endif
 	}
 
 	/** The UnrealInsights binary that ships with this engine, or an empty
@@ -317,8 +341,7 @@ namespace
 		const bool bConnected = FTraceAuxiliary::IsConnected();
 		Result->SetBoolField(TEXT("tracing"), bConnected);
 		Result->SetBoolField(TEXT("paused"), FTraceAuxiliary::IsPaused());
-		Result->SetStringField(TEXT("systemStatus"),
-			MCPProfilingSystemStatusName(FTraceAuxiliary::GetTraceSystemStatus()));
+		Result->SetStringField(TEXT("systemStatus"), MCPProfilingSystemStatusName());
 		Result->SetStringField(TEXT("connectionType"),
 			MCPProfilingConnectionTypeName(FTraceAuxiliary::GetConnectionType()));
 
@@ -331,7 +354,11 @@ namespace
 		TSharedPtr<FJsonObject> StatsObj = MakeShared<FJsonObject>();
 		StatsObj->SetNumberField(TEXT("bytesSent"), static_cast<double>(Stats.BytesSent));
 		StatsObj->SetNumberField(TEXT("bytesTraced"), static_cast<double>(Stats.BytesTraced));
+#if UE_MCP_HAS_5_5_API
 		StatsObj->SetNumberField(TEXT("bytesEmitted"), static_cast<double>(Stats.BytesEmitted));
+#else
+		// UE::Trace::FStatistics gained BytesEmitted in 5.5.
+#endif
 		StatsObj->SetNumberField(TEXT("memoryUsed"), static_cast<double>(Stats.MemoryUsed));
 		StatsObj->SetNumberField(TEXT("cacheAllocated"), static_cast<double>(Stats.CacheAllocated));
 		StatsObj->SetNumberField(TEXT("cacheUsed"), static_cast<double>(Stats.CacheUsed));
@@ -472,6 +499,7 @@ namespace
 	FMCPProfilingGpuSamples MCPProfilingDrainGpuHistory()
 	{
 		FMCPProfilingGpuSamples Out;
+#if UE_MCP_HAS_5_5_API
 		static FRHIGPUFrameTimeHistory::FState CursorState;
 
 		double Total = 0.0;
@@ -492,6 +520,20 @@ namespace
 			if (Out.Count >= 64) break;
 		}
 		if (Out.Count > 0) Out.AvgMs = Total / static_cast<double>(Out.Count);
+#else
+		// 5.4 has no FRHIGPUFrameTimeHistory: the RHI publishes only the most
+		// recent GPU frame, in GGPUFrameTime cycles. One sample is what there
+		// is to report, so min, max and average are that sample, and a count of
+		// one says so rather than implying a drained ring.
+		if (GGPUFrameTime > 0)
+		{
+			const double Ms = MCPProfilingCycles64ToMs(static_cast<uint64>(GGPUFrameTime));
+			Out.MinMs = Ms;
+			Out.MaxMs = Ms;
+			Out.AvgMs = Ms;
+			Out.Count = 1;
+		}
+#endif
 		return Out;
 	}
 }
@@ -624,7 +666,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 			TEXT("a network target fails when no trace server is listening on the host. Current system status: %s."),
 			*Target,
 			Type == FTraceAuxiliary::EConnectionType::File ? *FilePath : *Host,
-			MCPProfilingSystemStatusName(FTraceAuxiliary::GetTraceSystemStatus())));
+			MCPProfilingSystemStatusName()));
 	}
 
 	TSharedPtr<FJsonObject> Result = MCPSuccess();
@@ -922,8 +964,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetTraceChannels(const TSharedPtr<FJsonO
 		{
 			const FMCPProfilingChannelRow* Row = FindRow(Name);
 			const bool bBefore = Row ? Row->bEnabled : false;
+#if UE_MCP_HAS_5_5_API
 			if (bWantEnabled) FTraceAuxiliary::EnableChannels(*Name);
 			else              FTraceAuxiliary::DisableChannels(*Name);
+#else
+			// 5.4's EnableChannels takes no channel list, so the ToggleChannel
+			// call below is the only apply on that engine. DisableChannels does
+			// take one and is kept, so a disable still goes through the same
+			// path it does everywhere else.
+			if (!bWantEnabled) FTraceAuxiliary::DisableChannels(*Name);
+#endif
 
 			// ToggleChannel applies the same state again and returns the state
 			// the channel actually ended up in, which is the only way to learn

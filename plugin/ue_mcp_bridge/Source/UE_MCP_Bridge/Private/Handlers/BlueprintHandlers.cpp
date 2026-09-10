@@ -3347,8 +3347,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::FlushComponentTemplates(const TShared
 		{
 			Template->Modify();
 			Template->ClearFlags(RF_Public | RF_Standalone);
-			if (!Template->Rename(nullptr, GetTransientPackage(),
-				REN_DoNotDirty | REN_DontCreateRedirectors | REN_AllowPackageLinkerMismatch | REN_NonTransactional))
+			// REN_AllowPackageLinkerMismatch is 5.5 and newer. The rename that
+			// needs it is the same rename either way; on 5.4 the flag is simply
+			// not part of the set.
+#if UE_MCP_HAS_5_5_API
+			constexpr ERenameFlags RetireFlags =
+				REN_DoNotDirty | REN_DontCreateRedirectors | REN_AllowPackageLinkerMismatch | REN_NonTransactional;
+#else
+			constexpr ERenameFlags RetireFlags =
+				REN_DoNotDirty | REN_DontCreateRedirectors | REN_NonTransactional;
+#endif
+			if (!Template->Rename(nullptr, GetTransientPackage(), RetireFlags))
 			{
 				return MCPError(FString::Printf(TEXT("Failed to retire orphan component template: %s"), *Template->GetPathName()));
 			}

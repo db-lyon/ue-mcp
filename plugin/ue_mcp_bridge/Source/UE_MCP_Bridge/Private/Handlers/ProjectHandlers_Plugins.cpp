@@ -162,7 +162,14 @@ static TSharedPtr<FJsonObject> PPlug_Describe(const TSharedRef<IPlugin>& Plugin)
 	// `enabled` is the state of THIS editor session, decided at startup. It does
 	// not follow a write made in this session; `projectReference` does.
 	Obj->SetBoolField(TEXT("enabled"), Plugin->IsEnabled());
+#if UE_MCP_HAS_5_5_API
 	Obj->SetBoolField(TEXT("mounted"), Plugin->IsMounted());
+#else
+	// IPlugin::IsMounted() arrived after 5.4, and nothing there answers the
+	// same question: `enabled` is close but not the same fact, and reporting it
+	// under this name would make an approximation look like a reading. The
+	// field is left out on 5.4, the way canEnableInCurrentTarget is below.
+#endif
 	Obj->SetBoolField(TEXT("enabledByDefault"), Plugin->IsEnabledByDefault(/*bAllowEnginePluginsEnabledByDefault*/ true));
 	Obj->SetBoolField(TEXT("isBeta"), Descriptor.bIsBetaVersion);
 	Obj->SetBoolField(TEXT("isExperimental"), Descriptor.bIsExperimentalVersion);
@@ -297,8 +304,14 @@ TSharedPtr<FJsonValue> FProjectHandlers::EnablePlugin(const TSharedPtr<FJsonObje
 	Result->SetStringField(TEXT("descriptorFile"), Plugin->GetDescriptorFileName());
 	Result->SetBoolField(TEXT("enabledByDefault"), Plugin->IsEnabledByDefault(true));
 	Result->SetBoolField(TEXT("loadedInThisSession"), Plugin->IsEnabled());
+#if UE_MCP_HAS_5_5_API
 	Result->SetBoolField(TEXT("canEnableInCurrentTarget"),
 		IPluginManager::Get().CanEnablePluginInCurrentTarget(PluginName));
+#else
+	// IPluginManager::CanEnablePluginInCurrentTarget arrived in 5.5. Nothing on
+	// 5.4 answers the same question, and a guess reported as a fact is worse
+	// than an absent field.
+#endif
 
 	// ── Idempotency. Two shapes of "already enabled", and neither writes.
 	if (bPresent && bRefEnabled)
@@ -347,12 +360,14 @@ TSharedPtr<FJsonValue> FProjectHandlers::EnablePlugin(const TSharedPtr<FJsonObje
 		"after the editor restarts; nothing about this session changed. If the plugin has code and the "
 		"project has never built with it, the restart may ask to rebuild."), *PluginName));
 
+#if UE_MCP_HAS_5_5_API
 	if (!IPluginManager::Get().CanEnablePluginInCurrentTarget(PluginName))
 	{
 		Result->SetStringField(TEXT("warning"), FString::Printf(TEXT(
 			"'%s' declares no support for the current build target, so the entry is written but the plugin "
 			"may not load. Check its .uplugin SupportedTargetPlatforms and module HostType."), *PluginName));
 	}
+#endif
 
 	// The inverse depends on where it started, and the two cases differ in the
 	// FILE rather than in behaviour: with no entry before, the exact undo is

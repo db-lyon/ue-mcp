@@ -8,10 +8,15 @@
 #include "IObjectChooser.h"
 #include "ObjectChooser_Asset.h"
 #include "ObjectChooser_Class.h"
-#include "StructUtils/InstancedStruct.h"
+#include "MCPEngineCompat.h"
 #include "EditorAssetLibrary.h"
 #include "UObject/UnrealType.h"
+#if UE_MCP_HAS_5_5_API
 #include "Misc/StringOutputDevice.h"
+#else
+// 5.4 still declares FStringOutputDevice alongside FString.
+#include "Containers/UnrealString.h"
+#endif
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -137,8 +142,15 @@ static bool BuildOutputStruct(const FString& OutputPath, const FString& OutputTy
 	}
 	else if (OutputType == TEXT("soft_asset"))
 	{
+#if UE_MCP_HAS_5_5_API
 		Out.InitializeAs<FSoftAssetChooser>();
 		Out.GetMutablePtr<FSoftAssetChooser>()->Asset = Obj;
+#else
+		// FSoftAssetChooser does not exist in 5.4; a soft result there would
+		// have to be written as a hard one, which is a different asset.
+		OutError = TEXT("soft_asset results require Unreal Engine 5.5 or newer; use outputType 'asset' on 5.4");
+		return false;
+#endif
 	}
 	else
 	{
@@ -157,12 +169,82 @@ static TSharedPtr<FJsonObject> DescribeOutput(const FInstancedStruct& Result)
 #if WITH_EDITOR
 	if (const FObjectChooserBase* Base = Result.GetPtr<FObjectChooserBase>())
 	{
+#if UE_MCP_HAS_5_5_API
 		UObject* Ref = Base->GetReferencedObject();
+#else
+		// 5.4's FObjectChooserBase has no GetReferencedObject. Every result
+		// struct it defines holds the reference in one object property, named
+		// Asset on an asset result and Chooser on a nested one, so the same
+		// answer comes out of the property system.
+		UObject* Ref = nullptr;
+		if (SS)
+		{
+			const TCHAR* const ReferenceFields[] = { TEXT("Asset"), TEXT("Chooser") };
+			for (const TCHAR* FieldName : ReferenceFields)
+			{
+				if (FObjectPropertyBase* ObjectProp = FindFProperty<FObjectPropertyBase>(SS, FieldName))
+				{
+					Ref = ObjectProp->GetObjectPropertyValue(
+						ObjectProp->ContainerPtrToValuePtr<void>(Result.GetMemory()));
+					if (Ref) break;
+				}
+			}
+		}
+#endif
 		Obj->SetStringField(TEXT("output"), Ref ? Ref->GetPathName() : FString());
 	}
 #endif
+
 	return Obj;
 }
+
+// UChooserTable::DisabledRows is 5.5 and newer. On 5.4 a chooser row cannot be
+// disabled at all, so a row always reads as enabled, the grow and remove calls
+// have nothing to keep in step, and an attempt to disable one is refused rather
+// than reported as done.
+static bool MCPChooserRowDisabled(const UChooserTable* Table, int32 RowIndex)
+{
+#if UE_MCP_HAS_5_5_API
+	return Table && Table->DisabledRows.IsValidIndex(RowIndex) && Table->DisabledRows[RowIndex];
+#else
+	return false;
+#endif
+}
+
+static void MCPChooserGrowDisabledRows(UChooserTable* Table)
+{
+#if UE_MCP_HAS_5_5_API
+	if (!Table) return;
+	while (Table->DisabledRows.Num() < Table->ResultsStructs.Num()) Table->DisabledRows.Add(false);
+#endif
+}
+
+static void MCPChooserRemoveDisabledRow(UChooserTable* Table, int32 RowIndex)
+{
+#if UE_MCP_HAS_5_5_API
+	if (Table && Table->DisabledRows.IsValidIndex(RowIndex)) Table->DisabledRows.RemoveAt(RowIndex);
+#endif
+}
+
+/** Can a row be disabled on this engine at all? */
+static constexpr bool MCPChooserRowDisableSupported()
+{
+#if UE_MCP_HAS_5_5_API
+	return true;
+#else
+	return false;
+#endif
+}
+
+static void MCPChooserSetRowDisabled(UChooserTable* Table, int32 RowIndex, bool bDisabled)
+{
+#if UE_MCP_HAS_5_5_API
+	if (!Table || !Table->ResultsStructs.IsValidIndex(RowIndex)) return;
+	MCPChooserGrowDisabledRows(Table);
+	Table->DisabledRows[RowIndex] = bDisabled;
+#endif
+}
+
 
 // Build a map ColumnIndex -> cell text from the caller's `cells` array and/or
 // `inputs` object (keyed by column index-as-string or column name).
@@ -461,7 +543,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::ListRows(const TSharedPtr<FJsonObject>&
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 		Row->SetNumberField(TEXT("index"), r);
-		Row->SetBoolField(TEXT("disabled"), Table->DisabledRows.IsValidIndex(r) && Table->DisabledRows[r]);
+		Row->SetBoolField(TEXT("disabled"), MCPChooserRowDisabled(Table, r));
 		Row->SetObjectField(TEXT("output"), DescribeOutput(Table->ResultsStructs[r]));
 
 		TArray<TSharedPtr<FJsonValue>> Cells;
@@ -509,7 +591,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::AddRow(const TSharedPtr<FJsonObject>& P
 	Table->Modify();
 	const int32 NewRow = Table->ResultsStructs.Num();
 	Table->ResultsStructs.Add(OutputStruct);
-	while (Table->DisabledRows.Num() < Table->ResultsStructs.Num()) Table->DisabledRows.Add(false);
+	MCPChooserGrowDisabledRows(Table);
 
 	// Grow every column's per-row array to match the new row count.
 	for (FInstancedStruct& ColStruct : Table->ColumnsStructs)
@@ -591,7 +673,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 	const FString PriorResultType = PriorOutput->GetStringField(TEXT("resultType"));
 	const FString PriorOutputType = PriorResultType == TEXT("EvaluateChooser") ? TEXT("evaluate")
 		: (PriorResultType == TEXT("SoftAssetChooser") ? TEXT("soft_asset") : TEXT("asset"));
-	const bool bPriorDisabled = Table->DisabledRows.IsValidIndex(RowIndex) && Table->DisabledRows[RowIndex];
+	const bool bPriorDisabled = MCPChooserRowDisabled(Table, RowIndex);
 	TArray<TSharedPtr<FJsonValue>> PriorCells;
 	int32 UnreadableCells = 0;
 	for (int32 c = 0; c < Table->ColumnsStructs.Num(); ++c)
@@ -628,8 +710,11 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 	bool bDisabled;
 	if (Params->TryGetBoolField(TEXT("disabled"), bDisabled))
 	{
-		while (Table->DisabledRows.Num() < Table->ResultsStructs.Num()) Table->DisabledRows.Add(false);
-		Table->DisabledRows[RowIndex] = bDisabled;
+		if (!MCPChooserRowDisableSupported())
+		{
+			return MCPError(TEXT("This engine's UChooserTable has no per-row disabled state, so 'disabled' cannot be honoured. Remove the row instead, or omit 'disabled'."));
+		}
+		MCPChooserSetRowDisabled(Table, RowIndex, bDisabled);
 	}
 
 	// Optional: update cells.
@@ -717,7 +802,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 	const FString DoomedResultType = DoomedOutput->GetStringField(TEXT("resultType"));
 	const FString DoomedOutputType = DoomedResultType == TEXT("EvaluateChooser") ? TEXT("evaluate")
 		: (DoomedResultType == TEXT("SoftAssetChooser") ? TEXT("soft_asset") : TEXT("asset"));
-	const bool bDoomedDisabled = Table->DisabledRows.IsValidIndex(RowIndex) && Table->DisabledRows[RowIndex];
+	const bool bDoomedDisabled = MCPChooserRowDisabled(Table, RowIndex);
 	TArray<TSharedPtr<FJsonValue>> DoomedCells;
 	int32 UnexportableCells = 0;
 	for (int32 c = 0; c < Table->ColumnsStructs.Num(); ++c)
@@ -755,7 +840,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 		}
 	}
 	Table->ResultsStructs.RemoveAt(RowIndex);
-	if (Table->DisabledRows.IsValidIndex(RowIndex)) Table->DisabledRows.RemoveAt(RowIndex);
+	MCPChooserRemoveDisabledRow(Table, RowIndex);
 
 	FinalizeChooser(Table);
 

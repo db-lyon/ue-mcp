@@ -29,7 +29,7 @@
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
-#include "UObject/PerPlatformProperties.h"
+#include "MCPEngineCompat.h"
 
 namespace
 {

@@ -507,6 +507,18 @@ TSharedPtr<FJsonValue> FAnimationHandlers::PreviewAnimation(const TSharedPtr<FJs
 // or template and disappears when that component is reconstructed.
 TSharedPtr<FJsonValue> FAnimationHandlers::SetLivePostProcessAnimBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
+#if !UE_MCP_HAS_5_5_API
+	// USkeletalMeshComponent::OverridePostProcessAnimBP, its setter, and
+	// GetPostProcessAnimBPClassToBeUsed all arrived in 5.5. On 5.4 the
+	// post-process AnimBP belongs to the SkeletalMesh asset and a component
+	// carries no override to set or clear, so there is no live override to
+	// report on either.
+	auto Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("success"), false);
+	Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
+	Result->SetStringField(TEXT("error"), TEXT("set_live_post_process_anim_blueprint requires Unreal Engine 5.5 or newer, because the per-component post-process AnimBP override does not exist in 5.4. Set the post-process AnimBP on the SkeletalMesh asset instead."));
+	return MCPResult(Result);
+#else
 	FString ActorLabel;
 	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
 	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
@@ -612,6 +624,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetLivePostProcessAnimBlueprint(const
 	}
 	MCPSetRollback(Result, TEXT("set_live_post_process_anim_blueprint"), Rollback);
 	return MCPResult(Result);
+#endif
 }
 
 

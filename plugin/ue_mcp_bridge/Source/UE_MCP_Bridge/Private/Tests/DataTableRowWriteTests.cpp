@@ -26,7 +26,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/Guid.h"
-#include "UObject/PerPlatformProperties.h"
+#include "MCPEngineCompat.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -559,7 +559,15 @@ bool FJsonPropertyNumericPrecisionTest::RunTest(const FString& Parameters)
 	// ── int64. A JSON number is a double, so above 2^53 it no longer carries
 	// every integer: the write is refused rather than storing a neighbour, and
 	// the same number sent as a JSON string lands at full width.
+#if UE_MCP_HAS_5_5_API
 	FProperty* Int64Prop = TBaseStructure<FInt64Vector2>::Get()->FindPropertyByName(TEXT("X"));
+#else
+	// 5.4 has no TBaseStructure specialisation for FInt64Vector2; its script
+	// struct is still registered, so it is found by name instead.
+	UScriptStruct* Int64VectorStruct = FindObject<UScriptStruct>(nullptr, TEXT("/Script/CoreUObject.Int64Vector2"));
+	if (!TestNotNull(TEXT("FInt64Vector2 script struct exists"), Int64VectorStruct)) return false;
+	FProperty* Int64Prop = Int64VectorStruct->FindPropertyByName(TEXT("X"));
+#endif
 	if (!TestNotNull(TEXT("FInt64Vector2::X exists"), Int64Prop)) return false;
 	if (!TestNotNull(TEXT("FInt64Vector2::X is an int64 property"), CastField<FInt64Property>(Int64Prop))) return false;
 	{

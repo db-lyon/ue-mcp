@@ -14,6 +14,8 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "EditorAssetLibrary.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
@@ -55,6 +57,56 @@
 // (added in 5.8; the status module carries its own copy of this macro because
 // it must not depend on this one).
 #define UE_MCP_HAS_5_8_API ((ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8))
+
+// ── Engine API shims ─────────────────────────────────────────────────────────
+//
+// Where an engine API was renamed or wrapped between 5.4 and 5.8, the shim goes
+// here rather than in a handler, so two handlers cannot end up with two
+// spellings of the same rule. Headers that moved live in MCPEngineCompat.h.
+
+/** UStaticMesh Nanite settings. 5.5 added the accessor pair; 5.4 has only the
+ *  member, which 5.7 in turn deprecated direct access to. */
+inline FMeshNaniteSettings MCPGetNaniteSettings(const UStaticMesh* Mesh)
+{
+	if (!Mesh) return FMeshNaniteSettings();
+#if UE_MCP_HAS_5_5_API
+	return Mesh->GetNaniteSettings();
+#else
+	return Mesh->NaniteSettings;
+#endif
+}
+
+/** Counterpart to MCPGetNaniteSettings. The caller still owns Modify(). */
+inline void MCPSetNaniteSettings(UStaticMesh* Mesh, const FMeshNaniteSettings& InSettings)
+{
+	if (!Mesh) return;
+#if UE_MCP_HAS_5_5_API
+	Mesh->SetNaniteSettings(InSettings);
+#else
+	Mesh->NaniteSettings = InSettings;
+#endif
+}
+
+/** Per-component Nanite opt-outs. 5.5 wrapped the bitfields in accessors. */
+inline bool MCPIsDisallowNanite(const UStaticMeshComponent* Component)
+{
+	if (!Component) return false;
+#if UE_MCP_HAS_5_5_API
+	return Component->IsDisallowNanite();
+#else
+	return Component->bDisallowNanite != 0;
+#endif
+}
+
+inline bool MCPIsForceDisableNanite(const UStaticMeshComponent* Component)
+{
+	if (!Component) return false;
+#if UE_MCP_HAS_5_5_API
+	return Component->IsForceDisableNanite();
+#else
+	return Component->bForceDisableNanite != 0;
+#endif
+}
 
 // ── Quick result builders ────────────────────────────────────────────────────
 

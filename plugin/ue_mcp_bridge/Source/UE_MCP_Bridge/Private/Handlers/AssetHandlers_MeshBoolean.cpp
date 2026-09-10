@@ -825,7 +825,7 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 		Create.SetStructBool(TEXT("Options"), TEXT("bEnableCollision"), bCopyCollision);
 		Create.SetStructBool(TEXT("Options"), TEXT("bEnableNanite"),
 			NaniteMode == TEXT("enable")
-			|| (NaniteMode == TEXT("inherit") && TargetMesh->GetNaniteSettings().bEnabled));
+			|| (NaniteMode == TEXT("inherit") && MCPGetNaniteSettings(TargetMesh).bEnabled));
 		Create.SetObject(TEXT("Debug"), Debug);
 		Create.Invoke();
 		Messages.Append(DrainDebugMessages(Debug));
@@ -865,16 +865,16 @@ TSharedPtr<FJsonValue> FAssetMeshBooleanHandlers::MeshBoolean(const TSharedPtr<F
 
 	bool bNaniteChanged = false;
 	{
-		FMeshNaniteSettings Settings = Written->GetNaniteSettings();
+		FMeshNaniteSettings Settings = MCPGetNaniteSettings(Written);
 		const bool bWant =
 			NaniteMode == TEXT("enable") ? true :
 			NaniteMode == TEXT("disable") ? false :
-			TargetMesh->GetNaniteSettings().bEnabled;
+			MCPGetNaniteSettings(TargetMesh).bEnabled;
 		if (Settings.bEnabled != bWant)
 		{
 			Settings.bEnabled = bWant;
 			Written->Modify();
-			Written->SetNaniteSettings(Settings);
+			MCPSetNaniteSettings(Written, Settings);
 			bNaniteChanged = true;
 		}
 	}

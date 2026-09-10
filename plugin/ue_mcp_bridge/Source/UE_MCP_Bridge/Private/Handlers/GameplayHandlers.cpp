@@ -13,7 +13,13 @@
 #include "StateTreeExecutionContext.h"
 #include "StateTreeEditorData.h"
 #include "StateTreeSchema.h"
+#if UE_MCP_HAS_5_5_API
 #include "StateTreeEditingSubsystem.h"
+#else
+// 5.4 has no editing subsystem; FStateTreeCompiler is the compile entry point
+// there and lives in the editor module this plugin already links.
+#include "StateTreeCompiler.h"
+#endif
 #include "StateTreeCompilerLog.h"
 #include "HandlerStateTreeSchema.h"
 #include "AssetToolsModule.h"
@@ -1302,7 +1308,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateStateTree(const TSharedPtr<FJson
 		MCPStateTreeSchema::AttachSchema(StateTree, Schema.SchemaClass);
 
 	FStateTreeCompilerLog Log;
+#if UE_MCP_HAS_5_5_API
 	const bool bCompiled = UStateTreeEditingSubsystem::CompileStateTree(StateTree, Log);
+#else
+	FStateTreeCompiler Compiler(Log);
+	const bool bCompiled = Compiler.Compile(*StateTree);
+#endif
 	StateTree->MarkPackageDirty();
 
 	SaveAssetPackage(StateTree);

@@ -48,7 +48,9 @@
 // them to UObject*, which needs the complete type.
 #include "WorldPartition/HLOD/HLODLayer.h"
 #include "WorldPartition/WorldPartition.h"
+#if UE_MCP_HAS_5_5_API
 #include "WorldPartition/WorldPartitionRuntimeCellTransformer.h"
+#endif
 #include "WorldPartition/WorldPartitionRuntimeHash.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -624,11 +626,17 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddRuntimeCellTransformer(const TSharedPt
 	// a wrong class here reads the same way it does everywhere else in the
 	// bridge rather than growing its own phrasing.
 	UClass* TransformerClass = MCPResolveClass(ClassName);
+#if UE_MCP_HAS_5_5_API
 	if (auto Err = MCPCheckClassUsable(
 		ClassName, TransformerClass, UWorldPartitionRuntimeCellTransformer::StaticClass()))
 	{
 		return Err;
 	}
+#else
+	// 5.4 has no UWorldPartitionRuntimeCellTransformer to check against, and no
+	// RuntimeCellsTransformerStack either: the reflected-property check below
+	// is what refuses the call there, and it names the reason.
+#endif
 
 	FArrayProperty* ArrayProp = MCPWPTransformerStackProperty();
 	const FMCPWPTransformerFields Fields = MCPWPTransformerFields(ArrayProp);

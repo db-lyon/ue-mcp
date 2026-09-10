@@ -64,13 +64,21 @@
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 
+#if UE_MCP_HAS_5_5_API
 #include "MetasoundBuilderBase.h"
+#else
+// 5.4 declares UMetaSoundBuilderBase in the subsystem header and ships no
+// MetasoundBuilderBase.h.
+#include "MetasoundBuilderSubsystem.h"
+#endif
 // MetasoundDocumentBuilderRegistry.h, and never MetasoundFrontendDocumentBuilderRegistry.h:
 // the frontend header ships on 5.8 only. This MetasoundEngine header reaches
 // Metasound::Frontend::IDocumentBuilderRegistry on every supported engine, by
 // including the frontend header on 5.8 and MetasoundDocumentInterface.h, where
 // 5.7 and earlier declare the class, on all of them.
+#if UE_MCP_HAS_5_5_API
 #include "MetasoundDocumentBuilderRegistry.h"
+#endif
 #include "MetasoundDocumentInterface.h"
 #include "MetasoundFrontendDocument.h"
 #include "MetasoundFrontendLiteral.h"
@@ -88,6 +96,7 @@
 
 namespace
 {
+#if UE_MCP_HAS_5_5_API
 	/** A MetaSound that can be WRITTEN, plus how it was reached. */
 	struct FMSEditTarget
 	{
@@ -181,18 +190,33 @@ namespace
 
 #if WITH_EDITORONLY_DATA
 		using namespace Metasound::Frontend;
+#if UE_MCP_HAS_5_5_API
 		IDocumentBuilderRegistry* Registry = IDocumentBuilderRegistry::Get();
 		if (!Registry)
 		{
 			OutError = MCPError(TEXT("The MetaSound document builder registry is not available, so an existing MetaSound cannot be opened for editing. Enable the MetaSound plugin."));
 			return false;
 		}
+#else
+		// 5.4 attaches through the builder subsystem instead; there is no
+		// document builder registry to ask.
+		UMetaSoundBuilderSubsystem* Subsystem = UMetaSoundBuilderSubsystem::Get();
+		if (!Subsystem)
+		{
+			OutError = MCPError(TEXT("The MetaSound builder subsystem is not available, so an existing MetaSound cannot be opened for editing. Enable the MetaSound plugin."));
+			return false;
+		}
+#endif
 
-		// Asked BEFORE attaching, because FindOrBeginBuilding makes the answer
-		// true whatever it was. FindBuilder only asks.
+		// Asked BEFORE attaching, because attaching makes the answer true
+		// whatever it was. This only asks.
 		{
 			TScriptInterface<IMetaSoundDocumentInterface> DocIface(Out.Asset);
+#if UE_MCP_HAS_5_5_API
 			Out.bBuilderWasAttached = Registry->FindBuilder(DocIface) != nullptr;
+#else
+			Out.bBuilderWasAttached = Subsystem->FindBuilderOfDocument(DocIface) != nullptr;
+#endif
 		}
 
 		// FindOrBeginBuilding check()s that the object is an asset, and a check
@@ -207,9 +231,13 @@ namespace
 			return false;
 		}
 
+#if UE_MCP_HAS_5_5_API
 		Metasound::Engine::FDocumentBuilderRegistry& EngineRegistry =
 			static_cast<Metasound::Engine::FDocumentBuilderRegistry&>(*Registry);
 		Out.Builder = &EngineRegistry.FindOrBeginBuilding<UMetaSoundBuilderBase>(*Out.Asset);
+#else
+		Out.Builder = &Subsystem->AttachBuilderToAssetChecked(*Out.Asset);
+#endif
 		Out.Source = Out.bBuilderWasAttached ? TEXT("builder") : TEXT("asset");
 		return true;
 #else
@@ -364,6 +392,8 @@ namespace
 
 	// ── SoundCue helpers ────────────────────────────────────────────────
 
+#endif // UE_MCP_HAS_5_5_API
+
 	/** A cue node by object name, which is what soundcue_add_node hands back. */
 	USoundNode* MSEditFindCueNode(USoundCue* Cue, const FString& NodeName)
 	{
@@ -403,6 +433,7 @@ namespace
 // ─────────────────────────────────────────────────────────────────────────────
 // metasound_remove_node
 // ─────────────────────────────────────────────────────────────────────────────
+#if UE_MCP_HAS_5_5_API
 TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundRemoveNode(const TSharedPtr<FJsonObject>& Params)
 {
 	FString NodeId;
@@ -963,6 +994,51 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundRenameMember(const TSharedPtr<FJ
 // ─────────────────────────────────────────────────────────────────────────────
 // soundcue_remove_node
 // ─────────────────────────────────────────────────────────────────────────────
+#else
+
+// The MetaSound authoring and introspection surface this file writes through
+// is 5.5 and newer. 5.4 has a different document model (no graph pages, no
+// document builder registry, protected builder access, and four-argument
+// finders instead of five), so the same calls cannot be spelled against it.
+// Rather than half-author a document on 5.4, the actions stay registered and
+// report the engine requirement, which is what an agent can act on.
+
+namespace
+{
+	TSharedPtr<FJsonValue> MSEditUnsupportedEngine(const TCHAR* Action)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("audio(%s) requires Unreal Engine 5.5 or newer. %s"), Action,
+			TEXT("The MetaSound document model it drives (graph pages and the document builder registry) does not exist in 5.4.")));
+		return MCPResult(Result);
+	}
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundRemoveNode(const TSharedPtr<FJsonObject>&)
+{
+	return MSEditUnsupportedEngine(TEXT("metasound_remove_node"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundDisconnect(const TSharedPtr<FJsonObject>&)
+{
+	return MSEditUnsupportedEngine(TEXT("metasound_disconnect"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundRemoveMember(const TSharedPtr<FJsonObject>&)
+{
+	return MSEditUnsupportedEngine(TEXT("metasound_remove_member"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundRenameMember(const TSharedPtr<FJsonObject>&)
+{
+	return MSEditUnsupportedEngine(TEXT("metasound_rename_member"));
+}
+
+#endif
+
 TSharedPtr<FJsonValue> FAudioHandlers::SoundCueRemoveNode(const TSharedPtr<FJsonObject>& Params)
 {
 	FString CuePath;
@@ -1501,8 +1577,15 @@ TSharedPtr<FJsonValue> FAudioHandlers::ReadSoundRouting(const TSharedPtr<FJsonOb
 		// other: `maxCount` keeps meaning the authored field, and
 		// `effectiveMaxCount` is what the voice limiter actually applies.
 		const int32 AuthoredMaxCount = Conc->Concurrency.MaxCount;
+#if UE_MCP_HAS_5_5_API
 		const int32 EffectiveMaxCount = Conc->Concurrency.GetMaxCount();
 		const bool bPlatformScaled = Conc->Concurrency.IsMaxCountPlatformScalingEnabled();
+#else
+		// 5.4 has no platform scaling on concurrency and no accessor pair: the
+		// authored count is the one the voice limiter applies.
+		const int32 EffectiveMaxCount = AuthoredMaxCount;
+		const bool bPlatformScaled = false;
+#endif
 		O->SetNumberField(TEXT("maxCount"), AuthoredMaxCount);
 		O->SetNumberField(TEXT("effectiveMaxCount"), EffectiveMaxCount);
 		O->SetBoolField(TEXT("maxCountPlatformScaling"), bPlatformScaled);

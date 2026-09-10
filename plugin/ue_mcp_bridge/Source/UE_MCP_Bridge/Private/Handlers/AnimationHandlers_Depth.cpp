@@ -282,7 +282,17 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetStateMachineEntry(const TSharedPtr
 			TEXT("Recreate it with animation(create_state_machine)."), *SMName));
 	}
 
+#if UE_MCP_HAS_5_5_API
 	UEdGraphPin* EntryPin = Entry->GetOutputPin();
+#else
+	// 5.4's UAnimStateEntryNode has no GetOutputPin(); the entry node allocates
+	// exactly one output pin, which is the same pin that accessor returns.
+	UEdGraphPin* EntryPin = nullptr;
+	for (UEdGraphPin* Pin : Entry->Pins)
+	{
+		if (Pin && Pin->Direction == EGPD_Output) { EntryPin = Pin; break; }
+	}
+#endif
 	if (!EntryPin)
 	{
 		return MCPError(TEXT("The state machine's entry node has no output pin."));

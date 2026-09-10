@@ -118,6 +118,36 @@ namespace
 		return Names;
 	}
 
+	/** Is this material type compiled into this project?
+	 *
+	 *  5.5 added the project setting that trims runtime virtual texture shader
+	 *  permutations, and RuntimeVirtualTexture::IsMaterialTypeSupported with
+	 *  it. On 5.4 nothing trims them, so every material type the enum names is
+	 *  supported. */
+	bool MCPRvtMaterialTypeSupported(ERuntimeVirtualTextureMaterialType Type)
+	{
+#if UE_MCP_HAS_5_5_API
+		return RuntimeVirtualTexture::IsMaterialTypeSupported(Type);
+#else
+		return true;
+#endif
+	}
+
+	/** The RuntimeVirtualTextureOutput material expression class.
+	 *
+	 *  5.4 declares UMaterialExpressionRuntimeVirtualTextureOutput without an
+	 *  ENGINE_API, so its StaticClass() does not link outside Engine. The class
+	 *  is registered like any other, so it is resolved by path there. */
+	UClass* MCPRvtOutputExpressionClass()
+	{
+#if UE_MCP_HAS_5_5_API
+		return UMaterialExpressionRuntimeVirtualTextureOutput::StaticClass();
+#else
+		return FindObject<UClass>(
+			nullptr, TEXT("/Script/Engine.MaterialExpressionRuntimeVirtualTextureOutput"));
+#endif
+	}
+
 	FString MCPRvtMaterialTypeName(ERuntimeVirtualTextureMaterialType Type)
 	{
 		UEnum* Enum = MCPRvtMaterialTypeEnum();
@@ -206,7 +236,7 @@ namespace
 		Result->SetStringField(TEXT("name"), Rvt->GetName());
 		Result->SetStringField(TEXT("materialType"), MCPRvtMaterialTypeName(Rvt->GetMaterialType()));
 		Result->SetBoolField(TEXT("materialTypeSupported"),
-			RuntimeVirtualTexture::IsMaterialTypeSupported(Rvt->GetMaterialType()));
+			MCPRvtMaterialTypeSupported(Rvt->GetMaterialType()));
 		Result->SetNumberField(TEXT("tileCount"), Rvt->GetTileCount());
 		Result->SetNumberField(TEXT("tileSize"), Rvt->GetTileSize());
 		Result->SetNumberField(TEXT("tileBorderSize"), Rvt->GetTileBorderSize());
@@ -436,7 +466,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateRuntimeVirtualTexture(const TSha
 				TEXT("Unknown materialType '%s'. This engine defines: %s."),
 				*TypeSpec, *FString::Join(MCPRvtMaterialTypeNames(), TEXT(", "))));
 		}
-		if (!RuntimeVirtualTexture::IsMaterialTypeSupported(MaterialType))
+		if (!MCPRvtMaterialTypeSupported(MaterialType))
 		{
 			return MCPError(FString::Printf(
 				TEXT("materialType '%s' is disabled for this project, so an RVT using it would compile to nothing. ")
@@ -606,7 +636,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReadRuntimeVirtualTexture(const TShare
 			TEXT("landscape with material(assign_rvt_to_landscape), or to a mesh's RuntimeVirtualTextures array with ")
 			TEXT("editor(set_property).")));
 	}
-	if (!RuntimeVirtualTexture::IsMaterialTypeSupported(Rvt->GetMaterialType()))
+	if (!MCPRvtMaterialTypeSupported(Rvt->GetMaterialType()))
 	{
 		Problems.Add(MakeShared<FJsonValueString>(FString::Printf(
 			TEXT("materialType '%s' is disabled for this project, so this RVT compiles to nothing. Enable it under ")
@@ -1141,11 +1171,17 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddRvtOutput(const TSharedPtr<FJsonObj
 	const bool bMirror = OptionalBool(Params, TEXT("mirrorProperties"), true);
 	const bool bRecompile = OptionalBool(Params, TEXT("recompile"), true);
 
-	UMaterialExpressionRuntimeVirtualTextureOutput* Output = nullptr;
+	UClass* const RvtOutputClass = MCPRvtOutputExpressionClass();
+	if (!RvtOutputClass)
+	{
+		return MCPError(TEXT("The RuntimeVirtualTextureOutput material expression class is not registered in this editor."));
+	}
+
+	UMaterialExpression* Output = nullptr;
 	bool bCreated = false;
 	if (UMaterialExpression* Found = FindExpressionByName(Material, ExpressionName))
 	{
-		Output = Cast<UMaterialExpressionRuntimeVirtualTextureOutput>(Found);
+		Output = Found->IsA(RvtOutputClass) ? Found : nullptr;
 		if (!Output)
 		{
 			return MCPError(FString::Printf(
@@ -1159,7 +1195,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddRvtOutput(const TSharedPtr<FJsonObj
 
 	if (!Output)
 	{
-		Output = NewObject<UMaterialExpressionRuntimeVirtualTextureOutput>(Material);
+		Output = NewObject<UMaterialExpression>(Material, RvtOutputClass);
 		Output->Desc = ExpressionName;
 		Output->MaterialExpressionEditorX = OptionalInt(Params, TEXT("positionX"), 400);
 		Output->MaterialExpressionEditorY = OptionalInt(Params, TEXT("positionY"), 400);
@@ -1341,7 +1377,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AssignRvtToLandscape(const TSharedPtr<
 		URuntimeVirtualTexture* Rvt = Cast<URuntimeVirtualTexture>(Loaded);
 		if (!Rvt) return MCPAssetWrongTypeError(Path, Loaded, TEXT("RuntimeVirtualTexture"));
 		Resolved.AddUnique(Rvt);
-		if (!RuntimeVirtualTexture::IsMaterialTypeSupported(Rvt->GetMaterialType()))
+		if (!MCPRvtMaterialTypeSupported(Rvt->GetMaterialType()))
 		{
 			Problems.Add(MakeShared<FJsonValueString>(FString::Printf(
 				TEXT("'%s' uses materialType %s, which is disabled for this project, so it will render nothing however it is assigned."),
@@ -1443,7 +1479,8 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AssignRvtToLandscape(const TSharedPtr<
 		{
 			for (UMaterialExpression* Expression : BaseMaterial->GetExpressions())
 			{
-				if (Cast<UMaterialExpressionRuntimeVirtualTextureOutput>(Expression))
+				if (Expression && MCPRvtOutputExpressionClass()
+					&& Expression->IsA(MCPRvtOutputExpressionClass()))
 				{
 					bMaterialWritesRvt = true;
 					break;

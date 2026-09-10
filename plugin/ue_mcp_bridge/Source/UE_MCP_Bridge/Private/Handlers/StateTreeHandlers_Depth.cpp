@@ -74,9 +74,7 @@
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"
 #include "Runtime/Launch/Resources/Version.h"
-#include "StructUtils/InstancedStruct.h"
-#include "StructUtils/PropertyBag.h"
-#include "StructUtils/StructView.h"
+#include "MCPEngineCompat.h"
 #include "UObject/UnrealType.h"
 #include "UObject/UObjectIterator.h"
 

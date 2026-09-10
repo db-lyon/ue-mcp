@@ -37,7 +37,7 @@
 #include "Misc/Paths.h"
 #include "UObject/ObjectRedirector.h"
 #include "UObject/Package.h"
-#include "UObject/PerPlatformProperties.h"
+#include "MCPEngineCompat.h"
 
 namespace
 {

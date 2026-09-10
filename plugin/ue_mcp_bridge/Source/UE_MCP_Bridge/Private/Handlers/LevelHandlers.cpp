@@ -3781,7 +3781,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 	const bool bEnabled = OptionalBool(Params, TEXT("enabled"), true);
 	// Use the accessor pair (GetNaniteSettings/SetNaniteSettings) - direct
 	// member access to NaniteSettings is deprecated in 5.7+.
-	FMeshNaniteSettings Settings = Mesh->GetNaniteSettings();
+	FMeshNaniteSettings Settings = MCPGetNaniteSettings(Mesh);
 	const bool bPreviousEnabled = Settings.bEnabled != 0;
 	const int32 PreviousPositionPrecision = Settings.PositionPrecision;
 	Settings.bEnabled = bEnabled;
@@ -3807,7 +3807,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 		// said unchanged:true and saved:false, leaving the asset dirty with
 		// nothing written and nothing to save.
 		Mesh->Modify();
-		Mesh->SetNaniteSettings(Settings);
+		MCPSetNaniteSettings(Mesh, Settings);
 
 		// Force a rebuild so the Nanite data is generated immediately rather
 		// than on next cook. Build() is the editor's explicit rebuild entry point.
@@ -3816,8 +3816,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 		bSaved = SaveAssetPackage(Mesh);
 	}
 
-	const bool bNowEnabled = Mesh->GetNaniteSettings().bEnabled != 0;
-	const int32 NowPositionPrecision = Mesh->GetNaniteSettings().PositionPrecision;
+	const bool bNowEnabled = MCPGetNaniteSettings(Mesh).bEnabled != 0;
+	const int32 NowPositionPrecision = MCPGetNaniteSettings(Mesh).PositionPrecision;
 
 	auto Result = MCPSuccess();
 	if (bSettingsChanged) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
@@ -3872,7 +3872,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetNaniteInfo(const TSharedPtr<FJsonObjec
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("meshPath"), AssetPath)) return Err;
 	REQUIRE_ASSET(UStaticMesh, Mesh, AssetPath);
 
-	const FMeshNaniteSettings& Settings = Mesh->GetNaniteSettings();
+	const FMeshNaniteSettings Settings = MCPGetNaniteSettings(Mesh);
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), Mesh->GetPathName());
 	Result->SetBoolField(TEXT("naniteEnabled"), Settings.bEnabled != 0);

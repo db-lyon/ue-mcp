@@ -15,8 +15,17 @@
 #include "PoseSearch/PoseSearchSchema.h"
 #include "HandlerPoseSearchSchema.h"
 #include "PoseSearch/PoseSearchFeatureChannel.h"
+#if UE_MCP_HAS_5_5_API
 #include "PoseSearch/PoseSearchFeatureChannel_Pose.h"
 #include "PoseSearch/PoseSearchFeatureChannel_Trajectory.h"
+#else
+// UE 5.4 keeps both channel headers (and the FPoseSearchBone /
+// FPoseSearchTrajectorySample structs inside them) private to the PoseSearch
+// module, so nothing outside it can name the types. The classes are still
+// UCLASSes with reflected properties, so the two channel actions author them
+// through the property system instead - same asset, same fields, no header.
+#include "HandlerJsonProperty.h"
+#endif
 #include "PoseSearch/PoseSearchDatabase.h"
 #include "PoseSearch/PoseSearchNormalizationSet.h"
 #include "Animation/MirrorDataTable.h"
@@ -63,13 +72,47 @@ static int32 ParseFlagArray(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Fie
 	return Flags == 0 ? Default : Flags;
 }
 
+// Bit values of EPoseSearchBoneFlags / EPoseSearchTrajectoryFlags. They are
+// spelled out rather than taken from the enums because on 5.4 the enums are
+// declared in the private channel headers; these are the values the asset
+// serializes and they are the same from 5.4 through 5.8.
+static constexpr int32 MCPBoneFlagVelocity = 1 << 0;
+static constexpr int32 MCPBoneFlagPosition = 1 << 1;
+static constexpr int32 MCPBoneFlagRotation = 1 << 2;
+static constexpr int32 MCPBoneFlagPhase    = 1 << 3;
+
+static constexpr int32 MCPTrajFlagVelocity            = 1 << 0;
+static constexpr int32 MCPTrajFlagPosition            = 1 << 1;
+static constexpr int32 MCPTrajFlagVelocityDirection   = 1 << 2;
+static constexpr int32 MCPTrajFlagFacingDirection     = 1 << 3;
+static constexpr int32 MCPTrajFlagVelocityXY          = 1 << 4;
+static constexpr int32 MCPTrajFlagPositionXY          = 1 << 5;
+static constexpr int32 MCPTrajFlagVelocityDirectionXY = 1 << 6;
+static constexpr int32 MCPTrajFlagFacingDirectionXY   = 1 << 7;
+
+#if UE_MCP_HAS_5_5_API
+// Where the enums are reachable, hold the spelled-out values to them.
+static_assert(MCPBoneFlagVelocity == int32(EPoseSearchBoneFlags::Velocity), "EPoseSearchBoneFlags::Velocity moved");
+static_assert(MCPBoneFlagPosition == int32(EPoseSearchBoneFlags::Position), "EPoseSearchBoneFlags::Position moved");
+static_assert(MCPBoneFlagRotation == int32(EPoseSearchBoneFlags::Rotation), "EPoseSearchBoneFlags::Rotation moved");
+static_assert(MCPBoneFlagPhase == int32(EPoseSearchBoneFlags::Phase), "EPoseSearchBoneFlags::Phase moved");
+static_assert(MCPTrajFlagVelocity == int32(EPoseSearchTrajectoryFlags::Velocity), "EPoseSearchTrajectoryFlags::Velocity moved");
+static_assert(MCPTrajFlagPosition == int32(EPoseSearchTrajectoryFlags::Position), "EPoseSearchTrajectoryFlags::Position moved");
+static_assert(MCPTrajFlagVelocityDirection == int32(EPoseSearchTrajectoryFlags::VelocityDirection), "EPoseSearchTrajectoryFlags::VelocityDirection moved");
+static_assert(MCPTrajFlagFacingDirection == int32(EPoseSearchTrajectoryFlags::FacingDirection), "EPoseSearchTrajectoryFlags::FacingDirection moved");
+static_assert(MCPTrajFlagVelocityXY == int32(EPoseSearchTrajectoryFlags::VelocityXY), "EPoseSearchTrajectoryFlags::VelocityXY moved");
+static_assert(MCPTrajFlagPositionXY == int32(EPoseSearchTrajectoryFlags::PositionXY), "EPoseSearchTrajectoryFlags::PositionXY moved");
+static_assert(MCPTrajFlagVelocityDirectionXY == int32(EPoseSearchTrajectoryFlags::VelocityDirectionXY), "EPoseSearchTrajectoryFlags::VelocityDirectionXY moved");
+static_assert(MCPTrajFlagFacingDirectionXY == int32(EPoseSearchTrajectoryFlags::FacingDirectionXY), "EPoseSearchTrajectoryFlags::FacingDirectionXY moved");
+#endif
+
 static const TMap<FString, int32>& BoneFlagTable()
 {
 	static const TMap<FString, int32> Table = {
-		{ TEXT("velocity"), int32(EPoseSearchBoneFlags::Velocity) },
-		{ TEXT("position"), int32(EPoseSearchBoneFlags::Position) },
-		{ TEXT("rotation"), int32(EPoseSearchBoneFlags::Rotation) },
-		{ TEXT("phase"),    int32(EPoseSearchBoneFlags::Phase) },
+		{ TEXT("velocity"), MCPBoneFlagVelocity },
+		{ TEXT("position"), MCPBoneFlagPosition },
+		{ TEXT("rotation"), MCPBoneFlagRotation },
+		{ TEXT("phase"),    MCPBoneFlagPhase },
 	};
 	return Table;
 }
@@ -77,17 +120,35 @@ static const TMap<FString, int32>& BoneFlagTable()
 static const TMap<FString, int32>& TrajectoryFlagTable()
 {
 	static const TMap<FString, int32> Table = {
-		{ TEXT("velocity"),            int32(EPoseSearchTrajectoryFlags::Velocity) },
-		{ TEXT("position"),            int32(EPoseSearchTrajectoryFlags::Position) },
-		{ TEXT("velocitydirection"),   int32(EPoseSearchTrajectoryFlags::VelocityDirection) },
-		{ TEXT("facingdirection"),     int32(EPoseSearchTrajectoryFlags::FacingDirection) },
-		{ TEXT("velocityxy"),          int32(EPoseSearchTrajectoryFlags::VelocityXY) },
-		{ TEXT("positionxy"),          int32(EPoseSearchTrajectoryFlags::PositionXY) },
-		{ TEXT("velocitydirectionxy"), int32(EPoseSearchTrajectoryFlags::VelocityDirectionXY) },
-		{ TEXT("facingdirectionxy"),   int32(EPoseSearchTrajectoryFlags::FacingDirectionXY) },
+		{ TEXT("velocity"),            MCPTrajFlagVelocity },
+		{ TEXT("position"),            MCPTrajFlagPosition },
+		{ TEXT("velocitydirection"),   MCPTrajFlagVelocityDirection },
+		{ TEXT("facingdirection"),     MCPTrajFlagFacingDirection },
+		{ TEXT("velocityxy"),          MCPTrajFlagVelocityXY },
+		{ TEXT("positionxy"),          MCPTrajFlagPositionXY },
+		{ TEXT("velocitydirectionxy"), MCPTrajFlagVelocityDirectionXY },
+		{ TEXT("facingdirectionxy"),   MCPTrajFlagFacingDirectionXY },
 	};
 	return Table;
 }
+
+#if !UE_MCP_HAS_5_5_API
+/** Construct one of the PoseSearch channel classes by its script path. On 5.4
+ *  the concrete classes are private to the PoseSearch module, but the UClass is
+ *  registered like any other, so the object is created through it. */
+static UPoseSearchFeatureChannel* MCPNewPoseSearchChannel(UPoseSearchSchema* Schema, const TCHAR* ClassPath)
+{
+	UClass* ChannelClass = FindObject<UClass>(nullptr, ClassPath);
+	if (!ChannelClass) return nullptr;
+	return NewObject<UPoseSearchFeatureChannel>(Schema, ChannelClass, NAME_None, RF_Transactional);
+}
+
+/** Write one reflected property of a channel from JSON. */
+static bool MCPSetChannelProperty(UPoseSearchFeatureChannel* Channel, const TCHAR* PropertyName, const TSharedPtr<FJsonValue>& Value, FString& OutError)
+{
+	return MCPJsonProperty::SetDottedPropertyFromJson(Channel, PropertyName, Value, OutError);
+}
+#endif
 
 // ─── AnimGraph node authoring helpers ─────────────────────────────────────
 
@@ -228,23 +289,22 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaPoseChannel(const 
 		return MCPError(TEXT("Missing 'bones' (array of {bone, flags?:[velocity,position,rotation,phase], weight?})"));
 	}
 
-	Schema->Modify();
-	UPoseSearchFeatureChannel_Pose* Channel = NewObject<UPoseSearchFeatureChannel_Pose>(Schema, NAME_None, RF_Transactional);
-	double ChannelWeight = 0.0;
-	if (Params->TryGetNumberField(TEXT("weight"), ChannelWeight)) Channel->Weight = (float)ChannelWeight;
-
+	// Parse first, engine-independently, then write the parsed bones into the
+	// channel the way the running engine allows.
+	struct FParsedBone { FString Name; int32 Flags; float Weight; };
+	TArray<FParsedBone> ParsedBones;
 	TArray<TSharedPtr<FJsonValue>> Added;
 	for (const TSharedPtr<FJsonValue>& V : *Bones)
 	{
 		const TSharedPtr<FJsonObject>* BoneObj = nullptr;
 		FString BoneName;
-		int32 Flags = int32(EPoseSearchBoneFlags::Position);
+		int32 Flags = MCPBoneFlagPosition;
 		float Weight = 1.f;
 		if (V->TryGetObject(BoneObj) && BoneObj && (*BoneObj).IsValid())
 		{
 			if (!(*BoneObj)->TryGetStringField(TEXT("bone"), BoneName))
 				return MCPError(TEXT("Each bone entry needs a 'bone' name"));
-			Flags = ParseFlagArray(*BoneObj, TEXT("flags"), BoneFlagTable(), int32(EPoseSearchBoneFlags::Position));
+			Flags = ParseFlagArray(*BoneObj, TEXT("flags"), BoneFlagTable(), MCPBoneFlagPosition);
 			double W = 0.0;
 			if ((*BoneObj)->TryGetNumberField(TEXT("weight"), W)) Weight = (float)W;
 		}
@@ -253,13 +313,52 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaPoseChannel(const 
 			return MCPError(TEXT("Each bone entry must be an object or a bone-name string"));
 		}
 
-		FPoseSearchBone Bone;
-		Bone.Reference.BoneName = FName(*BoneName);
-		Bone.Flags = Flags;
-		Bone.Weight = Weight;
-		Channel->SampledBones.Add(Bone);
+		ParsedBones.Add({ BoneName, Flags, Weight });
 		Added.Add(MakeShared<FJsonValueString>(BoneName));
 	}
+
+	Schema->Modify();
+	double ChannelWeight = 0.0;
+	const bool bHasChannelWeight = Params->TryGetNumberField(TEXT("weight"), ChannelWeight);
+
+#if UE_MCP_HAS_5_5_API
+	UPoseSearchFeatureChannel_Pose* Channel = NewObject<UPoseSearchFeatureChannel_Pose>(Schema, NAME_None, RF_Transactional);
+	if (bHasChannelWeight) Channel->Weight = (float)ChannelWeight;
+	for (const FParsedBone& Parsed : ParsedBones)
+	{
+		FPoseSearchBone Bone;
+		Bone.Reference.BoneName = FName(*Parsed.Name);
+		Bone.Flags = Parsed.Flags;
+		Bone.Weight = Parsed.Weight;
+		Channel->SampledBones.Add(Bone);
+	}
+#else
+	UPoseSearchFeatureChannel* Channel = MCPNewPoseSearchChannel(Schema, TEXT("/Script/PoseSearch.PoseSearchFeatureChannel_Pose"));
+	if (!Channel) return MCPError(TEXT("PoseSearchFeatureChannel_Pose class is not loaded - is the PoseSearch plugin enabled?"));
+
+	FString PropertyError;
+	if (bHasChannelWeight && !MCPSetChannelProperty(Channel, TEXT("Weight"), MakeShared<FJsonValueNumber>(ChannelWeight), PropertyError))
+	{
+		return MCPError(FString::Printf(TEXT("Could not set channel weight: %s"), *PropertyError));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BoneStructs;
+	for (const FParsedBone& Parsed : ParsedBones)
+	{
+		TSharedPtr<FJsonObject> Reference = MakeShared<FJsonObject>();
+		Reference->SetStringField(TEXT("BoneName"), Parsed.Name);
+
+		TSharedPtr<FJsonObject> Bone = MakeShared<FJsonObject>();
+		Bone->SetObjectField(TEXT("Reference"), Reference);
+		Bone->SetNumberField(TEXT("Flags"), Parsed.Flags);
+		Bone->SetNumberField(TEXT("Weight"), Parsed.Weight);
+		BoneStructs.Add(MakeShared<FJsonValueObject>(Bone));
+	}
+	if (!MCPSetChannelProperty(Channel, TEXT("SampledBones"), MakeShared<FJsonValueArray>(BoneStructs), PropertyError))
+	{
+		return MCPError(FString::Printf(TEXT("Could not set SampledBones: %s"), *PropertyError));
+	}
+#endif
 
 	Schema->AddChannel(Channel);
 	MCPPoseSearch::Finalize(Schema);
@@ -292,28 +391,62 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaTrajectoryChannel(
 		return MCPError(TEXT("Missing 'samples' (array of {offset, flags?:[position,velocity,facingDirection,...], weight?}). Negative offsets are history, positive are prediction."));
 	}
 
-	Schema->Modify();
-	UPoseSearchFeatureChannel_Trajectory* Channel = NewObject<UPoseSearchFeatureChannel_Trajectory>(Schema, NAME_None, RF_Transactional);
-	double ChannelWeight = 0.0;
-	if (Params->TryGetNumberField(TEXT("weight"), ChannelWeight)) Channel->Weight = (float)ChannelWeight;
-
-	int32 Count = 0;
+	struct FParsedSample { float Offset; int32 Flags; float Weight; };
+	TArray<FParsedSample> ParsedSamples;
 	for (const TSharedPtr<FJsonValue>& V : *Samples)
 	{
 		const TSharedPtr<FJsonObject>* SampleObj = nullptr;
 		if (!V->TryGetObject(SampleObj) || !SampleObj || !(*SampleObj).IsValid())
 			return MCPError(TEXT("Each sample must be an object {offset, flags?, weight?}"));
 
-		FPoseSearchTrajectorySample Sample;
 		double Offset = 0.0;
 		(*SampleObj)->TryGetNumberField(TEXT("offset"), Offset);
-		Sample.Offset = (float)Offset;
-		Sample.Flags = ParseFlagArray(*SampleObj, TEXT("flags"), TrajectoryFlagTable(), int32(EPoseSearchTrajectoryFlags::Position));
-		double W = 0.0;
-		if ((*SampleObj)->TryGetNumberField(TEXT("weight"), W)) Sample.Weight = (float)W;
-		Channel->Samples.Add(Sample);
-		++Count;
+		const int32 Flags = ParseFlagArray(*SampleObj, TEXT("flags"), TrajectoryFlagTable(), MCPTrajFlagPosition);
+		double W = 1.0;
+		(*SampleObj)->TryGetNumberField(TEXT("weight"), W);
+		ParsedSamples.Add({ (float)Offset, Flags, (float)W });
 	}
+	const int32 Count = ParsedSamples.Num();
+
+	Schema->Modify();
+	double ChannelWeight = 0.0;
+	const bool bHasChannelWeight = Params->TryGetNumberField(TEXT("weight"), ChannelWeight);
+
+#if UE_MCP_HAS_5_5_API
+	UPoseSearchFeatureChannel_Trajectory* Channel = NewObject<UPoseSearchFeatureChannel_Trajectory>(Schema, NAME_None, RF_Transactional);
+	if (bHasChannelWeight) Channel->Weight = (float)ChannelWeight;
+	for (const FParsedSample& Parsed : ParsedSamples)
+	{
+		FPoseSearchTrajectorySample Sample;
+		Sample.Offset = Parsed.Offset;
+		Sample.Flags = Parsed.Flags;
+		Sample.Weight = Parsed.Weight;
+		Channel->Samples.Add(Sample);
+	}
+#else
+	UPoseSearchFeatureChannel* Channel = MCPNewPoseSearchChannel(Schema, TEXT("/Script/PoseSearch.PoseSearchFeatureChannel_Trajectory"));
+	if (!Channel) return MCPError(TEXT("PoseSearchFeatureChannel_Trajectory class is not loaded - is the PoseSearch plugin enabled?"));
+
+	FString PropertyError;
+	if (bHasChannelWeight && !MCPSetChannelProperty(Channel, TEXT("Weight"), MakeShared<FJsonValueNumber>(ChannelWeight), PropertyError))
+	{
+		return MCPError(FString::Printf(TEXT("Could not set channel weight: %s"), *PropertyError));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> SampleStructs;
+	for (const FParsedSample& Parsed : ParsedSamples)
+	{
+		TSharedPtr<FJsonObject> Sample = MakeShared<FJsonObject>();
+		Sample->SetNumberField(TEXT("Offset"), Parsed.Offset);
+		Sample->SetNumberField(TEXT("Flags"), Parsed.Flags);
+		Sample->SetNumberField(TEXT("Weight"), Parsed.Weight);
+		SampleStructs.Add(MakeShared<FJsonValueObject>(Sample));
+	}
+	if (!MCPSetChannelProperty(Channel, TEXT("Samples"), MakeShared<FJsonValueArray>(SampleStructs), PropertyError))
+	{
+		return MCPError(FString::Printf(TEXT("Could not set Samples: %s"), *PropertyError));
+	}
+#endif
 
 	Schema->AddChannel(Channel);
 	MCPPoseSearch::Finalize(Schema);
@@ -344,7 +477,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadPoseSearchSchema(const TSharedPtr
 	Res->SetNumberField(TEXT("sampleRate"), Schema->SampleRate);
 
 	TArray<TSharedPtr<FJsonValue>> Skeletons;
-	for (const FPoseSearchRoledSkeleton& Roled : Schema->GetRoledSkeletons())
+	for (const FPoseSearchRoledSkeleton& Roled : MCPPoseSearch::RoledSkeletons(Schema))
 	{
 		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
 		S->SetStringField(TEXT("role"), Roled.Role.ToString());
@@ -526,7 +659,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 	FString PrevPoseSearchModeName = TEXT("BruteForce");
 	if (PrevPoseSearchMode == EPoseSearchMode::PCAKDTree) PrevPoseSearchModeName = TEXT("PCAKDTree");
 	else if (PrevPoseSearchMode == EPoseSearchMode::VPTree) PrevPoseSearchModeName = TEXT("VPTree");
+#if UE_MCP_HAS_5_5_API
+	// EPoseSearchMode::EventOnly is a later addition to the enum.
 	else if (PrevPoseSearchMode == EPoseSearchMode::EventOnly) PrevPoseSearchModeName = TEXT("EventOnly");
+#endif
 #if WITH_EDITORONLY_DATA
 	const int32 PrevNumberOfPrincipalComponents = Database->NumberOfPrincipalComponents;
 	const FString PrevNormalizationSetPath =
@@ -547,7 +683,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 		if (Mode.Equals(TEXT("bruteforce"), ESearchCase::IgnoreCase)) Database->PoseSearchMode = EPoseSearchMode::BruteForce;
 		else if (Mode.Equals(TEXT("pcakdtree"), ESearchCase::IgnoreCase)) Database->PoseSearchMode = EPoseSearchMode::PCAKDTree;
 		else if (Mode.Equals(TEXT("vptree"), ESearchCase::IgnoreCase)) Database->PoseSearchMode = EPoseSearchMode::VPTree;
+#if UE_MCP_HAS_5_5_API
 		else if (Mode.Equals(TEXT("eventonly"), ESearchCase::IgnoreCase)) Database->PoseSearchMode = EPoseSearchMode::EventOnly;
+#endif
 	}
 
 #if WITH_EDITORONLY_DATA

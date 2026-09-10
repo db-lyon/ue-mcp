@@ -35,16 +35,26 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 
+#if UE_MCP_HAS_5_5_API
+
 #include "AssetRegistry/AssetRegistryModule.h"
 
 #include "MetasoundBuilderSubsystem.h"
+#if UE_MCP_HAS_5_5_API
 #include "MetasoundBuilderBase.h"
+#else
+// 5.4 declares UMetaSoundBuilderBase in the subsystem header and ships no
+// MetasoundBuilderBase.h.
+#include "MetasoundBuilderSubsystem.h"
+#endif
 // MetasoundDocumentBuilderRegistry.h, and never MetasoundFrontendDocumentBuilderRegistry.h:
 // the frontend header ships on 5.8 only. This MetasoundEngine header reaches
 // Metasound::Frontend::IDocumentBuilderRegistry on every supported engine, by
 // including the frontend header on 5.8 and MetasoundDocumentInterface.h, where
 // 5.7 and earlier declare the class, on all of them.
+#if UE_MCP_HAS_5_5_API
 #include "MetasoundDocumentBuilderRegistry.h"
+#endif
 #include "MetasoundDocumentInterface.h"
 #include "MetasoundFrontendDocument.h"
 #include "MetasoundFrontendLiteral.h"
@@ -152,10 +162,18 @@ namespace
 		// does not attach: FindBuilder, never FindOrBeginBuilding.
 		{
 			TScriptInterface<IMetaSoundDocumentInterface> DocScriptIface(Obj);
+#if UE_MCP_HAS_5_5_API
 			if (Metasound::Frontend::IDocumentBuilderRegistry* Registry = Metasound::Frontend::IDocumentBuilderRegistry::Get())
 			{
 				Out.bHasBuilder = Registry->FindBuilder(DocScriptIface) != nullptr;
 			}
+#else
+			// 5.4 keeps attached builders on the builder subsystem.
+			if (const UMetaSoundBuilderSubsystem* Subsystem = UMetaSoundBuilderSubsystem::GetConst())
+			{
+				Out.bHasBuilder = Subsystem->FindBuilderOfDocument(DocScriptIface) != nullptr;
+			}
+#endif
 		}
 		Out.Source = Out.bHasBuilder ? TEXT("builder") : TEXT("asset");
 
@@ -1413,3 +1431,63 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundValidate(const TSharedPtr<FJsonO
 			: TEXT("Each problem names the node and the call that fixes it. Re-run after fixing; call metasound_build to persist builder edits."));
 	return MCPResult(Res);
 }
+
+#else
+
+// The MetaSound authoring and introspection surface this file writes through
+// is 5.5 and newer. 5.4 has a different document model (no graph pages, no
+// document builder registry, protected builder access, and four-argument
+// finders instead of five), so the same calls cannot be spelled against it.
+// Rather than half-author a document on 5.4, the actions stay registered and
+// report the engine requirement, which is what an agent can act on.
+
+namespace
+{
+	TSharedPtr<FJsonValue> MSReadUnsupportedEngine(const TCHAR* Action)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("errorCode"), TEXT("unsupported_engine_version"));
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("audio(%s) requires Unreal Engine 5.5 or newer. %s"), Action,
+			TEXT("The MetaSound document model it drives (graph pages and the document builder registry) does not exist in 5.4.")));
+		return MCPResult(Result);
+	}
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundReadDocument(const TSharedPtr<FJsonObject>&)
+{
+	return MSReadUnsupportedEngine(TEXT("metasound_read_document"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundListConnections(const TSharedPtr<FJsonObject>&)
+{
+	return MSReadUnsupportedEngine(TEXT("metasound_list_connections"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundListVariables(const TSharedPtr<FJsonObject>&)
+{
+	return MSReadUnsupportedEngine(TEXT("metasound_list_variables"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundSearchNodes(const TSharedPtr<FJsonObject>&)
+{
+	return MSReadUnsupportedEngine(TEXT("metasound_search_nodes"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundInspectNode(const TSharedPtr<FJsonObject>&)
+{
+	return MSReadUnsupportedEngine(TEXT("metasound_inspect_node"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundListNodePins(const TSharedPtr<FJsonObject>&)
+{
+	return MSReadUnsupportedEngine(TEXT("metasound_list_node_pins"));
+}
+
+TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundValidate(const TSharedPtr<FJsonObject>&)
+{
+	return MSReadUnsupportedEngine(TEXT("metasound_validate"));
+}
+
+#endif
