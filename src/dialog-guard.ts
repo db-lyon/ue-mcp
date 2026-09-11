@@ -26,7 +26,7 @@
  */
 import type { EditorSession } from "./session.js";
 import type { IBridge } from "./bridge.js";
-import type { ElicitFn } from "./types.js";
+import type { ElicitFn, ElicitPrimitiveSchema } from "./types.js";
 import type { DialogMode } from "./user-state.js";
 import { elicitationNeedsRelay } from "./client-quirks.js";
 
@@ -187,12 +187,15 @@ export function isDialogRefusal(v: unknown): boolean {
     && (v as Record<string, unknown>).dialogBlocking === true;
 }
 
-/** Read a dialog out of whatever shape reported it. */
 /** Schema key for one tickable row. Kept in one place so both ends agree. */
 function itemKey(index: number): string {
   return `item_${index}`;
 }
 
+/** Schema key for the multi-select holding every tickable row. */
+const ITEMS_KEY = "items";
+
+/** Read a dialog out of whatever shape reported it. */
 function asDialog(v: unknown): BlockingDialog | null {
   if (typeof v !== "object" || v === null) return null;
   const r = v as Record<string, unknown>;
@@ -715,44 +718,71 @@ export class DialogGuard {
       body,
     ];
     message.push("", "Nothing else can run until this is answered, and nothing is pressed unless you choose it.");
-    // One toggle per row the dialog lets a person tick.
+    // The rows the dialog lets a person tick, as ONE multi-select field.
     //
     // Save Content is N questions, not one, and "Save Selected" saves whatever
     // is ticked. Offering the buttons alone made it all or nothing, so a person
     // who wanted two of five files had no way to say so.
     //
+    // One field, not a boolean per row. A client draws a multi-select as a
+    // checkbox group on the same screen as the buttons; a boolean per row is
+    // drawn by some clients as a page per asset, which on a save of forty files
+    // is forty pages before the button.
+    //
     // Only rows carrying a path: the header's select-all box owns the column
-    // headings, and a toggle labelled "Asset" is not a question anybody asked.
+    // headings, and a row labelled "Asset" is not a question anybody asked.
     const tickable = (dialog.items ?? []).filter((i) => i.cells.some((c) => c.startsWith("/")));
-    const itemProps: Record<string, unknown> = {};
+    const button: ElicitPrimitiveSchema = {
+      type: "string",
+      title: "Button",
+      description: "The dialog's own buttons, in the order it lays them out.",
+      enum: [...dialog.buttons, LEAVE_OPEN],
+    };
+    const schemaWith = (itemProps: Record<string, ElicitPrimitiveSchema>) => ({
+      type: "object" as const,
+      properties: { ...itemProps, button },
+      required: ["button"],
+    });
+    const itemTitle = (item: DialogItem) => item.label === "" ? `Item ${item.index}` : item.label;
+    const itemPath = (item: DialogItem) => item.cells.find((c) => c.startsWith("/")) ?? "";
+    const grouped: Record<string, ElicitPrimitiveSchema> = tickable.length === 0 ? {} : {
+      [ITEMS_KEY]: {
+        type: "array",
+        title: "Items",
+        description: "Ticked rows are what the dialog acts on.",
+        items: {
+          anyOf: tickable.map((item) => ({
+            const: itemKey(item.index),
+            title: `${itemTitle(item)}  ${itemPath(item)}`,
+          })),
+        },
+        default: tickable.filter((item) => item.checked).map((item) => itemKey(item.index)),
+      },
+    };
+    // A boolean per row, for a client that refuses the multi-select. Array
+    // fields arrived in a later revision of the protocol than the form itself,
+    // and a refused form is otherwise never shown at all.
+    const perRow: Record<string, ElicitPrimitiveSchema> = {};
     for (const item of tickable) {
-      itemProps[itemKey(item.index)] = {
+      perRow[itemKey(item.index)] = {
         type: "boolean",
-        title: item.label === "" ? `Item ${item.index}` : item.label,
-        description: item.cells.find((c) => c.startsWith("/")) ?? "",
+        title: itemTitle(item),
+        description: itemPath(item),
         default: item.checked,
       };
     }
+    let asked: "grouped" | "perRow" = "grouped";
     try {
-      answer = await elicit({
-        message: message.join("\n"),
-        requestedSchema: {
-          type: "object",
-          properties: {
-            ...itemProps,
-            button: {
-              type: "string",
-              title: "Button",
-              description: "The dialog's own buttons, in the order it lays them out.",
-              enum: [...dialog.buttons, LEAVE_OPEN],
-            },
-          },
-          required: ["button"],
-        },
-      });
+      answer = await elicit({ message: message.join("\n"), requestedSchema: schemaWith(grouped) });
     } catch {
-      // The form never rendered. Not an answer, and not a used-up chance.
-      return { shown: false, press: null };
+      if (tickable.length === 0) return { shown: false, press: null };
+      try {
+        asked = "perRow";
+        answer = await elicit({ message: message.join("\n"), requestedSchema: schemaWith(perRow) });
+      } catch {
+        // The form never rendered. Not an answer, and not a used-up chance.
+        return { shown: false, press: null };
+      }
     }
     if (answer.action !== "accept") return { shown: true, press: null };
     const chosen = answer.content?.button;
@@ -771,9 +801,16 @@ export class DialogGuard {
     try {
       // What the person ticked travels WITH the button. Sending it separately
       // would leave a modal holding a selection nobody had pressed anything on.
+      //
+      // A grouped answer with no list at all leaves every row as the dialog
+      // had it. A client that drops a field it cannot draw would otherwise
+      // untick everything, and "Save Selected" would save nothing.
+      const picked = answer.content?.[ITEMS_KEY];
       const selections = tickable.map((item) => ({
         index: item.index,
-        checked: answer.content?.[itemKey(item.index)] === true,
+        checked: asked === "perRow"
+          ? answer.content?.[itemKey(item.index)] === true
+          : Array.isArray(picked) ? picked.includes(itemKey(item.index)) : item.checked,
       }));
       // Called with ONE argument when there is nothing to tick, so a dialog
       // that offers no items presses exactly as it always did.

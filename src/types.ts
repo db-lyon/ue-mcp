@@ -60,7 +60,19 @@ export interface ElicitParams {
 export type ElicitPrimitiveSchema =
   | { type: "string"; title?: string; description?: string; enum?: string[]; enumNames?: string[]; default?: string }
   | { type: "number" | "integer"; title?: string; description?: string; default?: number }
-  | { type: "boolean"; title?: string; description?: string; default?: boolean };
+  | { type: "boolean"; title?: string; description?: string; default?: boolean }
+  | (ElicitMultiSelectBase & { items: { type: "string"; enum: string[] } })
+  | (ElicitMultiSelectBase & { items: { anyOf: Array<{ const: string; title: string }> } });
+
+/** A checkbox group: the answer is the list of ticked values. */
+interface ElicitMultiSelectBase {
+  type: "array";
+  title?: string;
+  description?: string;
+  minItems?: number;
+  maxItems?: number;
+  default?: string[];
+}
 
 export interface ElicitResult {
   action: "accept" | "decline" | "cancel";
