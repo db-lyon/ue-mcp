@@ -137,7 +137,7 @@ It lives with the feedback mode and for the same reason: whether somebody is at 
 
 | Mode | What happens to a blocking dialog |
 |------|-----------------------------------|
-| `interactive` | You get an elicitation form with the dialog's buttons as the choices, plus "leave it open". The button you pick is pressed and the blocked call then runs. The agent cannot press it for you: `editor(respond_to_dialog)` is refused in this mode. |
+| `interactive` | You get an elicitation form with the dialog's buttons as the choices, plus "leave it open", under the title "Submission". The button you pick is pressed and the blocked call then runs. A dialog that asks a question per row (the "Save Content" prompt is a checkbox per unsaved package) carries those rows in the same form as one checkbox group titled "Assets", ticked as the dialog has them, and what you tick travels with the button in one press. The agent cannot press it for you: `editor(respond_to_dialog)` is refused in this mode. |
 | `auto` | The refusal includes the `editor(action='respond_to_dialog')` call for each button. The agent picks one and makes that call. Nothing is pressed until it does. |
 | `defer` | The refusal names the dialog and its buttons but not the calls that press them, and `editor(respond_to_dialog)` is refused. Answer it in the Unreal Editor window. |
 
@@ -150,6 +150,8 @@ Set it with `npx ue-mcp dialog mode <interactive|auto|defer>` (add `--editor <na
 Under `interactive` the dialog is handed back whole on one call and the form goes up on the next, so its text lands somewhere nothing truncates it. An elicitation form is a few lines tall and the client decides how many of them it draws; one that keeps the opening line or two and collapses the rest would otherwise collapse the question itself. `dialogPhase` on the refusal says which call you are on: `relay` or `asking`.
 
 A client known to render the whole message skips that round trip. Every other client, including one nobody has checked, gets the handover: relaying needlessly costs one call, and not relaying against a client that collapses the message asks someone to choose a button for a question they cannot see. `UE_MCP_DIALOG_RELAY=off` turns the handover off whatever the client is, and `=on` forces it back on.
+
+The form outlives the call that raised it. A blocked call waits a minute for your answer and then refuses, so one open form does not hold every other call behind it, but the form stays up and the button you pick is still pressed whenever you get to it. The screen is re-read first, so an answer that arrives after the dialog was closed at the editor's own window, or after a different prompt replaced it, presses nothing.
 
 
 ### User-machine state (`~/.ue-mcp/`)
