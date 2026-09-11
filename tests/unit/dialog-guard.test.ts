@@ -1001,7 +1001,7 @@ describe("a dialog that asks a question per item", () => {
     ],
   };
 
-  it("offers a toggle per tickable row, and none for the select-all header", async () => {
+  it("offers the tickable rows as one multi-select, without the select-all header", async () => {
     let schema: any;
     const guard = make({
       mode: "interactive",
@@ -1014,11 +1014,14 @@ describe("a dialog that asks a question per item", () => {
 
     await guard.check("asset.list", "action");
 
-    // The two real rows, keyed by index, titled by the asset.
-    expect(schema.properties.item_1).toMatchObject({ type: "boolean", title: "L_Test", default: true });
-    expect(schema.properties.item_2).toMatchObject({ type: "boolean", title: "M_Rock" });
-    // The header row carries no path, so it is not a question.
-    expect(schema.properties.item_0).toBeUndefined();
+    // One field holding the two real rows, keyed by index, titled by the asset.
+    expect(schema.properties.items).toMatchObject({ type: "array", default: ["item_1", "item_2"] });
+    expect(schema.properties.items.items.anyOf).toEqual([
+      { const: "item_1", title: "L_Test  /Game/Maps/L_Test" },
+      { const: "item_2", title: "M_Rock  /Game/Mat/M_Rock" },
+    ]);
+    // No field per row: that is what some clients drew as a page per asset.
+    expect(Object.keys(schema.properties)).toEqual(["items", "button"]);
     // The buttons are still the decision.
     expect(schema.properties.button.enum).toContain("Save Selected");
   });
@@ -1031,7 +1034,7 @@ describe("a dialog that asks a question per item", () => {
       probe: async () => ({ dialogs: [SAVE_ITEMS] }),
       elicit: () => (async () => ({
         action: "accept",
-        content: { button: "Save Selected", item_1: true, item_2: false },
+        content: { button: "Save Selected", items: ["item_1"] },
       })) as never,
     });
 
@@ -1040,6 +1043,47 @@ describe("a dialog that asks a question per item", () => {
     expect(press).toHaveBeenCalledWith("Save Selected", [
       { index: 1, checked: true },
       { index: 2, checked: false },
+    ]);
+  });
+
+  it("leaves every row as it was when the answer carries no list", async () => {
+    const press = vi.fn(async () => ({ success: true, answered: true }));
+    const guard = make({
+      mode: "interactive",
+      press,
+      probe: async () => ({ dialogs: [SAVE_ITEMS] }),
+      elicit: () => (async () => ({ action: "accept", content: { button: "Save Selected" } })) as never,
+    });
+
+    await guard.check("asset.list", "action");
+
+    expect(press).toHaveBeenCalledWith("Save Selected", [
+      { index: 1, checked: true },
+      { index: 2, checked: true },
+    ]);
+  });
+
+  it("falls back to a boolean per row when the client refuses the multi-select", async () => {
+    const press = vi.fn(async () => ({ success: true, answered: true }));
+    const schemas: any[] = [];
+    const guard = make({
+      mode: "interactive",
+      press,
+      probe: async () => ({ dialogs: [SAVE_ITEMS] }),
+      elicit: () => (async (req: any) => {
+        schemas.push(req.requestedSchema);
+        if (req.requestedSchema.properties.items) throw new Error("unsupported schema");
+        return { action: "accept", content: { button: "Save Selected", item_1: false, item_2: true } };
+      }) as never,
+    });
+
+    await guard.check("asset.list", "action");
+
+    expect(schemas).toHaveLength(2);
+    expect(schemas[1].properties.item_1).toMatchObject({ type: "boolean", title: "L_Test", default: true });
+    expect(press).toHaveBeenCalledWith("Save Selected", [
+      { index: 1, checked: false },
+      { index: 2, checked: true },
     ]);
   });
 
