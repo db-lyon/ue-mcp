@@ -734,7 +734,7 @@ export class DialogGuard {
     const tickable = (dialog.items ?? []).filter((i) => i.cells.some((c) => c.startsWith("/")));
     const button: ElicitPrimitiveSchema = {
       type: "string",
-      title: "Button",
+      title: "Submission",
       description: "The dialog's own buttons, in the order it lays them out.",
       enum: [...dialog.buttons, LEAVE_OPEN],
     };
@@ -748,7 +748,7 @@ export class DialogGuard {
     const grouped: Record<string, ElicitPrimitiveSchema> = tickable.length === 0 ? {} : {
       [ITEMS_KEY]: {
         type: "array",
-        title: "Items",
+        title: "Assets",
         description: "Ticked rows are what the dialog acts on.",
         items: {
           anyOf: tickable.map((item) => ({

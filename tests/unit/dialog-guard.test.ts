@@ -1015,7 +1015,8 @@ describe("a dialog that asks a question per item", () => {
     await guard.check("asset.list", "action");
 
     // One field holding the two real rows, keyed by index, titled by the asset.
-    expect(schema.properties.items).toMatchObject({ type: "array", default: ["item_1", "item_2"] });
+    expect(schema.properties.items).toMatchObject({ type: "array", title: "Assets", default: ["item_1", "item_2"] });
+    expect(schema.properties.button.title).toBe("Submission");
     expect(schema.properties.items.items.anyOf).toEqual([
       { const: "item_1", title: "L_Test  /Game/Maps/L_Test" },
       { const: "item_2", title: "M_Rock  /Game/Mat/M_Rock" },
