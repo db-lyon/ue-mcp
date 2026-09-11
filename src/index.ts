@@ -363,6 +363,10 @@ async function main() {
   // Elicitation is only meaningful once the client has advertised support
   // during initialize. We lazily probe at call time so the function is bound
   // to whatever the live capabilities are, not a stale snapshot.
+  // A person answers a form when they get to it, not within the SDK's 60
+  // second request default. An answer given after that was discarded with
+  // nothing pressed, and the same question went up again (#1076).
+  const ELICIT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
   const buildElicit = (mcp: McpServer): ElicitFn | undefined => {
     const elicit: ElicitFn = async (params) => {
       const caps = mcp.server.getClientCapabilities();
@@ -374,7 +378,7 @@ async function main() {
           "Connected MCP client did not advertise the `elicitation` capability - cannot obtain a deterministic user approval. Upgrade your client (Claude Code >= 2.1.76) or run the action from a client that supports MCP elicitation.",
         );
       }
-      const result = await mcp.server.elicitInput(params);
+      const result = await mcp.server.elicitInput(params, { timeout: ELICIT_TIMEOUT_MS });
       return result as Awaited<ReturnType<ElicitFn>>;
     };
     // The gate is built before any client has connected, so this function

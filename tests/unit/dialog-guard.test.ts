@@ -38,6 +38,7 @@ function make(over: Omit<Partial<GuardDeps>, "mode"> & { mode?: DialogMode } = {
     elicit: over.elicit,
     readSnapshot: over.readSnapshot,
     isConnected: over.isConnected,
+    askWaitMs: over.askWaitMs,
   };
   return new DialogGuard(deps);
 }
@@ -1096,5 +1097,67 @@ describe("a dialog that asks a question per item", () => {
     await guard.check("asset.list", "action");
 
     expect(press).toHaveBeenCalledWith("Cancel");
+  });
+});
+
+describe("an answer that arrives after the call stopped waiting (#1076)", () => {
+  function deferred<T>() {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  it("is still pressed", async () => {
+    // stop_editor gave up waiting, the person answered minutes later, and the
+    // answer went nowhere: the modal stayed up and they had to answer again.
+    const answer = deferred<unknown>();
+    const press = vi.fn(async () => ({ success: true, answered: true }));
+    const guard = make({
+      mode: "interactive",
+      press,
+      askWaitMs: 5,
+      elicit: () => (async () => answer.promise) as never,
+    });
+
+    const decision = await guard.check("asset.list", "action");
+    expect(decision.allow).toBe(false);
+    expect(press).not.toHaveBeenCalled();
+
+    answer.resolve({ action: "accept", content: { button: "Cancel" } });
+    await vi.waitFor(() => expect(press).toHaveBeenCalledWith("Cancel"));
+  });
+
+  it("raises one form, not one per call, while it is open", async () => {
+    const answer = deferred<unknown>();
+    const elicit = vi.fn(async () => answer.promise);
+    const guard = make({ mode: "interactive", askWaitMs: 5, elicit: () => elicit as never });
+
+    await guard.check("asset.list", "action");
+    await guard.check("asset.list", "action");
+
+    expect(elicit).toHaveBeenCalledTimes(1);
+    answer.resolve({ action: "decline" });
+  });
+
+  it("is not pressed on a different dialog that came up meanwhile", async () => {
+    const answer = deferred<unknown>();
+    const press = vi.fn(async () => ({ success: true, answered: true }));
+    let title = "Save Content";
+    const guard = make({
+      mode: "interactive",
+      press,
+      askWaitMs: 5,
+      probe: async () => listing(title),
+      elicit: () => (async () => answer.promise) as never,
+    });
+
+    await guard.check("asset.list", "action");
+    title = "Message Log";
+    answer.resolve({ action: "accept", content: { button: "Cancel" } });
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(press).not.toHaveBeenCalled();
   });
 });

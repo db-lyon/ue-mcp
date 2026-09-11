@@ -679,6 +679,10 @@ TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FStri
 	OutTitle = ActiveModal->GetTitle().ToString();
 
 	TArray<FString> TextContents;
+	// How many buttons the walk is inside. A button's label is not a cell of
+	// the row before it, and without this the last row of Save Content carried
+	// "Save Selected", "Don't Save" and "Cancel" as its own cells (#1076).
+	int32 ButtonDepth = 0;
 
 	TFunction<void(const TSharedRef<SWidget>&)> TraverseWidgets = [&](const TSharedRef<SWidget>& Widget)
 	{
@@ -693,7 +697,7 @@ TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FStri
 				// checkbox then its cells, so text after a checkbox belongs to
 				// that checkbox until the next one starts a new row. That is
 				// what pairs "L_MoverPawnTest" with the box that saves it.
-				if (OutItems && OutItems->Num() > 0)
+				if (OutItems && OutItems->Num() > 0 && ButtonDepth == 0)
 				{
 					OutItems->Last().Cells.Add(Text);
 				}
@@ -730,6 +734,8 @@ TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FStri
 			OutButtons.Add(Entry);
 		}
 
+		const bool bIsButton = Widget->GetType() == TEXT("SButton");
+		if (bIsButton) ++ButtonDepth;
 		FChildren* Children = Widget->GetChildren();
 		if (Children)
 		{
@@ -738,6 +744,7 @@ TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FStri
 				TraverseWidgets(Children->GetChildAt(i));
 			}
 		}
+		if (bIsButton) --ButtonDepth;
 	};
 
 	TraverseWidgets(ActiveModal.ToSharedRef());

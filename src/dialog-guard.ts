@@ -195,6 +195,20 @@ function itemKey(index: number): string {
 /** Schema key for the multi-select holding every tickable row. */
 const ITEMS_KEY = "items";
 
+/** A dialog's identity: the same prompt on screen reads the same. */
+function dialogIdentity(dialog: BlockingDialog): string {
+  return `${dialog.title} :: ${dialog.message}`;
+}
+
+/** The promise's value, or null if it has not settled within `ms`. */
+function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
+
 /** Read a dialog out of whatever shape reported it. */
 function asDialog(v: unknown): BlockingDialog | null {
   if (typeof v !== "object" || v === null) return null;
@@ -280,6 +294,13 @@ export interface GuardDeps {
   readSnapshot?: () => { modal?: unknown; ageSeconds?: number } | null;
   /** Whether the bridge socket is currently up. */
   isConnected?: () => boolean;
+  /**
+   * How long one call waits on an open form before refusing, in ms.
+   *
+   * Internal and defaulted; it exists so the wait can be exercised in a test
+   * without sitting through it. The form itself outlives this wait.
+   */
+  askWaitMs?: number;
 }
 
 /**
@@ -291,6 +312,14 @@ export const STATUS_STALE_AFTER_MS = 15_000;
 /** How big a rendered dialog has to be before a form cannot carry it. */
 const RELAY_OVER_LINES = 12;
 const RELAY_OVER_CHARS = 700;
+
+/**
+ * How long a gated call waits for the person to answer an open form.
+ *
+ * The form is not bounded by this. When the wait runs out the call refuses and
+ * the form stays up; whatever the person picks later is still pressed.
+ */
+const ASK_WAIT_MS = 60_000;
 
 export class DialogGuard {
   private blocking: BlockingDialog | null = null;
@@ -523,7 +552,7 @@ export class DialogGuard {
     // shown the same prompt twice and the button was pressed TWICE, which on a
     // save prompt is two real answers for one action. If the same dialog is
     // still there after a press, pressing again will not help: report it.
-    const identity = `${dialog.title} :: ${dialog.message}`;
+    const identity = dialogIdentity(dialog);
     // canElicit: false means this route has nobody to ask. An HTTP request
     // has no person on it, and eliciting would raise a form in whichever
     // MCP client last touched this guard and press a real button on its
@@ -575,25 +604,31 @@ export class DialogGuard {
       // answering a question it was never shown.
       if (!this.asking || this.askingFor !== identity) {
         this.askingFor = identity;
-        this.asking = this.askUser(dialog).finally(() => {
-          this.asking = null;
-          this.askingFor = null;
-        });
+        // The outcome is recorded by the ask itself, not by whichever call is
+        // waiting on it. A person can answer long after every call has stopped
+        // waiting, and that answer is still theirs to have pressed (#1076).
+        this.asking = this.askUser(dialog)
+          .then((outcome) => {
+            // Recorded only once a form was actually SHOWN. Setting it before
+            // the ask meant an elicitation that threw or was declined consumed
+            // the one chance, and the person was never asked about that dialog
+            // again for the life of the process.
+            if (outcome.shown) this.lastAsked = identity;
+            this.pressed = outcome.press;
+            // Only a CONFIRMED press proves the way is clear. An unknown one
+            // is reported, not assumed.
+            if (outcome.press?.confirmed) this.clear();
+            return outcome;
+          })
+          .finally(() => {
+            this.asking = null;
+            this.askingFor = null;
+          });
       }
-      const outcome = await this.asking;
-      const pressed = outcome.press;
-      // Recorded only once a form was actually SHOWN. Setting it before the
-      // ask meant an elicitation that threw, timed out, or was declined
-      // consumed the one chance, and the person was never asked about that
-      // dialog again for the life of the process.
-      if (outcome.shown) this.lastAsked = identity;
-      this.pressed = pressed;
-      // Only a CONFIRMED press proves the way is clear. An unknown one is
-      // reported, not assumed.
-      if (pressed?.confirmed) {
-        this.clear();
-        return { allow: true };
-      }
+      // Bounded, where the form is not. A call that waited on the person for as
+      // long as they took would hold every gated call behind one open form.
+      const outcome = await within(this.asking, this.deps.askWaitMs ?? ASK_WAIT_MS);
+      if (outcome?.press?.confirmed) return { allow: true };
     }
     return { allow: false, refusal: this.refusal(subject, dialog, opts) };
   }
@@ -788,6 +823,11 @@ export class DialogGuard {
     const chosen = answer.content?.button;
     if (typeof chosen !== "string" || chosen === LEAVE_OPEN) return { shown: true, press: null };
     if (!dialog.buttons.includes(chosen)) return { shown: true, press: null };
+    // The answer can arrive long after the form went up, and the editor may be
+    // showing something else by then: the dialog answered at its own window, or
+    // a new one with the same buttons. A press is only for the dialog the
+    // person was shown.
+    if (!(await this.stillShowing(dialog))) return { shown: true, press: null };
     // Three outcomes, not two.
     //
     //   pressed      the editor confirmed it
@@ -832,6 +872,17 @@ export class DialogGuard {
       return { shown: true, press: { button: chosen, confirmed: false } };
     } catch {
       return { shown: true, press: null };
+    }
+  }
+
+  /** Whether the editor is still showing this dialog, read fresh. */
+  private async stillShowing(dialog: BlockingDialog): Promise<boolean> {
+    try {
+      const list = ((await this.deps.probe()) as { dialogs?: unknown })?.dialogs;
+      const current = Array.isArray(list) ? asDialog(list[0]) : null;
+      return current !== null && dialogIdentity(current) === dialogIdentity(dialog);
+    } catch {
+      return false;
     }
   }
 
