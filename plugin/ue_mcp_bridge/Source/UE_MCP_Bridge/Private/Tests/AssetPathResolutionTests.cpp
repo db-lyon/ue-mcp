@@ -263,9 +263,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 {
-	// The on-disk probe below deliberately reaches the editor loader on a mount
-	// the registry does not index, which the loader logs as an Error.
-	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	// #1074: a flagged object must never be resolved to. Reproduced by its
 	// observable effect rather than by running a real reload.
@@ -321,50 +318,6 @@ bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("the resolver answers the live replacement"), Resolved == Live);
 	TestTrue(TEXT("and never the corpse"), Resolved != Corpse);
 
-	// An asset on disk and NOT in memory: the only shape that gets past step 1
-	// to the gate and the loads behind it. Holding a live pointer would let
-	// FindObject answer and the gated half would never run.
-	{
-		const FString OnDiskPackage = FString(MCPAssetPathTestRoot) + TEXT("DT_OnDisk");
-		const FString OnDiskObject = OnDiskPackage + TEXT(".DT_OnDisk");
-		bool bWrote = false;
-		{
-			UPackage* DiskPackage = CreatePackage(*OnDiskPackage);
-			if (UDataTable* OnDisk = DiskPackage
-				? NewObject<UDataTable>(DiskPackage, FName(TEXT("DT_OnDisk")), RF_Public | RF_Standalone)
-				: nullptr)
-			{
-				OnDisk->RowStruct = FTableRowBase::StaticStruct();
-				bWrote = SaveAssetPackage(OnDisk);
-				DiskPackage->SetDirtyFlag(false);
-			}
-		}
-
-		if (bWrote)
-		{
-			// Drop it from memory so the object hash cannot answer.
-			CollectGarbage(RF_NoFlags, /*bPerformFullPurge=*/true);
-
-			if (FindObject<UObject>(nullptr, *OnDiskObject) == nullptr)
-			{
-				TestTrue(TEXT("a saved asset is seen without loading"),
-					MCPAssetExistsWithoutLoading(MCPAssetPathForms(OnDiskPackage)));
-				UObject* FromDisk = MCPLoadAssetObject(OnDiskPackage);
-				TestNotNull(TEXT("an asset only on disk resolves past the gate"), FromDisk);
-				TestTrue(TEXT("and it is the DataTable that was written"),
-					Cast<UDataTable>(FromDisk) != nullptr);
-			}
-			else
-			{
-				AddInfo(TEXT("The probe survived the purge, so step 1 still answers and the gated steps are not exercised."));
-			}
-		}
-		else
-		{
-			AddInfo(TEXT("SavePackage declined to write the probe; the on-disk assertions are skipped."));
-		}
-	}
-
 	// The predicate itself, so a caller reading it directly agrees.
 	TestFalse(TEXT("a flagged object is not live"), MCPIsLiveAssetObject(Corpse));
 	TestTrue(TEXT("the replacement is live"), MCPIsLiveAssetObject(Live));
@@ -372,6 +325,63 @@ bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("null is not live"), MCPIsLiveAssetObject(nullptr));
 
 	Package->SetDirtyFlag(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPAssetOnDiskResolutionTest,
+	"UE.MCP.Asset.PathResolution.AnAssetOnlyOnDiskResolves",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPAssetOnDiskResolutionTest::RunTest(const FString& Parameters)
+{
+	// The object hash answers for anything in memory, so only an asset that is
+	// on disk and NOT loaded exercises the existence gate and the loads behind
+	// it. The editor loader logs an Error for this mount, which the registry
+	// does not index.
+	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 1);
+
+	const FScopedAssetPathTestMount Mount;
+
+	const FString PackageName = FString(MCPAssetPathTestRoot) + TEXT("DT_OnDisk");
+	const FString ObjectPath = PackageName + TEXT(".DT_OnDisk");
+
+	UPackage* Package = CreatePackage(*PackageName);
+	TestNotNull(TEXT("probe package created"), Package);
+	if (!Package) return false;
+
+	UDataTable* Probe = NewObject<UDataTable>(Package, FName(TEXT("DT_OnDisk")), RF_Public | RF_Standalone);
+	TestNotNull(TEXT("probe asset created"), Probe);
+	if (!Probe)
+	{
+		Package->SetDirtyFlag(false);
+		return false;
+	}
+	Probe->RowStruct = FTableRowBase::StaticStruct();
+	TestTrue(TEXT("the probe was written to disk"), SaveAssetPackage(Probe));
+
+	// Unload this one package, the way asset(force_reload) does. A full purge
+	// would reach every loaded asset in whatever project the bridge is
+	// attached to.
+	Probe->ClearFlags(RF_Standalone);
+	Package->SetDirtyFlag(false);
+	ResetLoaders(Package);
+	Probe = nullptr;
+	Package = nullptr;
+	CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+
+	// Asserted rather than skipped: an eviction that stops working would leave
+	// everything below testing the object hash again.
+	TestNull(TEXT("the probe is out of memory"), FindObject<UObject>(nullptr, *ObjectPath));
+
+	TestTrue(TEXT("a saved asset is seen without loading it"),
+		MCPAssetExistsWithoutLoading(MCPAssetPathForms(PackageName)));
+
+	UObject* FromDisk = MCPLoadAssetObject(PackageName);
+	TestNotNull(TEXT("it resolves through the gated steps"), FromDisk);
+	TestNotNull(TEXT("as the DataTable that was written"), Cast<UDataTable>(FromDisk));
+
+	if (UPackage* Reloaded = FindPackage(nullptr, *PackageName)) Reloaded->SetDirtyFlag(false);
 	return true;
 }
 
