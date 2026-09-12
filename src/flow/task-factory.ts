@@ -1,6 +1,6 @@
 import type { TaskResult, TaskConstructor } from "@db-lyon/flowkit";
 import { UeMcpTask } from "../task.js";
-import { stripEditorTarget } from "../types.js";
+import { stripAction, stripEditorTarget } from "../types.js";
 import { prepareCall, finishCall, type CallPreparation } from "../call-pipeline.js";
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
@@ -66,8 +66,9 @@ export function bridgeTaskClass(
     async execute(): Promise<TaskResult> {
       // `editor` addresses a session; it is never a bridge parameter. Strip it
       // before the mapper too, since a mapper that forwards its input verbatim
-      // would carry it into the call.
-      const options = stripEditorTarget(this.options as Record<string, unknown>);
+      // would carry it into the call. The task name selects the action here,
+      // so `action` is the dispatcher's and never an argument.
+      const options = stripAction(stripEditorTarget(this.options as Record<string, unknown>));
       // THE per-call preparation. This is the route a live MCP call and a flow
       // step both take, so everything a call is promised has to happen here:
       // the routing parameters come off, the paths are repaired, and the

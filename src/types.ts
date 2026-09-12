@@ -567,19 +567,18 @@ export const TIMEOUT_PARAM = z
     + "call did not happen: read the state back before retrying.",
   );
 
-/** The dispatcher's own parameters, re-asserted after a category's keys are
- *  merged in. A category that declares one of these names cannot replace it.
- *  Reassignment keeps each key where it was first inserted, so the advertised
- *  order is unchanged. */
-function routingParamsWin(
-  schema: Record<string, z.ZodType>,
-  actionNames: [string, ...string[]],
-): Record<string, z.ZodType> {
-  schema.action = actionEnum(actionNames);
-  schema.timeoutMs = TIMEOUT_PARAM;
-  schema.select = SELECT_PARAM;
-  schema.omit = OMIT_PARAM;
-  return schema;
+/** The parameters the dispatcher consumes, built once per category. */
+function routingSchema(actionNames: [string, ...string[]]): Record<string, z.ZodType> {
+  return {
+    action: actionEnum(actionNames),
+    // #989: a call budget the caller controls. The client used to wait a flat
+    // 30s for every bridge call, and a large batch on a machine that is also
+    // compiling shaders finished in the editor after the client had already
+    // reported a failure. A retry then applied the mutation twice.
+    timeoutMs: TIMEOUT_PARAM,
+    select: SELECT_PARAM,
+    omit: OMIT_PARAM,
+  };
 }
 
 export function categoryTool(
@@ -591,6 +590,7 @@ export function categoryTool(
   options?: CategoryOptions,
 ): ToolDef {
   const actionNames = Object.keys(actions) as [string, ...string[]];
+  const routing = routingSchema(actionNames);
 
   // Auto-generate action docs from per-action descriptions if not provided
   const docs = actionDocs ?? actionNames
@@ -604,17 +604,9 @@ export function categoryTool(
     name,
     options,
     description: `${summary}\n\nActions:\n${docs}`,
-    schema: routingParamsWin({
-      action: actionEnum(actionNames),
-      // #989: a call budget the caller controls. The client used to wait a flat
-      // 30s for every bridge call, and a large batch on a machine that is also
-      // compiling shaders finished in the editor after the client had already
-      // reported a failure. A retry then applied the mutation twice.
-      timeoutMs: TIMEOUT_PARAM,
-      select: SELECT_PARAM,
-      omit: OMIT_PARAM,
-      ...extraSchema,
-    }, actionNames),
+    // Spread twice: the first sets the order, the last wins, so a category
+    // cannot replace a parameter the dispatcher consumes.
+    schema: { ...routing, ...extraSchema, ...routing },
     actions,
     handler: async (ctx, rawParams) => {
       // `editor` is a routing instruction, never a handler parameter, and only
@@ -646,9 +638,9 @@ export function categoryTool(
       // parameters (`timeoutMs`, `select`, `omit`) come off so no mapParams can
       // forward one into a bridge call, the paths are repaired before anything
       // reads them, and the category's own folding runs last over the repaired
-      // bag. This route calls it; the live route in flow/task-factory.ts calls
-      // the same function with the same preparation. Neither reimplements a
-      // step of it, and nothing per-call belongs in this closure again.
+      // bag. flow/task-factory.ts calls the same function. `action` is stripped
+      // separately on both routes, because prepareCall leaves a bag that
+      // already carries it alone.
       const pipeline = prepareCall(params, {
         action,
         normalizeParams: options?.normalizeParams,
