@@ -89,6 +89,60 @@ describe("action parameter schema", () => {
     ).toEqual([]);
   });
 
+  // The test above cannot see a closure that spreads its argument, and
+  // forwardedParams says so itself: it reads mapParams source text, and
+  // `(p) => epicToolCall(..., p)` names no key. Every generated Epic action has
+  // that shape, so the static check reported green while widget(action=
+  // "epic_windows") reached the wrapped Slate tool as input.action=
+  // "epic_windows" - a tool whose `action` argument means list|select|close.
+  //
+  // This one dispatches for real and looks at what the bridge was handed.
+  it("never hands the bridge the dispatch key, whatever mapParams does with its bag", async () => {
+    const offenders: string[] = [];
+    for (const tool of ALL_TOOLS) {
+      for (const [name, spec] of Object.entries(tool.actions)) {
+        if (spec.kind !== "bridge") continue;
+        let seen: Record<string, unknown> | null = null;
+        const ctx = {
+          bridge: {
+            isConnected: true,
+            call: async (_m: string, params: Record<string, unknown>) => { seen = params; return {}; },
+            getTarget: () => ({ projectPath: null, port: 0, portSource: "default", verified: true }),
+            connect: async () => {},
+            retargetProject: () => ({}),
+          },
+          project: {},
+        } as never;
+        try {
+          await tool.handler(ctx, { action: name });
+        } catch {
+          // A refusal before dispatch (a missing required argument) proves the
+          // key never reached the bridge, which is what this asserts.
+          continue;
+        }
+        if (seen === null) continue;
+        const serialized = JSON.stringify(seen);
+        if (serialized.includes(`"${name}"`)) {
+          offenders.push(`${tool.name}.${name}: the bridge payload contains the action name`);
+        }
+        // An `action` KEY is not the fault and must not be asserted against:
+        // editor(play_in_editor) and editor(play_sequence) call bridge methods
+        // whose own argument is named action, renamed on the surface to
+        // pieAction and sequenceAction precisely so the dispatcher's key is
+        // free. That is the correct pattern, the same one dialogAction uses.
+        // The fault is the dispatch key's VALUE travelling as an argument.
+      }
+    }
+    expect(
+      offenders,
+      "The dispatcher consumes 'action' to choose the spec, so it must never\n"
+        + "reach the bridge as an argument. An action whose mapParams forwards its\n"
+        + "whole bag sends the action's own NAME to the handler, which for a\n"
+        + "wrapped tool taking an argument called 'action' is a real value it will\n"
+        + "try to use:\n  " + offenders.join("\n  "),
+    ).toEqual([]);
+  });
+
   it("keeps every category's dispatch parameter describing its own actions", () => {
     const offenders: string[] = [];
     for (const tool of ALL_TOOLS) {
