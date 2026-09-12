@@ -1,11 +1,16 @@
-// asset(read_graph) - node, pin and connection topology for any EdGraph-backed
-// asset (#1059).
+// asset(read_graph) - node, pin and connection topology for EdGraph-backed
+// assets that have no category of their own (#1059, raised for Mutable's
+// CustomizableObject).
 //
-// Reflection cannot reach this: UEdGraphNode::Pins has no UPROPERTY and
+// Blueprints and PCG graphs are NOT read here: blueprint(read_graph),
+// blueprint(get_connections) and pcg(read_graph) already own those, address
+// them in their own terms, and a second answer in a different shape is worse
+// than no answer. Those types are refused with a pointer to the right action.
+//
+// Reflection cannot reach topology: UEdGraphNode::Pins has no UPROPERTY and
 // UEdGraphPin is not a UObject. From C++ Pins is an ordinary member.
 //
-// Generic rather than per-system, because UEdGraph is the engine's one graph
-// type. Read only: making a connection means running the owning schema's
+// Read only. Making a connection means running the owning schema's
 // TryCreateConnection, which is separate work.
 
 #include "AssetHandlers.h"
@@ -166,6 +171,22 @@ namespace
 	}
 }
 
+namespace
+{
+	/** The action that already owns this asset type's graph, or null. */
+	const TCHAR* MCPGraphReaderFor(const UObject* Asset)
+	{
+		if (!Asset) return nullptr;
+		if (Asset->IsA<UBlueprint>()) return TEXT("blueprint(read_graph) and blueprint(get_connections)");
+		const UClass* Class = Asset->GetClass();
+		for (; Class; Class = Class->GetSuperClass())
+		{
+			if (Class->GetFName() == FName(TEXT("PCGGraph"))) return TEXT("pcg(read_graph)");
+		}
+		return nullptr;
+	}
+}
+
 TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObject>& Params)
 {
 	MCP_CHECK_GAME_THREAD();
@@ -180,6 +201,18 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 	const FString GraphFilter = OptionalString(Params, TEXT("graphName"));
 	const bool bIncludePins = OptionalBool(Params, TEXT("includePins"), true);
 	const int32 MaxNodes = FMath::Clamp(OptionalInt(Params, TEXT("maxNodes"), 500), 1, 5000);
+
+	// A type with a category that already reads its graph is sent there rather
+	// than answered twice in two shapes. blueprint(get_connections) addresses
+	// nodes by GUID and pcg(read_graph) speaks PCG's own node model; this
+	// action exists for the EdGraph types that have no such owner.
+	if (const TCHAR* Owner = MCPGraphReaderFor(Asset))
+	{
+		return MCPError(FString::Printf(
+			TEXT("'%s' is a %s, which %s reads. Use that: it addresses this type the way the type is addressed "
+			     "everywhere else. asset(read_graph) covers the EdGraph types with no category of their own."),
+			*AssetPath, *Asset->GetClass()->GetName(), Owner));
+	}
 
 	TArray<UEdGraph*> Graphs;
 	CollectGraphs(Asset, Graphs);
@@ -202,8 +235,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 		// the asset.
 		Empty->SetStringField(TEXT("note"), FString::Printf(
 			TEXT("No UEdGraph was reachable from '%s' (a %s). Searched its subobjects and its own graph-typed ")
-			TEXT("properties, which is where a Blueprint, AnimBP, Niagara or CustomizableObject graph lives. ")
-			TEXT("Material and PCGGraph hold their editor graph elsewhere and are not readable this way."),
+			TEXT("properties. A type whose graph is built by its own editor holds none until that editor has ")
+			TEXT("opened it."),
 			*AssetPath, *Asset->GetClass()->GetName()));
 		return MCPResult(Empty);
 	}
