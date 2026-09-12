@@ -605,28 +605,91 @@ TSharedPtr<FJsonValue> FDialogHandlers::GetDialogPolicy(const TSharedPtr<FJsonOb
 namespace MCPDialogWindows
 {
 	/**
+	 * Does this window host docked tabs?
+	 *
+	 * #1078: a standalone Message Log, an undocked Output Log, a Content
+	 * Browser opened in its own window - each is a regular window parented to
+	 * the main editor window, which is exactly the shape the parented test
+	 * below was reading as "the editor is waiting on an answer". None of them
+	 * block anything. A restored Message Log at startup therefore refused
+	 * every unrelated action for the life of the session, and could not be
+	 * dismissed by pressing anything, because its buttons (CLEAR among them)
+	 * answer no question.
+	 *
+	 * Slate's own distinction is the tab manager: a window that exists to host
+	 * dock tabs is a workspace, never a prompt. The type names are matched
+	 * rather than the classes because Slate's docking types are private to
+	 * their module and this plugin already walks the tree by type name.
+	 *
+	 * A genuinely modal window is never asked this question. Only the parented
+	 * heuristic needs narrowing, and a true modal blocks whatever it contains.
+	 */
+	static bool HostsDockedTabs(const TSharedRef<SWidget>& Widget)
+	{
+		const FName Type = Widget->GetType();
+		if (Type == TEXT("SDockingArea")
+			|| Type == TEXT("SDockingTabStack")
+			|| Type == TEXT("SDockingSplitter")
+			|| Type == TEXT("SDockTab"))
+		{
+			return true;
+		}
+		FChildren* Children = Widget->GetChildren();
+		if (Children)
+		{
+			for (int32 i = 0; i < Children->Num(); ++i)
+			{
+				if (HostsDockedTabs(Children->GetChildAt(i))) return true;
+			}
+		}
+		return false;
+	}
+
+	/** Why a window was not counted as blocking, for the diagnostics below. */
+	struct FSkippedWindow
+	{
+		FString Title;
+		FString Reason;
+	};
+
+	/**
 	 * Every window the editor is holding the user with, gathered recursively.
 	 *
-	 * A REGULAR window that is either on the modal stack or parented to another
-	 * window is something the editor put up and is waiting on. Menus, tooltips
-	 * and notifications are not regular windows, so they are not mistaken for
-	 * questions.
+	 * A REGULAR window on the modal stack is one Slate itself calls blocking.
+	 * A regular window parented to another is USUALLY a dialog raised without
+	 * AddModalWindow, which is the case GetActiveModalWindow misses, but it is
+	 * also the shape of every ordinary utility window the editor docks (#1078),
+	 * so a window hosting dock tabs is not a question and is skipped.
+	 *
+	 * Menus, tooltips and notifications are not regular windows, so they are
+	 * not mistaken for questions either.
 	 *
 	 * Visibility is deliberately NOT consulted. A window that is up but undrawn,
 	 * or drawn behind the editor, still holds whatever raised it, and "the user
 	 * cannot see it" is the worst possible reason to let a quit through.
+	 *
+	 * OutSkipped records what was walked past. A false negative here is a quit
+	 * sent at a blocked editor and a false positive is a session refusing every
+	 * action, so which windows were considered and rejected is reported rather
+	 * than discarded.
 	 */
-	static void Gather(const TArray<TSharedRef<SWindow>>& Roots, TArray<TSharedPtr<SWindow>>& Out)
+	static void Gather(
+		const TArray<TSharedRef<SWindow>>& Roots,
+		TArray<TSharedPtr<SWindow>>& Out,
+		TArray<FSkippedWindow>* OutSkipped = nullptr)
 	{
 		for (const TSharedRef<SWindow>& Window : Roots)
 		{
-			const bool bBlocks = Window->IsRegularWindow()
-				&& (Window->IsModalWindow() || Window->GetParentWindow().IsValid());
-			if (bBlocks)
+			FString SkipReason;
+			if (FDialogHandlers::IsBlockingWindow(Window, &SkipReason))
 			{
 				Out.AddUnique(TSharedPtr<SWindow>(Window));
 			}
-			Gather(Window->GetChildWindows(), Out);
+			else if (OutSkipped && !SkipReason.IsEmpty())
+			{
+				OutSkipped->Add({ Window->GetTitle().ToString(), SkipReason });
+			}
+			Gather(Window->GetChildWindows(), Out, OutSkipped);
 		}
 	}
 
@@ -642,7 +705,7 @@ namespace MCPDialogWindows
 	 * detector was the whole system's eyes, and absence of evidence from it was
 	 * being reported as evidence of absence.
 	 */
-	static TSharedPtr<SWindow> FindBlocking()
+	static TSharedPtr<SWindow> FindBlocking(TArray<FSkippedWindow>* OutSkipped = nullptr)
 	{
 		if (!FSlateApplication::IsInitialized())
 		{
@@ -654,9 +717,39 @@ namespace MCPDialogWindows
 		{
 			Found.AddUnique(Modal);
 		}
-		Gather(Slate.GetInteractiveTopLevelWindows(), Found);
+		Gather(Slate.GetInteractiveTopLevelWindows(), Found, OutSkipped);
 		return Found.Num() > 0 ? Found[0] : nullptr;
 	}
+}
+
+bool FDialogHandlers::IsBlockingWindow(const TSharedRef<SWindow>& Window, FString* OutSkipReason)
+{
+	if (OutSkipReason) OutSkipReason->Reset();
+
+	// Menus, tooltips and notifications are not regular windows, so they are
+	// never mistaken for questions and are not worth reporting as skipped.
+	if (!Window->IsRegularWindow()) return false;
+
+	// On the modal stack is the one case Slate itself calls blocking.
+	if (Window->IsModalWindow()) return true;
+
+	// Not modal and not parented is a top-level window of its own, which the
+	// editor is not waiting on.
+	if (!Window->GetParentWindow().IsValid()) return false;
+
+	// Parented and not modal is usually a dialog raised without
+	// AddModalWindow, which is the case GetActiveModalWindow misses and the
+	// reason this heuristic exists at all. It is also the shape of every
+	// ordinary utility window the editor puts in its own frame.
+	if (MCPDialogWindows::HostsDockedTabs(Window))
+	{
+		if (OutSkipReason)
+		{
+			*OutSkipReason = TEXT("hosts docked tabs, so it is an editor window rather than a prompt");
+		}
+		return false;
+	}
+	return true;
 }
 
 TSharedPtr<SWindow> FDialogHandlers::CollectActiveModal(FString& OutTitle, FString& OutMessage, TArray<FModalButton>& OutButtons, TArray<FModalItem>* OutItems)
@@ -786,6 +879,26 @@ TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject
 {
 	auto Result = MCPSuccess();
 	TArray<TSharedPtr<FJsonValue>> DialogsArray;
+
+	// #1078: a window that was walked past is reported alongside the dialogs.
+	// The failure this replaced was a session refusing every action because a
+	// restored Message Log looked like an unanswered prompt, and the failure in
+	// the other direction is a quit sent at an editor that really is blocked.
+	// Neither is diagnosable from an empty list, so the walk says what it saw.
+	TArray<MCPDialogWindows::FSkippedWindow> Skipped;
+	MCPDialogWindows::FindBlocking(&Skipped);
+	if (Skipped.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> SkippedJson;
+		for (const MCPDialogWindows::FSkippedWindow& Window : Skipped)
+		{
+			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+			Entry->SetStringField(TEXT("title"), Window.Title);
+			Entry->SetStringField(TEXT("reason"), Window.Reason);
+			SkippedJson.Add(MakeShared<FJsonValueObject>(Entry));
+		}
+		Result->SetArrayField(TEXT("notTreatedAsDialogs"), SkippedJson);
+	}
 
 	FString Title;
 	FString Message;

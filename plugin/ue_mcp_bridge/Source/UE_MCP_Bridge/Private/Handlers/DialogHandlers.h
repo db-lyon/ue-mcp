@@ -84,6 +84,16 @@ public:
 		bool bChecked = false;
 	};
 
+	/** Is the editor waiting on an answer from this window? (#1078)
+	 *
+	 *  Public because it is the whole decision behind the dialog gate, and a
+	 *  wrong answer in either direction is expensive: a false negative sends a
+	 *  quit at a blocked editor, and a false positive refuses every action for
+	 *  the life of the session. On false, OutSkipReason carries the sentence
+	 *  list_dialogs reports under notTreatedAsDialogs, and is left empty for a
+	 *  window that was never a candidate. */
+	static bool IsBlockingWindow(const TSharedRef<class SWindow>& Window, FString* OutSkipReason = nullptr);
+
 private:
 	// Dialog policy: pattern -> response mapping
 	struct FDialogPolicy
@@ -122,6 +132,7 @@ private:
 	// list_dialogs, respond_to_dialog and the policy applier, so the four
 	// cannot disagree about which buttons a dialog has.
 	static TSharedPtr<SWindow> CollectActiveModal(FString& OutTitle, FString& OutMessage, TArray<FModalButton>& OutButtons, TArray<FModalItem>* OutItems = nullptr);
+
 
 	/** First policy whose pattern appears in the title or the message. */
 	static const FDialogPolicy* FindMatchingPolicy(const FString& Title, const FString& Message);
