@@ -50,6 +50,14 @@ namespace
 		return Text;
 	}
 
+	/** A wire, keyed by its two pin ids in a fixed order so both ends agree. */
+	using FWireKey = TPair<FGuid, FGuid>;
+
+	FWireKey WireKey(const UEdGraphPin& A, const UEdGraphPin& B)
+	{
+		return A.PinId < B.PinId ? FWireKey(A.PinId, B.PinId) : FWireKey(B.PinId, A.PinId);
+	}
+
 	/** One end of a connection, named so the other end can be found again. */
 	TSharedPtr<FJsonObject> LinkJson(const UEdGraphPin* Other)
 	{
@@ -91,7 +99,7 @@ namespace
 		return Json;
 	}
 
-	TSharedPtr<FJsonObject> NodeJson(UEdGraphNode* Node, bool bIncludePins, int32& OutPinCount, int32& OutLinkCount)
+	TSharedPtr<FJsonObject> NodeJson(UEdGraphNode* Node, bool bIncludePins, int32& OutPinCount, int32& OutLinkCount, TSet<FWireKey>& OutWires)
 	{
 		TSharedPtr<FJsonObject> Json = MakeShared<FJsonObject>();
 		Json->SetStringField(TEXT("name"), Node->GetName());
@@ -108,7 +116,14 @@ namespace
 		int32 NodeLinks = 0;
 		for (const UEdGraphPin* Pin : Node->Pins)
 		{
-			if (Pin) NodeLinks += Pin->LinkedTo.Num();
+			if (!Pin) continue;
+			NodeLinks += Pin->LinkedTo.Num();
+			// By wire, not by counting ends and halving: a wire whose far node
+			// maxNodes cut away is only ever seen from this side.
+			for (const UEdGraphPin* Other : Pin->LinkedTo)
+			{
+				if (Other) OutWires.Add(WireKey(*Pin, *Other));
+			}
 		}
 		OutLinkCount += NodeLinks;
 		Json->SetNumberField(TEXT("pinCount"), Node->Pins.Num());
@@ -180,6 +195,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 	int32 TotalNodes = 0;
 	int32 TotalPins = 0;
 	int32 TotalLinks = 0;
+	TSet<FWireKey> AllWires;
 	bool bTruncated = false;
 
 	for (UEdGraph* Graph : Graphs)
@@ -198,6 +214,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 		TArray<TSharedPtr<FJsonValue>> NodesJson;
 		int32 GraphPins = 0;
 		int32 GraphLinks = 0;
+		TSet<FWireKey> GraphWires;
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
 			if (!Node) continue;
@@ -206,16 +223,16 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 				bTruncated = true;
 				break;
 			}
-			NodesJson.Add(MakeShared<FJsonValueObject>(NodeJson(Node, bIncludePins, GraphPins, GraphLinks)));
+			NodesJson.Add(MakeShared<FJsonValueObject>(NodeJson(Node, bIncludePins, GraphPins, GraphLinks, GraphWires)));
 		}
 		GraphJson->SetArrayField(TEXT("nodes"), NodesJson);
 		GraphJson->SetNumberField(TEXT("pinCount"), GraphPins);
-		// Each wire is seen from both ends, so the raw sum double-counts.
-		GraphJson->SetNumberField(TEXT("connectionCount"), GraphLinks / 2);
+		GraphJson->SetNumberField(TEXT("connectionCount"), GraphWires.Num());
 
 		TotalNodes += NodesJson.Num();
 		TotalPins += GraphPins;
 		TotalLinks += GraphLinks;
+		AllWires.Append(GraphWires);
 		GraphsJson.Add(MakeShared<FJsonValueObject>(GraphJson));
 	}
 
@@ -226,7 +243,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 	Result->SetNumberField(TEXT("graphCount"), GraphsJson.Num());
 	Result->SetNumberField(TEXT("nodeCount"), TotalNodes);
 	Result->SetNumberField(TEXT("pinCount"), TotalPins);
-	Result->SetNumberField(TEXT("connectionCount"), TotalLinks / 2);
+	Result->SetNumberField(TEXT("connectionCount"), AllWires.Num());
 	if (bTruncated)
 	{
 		Result->SetBoolField(TEXT("truncated"), true);
