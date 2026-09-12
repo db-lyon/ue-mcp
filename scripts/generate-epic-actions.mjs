@@ -31,9 +31,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 // The dispatcher's own parameter names, from the module that defines them.
-// A second copy here would drift the moment one is added or renamed, and the
-// failure is silent: a generated action would declare the name and replace a
-// category's dispatch parameter, which is the defect this list prevents.
 import { ROUTING_PARAMS } from "../dist/action-schema.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -111,20 +108,9 @@ function prose(description) {
 }
 
 /**
- * Names the category tool's dispatcher consumes and strips before a call
- * reaches the bridge (#1078). A wrapped tool argument that happens to share
- * one cannot be declared or documented at the top level: declaring it
- * OVERWRITES the dispatcher's own parameter, and a caller who writes it
- * selects an action rather than passing an argument.
- *
- * SlateInspectorToolset.Windows takes an argument called "action", which is
- * how this was found: the widget tool advertised `action` as a free string
- * described as '"list" returns JSON array, "select" brings to front, "close"
- * destroys', in place of the dispatch parameter that names widget's own
- * hundred-odd actions. The argument was unreachable either way.
- *
- * These arguments go inside `input`, which resolveEpicToolInput has always
- * read and which is now declared in any category that needs it.
+ * Names the dispatcher consumes before a call reaches the bridge (#1078).
+ * Declaring one here would overwrite the category's own parameter, so such an
+ * argument goes inside `input` instead.
  */
 const RESERVED_TOP_LEVEL = ROUTING_PARAMS;
 
@@ -134,10 +120,8 @@ function reservedArgs(inputSchema) {
 }
 
 /** The `Params:` clause every action on this surface is required to carry.
- *
- *  A reserved argument is named in a parenthetical, which the Params parser
- *  reads as prose rather than as a parameter, so the clause tells the truth
- *  about where the argument goes without promising a key that gets stripped. */
+ *  A reserved argument is named in a parenthetical, which the parser reads as
+ *  prose rather than as a promised key. */
 function paramsClause(inputSchema) {
   const props = Object.keys(inputSchema?.properties ?? {});
   if (props.length === 0) return "Params: none";
@@ -247,8 +231,7 @@ function main() {
       const input = tool.inputSchema ?? {};
       if (reservedArgs(input).length > 0) bucket.needsInput = true;
       for (const [name, prop] of Object.entries(input.properties ?? {})) {
-        // A reserved name is never declared: the category tool owns it, and
-        // declaring it here replaces the dispatcher's own parameter.
+        // Never declared: the category tool owns the name.
         if (RESERVED_TOP_LEVEL.has(name)) continue;
         if (!bucket.params.has(name)) bucket.params.set(name, { kinds: new Set(), description: "" });
         const entry = bucket.params.get(name);
@@ -327,9 +310,7 @@ import { epicToolCall } from "../../epic-input.js";
 
 `;
 
-  // The nested escape, declared only where a wrapped tool actually needs it:
-  // an argument whose name the category tool's dispatcher owns has no other
-  // way in. resolveEpicToolInput has always read both of these.
+  // The nested escape, declared only where a wrapped tool needs it.
   if (bucket.needsInput) {
     if (!bucket.params.has("input")) {
       bucket.params.set("input", {

@@ -1,19 +1,6 @@
-// Regression coverage for #1078.
-//
-// The dialog gate decides, per window, whether the editor is waiting on an
-// answer. It read "regular window that is modal OR has a parent" as the whole
-// answer, and the second half of that is also the exact shape of every
-// ordinary editor window the user has undocked into its own frame. A restored
-// standalone Message Log at startup was therefore reported as an unanswered
-// blocking modal: every unrelated action was refused for the life of the
-// session, and nothing in the window could answer it, because CLEAR clears a
-// log rather than closing a prompt.
-//
-// The two properties held here are the two directions that cost something. A
-// window hosting docked tabs is not a prompt, and a parented window that is
-// not hosting tabs still is one, because that is the case
-// GetActiveModalWindow misses and the only reason the parented heuristic
-// exists.
+// Regression coverage for #1078: the two directions that cost something. A
+// window hosting docked tabs is not a prompt, and a parented window without
+// them still is - that being the case GetActiveModalWindow misses.
 
 #if WITH_DEV_AUTOMATION_TESTS
 

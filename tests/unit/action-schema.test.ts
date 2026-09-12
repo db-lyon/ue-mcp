@@ -50,21 +50,9 @@ describe("action parameter schema", () => {
     ).toEqual([]);
   });
 
-  // #1078. `action` is the dispatcher's own parameter, and ROUTING_PARAMS
-  // exempts it from the drift check above so that an action is not accused of
-  // failing to declare the key it dispatches on. That exemption is also a
-  // blind spot: a HANDLER parameter that happens to be called `action` is
-  // undeclarable, unforwardable and undocumentable, and nothing said so.
-  //
-  // Two shipped instances were found by asking this question by hand.
-  // editor(respond_to_dialog) promised `action='close'` in its description and
-  // read it in C++, and the surface stripped the key on every call, so the
-  // documented way to dismiss a dialog no button fits was dead on arrival.
-  // A generated Epic action went further and DECLARED it, which replaced the
-  // widget tool's dispatch parameter: widget's `action` was advertised as a
-  // free-form string described as '"list" returns JSON array, "select" brings
-  // to front, "close" destroys', in place of the enum naming widget's own
-  // hundred-odd actions.
+  // ROUTING_PARAMS exempts `action` from the drift check above, which is also
+  // a blind spot: a HANDLER parameter of that name is undeclarable,
+  // unforwardable and undocumentable, and nothing said so (#1078).
   it("never declares or documents a handler parameter named 'action'", () => {
     const offenders: string[] = [];
     for (const tool of ALL_TOOLS) {
@@ -89,14 +77,9 @@ describe("action parameter schema", () => {
     ).toEqual([]);
   });
 
-  // The test above cannot see a closure that spreads its argument, and
-  // forwardedParams says so itself: it reads mapParams source text, and
-  // `(p) => epicToolCall(..., p)` names no key. Every generated Epic action has
-  // that shape, so the static check reported green while widget(action=
-  // "epic_windows") reached the wrapped Slate tool as input.action=
-  // "epic_windows" - a tool whose `action` argument means list|select|close.
-  //
-  // This one dispatches for real and looks at what the bridge was handed.
+  // The static check above cannot see a closure that spreads its argument, and
+  // every generated Epic action has that shape. This one dispatches for real
+  // and looks at what the bridge was handed.
   it("never hands the bridge the dispatch key, whatever mapParams does with its bag", async () => {
     const offenders: string[] = [];
     for (const tool of ALL_TOOLS) {
@@ -116,8 +99,7 @@ describe("action parameter schema", () => {
         try {
           await tool.handler(ctx, { action: name });
         } catch {
-          // A refusal before dispatch (a missing required argument) proves the
-          // key never reached the bridge, which is what this asserts.
+          // A refusal before dispatch proves the key never reached the bridge.
           continue;
         }
         if (seen === null) continue;
@@ -125,12 +107,9 @@ describe("action parameter schema", () => {
         if (serialized.includes(`"${name}"`)) {
           offenders.push(`${tool.name}.${name}: the bridge payload contains the action name`);
         }
-        // An `action` KEY is not the fault and must not be asserted against:
-        // editor(play_in_editor) and editor(play_sequence) call bridge methods
-        // whose own argument is named action, renamed on the surface to
-        // pieAction and sequenceAction precisely so the dispatcher's key is
-        // free. That is the correct pattern, the same one dialogAction uses.
-        // The fault is the dispatch key's VALUE travelling as an argument.
+        // An `action` KEY is not the fault: play_in_editor and play_sequence
+        // call bridge methods whose own argument is named action, renamed on
+        // the surface. The fault is the dispatch key's VALUE travelling.
       }
     }
     expect(
@@ -152,8 +131,7 @@ describe("action parameter schema", () => {
         continue;
       }
       const described = dispatch.description ?? "";
-      // The dispatch parameter is authored once, by categoryTool. Anything
-      // else in that slot is a merged-in collision that replaced it.
+      // Authored once, by categoryTool. Anything else is a merged-in collision.
       if (!described.startsWith("Action to perform.")) {
         offenders.push(`${tool.name}: 'action' is described as ${JSON.stringify(described.slice(0, 80))}`);
       }

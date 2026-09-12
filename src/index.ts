@@ -507,15 +507,9 @@ async function main() {
       flows: load.pluginLoad.flowDefs,
     }).config;
 
-    // #1061: ue-mcp.yml is re-read when it changes, so a guard's options are
-    // what the file says now rather than what it said when this session was
-    // registered. Editing the file used to have no effect until a restart, and
-    // the refusal text told the user to make a change that was already on
-    // disk.
-    //
-    // Gated on the file's mtime and size because a guard's before hook runs on
-    // every call it covers, and parsing the config there would put a YAML read
-    // on the hot path. An unchanged file costs one stat.
+    // Guard options track ue-mcp.yml (#1061). Gated on mtime and size, because
+    // a before hook runs on every call it covers and parsing YAML there would
+    // put a config read on the hot path. An unchanged file costs one stat.
     const configPath = path.join(load.configDir ?? process.cwd(), "ue-mcp.yml");
     let cachedStamp: string | null = null;
     let cachedGuards: GuardDeclarations = {};
@@ -525,8 +519,7 @@ async function main() {
         const st = fs.statSync(configPath);
         stamp = `${st.mtimeMs}:${st.size}`;
       } catch {
-        // No project file: nothing declares guards there, so nothing to
-        // refresh. Plugin-declared guards keep their manifest options.
+        // No project file: plugin-declared guards keep their manifest options.
         return {};
       }
       if (stamp === cachedStamp) return cachedGuards;
@@ -534,8 +527,7 @@ async function main() {
         cachedGuards = (readProjectConfig().guards ?? {}) as GuardDeclarations;
         cachedStamp = stamp;
       } catch (e) {
-        // A half-written or invalid file must not disarm a guard. Keep what
-        // was last valid and say so once per change.
+        // A half-written file must not disarm a guard.
         console.error(
           `[ue-mcp] ${load.surface.session.name}: ue-mcp.yml changed but could not be re-read, `
           + `guard options are unchanged: ${e instanceof Error ? e.message : String(e)}`,

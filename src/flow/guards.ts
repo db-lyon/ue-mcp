@@ -55,20 +55,9 @@ export interface BuildGuardsDeps {
   /**
    * The options a guard is declared with RIGHT NOW, re-read per call (#1061).
    *
-   * A guard's `options` used to be captured when the session's guards were
-   * built and never read again, so editing ue-mcp.yml had no effect on a
-   * running server. A guard meant as a reversible safety switch was a one-way
-   * door for the life of the process, and its own refusal text named the
-   * config change that was already in place. Flows in the same file are
-   * reloaded per call and promise as much in a comment; guards had no
-   * equivalent.
-   *
-   * Only the options payload is re-read. The guard set itself is not rebuilt,
-   * because registration appends: re-running the build would double-register
-   * every guard rather than replace it, and a class_path resolved at startup
-   * is what keeps an unbuildable guard from leaving its calls ungated.
-   *
-   * Undefined, or a resolver returning undefined, keeps the declared options.
+   * Only the options payload: registration appends, so rebuilding the guard
+   * set would double-register rather than replace. Undefined keeps the
+   * declared options.
    */
   liveOptions?: (guardName: string, phase: GuardPhase) => Record<string, unknown> | undefined;
 }
@@ -148,9 +137,7 @@ async function runHook(
   phase: GuardPhase,
   result?: unknown,
 ): Promise<HookResult> {
-  // #1061: what the file says now, not what it said at startup. A resolver
-  // that answers nothing leaves the declared options in place, so a guard
-  // declared by a plugin manifest rather than by ue-mcp.yml is unaffected.
+  // What the file says now (#1061). Nothing answered keeps the declared set.
   const options = deps.liveOptions?.(guardName, phase) ?? hook.options;
   const task = await deps.registry.create(
     hook.class_path,

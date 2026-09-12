@@ -1201,18 +1201,8 @@ export interface StopEditorResult {
   refusedReason?: "unsaved-work" | "unknown-dirty-state";
   /** Every package that was dirty when the stop was asked for. */
   dirtyPackages?: string[];
-  /**
-   * Other editors of THIS project still running after the stop (#1072).
-   *
-   * A stop is aimed at one editor, by the port this project published, and
-   * that is correct. What it did not say is that it aimed at one: with two
-   * editors of a project open, the call closed one and reported plain success,
-   * and a caller with no reason to suspect a second editor read that as "this
-   * project has no editor running" and acted on it.
-   *
-   * Present only when there is something to report, so an ordinary
-   * single-editor stop is unchanged.
-   */
+  /** Other editors of THIS project still running after the stop (#1072).
+   *  Present only when there is something to report. */
   remainingInstances?: Array<{ pid: number; port: number }>;
 }
 
@@ -1304,22 +1294,13 @@ function unsavedWorkRefusal(dirty: string[]): string {
  * process behind it is checked before the quit goes out (#819).
  */
 /**
- * Editors of this project that are still running after one was stopped.
+ * Editors of this project still running after one was stopped (#1072).
  *
- * #1072: two editors of one project share a `Saved/UE_MCP_Bridge/`, and the
- * quitting one takes port.json with it. #934 taught the client to recover the
- * survivor's address from its own instance record, so the survivor is reachable
- * again - but the stop that left it there still reported plain success, with
- * nothing saying an editor of this project was still up.
+ * A record and a live process must agree: a record outlives a crash, and a
+ * running editor may have published none. `stoppedPid` is excluded because its
+ * record may not be deleted yet.
  *
- * Both sources have to agree. An instance record can outlive a crash, and a
- * running process may have published none, so a record is only reported when a
- * live editor process holding this project is behind it.
- *
- * `stoppedPid` is excluded: it is the editor that was just asked to quit, and
- * its own record may not be deleted yet at the moment this runs.
- * so the filtering is testable without real
- * processes.
+ * `listEditors` is injected so the filtering is testable without real pids.
  */
 export async function findRemainingInstances(
   projectDir: string | undefined,
@@ -1332,8 +1313,7 @@ export async function findRemainingInstances(
   try {
     live = await listEditors(projectPath);
   } catch {
-    // Process enumeration is best effort. Failing it must never turn a
-    // successful stop into an error.
+    // Best effort: this must never turn a successful stop into an error.
     return [];
   }
   const livePids = new Set(live.map((p) => p.pid));
@@ -1500,9 +1480,7 @@ export async function stopEditor(
     await new Promise((resolve) => setTimeout(resolve, confirmPollMs));
     if (!(await isBridgeAvailable(host, port))) {
       quitsInFlight.delete(editorKey);
-      // #1072: the stop aimed at one editor, which is correct, and now says
-      // so when that was not the only one. Without this a caller reads plain
-      // success as "no editor of this project is running".
+      // The stop aims at one editor; say so when it was not the only one.
       const remaining = await findRemainingInstances(projectDir, projectPath, ownership.pid ?? null);
       const remainingNote = remaining.length === 0
         ? ""

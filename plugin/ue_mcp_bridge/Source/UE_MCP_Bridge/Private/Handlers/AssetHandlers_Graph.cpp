@@ -1,31 +1,12 @@
-// asset(read_graph) - the topology of any EdGraph-backed asset (#1059).
+// asset(read_graph) - node, pin and connection topology for any EdGraph-backed
+// asset (#1059).
 //
-// Reflection is the only door most of this bridge has into an asset, and for
-// graph topology that door does not exist. It is structural, not an omission:
+// Reflection cannot reach this: UEdGraphNode::Pins has no UPROPERTY and
+// UEdGraphPin is not a UObject. From C++ Pins is an ordinary member.
 //
-//   - UEdGraphNode declares `TArray<UEdGraphPin*> Pins;` with NO UPROPERTY.
-//   - UEdGraphPin is a plain class, not a UObject. Only the long-deprecated
-//     UEdGraphPin_Deprecated ever was one.
-//
-// So no set_property, no reflect_instance and no find_object can read, break
-// or make a connection, and a caller auditing a graph can see every node's
-// settings and nothing about how they are wired. The report that raised this
-// was a Mutable CustomizableObject, where a large graph holds dozens of
-// parameter nodes whose UI metadata drives the in-game customization menu, and
-// the wiring is the part that says what the menu actually does.
-//
-// C++ has no such problem: Pins is an ordinary member. This reads it.
-//
-// Deliberately generic rather than a `mutable` category. UEdGraph is the
-// engine's one graph type, so the same walk answers for a CustomizableObject,
-// a Material, an AnimBP, a Niagara graph or anything else built on it, and a
-// per-plugin category would be the same code again behind a different name for
-// each. Where a system needs authoring semantics of its own, that earns its own
-// actions; reading the topology does not.
-//
-// READ ONLY, on purpose. Writing a connection means running the owning
-// schema's TryCreateConnection so the graph's own rules decide, which is a
-// different piece of work from this one and is not smuggled in here.
+// Generic rather than per-system, because UEdGraph is the engine's one graph
+// type. Read only: making a connection means running the owning schema's
+// TryCreateConnection, which is separate work.
 
 #include "AssetHandlers.h"
 #include "HandlerUtils.h"
@@ -121,9 +102,8 @@ namespace
 		Json->SetNumberField(TEXT("posY"), Node->NodePosY);
 		if (!Node->NodeComment.IsEmpty()) Json->SetStringField(TEXT("comment"), Node->NodeComment);
 
-		// The node's own settings are read with reflection(reflect_instance) on
-		// the path above, which already works. This reports what reflection
-		// cannot reach, and says so rather than duplicating it.
+		// Node settings come from reflection(reflect_instance) on the path
+		// above; this reports only what reflection cannot reach.
 		OutPinCount += Node->Pins.Num();
 		int32 NodeLinks = 0;
 		for (const UEdGraphPin* Pin : Node->Pins)
@@ -134,11 +114,8 @@ namespace
 		Json->SetNumberField(TEXT("pinCount"), Node->Pins.Num());
 		Json->SetNumberField(TEXT("linkCount"), NodeLinks);
 
-		// A node with no pins at all is the signature of one created by
-		// appending to UEdGraph::Nodes rather than through the schema:
-		// AllocateDefaultPins never ran, so it is structurally dead and the
-		// editor will not draw it usefully. Naming it here is how an audit
-		// finds one that a previous session left behind (#1059).
+		// No pins means AllocateDefaultPins never ran: a node built outside the
+		// schema, which can never be wired (#1059).
 		if (Node->Pins.Num() == 0)
 		{
 			Json->SetBoolField(TEXT("hasNoPins"), true);
@@ -186,9 +163,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 
 	if (Graphs.Num() == 0)
 	{
-		// Not an error. A Texture has no graph and never will, and answering
-		// with an empty list plus the reason is more useful than a failure a
-		// caller has to distinguish from a bad path.
+		// Not an error: a Texture has no graph and never will.
 		auto Empty = MCPSuccess();
 		Empty->SetStringField(TEXT("assetPath"), AssetPath);
 		Empty->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
@@ -235,10 +210,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 		}
 		GraphJson->SetArrayField(TEXT("nodes"), NodesJson);
 		GraphJson->SetNumberField(TEXT("pinCount"), GraphPins);
-		// Each connection is seen from both of its ends, so the raw sum counts
-		// every wire twice. Reporting the halved figure means a caller can
-		// compare it against what the editor shows without doing arithmetic
-		// nothing told them to do.
+		// Each wire is seen from both ends, so the raw sum double-counts.
 		GraphJson->SetNumberField(TEXT("connectionCount"), GraphLinks / 2);
 
 		TotalNodes += NodesJson.Num();

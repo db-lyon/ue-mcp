@@ -86,12 +86,9 @@ public:
 
 	/** Is the editor waiting on an answer from this window? (#1078)
 	 *
-	 *  Public because it is the whole decision behind the dialog gate, and a
-	 *  wrong answer in either direction is expensive: a false negative sends a
-	 *  quit at a blocked editor, and a false positive refuses every action for
-	 *  the life of the session. On false, OutSkipReason carries the sentence
-	 *  list_dialogs reports under notTreatedAsDialogs, and is left empty for a
-	 *  window that was never a candidate. */
+	 *  On false, OutSkipReason carries the sentence list_dialogs reports under
+	 *  notTreatedAsDialogs, and is empty for a window that was never a
+	 *  candidate. */
 	static bool IsBlockingWindow(const TSharedRef<class SWindow>& Window, FString* OutSkipReason = nullptr);
 
 private:

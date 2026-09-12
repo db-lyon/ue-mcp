@@ -604,26 +604,9 @@ TSharedPtr<FJsonValue> FDialogHandlers::GetDialogPolicy(const TSharedPtr<FJsonOb
 // would merge with whatever other .cpp shares the blob.
 namespace MCPDialogWindows
 {
-	/**
-	 * Does this window host docked tabs?
-	 *
-	 * #1078: a standalone Message Log, an undocked Output Log, a Content
-	 * Browser opened in its own window - each is a regular window parented to
-	 * the main editor window, which is exactly the shape the parented test
-	 * below was reading as "the editor is waiting on an answer". None of them
-	 * block anything. A restored Message Log at startup therefore refused
-	 * every unrelated action for the life of the session, and could not be
-	 * dismissed by pressing anything, because its buttons (CLEAR among them)
-	 * answer no question.
-	 *
-	 * Slate's own distinction is the tab manager: a window that exists to host
-	 * dock tabs is a workspace, never a prompt. The type names are matched
-	 * rather than the classes because Slate's docking types are private to
-	 * their module and this plugin already walks the tree by type name.
-	 *
-	 * A genuinely modal window is never asked this question. Only the parented
-	 * heuristic needs narrowing, and a true modal blocks whatever it contains.
-	 */
+	/** Does this window host docked tabs? Such a window is a workspace, never a
+	 *  prompt (#1078). Matched by type name because Slate's docking types are
+	 *  private to their module. */
 	static bool HostsDockedTabs(const TSharedRef<SWidget>& Widget)
 	{
 		const FName Type = Widget->GetType();
@@ -655,23 +638,14 @@ namespace MCPDialogWindows
 	/**
 	 * Every window the editor is holding the user with, gathered recursively.
 	 *
-	 * A REGULAR window on the modal stack is one Slate itself calls blocking.
-	 * A regular window parented to another is USUALLY a dialog raised without
-	 * AddModalWindow, which is the case GetActiveModalWindow misses, but it is
-	 * also the shape of every ordinary utility window the editor docks (#1078),
-	 * so a window hosting dock tabs is not a question and is skipped.
-	 *
 	 * Menus, tooltips and notifications are not regular windows, so they are
-	 * not mistaken for questions either.
+	 * never mistaken for questions.
 	 *
-	 * Visibility is deliberately NOT consulted. A window that is up but undrawn,
-	 * or drawn behind the editor, still holds whatever raised it, and "the user
-	 * cannot see it" is the worst possible reason to let a quit through.
+	 * Visibility is deliberately NOT consulted: a window that is undrawn or
+	 * behind the editor still holds whatever raised it.
 	 *
-	 * OutSkipped records what was walked past. A false negative here is a quit
-	 * sent at a blocked editor and a false positive is a session refusing every
-	 * action, so which windows were considered and rejected is reported rather
-	 * than discarded.
+	 * OutSkipped records what was walked past, because a wrong answer either
+	 * way is expensive and an empty list is otherwise undiagnosable.
 	 */
 	static void Gather(
 		const TArray<TSharedRef<SWindow>>& Roots,
@@ -726,21 +700,15 @@ bool FDialogHandlers::IsBlockingWindow(const TSharedRef<SWindow>& Window, FStrin
 {
 	if (OutSkipReason) OutSkipReason->Reset();
 
-	// Menus, tooltips and notifications are not regular windows, so they are
-	// never mistaken for questions and are not worth reporting as skipped.
 	if (!Window->IsRegularWindow()) return false;
-
-	// On the modal stack is the one case Slate itself calls blocking.
+	// The modal stack is the one case Slate itself calls blocking.
 	if (Window->IsModalWindow()) return true;
-
-	// Not modal and not parented is a top-level window of its own, which the
-	// editor is not waiting on.
+	// Unparented and not modal: a top-level window of its own.
 	if (!Window->GetParentWindow().IsValid()) return false;
 
 	// Parented and not modal is usually a dialog raised without
-	// AddModalWindow, which is the case GetActiveModalWindow misses and the
-	// reason this heuristic exists at all. It is also the shape of every
-	// ordinary utility window the editor puts in its own frame.
+	// AddModalWindow, the case GetActiveModalWindow misses. It is also the
+	// shape of every utility window the editor puts in its own frame.
 	if (MCPDialogWindows::HostsDockedTabs(Window))
 	{
 		if (OutSkipReason)
@@ -880,11 +848,7 @@ TSharedPtr<FJsonValue> FDialogHandlers::ListDialogs(const TSharedPtr<FJsonObject
 	auto Result = MCPSuccess();
 	TArray<TSharedPtr<FJsonValue>> DialogsArray;
 
-	// #1078: a window that was walked past is reported alongside the dialogs.
-	// The failure this replaced was a session refusing every action because a
-	// restored Message Log looked like an unanswered prompt, and the failure in
-	// the other direction is a quit sent at an editor that really is blocked.
-	// Neither is diagnosable from an empty list, so the walk says what it saw.
+	// What the walk rejected, reported alongside the dialogs (#1078).
 	TArray<MCPDialogWindows::FSkippedWindow> Skipped;
 	MCPDialogWindows::FindBlocking(&Skipped);
 	if (Skipped.Num() > 0)
@@ -1142,12 +1106,8 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 		// itself, which ends the modal loop and releases the game thread. A
 		// synthetic Escape keypress alone does not reach a modal window that
 		// never took keyboard focus, so send both.
-		// #1078: the parameter is named dialogAction on the wire. "action" is
-		// the category tool's own dispatch field, so a caller writing
-		// action='close' selected a nonexistent editor action instead of
-		// reaching this handler, and the MCP surface stripped the key before
-		// it ever arrived. The old name is still read, because the bridge
-		// answers clients other than this server's category tools.
+		// dialogAction on the wire: "action" is the category tool's dispatch
+		// field (#1078). The old name is still read for direct bridge clients.
 		FString Action = OptionalString(Params, TEXT("dialogAction"));
 		if (Action.IsEmpty()) Action = OptionalString(Params, TEXT("action"));
 		if (Action == TEXT("escape") || Action == TEXT("close"))

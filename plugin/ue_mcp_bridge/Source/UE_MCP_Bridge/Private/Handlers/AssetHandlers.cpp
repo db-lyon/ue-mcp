@@ -3799,14 +3799,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 			FinalProp ? *FinalProp->GetCPPType() : TEXT("unknown")));
 	}
 
-	// #1059: UEdGraph::Nodes IS a UPROPERTY, so an append onto it succeeds and
-	// reports previousNum and newNum exactly as it would for any other array.
-	// What it appends is not a usable node. A graph node has to be built
-	// through its graph's schema, which runs AllocateDefaultPins and parents
-	// it to the graph; anything else lands in the array with no pins and the
-	// wrong outer, and the graph then opens broken. The whole hazard is that
-	// the call looks like it worked, so it is refused here rather than
-	// documented somewhere a caller reads afterwards.
+	// Nodes IS a UPROPERTY, so an append succeeds and reports a count. The node
+	// is unusable: no pins, wrong outer, and the graph will not open (#1059).
 	if (const FObjectPropertyBase* ElementObject = CastField<FObjectPropertyBase>(ArrayProp->Inner))
 	{
 		if (ElementObject->PropertyClass

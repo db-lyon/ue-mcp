@@ -152,12 +152,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPAssetPathResolutionTest::RunTest(const FString& Parameters)
 {
-	// Resolving a path that names nothing is half of what this test asserts,
-	// and UEditorAssetLibrary::LoadAsset logs an Error every time it is asked
-	// for one. The automation framework fails a test on any unexpected Error,
-	// so the deliberate miss below failed the test that was checking it.
-	// Declared the same way SequencerHandlerTests declares it, with a count of
-	// 0 meaning any number of occurrences.
+	// The miss below is deliberate, and the engine loader logs an Error for it.
+	// Count 0 means "must occur", so this stays honest if the miss stops.
 	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	const FScopedAssetPathTestMount Mount;
@@ -174,8 +170,7 @@ bool FMCPAssetPathResolutionTest::RunTest(const FString& Parameters)
 
 	UDataTable* Probe = NewObject<UDataTable>(
 		Package, FName(TEXT("DT_PathProbe")), RF_Public | RF_Standalone);
-	// A DataTable with no RowStruct logs an Error when the engine empties it,
-	// which happens on teardown and fails the test that made it.
+	// An empty RowStruct logs an Error on teardown, failing the test.
 	if (Probe) Probe->RowStruct = FTableRowBase::StaticStruct();
 	TestNotNull(TEXT("probe asset created"), Probe);
 	if (!Probe)
@@ -236,10 +231,7 @@ bool FMCPAssetPathResolutionTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("a miss with nothing on disk and nothing in the registry reads as missing"),
 			ErrorField(Missing, TEXT("reason")), FString(TEXT("missing")));
 
-		// #1065: every load failure says whether play was running, because
-		// that changes how assets load and a caller cannot see it. The suite
-		// does not run under PIE, so the flag is present and false here; what
-		// is being pinned is that the field exists at all.
+		// The flag is reported on every miss.
 		const TSharedPtr<FJsonObject> MissingObj = Missing->AsObject();
 		TestTrue(TEXT("a miss reports whether play-in-editor was running"),
 			MissingObj.IsValid() && MissingObj->HasField(TEXT("playInEditorActive")));
@@ -271,15 +263,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 {
-	// #1074. A package reload does not free the object it replaced: it renames
-	// it aside, marks it RF_NewerVersionExists, and leaves it reachable in the
-	// object hash while a freshly loaded object takes the real path. The
-	// resolver asked the hash first and returned whatever came back, so after a
-	// write that reloaded a package, reads answered off the corpse and writes
-	// landed on it. Only an editor restart cleared it.
-	//
-	// The reload is reproduced here by its observable effect rather than by
-	// running one: an object carrying the flag, and a live object at the path.
+	// #1074: a flagged object must never be resolved to. Reproduced by its
+	// observable effect rather than by running a real reload.
 	const FScopedAssetPathTestMount Mount;
 
 	const FString PackageName = FString(MCPAssetPathTestRoot) + TEXT("DT_ReloadProbe");
@@ -302,14 +287,16 @@ bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 	}
 	const FGCRootScope KeepCorpseAlive(Corpse);
 
-	// Before the reload the object at the path is the one the resolver answers.
-	TestTrue(TEXT("a live asset resolves normally"),
-		MCPLoadAssetObject(PackageName) == Corpse);
-
-	// The reload: the old object is flagged and renamed out of the way, and a
-	// new object takes the name. This is what UPackage reload does to the
-	// object it replaces, and it is why FindObject can still reach the old one.
+	// A flagged object still holding the path: never returned, and with nothing
+	// else there the answer is nothing.
 	Corpse->SetFlags(RF_NewerVersionExists);
+	TestNull(TEXT("a flagged object holding the path is never returned"),
+		MCPLoadAssetObject(PackageName));
+	TestNull(TEXT("nor through the object path form"),
+		MCPLoadAssetObject(PackageName + TEXT(".DT_ReloadProbe")));
+
+	// End state of a reload. Not a guard: the rename means the hash resolves to
+	// the replacement on name alone, with or without the predicate.
 	Corpse->Rename(
 		*FString::Printf(TEXT("DT_ReloadProbe_DEADCLASS_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits)),
 		Package,
@@ -326,11 +313,9 @@ bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 	}
 	const FGCRootScope KeepLiveAlive(Live);
 
-	// The assertion that fails on a regression: the resolver walks past the
-	// corpse and answers the object the editor actually consults.
 	UObject* Resolved = MCPLoadAssetObject(PackageName);
-	TestTrue(TEXT("the resolver never answers the reload corpse"), Resolved != Corpse);
 	TestTrue(TEXT("the resolver answers the live replacement"), Resolved == Live);
+	TestTrue(TEXT("and never the corpse"), Resolved != Corpse);
 
 	// The predicate itself, so a caller reading it directly agrees.
 	TestFalse(TEXT("a flagged object is not live"), MCPIsLiveAssetObject(Corpse));

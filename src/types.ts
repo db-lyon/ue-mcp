@@ -655,15 +655,9 @@ export function categoryTool(
         );
       }
       if (spec.kind === "bridge") {
-        // `action` is stripped BEFORE mapParams, not instead of it. Stripping
-        // only on the else branch meant every action with a mapParams still
-        // had the dispatch key in its bag, and one that forwards its bag
-        // wholesale carried the action's own NAME to the bridge as an
-        // argument. A generated Epic action does exactly that:
-        // widget(action="epic_windows") reached the wrapped Slate tool as
-        // input.action="epic_windows", where that argument means
-        // list | select | close. Nothing legitimately reads it here - the
-        // dispatcher has already consumed it to pick this spec.
+        // Stripped BEFORE mapParams, not instead of it: a mapParams that
+        // forwards its whole bag would otherwise send the action's own name to
+        // the bridge as an argument. Nothing here reads the key.
         const mapped = spec.mapParams
           ? spec.mapParams(stripAction(normalized))
           : stripAction(normalized);

@@ -134,17 +134,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 			TEXT("it is a class object rather than an instantiable type. Pass the class you want an INSTANCE of."));
 	}
 
-	// #1059: a graph node built here is structurally dead and looks like a
-	// success. Two things go wrong at once. NewObject does not run the node's
-	// AllocateDefaultPins, so it has no pins and can never be wired to
-	// anything, and the outer is the ASSET rather than the graph the node has
-	// to belong to. Appending that to UEdGraph::Nodes - which IS a UPROPERTY,
-	// so the append reports previousNum 58 and newNum 59 quite happily - leaves
-	// a node the editor cannot draw, in a graph that now fails to open.
-	//
-	// Refused rather than documented, because the whole failure is that it
-	// reports success. A node is created through its graph's own schema, which
-	// allocates the pins and parents it correctly.
+	// A node built here gets no AllocateDefaultPins and the asset as its outer,
+	// so it can never be wired and the graph will not open (#1059).
 	if (Class->IsChildOf(UEdGraphNode::StaticClass()))
 	{
 		return MCPClassUnusableError(ClassName, Class, TEXT("graph_node"),

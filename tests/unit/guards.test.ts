@@ -83,11 +83,8 @@ const SOURCE = { label: "ue-mcp.yml" };
 const declare = (raw: unknown) => GuardsSchema.parse(raw);
 
 describe("options are what the file says now", () => {
-  // #1061: a guard's `options` were bound when the session's guards were built
-  // and never read again, so editing ue-mcp.yml had no effect until a restart.
-  // A guard meant as a reversible safety switch was a one-way door for the
-  // life of the process, and its own refusal named the config change that was
-  // already on disk. Flows in the same file are reloaded per call.
+  // #1061: options were bound at build time, so editing ue-mcp.yml had no
+  // effect until a restart. Flows in the same file are reloaded per call.
   it("hands the hook the options the resolver answers, not the declared ones", async () => {
     const registry = registryWith({ check: ALLOW });
     let enabled = true;
@@ -135,8 +132,7 @@ describe("options are what the file says now", () => {
   });
 
   it("keeps the declared options when nothing answers", async () => {
-    // A guard declared by a plugin manifest is not in ue-mcp.yml, so the
-    // resolver has nothing to say about it and it must not be disarmed.
+    // A plugin-declared guard is not in ue-mcp.yml and must not be disarmed.
     const registry = registryWith({ check: ALLOW });
     const guards = await buildGuards(
       declare({ fromPlugin: { before: { class_path: "check", options: { enabled: true } } } }),
