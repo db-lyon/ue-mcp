@@ -309,6 +309,34 @@ inline FMCPAssetPathForms MCPAssetPathForms(const FString& AssetPath)
 	return Forms;
 }
 
+/** Is this candidate an asset the editor still consults?
+ *
+ *  A package reload does not free the object it replaced. It renames it aside,
+ *  marks it RF_NewerVersionExists and leaves it in the object hash under a
+ *  mangled name, while a freshly loaded object takes the real path. FindObject
+ *  can still reach the corpse, and handing one back is silent in the worst
+ *  way: a read reports the pre-reload values, and a write lands on an object
+ *  nothing consults, reports success, and is gone on the next restart.
+ *
+ *  #972 found this for WidgetBlueprints and fixed it inside the widget
+ *  resolver. #1074 is the same defect one layer down: asset(set_property) on
+ *  one asset left later read_properties and list_properties calls answering
+ *  "Asset not found" for assets that were never touched, and only an editor
+ *  restart cleared it. Reloading a package the write touched is what puts a
+ *  corpse in the hash, and MCPLoadAssetObject asked the hash first and
+ *  returned whatever it got after checking only that it was not a UPackage.
+ *
+ *  IsValid covers null, pending kill and garbage. The flag check covers the
+ *  reload corpse. Both are cheap, and the caller's fallbacks below still run,
+ *  so a rejected candidate becomes a fresh load rather than an error. */
+inline bool MCPIsLiveAssetObject(const UObject* Candidate)
+{
+	if (!IsValid(Candidate)) return false;
+	if (Candidate->HasAnyFlags(RF_NewerVersionExists)) return false;
+	if (Candidate->IsA<UPackage>()) return false;
+	return true;
+}
+
 /** Load the asset at `AssetPath`, the way asset(read) does.
  *
  *  UEditorAssetLibrary::LoadAsset is the usual entry point, but it validates
@@ -319,6 +347,9 @@ inline FMCPAssetPathForms MCPAssetPathForms(const FString& AssetPath)
  *  did not: read_datatable, get_datatable_row and export all reported
  *  "Asset not found" or "Asset is not a DataTable" for assets that
  *  asset(read) opened and correctly named as DataTables (#930).
+ *
+ *  Every candidate is revalidated before it is handed back (#1074). See
+ *  MCPIsLiveAssetObject below for what that rules out and why.
  *
  *  This lives here rather than as a copy per handler file: the asset handlers
  *  share one unity blob, and a second copy would either collide at compile
@@ -337,12 +368,12 @@ inline UObject* MCPLoadAssetObject(const FString& AssetPath)
 	// than not looking, so the derived object path stands in for it.
 	if (UObject* Loaded = FindObject<UObject>(nullptr, *Forms.ObjectPath))
 	{
-		if (!Loaded->IsA<UPackage>()) return Loaded;
+		if (MCPIsLiveAssetObject(Loaded)) return Loaded;
 	}
 
 	if (UObject* ViaEditorLibrary = UEditorAssetLibrary::LoadAsset(AssetPath))
 	{
-		return ViaEditorLibrary;
+		if (MCPIsLiveAssetObject(ViaEditorLibrary)) return ViaEditorLibrary;
 	}
 
 	// #957: the caller's own form is tried first so nothing that used to work
@@ -353,13 +384,32 @@ inline UObject* MCPLoadAssetObject(const FString& AssetPath)
 	// resolve on its own.
 	if (UObject* ViaInput = LoadObject<UObject>(nullptr, *AssetPath))
 	{
-		if (!ViaInput->IsA<UPackage>()) return ViaInput;
+		if (MCPIsLiveAssetObject(ViaInput)) return ViaInput;
 	}
 	if (!Forms.bInputCarriedObjectName)
 	{
 		if (UObject* ViaObjectPath = LoadObject<UObject>(nullptr, *Forms.ObjectPath))
 		{
-			if (!ViaObjectPath->IsA<UPackage>()) return ViaObjectPath;
+			if (MCPIsLiveAssetObject(ViaObjectPath)) return ViaObjectPath;
+		}
+	}
+
+	// #1074: every step above rejected its candidate. If that was because the
+	// hash is holding a reload corpse, the package still on disk is the live
+	// asset and a full load re-reads it. Only attempted when the object path
+	// resolves to a real package, because LoadPackage on a path with nothing
+	// behind it forces a blocking package search.
+	const FString PackageName = FPackageName::ObjectPathToPackageName(Forms.ObjectPath);
+	if (!PackageName.IsEmpty() && FPackageName::DoesPackageExist(PackageName))
+	{
+		if (UPackage* Package = LoadPackage(nullptr, *PackageName, LOAD_None))
+		{
+			Package->FullyLoad();
+			const FString ObjectName = FPackageName::ObjectPathToObjectName(Forms.ObjectPath);
+			if (UObject* InPackage = FindObject<UObject>(Package, *ObjectName))
+			{
+				if (MCPIsLiveAssetObject(InPackage)) return InPackage;
+			}
 		}
 	}
 	return nullptr;

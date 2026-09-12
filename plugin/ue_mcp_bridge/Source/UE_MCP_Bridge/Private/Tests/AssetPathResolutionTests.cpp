@@ -240,4 +240,80 @@ bool FMCPAssetPathResolutionTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMCPAssetReloadCorpseTest,
+	"UE.MCP.Asset.PathResolution.AReloadCorpseIsNeverHandedBack",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
+{
+	// #1074. A package reload does not free the object it replaced: it renames
+	// it aside, marks it RF_NewerVersionExists, and leaves it reachable in the
+	// object hash while a freshly loaded object takes the real path. The
+	// resolver asked the hash first and returned whatever came back, so after a
+	// write that reloaded a package, reads answered off the corpse and writes
+	// landed on it. Only an editor restart cleared it.
+	//
+	// The reload is reproduced here by its observable effect rather than by
+	// running one: an object carrying the flag, and a live object at the path.
+	const FScopedAssetPathTestMount Mount;
+
+	const FString PackageName = FString(MCPAssetPathTestRoot) + TEXT("DT_ReloadProbe");
+
+	UPackage* Package = CreatePackage(*PackageName);
+	TestNotNull(TEXT("probe package created"), Package);
+	if (!Package)
+	{
+		return false;
+	}
+
+	UDataTable* Corpse = NewObject<UDataTable>(
+		Package, FName(TEXT("DT_ReloadProbe")), RF_Public | RF_Standalone);
+	TestNotNull(TEXT("probe asset created"), Corpse);
+	if (!Corpse)
+	{
+		Package->SetDirtyFlag(false);
+		return false;
+	}
+	const FGCRootScope KeepCorpseAlive(Corpse);
+
+	// Before the reload the object at the path is the one the resolver answers.
+	TestTrue(TEXT("a live asset resolves normally"),
+		MCPLoadAssetObject(PackageName) == Corpse);
+
+	// The reload: the old object is flagged and renamed out of the way, and a
+	// new object takes the name. This is what UPackage reload does to the
+	// object it replaces, and it is why FindObject can still reach the old one.
+	Corpse->SetFlags(RF_NewerVersionExists);
+	Corpse->Rename(
+		*FString::Printf(TEXT("DT_ReloadProbe_DEADCLASS_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits)),
+		Package,
+		REN_DontCreateRedirectors | REN_NonTransactional);
+
+	UDataTable* Live = NewObject<UDataTable>(
+		Package, FName(TEXT("DT_ReloadProbe")), RF_Public | RF_Standalone);
+	TestNotNull(TEXT("replacement asset created"), Live);
+	if (!Live)
+	{
+		Package->SetDirtyFlag(false);
+		return false;
+	}
+	const FGCRootScope KeepLiveAlive(Live);
+
+	// The assertion that fails on a regression: the resolver walks past the
+	// corpse and answers the object the editor actually consults.
+	UObject* Resolved = MCPLoadAssetObject(PackageName);
+	TestTrue(TEXT("the resolver never answers the reload corpse"), Resolved != Corpse);
+	TestTrue(TEXT("the resolver answers the live replacement"), Resolved == Live);
+
+	// The predicate itself, so a caller reading it directly agrees.
+	TestFalse(TEXT("a flagged object is not live"), MCPIsLiveAssetObject(Corpse));
+	TestTrue(TEXT("the replacement is live"), MCPIsLiveAssetObject(Live));
+	TestFalse(TEXT("a package is not an asset"), MCPIsLiveAssetObject(Package));
+	TestFalse(TEXT("null is not live"), MCPIsLiveAssetObject(nullptr));
+
+	Package->SetDirtyFlag(false);
+	return true;
+}
+
 #endif
