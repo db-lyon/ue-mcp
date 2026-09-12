@@ -30,8 +30,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-// The dispatcher's own parameter names, from the module that defines them.
-import { ROUTING_PARAMS } from "../dist/action-schema.js";
+// The dispatcher's own parameter names. Read from source, not dist: this
+// generator runs in CI before anything is built.
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CATALOG = path.join(ROOT, "tests", "golden", "epic-catalog.json");
@@ -112,7 +112,9 @@ function prose(description) {
  * Declaring one here would overwrite the category's own parameter, so such an
  * argument goes inside `input` instead.
  */
-const RESERVED_TOP_LEVEL = ROUTING_PARAMS;
+const RESERVED_TOP_LEVEL = new Set(
+  JSON.parse(fs.readFileSync(path.join(ROOT, "src", "routing-params.json"), "utf8")).routingParams,
+);
 
 /** Tool argument names this generator must not declare at the top level. */
 function reservedArgs(inputSchema) {

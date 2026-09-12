@@ -21,6 +21,7 @@
  * and a unit test gates the whole surface on it.
  */
 import { z } from "zod";
+import routingParamNames from "./routing-params.json";
 import type { ActionEffectSource, ActionSpec, ToolDef } from "./types.js";
 import type { ActionClass } from "./action-class.js";
 
@@ -699,7 +700,7 @@ export function forwardedParams(spec: ActionSpec): string[] {
  *
  *  Also the set a generated surface must never declare, so
  *  scripts/generate-epic-actions.mjs imports it rather than keeping a copy. */
-export const ROUTING_PARAMS: ReadonlySet<string> = new Set(["action", "timeoutMs", "select", "omit", "editor", "toEditor"]);
+export const ROUTING_PARAMS: ReadonlySet<string> = new Set(routingParamNames.routingParams);
 
 /** Build the full schema for one action of one tool. */
 export function actionSchema(tool: ToolDef, action: string): ActionSchema {
