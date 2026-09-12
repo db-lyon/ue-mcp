@@ -65,6 +65,14 @@ bool FMCPDialogBlockingWindowTest::RunTest(const FString& Parameters)
 		const TSharedRef<SWindow> Window = MakeOffscreenWindow(
 			SNew(SDockTab).TabRole(ETabRole::NomadTab), TEXT("Message Log"));
 
+		// Parented, because that is the whole point: an unparented window is
+		// rejected one step earlier and would pass this for the wrong reason.
+		// The restored Message Log this reproduces is a child of the main
+		// editor window, which is exactly what made it look like a prompt.
+		const TSharedRef<SWindow> Editor = MakeOffscreenWindow(SNullWidget::NullWidget, TEXT("Editor"));
+		Editor->AddChildWindow(Window);
+		TestTrue(TEXT("the parent link was established"), Window->GetParentWindow().IsValid());
+
 		FString Reason;
 		TestFalse(TEXT("a window hosting a dock tab does not block"),
 			FDialogHandlers::IsBlockingWindow(Window, &Reason));
