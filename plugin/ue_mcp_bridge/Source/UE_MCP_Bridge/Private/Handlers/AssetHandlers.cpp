@@ -1,6 +1,7 @@
 #include "AssetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "EdGraph/EdGraphNode.h"
 #include "HandlerPagination.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerPropertyText.h"
@@ -189,6 +190,7 @@ void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #975: a named subobject inside an existing asset package, which
 	// create_asset_by_class cannot make because it always creates a package.
 	Registry.RegisterHandler(TEXT("create_subobject"), &CreateSubobject);
+	Registry.RegisterHandler(TEXT("read_asset_graph"), &ReadAssetGraph);
 	Registry.RegisterHandler(TEXT("save_asset"), &SaveAsset);
 	Registry.RegisterHandler(TEXT("save_all_dirty"), &SaveAllDirty);
 	Registry.RegisterHandler(TEXT("list_textures"), &ListTextures);

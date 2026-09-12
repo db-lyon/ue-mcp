@@ -75,6 +75,11 @@ private:
 	// #726: create an asset of any concrete UObject class via its registered
 	// factory (or NewObject fallback), not just UDataAsset subclasses.
 	static TSharedPtr<FJsonValue> CreateAssetByClass(const TSharedPtr<FJsonObject>& Params);
+	// #1059: the node graph of any EdGraph-backed asset, with its pins and its
+	// connections. Reflection cannot reach either - UEdGraphNode::Pins has no
+	// UPROPERTY and UEdGraphPin is not a UObject - so this is the only way to
+	// read a graph's topology. Lives in AssetHandlers_Graph.cpp.
+	static TSharedPtr<FJsonValue> ReadAssetGraph(const TSharedPtr<FJsonObject>& Params);
 	// A named subobject inside an existing asset's package (#975). Lives in
 	// AssetHandlers_Subobject.cpp.
 	static TSharedPtr<FJsonValue> CreateSubobject(const TSharedPtr<FJsonObject>& Params);
