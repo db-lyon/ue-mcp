@@ -264,7 +264,7 @@ export const actions: Record<string, ActionSpec> = {
   ),
   epic_windows: bp(
     "unknown",
-    "[Epic SlateInspectorToolset.SlateInspectorToolset] List, select, or close top-level Slate editor windows. Params: action?, index?",
+    "[Epic SlateInspectorToolset.SlateInspectorToolset] List, select, or close top-level Slate editor windows. Params: index?, input? (carries action, which cannot be sent at the top level)",
     "epic_call_tool",
     (p) => epicToolCall("SlateInspectorToolset.SlateInspectorToolset", "SlateInspectorToolset.SlateInspectorToolset.Windows", S_epic_windows, p),
   ),
@@ -278,7 +278,6 @@ export const actions: Record<string, ActionSpec> = {
 
 /** The parameters those actions accept, declared so the MCP layer stops stripping them. */
 export const schema: Record<string, z.ZodType> = {
-  action: z.string().optional().describe("\"list\" returns JSON array, \"select\" brings to front, \"close\" destroys."),
   assetName: z.string().optional().describe("Name for the new blueprint asset."),
   bIncludeSourceLocations: z.boolean().optional().describe("Include [src=File:Line] tags showing where each widget was created in C++."),
   bIsVariable: z.boolean().optional().describe("True to expose as a blueprint variable, false to hide it."),
@@ -296,6 +295,8 @@ export const schema: Record<string, z.ZodType> = {
   hostWidget: z.union([z.string(), z.record(z.unknown())]).optional().describe("The widget that owns the named slot, or null to target the root WidgetTree."),
   identifier: z.string().optional().describe("The identifier returned by Observe()."),
   index: z.number().optional().describe("Window index for select/close."),
+  input: z.record(z.unknown()).optional().describe("The wrapped tool's arguments as an object. Use it for an argument this category cannot take at the top level because its dispatcher owns that name."),
+  inputJson: z.string().optional().describe("The wrapped tool's arguments as a raw JSON string. Takes full control: nothing is merged in when it is set."),
   key: z.string().optional().describe("Key name with optional modifiers, e.g. \"Enter\", \"Ctrl+A\", \"Shift+Tab\"."),
   maxDepth: z.number().optional().describe("Maximum depth to walk from the root."),
   modifiers: z.record(z.unknown()).optional().describe("Modifier keys held during the click."),
