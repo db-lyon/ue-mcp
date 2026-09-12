@@ -177,6 +177,26 @@ describe("buildMicroGateway", () => {
   const invoke = (gw: ToolDef, params: Record<string, unknown>) =>
     gw.actions.call.handler!(ctxB, { action: "call", ...params });
 
+  // The gateway is a fourth dispatch route. `args` can carry `action`, and a
+  // mapParams that forwards its bag would send it to the bridge as an argument.
+  it("never forwards the dispatch key from args to the bridge", async () => {
+    const tools = microFixture();
+    tools[0].actions.spread = bp("read", "Spread. Params: none", "spread_method", (q) => ({ ...q }));
+    const gw = buildMicroGateway(tools);
+
+    const out = (await invoke(gw, {
+      category: "blueprint",
+      method: "spread",
+      args: { action: "spread", name: "X" },
+    })) as { params?: Record<string, unknown> };
+
+    expect(
+      Object.prototype.hasOwnProperty.call(out.params ?? {}, "action"),
+      `the bridge was handed ${JSON.stringify(out.params)}`,
+    ).toBe(false);
+    expect(out.params?.name).toBe("X");
+  });
+
   it("exposes search alongside the three gateway actions", () => {
     const gw = buildMicroGateway(microFixture());
     expect(gw.name).toBe("tools");
