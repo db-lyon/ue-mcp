@@ -166,59 +166,16 @@ FWidgetBlueprintResolve ResolveWidgetBlueprint(const FString& AssetPath)
 		return Out;
 	}
 
-	const FString PackageName = FPackageName::ObjectPathToPackageName(Out.ObjectPath);
-	// The same existence answer the generic resolver uses.
 	Out.bAssetExists = MCPAssetExistsWithoutLoading(MCPAssetPathForms(Out.ObjectPath));
 
-	// Step 1. The object hash, first and cheapest. An asset already in memory
-	// answers here without the AssetRegistry round trip UEditorAssetLibrary
-	// makes, which is the step that was intermittently returning null.
+	// One ladder, the one every asset action uses. Each of its steps resolves
+	// the same path, so a step that finds the wrong type is the answer and
+	// continuing past it would only find the same object again.
 	if (UWidgetBlueprint* Live =
-		AsLiveWidgetBlueprint(FindObject<UObject>(nullptr, *Out.ObjectPath), Out.FoundClass))
+		AsLiveWidgetBlueprint(MCPLoadAssetObject(Out.ObjectPath), Out.FoundClass))
 	{
 		Out.Blueprint = Live;
 		return Out;
-	}
-
-	// Step 2. The historical path. Kept because it understands more path
-	// spellings than the object hash does and it is what every other handler
-	// in this plugin uses.
-	if (UWidgetBlueprint* Live =
-		AsLiveWidgetBlueprint(UEditorAssetLibrary::LoadAsset(AssetPath), Out.FoundClass))
-	{
-		Out.Blueprint = Live;
-		return Out;
-	}
-
-	// Step 3. Load the object directly, bypassing the registry entirely. Only
-	// worth attempting when something really is there: StaticLoadObject on a
-	// path with no package behind it can force a blocking package search.
-	if (Out.bAssetExists)
-	{
-		if (UWidgetBlueprint* Live =
-			AsLiveWidgetBlueprint(LoadObject<UObject>(nullptr, *Out.ObjectPath), Out.FoundClass))
-		{
-			Out.Blueprint = Live;
-			return Out;
-		}
-
-		// Step 4. "Failed to find object 'Object /Game/x/WBP_Foo.WBP_Foo'" in
-		// the log means the package resolved but the object lookup inside it
-		// did not. Load the package explicitly and look again.
-		if (!PackageName.IsEmpty())
-		{
-			if (UPackage* Package = LoadPackage(nullptr, *PackageName, LOAD_None))
-			{
-				Package->FullyLoad();
-				const FString ObjectName = FPackageName::ObjectPathToObjectName(Out.ObjectPath);
-				if (UWidgetBlueprint* Live =
-					AsLiveWidgetBlueprint(FindObject<UObject>(Package, *ObjectName), Out.FoundClass))
-				{
-					Out.Blueprint = Live;
-					return Out;
-				}
-			}
-		}
 	}
 
 	if (!Out.FoundClass.IsEmpty())

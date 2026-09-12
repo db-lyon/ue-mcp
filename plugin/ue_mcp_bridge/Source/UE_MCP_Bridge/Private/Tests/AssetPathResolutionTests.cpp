@@ -317,6 +317,33 @@ bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("the resolver answers the live replacement"), Resolved == Live);
 	TestTrue(TEXT("and never the corpse"), Resolved != Corpse);
 
+	// An asset that is really on disk, which is what reaches the gated steps of
+	// the ladder: with no file and no registry entry they are skipped entirely.
+	{
+		const FString OnDiskPackage = FString(MCPAssetPathTestRoot) + TEXT("DT_OnDisk");
+		UPackage* DiskPackage = CreatePackage(*OnDiskPackage);
+		UDataTable* OnDisk = DiskPackage
+			? NewObject<UDataTable>(DiskPackage, FName(TEXT("DT_OnDisk")), RF_Public | RF_Standalone)
+			: nullptr;
+		if (OnDisk)
+		{
+			OnDisk->RowStruct = FTableRowBase::StaticStruct();
+			const FGCRootScope KeepOnDiskAlive(OnDisk);
+			if (SaveAssetPackage(OnDisk))
+			{
+				TestTrue(TEXT("a saved asset is seen without loading"),
+					MCPAssetExistsWithoutLoading(MCPAssetPathForms(OnDiskPackage)));
+				TestTrue(TEXT("and resolves through the ladder"),
+					MCPLoadAssetObject(OnDiskPackage) == OnDisk);
+			}
+			else
+			{
+				AddInfo(TEXT("SavePackage declined to write the probe; the on-disk assertions are skipped."));
+			}
+			DiskPackage->SetDirtyFlag(false);
+		}
+	}
+
 	// The predicate itself, so a caller reading it directly agrees.
 	TestFalse(TEXT("a flagged object is not live"), MCPIsLiveAssetObject(Corpse));
 	TestTrue(TEXT("the replacement is live"), MCPIsLiveAssetObject(Live));

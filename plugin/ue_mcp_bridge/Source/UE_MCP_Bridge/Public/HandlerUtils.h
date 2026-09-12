@@ -408,6 +408,10 @@ inline UObject* MCPLoadAssetObject(const FString& AssetPath)
 	// "Asset not found" for an asset asset(search) had just reported by that
 	// exact string, because the load stopped at a form the loader would not
 	// resolve on its own.
+	// Gated for the same reason as the package load below: LoadObject on a path
+	// with nothing behind it can force a blocking package search.
+	if (!MCPAssetExistsWithoutLoading(Forms)) return nullptr;
+
 	if (UObject* ViaInput = LoadObject<UObject>(nullptr, *AssetPath))
 	{
 		if (MCPIsLiveAssetObject(ViaInput)) return ViaInput;
@@ -423,7 +427,7 @@ inline UObject* MCPLoadAssetObject(const FString& AssetPath)
 	// Every step above rejected its candidate. A full load re-reads the package,
 	// gated on the asset existing so LoadPackage cannot force a blind search.
 	const FString PackageName = FPackageName::ObjectPathToPackageName(Forms.ObjectPath);
-	if (!PackageName.IsEmpty() && MCPAssetExistsWithoutLoading(Forms))
+	if (!PackageName.IsEmpty())
 	{
 		if (UPackage* Package = LoadPackage(nullptr, *PackageName, LOAD_None))
 		{
