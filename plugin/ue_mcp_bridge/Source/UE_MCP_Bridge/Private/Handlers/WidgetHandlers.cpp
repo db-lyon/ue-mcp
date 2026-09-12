@@ -133,18 +133,12 @@ static FString NormalizeWidgetBlueprintObjectPath(const FString& InAssetPath)
 	return Path;
 }
 
-/**
- * Accept a candidate only if it is a WidgetBlueprint the editor still consults.
- *
- * RF_NewerVersionExists is the flag a package reload leaves on the object it
- * replaced. Handing one of those back is exactly the failure #972 describes
- * after asset(force_reload): every write lands on a corpse, the real asset
- * never changes, and nothing reports an error. IsValid covers null and garbage.
- */
+/** A WidgetBlueprint the editor still consults. Liveness is
+ *  MCPIsLiveAssetObject's answer; what is widget-specific is the cast and
+ *  mapping a generated-class path back to its blueprint. */
 static UWidgetBlueprint* AsLiveWidgetBlueprint(UObject* Candidate, FString& OutFoundClass)
 {
-	if (!IsValid(Candidate)) return nullptr;
-	if (Candidate->HasAnyFlags(RF_NewerVersionExists)) return nullptr;
+	if (!MCPIsLiveAssetObject(Candidate)) return nullptr;
 
 	if (UWidgetBlueprint* AsBlueprint = Cast<UWidgetBlueprint>(Candidate))
 	{
@@ -162,24 +156,6 @@ static UWidgetBlueprint* AsLiveWidgetBlueprint(UObject* Candidate, FString& OutF
 	return nullptr;
 }
 
-/** True when the AssetRegistry or the filesystem says the asset is really there. */
-static bool WidgetBlueprintAssetExists(const FString& ObjectPath, const FString& PackageName)
-{
-	if (!PackageName.IsEmpty() && FPackageName::DoesPackageExist(PackageName))
-	{
-		return true;
-	}
-	// An asset created this session and not yet saved has no file, so the
-	// registry is the only witness. Never load anything to answer this.
-	if (FAssetRegistryModule* ARM =
-		FModuleManager::GetModulePtr<FAssetRegistryModule>(TEXT("AssetRegistry")))
-	{
-		const FAssetData Data = ARM->Get().GetAssetByObjectPath(FSoftObjectPath(ObjectPath));
-		if (Data.IsValid()) return true;
-	}
-	return false;
-}
-
 FWidgetBlueprintResolve ResolveWidgetBlueprint(const FString& AssetPath)
 {
 	FWidgetBlueprintResolve Out;
@@ -191,7 +167,8 @@ FWidgetBlueprintResolve ResolveWidgetBlueprint(const FString& AssetPath)
 	}
 
 	const FString PackageName = FPackageName::ObjectPathToPackageName(Out.ObjectPath);
-	Out.bAssetExists = WidgetBlueprintAssetExists(Out.ObjectPath, PackageName);
+	// The same existence answer the generic resolver uses.
+	Out.bAssetExists = MCPAssetExistsWithoutLoading(MCPAssetPathForms(Out.ObjectPath));
 
 	// Step 1. The object hash, first and cheapest. An asset already in memory
 	// answers here without the AssetRegistry round trip UEditorAssetLibrary

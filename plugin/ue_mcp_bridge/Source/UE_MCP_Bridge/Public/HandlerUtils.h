@@ -311,30 +311,57 @@ inline FMCPAssetPathForms MCPAssetPathForms(const FString& AssetPath)
 
 /** Is this candidate an asset the editor still consults?
  *
- *  A package reload does not free the object it replaced. It renames it aside,
- *  marks it RF_NewerVersionExists and leaves it in the object hash under a
- *  mangled name, while a freshly loaded object takes the real path. FindObject
- *  can still reach the corpse, and handing one back is silent in the worst
- *  way: a read reports the pre-reload values, and a write lands on an object
- *  nothing consults, reports success, and is gone on the next restart.
- *
- *  #972 found this for WidgetBlueprints and fixed it inside the widget
- *  resolver. #1074 is the same defect one layer down: asset(set_property) on
- *  one asset left later read_properties and list_properties calls answering
- *  "Asset not found" for assets that were never touched, and only an editor
- *  restart cleared it. Reloading a package the write touched is what puts a
- *  corpse in the hash, and MCPLoadAssetObject asked the hash first and
- *  returned whatever it got after checking only that it was not a UPackage.
- *
- *  IsValid covers null, pending kill and garbage. The flag check covers the
- *  reload corpse. Both are cheap, and the caller's fallbacks below still run,
- *  so a rejected candidate becomes a fresh load rather than an error. */
+ *  RF_NewerVersionExists marks an object a package reload replaced. It stays
+ *  reachable, and resolving to one is silent: reads report stale values and
+ *  writes land where nothing looks (#972, #1074). */
 inline bool MCPIsLiveAssetObject(const UObject* Candidate)
 {
 	if (!IsValid(Candidate)) return false;
 	if (Candidate->HasAnyFlags(RF_NewerVersionExists)) return false;
 	if (Candidate->IsA<UPackage>()) return false;
 	return true;
+}
+
+/** Look an asset path up in the Asset Registry without loading anything.
+ *  Tries the exact object path first, then any asset the registry holds in
+ *  that package, which is what distinguishes "the package has an asset under
+ *  a different name" from "there is nothing there at all". */
+inline FAssetData MCPFindAssetDataForPath(const FMCPAssetPathForms& Forms)
+{
+	if (Forms.PackagePath.IsEmpty()) return FAssetData();
+
+	FAssetRegistryModule* Module = FModuleManager::GetModulePtr<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	if (!Module) return FAssetData();
+	IAssetRegistry& Registry = Module->Get();
+
+	if (!Forms.ObjectPath.IsEmpty())
+	{
+		const FAssetData Exact = Registry.GetAssetByObjectPath(FSoftObjectPath(Forms.ObjectPath));
+		if (Exact.IsValid()) return Exact;
+	}
+
+	TArray<FAssetData> InPackage;
+	Registry.GetAssetsByPackageName(FName(*Forms.PackagePath), InPackage);
+	for (const FAssetData& Candidate : InPackage)
+	{
+		if (Candidate.IsValid()) return Candidate;
+	}
+	return FAssetData();
+}
+
+/** Is there really an asset at this path, without loading anything?
+ *
+ *  Both sources, because an unsaved asset has no file and the registry is its
+ *  only witness. Shared so the resolvers cannot disagree about it. */
+inline bool MCPAssetExistsWithoutLoading(const FMCPAssetPathForms& Forms)
+{
+	if (!Forms.PackagePath.IsEmpty()
+		&& FPackageName::IsValidLongPackageName(Forms.PackagePath)
+		&& FPackageName::DoesPackageExist(Forms.PackagePath))
+	{
+		return true;
+	}
+	return MCPFindAssetDataForPath(Forms).IsValid();
 }
 
 /** Load the asset at `AssetPath`, the way asset(read) does.
@@ -348,8 +375,7 @@ inline bool MCPIsLiveAssetObject(const UObject* Candidate)
  *  "Asset not found" or "Asset is not a DataTable" for assets that
  *  asset(read) opened and correctly named as DataTables (#930).
  *
- *  Every candidate is revalidated before it is handed back (#1074). See
- *  MCPIsLiveAssetObject below for what that rules out and why.
+ *  Every candidate is revalidated by MCPIsLiveAssetObject above (#1074).
  *
  *  This lives here rather than as a copy per handler file: the asset handlers
  *  share one unity blob, and a second copy would either collide at compile
@@ -394,13 +420,10 @@ inline UObject* MCPLoadAssetObject(const FString& AssetPath)
 		}
 	}
 
-	// #1074: every step above rejected its candidate. If that was because the
-	// hash is holding a reload corpse, the package still on disk is the live
-	// asset and a full load re-reads it. Only attempted when the object path
-	// resolves to a real package, because LoadPackage on a path with nothing
-	// behind it forces a blocking package search.
+	// Every step above rejected its candidate. A full load re-reads the package,
+	// gated on the asset existing so LoadPackage cannot force a blind search.
 	const FString PackageName = FPackageName::ObjectPathToPackageName(Forms.ObjectPath);
-	if (!PackageName.IsEmpty() && FPackageName::DoesPackageExist(PackageName))
+	if (!PackageName.IsEmpty() && MCPAssetExistsWithoutLoading(Forms))
 	{
 		if (UPackage* Package = LoadPackage(nullptr, *PackageName, LOAD_None))
 		{
@@ -415,31 +438,23 @@ inline UObject* MCPLoadAssetObject(const FString& AssetPath)
 	return nullptr;
 }
 
-/** Look an asset path up in the Asset Registry without loading anything.
- *  Tries the exact object path first, then any asset the registry holds in
- *  that package, which is what distinguishes "the package has an asset under
- *  a different name" from "there is nothing there at all". */
-inline FAssetData MCPFindAssetDataForPath(const FMCPAssetPathForms& Forms)
+/** Is a play-in-editor or simulate session running right now?
+ *
+ *  The editor's asset loader refuses every call in play mode and logs the
+ *  reason where a bridge caller cannot see it (#1065). */
+inline bool MCPIsPlayInEditorActive()
 {
-	if (Forms.PackagePath.IsEmpty()) return FAssetData();
+	return GEditor && (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor);
+}
 
-	FAssetRegistryModule* Module = FModuleManager::GetModulePtr<FAssetRegistryModule>(TEXT("AssetRegistry"));
-	if (!Module) return FAssetData();
-	IAssetRegistry& Registry = Module->Get();
-
-	if (!Forms.ObjectPath.IsEmpty())
-	{
-		const FAssetData Exact = Registry.GetAssetByObjectPath(FSoftObjectPath(Forms.ObjectPath));
-		if (Exact.IsValid()) return Exact;
-	}
-
-	TArray<FAssetData> InPackage;
-	Registry.GetAssetsByPackageName(FName(*Forms.PackagePath), InPackage);
-	for (const FAssetData& Candidate : InPackage)
-	{
-		if (Candidate.IsValid()) return Candidate;
-	}
-	return FAssetData();
+/** Appended to a load failure while PIE is running, empty otherwise. One
+ *  wording, shared by every resolver. */
+inline FString MCPPlayInEditorLoadNote()
+{
+	if (!MCPIsPlayInEditorActive()) return FString();
+	return TEXT(" A play-in-editor session is running, which changes how assets load: ")
+		TEXT("the editor's own asset loader refuses every call while in play mode. ")
+		TEXT("Stop play with editor(action=\"stop_pie\") and retry before treating this as an asset problem.");
 }
 
 /** The answer for a path MCPLoadAssetObject could not resolve.
@@ -451,35 +466,6 @@ inline FAssetData MCPFindAssetDataForPath(const FMCPAssetPathForms& Forms)
  *  package is on disk, reports what the Asset Registry knows without loading
  *  anything, and, when the registry holds the asset under a different object
  *  path, names the form that would have worked. */
-/** Is a play-in-editor or simulate session running right now?
- *
- *  #1065: this changes how asset loads behave, and the difference is invisible
- *  in the result. UEditorAssetLibrary::LoadAsset refuses outright while the
- *  editor is in play mode, and the engine logs the reason ("The Editor is
- *  currently in a play mode.") somewhere a bridge caller never sees. A report
- *  spent a debugging session on a WidgetBlueprint that was present, valid and
- *  loadable, because the failure it was handed was the same sentence a missing
- *  or corrupt asset produces.
- *
- *  So every load failure says whether PIE was running when it happened. It is
- *  not asserted to be the cause: it is the one piece of state the caller
- *  cannot see and cannot rule out on their own. */
-inline bool MCPIsPlayInEditorActive()
-{
-	return GEditor && (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor);
-}
-
-/** The sentence appended to a load failure while PIE is running, empty
- *  otherwise. One wording, so the widget resolver and the generic asset
- *  resolver cannot disagree about it. */
-inline FString MCPPlayInEditorLoadNote()
-{
-	if (!MCPIsPlayInEditorActive()) return FString();
-	return TEXT(" A play-in-editor session is running, which changes how assets load: ")
-		TEXT("the editor's own asset loader refuses every call while in play mode. ")
-		TEXT("Stop play with editor(action=\"stop_pie\") and retry before treating this as an asset problem.");
-}
-
 inline TSharedPtr<FJsonValue> MCPAssetNotFoundError(const FString& AssetPath, const FString& Context = FString())
 {
 	const FMCPAssetPathForms Forms = MCPAssetPathForms(AssetPath);
@@ -540,9 +526,8 @@ inline TSharedPtr<FJsonValue> MCPAssetNotFoundError(const FString& AssetPath, co
 			*Prefix, *Forms.PackagePath, *AssetPath, *Forms.ObjectPath);
 	}
 
-	// Appended to the message rather than replacing a branch: the branch says
-	// what the registry and the filesystem report, which stays true, and this
-	// says what else was going on.
+	// Appended, not substituted: what the registry and filesystem report stays
+	// true and stays first.
 	const FString PlayNote = MCPPlayInEditorLoadNote();
 	if (!PlayNote.IsEmpty()) Message += PlayNote;
 
