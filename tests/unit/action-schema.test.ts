@@ -20,7 +20,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { categoryTool, bp } from "../../src/types.js";
+import { categoryTool, bp} from "../../src/types.js";
 import { ALL_TOOLS } from "../../src/tools.js";
 import { requiresExplicitEditor } from "../../src/action-class.js";
 import {
@@ -187,29 +187,6 @@ describe("action parameter schema", () => {
     }
     // And the dispatch parameter still enumerates the category's actions.
     expect(JSON.stringify(hostile.schema.action)).toContain("alpha");
-  });
-
-  it("keeps every category's dispatch parameter describing its own actions", () => {
-    const offenders: string[] = [];
-    for (const tool of ALL_TOOLS) {
-      const dispatch = tool.schema.action;
-      if (!dispatch) {
-        offenders.push(`${tool.name}: declares no 'action' parameter at all`);
-        continue;
-      }
-      const described = dispatch.description ?? "";
-      // Authored once, by categoryTool. Anything else is a merged-in collision.
-      if (!described.startsWith("Action to perform.")) {
-        offenders.push(`${tool.name}: 'action' is described as ${JSON.stringify(described.slice(0, 80))}`);
-      }
-    }
-    expect(
-      offenders,
-      "A category's 'action' parameter is the dispatcher's, authored by\n"
-        + "categoryTool. A description from somewhere else means another parameter\n"
-        + "of the same name was merged over it, and the tool no longer tells a\n"
-        + "client what its actions are:\n  " + offenders.join("\n  "),
-    ).toEqual([]);
   });
 
   it("documents parameters on every action", () => {

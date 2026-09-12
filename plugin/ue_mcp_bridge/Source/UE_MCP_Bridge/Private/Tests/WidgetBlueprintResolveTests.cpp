@@ -24,7 +24,8 @@ bool FWidgetBlueprintResolvePathTest::RunTest(const FString& Parameters)
 	// path that names nothing, and the automation framework fails a test on any
 	// unexpected Error. Asserting what a deliberate miss reports therefore
 	// failed the test doing the asserting. Declared the way SequencerHandlerTests
-	// declares it; a count of 0 means any number of occurrences.
+	// declares it; count 0 means it must occur, so a test that stops
+	// provoking it fails.
 	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
 
 	using namespace MCPWidget;
