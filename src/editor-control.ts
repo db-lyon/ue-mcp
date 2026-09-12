@@ -16,7 +16,7 @@ import {
   readLogState,
   type EngineState,
 } from "./engine-observer.js";
-import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, resolveBridgeTarget } from "./editor-target.js";
+import { findLiveInstanceRecord, isPidAlive, lockfileIsFromThisLaunch, readBridgeInstanceRecords, resolveBridgeTarget } from "./editor-target.js";
 import { startProgress } from "./ui/progress.js";
 import { getDialogMode, getUserStatePath, type DialogMode } from "./user-state.js";
 import { DialogGuard, STATUS_STALE_AFTER_MS, oneLine, type DialogPhase } from "./dialog-guard.js";
@@ -1201,6 +1201,19 @@ export interface StopEditorResult {
   refusedReason?: "unsaved-work" | "unknown-dirty-state";
   /** Every package that was dirty when the stop was asked for. */
   dirtyPackages?: string[];
+  /**
+   * Other editors of THIS project still running after the stop (#1072).
+   *
+   * A stop is aimed at one editor, by the port this project published, and
+   * that is correct. What it did not say is that it aimed at one: with two
+   * editors of a project open, the call closed one and reported plain success,
+   * and a caller with no reason to suspect a second editor read that as "this
+   * project has no editor running" and acted on it.
+   *
+   * Present only when there is something to report, so an ordinary
+   * single-editor stop is unchanged.
+   */
+  remainingInstances?: Array<{ pid: number; port: number }>;
 }
 
 /**
@@ -1290,6 +1303,47 @@ function unsavedWorkRefusal(dirty: string[]): string {
  * The port comes from what this project published and nowhere else, and the
  * process behind it is checked before the quit goes out (#819).
  */
+/**
+ * Editors of this project that are still running after one was stopped.
+ *
+ * #1072: two editors of one project share a `Saved/UE_MCP_Bridge/`, and the
+ * quitting one takes port.json with it. #934 taught the client to recover the
+ * survivor's address from its own instance record, so the survivor is reachable
+ * again - but the stop that left it there still reported plain success, with
+ * nothing saying an editor of this project was still up.
+ *
+ * Both sources have to agree. An instance record can outlive a crash, and a
+ * running process may have published none, so a record is only reported when a
+ * live editor process holding this project is behind it.
+ *
+ * `stoppedPid` is excluded: it is the editor that was just asked to quit, and
+ * its own record may not be deleted yet at the moment this runs.
+ * so the filtering is testable without real
+ * processes.
+ */
+export async function findRemainingInstances(
+  projectDir: string | undefined,
+  projectPath: string | null | undefined,
+  stoppedPid: number | null,
+  listEditors: (p?: string | null) => Promise<Array<{ pid: number }>> = findInteractiveEditors,
+): Promise<Array<{ pid: number; port: number }>> {
+  if (!projectDir) return [];
+  let live: Array<{ pid: number }>;
+  try {
+    live = await listEditors(projectPath);
+  } catch {
+    // Process enumeration is best effort. Failing it must never turn a
+    // successful stop into an error.
+    return [];
+  }
+  const livePids = new Set(live.map((p) => p.pid));
+  return readBridgeInstanceRecords(projectDir)
+    .filter((r) => r.state !== "bind-failed")
+    .filter((r) => r.pid !== stoppedPid)
+    .filter((r) => livePids.has(r.pid))
+    .map((r) => ({ pid: r.pid, port: r.port }));
+}
+
 export async function stopEditor(
   projectDir?: string,
   opts: {
@@ -1446,11 +1500,25 @@ export async function stopEditor(
     await new Promise((resolve) => setTimeout(resolve, confirmPollMs));
     if (!(await isBridgeAvailable(host, port))) {
       quitsInFlight.delete(editorKey);
+      // #1072: the stop aimed at one editor, which is correct, and now says
+      // so when that was not the only one. Without this a caller reads plain
+      // success as "no editor of this project is running".
+      const remaining = await findRemainingInstances(projectDir, projectPath, ownership.pid ?? null);
+      const remainingNote = remaining.length === 0
+        ? ""
+        : ` ${remaining.length} other editor${remaining.length === 1 ? "" : "s"} of this project ${
+            remaining.length === 1 ? "is" : "are"} still running (${
+            remaining.map((r) => `pid ${r.pid} on port ${r.port}`).join(", ")
+          }). This call closed one editor, the one this project's lockfile named. Stop ${
+            remaining.length === 1 ? "it" : "them"} by targeting ${
+            remaining.length === 1 ? "its" : "their"} own editor session.`;
       return {
         success: true,
         message:
           "Editor quit itself via the bridge." +
-          (ownership.healed ? ` ${ownership.healed}` : ""),
+          (ownership.healed ? ` ${ownership.healed}` : "") +
+          remainingNote,
+        ...(remaining.length > 0 ? { remainingInstances: remaining } : {}),
         // Reported whenever a dialog was in the way, including when answering
         // it is what let the stop through, so the caller can always see which
         // mode applied and why.
