@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { categoryTool, bp, type ActionSpec, type ToolDef } from "../types.js";
+import { categoryTool, bp, stripAction, type ActionSpec, type ToolDef } from "../types.js";
 import { Vec3, Rotator } from "../schemas.js";
 import { PAGINATION_SCHEMA, paged } from "../pagination.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/niagara.generated.js";
@@ -131,8 +131,9 @@ export const niagaraTool: ToolDef = categoryTool(
           if (action === "batch") { results.push({ action, error: "nested batch not allowed" }); return { results, stoppedAt: i }; }
           try {
             const subParams = { ...(op.params ?? {}), action } as Record<string, unknown>;
+            const forBridge = stripAction(subParams);
             const result = await (spec as ActionSpec).handler?.(ctx, subParams)
-              ?? (spec.bridge ? await ctx.bridge.call(spec.bridge, spec.mapParams ? spec.mapParams(subParams) : (() => { const { action: _, ...r } = subParams; return r; })(), spec.timeoutMs) : undefined);
+              ?? (spec.bridge ? await ctx.bridge.call(spec.bridge, spec.mapParams ? spec.mapParams(forBridge) : forBridge, spec.timeoutMs) : undefined);
             results.push({ action, result });
           } catch (e) {
             results.push({ action, error: (e as Error).message });

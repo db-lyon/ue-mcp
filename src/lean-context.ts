@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { actionEnum, categoryTool, takeTimeout, type ActionSpec, type ToolDef } from "./types.js";
+import { actionEnum, categoryTool, stripAction, takeTimeout, type ActionSpec, type ToolDef } from "./types.js";
 import { applyCategoryFolding } from "./call-pipeline.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { actionSchema } from "./action-schema.js";
@@ -269,7 +269,8 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
         });
         if (spec.handler) return spec.handler(ctx, args);
         if (spec.bridge) {
-          const mapped = spec.mapParams ? spec.mapParams(args) : args;
+          const base = stripAction(args);
+          const mapped = spec.mapParams ? spec.mapParams(base) : base;
           return ctx.bridge.call(spec.bridge, mapped, requestedTimeout ?? spec.timeoutMs);
         }
         throw new McpError(ErrorCode.NO_HANDLER, `Action ${category}.${method} has no handler.`);

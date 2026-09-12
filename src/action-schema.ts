@@ -21,13 +21,7 @@
  * and a unit test gates the whole surface on it.
  */
 import { z } from "zod";
-import { createRequire } from "node:module";
-
-// JSON by require, not by import: an ESM `import ... from "*.json"` needs an
-// import attribute that this tsconfig's module setting rejects, so the emitted
-// dist/ module fails to load at runtime.
-const requireJson = createRequire(import.meta.url);
-const routingParamNames = requireJson("./routing-params.json") as { routingParams: string[] };
+import { ROUTING_PARAM_NAMES } from "./routing-params.js";
 import type { ActionEffectSource, ActionSpec, ToolDef } from "./types.js";
 import type { ActionClass } from "./action-class.js";
 
@@ -706,7 +700,7 @@ export function forwardedParams(spec: ActionSpec): string[] {
  *
  *  Also the set a generated surface must never declare, so
  *  scripts/generate-epic-actions.mjs imports it rather than keeping a copy. */
-export const ROUTING_PARAMS: ReadonlySet<string> = new Set(routingParamNames.routingParams);
+export const ROUTING_PARAMS: ReadonlySet<string> = new Set(ROUTING_PARAM_NAMES);
 
 /** Build the full schema for one action of one tool. */
 export function actionSchema(tool: ToolDef, action: string): ActionSchema {

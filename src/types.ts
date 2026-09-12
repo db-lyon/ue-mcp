@@ -677,7 +677,10 @@ export function categoryTool(
   return def;
 }
 
-function stripAction(params: Record<string, unknown>): Record<string, unknown> {
+/** Drop the dispatch key. Every route that hands a bag to a bridge action must
+ *  call this FIRST: a mapParams that forwards its whole bag would otherwise
+ *  send the action's own name as an argument. */
+export function stripAction(params: Record<string, unknown>): Record<string, unknown> {
   const { action: _, ...rest } = params;
   return rest;
 }

@@ -112,9 +112,20 @@ function prose(description) {
  * Declaring one here would overwrite the category's own parameter, so such an
  * argument goes inside `input` instead.
  */
-const RESERVED_TOP_LEVEL = new Set(
-  JSON.parse(fs.readFileSync(path.join(ROOT, "src", "routing-params.json"), "utf8")).routingParams,
-);
+/** The names from src/routing-params.ts, the single source. Read as text
+ *  because this script runs before anything is built. Throws rather than
+ *  guessing, so a rename here cannot silently un-reserve a name. */
+function readRoutingParamNames() {
+  const file = path.join(ROOT, "src", "routing-params.ts");
+  const text = fs.readFileSync(file, "utf8");
+  const match = /export const ROUTING_PARAM_NAMES\s*=\s*\[([^\]]*)\]/.exec(text);
+  if (!match) throw new Error(`Could not read ROUTING_PARAM_NAMES from ${file}`);
+  const names = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  if (names.length === 0) throw new Error(`ROUTING_PARAM_NAMES in ${file} is empty`);
+  return names;
+}
+
+const RESERVED_TOP_LEVEL = new Set(readRoutingParamNames());
 
 /** Tool argument names this generator must not declare at the top level. */
 function reservedArgs(inputSchema) {

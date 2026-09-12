@@ -25,7 +25,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { ALL_TOOLS } from "../../src/tools.js";
-import { actionSchema } from "../../src/action-schema.js";
+import { actionSchema, ROUTING_PARAMS} from "../../src/action-schema.js";
 
 /** The `Params:` clause of a description, cut where the prose resumes. */
 function paramsClause(description: string): string | undefined {
@@ -63,7 +63,7 @@ function topLevelWords(clause: string): string[] {
 }
 
 /** Consumed by the dispatcher, accepted by every action, documented nowhere. */
-const ROUTING: ReadonlySet<string> = new Set(["action", "timeoutMs", "select", "omit", "editor", "toEditor"]);
+const ROUTING: ReadonlySet<string> = ROUTING_PARAMS;
 
 /**
  * The four places on the surface where the oracle's assumption breaks: a word

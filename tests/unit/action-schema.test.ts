@@ -122,6 +122,46 @@ describe("action parameter schema", () => {
     ).toEqual([]);
   });
 
+  // niagara(batch) dispatches to other actions itself, so it never reaches the
+  // check above and carried the same leak after types.ts was fixed. The probe
+  // is a spec that forwards its bag verbatim, because no shipped niagara action
+  // does today and a test that cannot fail proves nothing.
+  it("never leaks the dispatch key through a category's own batch route", async () => {
+    const niagara = ALL_TOOLS.find((t) => t.name === "niagara")!;
+    const probe = "epic_leak_probe";
+    (niagara.actions as Record<string, unknown>)[probe] = bp(
+      "read",
+      "Probe. Params: none",
+      "probe_method",
+      (p) => ({ ...p }),
+    );
+    try {
+      const seen: Array<Record<string, unknown>> = [];
+      const ctx = {
+        bridge: {
+          isConnected: true,
+          call: async (_m: string, params: Record<string, unknown>) => { seen.push(params); return {}; },
+          getTarget: () => ({ projectPath: null, port: 0, portSource: "default", verified: true }),
+          connect: async () => {},
+          retargetProject: () => ({}),
+        },
+        project: {},
+      } as never;
+
+      await niagara.handler(ctx, { action: "batch", ops: [{ action: probe }] });
+
+      expect(seen.length, "the probe should have reached the bridge").toBe(1);
+      expect(
+        Object.prototype.hasOwnProperty.call(seen[0], "action"),
+        "A batch route hands each op's bag to that action's mapParams, so it\n"
+          + "must strip the dispatch key exactly as the tool handler does. Payload:\n"
+          + JSON.stringify(seen[0]),
+      ).toBe(false);
+    } finally {
+      delete (niagara.actions as Record<string, unknown>)[probe];
+    }
+  });
+
   it("keeps every category's dispatch parameter describing its own actions", () => {
     const offenders: string[] = [];
     for (const tool of ALL_TOOLS) {

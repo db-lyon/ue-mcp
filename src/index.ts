@@ -30,6 +30,7 @@ import {
   type ElicitFn,
   type ProgressFn,
   type ProgressUpdate,
+  stripAction,
 } from "./types.js";
 import { McpError, ErrorCode } from "./errors.js";
 import * as nodePath from "node:path";
@@ -784,7 +785,7 @@ async function main() {
         };
       }
 
-      const { action: _, ...taskParams } = params;
+      const taskParams = stripAction(params);
       const flowCtx: FlowContext = {
         bridge: session.guarded,
         project: session.project,
