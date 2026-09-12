@@ -18,16 +18,28 @@
 
 namespace
 {
-	/** Every UEdGraph reachable from an asset, including graphs nested inside
-	 *  other graphs' nodes (a state machine, a collapsed node, a macro). */
+	/** Every UEdGraph reachable from an asset.
+	 *
+	 *  Two routes, because a graph reaches its asset in two ways. Most hang off
+	 *  it as inners, including graphs nested inside other graphs' nodes (a
+	 *  state machine, a collapsed node, a macro). A Material or a PCG graph is
+	 *  instead held by a UPROPERTY on the asset and outered elsewhere, so an
+	 *  inner walk alone reports those assets as having no graph at all. */
 	void CollectGraphs(UObject* Root, TArray<UEdGraph*>& Out)
 	{
 		if (!Root) return;
+
 		TArray<UObject*> Inner;
-		GetObjectsWithOuter(Root, Inner, /*bIncludeNestedObjects=*/true);
+		MCPGetNestedSubobjects(Root, Inner);
 		for (UObject* Object : Inner)
 		{
-			if (UEdGraph* Graph = Cast<UEdGraph>(Object))
+			if (UEdGraph* Graph = Cast<UEdGraph>(Object)) Out.AddUnique(Graph);
+		}
+
+		for (TFieldIterator<FObjectPropertyBase> It(Root->GetClass()); It; ++It)
+		{
+			if (!It->PropertyClass || !It->PropertyClass->IsChildOf(UEdGraph::StaticClass())) continue;
+			if (UEdGraph* Graph = Cast<UEdGraph>(It->GetObjectPropertyValue_InContainer(Root)))
 			{
 				Out.AddUnique(Graph);
 			}
@@ -184,9 +196,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 		Empty->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
 		Empty->SetArrayField(TEXT("graphs"), TArray<TSharedPtr<FJsonValue>>());
 		Empty->SetNumberField(TEXT("graphCount"), 0);
+		// States what was searched, not what the asset "has". Material and
+		// PCGGraph keep their editor graph outside both routes, so an empty
+		// answer for those is a limit of this reader rather than a fact about
+		// the asset.
 		Empty->SetStringField(TEXT("note"), FString::Printf(
-			TEXT("'%s' is a %s and holds no UEdGraph, so it has no node graph to read. This action reads assets ")
-			TEXT("built on the engine's EdGraph (CustomizableObject, Material, AnimBP, Niagara and the rest)."),
+			TEXT("No UEdGraph was reachable from '%s' (a %s). Searched its subobjects and its own graph-typed ")
+			TEXT("properties, which is where a Blueprint, AnimBP, Niagara or CustomizableObject graph lives. ")
+			TEXT("Material and PCGGraph hold their editor graph elsewhere and are not readable this way."),
 			*AssetPath, *Asset->GetClass()->GetName()));
 		return MCPResult(Empty);
 	}
@@ -194,7 +211,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 	TArray<TSharedPtr<FJsonValue>> GraphsJson;
 	int32 TotalNodes = 0;
 	int32 TotalPins = 0;
-	int32 TotalLinks = 0;
 	TSet<FWireKey> AllWires;
 	bool bTruncated = false;
 
@@ -231,7 +247,6 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 
 		TotalNodes += NodesJson.Num();
 		TotalPins += GraphPins;
-		TotalLinks += GraphLinks;
 		AllWires.Append(GraphWires);
 		GraphsJson.Add(MakeShared<FJsonValueObject>(GraphJson));
 	}
@@ -241,7 +256,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetGraph(const TSharedPtr<FJsonObje
 	Result->SetStringField(TEXT("assetClass"), Asset->GetClass()->GetName());
 	Result->SetArrayField(TEXT("graphs"), GraphsJson);
 	Result->SetNumberField(TEXT("graphCount"), GraphsJson.Num());
-	Result->SetNumberField(TEXT("nodeCount"), TotalNodes);
+	Result->SetNumberField(TEXT("nodesReported"), TotalNodes);
 	Result->SetNumberField(TEXT("pinCount"), TotalPins);
 	Result->SetNumberField(TEXT("connectionCount"), AllWires.Num());
 	if (bTruncated)

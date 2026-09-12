@@ -144,7 +144,8 @@ static UWidgetBlueprint* AsLiveWidgetBlueprint(UObject* Candidate, FString& OutF
 	{
 		return AsBlueprint;
 	}
-	// A caller who passed the generated class path gets the blueprint behind it.
+	// A UClass reaches here only from a caller that resolved one directly; the
+	// _C spelling is normalized away before the lookup.
 	if (UClass* AsClass = Cast<UClass>(Candidate))
 	{
 		if (UWidgetBlueprint* Generated = Cast<UWidgetBlueprint>(AsClass->ClassGeneratedBy))
