@@ -263,6 +263,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 {
+	// The on-disk probe below deliberately reaches the editor loader on a mount
+	// the registry does not index, which the loader logs as an Error.
+	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
+
 	// #1074: a flagged object must never be resolved to. Reproduced by its
 	// observable effect rather than by running a real reload.
 	const FScopedAssetPathTestMount Mount;
@@ -317,30 +321,47 @@ bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("the resolver answers the live replacement"), Resolved == Live);
 	TestTrue(TEXT("and never the corpse"), Resolved != Corpse);
 
-	// An asset that is really on disk, which is what reaches the gated steps of
-	// the ladder: with no file and no registry entry they are skipped entirely.
+	// An asset on disk and NOT in memory: the only shape that gets past step 1
+	// to the gate and the loads behind it. Holding a live pointer would let
+	// FindObject answer and the gated half would never run.
 	{
 		const FString OnDiskPackage = FString(MCPAssetPathTestRoot) + TEXT("DT_OnDisk");
-		UPackage* DiskPackage = CreatePackage(*OnDiskPackage);
-		UDataTable* OnDisk = DiskPackage
-			? NewObject<UDataTable>(DiskPackage, FName(TEXT("DT_OnDisk")), RF_Public | RF_Standalone)
-			: nullptr;
-		if (OnDisk)
+		const FString OnDiskObject = OnDiskPackage + TEXT(".DT_OnDisk");
+		bool bWrote = false;
 		{
-			OnDisk->RowStruct = FTableRowBase::StaticStruct();
-			const FGCRootScope KeepOnDiskAlive(OnDisk);
-			if (SaveAssetPackage(OnDisk))
+			UPackage* DiskPackage = CreatePackage(*OnDiskPackage);
+			if (UDataTable* OnDisk = DiskPackage
+				? NewObject<UDataTable>(DiskPackage, FName(TEXT("DT_OnDisk")), RF_Public | RF_Standalone)
+				: nullptr)
+			{
+				OnDisk->RowStruct = FTableRowBase::StaticStruct();
+				bWrote = SaveAssetPackage(OnDisk);
+				DiskPackage->SetDirtyFlag(false);
+			}
+		}
+
+		if (bWrote)
+		{
+			// Drop it from memory so the object hash cannot answer.
+			CollectGarbage(RF_NoFlags, /*bPerformFullPurge=*/true);
+
+			if (FindObject<UObject>(nullptr, *OnDiskObject) == nullptr)
 			{
 				TestTrue(TEXT("a saved asset is seen without loading"),
 					MCPAssetExistsWithoutLoading(MCPAssetPathForms(OnDiskPackage)));
-				TestTrue(TEXT("and resolves through the ladder"),
-					MCPLoadAssetObject(OnDiskPackage) == OnDisk);
+				UObject* FromDisk = MCPLoadAssetObject(OnDiskPackage);
+				TestNotNull(TEXT("an asset only on disk resolves past the gate"), FromDisk);
+				TestTrue(TEXT("and it is the DataTable that was written"),
+					Cast<UDataTable>(FromDisk) != nullptr);
 			}
 			else
 			{
-				AddInfo(TEXT("SavePackage declined to write the probe; the on-disk assertions are skipped."));
+				AddInfo(TEXT("The probe survived the purge, so step 1 still answers and the gated steps are not exercised."));
 			}
-			DiskPackage->SetDirtyFlag(false);
+		}
+		else
+		{
+			AddInfo(TEXT("SavePackage declined to write the probe; the on-disk assertions are skipped."));
 		}
 	}
 
