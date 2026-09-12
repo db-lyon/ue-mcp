@@ -61,6 +61,14 @@ The merge style follows the commit count, and writing five commits only to squas
 - The `epic_*` actions enrichment injects are **sorted in the recording**, alongside the path, port and timestamp rewrites. Unreal's toolset registry promises the set of tools, not the sequence, and a restart that reshuffles it would otherwise report a surface change on a healthy editor. Only the snapshot is normalised; the server advertises exactly what it always did. A category's own actions keep their declared order, which is authored and does carry meaning.
 - The editor-connected half (`tests/golden/editor-connected.json`) is the same recording made with a live editor attached, guarded by `tests/live/golden-connected.test.ts` in the live tests because it needs a running editor. Re-record it with `npm run golden:record -- --connected`. The recorder asserts the surface really was enriched from the live editor rather than a cache or the baked snapshot, so the two baselines cannot be recorded from the same source by accident.
 
+### C++ automation tests
+
+`npm run test:automation` runs the plugin's own `UE.MCP.*` suite inside a running editor and prints one line per failure. Same target guard as the smoke harness: it confirms the attached editor has `tests/ue_mcp` open and aborts otherwise. `--filter` narrows, `--verbose` prints every error line.
+
+- These tests only exist inside Unreal, so the bridge is the only way to reach them. Do not hand-roll a WebSocket script for it.
+- The suite is NOT green on main. Six failures are long-standing and unrelated to each other, so check whether a failure predates your branch before treating it as yours.
+- A run that never returns is usually a test that took the editor down; the runner says so rather than hanging.
+
 ### Live tests
 
 `npm run test:live` runs `tests/live/` against an editor that is **already running**, through the shipped server: the connected golden baseline, per-path dispatch and leak assertions, addressing, gating, the union surface, and the records the bridge publishes. It never starts or stops an editor.
@@ -178,6 +186,7 @@ npm run build           # Build the UE C++ plugin only
 npx tsc --noEmit        # Type-check TS
 npm run test:smoke      # Live smoke tests (tests/ue_mcp only)
 npm run test:live       # Live tests against a running editor (tests/ue_mcp only)
+npm run test:automation # The plugin's C++ UE.MCP.* suite, through the bridge
 npm run golden:record   # Re-record tests/golden/editor-down.json (review the diff)
 npm run release:notes   # Compose cumulative stable notes from a version's prereleases
 npm test                # Vitest unit tests
