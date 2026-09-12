@@ -21,7 +21,13 @@
  * and a unit test gates the whole surface on it.
  */
 import { z } from "zod";
-import routingParamNames from "./routing-params.json";
+import { createRequire } from "node:module";
+
+// JSON by require, not by import: an ESM `import ... from "*.json"` needs an
+// import attribute that this tsconfig's module setting rejects, so the emitted
+// dist/ module fails to load at runtime.
+const requireJson = createRequire(import.meta.url);
+const routingParamNames = requireJson("./routing-params.json") as { routingParams: string[] };
 import type { ActionEffectSource, ActionSpec, ToolDef } from "./types.js";
 import type { ActionClass } from "./action-class.js";
 

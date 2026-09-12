@@ -289,6 +289,9 @@ jobs:
           test -s dist/index.js || (echo "dist/index.js missing or empty" && exit 1)
           test -s dist/init.js || (echo "dist/init.js missing or empty" && exit 1)
           test -s dist/update.js || (echo "dist/update.js missing or empty" && exit 1)
+          # Non-empty is not loadable. The unit suite runs from source, so a
+          # module that only fails once emitted reaches npm otherwise.
+          node -e "import('./dist/tools.js').then(()=>console.log('dist loads')).catch(e=>{console.error(e.message);process.exit(1)})"
 
       - name: Tag release (before publish)
         if: steps.version.outputs.should_publish == 'true'
