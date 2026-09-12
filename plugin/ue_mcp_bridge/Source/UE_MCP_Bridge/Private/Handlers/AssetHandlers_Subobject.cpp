@@ -28,6 +28,9 @@
 #include "AssetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphNode.h"
 #include "HandlerJsonProperty.h"
 
 #include "Dom/JsonObject.h"
@@ -129,6 +132,34 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 	{
 		return MCPClassUnusableError(ClassName, Class, TEXT("class_object"),
 			TEXT("it is a class object rather than an instantiable type. Pass the class you want an INSTANCE of."));
+	}
+
+	// #1059: a graph node built here is structurally dead and looks like a
+	// success. Two things go wrong at once. NewObject does not run the node's
+	// AllocateDefaultPins, so it has no pins and can never be wired to
+	// anything, and the outer is the ASSET rather than the graph the node has
+	// to belong to. Appending that to UEdGraph::Nodes - which IS a UPROPERTY,
+	// so the append reports previousNum 58 and newNum 59 quite happily - leaves
+	// a node the editor cannot draw, in a graph that now fails to open.
+	//
+	// Refused rather than documented, because the whole failure is that it
+	// reports success. A node is created through its graph's own schema, which
+	// allocates the pins and parents it correctly.
+	if (Class->IsChildOf(UEdGraphNode::StaticClass()))
+	{
+		return MCPClassUnusableError(ClassName, Class, TEXT("graph_node"),
+			TEXT("a graph node is created through its graph's schema, which allocates its pins and parents it to "
+			     "the graph. Constructed here it would get neither: no pins, so it can never be connected, and the "
+			     "asset as its outer instead of the graph. The result opens as a broken node. Read the graph with "
+			     "asset(action=\"read_graph\") and author nodes through the editor or an action that knows the "
+			     "schema for that graph type."));
+	}
+	if (Class->IsChildOf(UEdGraph::StaticClass()))
+	{
+		return MCPClassUnusableError(ClassName, Class, TEXT("graph_object"),
+			TEXT("a graph is created by the system that owns it (a Blueprint, a Material, a CustomizableObject), "
+			     "which gives it its schema. One constructed here would have no schema and could hold no valid "
+			     "nodes."));
 	}
 
 	// outer=asset gives "/Game/Foo/DA_Thing.DA_Thing:Name", the ordinary

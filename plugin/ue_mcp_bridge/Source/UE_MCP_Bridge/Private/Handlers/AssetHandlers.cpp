@@ -3799,6 +3799,30 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 			FinalProp ? *FinalProp->GetCPPType() : TEXT("unknown")));
 	}
 
+	// #1059: UEdGraph::Nodes IS a UPROPERTY, so an append onto it succeeds and
+	// reports previousNum and newNum exactly as it would for any other array.
+	// What it appends is not a usable node. A graph node has to be built
+	// through its graph's schema, which runs AllocateDefaultPins and parents
+	// it to the graph; anything else lands in the array with no pins and the
+	// wrong outer, and the graph then opens broken. The whole hazard is that
+	// the call looks like it worked, so it is refused here rather than
+	// documented somewhere a caller reads afterwards.
+	if (const FObjectPropertyBase* ElementObject = CastField<FObjectPropertyBase>(ArrayProp->Inner))
+	{
+		if (ElementObject->PropertyClass
+			&& ElementObject->PropertyClass->IsChildOf(UEdGraphNode::StaticClass()))
+		{
+			return MCPError(FString::Printf(
+				TEXT("Refusing to append to '%s': it holds graph nodes, and a node appended to a graph's Nodes ")
+				TEXT("array is not a working node. It has no pins, because only the graph's schema runs ")
+				TEXT("AllocateDefaultPins, so it can never be connected to anything, and its outer is wrong. The ")
+				TEXT("append would report success and leave the graph unable to open. Read the graph with ")
+				TEXT("asset(action=\"read_graph\"), and author nodes through the editor or an action that knows ")
+				TEXT("the schema for that graph type."),
+				*PropertyName));
+		}
+	}
+
 	TArray<void*> StagedElements;
 	StagedElements.Reserve(Elements->Num());
 	auto DestroyStagedElements = [&]()
