@@ -52,6 +52,25 @@ export interface BuildGuardsDeps {
    * gate back, with no pipeline attached.
    */
   rawBridge: IBridge;
+  /**
+   * The options a guard is declared with RIGHT NOW, re-read per call (#1061).
+   *
+   * A guard's `options` used to be captured when the session's guards were
+   * built and never read again, so editing ue-mcp.yml had no effect on a
+   * running server. A guard meant as a reversible safety switch was a one-way
+   * door for the life of the process, and its own refusal text named the
+   * config change that was already in place. Flows in the same file are
+   * reloaded per call and promise as much in a comment; guards had no
+   * equivalent.
+   *
+   * Only the options payload is re-read. The guard set itself is not rebuilt,
+   * because registration appends: re-running the build would double-register
+   * every guard rather than replace it, and a class_path resolved at startup
+   * is what keeps an unbuildable guard from leaving its calls ungated.
+   *
+   * Undefined, or a resolver returning undefined, keeps the declared options.
+   */
+  liveOptions?: (guardName: string, phase: GuardPhase) => Record<string, unknown> | undefined;
 }
 
 /** The result body a hook task returns. */
@@ -122,16 +141,21 @@ function hookOptions(
 
 /** Run one hook and give back what it answered. */
 async function runHook(
+  guardName: string,
   hook: GuardHook,
   cc: CallContext,
   deps: BuildGuardsDeps,
   phase: GuardPhase,
   result?: unknown,
 ): Promise<HookResult> {
+  // #1061: what the file says now, not what it said at startup. A resolver
+  // that answers nothing leaves the declared options in place, so a guard
+  // declared by a plugin manifest rather than by ue-mcp.yml is unaffected.
+  const options = deps.liveOptions?.(guardName, phase) ?? hook.options;
   const task = await deps.registry.create(
     hook.class_path,
     hookContext(cc, deps) as never,
-    hookOptions(cc, hook.options, phase, result),
+    hookOptions(cc, options, phase, result),
   );
   return (await task.execute()) as HookResult;
 }
@@ -202,7 +226,7 @@ export async function buildGuards(
             before: async (cc: CallContext): Promise<void> => {
               let answered: HookResult;
               try {
-                answered = await runHook(decl.before!, cc, deps, "before");
+                answered = await runHook(name, decl.before!, cc, deps, "before");
               } catch (e) {
                 // A hook that threw denies the call. It is the same outcome as
                 // returning failure, and a guard that errors is not a guard
@@ -230,7 +254,7 @@ export async function buildGuards(
             after: async (cc: CallContext, result: unknown): Promise<unknown | void> => {
               let answered: HookResult;
               try {
-                answered = await runHook(decl.after!, cc, deps, "after", result);
+                answered = await runHook(name, decl.after!, cc, deps, "after", result);
               } catch (e) {
                 // The call already happened. Failing it now would report a
                 // mutation as not having occurred, which is worse than an

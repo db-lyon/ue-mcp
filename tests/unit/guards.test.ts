@@ -82,6 +82,85 @@ const SOURCE = { label: "ue-mcp.yml" };
 /** Parse as the loader would, so tests exercise the real defaults. */
 const declare = (raw: unknown) => GuardsSchema.parse(raw);
 
+describe("options are what the file says now", () => {
+  // #1061: a guard's `options` were bound when the session's guards were built
+  // and never read again, so editing ue-mcp.yml had no effect until a restart.
+  // A guard meant as a reversible safety switch was a one-way door for the
+  // life of the process, and its own refusal named the config change that was
+  // already on disk. Flows in the same file are reloaded per call.
+  it("hands the hook the options the resolver answers, not the declared ones", async () => {
+    const registry = registryWith({ check: ALLOW });
+    let enabled = true;
+    const guards = await buildGuards(
+      declare({ freeze: { before: { class_path: "check", options: { enabled: true } } } }),
+      { ...deps(registry), liveOptions: () => ({ enabled }) },
+      SOURCE,
+    );
+
+    await guards[0].before!(callCtx("set_asset_property"));
+    expect(seen.at(-1)).toMatchObject({ enabled: true });
+
+    // The edit a user makes while the server is running.
+    enabled = false;
+
+    await guards[0].before!(callCtx("set_asset_property"));
+    expect(seen.at(-1)).toMatchObject({ enabled: false });
+  });
+
+  it("asks per phase, so a before and an after hook are not given each other's options", async () => {
+    const registry = registryWith({ check: ALLOW, audit: ALLOW });
+    const asked: Array<[string, string]> = [];
+    const guards = await buildGuards(
+      declare({
+        both: {
+          before: { class_path: "check", options: { which: "declared-before" } },
+          after: { class_path: "audit", options: { which: "declared-after" } },
+        },
+      }),
+      {
+        ...deps(registry),
+        liveOptions: (name: string, phase: string) => {
+          asked.push([name, phase]);
+          return { which: `live-${phase}` };
+        },
+      },
+      SOURCE,
+    );
+
+    await guards[0].before!(callCtx("set_asset_property"));
+    await guards[0].after!(callCtx("set_asset_property"), { ok: true });
+
+    expect(asked).toEqual([["both", "before"], ["both", "after"]]);
+    expect(seen.map((o) => o.which)).toEqual(["live-before", "live-after"]);
+  });
+
+  it("keeps the declared options when nothing answers", async () => {
+    // A guard declared by a plugin manifest is not in ue-mcp.yml, so the
+    // resolver has nothing to say about it and it must not be disarmed.
+    const registry = registryWith({ check: ALLOW });
+    const guards = await buildGuards(
+      declare({ fromPlugin: { before: { class_path: "check", options: { enabled: true } } } }),
+      { ...deps(registry), liveOptions: () => undefined },
+      SOURCE,
+    );
+
+    await guards[0].before!(callCtx("set_asset_property"));
+    expect(seen.at(-1)).toMatchObject({ enabled: true });
+  });
+
+  it("works with no resolver at all", async () => {
+    const registry = registryWith({ check: ALLOW });
+    const guards = await buildGuards(
+      declare({ plain: { before: { class_path: "check", options: { enabled: true } } } }),
+      deps(registry),
+      SOURCE,
+    );
+
+    await guards[0].before!(callCtx("set_asset_property"));
+    expect(seen.at(-1)).toMatchObject({ enabled: true });
+  });
+});
+
 describe("a declaration becomes a guard", () => {
   it("builds one guard per declaration, whatever its hooks", async () => {
     const registry = registryWith({ check: ALLOW, audit: ALLOW });
