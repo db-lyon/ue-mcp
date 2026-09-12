@@ -451,6 +451,35 @@ inline FAssetData MCPFindAssetDataForPath(const FMCPAssetPathForms& Forms)
  *  package is on disk, reports what the Asset Registry knows without loading
  *  anything, and, when the registry holds the asset under a different object
  *  path, names the form that would have worked. */
+/** Is a play-in-editor or simulate session running right now?
+ *
+ *  #1065: this changes how asset loads behave, and the difference is invisible
+ *  in the result. UEditorAssetLibrary::LoadAsset refuses outright while the
+ *  editor is in play mode, and the engine logs the reason ("The Editor is
+ *  currently in a play mode.") somewhere a bridge caller never sees. A report
+ *  spent a debugging session on a WidgetBlueprint that was present, valid and
+ *  loadable, because the failure it was handed was the same sentence a missing
+ *  or corrupt asset produces.
+ *
+ *  So every load failure says whether PIE was running when it happened. It is
+ *  not asserted to be the cause: it is the one piece of state the caller
+ *  cannot see and cannot rule out on their own. */
+inline bool MCPIsPlayInEditorActive()
+{
+	return GEditor && (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor);
+}
+
+/** The sentence appended to a load failure while PIE is running, empty
+ *  otherwise. One wording, so the widget resolver and the generic asset
+ *  resolver cannot disagree about it. */
+inline FString MCPPlayInEditorLoadNote()
+{
+	if (!MCPIsPlayInEditorActive()) return FString();
+	return TEXT(" A play-in-editor session is running, which changes how assets load: ")
+		TEXT("the editor's own asset loader refuses every call while in play mode. ")
+		TEXT("Stop play with editor(action=\"stop_pie\") and retry before treating this as an asset problem.");
+}
+
 inline TSharedPtr<FJsonValue> MCPAssetNotFoundError(const FString& AssetPath, const FString& Context = FString())
 {
 	const FMCPAssetPathForms Forms = MCPAssetPathForms(AssetPath);
@@ -511,9 +540,16 @@ inline TSharedPtr<FJsonValue> MCPAssetNotFoundError(const FString& AssetPath, co
 			*Prefix, *Forms.PackagePath, *AssetPath, *Forms.ObjectPath);
 	}
 
+	// Appended to the message rather than replacing a branch: the branch says
+	// what the registry and the filesystem report, which stays true, and this
+	// says what else was going on.
+	const FString PlayNote = MCPPlayInEditorLoadNote();
+	if (!PlayNote.IsEmpty()) Message += PlayNote;
+
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 	Obj->SetBoolField(TEXT("success"), false);
 	Obj->SetStringField(TEXT("error"), Message);
+	Obj->SetBoolField(TEXT("playInEditorActive"), !PlayNote.IsEmpty());
 	Obj->SetStringField(TEXT("assetPath"), AssetPath);
 	Obj->SetStringField(TEXT("packagePath"), Forms.PackagePath);
 	Obj->SetStringField(TEXT("objectPath"), Forms.ObjectPath);

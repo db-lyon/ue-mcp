@@ -273,18 +273,24 @@ TSharedPtr<FJsonValue> WidgetBlueprintResolveError(
 	case EWidgetBlueprintResolveFailure::Unresolvable:
 		// The distinction the caller needs: the asset is there, so retrying or
 		// reloading the bridge is the move. Renaming or re-creating it is not.
+		//
+		// #1065: and if play is running, say so first. A WidgetBlueprint that
+		// was present and valid failed here for no reason but PIE, and the
+		// message named a stale handle, which sent the debugging somewhere
+		// else entirely. The engine logs the real reason where a bridge caller
+		// never sees it.
 		return MCPError(FString::Printf(
 			TEXT("'%s' exists but could not be resolved to a live WidgetBlueprint on this call. ")
 			TEXT("The object handle went stale (a package reload or a GC pass replaced it), the asset is not missing. ")
-			TEXT("Retry the call; if it keeps failing, editor(action=\"reload_bridge\") clears it."),
-			*AssetPath));
+			TEXT("Retry the call; if it keeps failing, editor(action=\"reload_bridge\") clears it.%s"),
+			*AssetPath, *MCPPlayInEditorLoadNote()));
 
 	case EWidgetBlueprintResolveFailure::NotFound:
 	default:
 		return MCPError(FString::Printf(
 			TEXT("No asset exists at '%s'. Nothing of that name is in the AssetRegistry and no package of that name is on disk. ")
-			TEXT("Check the path with widget(action=\"list\") or asset(action=\"search\")."),
-			*AssetPath));
+			TEXT("Check the path with widget(action=\"list\") or asset(action=\"search\").%s"),
+			*AssetPath, *MCPPlayInEditorLoadNote()));
 	}
 }
 

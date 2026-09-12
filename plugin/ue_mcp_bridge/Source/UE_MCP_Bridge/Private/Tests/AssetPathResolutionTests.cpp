@@ -224,6 +224,19 @@ bool FMCPAssetPathResolutionTest::RunTest(const FString& Parameters)
 			ErrorField(Missing, TEXT("objectPath")), MissingPath + TEXT(".DT_NotThere"));
 		TestEqual(TEXT("a miss with nothing on disk and nothing in the registry reads as missing"),
 			ErrorField(Missing, TEXT("reason")), FString(TEXT("missing")));
+
+		// #1065: every load failure says whether play was running, because
+		// that changes how assets load and a caller cannot see it. The suite
+		// does not run under PIE, so the flag is present and false here; what
+		// is being pinned is that the field exists at all.
+		const TSharedPtr<FJsonObject> MissingObj = Missing->AsObject();
+		TestTrue(TEXT("a miss reports whether play-in-editor was running"),
+			MissingObj.IsValid() && MissingObj->HasField(TEXT("playInEditorActive")));
+		TestEqual(TEXT("the flag agrees with the editor's own state"),
+			MissingObj.IsValid() && MissingObj->GetBoolField(TEXT("playInEditorActive")),
+			MCPIsPlayInEditorActive());
+		TestEqual(TEXT("the shared note is empty when play is not running"),
+			MCPPlayInEditorLoadNote().IsEmpty(), !MCPIsPlayInEditorActive());
 	}
 
 	// A context label names what the path was supposed to be.
