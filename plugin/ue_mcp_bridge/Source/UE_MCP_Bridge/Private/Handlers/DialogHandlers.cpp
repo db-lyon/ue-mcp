@@ -1029,7 +1029,14 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 		// itself, which ends the modal loop and releases the game thread. A
 		// synthetic Escape keypress alone does not reach a modal window that
 		// never took keyboard focus, so send both.
-		FString Action = OptionalString(Params, TEXT("action"));
+		// #1078: the parameter is named dialogAction on the wire. "action" is
+		// the category tool's own dispatch field, so a caller writing
+		// action='close' selected a nonexistent editor action instead of
+		// reaching this handler, and the MCP surface stripped the key before
+		// it ever arrived. The old name is still read, because the bridge
+		// answers clients other than this server's category tools.
+		FString Action = OptionalString(Params, TEXT("dialogAction"));
+		if (Action.IsEmpty()) Action = OptionalString(Params, TEXT("action"));
 		if (Action == TEXT("escape") || Action == TEXT("close"))
 		{
 			FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
@@ -1057,7 +1064,7 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 			Result->SetBoolField(TEXT("success"), false);
 			Result->SetArrayField(TEXT("availableButtons"), AvailableButtons);
 			Result->SetStringField(TEXT("error"), FString::Printf(
-				TEXT("Button not found on dialog '%s'. Pass buttonLabel as one of [%s], or buttonIndex between 0 and %d, or action='close'."),
+				TEXT("Button not found on dialog '%s'. Pass buttonLabel as one of [%s], or buttonIndex between 0 and %d, or dialogAction='close'."),
 				*Title, *JoinLabels(Buttons), FMath::Max(0, Buttons.Num() - 1)));
 		}
 	}
