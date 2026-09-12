@@ -152,6 +152,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPAssetPathResolutionTest::RunTest(const FString& Parameters)
 {
+	// Resolving a path that names nothing is half of what this test asserts,
+	// and UEditorAssetLibrary::LoadAsset logs an Error every time it is asked
+	// for one. The automation framework fails a test on any unexpected Error,
+	// so the deliberate miss below failed the test that was checking it.
+	// Declared the same way SequencerHandlerTests declares it, with a count of
+	// 0 meaning any number of occurrences.
+	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
+
 	const FScopedAssetPathTestMount Mount;
 
 	const FString PackageName = FString(MCPAssetPathTestRoot) + TEXT("DT_PathProbe");
@@ -166,6 +174,9 @@ bool FMCPAssetPathResolutionTest::RunTest(const FString& Parameters)
 
 	UDataTable* Probe = NewObject<UDataTable>(
 		Package, FName(TEXT("DT_PathProbe")), RF_Public | RF_Standalone);
+	// A DataTable with no RowStruct logs an Error when the engine empties it,
+	// which happens on teardown and fails the test that made it.
+	if (Probe) Probe->RowStruct = FTableRowBase::StaticStruct();
 	TestNotNull(TEXT("probe asset created"), Probe);
 	if (!Probe)
 	{
@@ -282,6 +293,7 @@ bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 
 	UDataTable* Corpse = NewObject<UDataTable>(
 		Package, FName(TEXT("DT_ReloadProbe")), RF_Public | RF_Standalone);
+	if (Corpse) Corpse->RowStruct = FTableRowBase::StaticStruct();
 	TestNotNull(TEXT("probe asset created"), Corpse);
 	if (!Corpse)
 	{
@@ -305,6 +317,7 @@ bool FMCPAssetReloadCorpseTest::RunTest(const FString& Parameters)
 
 	UDataTable* Live = NewObject<UDataTable>(
 		Package, FName(TEXT("DT_ReloadProbe")), RF_Public | RF_Standalone);
+	if (Live) Live->RowStruct = FTableRowBase::StaticStruct();
 	TestNotNull(TEXT("replacement asset created"), Live);
 	if (!Live)
 	{

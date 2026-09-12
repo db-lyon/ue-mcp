@@ -66,6 +66,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPMeshBooleanRefusesBeforeWritingTest::RunTest(const FString& Parameters)
 {
+	// The engine's own asset loader logs an Error every time it is asked for a
+	// path that names nothing, and the automation framework fails a test on any
+	// unexpected Error. Asserting what a deliberate miss reports therefore
+	// failed the test doing the asserting. Declared the way SequencerHandlerTests
+	// declares it; a count of 0 means any number of occurrences.
+	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
+
 	FMCPHandlerRegistry Registry;
 	FAssetMeshBooleanHandlers::RegisterHandlers(Registry);
 	if (!TestTrue(TEXT("mesh_boolean is registered"), Registry.HasHandler(TEXT("mesh_boolean")))) return false;

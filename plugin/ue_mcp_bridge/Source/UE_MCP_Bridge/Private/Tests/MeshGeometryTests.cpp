@@ -30,6 +30,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FAssetMeshGeometryRegistrationTest::RunTest(const FString& Parameters)
 {
+	// The engine's own asset loader logs an Error every time it is asked for a
+	// path that names nothing, and the automation framework fails a test on any
+	// unexpected Error. Asserting what a deliberate miss reports therefore
+	// failed the test doing the asserting. Declared the way SequencerHandlerTests
+	// declares it; a count of 0 means any number of occurrences.
+	AddExpectedError(TEXT("LoadAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
+
 	FMCPHandlerRegistry Registry;
 	FAssetGeometryHandlers::RegisterHandlers(Registry);
 	TestTrue(TEXT("get_mesh_geometry is registered"), Registry.HasHandler(TEXT("get_mesh_geometry")));
