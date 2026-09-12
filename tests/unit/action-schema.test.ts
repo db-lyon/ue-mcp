@@ -50,6 +50,69 @@ describe("action parameter schema", () => {
     ).toEqual([]);
   });
 
+  // #1078. `action` is the dispatcher's own parameter, and ROUTING_PARAMS
+  // exempts it from the drift check above so that an action is not accused of
+  // failing to declare the key it dispatches on. That exemption is also a
+  // blind spot: a HANDLER parameter that happens to be called `action` is
+  // undeclarable, unforwardable and undocumentable, and nothing said so.
+  //
+  // Two shipped instances were found by asking this question by hand.
+  // editor(respond_to_dialog) promised `action='close'` in its description and
+  // read it in C++, and the surface stripped the key on every call, so the
+  // documented way to dismiss a dialog no button fits was dead on arrival.
+  // A generated Epic action went further and DECLARED it, which replaced the
+  // widget tool's dispatch parameter: widget's `action` was advertised as a
+  // free-form string described as '"list" returns JSON array, "select" brings
+  // to front, "close" destroys', in place of the enum naming widget's own
+  // hundred-odd actions.
+  it("never declares or documents a handler parameter named 'action'", () => {
+    const offenders: string[] = [];
+    for (const tool of ALL_TOOLS) {
+      const declared = new Set(Object.keys(tool.schema));
+      for (const [name, spec] of Object.entries(tool.actions)) {
+        const parsed = parseParams(spec.description ?? "", declared);
+        if (parsed.params.some((p) => p.name === "action")) {
+          offenders.push(`${tool.name}.${name}: documents a parameter named 'action'`);
+        }
+        if (forwardedParams(spec).includes("action")) {
+          offenders.push(`${tool.name}.${name}: forwards a parameter named 'action'`);
+        }
+      }
+    }
+    expect(
+      offenders,
+      "The category tool dispatches on 'action', so a handler parameter of that\n"
+        + "name can never arrive: the surface strips it, and a caller who writes it\n"
+        + "selects an action instead. Give it another name on the wire and read the\n"
+        + "new one in the handler, or accept it nested inside 'input':\n  "
+        + offenders.join("\n  "),
+    ).toEqual([]);
+  });
+
+  it("keeps every category's dispatch parameter describing its own actions", () => {
+    const offenders: string[] = [];
+    for (const tool of ALL_TOOLS) {
+      const dispatch = tool.schema.action;
+      if (!dispatch) {
+        offenders.push(`${tool.name}: declares no 'action' parameter at all`);
+        continue;
+      }
+      const described = dispatch.description ?? "";
+      // The dispatch parameter is authored once, by categoryTool. Anything
+      // else in that slot is a merged-in collision that replaced it.
+      if (!described.startsWith("Action to perform.")) {
+        offenders.push(`${tool.name}: 'action' is described as ${JSON.stringify(described.slice(0, 80))}`);
+      }
+    }
+    expect(
+      offenders,
+      "A category's 'action' parameter is the dispatcher's, authored by\n"
+        + "categoryTool. A description from somewhere else means another parameter\n"
+        + "of the same name was merged over it, and the tool no longer tells a\n"
+        + "client what its actions are:\n  " + offenders.join("\n  "),
+    ).toEqual([]);
+  });
+
   it("documents parameters on every action", () => {
     const undocumented: string[] = [];
     for (const tool of ALL_TOOLS) {
