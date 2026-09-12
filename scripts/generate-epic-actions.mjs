@@ -30,6 +30,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// The dispatcher's own parameter names, from the module that defines them.
+// A second copy here would drift the moment one is added or renamed, and the
+// failure is silent: a generated action would declare the name and replace a
+// category's dispatch parameter, which is the defect this list prevents.
+import { ROUTING_PARAMS } from "../dist/action-schema.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CATALOG = path.join(ROOT, "tests", "golden", "epic-catalog.json");
@@ -121,7 +126,7 @@ function prose(description) {
  * These arguments go inside `input`, which resolveEpicToolInput has always
  * read and which is now declared in any category that needs it.
  */
-const RESERVED_TOP_LEVEL = new Set(["action", "timeoutMs", "select", "omit", "editor", "toEditor"]);
+const RESERVED_TOP_LEVEL = ROUTING_PARAMS;
 
 /** Tool argument names this generator must not declare at the top level. */
 function reservedArgs(inputSchema) {

@@ -695,8 +695,14 @@ export function forwardedParams(spec: ActionSpec): string[] {
 
 /** Routing instructions the dispatcher consumes and strips before a handler
  *  ever sees them. They are real wire parameters, so they are reported, but
- *  they are never counted as drift against an action's own documentation. */
-const ROUTING_PARAMS: ReadonlySet<string> = new Set(["action", "timeoutMs", "select", "omit", "editor", "toEditor"]);
+ *  they are never counted as drift against an action's own documentation.
+ *
+ *  Exported because it is also the set a generated surface must never declare:
+ *  a wrapped tool argument sharing one of these names overwrites the
+ *  dispatcher's own parameter. scripts/generate-epic-actions.mjs imports this
+ *  rather than keeping a second copy, because two hardcoded lists of the same
+ *  names in two languages is the drift this whole module exists to catch. */
+export const ROUTING_PARAMS: ReadonlySet<string> = new Set(["action", "timeoutMs", "select", "omit", "editor", "toEditor"]);
 
 /** Build the full schema for one action of one tool. */
 export function actionSchema(tool: ToolDef, action: string): ActionSchema {
