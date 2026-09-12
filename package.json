@@ -95,7 +95,7 @@
     "gen:epic-docs": "npx tsc && node scripts/gen-epic-docs.mjs",
     "prepare": "husky",
     "epic:record": "node scripts/record-epic-catalog.mjs",
-    "epic:generate": "node scripts/generate-epic-actions.mjs",
+    "epic:generate": "node --import tsx scripts/generate-epic-actions.mjs",
     "epic:seed": "node scripts/seed-epic-effects.mjs",
     "epic:unreviewed": "node scripts/epic-unreviewed.mjs"
   },

@@ -30,8 +30,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-// The dispatcher's own parameter names. Read from source, not dist: this
-// generator runs in CI before anything is built.
+// The dispatcher's own parameter names, imported from the module that
+// declares them. Run under tsx, so this reads the real export rather than
+// parsing the file.
+import { ROUTING_PARAMS } from "../src/action-schema.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CATALOG = path.join(ROOT, "tests", "golden", "epic-catalog.json");
@@ -112,20 +114,7 @@ function prose(description) {
  * Declaring one here would overwrite the category's own parameter, so such an
  * argument goes inside `input` instead.
  */
-/** The names from src/routing-params.ts, the single source. Read as text
- *  because this script runs before anything is built. Throws rather than
- *  guessing, so a rename here cannot silently un-reserve a name. */
-function readRoutingParamNames() {
-  const file = path.join(ROOT, "src", "routing-params.ts");
-  const text = fs.readFileSync(file, "utf8");
-  const match = /export const ROUTING_PARAM_NAMES\s*=\s*\[([^\]]*)\]/.exec(text);
-  if (!match) throw new Error(`Could not read ROUTING_PARAM_NAMES from ${file}`);
-  const names = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  if (names.length === 0) throw new Error(`ROUTING_PARAM_NAMES in ${file} is empty`);
-  return names;
-}
-
-const RESERVED_TOP_LEVEL = new Set(readRoutingParamNames());
+const RESERVED_TOP_LEVEL = ROUTING_PARAMS;
 
 /** Tool argument names this generator must not declare at the top level. */
 function reservedArgs(inputSchema) {

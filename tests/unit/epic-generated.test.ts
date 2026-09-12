@@ -152,7 +152,9 @@ describe("the committed modules match their inputs", () => {
       if (f.endsWith(".generated.ts") || f === "index.ts") before.set(f, read(f));
     }
 
-    execFileSync(process.execPath, [path.join(ROOT, "scripts", "generate-epic-actions.mjs")], {
+    // Under tsx: the generator imports ROUTING_PARAMS from source rather than
+    // parsing it, so plain node cannot load it. Matches the epic:generate script.
+    execFileSync(process.execPath, ["--import", "tsx", path.join(ROOT, "scripts", "generate-epic-actions.mjs")], {
       cwd: ROOT,
       stdio: "pipe",
     });

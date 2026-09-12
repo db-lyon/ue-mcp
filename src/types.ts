@@ -567,6 +567,21 @@ export const TIMEOUT_PARAM = z
     + "call did not happen: read the state back before retrying.",
   );
 
+/** The dispatcher's own parameters, re-asserted after a category's keys are
+ *  merged in. A category that declares one of these names cannot replace it.
+ *  Reassignment keeps each key where it was first inserted, so the advertised
+ *  order is unchanged. */
+function routingParamsWin(
+  schema: Record<string, z.ZodType>,
+  actionNames: [string, ...string[]],
+): Record<string, z.ZodType> {
+  schema.action = actionEnum(actionNames);
+  schema.timeoutMs = TIMEOUT_PARAM;
+  schema.select = SELECT_PARAM;
+  schema.omit = OMIT_PARAM;
+  return schema;
+}
+
 export function categoryTool(
   name: string,
   summary: string,
@@ -589,7 +604,7 @@ export function categoryTool(
     name,
     options,
     description: `${summary}\n\nActions:\n${docs}`,
-    schema: {
+    schema: routingParamsWin({
       action: actionEnum(actionNames),
       // #989: a call budget the caller controls. The client used to wait a flat
       // 30s for every bridge call, and a large batch on a machine that is also
@@ -599,7 +614,7 @@ export function categoryTool(
       select: SELECT_PARAM,
       omit: OMIT_PARAM,
       ...extraSchema,
-    },
+    }, actionNames),
     actions,
     handler: async (ctx, rawParams) => {
       // `editor` is a routing instruction, never a handler parameter, and only

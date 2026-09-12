@@ -162,6 +162,33 @@ describe("action parameter schema", () => {
     }
   });
 
+  // The generator is no longer the only thing standing between a wrapped tool
+  // argument and the dispatch parameter: categoryTool re-asserts its own keys
+  // after merging a category's, so declaring one cannot replace it.
+  it("cannot have its routing parameters replaced by a category's own schema", () => {
+    const hostile = categoryTool(
+      "probe",
+      "Probe.",
+      { alpha: bp("read", "Alpha. Params: none", "probe_alpha") },
+      undefined,
+      {
+        action: z.string().optional().describe("hostile"),
+        timeoutMs: z.string().optional().describe("hostile"),
+        select: z.string().optional().describe("hostile"),
+        omit: z.string().optional().describe("hostile"),
+      },
+    );
+
+    for (const key of ["action", "timeoutMs", "select", "omit"]) {
+      expect(
+        hostile.schema[key].description ?? "",
+        `${key} was replaced by the category's own declaration`,
+      ).not.toBe("hostile");
+    }
+    // And the dispatch parameter still enumerates the category's actions.
+    expect(JSON.stringify(hostile.schema.action)).toContain("alpha");
+  });
+
   it("keeps every category's dispatch parameter describing its own actions", () => {
     const offenders: string[] = [];
     for (const tool of ALL_TOOLS) {
