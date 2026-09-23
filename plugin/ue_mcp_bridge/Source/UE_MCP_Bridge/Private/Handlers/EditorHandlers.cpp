@@ -8,6 +8,7 @@
 #include "Logging/TokenizedMessage.h"
 #include "Editor/EditorPerformanceSettings.h"
 #include "Misc/ScopeExit.h"
+#include "UObject/GCObjectScopeGuard.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Scalability.h"
@@ -3093,6 +3094,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
 	}
+
+	// Root the loaded asset for the rest of the call. StaticLoadObject returns an
+	// unrooted pointer, and OpenEditorForAsset can run the GC, so reading
+	// Asset->GetClass() afterwards was an access violation when the asset was
+	// collected mid-call (crash 2026-09-23 14:31, FNameEntry::GetPlainNameString
+	// via OpenAsset).
+	FGCObjectScopeGuard AssetScopeGuard(Asset);
 
 	if (!GEditor)
 	{
