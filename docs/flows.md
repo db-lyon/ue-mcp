@@ -36,7 +36,6 @@ The response carries a `summary` line per step plus a `steps` array holding what
 
 Running flows is three of the tool's seventeen actions: `run`, `plan` and `list`. The other fourteen are two surfaces that sit beside them.
 
-- **[Journal](journal.md)** - the nine `journal_*` actions, the record a run leaves behind: what was done, what it produced, and how it ended. Every `flow(action="run")` writes one automatically; open one by hand for work that is not a flow.
 - **[Skill packs](skill-packs.md)** - the five `skill_*` actions, covering the written workflows that say which calls to make in what order, including verifying that the calls they teach still exist.
 
 Neither surface reaches the editor, so both work with the editor down.
@@ -351,7 +350,7 @@ steps[i].partialWriteRollback = {
 - **Armed.** The runner already ran the undo, ahead of every other inverse. `rollback.attempted` counts it, and `rollback.errors` says whether it worked.
 - **Not armed.** Nothing replayed it. Run it as the step shown, or call the bridge method named in `record.payload.method` with the rest of the payload.
 
-The same call is appended to that step's `error.message` and printed under the step in the summary, because a message survives a summary line and a journal entry where a field does not. A task cannot see `rollback_on_failure`, so the message names both outcomes and the `replayed` flag says which one happened.
+The same call is appended to that step's `error.message` and printed under the step in the summary, because a message survives a summary line where a field does not. A task cannot see `rollback_on_failure`, so the message names both outcomes and the `replayed` flag says which one happened.
 
 A step carrying `ignore_failure: true` contributes its record on the same terms. The flag says the run may walk past that failure, not that what the step half-wrote should survive a rollback. Because an ignored step does not stop the run, a LATER real failure is what arms `rollback_on_failure`, and the unwind then covers the ignored step's partial write alongside the successful steps before it.
 

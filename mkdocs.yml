@@ -72,7 +72,6 @@ nav:
     - Layout Diagnostics: runtime-widget-layout-diagnostics.md
   - Flows:
     - flows.md
-    - Journal: journal.md
     - Skill Packs: skill-packs.md
   - Plugins:
     - plugins.md

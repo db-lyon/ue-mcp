@@ -63,7 +63,6 @@ const PER_SESSION: Record<string, string> = {
   "feedback-deferred.ts": "Deferred entries record the editor they came from and are filtered by it.",
   "feedback-fallback.ts": "Writes the saved report into the same per-editor deferred store, tagged with the submitting project.",
   "user-state.ts": "Keyed by absolute project root: installed hooks, and the per-project feedback mode.",
-  "journal.ts": "One journal file per absolute project root, so a run recorded against one editor is never read back as another's.",
   "mcp-client-config.ts": "Writes the project positionals a server is started with.",
   "doctor.ts": "Reports every project the configured invocation names.",
   "init.ts": "Writes one project's config, chosen with --editor.",
@@ -80,7 +79,6 @@ const PER_SESSION: Record<string, string> = {
 
   "flow/context.ts": "Carries the session a flow step runs in.",
   "flow/flow-tool.ts": "Resolves the registry and config of the addressed editor.",
-  "flow/journal-actions.ts": "Reads and writes the addressed session's project journal.",
   "flow/skill-actions.ts": "Installs skill packs into the addressed session's project, and lists the packs its plugins contribute.",
   "flow/registry.ts": "One task registry per session, built from that project's graph.",
   "flow/task-factory.ts": "Builds tasks that dispatch on the context's session bridge.",

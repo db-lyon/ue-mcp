@@ -194,7 +194,6 @@ Editor process control (`editor(start_editor)` / `stop_editor` / `restart_editor
 - [Tool Reference](https://ue-mcp.com/docs/tool-reference/) - Every tool, action, and parameter
 - [Architecture](https://ue-mcp.com/docs/architecture/) - How the server, bridge, and editor fit together
 - [Flows](https://ue-mcp.com/docs/flows/) - Multi-step YAML workflows, custom tasks, rollback
-- [Journal](https://ue-mcp.com/docs/journal/) - The per-project record of what a session did, produced, and how it ended
 - [Skill Packs](https://ue-mcp.com/docs/skill-packs/) - Written workflows an agent reads, and checking that the calls they teach still exist
 - [Plugins](https://ue-mcp.com/docs/plugins/) - Extending the surface through npm
 - [Configuration](https://ue-mcp.com/docs/configuration/) - `ue-mcp.yml` and MCP client config

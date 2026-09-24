@@ -64,12 +64,11 @@ describe("flow action contract", () => {
     ).toEqual([]);
   });
 
-  it("keeps the journal and skill actions distinct from the run/plan/list three", () => {
+  it("keeps the skill actions distinct from the run/plan/list three", () => {
     const names = Object.keys(flowTool.actions);
     expect(names).toContain("run");
-    expect(names.filter((n) => n.startsWith("journal_")).length).toBeGreaterThan(0);
     expect(names.filter((n) => n.startsWith("skill_")).length).toBeGreaterThan(0);
-    // Every name is unique by construction, but a collision between a journal
+    // Every name is unique by construction, but a collision between a skill
     // action and one of the three would silently shadow it.
     expect(new Set(names).size).toEqual(names.length);
   });

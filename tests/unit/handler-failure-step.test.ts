@@ -422,7 +422,7 @@ describe("the inverse a FAILING step carries", () => {
     // A `flow` step carries the child's own step results from 0.17.1, so the
     // child's partial write is reported structurally rather than only as prose
     // inside the child's run error. The error text still carries the call,
-    // because that is what survives a summary line and a journal entry.
+    // because that is what survives a summary line.
     const bridge = fakeBridge({ wipe_the_thing: PARTIAL });
     const body = await runFlow(probeTool(ACCEPTED), bridge, {
       child: { description: "the inner flow", steps: { "1": { task: "probe.wipe" } } },

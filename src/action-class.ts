@@ -354,23 +354,10 @@ const OVERRIDES: Readonly<Record<string, ActionClass>> = {
   // `exists` question never creates the layer it asks about.
   "landscape.layer_exists": "read",
 
-  // ── The workflow journal and the skill packs ────────────────────────
-  // Neither reaches a bridge, so nothing here can land in the wrong EDITOR.
-  // Both are still per project: the journal file is keyed by absolute project
-  // root and skill packs install under a project's own `.claude/skills/`, so a
-  // write that guessed the wrong session would record one project's history,
-  // or install into one project's checkout, under another project's name.
-  // Spelled out rather than left to the verb lexicon, which has no reason to
-  // know what "note", "attach", "finish" or "cancel" do.
-  "flow.journal_start": "mutate",
-  "flow.journal_note": "mutate",
-  "flow.journal_attach": "mutate",
-  "flow.journal_finish": "mutate",
-  "flow.journal_cancel": "mutate",
-  "flow.journal_delete": "mutate",
-  "flow.journal_list": "read",
-  "flow.journal_get": "read",
-  "flow.journal_status": "read",
+  // ── The skill packs ─────────────────────────────────────────────────
+  // Neither reaches a bridge, but packs install under a project's own
+  // `.claude/skills/`, so a write that guessed the wrong session would install
+  // into one project's checkout under another project's name.
   "flow.skill_install": "mutate",
   "flow.skill_remove": "mutate",
   "flow.skill_list": "read",

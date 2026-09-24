@@ -132,8 +132,8 @@ function current(): EffectIndex {
     // The flow tool is built per server, from a task registry and a config
     // source, so it is registered outside `ALL_TOOLS` and is not in the
     // published graph either: the graph is published during startup and the
-    // flow tool is constructed after it. Its seventeen actions still need
-    // their effects read, or `flow(plan)` and `flow(journal_list)` would be
+    // flow tool is constructed after it. Its eight actions still need
+    // their effects read, or `flow(plan)` and `flow(skill_list)` would be
     // refused as untargeted changes for being unrecognised. This is the same
     // stand-in the skill-pack check holds packs against, and a unit test keeps
     // it matching the tool the server actually registers.

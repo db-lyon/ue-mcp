@@ -25,7 +25,6 @@ import * as path from "node:path";
 import type { ActionEffect, ActionSpec, ToolContext, ToolDef } from "../types.js";
 import { McpError, ErrorCode } from "../errors.js";
 import { getLiveToolGraph } from "../tools.js";
-import { journalActions } from "./journal-actions.js";
 import {
   checkSkillPacks,
   dedupePacks,
@@ -63,7 +62,7 @@ function discover(ctx: ToolContext): SkillPack[] {
 }
 
 /**
- * The flow tool's own actions, the three that are not journal or skill.
+ * The flow tool's own actions, the three that are not skill actions.
  *
  * The flow tool is registered outside `ALL_TOOLS` (it is built per server with
  * a task registry and a config source), so a graph read from `tools.ts` does
@@ -104,7 +103,7 @@ export function flowCategoryForCheck(): ToolDef {
     // The real specs for everything but the three own actions, so a check that
     // reads an effect off this stand-in reads the declaration rather than a
     // placeholder that happens to be next to it.
-    actions: { ...Object.fromEntries(own), ...journalActions, ...skillActions },
+    actions: { ...Object.fromEntries(own), ...skillActions },
     handler: async () => ({}),
   };
 }

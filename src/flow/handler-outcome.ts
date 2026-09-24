@@ -90,7 +90,7 @@ export function inFlowRun(ctx: TaskContext): boolean {
  * happened.
  *
  * The call goes in the error MESSAGE as well as in a field, because the message
- * survives every reader: a summary line, a journal entry, a terminal.
+ * survives every reader: a summary line, a terminal.
  *
  * The string is the flow step that runs it, because the record already names
  * the generic bridge task and carries the bridge method in its payload, so
