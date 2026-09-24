@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { collectDoctor, formatDoctor } from "./doctor.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { editorOwnsProject, listEditorProcesses } from "./engine-observer.js";
+import { setUpdateNotices } from "./user-state.js";
 import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "./version-check.js";
 
 const RESET = "\x1b[0m";
@@ -75,6 +76,17 @@ function runSelfCli(scriptBase: string, projectArg: string | undefined): boolean
 }
 
 async function update() {
+  if (process.argv[2] === "notify") {
+    const arg = process.argv[3];
+    if (arg !== "on" && arg !== "off") {
+      fail("Usage: ue-mcp update notify <on|off>");
+      process.exit(1);
+    }
+    setUpdateNotices(arg === "on");
+    ok(`Update notices ${arg === "on" ? "on" : "off"}.`);
+    return;
+  }
+
   let target: { projectPath?: string; rest: string[] };
   try {
     target = takeEditorTarget(process.argv.slice(2));

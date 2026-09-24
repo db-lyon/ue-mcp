@@ -18,6 +18,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { feedbackPromptsEnabled } from "./user-state.js";
 
 /** The fields of a hook payload this cares about. Everything else passes through. */
 export interface HookPayload {
@@ -122,7 +123,7 @@ function str(v: unknown): string | null {
  * from before hooks knew about sessions.
  */
 export async function feedbackDisabledForDir(dir: string | null): Promise<boolean> {
-  if (!dir) return true;
+  if (!dir || !feedbackPromptsEnabled()) return true;
   try {
     const yaml = (await import("js-yaml")).default;
     let cursor = dir;

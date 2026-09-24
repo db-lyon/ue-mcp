@@ -242,3 +242,14 @@ export function multiEditorInstructions(sessionNames: string[], activeName: stri
     "(start_editor / stop_editor / restart_editor / build_project), so the work lands where you intend.",
   ].join("\n");
 }
+
+/**
+ * The instructions without their FEEDBACK section, for a user who turned the
+ * prompts off or a project that disables the feedback tool (#1151).
+ */
+export function withoutFeedbackSection(instructions: string): string {
+  return instructions
+    .replace(/═══ FEEDBACK ═══[\s\S]*?(?=═══ |$)/, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd();
+}

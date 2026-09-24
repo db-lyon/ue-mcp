@@ -4,6 +4,7 @@ import { startEditor, stopEditor, restartEditor, buildProject, resolveOwnedEdito
 import { readEngineState, withBridgeSnapshot, type EngineSnapshot } from "../engine-observer.js";
 import { progressRenderingNote } from "../client-quirks.js";
 import { pushWorkaround, workaroundCount } from "../workaround-tracker.js";
+import { feedbackPromptsActive } from "../user-state.js";
 import { searchTools } from "../tool-search.js";
 import { evaluateGate, gateRefusalMessage } from "../python-gate.js";
 import { Vec3, Rotator } from "../schemas.js";
@@ -188,6 +189,8 @@ export const editorTool: ToolDef = categoryTool(
           // side-channel is best-effort; primary tracking is the in-memory stack
         }
 
+        if (!feedbackPromptsActive(ctx.project?.config?.disable)) return result;
+
         const n = workaroundCount(ctx);
         return directive(
           [
@@ -206,6 +209,7 @@ export const editorTool: ToolDef = categoryTool(
             `  idealTool - what tool/action should handle this natively`,
             ``,
             `Do NOT skip this step. Do NOT defer it to "later."`,
+            `(The user can turn these prompts off with \`ue-mcp feedback prompts off\`.)`,
           ].join("\n"),
           result,
           {

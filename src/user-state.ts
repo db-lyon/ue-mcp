@@ -67,8 +67,11 @@ interface Preferences {
   /** Per-user, per-device feedback approval mode. Set via
    *  `npx ue-mcp feedback mode <value>`. NOT in project yaml because the
    *  preference varies per developer / per machine (am I at the keyboard,
-   *  is this a long unattended run, etc.). */
-  feedback?: { mode?: FeedbackMode };
+   *  is this a long unattended run, etc.). `prompts: false` stops the agent
+   *  being told to offer feedback after an execute_python workaround (#1151). */
+  feedback?: { mode?: FeedbackMode; prompts?: boolean };
+  /** `notify: false` silences the "newer version available" notice (#1151). */
+  updates?: { notify?: boolean };
   /** Per-user, per-device dialog handling mode. NOT in project yaml for the
    *  same reason: whether a person is at the keyboard to answer a modal is a
    *  property of the machine and the session, not of the project. */
@@ -232,7 +235,7 @@ function writeState(state: UserState): void {
   }
   if (state.preferences) {
     const fb = state.preferences.feedback;
-    if (fb && fb.mode === undefined) delete state.preferences.feedback;
+    if (fb && fb.mode === undefined && fb.prompts === undefined) delete state.preferences.feedback;
     const dlg = state.preferences.dialog;
     if (dlg && dlg.mode === undefined) delete state.preferences.dialog;
     if (Object.keys(state.preferences).length === 0) {
@@ -407,6 +410,42 @@ export function getFeedbackMode(projectRoot?: string | null): FeedbackMode | und
     if (scoped) return scoped;
   }
   return asFeedbackMode(state.preferences?.feedback?.mode);
+}
+
+/** Whether the agent is nudged to offer feedback after a Python workaround. Default on. */
+export function feedbackPromptsEnabled(): boolean {
+  return readState().preferences?.feedback?.prompts !== false;
+}
+
+/** Prompts are off when the user turned them off or the project disables the feedback tool. */
+export function feedbackPromptsActive(disabledCategories: readonly string[] | undefined): boolean {
+  return feedbackPromptsEnabled() && !(disabledCategories ?? []).includes("feedback");
+}
+
+export function setFeedbackPrompts(on: boolean): void {
+  withStateLock(() => {
+    const state = readState();
+    if (!state.preferences) state.preferences = {};
+    if (!state.preferences.feedback) state.preferences.feedback = {};
+    if (on) delete state.preferences.feedback.prompts;
+    else state.preferences.feedback.prompts = false;
+    writeState(state);
+  });
+}
+
+/** Whether the "newer version available" notice is shown. Default on. */
+export function updateNoticesEnabled(): boolean {
+  return readState().preferences?.updates?.notify !== false;
+}
+
+export function setUpdateNotices(on: boolean): void {
+  withStateLock(() => {
+    const state = readState();
+    if (!state.preferences) state.preferences = {};
+    if (on) delete state.preferences.updates;
+    else state.preferences.updates = { notify: false };
+    writeState(state);
+  });
 }
 
 /** Set or clear the feedback mode preference. Pass undefined to clear. */

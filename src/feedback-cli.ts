@@ -29,8 +29,10 @@ import {
   type GitHubRepo,
 } from "./registry-catalog.js";
 import {
+  feedbackPromptsEnabled,
   getFeedbackMode,
   setFeedbackMode,
+  setFeedbackPrompts,
   getUserStatePath,
   type FeedbackMode,
 } from "./user-state.js";
@@ -57,6 +59,7 @@ function printHelp(): void {
   console.log("");
   console.log(`  ${BOLD}mode${RESET}              Print the current feedback approval mode`);
   console.log(`  ${BOLD}mode${RESET} <mode>       Set the mode (interactive | auto-approve | defer)`);
+  console.log(`  ${BOLD}prompts${RESET} <on|off>  Whether the agent offers feedback after a Python workaround`);
   console.log(`  ${BOLD}list${RESET}              List every pending submission (id, project, title)`);
   console.log(`  ${BOLD}show${RESET} <id>         Print the full body and metadata for one entry`);
   console.log(`  ${BOLD}approve${RESET} <id>      POST the entry to GitHub, then delete it locally`);
@@ -457,6 +460,17 @@ async function main(): Promise<void> {
   const id = target.rest[1];
 
   switch (sub) {
+    case "prompts":
+      if (id === "on" || id === "off") {
+        setFeedbackPrompts(id === "on");
+        ok(`Feedback prompts ${id}.`);
+      } else if (id === undefined) {
+        console.log(`  Feedback prompts: ${feedbackPromptsEnabled() ? "on" : "off"}`);
+      } else {
+        fail(`Unknown value "${id}". Allowed: on, off.`);
+        process.exit(1);
+      }
+      break;
     case "mode":
       cmdMode(id, projectRootOf(target.projectPath), editorFilter);
       return;

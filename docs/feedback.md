@@ -78,6 +78,7 @@ The mode is a **per-user, per-device** preference, not a project policy - it's s
 Set or inspect the mode with:
 
 ```bash
+npx ue-mcp feedback prompts off         # stop the agent offering feedback after a Python workaround
 npx ue-mcp feedback mode                 # show the effective mode and where it came from
 npx ue-mcp feedback mode defer           # persist the mode in ~/.ue-mcp/state.json
 npx ue-mcp feedback mode auto-approve

@@ -6,7 +6,8 @@ import { SessionRegistry, type EditorSession } from "./session.js";
 import type { ProjectContext } from "./project.js";
 import { ueMcpConfigRejections, describeConfigRejections } from "./project.js";
 import { attach, attachSummary } from "./deployer.js";
-import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO, multiEditorInstructions } from "./instructions.js";
+import { SERVER_INSTRUCTIONS, SERVER_INSTRUCTIONS_LEAN, SERVER_INSTRUCTIONS_MICRO, multiEditorInstructions, withoutFeedbackSection } from "./instructions.js";
+import { feedbackPromptsActive } from "./user-state.js";
 import { resolveContextStrategy, applyLeanContext, buildMicroGateway } from "./lean-context.js";
 import {
   routeEditorCall,
@@ -613,11 +614,14 @@ async function main() {
   // cannot be renegotiated, so an editor whose plugins document a category
   // has to have that documented for the whole server or not at all.
   const knowledgeBlock = buildKnowledgeBlock(unionKnowledge(surfaces));
-  const baseInstructions = contextStrategy === "micro"
+  const strategyInstructions = contextStrategy === "micro"
     ? SERVER_INSTRUCTIONS_MICRO
     : contextStrategy === "lean"
       ? SERVER_INSTRUCTIONS_LEAN
       : SERVER_INSTRUCTIONS;
+  const baseInstructions = feedbackPromptsActive(project.config.disable)
+    ? strategyInstructions
+    : withoutFeedbackSection(strategyInstructions);
   const withKnowledge = knowledgeBlock
     ? `${baseInstructions}\n\n═══ PLUGIN KNOWLEDGE ═══\n${knowledgeBlock}`
     : baseInstructions;

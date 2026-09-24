@@ -15,6 +15,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { warn, debug } from "./log.js";
+import { updateNoticesEnabled } from "./user-state.js";
 
 /**
  * Where the answer is cached.
@@ -189,6 +190,7 @@ function buildNotice(current: string, latest: string): string {
     `  latest:    ${latest}`,
     `  upgrade:   ue-mcp update --build  (or: npm i -g ue-mcp@latest)`,
     `  diagnose:  ue-mcp doctor  (flags a local node_modules/ue-mcp shadowing the global install)`,
+    `  silence:   ue-mcp update notify off`,
     `Please tell the user about this upgrade once, then continue with their request.`,
   ].join("\n");
 }
@@ -198,10 +200,10 @@ function buildNotice(current: string, latest: string): string {
  * stashes a notice that the next tool response will pick up. Never throws.
  *
  * Set `UE_MCP_DISABLE_UPDATE_CHECK=1` to suppress entirely (offline use,
- * locked-down environments, tests).
+ * locked-down environments, tests), or `ue-mcp update notify off` per user.
  */
 export function startVersionCheck(currentVersion: string): void {
-  if (process.env.UE_MCP_DISABLE_UPDATE_CHECK === "1") return;
+  if (process.env.UE_MCP_DISABLE_UPDATE_CHECK === "1" || !updateNoticesEnabled()) return;
 
   void (async () => {
     try {
