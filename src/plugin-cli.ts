@@ -50,6 +50,7 @@ import {
   checkSkills,
   conflictMessages,
   installSkillSet,
+  installedSkillName,
   listSkills,
   removeSkillSet,
   syncPluginSkills,
@@ -475,13 +476,21 @@ function cmdCheckSkills(): void {
     note(`no usable ue-mcp.plugin.yml (${(e as Error).message}); checking against core actions only`);
   }
 
-  const result = checkSkills(root, known);
+  // The installer sets a plugin skill's name, so the directory need not match it.
+  const result = checkSkills(root, known, { requireNameMatch: false });
   for (const p of result.problems) {
     console.log(`  ${p.skill}: ${p.detail}${p.didYouMean?.length ? ` Closest: ${p.didYouMean.join(", ")}` : ""}`);
   }
   for (const ref of result.unverified) console.log(`  unverified (unknown category): ${ref}`);
   if (result.problems.length > 0) fail(`${result.problems.length} problem(s) in ${result.checked.length} skill(s)`);
-  note(`${result.checked.length} skill(s) ok: ${result.checked.join(", ")}`);
+  let pkgName = path.basename(dir);
+  try {
+    pkgName = (JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8")) as { name?: string }).name ?? pkgName;
+  } catch {
+    // No package.json: name the prefix after the directory.
+  }
+  note(`${result.checked.length} skill(s) ok. Installed as:`);
+  for (const skill of result.checked) console.log(`  ${skill} -> .claude/skills/${installedSkillName(pkgName, skill)}`);
 }
 
 function cmdCreate(): void {
@@ -728,10 +737,10 @@ export default class ${greetClass} extends UeMcpTask<Options> {
   );
 
   // ── Skills ──────────────────────────────────────────────────────────────
-  fs.mkdirSync(path.join(dir, "skills", `${prefix}-workflow`), { recursive: true });
+  fs.mkdirSync(path.join(dir, "skills", "workflow"), { recursive: true });
   fs.writeFileSync(
-    path.join(dir, "skills", `${prefix}-workflow`, "SKILL.md"),
-    `---\nname: ${prefix}-workflow\ndescription: Use when working with ${pkgName}. Say here when Claude should load this guide.\n---\n\n`
+    path.join(dir, "skills", "workflow", "SKILL.md"),
+    `---\nname: workflow\ndescription: Use when working with ${pkgName}. Say here when Claude should load this guide.\n---\n\n`
       + `# ${pkgName} workflow\n\n1. \`${prefix}(action="greet")\` to check the plugin is loaded.\n`,
   );
 
@@ -756,7 +765,7 @@ Keep what you want, delete the rest.
 - **inject** -> \`project(action="${prefix}_hello")\` (an action added onto a built-in category)
 - **provides** -> \`${prefix}(action="greet")\` (a new top-level category this plugin owns)
 - **flows** -> \`${prefix}_demo\` (a chained, one-call orchestration)
-- **skills** -> \`skills/${prefix}-workflow/SKILL.md\`, copied into the project's \`.claude/skills/\` on install
+- **skills** -> \`skills/workflow/SKILL.md\`, installed into the project's \`.claude/skills/\` under this plugin's prefix
 - **nativeModule** -> a C++ handler skeleton under \`ue/Plugins/${uePlugin}/\`, **dormant** until you activate it
 
 ## Activate the native C++ module

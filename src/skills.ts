@@ -17,6 +17,7 @@ import yaml from "js-yaml";
 import { nearestActions } from "./action-schema.js";
 import { readPluginsList } from "./plugin/plugins-list.js";
 import { findInstalledPackage } from "./plugin/resolver.js";
+import { pluginSlug } from "./plugin/plugin-groups.js";
 
 /** The owner name recorded for the skills that ship with ue-mcp itself. */
 export const CORE_OWNER = "ue-mcp";
@@ -92,6 +93,31 @@ export interface SkillInstallResult {
 }
 
 /**
+ * The prefix a plugin's skills install under: the package name without its
+ * scope separator or `ue-mcp-`, reduced to the characters a skill name allows.
+ * `ue-mcp-meshy` gives `meshy`, `@studio/ue-mcp-foo` gives `studio-foo`.
+ */
+export function skillNamespace(pkgName: string): string {
+  const scoped = /^@([^/]+)\/(.+)$/.exec(pkgName);
+  const base = pluginSlug(scoped ? scoped[2] : pkgName);
+  return (scoped ? `${scoped[1]}-${base}` : base)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * The directory, and frontmatter `name:`, a skill installs as. A plugin's
+ * skills are prefixed with its namespace so two plugins can ship the same
+ * name; one already carrying the prefix keeps it once. ue-mcp's own are not.
+ */
+export function installedSkillName(owner: string, skill: string): string {
+  if (owner === CORE_OWNER) return skill;
+  const ns = skillNamespace(owner);
+  return skill === ns || skill.startsWith(`${ns}-`) ? skill : `${ns}-${skill}`;
+}
+
+/**
  * Install every skill under `sourceRoot` for one owner, and prune the ones that
  * owner installed before but no longer ships.
  *
@@ -117,24 +143,29 @@ export function installSkillSet(
   };
   const owned: string[] = [];
 
-  for (const name of listSkills(sourceRoot)) {
-    const src = path.join(sourceRoot, name);
+  for (const skill of listSkills(sourceRoot)) {
+    const name = installedSkillName(owner, skill);
+    const files = skillFiles(path.join(sourceRoot, skill), owner === CORE_OWNER ? undefined : name);
     const dest = path.join(destRoot, name);
     const heldBy = Object.keys(state).find((o) => o !== owner && state[o].includes(name));
     if (heldBy) {
       result.conflicts.push({ skill: name, heldBy });
       continue;
     }
+    const current = matches(files, dest);
     const untracked = !previous.has(name) && fs.existsSync(dest);
-    if (untracked && owner !== CORE_OWNER && !sameTree(src, dest)) {
+    if (untracked && owner !== CORE_OWNER && !current) {
       result.conflicts.push({ skill: name, heldBy: "the user (untracked directory)" });
       continue;
     }
-    if (sameTree(src, dest)) {
+    if (current) {
       result.unchanged.push(name);
     } else {
       fs.rmSync(dest, { recursive: true, force: true });
-      fs.cpSync(src, dest, { recursive: true });
+      for (const [rel, data] of files) {
+        fs.mkdirSync(path.dirname(path.join(dest, rel)), { recursive: true });
+        fs.writeFileSync(path.join(dest, rel), data);
+      }
       result.installed.push(name);
     }
     owned.push(name);
@@ -226,17 +257,44 @@ export function syncPluginSkills(projectDir: string, configPath: string): Plugin
   return result;
 }
 
-function sameTree(a: string, b: string): boolean {
-  if (!fs.existsSync(b)) return false;
-  const files = (root: string): string[] =>
-    (fs.readdirSync(root, { recursive: true, withFileTypes: true }) as fs.Dirent[])
-      .filter((e) => e.isFile())
-      .map((e) => path.relative(root, path.join(e.parentPath ?? e.path, e.name)))
-      .sort();
-  const fa = files(a);
-  const fb = files(b);
-  if (fa.length !== fb.length || fa.some((f, i) => f !== fb[i])) return false;
-  return fa.every((f) => fs.readFileSync(path.join(a, f)).equals(fs.readFileSync(path.join(b, f))));
+function listFiles(root: string): string[] {
+  return (fs.readdirSync(root, { recursive: true, withFileTypes: true }) as fs.Dirent[])
+    .filter((e) => e.isFile())
+    .map((e) => path.relative(root, path.join(e.parentPath ?? e.path, e.name)))
+    .sort();
+}
+
+/** A skill's files as they will be installed, with the frontmatter name set
+ *  when `rename` is given. */
+function skillFiles(src: string, rename?: string): Map<string, Buffer> {
+  const files = new Map<string, Buffer>();
+  for (const rel of listFiles(src)) {
+    const data = fs.readFileSync(path.join(src, rel));
+    files.set(
+      rel,
+      rel === "SKILL.md" && rename
+        ? Buffer.from(setFrontmatterName(data.toString("utf-8"), rename), "utf-8")
+        : data,
+    );
+  }
+  return files;
+}
+
+function matches(files: Map<string, Buffer>, dest: string): boolean {
+  if (!fs.existsSync(dest)) return false;
+  const present = listFiles(dest);
+  if (present.length !== files.size) return false;
+  return present.every((rel) => files.get(rel)?.equals(fs.readFileSync(path.join(dest, rel))) ?? false);
+}
+
+/** Set the frontmatter `name:`, adding the field or the whole block if missing. */
+export function setFrontmatterName(text: string, name: string): string {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  if (!m) return `---\nname: ${name}\n---\n\n${text}`;
+  const line = /^name:[^\r\n]*$/m;
+  const block = line.test(m[1]) ? m[1].replace(line, `name: ${name}`) : `name: ${name}\n${m[1]}`;
+  const start = m.index + (m[0].startsWith("---\r\n") ? 5 : 4);
+  return text.slice(0, start) + block + text.slice(start + m[1].length);
 }
 
 function removeIfEmpty(dir: string): void {
@@ -275,10 +333,15 @@ export function extractActionReferences(body: string): string[] {
 
 /**
  * Check every skill under `root` against a set of `category.action` names:
- * each must have a frontmatter description, a name matching its directory,
- * and teach only actions that exist.
+ * each must have a frontmatter description, a name matching its directory
+ * (unless the installer sets it, as for plugin skills), and teach only
+ * actions that exist.
  */
-export function checkSkills(root: string, known: ReadonlySet<string>): SkillCheckResult {
+export function checkSkills(
+  root: string,
+  known: ReadonlySet<string>,
+  opts: { requireNameMatch?: boolean } = {},
+): SkillCheckResult {
   const categories = new Set([...known].map((a) => a.slice(0, a.indexOf("."))));
   const result: SkillCheckResult = { checked: listSkills(root), problems: [], unverified: [] };
   const unverified = new Set<string>();
@@ -293,7 +356,7 @@ export function checkSkills(root: string, known: ReadonlySet<string>): SkillChec
         detail: `${file} has no 'description:' in its frontmatter, so Claude Code never loads it.`,
       });
     }
-    if (typeof frontmatter.name === "string" && frontmatter.name !== skill) {
+    if (opts.requireNameMatch !== false && typeof frontmatter.name === "string" && frontmatter.name !== skill) {
       result.problems.push({
         skill,
         detail: `frontmatter name '${frontmatter.name}' does not match the directory '${skill}'.`,

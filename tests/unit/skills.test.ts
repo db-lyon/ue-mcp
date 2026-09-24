@@ -1,7 +1,8 @@
 /**
  * Claude Code skills: install and removal per owning package, plugin skills
- * following the project's plugins: list, and the gate that every shipped
- * skill teaches only actions that exist.
+ * prefixed so two plugins can ship the same name, plugin skills following the
+ * project's plugins: list, and the gate that every shipped skill teaches only
+ * actions that exist.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs";
@@ -17,12 +18,15 @@ import {
   extractActionReferences,
   installCoreSkills,
   installSkillSet,
+  installedSkillName,
   listSkills,
   packagedSkillsRoot,
   projectSkillsRoot,
   readSkillOwnership,
   removeCoreSkills,
   removeSkillSet,
+  setFrontmatterName,
+  skillNamespace,
   syncPluginSkills,
 } from "../../src/skills.js";
 
@@ -52,6 +56,8 @@ function writeConfig(plugins: string[]): string {
 }
 
 const installed = (): string[] => listSkills(projectSkillsRoot(projectDir));
+const readInstalled = (name: string): string =>
+  fs.readFileSync(path.join(projectSkillsRoot(projectDir), name, "SKILL.md"), "utf-8");
 
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ue-mcp-skills-"));
@@ -64,54 +70,106 @@ afterEach(() => {
 });
 
 describe("installing one owner's skills", () => {
-  it("installs, then reports a repeat as unchanged", () => {
+  it("installs under the owner's prefix, then reports a repeat as unchanged", () => {
     const src = path.join(tmp, "src");
     writeSkill(src, "a");
     writeSkill(src, "b");
-    expect(installSkillSet(projectDir, "pkg", src).installed).toEqual(["a", "b"]);
-    const again = installSkillSet(projectDir, "pkg", src);
+    expect(installSkillSet(projectDir, "ue-mcp-pkg", src).installed).toEqual(["pkg-a", "pkg-b"]);
+    const again = installSkillSet(projectDir, "ue-mcp-pkg", src);
     expect(again.installed).toEqual([]);
-    expect(again.unchanged).toEqual(["a", "b"]);
-    expect(readSkillOwnership(projectDir)).toEqual({ pkg: ["a", "b"] });
+    expect(again.unchanged).toEqual(["pkg-a", "pkg-b"]);
+    expect(readSkillOwnership(projectDir)).toEqual({ "ue-mcp-pkg": ["pkg-a", "pkg-b"] });
+  });
+
+  it("rewrites the frontmatter name to the installed name", () => {
+    const src = path.join(tmp, "src");
+    writeSkill(src, "a");
+    installSkillSet(projectDir, "ue-mcp-pkg", src);
+    expect(readInstalled("pkg-a")).toBe("---\nname: pkg-a\ndescription: what a is for\n---\n# body\n");
+  });
+
+  it("installs two plugins' skills of the same name side by side", () => {
+    const one = path.join(tmp, "one");
+    const two = path.join(tmp, "two");
+    writeSkill(one, "import");
+    writeSkill(two, "import", "# different\n");
+    installSkillSet(projectDir, "ue-mcp-meshy", one);
+    expect(installSkillSet(projectDir, "@studio/ue-mcp-foo", two).conflicts).toEqual([]);
+    expect(installed()).toEqual(["meshy-import", "studio-foo-import"]);
+  });
+
+  it("does not repeat a prefix the author already used", () => {
+    const src = path.join(tmp, "src");
+    writeSkill(src, "meshy-import");
+    writeSkill(src, "meshy");
+    expect(installSkillSet(projectDir, "ue-mcp-meshy", src).installed).toEqual(["meshy", "meshy-import"]);
+  });
+
+  it("replaces bare names from an earlier version with prefixed ones", () => {
+    const src = path.join(tmp, "src");
+    writeSkill(src, "a");
+    writeSkill(projectSkillsRoot(projectDir), "a");
+    fs.mkdirSync(path.join(projectDir, ".ue-mcp"), { recursive: true });
+    fs.writeFileSync(path.join(projectDir, ".ue-mcp", "skills.json"), JSON.stringify({ "ue-mcp-pkg": ["a"] }));
+    expect(installSkillSet(projectDir, "ue-mcp-pkg", src).pruned).toEqual(["a"]);
+    expect(installed()).toEqual(["pkg-a"]);
   });
 
   it("prunes a skill the owner stopped shipping", () => {
     const src = path.join(tmp, "src");
     writeSkill(src, "a");
     writeSkill(src, "b");
-    installSkillSet(projectDir, "pkg", src);
+    installSkillSet(projectDir, "ue-mcp-pkg", src);
     fs.rmSync(path.join(src, "b"), { recursive: true });
-    expect(installSkillSet(projectDir, "pkg", src).pruned).toEqual(["b"]);
-    expect(installed()).toEqual(["a"]);
+    expect(installSkillSet(projectDir, "ue-mcp-pkg", src).pruned).toEqual(["pkg-b"]);
+    expect(installed()).toEqual(["pkg-a"]);
   });
 
   it("refuses a name another owner holds", () => {
+    // Only two packages that reduce to the same prefix can still collide.
     const one = path.join(tmp, "one");
     const two = path.join(tmp, "two");
     writeSkill(one, "shared");
     writeSkill(two, "shared", "# different\n");
-    installSkillSet(projectDir, "first", one);
-    const r = installSkillSet(projectDir, "second", two);
-    expect(r.conflicts).toEqual([{ skill: "shared", heldBy: "first" }]);
-    expect(fs.readFileSync(path.join(projectSkillsRoot(projectDir), "shared", "SKILL.md"), "utf-8")).toContain("# body");
+    installSkillSet(projectDir, "ue-mcp-x", one);
+    expect(installSkillSet(projectDir, "x", two).conflicts).toEqual([{ skill: "x-shared", heldBy: "ue-mcp-x" }]);
+    expect(readInstalled("x-shared")).toContain("# body");
   });
 
   it("refuses to overwrite a skill the user wrote", () => {
-    writeSkill(projectSkillsRoot(projectDir), "mine", "# the user's\n");
+    writeSkill(projectSkillsRoot(projectDir), "pkg-mine", "# the user's\n");
     const src = path.join(tmp, "src");
     writeSkill(src, "mine");
-    expect(installSkillSet(projectDir, "pkg", src).conflicts[0].skill).toBe("mine");
-    expect(fs.readFileSync(path.join(projectSkillsRoot(projectDir), "mine", "SKILL.md"), "utf-8")).toContain("the user's");
+    expect(installSkillSet(projectDir, "ue-mcp-pkg", src).conflicts[0].skill).toBe("pkg-mine");
+    expect(readInstalled("pkg-mine")).toContain("the user's");
   });
 
   it("removes only its own skills, and leaves the user's", () => {
     const src = path.join(tmp, "src");
     writeSkill(src, "a");
     writeSkill(projectSkillsRoot(projectDir), "mine");
-    installSkillSet(projectDir, "pkg", src);
-    expect(removeSkillSet(projectDir, "pkg")).toEqual(["a"]);
+    installSkillSet(projectDir, "ue-mcp-pkg", src);
+    expect(removeSkillSet(projectDir, "ue-mcp-pkg")).toEqual(["pkg-a"]);
     expect(installed()).toEqual(["mine"]);
     expect(readSkillOwnership(projectDir)).toEqual({});
+  });
+});
+
+describe("naming", () => {
+  it("derives the prefix from the package name", () => {
+    expect(skillNamespace("ue-mcp-meshy")).toBe("meshy");
+    expect(skillNamespace("@Studio/ue-mcp-foo")).toBe("studio-foo");
+    expect(skillNamespace("my_plugin")).toBe("my-plugin");
+  });
+
+  it("leaves ue-mcp's own skill names alone", () => {
+    expect(installedSkillName(CORE_OWNER, "ue-mcp-blueprint")).toBe("ue-mcp-blueprint");
+  });
+
+  it("sets the name field, adding it or the whole block when missing", () => {
+    expect(setFrontmatterName("---\ndescription: d\n---\nbody", "x")).toBe("---\nname: x\ndescription: d\n---\nbody");
+    expect(setFrontmatterName("---\r\nname: old\r\n---\r\n", "x")).toBe("---\r\nname: x\r\n---\r\n");
+    expect(setFrontmatterName("# body\n", "x")).toBe("---\nname: x\n---\n\n# body\n");
   });
 });
 
@@ -125,6 +183,13 @@ describe("ue-mcp's own skills", () => {
     expect(readSkillOwnership(projectDir)[CORE_OWNER]).toEqual(listSkills(packagedSkillsRoot()));
   });
 
+  it("installs byte-identical copies, with no name rewrite", () => {
+    installCoreSkills(projectDir);
+    for (const name of listSkills(packagedSkillsRoot())) {
+      expect(readInstalled(name)).toBe(fs.readFileSync(path.join(packagedSkillsRoot(), name, "SKILL.md"), "utf-8"));
+    }
+  });
+
   it("removes untracked copies from an earlier version on opt-out", () => {
     const name = listSkills(packagedSkillsRoot())[0];
     writeSkill(projectSkillsRoot(projectDir), name);
@@ -135,7 +200,7 @@ describe("ue-mcp's own skills", () => {
 
 describe("plugin skills follow the plugins: list", () => {
   it("installs a listed plugin's skills and removes them once it is unlisted", () => {
-    writePlugin("ue-mcp-foo", ["foo-guide"]);
+    writePlugin("ue-mcp-foo", ["guide"]);
     const config = writeConfig(["ue-mcp-foo"]);
     expect(syncPluginSkills(projectDir, config).plugins["ue-mcp-foo"].installed).toEqual(["foo-guide"]);
     expect(installed()).toEqual(["foo-guide"]);
@@ -183,6 +248,7 @@ describe("checking skills", () => {
     fs.mkdirSync(dir);
     fs.writeFileSync(path.join(dir, "SKILL.md"), "---\nname: other\ndescription: d\n---\n");
     expect(checkSkills(root, known).problems.map((p) => p.skill)).toEqual(["x", "z"]);
+    expect(checkSkills(root, known, { requireNameMatch: false }).problems.map((p) => p.skill)).toEqual(["x"]);
   });
 
   it("lists a reference to an unknown category as unverified, not wrong", () => {
