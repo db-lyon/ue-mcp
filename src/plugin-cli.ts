@@ -6,6 +6,8 @@
  *   uninstall <name>                   npm uninstall + remove from plugins:
  *   list                               list configured plugins and their status
  *   update [name]                      npm update + re-validate manifests
+ *   check-skills [dir]                 check a plugin's skills/ against the
+ *                                      action surface, before publishing
  *   create <name> [--dir path]         scaffold a new plugin (superset of every
  *                                      extension shape: inject, provides, flows,
  *                                      and a dormant native C++ module)
@@ -41,6 +43,17 @@ import {
   writeNativeModulesState,
 } from "./plugin/native-deploy.js";
 import { ALL_TOOLS } from "./tools.js";
+import { readPluginsList, type PluginEntry } from "./plugin/plugins-list.js";
+import { prefixedActionName } from "./plugin/manifest.js";
+import { flowCategoryForCheck } from "./flow/flow-surface.js";
+import {
+  checkSkills,
+  conflictMessages,
+  installSkillSet,
+  listSkills,
+  removeSkillSet,
+  syncPluginSkills,
+} from "./skills.js";
 import { resolvePublishToken } from "./registry-auth.js";
 import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-flag.js";
 
@@ -121,28 +134,6 @@ function runNpm(args: string[], cwd: string): void {
   if (r.status !== 0) {
     fail(`npm ${args.join(" ")} exited ${r.status ?? "(killed by signal)"}`);
   }
-}
-
-interface PluginEntry {
-  name: string;
-  version?: string;
-}
-
-function readPluginsList(configPath: string): PluginEntry[] {
-  if (!fs.existsSync(configPath)) return [];
-  const raw = yaml.load(fs.readFileSync(configPath, "utf-8")) as { plugins?: unknown } | null;
-  if (!raw || !Array.isArray(raw.plugins)) return [];
-  const out: PluginEntry[] = [];
-  for (const entry of raw.plugins) {
-    if (entry && typeof entry === "object" && typeof (entry as { name?: unknown }).name === "string") {
-      const e = entry as { name: string; version?: unknown };
-      out.push({
-        name: e.name,
-        version: typeof e.version === "string" ? e.version : undefined,
-      });
-    }
-  }
-  return out;
 }
 
 /**
@@ -350,6 +341,15 @@ function cmdInstall(): void {
     }
   }
 
+  // Copy the plugin's skills/<name>/SKILL.md into .claude/skills/.
+  const skillsRoot = path.join(pkgDir, "skills");
+  if (listSkills(skillsRoot).length > 0) {
+    const r = installSkillSet(proj.projectDir, name, skillsRoot);
+    for (const line of conflictMessages(r)) note(`WARNING: ${line}`);
+    const skills = [...r.installed, ...r.unchanged];
+    if (skills.length > 0) note(`skills: ${skills.join(", ")} (in .claude/skills/)`);
+  }
+
   // Summary
   note(`installed ${name}@${manifest.minServerVersion ? `(server-min ${manifest.minServerVersion})` : ""}`);
   note(`actionPrefix: ${manifest.actionPrefix}`);
@@ -385,6 +385,9 @@ function cmdUninstall(): void {
         `Close the editor if it's running and remove leftover files under Plugins/${nativeState[name].uePluginName}/ manually.`);
     }
   }
+
+  const removedSkills = removeSkillSet(proj.projectDir, name);
+  if (removedSkills.length > 0) note(`removed skills: ${removedSkills.join(", ")}`);
 
   const list = readPluginsList(proj.configPath).filter((p) => p.name !== name);
   writePluginsList(proj.configPath, list);
@@ -436,7 +439,49 @@ function cmdUpdate(): void {
   } else {
     runNpm(["update"], proj.projectDir);
   }
+  const skills = syncPluginSkills(proj.projectDir, proj.configPath);
+  for (const [plugin, r] of Object.entries(skills.plugins)) {
+    for (const line of conflictMessages(r)) note(`WARNING: ${line}`);
+    if (r.installed.length > 0) note(`${plugin}: updated skills ${r.installed.join(", ")}`);
+    if (r.pruned.length > 0) note(`${plugin}: removed skills ${r.pruned.join(", ")}`);
+  }
   note(RESTART_NOTE);
+}
+
+/**
+ * Check a plugin package's skills/ before publishing: every SKILL.md needs a
+ * description, a name matching its directory, and only actions that exist,
+ * counting the ones this plugin adds. Another plugin's category cannot be
+ * checked here and is listed as unverified rather than failed.
+ */
+function cmdCheckSkills(): void {
+  const dir = path.resolve(args.shift() ?? process.cwd());
+  const root = path.join(dir, "skills");
+  if (listSkills(root).length === 0) fail(`no skills/<name>/SKILL.md under ${dir}`);
+
+  const known = new Set<string>();
+  for (const tool of [...ALL_TOOLS, flowCategoryForCheck()]) {
+    for (const action of Object.keys(tool.actions)) known.add(`${tool.name}.${action}`);
+  }
+  try {
+    const { manifest } = loadManifest(dir);
+    for (const [category, actions] of Object.entries(manifest.inject)) {
+      for (const a of Object.keys(actions)) known.add(`${category}.${prefixedActionName(manifest.actionPrefix, a)}`);
+    }
+    for (const [category, spec] of Object.entries(manifest.provides)) {
+      for (const a of Object.keys(spec.actions)) known.add(`${category}.${a}`);
+    }
+  } catch (e) {
+    note(`no usable ue-mcp.plugin.yml (${(e as Error).message}); checking against core actions only`);
+  }
+
+  const result = checkSkills(root, known);
+  for (const p of result.problems) {
+    console.log(`  ${p.skill}: ${p.detail}${p.didYouMean?.length ? ` Closest: ${p.didYouMean.join(", ")}` : ""}`);
+  }
+  for (const ref of result.unverified) console.log(`  unverified (unknown category): ${ref}`);
+  if (result.problems.length > 0) fail(`${result.problems.length} problem(s) in ${result.checked.length} skill(s)`);
+  note(`${result.checked.length} skill(s) ok: ${result.checked.join(", ")}`);
 }
 
 function cmdCreate(): void {
@@ -510,7 +555,7 @@ function writeScaffold(dir: string, pkgName: string, prefix: string): void {
     main: "dist/index.js",
     // `ue` ships the dormant native C++ source so authors can activate it
     // without re-vendoring; `LICENSE` is included for npm publish hygiene.
-    files: ["dist", "ue", "ue-mcp.plugin.yml", "knowledge", "README.md", "LICENSE"],
+    files: ["dist", "ue", "ue-mcp.plugin.yml", "knowledge", "skills", "README.md", "LICENSE"],
     keywords: ["ue-mcp-plugin", "unreal-engine"],
     author: "",
     license: "MIT",
@@ -526,7 +571,7 @@ function writeScaffold(dir: string, pkgName: string, prefix: string): void {
     },
     scripts: {
       build: "tsc",
-      check: "node scripts/check.mjs",
+      check: "node scripts/check.mjs && ue-mcp plugin check-skills .",
       prepublishOnly: "npm run build && npm run check",
     },
   };
@@ -682,6 +727,14 @@ export default class ${greetClass} extends UeMcpTask<Options> {
     `# ${pkgName} - project actions\n\nDescribe in one screen what your plugin contributes to the project category.\n`,
   );
 
+  // ── Skills ──────────────────────────────────────────────────────────────
+  fs.mkdirSync(path.join(dir, "skills", `${prefix}-workflow`), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "skills", `${prefix}-workflow`, "SKILL.md"),
+    `---\nname: ${prefix}-workflow\ndescription: Use when working with ${pkgName}. Say here when Claude should load this guide.\n---\n\n`
+      + `# ${pkgName} workflow\n\n1. \`${prefix}(action="greet")\` to check the plugin is loaded.\n`,
+  );
+
   // ── Dormant native C++ module ────────────────────────────────────────────
   writeNativeSkeleton(dir, uePlugin, pkgName);
 
@@ -703,6 +756,7 @@ Keep what you want, delete the rest.
 - **inject** -> \`project(action="${prefix}_hello")\` (an action added onto a built-in category)
 - **provides** -> \`${prefix}(action="greet")\` (a new top-level category this plugin owns)
 - **flows** -> \`${prefix}_demo\` (a chained, one-call orchestration)
+- **skills** -> \`skills/${prefix}-workflow/SKILL.md\`, copied into the project's \`.claude/skills/\` on install
 - **nativeModule** -> a C++ handler skeleton under \`ue/Plugins/${uePlugin}/\`, **dormant** until you activate it
 
 ## Activate the native C++ module
@@ -1308,6 +1362,7 @@ switch (sub) {
   case "ls": cmdList(); break;
   case "update":
   case "upgrade": cmdUpdate(); break;
+  case "check-skills": cmdCheckSkills(); break;
   case "create":
   case "new":
   case "init": cmdCreate(); break;
@@ -1320,6 +1375,7 @@ switch (sub) {
       "  ue-mcp plugin uninstall <name>\n" +
       "  ue-mcp plugin list\n" +
       "  ue-mcp plugin update [name]\n" +
+      "  ue-mcp plugin check-skills [dir]\n" +
       "  ue-mcp plugin config <name> [--enable a,b] [--disable c,d] [--list-groups] [--local|--project]\n" +
       "  ue-mcp plugin create <name> [--dir path]\n" +
       "  ue-mcp plugin publish [dir] [--slug s] [--private|--public] [--dry-run]",

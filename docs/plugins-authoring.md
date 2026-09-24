@@ -49,6 +49,9 @@ my-plugin/
     check.mjs                # pre-publish validator: manifest parses, task refs resolve
   knowledge/
     gameplay.md              # one markdown file per target category
+  skills/
+    my-workflow/
+      SKILL.md               # Claude Code skill, copied into the project on install
   LICENSE
   README.md
 ```
@@ -215,6 +218,34 @@ Quick start:
 2. Press Play, do your thing, stop PIE
 3. `gameplay(action="pie_replay_arm", recording_id="<id>", eject=true, time_scale=0.1)` - replay at 10%
 ```
+
+## Skills
+
+A plugin can ship Claude Code skills: one directory per skill under `skills/`, each holding a `SKILL.md`. No manifest key is needed. Add `skills` to `files` in `package.json` so it ships.
+
+```markdown
+---
+name: my-workflow
+description: Use when importing a character with MyPlugin. Claude reads this line to decide whether to load the skill.
+---
+
+# Importing a character
+
+1. `myplugin(action="import", path="...")`
+2. `animation(action="list_skeletal_meshes")` to confirm the skeleton
+```
+
+`ue-mcp plugin install` copies every skill directory into the project's `.claude/skills/`, and `ue-mcp plugin uninstall` removes them. `ue-mcp plugin update`, `ue-mcp init` and `ue-mcp deploy` refresh them and delete any your new version stopped shipping. Which package installed each skill is recorded in `.ue-mcp/skills.json`.
+
+A skill name is owned by the first package that installed it. A second package shipping the same name is refused with a warning, and so is a name the user already has in `.claude/skills/`. Prefix skill names with your plugin's name.
+
+Check your skills before publishing:
+
+```bash
+ue-mcp plugin check-skills .
+```
+
+It fails on a `SKILL.md` without a `description:`, a `name:` that differs from its directory, or a `category(action="x")` call that does not exist, counting the actions your plugin adds. A call into another plugin's category cannot be checked and is listed as unverified. The scaffold's `npm run check` runs it.
 
 ## Publishing
 

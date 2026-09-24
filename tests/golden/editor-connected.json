@@ -9288,7 +9288,7 @@
       "name": "feedback"
     },
     {
-      "description": "Run pre-built named sequences for this project. ALWAYS check project(action=\"get_status\") first - its 'flows' field lists what's available. If a flow matches the user's request, run it via flow(action=\"run\", flowName=\"...\") instead of composing the sequence by hand. Config reloads on every call - no restart needed.\n\nThe skill_* actions cover the skill packs - the written workflows that say which calls to make in what order - including verifying that the calls they teach still exist.\n\nActions:\n- run: Execute a named flow from ue-mcp.yml. Params: flowName, skip? (step names or numbers), params? (runtime options merged into every step's options, highest priority), rollback_on_failure? (invoke inverse tasks in reverse order when a later step fails). A step whose handler reports success:false FAILS the step and stops the run, and the inverses collected up to and including it are what rollback_on_failure unwinds. A step whose failure is EXPECTED says so itself, in the YAML, with ignore_failure: true - the run walks on, and the step is still recorded as failed with its error and its data, marked ignoredFailure. That is how stop, build, start survives an editor that was already stopped, instead of editor(stop_editor) reporting a success it did not achieve. The failing step's OWN inverse, which a few handlers attach after a partial write, is collected like every other: under rollback_on_failure it is replayed FIRST, ahead of the steps before it, so the partial write is undone before they unwind. It arrives verbatim on steps[i].partialWriteRollback, whose replayed flag says whether the runner ran it or it is yours to run, and in that step's error text. A nested flow's steps arrive on steps[i].nestedSteps, reported on the same terms. Returns a summary, every step's data, and the runId.\n- plan: Show a flow's execution plan without running a step of it. Params: flowName. Returns the ordered plan.\n- list: List the flows available to this project, merged from ue-mcp.yml, the user-global config and any loaded plugin. Params: none\n- skill_list: Every skill pack this server can see: the ones bundled with ue-mcp, the ones contributed by loaded plugins (any plugin package shipping skills/<name>/SKILL.md), and the ones installed into this project's .claude/skills. Each row carries the description an agent reads to decide whether to load it, the categories it drives, and any Unreal plugin it needs. Params: source? (packaged|project|plugin, default all), detail? (include declared and referenced actions plus the sidecar path). Returns the packs grouped by source, plus whether each is installed.\n- skill_get: One skill pack in full, optionally including its markdown, so an agent can read the workflow without leaving the tool surface. Reports whether the project's installed copy matches the available one, which is how a stale install is spotted. Params: skillName, includeBody? (default true). Returns the pack, its declarations, the actions it teaches, and its install state.\n- skill_check: Verify every skill pack against the live action surface. A pack is prose that names calls, so a renamed or removed action leaves a document that teaches a call the server refuses; this reads every category(action=\"x\") out of every pack and reports the ones that no longer resolve, with the closest real spellings. Also flags a missing frontmatter description, a name that disagrees with its directory, an unparsable ue-mcp.yml sidecar, and a sidecar 'actions:' list that omits something the body teaches. epic_* references are reported separately, since those exist only once a 5.8 editor enriches the surface. Params: none\n- skill_install: Copy skill packs into this project's .claude/skills, SKILL.md and ue-mcp.yml sidecar together. Idempotent and specific about it: a pack whose destination already holds the same bytes comes back as unchanged rather than counted as installed, so a repeat call is distinguishable from a real update. Files in .claude/skills that did not come from a pack are never touched. Params: skillName? (one pack; omitted, every packaged and plugin-contributed pack). Returns what changed, what did not, and the call that removes them.\n- skill_remove: Remove installed skill packs from this project's .claude/skills. Deletes the SKILL.md and its sidecar, then the pack directory only if it ends up empty and the skills directory only if it does too, so anything the user added alongside survives. Idempotent: a pack that was not installed is reported as absent rather than failing. Params: exactly one of skillName (that pack) or all (true, every pack ue-mcp installed). Returns what was removed and the call that puts it back.\n\nStep types supported in YAML flows: any MCP action (category.action), nested flows (flow:),\nand 'shell' for running shell/exec commands. Per-step options: options, when, retries,\nretryDelay, retryOn, and ignore_failure (record this step's failure and carry on).\nExample shell step:\n  steps:\n    1: { task: shell, options: { command: \"npm run up:build\" } }",
+      "description": "Run pre-built named sequences for this project. ALWAYS check project(action=\"get_status\") first - its 'flows' field lists what's available. If a flow matches the user's request, run it via flow(action=\"run\", flowName=\"...\") instead of composing the sequence by hand. Config reloads on every call - no restart needed.\n\nActions:\n- run: Execute a named flow from ue-mcp.yml. Params: flowName, skip? (step names or numbers), params? (runtime options merged into every step's options, highest priority), rollback_on_failure? (invoke inverse tasks in reverse order when a later step fails). A step whose handler reports success:false FAILS the step and stops the run, and the inverses collected up to and including it are what rollback_on_failure unwinds. A step whose failure is EXPECTED says so itself, in the YAML, with ignore_failure: true - the run walks on, and the step is still recorded as failed with its error and its data, marked ignoredFailure. That is how stop, build, start survives an editor that was already stopped, instead of editor(stop_editor) reporting a success it did not achieve. The failing step's OWN inverse, which a few handlers attach after a partial write, is collected like every other: under rollback_on_failure it is replayed FIRST, ahead of the steps before it, so the partial write is undone before they unwind. It arrives verbatim on steps[i].partialWriteRollback, whose replayed flag says whether the runner ran it or it is yours to run, and in that step's error text. A nested flow's steps arrive on steps[i].nestedSteps, reported on the same terms. Returns a summary, every step's data, and the runId.\n- plan: Show a flow's execution plan without running a step of it. Params: flowName. Returns the ordered plan.\n- list: List the flows available to this project, merged from ue-mcp.yml, the user-global config and any loaded plugin. Params: none\n\nStep types supported in YAML flows: any MCP action (category.action), nested flows (flow:),\nand 'shell' for running shell/exec commands. Per-step options: options, when, retries,\nretryDelay, retryOn, and ignore_failure (record this step's failure and carry on).\nExample shell step:\n  steps:\n    1: { task: shell, options: { command: \"npm run up:build\" } }",
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "additionalProperties": false,
@@ -9299,12 +9299,7 @@
                 "enum": [
                   "run",
                   "plan",
-                  "list",
-                  "skill_list",
-                  "skill_get",
-                  "skill_check",
-                  "skill_install",
-                  "skill_remove"
+                  "list"
                 ],
                 "type": "string"
               },
@@ -9314,21 +9309,9 @@
             ],
             "description": "Action to perform. One of the listed values; anything else returns the closest matches."
           },
-          "all": {
-            "description": "skill_remove: act on every installed pack instead of a named one",
-            "type": "boolean"
-          },
-          "detail": {
-            "description": "skill_list: return full detail rather than summary rows",
-            "type": "boolean"
-          },
           "flowName": {
             "description": "Flow name from ue-mcp.yml",
             "type": "string"
-          },
-          "includeBody": {
-            "description": "skill_get: include the pack's markdown (default true)",
-            "type": "boolean"
           },
           "params": {
             "additionalProperties": {},
@@ -9339,20 +9322,12 @@
             "description": "run: invoke inverse tasks in reverse order on failure",
             "type": "boolean"
           },
-          "skillName": {
-            "description": "skill_get / skill_install / skill_remove: the pack's directory name",
-            "type": "string"
-          },
           "skip": {
             "description": "run: step names or numbers to skip",
             "items": {
               "type": "string"
             },
             "type": "array"
-          },
-          "source": {
-            "description": "skill_list: packaged|project|plugin",
-            "type": "string"
           }
         },
         "required": [

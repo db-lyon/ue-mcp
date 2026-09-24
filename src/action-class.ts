@@ -353,16 +353,6 @@ const OVERRIDES: Readonly<Record<string, ActionClass>> = {
   // Answers whether a named weightmap layer is present on a landscape. The
   // `exists` question never creates the layer it asks about.
   "landscape.layer_exists": "read",
-
-  // ── The skill packs ─────────────────────────────────────────────────
-  // Neither reaches a bridge, but packs install under a project's own
-  // `.claude/skills/`, so a write that guessed the wrong session would install
-  // into one project's checkout under another project's name.
-  "flow.skill_install": "mutate",
-  "flow.skill_remove": "mutate",
-  "flow.skill_list": "read",
-  "flow.skill_get": "read",
-  "flow.skill_check": "read",
 };
 
 /** Split `category.action`, tolerating an action name that contains a dot. */

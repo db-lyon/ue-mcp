@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { ProjectContext } from "./project.js";
 import { deploy, deploySummary } from "./deployer.js";
-import { installSkills } from "./skills.js";
+import { coreSkillsInstalled, conflictMessages, installCoreSkills, syncPluginSkills } from "./skills.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 
 const RESET = "\x1b[0m";
@@ -70,12 +70,14 @@ async function deployCmd() {
   if (result.pythonPluginEnabled) ok("Enabled PythonScriptPlugin");
   if (result.cppPluginEnabled) ok("Enabled UE_MCP_Bridge");
 
-  // Refresh Claude Code skills if the project is already using them
-  if (fs.existsSync(path.join(project.projectDir!, ".claude"))) {
-    const skillsResult = installSkills(project.projectDir!);
-    if (!skillsResult.error && skillsResult.installed.length > 0) {
-      ok(`Skills refreshed: ${skillsResult.installed.join(", ")}`);
-    }
+  // Refresh ue-mcp's skills if the project uses them, and every plugin's.
+  const skillResults = coreSkillsInstalled(project.projectDir!)
+    ? { "ue-mcp": installCoreSkills(project.projectDir!) }
+    : {};
+  const pluginSkills = syncPluginSkills(project.projectDir!, path.join(project.projectDir!, "ue-mcp.yml"));
+  for (const [owner, r] of Object.entries({ ...skillResults, ...pluginSkills.plugins })) {
+    for (const line of conflictMessages(r)) fail(line);
+    if (r.installed.length > 0) ok(`${owner} skills refreshed: ${r.installed.join(", ")}`);
   }
 
   console.log("");

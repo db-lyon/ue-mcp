@@ -75,11 +75,10 @@ const PER_SESSION: Record<string, string> = {
   "plugin-cli.ts": "Installs and inspects plugins for one project, chosen with --editor.",
   "feedback-cli.ts": "Scopes the deferred queue and the feedback mode with --editor.",
   "dialog-cli.ts": "Scopes the dialog handling mode with --editor, one editor at a time.",
-  "skills.ts": "Installs and removes agent skills inside one project directory.",
+  "skills.ts": "Installs, removes and checks agent skills inside one project directory, recording which package owns each.",
 
   "flow/context.ts": "Carries the session a flow step runs in.",
   "flow/flow-tool.ts": "Resolves the registry and config of the addressed editor.",
-  "flow/skill-actions.ts": "Installs skill packs into the addressed session's project, and lists the packs its plugins contribute.",
   "flow/registry.ts": "One task registry per session, built from that project's graph.",
   "flow/task-factory.ts": "Builds tasks that dispatch on the context's session bridge.",
   "flow/bridge-task.ts": "Calls the addressed session's bridge.",
@@ -137,7 +136,6 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "task.ts": "The public task-authoring surface, which is types.",
   "tools.ts": "The pristine tool declaration plus the union the server advertises; per-session graphs are clones of it, built in session-surface.",
   "tool-search.ts": "Searches the graph it is handed.",
-  "skill-packs.ts": "Reads, validates and installs skill packs from whichever roots it is handed; a pack belongs to a package, not to an editor.",
   "lean-context.ts": "Pure transforms over a graph. The strategy is one answer per transport, since there is one transport.",
   "instructions.ts": "The initialize payload is sent once per process and cannot be renegotiated.",
   "global-config.ts": "The user-global config layer, which applies to every project by definition.",
@@ -157,6 +155,8 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "plugin/provision.ts": "Builds a provided category from a manifest.",
   "plugin/plugin-groups.ts": "Pure group logic over the config it is handed.",
   "plugin/version.ts": "Semver comparison for the minServerVersion gate.",
+  "plugin/plugins-list.ts": "Pure read of the plugins: list from the config file it is handed.",
+  "flow/flow-surface.ts": "Shared declaration of the flow tool's actions and their effects.",
 };
 
 /** Directories where every module has the same answer for the same reason. */

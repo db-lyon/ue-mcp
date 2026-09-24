@@ -30,7 +30,6 @@ import {
   trimError,
 } from "./events.js";
 import { unappliedRollbackCall } from "./handler-outcome.js";
-import { skillActions } from "./skill-actions.js";
 
 /**
  * Name a failed rollback by the bridge method it tried to call. Every record
@@ -98,7 +97,6 @@ export function createFlowTool(
         + "and any loaded plugin. Params: none",
       handler: async (ctx) => listFlows(configFor(ctx)),
     },
-    ...skillActions,
   };
 
   const def: ToolDef = {
@@ -109,8 +107,6 @@ export function createFlowTool(
       `If a flow matches the user's request, run it via ` +
       `flow(action="run", flowName="...") instead of composing the sequence by hand. ` +
       `Config reloads on every call - no restart needed.\n\n` +
-      `The skill_* actions cover the skill packs - the written workflows that say which calls to ` +
-      `make in what order - including verifying that the calls they teach still exist.\n\n` +
       `Actions:\n` +
       Object.entries(actions)
         .map(([name, spec]) => `- ${name}: ${spec.description ?? ""}`)
@@ -127,11 +123,6 @@ export function createFlowTool(
       skip: z.array(z.string()).optional().describe("run: step names or numbers to skip"),
       params: z.record(z.unknown()).optional().describe("run: runtime options merged into every step's options (highest priority)"),
       rollback_on_failure: z.boolean().optional().describe("run: invoke inverse tasks in reverse order on failure"),
-      detail: z.boolean().optional().describe("skill_list: return full detail rather than summary rows"),
-      all: z.boolean().optional().describe("skill_remove: act on every installed pack instead of a named one"),
-      skillName: z.string().optional().describe("skill_get / skill_install / skill_remove: the pack's directory name"),
-      includeBody: z.boolean().optional().describe("skill_get: include the pack's markdown (default true)"),
-      source: z.string().optional().describe("skill_list: packaged|project|plugin"),
     },
     actions,
     handler: async (ctx, params) => {

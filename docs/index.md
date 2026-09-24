@@ -56,7 +56,6 @@ And a **plugin system** that lets npm packages inject new actions into the exist
 - **[Tool Reference](tool-reference.md)** - All <!-- count:tools -->26<!-- /count --> tools with every action and its parameters
 - **[Native Control Rig Animation](control-rig-animation.md)** - Agent workflow for rig discovery, anatomical solving, quaternion keys, baking, and deterministic V&V
 - **[Flows](flows.md)** - Multi-step YAML workflows, custom tasks, hooks, rollback
-- **[Skill Packs](skill-packs.md)** - Written workflows an agent reads, and checking that the calls they teach still exist
 - **[Plugins](plugins.md)** - npm packages that inject new actions into existing categories
 - **[Configuration](configuration.md)** - `ue-mcp.yml` and MCP client config
 - **[Neon Shrine Demo](neon-shrine-demo.md)** - 19-step procedural scene walkthrough

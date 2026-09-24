@@ -28,7 +28,7 @@
  */
 import { getLiveToolGraph } from "./tools.js";
 import { splitTaskName } from "./action-class.js";
-import { flowCategoryForCheck } from "./flow/skill-actions.js";
+import { flowCategoryForCheck } from "./flow/flow-surface.js";
 import { EPIC_TOOL_EFFECTS } from "./tools/epic/effects.js";
 import type { ActionEffect, ActionEffectSource, ToolDef } from "./types.js";
 
@@ -132,11 +132,10 @@ function current(): EffectIndex {
     // The flow tool is built per server, from a task registry and a config
     // source, so it is registered outside `ALL_TOOLS` and is not in the
     // published graph either: the graph is published during startup and the
-    // flow tool is constructed after it. Its eight actions still need
-    // their effects read, or `flow(plan)` and `flow(skill_list)` would be
-    // refused as untargeted changes for being unrecognised. This is the same
-    // stand-in the skill-pack check holds packs against, and a unit test keeps
-    // it matching the tool the server actually registers.
+    // flow tool is constructed after it. Its actions still need their
+    // effects read, or `flow(plan)` would be refused as an untargeted change
+    // for being unrecognised. A unit test keeps this stand-in matching the
+    // tool the server actually registers.
     index = build([...graph, flowCategoryForCheck()]);
   }
   return index;

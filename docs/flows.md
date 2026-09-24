@@ -32,14 +32,6 @@ That's it. The config is **hot-reloaded on every call** - edit the YAML and run 
 
 The response carries a `summary` line per step plus a `steps` array holding what each step answered, so an action called inside a flow returns the same data it returns when called directly.
 
-## The rest of the `flow` tool
-
-Running flows is three of the tool's seventeen actions: `run`, `plan` and `list`. The other fourteen are two surfaces that sit beside them.
-
-- **[Skill packs](skill-packs.md)** - the five `skill_*` actions, covering the written workflows that say which calls to make in what order, including verifying that the calls they teach still exist.
-
-Neither surface reaches the editor, so both work with the editor down.
-
 ## Concepts
 
 ### Tasks
