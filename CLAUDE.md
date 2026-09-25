@@ -66,7 +66,7 @@ The merge style follows the commit count, and writing five commits only to squas
 `npm run test:automation` runs the plugin's own `UE.MCP.*` suite inside a running editor and prints one line per failure. Same target guard as the smoke harness: it confirms the attached editor has `tests/ue_mcp` open and aborts otherwise. `--filter` narrows, `--verbose` prints every error line.
 
 - These tests only exist inside Unreal, so the bridge is the only way to reach them. Do not hand-roll a WebSocket script for it.
-- The suite is NOT green on main. Six failures are long-standing and unrelated to each other, so check whether a failure predates your branch before treating it as yours.
+- The suite is green on main (#1079, #1080 fixed the last reds), and it runs twice in one editor process. A failure is yours until proven otherwise.
 - A run that never returns is usually a test that took the editor down; the runner says so rather than hanging.
 
 ### Live tests
