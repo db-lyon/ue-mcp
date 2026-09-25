@@ -1052,11 +1052,11 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidgetAnimationKey(const TSharedPtr<F
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
-	if (!Params->HasField(TEXT("time")))
+	if (!HasParam(Params, TEXT("time")))
 	{
 		return MCPError(TEXT("Missing required parameter 'time' (seconds from the start of the animation)."));
 	}
-	if (!Params->HasField(TEXT("value")))
+	if (!HasParam(Params, TEXT("value")))
 	{
 		return MCPError(TEXT("Missing required parameter 'value' (the keyed number)."));
 	}
@@ -1767,7 +1767,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetNavigation(const TSharedPtr<FJs
 	// spelled with the three top-level params, which is folded into the array.
 	TArray<TSharedPtr<FJsonValue>> RuleEntries;
 	const TArray<TSharedPtr<FJsonValue>>* GivenRules = nullptr;
-	if (Params->TryGetArrayField(TEXT("rules"), GivenRules) && GivenRules)
+	if (TryGetArrayParam(Params, TEXT("rules"), GivenRules) && GivenRules)
 	{
 		RuleEntries = *GivenRules;
 	}
@@ -2019,7 +2019,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RestoreWidgetNavigation(const TSharedPtr
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	const TArray<TSharedPtr<FJsonValue>>* Previous = nullptr;
-	if (!Params->TryGetArrayField(TEXT("previous"), Previous) || !Previous)
+	if (!TryGetArrayParam(Params, TEXT("previous"), Previous) || !Previous)
 	{
 		return MCPError(
 			TEXT("Missing required parameter 'previous' (the array set_widget_navigation / ")

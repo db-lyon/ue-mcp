@@ -101,7 +101,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 	// Read every request and capture every previous value FIRST. Nothing below
 	// this point writes until the no-op check has run.
 	bool bExposeOnSpawn = false;
-	const bool bHasExposeOnSpawn = Params->TryGetBoolField(TEXT("exposeOnSpawn"), bExposeOnSpawn);
+	const bool bHasExposeOnSpawn = TryGetBoolParam(Params, TEXT("exposeOnSpawn"), bExposeOnSpawn);
 	// Compare the effective state, not merely the presence of the metadata key:
 	// the key can exist with value "false", or exist while CPF_ExposeOnSpawn is
 	// clear, and treating that as "already true" hid a real change.
@@ -111,7 +111,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 		 FoundVar->GetMetaData(FBlueprintMetadata::MD_ExposeOnSpawn).ToBool());
 
 	bool bInstanceEditable = false;
-	const bool bHasInstanceEditable = Params->TryGetBoolField(TEXT("instanceEditable"), bInstanceEditable);
+	const bool bHasInstanceEditable = TryGetBoolParam(Params, TEXT("instanceEditable"), bInstanceEditable);
 	const bool bWasEditableAtAll = (FoundVar->PropertyFlags & CPF_Edit) != 0;
 	// Read the VALUE, not just presence - the engine's own readers use it, so a
 	// key present with "false" is NOT private. GetMetaData asserts outright
@@ -137,7 +137,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 	// rather than a fifth enum value. Folding it in would lose a bit, which is
 	// exactly what made the old rollback unable to restore the original state.
 	bool bPrivate = false;
-	const bool bHasPrivate = Params->TryGetBoolField(TEXT("private"), bPrivate);
+	const bool bHasPrivate = TryGetBoolParam(Params, TEXT("private"), bPrivate);
 	FString EditFlag = OptionalString(Params, TEXT("editFlag"));
 	if (!EditFlag.IsEmpty())
 	{
@@ -160,9 +160,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetVariableProperties(const TSharedPt
 	}
 
 	FString CategoryStr;
-	const bool bHasCategory = Params->TryGetStringField(TEXT("category"), CategoryStr);
+	const bool bHasCategory = TryGetStringParam(Params, TEXT("category"), CategoryStr);
 	FString TooltipStr;
-	const bool bHasTooltip = Params->TryGetStringField(TEXT("tooltip"), TooltipStr);
+	const bool bHasTooltip = TryGetStringParam(Params, TEXT("tooltip"), TooltipStr);
 
 	// Detect no-op BEFORE writing anything. Previously every branch above had
 	// already mutated PropertyFlags by the time this ran, so a "nothing
@@ -306,7 +306,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentProperty(const TSharedPtr
 	// #152: accept any JSON value type - scalars, numbers, booleans, or structured
 	// objects like {x,y,z} for FVector. Previous impl only accepted strings, so
 	// RelativeLocation etc. couldn't be set without pre-formatting "(X=1,Y=2,Z=3)".
-	TSharedPtr<FJsonValue> ValueField = Params->TryGetField(TEXT("value"));
+	TSharedPtr<FJsonValue> ValueField = TryGetParam(Params, TEXT("value"));
 	if (!ValueField.IsValid())
 	{
 		return MCPError(TEXT("Missing 'value' parameter"));
@@ -531,7 +531,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetClassDefault(const TSharedPtr<FJso
 	// Accept value as any JSON type (string, number, bool, object, array).
 	// This enables setting TArray<FStruct> with nested UObject refs via JSON
 	// instead of requiring arcane ImportText format strings (#196, #199).
-	TSharedPtr<FJsonValue> ValueField = Params->TryGetField(TEXT("value"));
+	TSharedPtr<FJsonValue> ValueField = TryGetParam(Params, TEXT("value"));
 	if (!ValueField.IsValid())
 	{
 		return MCPError(TEXT("Missing 'value' parameter"));
@@ -1123,9 +1123,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetActorTickSettings(const TSharedPtr
 	bool bStartWithTickEnabled = bPrevStartWithTickEnabled;
 	double TickInterval = PrevTickInterval;
 
-	Params->TryGetBoolField(TEXT("bCanEverTick"), bCanEverTick);
-	Params->TryGetBoolField(TEXT("bStartWithTickEnabled"), bStartWithTickEnabled);
-	Params->TryGetNumberField(TEXT("TickInterval"), TickInterval);
+	TryGetBoolParam(Params, TEXT("bCanEverTick"), bCanEverTick);
+	TryGetBoolParam(Params, TEXT("bStartWithTickEnabled"), bStartWithTickEnabled);
+	TryGetNumberParam(Params, TEXT("TickInterval"), TickInterval);
 
 	// The stored field is a float, so the comparison has to happen in float.
 	// Comparing the caller's double 0.1 against a float-widened 0.1f is never
@@ -1273,7 +1273,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetCdoProperty(const TSharedPtr<FJson
 
 	// Accept value as any JSON type (string, number, bool, object, array).
 	// Enables setting TArray<FStruct> with nested UObject refs via JSON (#196, #199).
-	TSharedPtr<FJsonValue> ValueField = Params->TryGetField(TEXT("value"));
+	TSharedPtr<FJsonValue> ValueField = TryGetParam(Params, TEXT("value"));
 	if (!ValueField.IsValid())
 	{
 		return MCPError(TEXT("Missing 'value' parameter"));
@@ -1416,7 +1416,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::GetCdoProperties(const TSharedPtr<FJs
 	// Optional filter: specific property names
 	TSet<FString> Filter;
 	const TArray<TSharedPtr<FJsonValue>>* PropNamesArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("propertyNames"), PropNamesArr) && PropNamesArr)
+	if (TryGetArrayParam(Params, TEXT("propertyNames"), PropNamesArr) && PropNamesArr)
 	{
 		for (const auto& V : *PropNamesArr)
 		{
@@ -1470,7 +1470,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetComponentOverrideMaterials(const T
 	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
 
 	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("materialPaths"), PathsArr) || !PathsArr)
+	if (!TryGetArrayParam(Params, TEXT("materialPaths"), PathsArr) || !PathsArr)
 	{
 		return MCPError(TEXT("Missing 'materialPaths' (string array)"));
 	}
@@ -1587,7 +1587,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddTimelineTrack(const TSharedPtr<FJs
 	// Read keyframes array. Float/event keys carry numeric values; vector
 	// keys are {x,y,z}; color keys are {r,g,b,a}.
 	const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
-	Params->TryGetArrayField(TEXT("keyframes"), Keys);
+	TryGetArrayParam(Params, TEXT("keyframes"), Keys);
 
 	const FName TrackFName(*TrackName);
 
@@ -1780,8 +1780,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetCapsuleSize(const TSharedPtr<FJson
 	FString ComponentName;
 	if (auto Err = RequireString(Params, TEXT("componentName"), ComponentName)) return Err;
 
-	const bool bHasHalfHeight = Params->HasField(TEXT("halfHeight"));
-	const bool bHasRadius = Params->HasField(TEXT("radius"));
+	const bool bHasHalfHeight = HasParam(Params, TEXT("halfHeight"));
+	const bool bHasRadius = HasParam(Params, TEXT("radius"));
 	if (!bHasHalfHeight && !bHasRadius)
 	{
 		return MCPError(TEXT("Pass at least one of 'halfHeight' or 'radius'"));
@@ -1815,13 +1815,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetCapsuleSize(const TSharedPtr<FJson
 	if (bHasHalfHeight)
 	{
 		double H = PrevHalfHeight;
-		Params->TryGetNumberField(TEXT("halfHeight"), H);
+		TryGetNumberParam(Params, TEXT("halfHeight"), H);
 		NewHalfHeight = (float)H;
 	}
 	if (bHasRadius)
 	{
 		double R = PrevRadius;
-		Params->TryGetNumberField(TEXT("radius"), R);
+		TryGetNumberParam(Params, TEXT("radius"), R);
 		NewRadius = (float)R;
 	}
 

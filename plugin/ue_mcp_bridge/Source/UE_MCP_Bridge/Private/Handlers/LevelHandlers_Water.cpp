@@ -103,7 +103,7 @@ namespace
 	/** {x, y} object or [x, y] array. */
 	bool MCPWaterReadXYParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, FVector2D& Out)
 	{
-		const TSharedPtr<FJsonValue> Value = Params.IsValid() ? Params->TryGetField(Key) : nullptr;
+		const TSharedPtr<FJsonValue> Value = TryGetParam(Params, Key);
 		if (!Value.IsValid()) return false;
 		if (Value->Type == EJson::Object)
 		{
@@ -195,11 +195,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::RebuildWaterZone(const TSharedPtr<FJsonOb
 
 	FVector2D NewExtent = FVector2D::ZeroVector;
 	const bool bSetExtent = MCPWaterReadXYParam(Params, TEXT("zoneExtent"), NewExtent);
-	if (Params->HasField(TEXT("zoneExtent")) && !bSetExtent)
+	if (HasParam(Params, TEXT("zoneExtent")) && !bSetExtent)
 	{
 		return MCPError(TEXT("zoneExtent must be {x, y} or [x, y]"));
 	}
-	const bool bSetTileSize = Params->HasField(TEXT("tileSize"));
+	const bool bSetTileSize = HasParam(Params, TEXT("tileSize"));
 	const double NewTileSize = OptionalNumber(Params, TEXT("tileSize"), 0.0);
 	if (bSetTileSize && NewTileSize <= 0.0) return MCPError(TEXT("tileSize must be greater than 0"));
 	if ((bSetExtent || bSetTileSize) && Zones.Num() > 1)

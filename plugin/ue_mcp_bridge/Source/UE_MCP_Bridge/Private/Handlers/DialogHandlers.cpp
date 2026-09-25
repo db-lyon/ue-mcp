@@ -167,6 +167,8 @@ namespace MCPDialogPolicy
 
 void FDialogHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("dialog"));
 	Registry.RegisterHandler(TEXT("set_dialog_policy"), &SetDialogPolicy);
 	Registry.RegisterHandler(TEXT("clear_dialog_policy"), &ClearDialogPolicy);
 	Registry.RegisterHandler(TEXT("get_dialog_policy"), &GetDialogPolicy);
@@ -401,7 +403,7 @@ EAppReturnType::Type FDialogHandlers::HandleModalDialog(EAppMsgType::Type MsgTyp
 TSharedPtr<FJsonValue> FDialogHandlers::SetDialogPolicy(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Pattern;
-	if (!Params->TryGetStringField(TEXT("pattern"), Pattern) || Pattern.IsEmpty())
+	if (!TryGetStringParam(Params, TEXT("pattern"), Pattern) || Pattern.IsEmpty())
 	{
 		return MCPError(TEXT("Missing or empty 'pattern' parameter. It is matched case-insensitively against the dialog title and message."));
 	}
@@ -1118,7 +1120,7 @@ TSharedPtr<FJsonValue> FDialogHandlers::RespondToDialog(const TSharedPtr<FJsonOb
 	// through the checkbox's own delegate, so writing the visual state without
 	// firing it would tick the box on screen and save the wrong packages.
 	const TArray<TSharedPtr<FJsonValue>>* RequestedItems = nullptr;
-	if (Params.IsValid() && Params->TryGetArrayField(TEXT("items"), RequestedItems) && RequestedItems)
+	if (TryGetArrayParam(Params, TEXT("items"), RequestedItems) && RequestedItems)
 	{
 		TArray<TSharedPtr<FJsonValue>> AppliedJson;
 		for (const TSharedPtr<FJsonValue>& Entry : *RequestedItems)

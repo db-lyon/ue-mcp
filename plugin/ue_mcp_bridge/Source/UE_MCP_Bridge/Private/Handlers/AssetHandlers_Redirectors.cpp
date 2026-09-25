@@ -120,7 +120,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixupRedirectors(const TSharedPtr<FJsonOb
 	MCP_CHECK_GAME_THREAD();
 
 	const TArray<TSharedPtr<FJsonValue>>* PathsField = nullptr;
-	if (!Params->TryGetArrayField(TEXT("paths"), PathsField) || !PathsField)
+	if (!TryGetArrayParam(Params, TEXT("paths"), PathsField) || !PathsField)
 	{
 		return MCPError(TEXT("Missing 'paths' array: the redirector packages, or the folders holding them, to fix up."));
 	}

@@ -78,6 +78,8 @@
 
 void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("blueprint"));
 	constexpr float ReadBlueprintGraphTimeoutSeconds = 180.0f;
 	// #945: a first sweep on a cold project pays for every package load the
 	// registry could not rule out, which the default request timeout does not
@@ -1599,7 +1601,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddComponent(const TSharedPtr<FJsonOb
 				// ChildActorClass in the same call. Accepts a Blueprint asset path
 				// (with or without the _C generated-class suffix) or a C++ class.
 				FString ChildActorClassPath;
-				if (Params->TryGetStringField(TEXT("childActorClass"), ChildActorClassPath) && !ChildActorClassPath.IsEmpty())
+				if (TryGetStringParam(Params, TEXT("childActorClass"), ChildActorClassPath) && !ChildActorClassPath.IsEmpty())
 				{
 					if (const FSubobjectData* NewData = NewHandle.GetData())
 					{
@@ -3450,7 +3452,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RunConstructionScript(const TSharedPt
 	// Parse optional spawn location
 	FVector SpawnLocation = FVector::ZeroVector;
 	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocationObj) && LocationObj)
+	if (TryGetObjectParam(Params, TEXT("location"), LocationObj) && LocationObj)
 	{
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		(*LocationObj)->TryGetNumberField(TEXT("x"), X);

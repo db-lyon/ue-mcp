@@ -186,7 +186,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 
 	const TSharedPtr<FJsonObject>* PropertiesField = nullptr;
 	TSharedPtr<FJsonObject> Properties;
-	if (Params->TryGetObjectField(TEXT("properties"), PropertiesField) && PropertiesField && (*PropertiesField).IsValid())
+	if (TryGetObjectParam(Params, TEXT("properties"), PropertiesField) && PropertiesField && (*PropertiesField).IsValid())
 	{
 		Properties = *PropertiesField;
 	}

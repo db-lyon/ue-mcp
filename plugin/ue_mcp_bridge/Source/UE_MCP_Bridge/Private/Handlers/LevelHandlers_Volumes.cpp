@@ -196,7 +196,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnVolume(const TSharedPtr<FJsonObject>
 	// #238: when spawning a PCGVolume, accept and bind a graphPath so callers
 	// don't have to make a follow-up set_actor_property call.
 	FString GraphPath;
-	if (Params->TryGetStringField(TEXT("graphPath"), GraphPath) && !GraphPath.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("graphPath"), GraphPath) && !GraphPath.IsEmpty())
 	{
 		if (UPCGComponent* PCGComp = NewVolume->FindComponentByClass<UPCGComponent>())
 		{
@@ -244,16 +244,19 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetVolumeProperties(const TSharedPtr<FJso
 	// the wrapped form; the original handler only walked top-level keys
 	// and silently dropped wrapped writes. Walk both.
 	TArray<TPair<FString, TSharedPtr<FJsonValue>>> Pairs;
-	for (auto& Pair : Params->Values)
+	// Every flat key is a property write, so each one walked is noted as read (#1057).
+	const TSharedPtr<FJsonObject>& FlatWrites = Params;
+	for (auto& Pair : FlatWrites->Values)
 	{
 		// actorPath joins the selector keys that are never property writes (#983).
 		if (Pair.Key == TEXT("actorLabel") || Pair.Key == TEXT("actorPath")
 			|| Pair.Key == TEXT("action") || Pair.Key == TEXT("properties"))
 			continue;
 		Pairs.Emplace(FString(*Pair.Key), Pair.Value);
+		MCPNoteParamRead(Params, *Pairs.Last().Key);
 	}
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj && (*PropsObj).IsValid())
+	if (TryGetObjectParam(Params, TEXT("properties"), PropsObj) && PropsObj && (*PropsObj).IsValid())
 	{
 		for (auto& Pair : (*PropsObj)->Values)
 		{

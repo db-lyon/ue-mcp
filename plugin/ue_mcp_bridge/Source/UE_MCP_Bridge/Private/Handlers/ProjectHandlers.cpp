@@ -91,6 +91,8 @@ namespace
 
 void FProjectHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("project"));
 	// create_cpp_class triggers AddCodeToProject which regenerates IDE
 	// project files + kicks a Live Coding compile. Both are synchronous
 	// game-thread work and easily exceed the 30-second default.

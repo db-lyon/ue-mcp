@@ -52,6 +52,8 @@ using FUE_MCPStateTreePropertyCreationDesc = FStateTreeEditorPropertyCreationDes
 
 void FStateTreeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("statetree"));
 #if !UE_MCP_HAS_5_5_API
 	UE_LOG(LogTemp, Warning, TEXT("[UE_MCP_Bridge] StateTree handlers require UE 5.5+; skipped on this engine version."));
 	return;
@@ -214,17 +216,17 @@ UStateTreeState* FStateTreeHandlers::FindStateByPath(UStateTreeEditorData* Edito
 
 UStateTreeState* FStateTreeHandlers::ResolveState(UStateTreeEditorData* EditorData, const TSharedPtr<FJsonObject>& Params)
 {
-	if (Params->HasField(TEXT("stateId")))
+	if (HasParam(Params, TEXT("stateId")))
 	{
 		FGuid StateID;
-		if (FGuid::Parse(Params->GetStringField(TEXT("stateId")), StateID))
+		if (FGuid::Parse(OptionalString(Params, TEXT("stateId")), StateID))
 		{
 			return FindStateByID(EditorData, StateID);
 		}
 	}
-	if (Params->HasField(TEXT("statePath")))
+	if (HasParam(Params, TEXT("statePath")))
 	{
-		return FindStateByPath(EditorData, Params->GetStringField(TEXT("statePath")));
+		return FindStateByPath(EditorData, OptionalString(Params, TEXT("statePath")));
 	}
 	return nullptr;
 }
@@ -928,19 +930,19 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString Name = Params->GetStringField(TEXT("name"));
+	const FString Name = OptionalString(Params, TEXT("name"));
 	if (Name.IsEmpty()) return MCPError(TEXT("name is required"));
 
 	EStateTreeStateType StateType = EStateTreeStateType::State;
-	if (Params->HasField(TEXT("stateType")))
+	if (HasParam(Params, TEXT("stateType")))
 	{
-		StateType = ParseStateType(Params->GetStringField(TEXT("stateType")));
+		StateType = ParseStateType(OptionalString(Params, TEXT("stateType")));
 	}
 
 	EStateTreeStateSelectionBehavior SelectionBehavior = EStateTreeStateSelectionBehavior::TrySelectChildrenInOrder;
-	if (Params->HasField(TEXT("selectionBehavior")))
+	if (HasParam(Params, TEXT("selectionBehavior")))
 	{
-		SelectionBehavior = ParseSelectionBehavior(Params->GetStringField(TEXT("selectionBehavior")));
+		SelectionBehavior = ParseSelectionBehavior(OptionalString(Params, TEXT("selectionBehavior")));
 	}
 
 	UStateTreeState* ParentState = ResolveState(EditorData, Params);
@@ -954,9 +956,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 		Ref.SelectionBehavior = SelectionBehavior;
 		NewState = &Ref;
 
-		if (Params->HasField(TEXT("insertIndex")))
+		if (HasParam(Params, TEXT("insertIndex")))
 		{
-			const int32 Idx = static_cast<int32>(Params->GetNumberField(TEXT("insertIndex")));
+			const int32 Idx = static_cast<int32>(OptionalNumber(Params, TEXT("insertIndex")));
 			const int32 LastIdx = ParentState->Children.Num() - 1;
 			if (Idx >= 0 && Idx < LastIdx)
 			{
@@ -975,9 +977,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 		NewState = &Ref;
 	}
 
-	if (Params->HasField(TEXT("linkedSubtree")))
+	if (HasParam(Params, TEXT("linkedSubtree")))
 	{
-		const FString SubtreePath = Params->GetStringField(TEXT("linkedSubtree"));
+		const FString SubtreePath = OptionalString(Params, TEXT("linkedSubtree"));
 		UStateTree* LinkedST = LoadObject<UStateTree>(nullptr, *SubtreePath);
 		if (LinkedST)
 		{
@@ -1127,8 +1129,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 
 	State->Modify();
 
-	const FString PropName = Params->GetStringField(TEXT("propertyName"));
-	const FString Value = Params->GetStringField(TEXT("value"));
+	const FString PropName = OptionalString(Params, TEXT("propertyName"));
+	const FString Value = OptionalString(Params, TEXT("value"));
 
 	// Read before the write, so the inverse replays what was actually there.
 	FString PriorValue;
@@ -1353,13 +1355,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTask(const TSharedPtr<FJsonObject>
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	const FString StructType = Params->GetStringField(TEXT("structType"));
+	const FString StructType = OptionalString(Params, TEXT("structType"));
 	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
 	TSharedPtr<FJsonObject> InstanceProps;
-	if (Params->HasField(TEXT("instanceProperties")))
+	if (HasParam(Params, TEXT("instanceProperties")))
 	{
-		InstanceProps = Params->GetObjectField(TEXT("instanceProperties"));
+		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
 
 	State->Modify();
@@ -1405,13 +1407,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEnterCondition(const TSharedPtr<FJ
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	const FString StructType = Params->GetStringField(TEXT("structType"));
+	const FString StructType = OptionalString(Params, TEXT("structType"));
 	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
 	TSharedPtr<FJsonObject> InstanceProps;
-	if (Params->HasField(TEXT("instanceProperties")))
+	if (HasParam(Params, TEXT("instanceProperties")))
 	{
-		InstanceProps = Params->GetObjectField(TEXT("instanceProperties"));
+		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
 
 	State->Modify();
@@ -1423,9 +1425,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEnterCondition(const TSharedPtr<FJ
 		return MCPError(Error);
 	}
 
-	if (Params->HasField(TEXT("operand")))
+	if (HasParam(Params, TEXT("operand")))
 	{
-		const FString Op = Params->GetStringField(TEXT("operand"));
+		const FString Op = OptionalString(Params, TEXT("operand"));
 		if (Op == TEXT("Or")) NewNode->ExpressionOperand = EStateTreeExpressionOperand::Or;
 		else NewNode->ExpressionOperand = EStateTreeExpressionOperand::And;
 	}
@@ -1492,7 +1494,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEnterCondition(const TSharedPtr
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	const int32 ConditionIndex = static_cast<int32>(Params->GetNumberField(TEXT("conditionIndex")));
+	const int32 ConditionIndex = static_cast<int32>(OptionalNumber(Params, TEXT("conditionIndex")));
 	if (!State->EnterConditions.IsValidIndex(ConditionIndex))
 	{
 		return MCPError(FString::Printf(TEXT("Invalid conditionIndex: %d (state has %d enter conditions)"),
@@ -1553,7 +1555,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTask(const TSharedPtr<FJsonObje
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	const int32 TaskIndex = static_cast<int32>(Params->GetNumberField(TEXT("taskIndex")));
+	const int32 TaskIndex = static_cast<int32>(OptionalNumber(Params, TEXT("taskIndex")));
 	if (!State->Tasks.IsValidIndex(TaskIndex))
 	{
 		return MCPError(FString::Printf(TEXT("Invalid taskIndex: %d (state has %d tasks)"), TaskIndex, State->Tasks.Num()));
@@ -1611,7 +1613,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskInstanceProperty(const TShared
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	const int32 TaskIndex = static_cast<int32>(Params->GetNumberField(TEXT("taskIndex")));
+	const int32 TaskIndex = static_cast<int32>(OptionalNumber(Params, TEXT("taskIndex")));
 	if (!State->Tasks.IsValidIndex(TaskIndex))
 	{
 		return MCPError(FString::Printf(TEXT("Invalid taskIndex: %d"), TaskIndex));
@@ -1625,8 +1627,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskInstanceProperty(const TShared
 
 	State->Modify();
 
-	const FString PropName = Params->GetStringField(TEXT("propertyName"));
-	const FString Value = Params->GetStringField(TEXT("value"));
+	const FString PropName = OptionalString(Params, TEXT("propertyName"));
+	const FString Value = OptionalString(Params, TEXT("value"));
 
 	const UScriptStruct* InstStruct = TaskNode.Instance.GetScriptStruct();
 	uint8* InstMem = TaskNode.Instance.GetMutableMemory();
@@ -1669,7 +1671,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskProperty(const TSharedPtr<FJso
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	const int32 TaskIndex = static_cast<int32>(Params->GetNumberField(TEXT("taskIndex")));
+	const int32 TaskIndex = static_cast<int32>(OptionalNumber(Params, TEXT("taskIndex")));
 	if (!State->Tasks.IsValidIndex(TaskIndex))
 	{
 		return MCPError(FString::Printf(TEXT("Invalid taskIndex: %d (state has %d tasks)"), TaskIndex, State->Tasks.Num()));
@@ -1688,8 +1690,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetTaskProperty(const TSharedPtr<FJso
 		return MCPError(TEXT("Task node struct/memory unavailable"));
 	}
 
-	const FString PropName = Params->GetStringField(TEXT("propertyName"));
-	const FString Value = Params->GetStringField(TEXT("value"));
+	const FString PropName = OptionalString(Params, TEXT("propertyName"));
+	const FString Value = OptionalString(Params, TEXT("value"));
 
 	FProperty* Prop = NodeStruct->FindPropertyByName(*PropName);
 	if (!Prop)
@@ -1741,7 +1743,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEvaluator(const TSharedPtr<FJsonOb
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString StructType = Params->GetStringField(TEXT("structType"));
+	const FString StructType = OptionalString(Params, TEXT("structType"));
 	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
 	UScriptStruct* NodeStruct = ResolveStructType(StructType);
@@ -1755,9 +1757,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddEvaluator(const TSharedPtr<FJsonOb
 	}
 
 	TSharedPtr<FJsonObject> InstanceProps;
-	if (Params->HasField(TEXT("instanceProperties")))
+	if (HasParam(Params, TEXT("instanceProperties")))
 	{
-		InstanceProps = Params->GetObjectField(TEXT("instanceProperties"));
+		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
 
 	EditorData->Modify();
@@ -1794,7 +1796,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveEvaluator(const TSharedPtr<FJso
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString NodeIdStr = Params->GetStringField(TEXT("nodeId"));
+	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
 	{
@@ -1857,7 +1859,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorInstanceProperty(const TS
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString NodeIdStr = Params->GetStringField(TEXT("nodeId"));
+	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
 	{
@@ -1875,8 +1877,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorInstanceProperty(const TS
 		return MCPError(TEXT("Evaluator has no instance data"));
 	}
 
-	const FString PropName = Params->GetStringField(TEXT("propertyName"));
-	const FString Value = Params->GetStringField(TEXT("value"));
+	const FString PropName = OptionalString(Params, TEXT("propertyName"));
+	const FString Value = OptionalString(Params, TEXT("value"));
 
 	const UScriptStruct* InstStruct = FoundNode->Instance.GetScriptStruct();
 	uint8* InstMem = FoundNode->Instance.GetMutableMemory();
@@ -1916,7 +1918,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorProperty(const TSharedPtr
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString NodeIdStr = Params->GetStringField(TEXT("nodeId"));
+	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
 	{
@@ -1941,8 +1943,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetEvaluatorProperty(const TSharedPtr
 		return MCPError(TEXT("Evaluator node struct/memory unavailable"));
 	}
 
-	const FString PropName = Params->GetStringField(TEXT("propertyName"));
-	const FString Value = Params->GetStringField(TEXT("value"));
+	const FString PropName = OptionalString(Params, TEXT("propertyName"));
+	const FString Value = OptionalString(Params, TEXT("value"));
 
 	FProperty* Prop = NodeStruct->FindPropertyByName(*PropName);
 	if (!Prop)
@@ -1985,7 +1987,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddGlobalTask(const TSharedPtr<FJsonO
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString StructType = Params->GetStringField(TEXT("structType"));
+	const FString StructType = OptionalString(Params, TEXT("structType"));
 	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
 	UScriptStruct* NodeStruct = ResolveStructType(StructType);
@@ -1999,9 +2001,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddGlobalTask(const TSharedPtr<FJsonO
 	}
 
 	TSharedPtr<FJsonObject> InstanceProps;
-	if (Params->HasField(TEXT("instanceProperties")))
+	if (HasParam(Params, TEXT("instanceProperties")))
 	{
-		InstanceProps = Params->GetObjectField(TEXT("instanceProperties"));
+		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
 
 	EditorData->Modify();
@@ -2038,7 +2040,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveGlobalTask(const TSharedPtr<FJs
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString NodeIdStr = Params->GetStringField(TEXT("nodeId"));
+	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
 	{
@@ -2101,7 +2103,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskInstanceProperty(const T
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString NodeIdStr = Params->GetStringField(TEXT("nodeId"));
+	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
 	{
@@ -2119,8 +2121,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskInstanceProperty(const T
 		return MCPError(TEXT("Global task has no instance data"));
 	}
 
-	const FString PropName = Params->GetStringField(TEXT("propertyName"));
-	const FString Value = Params->GetStringField(TEXT("value"));
+	const FString PropName = OptionalString(Params, TEXT("propertyName"));
+	const FString Value = OptionalString(Params, TEXT("value"));
 
 	const UScriptStruct* InstStruct = FoundNode->Instance.GetScriptStruct();
 	uint8* InstMem = FoundNode->Instance.GetMutableMemory();
@@ -2160,7 +2162,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskProperty(const TSharedPt
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString NodeIdStr = Params->GetStringField(TEXT("nodeId"));
+	const FString NodeIdStr = OptionalString(Params, TEXT("nodeId"));
 	FGuid NodeId;
 	if (!FGuid::Parse(NodeIdStr, NodeId))
 	{
@@ -2185,8 +2187,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetGlobalTaskProperty(const TSharedPt
 		return MCPError(TEXT("Global task node struct/memory unavailable"));
 	}
 
-	const FString PropName = Params->GetStringField(TEXT("propertyName"));
-	const FString Value = Params->GetStringField(TEXT("value"));
+	const FString PropName = OptionalString(Params, TEXT("propertyName"));
+	const FString Value = OptionalString(Params, TEXT("value"));
 
 	FProperty* Prop = NodeStruct->FindPropertyByName(*PropName);
 	if (!Prop)
@@ -2232,19 +2234,19 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonO
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	const FString TriggerStr = Params->GetStringField(TEXT("trigger"));
+	const FString TriggerStr = OptionalString(Params, TEXT("trigger"));
 	const EStateTreeTransitionTrigger Trigger = ParseTransitionTrigger(TriggerStr);
 
-	const FString TypeStr = Params->GetStringField(TEXT("transitionType"));
+	const FString TypeStr = OptionalString(Params, TEXT("transitionType"));
 	const EStateTreeTransitionType TransType = ParseTransitionType(TypeStr);
 
 	State->Modify();
 
 	FStateTreeTransition* Trans = nullptr;
 
-	if (Params->HasField(TEXT("eventTag")) && EnumHasAnyFlags(Trigger, EStateTreeTransitionTrigger::OnEvent))
+	if (HasParam(Params, TEXT("eventTag")) && EnumHasAnyFlags(Trigger, EStateTreeTransitionTrigger::OnEvent))
 	{
-		FGameplayTag EventTag = FGameplayTag::RequestGameplayTag(FName(*Params->GetStringField(TEXT("eventTag"))));
+		FGameplayTag EventTag = FGameplayTag::RequestGameplayTag(FName(*OptionalString(Params, TEXT("eventTag"))));
 		Trans = &State->AddTransition(Trigger, EventTag, TransType, nullptr);
 	}
 	else
@@ -2256,14 +2258,14 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonO
 	if (TransType == EStateTreeTransitionType::GotoState)
 	{
 		UStateTreeState* TargetState = nullptr;
-		if (Params->HasField(TEXT("targetStateId")))
+		if (HasParam(Params, TEXT("targetStateId")))
 		{
-			FGuid TargetId = ParseGuid(Params->GetStringField(TEXT("targetStateId")));
+			FGuid TargetId = ParseGuid(OptionalString(Params, TEXT("targetStateId")));
 			TargetState = FindStateByID(EditorData, TargetId);
 		}
-		else if (Params->HasField(TEXT("targetStatePath")))
+		else if (HasParam(Params, TEXT("targetStatePath")))
 		{
-			TargetState = FindStateByPath(EditorData, Params->GetStringField(TEXT("targetStatePath")));
+			TargetState = FindStateByPath(EditorData, OptionalString(Params, TEXT("targetStatePath")));
 		}
 
 		if (TargetState)
@@ -2272,18 +2274,18 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransition(const TSharedPtr<FJsonO
 		}
 	}
 
-	if (Params->HasField(TEXT("priority")))
+	if (HasParam(Params, TEXT("priority")))
 	{
-		Trans->Priority = ParseTransitionPriority(Params->GetStringField(TEXT("priority")));
+		Trans->Priority = ParseTransitionPriority(OptionalString(Params, TEXT("priority")));
 	}
 
-	if (Params->HasField(TEXT("bDelayTransition")))
+	if (HasParam(Params, TEXT("bDelayTransition")))
 	{
-		Trans->bDelayTransition = Params->GetBoolField(TEXT("bDelayTransition"));
+		Trans->bDelayTransition = OptionalBool(Params, TEXT("bDelayTransition"));
 	}
-	if (Params->HasField(TEXT("delayDuration")))
+	if (HasParam(Params, TEXT("delayDuration")))
 	{
-		Trans->DelayDuration = static_cast<float>(Params->GetNumberField(TEXT("delayDuration")));
+		Trans->DelayDuration = static_cast<float>(OptionalNumber(Params, TEXT("delayDuration")));
 	}
 
 	auto Result = MCPSuccess();
@@ -2318,19 +2320,19 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransitionCondition(const TSharedP
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	const int32 TransIndex = static_cast<int32>(Params->GetNumberField(TEXT("transitionIndex")));
+	const int32 TransIndex = static_cast<int32>(OptionalNumber(Params, TEXT("transitionIndex")));
 	if (!State->Transitions.IsValidIndex(TransIndex))
 	{
 		return MCPError(FString::Printf(TEXT("Invalid transitionIndex: %d"), TransIndex));
 	}
 
-	const FString StructType = Params->GetStringField(TEXT("structType"));
+	const FString StructType = OptionalString(Params, TEXT("structType"));
 	if (StructType.IsEmpty()) return MCPError(TEXT("structType is required"));
 
 	TSharedPtr<FJsonObject> InstanceProps;
-	if (Params->HasField(TEXT("instanceProperties")))
+	if (HasParam(Params, TEXT("instanceProperties")))
 	{
-		InstanceProps = Params->GetObjectField(TEXT("instanceProperties"));
+		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
 
 	State->Modify();
@@ -2342,9 +2344,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddTransitionCondition(const TSharedP
 		return MCPError(Error);
 	}
 
-	if (Params->HasField(TEXT("operand")))
+	if (HasParam(Params, TEXT("operand")))
 	{
-		const FString Op = Params->GetStringField(TEXT("operand"));
+		const FString Op = OptionalString(Params, TEXT("operand"));
 		if (Op == TEXT("Or")) NewNode->ExpressionOperand = EStateTreeExpressionOperand::Or;
 		else NewNode->ExpressionOperand = EStateTreeExpressionOperand::And;
 	}
@@ -2382,7 +2384,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTransition(const TSharedPtr<FJs
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	const int32 TransIndex = static_cast<int32>(Params->GetNumberField(TEXT("transitionIndex")));
+	const int32 TransIndex = static_cast<int32>(OptionalNumber(Params, TEXT("transitionIndex")));
 	if (!State->Transitions.IsValidIndex(TransIndex))
 	{
 		return MCPError(FString::Printf(TEXT("Invalid transitionIndex: %d"), TransIndex));
@@ -2473,10 +2475,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddBinding(const TSharedPtr<FJsonObje
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString SourceStructIdStr = Params->GetStringField(TEXT("sourceStructId"));
-	const FString SourcePathStr = Params->GetStringField(TEXT("sourcePath"));
-	const FString TargetStructIdStr = Params->GetStringField(TEXT("targetStructId"));
-	const FString TargetPathStr = Params->GetStringField(TEXT("targetPath"));
+	const FString SourceStructIdStr = OptionalString(Params, TEXT("sourceStructId"));
+	const FString SourcePathStr = OptionalString(Params, TEXT("sourcePath"));
+	const FString TargetStructIdStr = OptionalString(Params, TEXT("targetStructId"));
+	const FString TargetPathStr = OptionalString(Params, TEXT("targetPath"));
 
 	FUE_MCPStateTreePropertyPath SourcePath;
 	SourcePath.SetStructID(ParseGuid(SourceStructIdStr));
@@ -2643,8 +2645,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveBinding(const TSharedPtr<FJsonO
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString TargetStructIdStr = Params->GetStringField(TEXT("targetStructId"));
-	const FString TargetPathStr = Params->GetStringField(TEXT("targetPath"));
+	const FString TargetStructIdStr = OptionalString(Params, TEXT("targetStructId"));
+	const FString TargetPathStr = OptionalString(Params, TEXT("targetPath"));
 
 	FUE_MCPStateTreePropertyPath TargetPath;
 	TargetPath.SetStructID(ParseGuid(TargetStructIdStr));
@@ -2742,9 +2744,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::ListBindings(const TSharedPtr<FJsonOb
 	if (Bindings)
 	{
 		FGuid FilterStructId;
-		if (Params->HasField(TEXT("structId")))
+		if (HasParam(Params, TEXT("structId")))
 		{
-			FilterStructId = ParseGuid(Params->GetStringField(TEXT("structId")));
+			FilterStructId = ParseGuid(OptionalString(Params, TEXT("structId")));
 		}
 
 		for (const FStateTreePropertyPathBinding& B : Bindings->GetBindings())
@@ -2806,7 +2808,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddColor(const TSharedPtr<FJsonObject
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	const FString DisplayName = Params->GetStringField(TEXT("displayName"));
+	const FString DisplayName = OptionalString(Params, TEXT("displayName"));
 	if (DisplayName.IsEmpty()) return MCPError(TEXT("displayName is required"));
 
 	for (const FStateTreeEditorColor& C : EditorData->Colors)
@@ -2820,9 +2822,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddColor(const TSharedPtr<FJsonObject
 	FStateTreeEditorColor NewColor;
 	NewColor.DisplayName = DisplayName;
 
-	if (Params->HasField(TEXT("color")))
+	if (HasParam(Params, TEXT("color")))
 	{
-		const FString ColorStr = Params->GetStringField(TEXT("color"));
+		const FString ColorStr = OptionalString(Params, TEXT("color"));
 		NewColor.Color.InitFromString(ColorStr);
 	}
 
@@ -2924,10 +2926,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddStateParameter(const TSharedPtr<FJ
 		return MCPError(TEXT("Cannot add parameters to a state with fixed layout (linked state). Use set_state_parameter to override values instead."));
 	}
 
-	const FString ParamName = Params->GetStringField(TEXT("paramName"));
+	const FString ParamName = OptionalString(Params, TEXT("paramName"));
 	if (ParamName.IsEmpty()) return MCPError(TEXT("paramName is required"));
 
-	const FString ParamType = Params->GetStringField(TEXT("paramType"));
+	const FString ParamType = OptionalString(Params, TEXT("paramType"));
 	if (ParamType.IsEmpty()) return MCPError(TEXT("paramType is required"));
 
 	EPropertyBagPropertyType BagType;
@@ -2988,7 +2990,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveStateParameter(const TSharedPtr
 		return MCPError(TEXT("Cannot remove parameters from a state with fixed layout (linked state)."));
 	}
 
-	const FString ParamName = Params->GetStringField(TEXT("paramName"));
+	const FString ParamName = OptionalString(Params, TEXT("paramName"));
 	if (ParamName.IsEmpty()) return MCPError(TEXT("paramName is required"));
 
 	// Read the descriptor and the current value before the removal: the inverse
@@ -3087,10 +3089,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateParameter(const TSharedPtr<FJ
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found"));
 
-	const FString ParamName = Params->GetStringField(TEXT("paramName"));
+	const FString ParamName = OptionalString(Params, TEXT("paramName"));
 	if (ParamName.IsEmpty()) return MCPError(TEXT("paramName is required"));
 
-	const FString Value = Params->GetStringField(TEXT("value"));
+	const FString Value = OptionalString(Params, TEXT("value"));
 
 	FInstancedPropertyBag& Bag = State->Parameters.Parameters;
 	const UPropertyBag* BagStruct = Bag.GetPropertyBagStruct();
@@ -3154,12 +3156,12 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetRootParameters(const TSharedPtr<FJ
 	UStateTreeEditorData* EditorData = GetEditorData(ST);
 	if (!EditorData) return MCPError(TEXT("EditorData not found"));
 
-	if (!Params->HasField(TEXT("parameters")))
+	if (!HasParam(Params, TEXT("parameters")))
 	{
 		return MCPError(TEXT("parameters array is required"));
 	}
 
-	const TArray<TSharedPtr<FJsonValue>>& ParamsArr = Params->GetArrayField(TEXT("parameters"));
+	const TArray<TSharedPtr<FJsonValue>>& ParamsArr = TryGetParam(Params, TEXT("parameters"))->AsArray();
 
 	TArray<FUE_MCPStateTreePropertyCreationDesc> Descs;
 	for (const TSharedPtr<FJsonValue>& PVal : ParamsArr)

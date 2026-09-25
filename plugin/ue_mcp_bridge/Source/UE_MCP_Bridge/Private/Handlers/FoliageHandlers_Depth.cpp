@@ -299,7 +299,7 @@ namespace
 	{
 		const FString SpawnerPath = OptionalString(Params, TEXT("spawnerPath"));
 		const bool bHasActorSelector =
-			Params->HasField(TEXT("actorLabel")) || Params->HasField(TEXT("actorPath"));
+			HasParam(Params, TEXT("actorLabel")) || HasParam(Params, TEXT("actorPath"));
 
 		if (bHasActorSelector)
 		{
@@ -409,7 +409,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::AddFoliageInstances(const TSharedPtr<FJ
 	TArray<FTransform> Explicit;
 	bool bHasExplicit = false;
 	const TArray<TSharedPtr<FJsonValue>>* TransformsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("transforms"), TransformsArr) && TransformsArr)
+	if (TryGetArrayParam(Params, TEXT("transforms"), TransformsArr) && TransformsArr)
 	{
 		bHasExplicit = true;
 		for (int32 i = 0; i < TransformsArr->Num(); ++i)
@@ -425,7 +425,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::AddFoliageInstances(const TSharedPtr<FJ
 	}
 
 	FVector Center = FVector::ZeroVector;
-	const bool bHasCenter = Params->HasField(TEXT("center"));
+	const bool bHasCenter = HasParam(Params, TEXT("center"));
 	if (bHasCenter)
 	{
 		if (auto Err = RequireVec3(Params, TEXT("center"), Center)) return Err;
@@ -602,13 +602,13 @@ TSharedPtr<FJsonValue> FFoliageHandlers::RemoveFoliageInstances(const TSharedPtr
 	const double MatchTolerance = OptionalNumber(Params, TEXT("matchTolerance"), 1.0);
 
 	const TArray<TSharedPtr<FJsonValue>>* IndicesArr = nullptr;
-	const bool bHasIndices = Params->TryGetArrayField(TEXT("instanceIndices"), IndicesArr) && IndicesArr;
+	const bool bHasIndices = TryGetArrayParam(Params, TEXT("instanceIndices"), IndicesArr) && IndicesArr;
 
 	const TArray<TSharedPtr<FJsonValue>>* TransformsArr = nullptr;
-	const bool bHasTransforms = Params->TryGetArrayField(TEXT("transforms"), TransformsArr) && TransformsArr;
+	const bool bHasTransforms = TryGetArrayParam(Params, TEXT("transforms"), TransformsArr) && TransformsArr;
 
 	FVector Center = FVector::ZeroVector;
-	const bool bHasCenter = Params->HasField(TEXT("center"));
+	const bool bHasCenter = HasParam(Params, TEXT("center"));
 	if (bHasCenter)
 	{
 		if (auto Err = RequireVec3(Params, TEXT("center"), Center)) return Err;
@@ -789,7 +789,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::GetFoliageInstances(const TSharedPtr<FJ
 	}
 
 	FVector Center = FVector::ZeroVector;
-	const bool bHasCenter = Params->HasField(TEXT("center"));
+	const bool bHasCenter = HasParam(Params, TEXT("center"));
 	if (bHasCenter)
 	{
 		if (auto Err = RequireVec3(Params, TEXT("center"), Center)) return Err;
@@ -1123,7 +1123,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SetProceduralFoliageSpawnerTypes(const 
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("foliageTypePaths"), PathsArr) || !PathsArr)
+	if (!TryGetArrayParam(Params, TEXT("foliageTypePaths"), PathsArr) || !PathsArr)
 	{
 		return MCPError(TEXT("Missing required parameter 'foliageTypePaths' (array of FoliageType asset paths, or Blueprint paths whose generated class derives from FoliageType)."));
 	}
@@ -1417,9 +1417,9 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SimulateProceduralFoliage(const TShared
 
 	{
 		auto Payload = MakeShared<FJsonObject>();
-		if (Params->HasField(TEXT("actorLabel"))) Payload->SetStringField(TEXT("actorLabel"), OptionalString(Params, TEXT("actorLabel")));
-		if (Params->HasField(TEXT("actorPath"))) Payload->SetStringField(TEXT("actorPath"), OptionalString(Params, TEXT("actorPath")));
-		if (Params->HasField(TEXT("spawnerPath"))) Payload->SetStringField(TEXT("spawnerPath"), OptionalString(Params, TEXT("spawnerPath")));
+		if (HasParam(Params, TEXT("actorLabel"))) Payload->SetStringField(TEXT("actorLabel"), OptionalString(Params, TEXT("actorLabel")));
+		if (HasParam(Params, TEXT("actorPath"))) Payload->SetStringField(TEXT("actorPath"), OptionalString(Params, TEXT("actorPath")));
+		if (HasParam(Params, TEXT("spawnerPath"))) Payload->SetStringField(TEXT("spawnerPath"), OptionalString(Params, TEXT("spawnerPath")));
 		Payload->SetStringField(TEXT("lossy"), bClearExisting
 			? TEXT("The inverse removes everything this simulation placed, but the content that clearExisting=true discarded before it ran is gone for good. Rerunning simulate_procedural reproduces it only while the spawner's RandomSeed and FoliageTypes are unchanged.")
 			: TEXT("The inverse removes every instance this component has spawned, including any that predate this call, because RemoveProceduralContent matches on the component's ProceduralGuid rather than on this run."));
@@ -1472,9 +1472,9 @@ TSharedPtr<FJsonValue> FFoliageHandlers::ClearProceduralFoliage(const TSharedPtr
 
 	{
 		auto Payload = MakeShared<FJsonObject>();
-		if (Params->HasField(TEXT("actorLabel"))) Payload->SetStringField(TEXT("actorLabel"), OptionalString(Params, TEXT("actorLabel")));
-		if (Params->HasField(TEXT("actorPath"))) Payload->SetStringField(TEXT("actorPath"), OptionalString(Params, TEXT("actorPath")));
-		if (Params->HasField(TEXT("spawnerPath"))) Payload->SetStringField(TEXT("spawnerPath"), OptionalString(Params, TEXT("spawnerPath")));
+		if (HasParam(Params, TEXT("actorLabel"))) Payload->SetStringField(TEXT("actorLabel"), OptionalString(Params, TEXT("actorLabel")));
+		if (HasParam(Params, TEXT("actorPath"))) Payload->SetStringField(TEXT("actorPath"), OptionalString(Params, TEXT("actorPath")));
+		if (HasParam(Params, TEXT("spawnerPath"))) Payload->SetStringField(TEXT("spawnerPath"), OptionalString(Params, TEXT("spawnerPath")));
 		Payload->SetStringField(TEXT("lossy"), TEXT("The inverse re-runs the simulation. It reproduces the cleared content exactly only while the spawner's RandomSeed, TileSize, NumUniqueTiles and FoliageTypes are unchanged and the geometry under the volume is the same."));
 		MCPSetRollback(Result, TEXT("simulate_procedural_foliage"), Payload);
 	}

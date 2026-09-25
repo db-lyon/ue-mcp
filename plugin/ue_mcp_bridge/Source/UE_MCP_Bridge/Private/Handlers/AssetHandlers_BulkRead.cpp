@@ -81,6 +81,7 @@ namespace
 
 void FAssetBulkReadHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("asset"));
 	// Loading hundreds of assets to read them takes longer than the default
 	// handler timeout allows, and a timeout here would look like a hang.
 	Registry.RegisterHandlerWithTimeout(
@@ -95,7 +96,7 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 	TArray<FString> PropertyPaths;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* PropertyValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("propertyNames"), PropertyValues) && PropertyValues)
+		if (TryGetArrayParam(Params, TEXT("propertyNames"), PropertyValues) && PropertyValues)
 		{
 			PropertyPaths = JsonArrayToStringList(PropertyValues);
 		}
@@ -114,7 +115,7 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 	TArray<FString> ExplicitPaths;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* PathValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("assetPaths"), PathValues) && PathValues)
+		if (TryGetArrayParam(Params, TEXT("assetPaths"), PathValues) && PathValues)
 		{
 			ExplicitPaths = JsonArrayToStringList(PathValues);
 		}
@@ -138,7 +139,7 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 	TArray<UClass*> ClassFilters;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* ClassValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("classNames"), ClassValues) && ClassValues)
+		if (TryGetArrayParam(Params, TEXT("classNames"), ClassValues) && ClassValues)
 		{
 			for (const FString& Spec : JsonArrayToStringList(ClassValues))
 			{
@@ -156,7 +157,7 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 	TArray<MCPQuery::FPredicate> Predicates;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* WhereValues = nullptr;
-		Params->TryGetArrayField(TEXT("where"), WhereValues);
+		TryGetArrayParam(Params, TEXT("where"), WhereValues);
 		FString ParseError;
 		if (!MCPQuery::ParsePredicates(WhereValues, MCPBulkReadMaxPredicates, Predicates, ParseError))
 		{
@@ -187,7 +188,7 @@ TSharedPtr<FJsonValue> FAssetBulkReadHandlers::BulkReadAssetProperties(const TSh
 	TArray<FString> CountByPaths;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* CountByValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("countBy"), CountByValues) && CountByValues)
+		if (TryGetArrayParam(Params, TEXT("countBy"), CountByValues) && CountByValues)
 		{
 			CountByPaths = JsonArrayToStringList(CountByValues);
 		}

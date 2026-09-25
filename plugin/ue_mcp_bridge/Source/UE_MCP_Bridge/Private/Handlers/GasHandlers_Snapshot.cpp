@@ -334,7 +334,7 @@ namespace
 		TSharedPtr<FJsonValue>& OutError)
 	{
 		const TSharedPtr<FJsonObject>* Inline = nullptr;
-		if (Params->TryGetObjectField(ObjectField, Inline) && Inline && (*Inline).IsValid())
+		if (TryGetObjectParam(Params, ObjectField, Inline) && Inline && (*Inline).IsValid())
 		{
 			OutSource = TEXT("inline");
 			return *Inline;

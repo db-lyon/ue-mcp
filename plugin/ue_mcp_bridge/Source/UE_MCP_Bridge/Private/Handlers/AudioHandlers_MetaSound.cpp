@@ -553,7 +553,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAuthor(const TSharedPtr<FJsonObj
 
 	// 1. Graph inputs.
 	const TArray<TSharedPtr<FJsonValue>>* Inputs = nullptr;
-	if (Params->TryGetArrayField(TEXT("inputs"), Inputs) && Inputs)
+	if (TryGetArrayParam(Params, TEXT("inputs"), Inputs) && Inputs)
 	{
 		for (const TSharedPtr<FJsonValue>& E : *Inputs)
 		{
@@ -570,7 +570,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAuthor(const TSharedPtr<FJsonObj
 
 	// 2. Graph outputs.
 	const TArray<TSharedPtr<FJsonValue>>* Outputs = nullptr;
-	if (Params->TryGetArrayField(TEXT("outputs"), Outputs) && Outputs)
+	if (TryGetArrayParam(Params, TEXT("outputs"), Outputs) && Outputs)
 	{
 		for (const TSharedPtr<FJsonValue>& E : *Outputs)
 		{
@@ -588,7 +588,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAuthor(const TSharedPtr<FJsonObj
 	// 3. Nodes (build a localId -> handle map), plus per-node input defaults.
 	TMap<FString, FMetaSoundNodeHandle> NodeMap;
 	const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
-	if (Params->TryGetArrayField(TEXT("nodes"), Nodes) && Nodes)
+	if (TryGetArrayParam(Params, TEXT("nodes"), Nodes) && Nodes)
 	{
 		for (const TSharedPtr<FJsonValue>& E : *Nodes)
 		{
@@ -666,7 +666,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAuthor(const TSharedPtr<FJsonObj
 
 	// 4. Connections.
 	const TArray<TSharedPtr<FJsonValue>>* Conns = nullptr;
-	if (Params->TryGetArrayField(TEXT("connections"), Conns) && Conns)
+	if (TryGetArrayParam(Params, TEXT("connections"), Conns) && Conns)
 	{
 		for (const TSharedPtr<FJsonValue>& E : *Conns)
 		{
@@ -760,7 +760,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundAddGraphInput(const TSharedPtr<F
 	FMSSession* S = FindSession(AssetPath);
 	if (!S) return MSAuthorNoSessionError(AssetPath);
 
-	FMetasoundFrontendLiteral Default = MakeLiteral(Params->TryGetField(TEXT("defaultValue")), DataType);
+	FMetasoundFrontendLiteral Default = MakeLiteral(TryGetParam(Params, TEXT("defaultValue")), DataType);
 	EMetaSoundBuilderResult Result = EMetaSoundBuilderResult::Failed;
 	S->Builder->AddGraphInputNode(FName(*Name), FName(*DataType), Default, Result, /*bIsConstructorInput*/ false);
 	if (!Ok(Result)) return MCPError(FString::Printf(TEXT("Failed to add graph input '%s' (%s)."), *Name, *DataType));
@@ -979,7 +979,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundSetInputDefault(const TSharedPtr
 	FMSSession* S = FindSession(AssetPath);
 	if (!S) return MSAuthorNoSessionError(AssetPath);
 
-	const TSharedPtr<FJsonValue> Value = Params->TryGetField(TEXT("value"));
+	const TSharedPtr<FJsonValue> Value = TryGetParam(Params, TEXT("value"));
 	const FString TypeHint = OptionalString(Params, TEXT("dataType"));
 	FMetasoundFrontendLiteral Lit = MakeLiteral(Value, TypeHint);
 	EMetaSoundBuilderResult R = EMetaSoundBuilderResult::Failed;
@@ -992,7 +992,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundSetInputDefault(const TSharedPtr
 	bool bCapturedPrevious = false;
 
 	FString GraphInput;
-	if (Params->TryGetStringField(TEXT("graphInput"), GraphInput) && !GraphInput.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("graphInput"), GraphInput) && !GraphInput.IsEmpty())
 	{
 		EMetaSoundBuilderResult PrevResult = EMetaSoundBuilderResult::Failed;
 		const FMetasoundFrontendLiteral Previous = S->Builder->GetGraphInputDefault(FName(*GraphInput), PrevResult);

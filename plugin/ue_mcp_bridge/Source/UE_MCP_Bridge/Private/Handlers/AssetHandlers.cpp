@@ -138,6 +138,7 @@ namespace
 
 void FAssetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("asset"));
 	Registry.RegisterHandler(TEXT("list_assets"), &ListAssets);
 	Registry.RegisterHandler(TEXT("read_uv_channels"), &ReadUvChannels);
 	Registry.RegisterHandler(TEXT("set_uv_channel_count"), &SetUvChannelCount);
@@ -495,7 +496,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ListAssets(const TSharedPtr<FJsonObject>&
 	// with the shared cursor: an offset re-read a moved collection at a row
 	// number and could not tell that it had, while a cursor names the row it
 	// resumes after and reports when that row moved or vanished.
-	if (Params.IsValid() && Params->HasField(TEXT("offset")))
+	if (Params.IsValid() && HasParam(Params, TEXT("offset")))
 	{
 		return MCPError(TEXT(
 			"'offset' is no longer how list_assets pages, because a row number cannot tell you the "
@@ -561,7 +562,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SearchAssets(const TSharedPtr<FJsonObject
 {
 	FString Query = OptionalString(Params, TEXT("query"));
 	FString Directory;
-	bool bHasDirectory = Params->TryGetStringField(TEXT("directory"), Directory);
+	bool bHasDirectory = TryGetStringParam(Params, TEXT("directory"), Directory);
 	if (!bHasDirectory)
 	{
 		Directory = TEXT("/Game/");
@@ -927,7 +928,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 	Asset = MCPResolveAssetToCDO(Asset); // #568
 
 	FString ValueFormat;
-	Params->TryGetStringField(TEXT("valueFormat"), ValueFormat);
+	TryGetStringParam(Params, TEXT("valueFormat"), ValueFormat);
 	const bool bJsonValues = ValueFormat.Equals(TEXT("json"), ESearchCase::IgnoreCase);
 
 	// Helper lambda to export a property value as string (#48 - reads arrays, structs, sub-objects)
@@ -940,7 +941,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadAssetProperties(const TSharedPtr<FJso
 	};
 
 	FString PropertyName;
-	if (Params->TryGetStringField(TEXT("propertyName"), PropertyName) && !PropertyName.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("propertyName"), PropertyName) && !PropertyName.IsEmpty())
 	{
 		// Resolve dotted/indexed paths into nested structs, array elements, and
 		// instanced subobjects (#527), e.g. "Config.Traits[1].Params.Field".
@@ -1634,14 +1635,14 @@ static TSharedPtr<FJsonValue> ReconcileOrphanExternals(const FString& SourceAsse
 TSharedPtr<FJsonValue> FAssetHandlers::RenameAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SourcePath, DestPath;
-	if (Params->TryGetStringField(TEXT("sourcePath"), SourcePath) && Params->TryGetStringField(TEXT("destinationPath"), DestPath))
+	if (TryGetStringParam(Params, TEXT("sourcePath"), SourcePath) && TryGetStringParam(Params, TEXT("destinationPath"), DestPath))
 	{
 		// Use sourcePath/destinationPath directly
 	}
 	else
 	{
 		FString AssetPath, NewName;
-		if (Params->TryGetStringField(TEXT("assetPath"), AssetPath) && Params->TryGetStringField(TEXT("newName"), NewName))
+		if (TryGetStringParam(Params, TEXT("assetPath"), AssetPath) && TryGetStringParam(Params, TEXT("newName"), NewName))
 		{
 			SourcePath = AssetPath;
 			FString PackageName, AssetName;
@@ -2028,7 +2029,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteAsset(const TSharedPtr<FJsonObject>
 TSharedPtr<FJsonValue> FAssetHandlers::DeleteAssetBatch(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("assetPaths"), PathsArr) && !Params->TryGetArrayField(TEXT("paths"), PathsArr))
+	if (!TryGetArrayParam(Params, TEXT("assetPaths"), PathsArr) && !TryGetArrayParam(Params, TEXT("paths"), PathsArr))
 	{
 		return MCPError(TEXT("Missing 'assetPaths' array parameter"));
 	}
@@ -2204,8 +2205,8 @@ static TSharedPtr<FJsonValue> MCPRefuseSplitPackages(const TArray<FAssetRenameDa
 TSharedPtr<FJsonValue> FAssetHandlers::BulkRename(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
-	if (!Params->TryGetArrayField(TEXT("renames"), Items) &&
-		!Params->TryGetArrayField(TEXT("items"), Items))
+	if (!TryGetArrayParam(Params, TEXT("renames"), Items) &&
+		!TryGetArrayParam(Params, TEXT("items"), Items))
 	{
 		return MCPError(TEXT("Missing 'renames' array parameter"));
 	}
@@ -2481,7 +2482,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateDataAsset(const TSharedPtr<FJsonObj
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 	int32 SetCount = 0;
 	TArray<FString> PropErrors;
-	if (Params->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj && (*PropsObj).IsValid())
+	if (TryGetObjectParam(Params, TEXT("properties"), PropsObj) && PropsObj && (*PropsObj).IsValid())
 	{
 		for (const auto& Pair : (*PropsObj)->Values)
 		{
@@ -2562,7 +2563,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateAssetByClass(const TSharedPtr<FJson
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 	int32 SetCount = 0;
 	TArray<FString> PropErrors;
-	if (Params->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj && (*PropsObj).IsValid())
+	if (TryGetObjectParam(Params, TEXT("properties"), PropsObj) && PropsObj && (*PropsObj).IsValid())
 	{
 		for (const auto& Pair : (*PropsObj)->Values)
 		{
@@ -2639,7 +2640,7 @@ namespace
 TSharedPtr<FJsonValue> FAssetHandlers::SaveAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	if ((Params->TryGetStringField(TEXT("path"), AssetPath) || Params->TryGetStringField(TEXT("assetPath"), AssetPath)) && !AssetPath.IsEmpty() && AssetPath != TEXT("all"))
+	if ((TryGetStringParam(Params, TEXT("path"), AssetPath) || TryGetStringParam(Params, TEXT("assetPath"), AssetPath)) && !AssetPath.IsEmpty() && AssetPath != TEXT("all"))
 	{
 		// #768: force=true saves regardless of the dirty flag. Several reports
 		// hit edits that never marked their package dirty (OFPA level actors,
@@ -2962,7 +2963,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetReferencers(const TSharedPtr<FJsonObje
 {
 	TArray<FString> Packages;
 	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-	if (Params->TryGetArrayField(TEXT("packages"), Arr) && Arr)
+	if (TryGetArrayParam(Params, TEXT("packages"), Arr) && Arr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *Arr)
 		{
@@ -2972,7 +2973,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetReferencers(const TSharedPtr<FJsonObje
 	else
 	{
 		FString Single;
-		if (Params->TryGetStringField(TEXT("packagePath"), Single)) Packages.Add(Single);
+		if (TryGetStringParam(Params, TEXT("packagePath"), Single)) Packages.Add(Single);
 	}
 	if (Packages.Num() == 0) return MCPError(TEXT("Supply 'packages' (array) or 'packagePath'"));
 
@@ -3006,7 +3007,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetDependencies(const TSharedPtr<FJsonObj
 {
 	TArray<FString> Packages;
 	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-	if (Params->TryGetArrayField(TEXT("packages"), Arr) && Arr)
+	if (TryGetArrayParam(Params, TEXT("packages"), Arr) && Arr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *Arr)
 		{
@@ -3016,7 +3017,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::GetDependencies(const TSharedPtr<FJsonObj
 	else
 	{
 		FString Single;
-		if (Params->TryGetStringField(TEXT("packagePath"), Single)) Packages.Add(Single);
+		if (TryGetStringParam(Params, TEXT("packagePath"), Single)) Packages.Add(Single);
 	}
 	if (Packages.Num() == 0) return MCPError(TEXT("Supply 'packages' (array) or 'packagePath'"));
 
@@ -3284,7 +3285,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateFolder(const TSharedPtr<FJsonObject
 {
 	TArray<FString> Paths;
 	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("paths"), PathsArr) && PathsArr)
+	if (TryGetArrayParam(Params, TEXT("paths"), PathsArr) && PathsArr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *PathsArr)
 		{
@@ -3292,7 +3293,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateFolder(const TSharedPtr<FJsonObject
 		}
 	}
 	FString SinglePath;
-	if (Params->TryGetStringField(TEXT("path"), SinglePath) && !SinglePath.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("path"), SinglePath) && !SinglePath.IsEmpty())
 	{
 		Paths.AddUnique(SinglePath);
 	}
@@ -3407,7 +3408,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteFolder(const TSharedPtr<FJsonObject
 {
 	TArray<FString> Paths;
 	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("paths"), PathsArr) && PathsArr)
+	if (TryGetArrayParam(Params, TEXT("paths"), PathsArr) && PathsArr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *PathsArr)
 		{
@@ -3415,7 +3416,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::DeleteFolder(const TSharedPtr<FJsonObject
 		}
 	}
 	FString SinglePath;
-	if (Params->TryGetStringField(TEXT("path"), SinglePath) && !SinglePath.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("path"), SinglePath) && !SinglePath.IsEmpty())
 	{
 		Paths.AddUnique(SinglePath);
 	}
@@ -3797,8 +3798,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
-	const TSharedPtr<FJsonValue>* ValueField = Params->Values.Find(TEXT("value"));
-	if (!ValueField || !(*ValueField).IsValid())
+	const TSharedPtr<FJsonValue> ValueField = TryGetParam(Params, TEXT("value"));
+	if (!ValueField.IsValid())
 	{
 		return MCPError(TEXT("Missing 'value' parameter"));
 	}
@@ -3840,7 +3841,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetAssetProperty(const TSharedPtr<FJsonOb
 	Asset->Modify();
 	if (LeafOwner && LeafOwner != Asset) LeafOwner->Modify();
 	FString SetErr;
-	if (!MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, *ValueField, SetErr))
+	if (!MCPJsonProperty::SetJsonOnProperty(FinalProp, ValuePtr, ValueField, SetErr))
 	{
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *SetErr));
 	}
@@ -3895,7 +3896,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
 	const TArray<TSharedPtr<FJsonValue>>* Elements = nullptr;
-	if (!Params->TryGetArrayField(TEXT("elements"), Elements) || !Elements)
+	if (!TryGetArrayParam(Params, TEXT("elements"), Elements) || !Elements)
 	{
 		return MCPError(TEXT("Missing 'elements' array parameter"));
 	}
@@ -4047,7 +4048,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AppendAssetArrayElements(const TSharedPtr
 TSharedPtr<FJsonValue> FAssetHandlers::SetTextureSettingsByType(const TSharedPtr<FJsonObject>& Params)
 {
 	const TSharedPtr<FJsonObject>* GroupsObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("groups"), GroupsObj) || !GroupsObj || !(*GroupsObj).IsValid())
+	if (!TryGetObjectParam(Params, TEXT("groups"), GroupsObj) || !GroupsObj || !(*GroupsObj).IsValid())
 	{
 		return MCPError(TEXT("Missing 'groups' object: { normal?: [paths], grayscale?: [paths], baseColor?: [paths], hdr?: [paths] }"));
 	}
@@ -4196,7 +4197,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureSettingsByType(const TSharedPtr
 TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("assetPath"), AssetPath);
+	TryGetStringParam(Params, TEXT("assetPath"), AssetPath);
 	FString Name, PackagePath;
 	if (AssetPath.IsEmpty())
 	{
@@ -4277,7 +4278,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateInterchangePipeline(const TSharedPt
 	const TSharedPtr<FJsonObject>* OptionsObj = nullptr;
 	int32 OverridesApplied = 0;
 	TArray<TSharedPtr<FJsonValue>> OverrideFailures;
-	if (Params->TryGetObjectField(TEXT("options"), OptionsObj) && OptionsObj && (*OptionsObj).IsValid())
+	if (TryGetObjectParam(Params, TEXT("options"), OptionsObj) && OptionsObj && (*OptionsObj).IsValid())
 	{
 		for (const auto& Pair : (*OptionsObj)->Values)
 		{
@@ -4331,7 +4332,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::MigrateAssets(const TSharedPtr<FJsonObjec
 {
 	TArray<FString> AssetPaths;
 	const TArray<TSharedPtr<FJsonValue>>* PathArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("assetPaths"), PathArray) && PathArray)
+	if (TryGetArrayParam(Params, TEXT("assetPaths"), PathArray) && PathArray)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *PathArray)
 		{
@@ -4340,7 +4341,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::MigrateAssets(const TSharedPtr<FJsonObjec
 		}
 	}
 	FString Single;
-	if (Params->TryGetStringField(TEXT("assetPath"), Single) && !Single.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("assetPath"), Single) && !Single.IsEmpty())
 	{
 		AssetPaths.AddUnique(Single);
 	}

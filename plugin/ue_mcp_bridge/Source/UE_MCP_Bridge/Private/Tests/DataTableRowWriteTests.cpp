@@ -1,5 +1,6 @@
 // Coverage for the DataTable row write path and the JSON property setter it
-// runs on, for the three data-loss bugs they carried (#928, #929, #935).
+// runs on, for the three data-loss bugs they carried (#928, #929, #935), and
+// for read_datatable's outputPath form, which writes the rows to a file.
 //
 // run_automation_tests dispatches every EditorContext/EngineFilter test in the
 // process when it is called without a filter, against whatever project the
@@ -24,9 +25,18 @@
 #include "Math/IntVector.h"
 #include "GameFramework/DefaultPawn.h"
 #include "GameFramework/GameModeBase.h"
+#include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
+#include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
 #include "MCPEngineCompat.h"
+#include "Tests/MCPDataTableTestTypes.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -100,6 +110,28 @@ bool ResponseSucceeded(const TSharedPtr<FJsonValue>& Response, FString& OutError
 		Obj->TryGetStringField(TEXT("error"), OutError);
 	}
 	return bSuccess;
+}
+
+/** Params for asset(read_datatable) against a transient table. An empty
+ *  filter or path leaves that param out, which is the inline, unfiltered read. */
+TSharedPtr<FJsonObject> MakeDataTableReadParams(const UDataTable* Table, const FString& RowFilter, const FString& OutputPath)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("assetPath"), Table->GetPathName());
+	if (!RowFilter.IsEmpty()) Params->SetStringField(TEXT("rowFilter"), RowFilter);
+	if (!OutputPath.IsEmpty()) Params->SetStringField(TEXT("outputPath"), OutputPath);
+	return Params;
+}
+
+/** One canonical text form of a row array, so rows returned inline and rows
+ *  read back from a file compare as strings. */
+FString CondenseDataTableRows(const TArray<TSharedPtr<FJsonValue>>& Rows)
+{
+	FString Text;
+	const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+		TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Text);
+	FJsonSerializer::Serialize(Rows, Writer);
+	return Text;
 }
 }
 
@@ -243,6 +275,164 @@ bool FDataTableRejectedWriteLeavesRowIntactTest::RunTest(const FString& Paramete
 	TestEqual(TEXT("the TMap is untouched"), RowA->PerPlatform.Num(), 1);
 	return true;
 #endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// read_datatable with outputPath writes exactly the rows the inline read
+// returns, rowFilter applied, and reports the file instead of the rows.
+// ─────────────────────────────────────────────────────────────────────────────
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDataTableReadToFileTest,
+	"UE.MCP.Asset.DataTable.ReadToFileRoundTrips",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDataTableReadToFileTest::RunTest(const FString& Parameters)
+{
+	UDataTable* Table = MakeTransientPerPlatformTable();
+	if (!TestNotNull(TEXT("transient DataTable was created"), Table)) return false;
+	FGCRootScope TableRoot(Table);
+
+	TMap<FName, int32> Overrides;
+	Overrides.Add(TEXT("Windows"), 41);
+	AddPerPlatformRow(Table, TEXT("AlphaOne"), 1, Overrides);
+	AddPerPlatformRow(Table, TEXT("AlphaTwo"), 2, TMap<FName, int32>());
+	AddPerPlatformRow(Table, TEXT("Beta"), 3, TMap<FName, int32>());
+
+	FMCPHandlerRegistry Registry;
+	FAssetHandlers::RegisterHandlers(Registry);
+	TestTrue(TEXT("read_datatable is registered"), Registry.HasHandler(TEXT("read_datatable")));
+
+	if (!TestTrue(
+			TEXT("the handler resolves the transient table by path"),
+			MCPLoadAssetObject(Table->GetPathName()) == Table))
+	{
+		return false;
+	}
+
+	// Every file this test writes lands in one folder of its own under Saved/,
+	// removed on the way out whatever the assertions found.
+	const FString DumpFolder = FString::Printf(
+		TEXT("UE_MCP/AutomationTests/ReadDataTable_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	const FString DumpDirectory = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), DumpFolder));
+	ON_SCOPE_EXIT
+	{
+		IFileManager::Get().DeleteDirectory(*DumpDirectory, false, true);
+	};
+
+	auto Read = [this, &Registry, Table](const TCHAR* Label, const FString& RowFilter, const FString& OutputPath)
+		-> TSharedPtr<FJsonObject>
+	{
+		const TSharedPtr<FJsonValue> Response = Registry.ExecuteHandler(
+			TEXT("read_datatable"), MakeDataTableReadParams(Table, RowFilter, OutputPath));
+		FString Error;
+		const bool bSucceeded = ResponseSucceeded(Response, Error);
+		if (!TestTrue(FString::Printf(TEXT("%s succeeded (%s)"), Label, *Error), bSucceeded)) return nullptr;
+		return Response->AsObject();
+	};
+
+	auto LoadRows = [this](const FString& Path, TArray<TSharedPtr<FJsonValue>>& OutRows) -> bool
+	{
+		FString Text;
+		if (!TestTrue(FString::Printf(TEXT("the file can be read back (%s)"), *Path), FFileHelper::LoadFileToString(Text, *Path)))
+		{
+			return false;
+		}
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Text);
+		return TestTrue(TEXT("the file holds a JSON array"), FJsonSerializer::Deserialize(Reader, OutRows));
+	};
+
+	// ── The inline reads are the reference the files must match, and the
+	// shape they return must not have moved.
+	const TSharedPtr<FJsonObject> InlineAll = Read(TEXT("the inline read"), FString(), FString());
+	const TSharedPtr<FJsonObject> InlineFiltered = Read(TEXT("the filtered inline read"), TEXT("alpha"), FString());
+	if (!InlineAll.IsValid() || !InlineFiltered.IsValid()) return false;
+
+	const TArray<TSharedPtr<FJsonValue>>* InlineAllRows = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* InlineFilteredRows = nullptr;
+	if (!TestTrue(TEXT("the inline read returns rows"), InlineAll->TryGetArrayField(TEXT("rows"), InlineAllRows))) return false;
+	if (!TestTrue(TEXT("the filtered inline read returns rows"), InlineFiltered->TryGetArrayField(TEXT("rows"), InlineFilteredRows))) return false;
+	TestEqual(TEXT("the inline read returns every row"), InlineAllRows->Num(), 3);
+	TestEqual(TEXT("the filter keeps the two matching rows"), InlineFilteredRows->Num(), 2);
+	TestTrue(TEXT("the inline read still lists rowNames"), InlineAll->HasField(TEXT("rowNames")));
+	TestFalse(TEXT("the inline read names no file"), InlineAll->HasField(TEXT("outputPath")));
+
+	// ── A relative outputPath resolves under Saved/, creating the folder, and
+	// the file holds the filtered rows and nothing else.
+	{
+		const FString Requested = DumpFolder / TEXT("filtered.json");
+		const FString Expected = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), Requested));
+		const TSharedPtr<FJsonObject> Written = Read(TEXT("the filtered read to a relative path"), TEXT("alpha"), Requested);
+		if (!Written.IsValid()) return false;
+
+		FString OutputPath;
+		Written->TryGetStringField(TEXT("outputPath"), OutputPath);
+		TestEqual(TEXT("a relative path resolves under Saved/ and comes back absolute"), OutputPath, Expected);
+		TestFalse(TEXT("the rows do not come back inline"), Written->HasField(TEXT("rows")));
+		TestFalse(TEXT("nor does the per-row name list"), Written->HasField(TEXT("rowNames")));
+
+		int32 RowCount = -1;
+		Written->TryGetNumberField(TEXT("rowCount"), RowCount);
+		TestEqual(TEXT("rowCount counts the rows after the filter"), RowCount, 2);
+		int32 TotalRowCount = -1;
+		Written->TryGetNumberField(TEXT("totalRowCount"), TotalRowCount);
+		TestEqual(TEXT("totalRowCount still counts the whole table"), TotalRowCount, 3);
+		FString RowStruct;
+		Written->TryGetStringField(TEXT("rowStruct"), RowStruct);
+		TestEqual(TEXT("rowStruct names the row struct"), RowStruct, FString(TEXT("PerPlatformInt")));
+		int64 Bytes = -1;
+		Written->TryGetNumberField(TEXT("bytes"), Bytes);
+		TestEqual(TEXT("bytes is the size of the file on disk"), Bytes, IFileManager::Get().FileSize(*Expected));
+		TestTrue(TEXT("and the file is not empty"), Bytes > 0);
+
+		TArray<TSharedPtr<FJsonValue>> FileRows;
+		if (LoadRows(Expected, FileRows))
+		{
+			TestEqual(
+				TEXT("the file holds the rows the filtered inline read returned"),
+				CondenseDataTableRows(FileRows),
+				CondenseDataTableRows(*InlineFilteredRows));
+		}
+	}
+
+	// ── An absolute outputPath is used as given, a missing nested folder is
+	// created, and without a filter every row is written.
+	const FString AbsolutePath = DumpDirectory / TEXT("nested") / TEXT("all.json");
+	{
+		const TSharedPtr<FJsonObject> Written = Read(TEXT("the unfiltered read to an absolute path"), FString(), AbsolutePath);
+		if (!Written.IsValid()) return false;
+
+		FString OutputPath;
+		Written->TryGetStringField(TEXT("outputPath"), OutputPath);
+		TestEqual(TEXT("an absolute path is used as given"), OutputPath, AbsolutePath);
+		TestFalse(TEXT("no filteredCount without a filter"), Written->HasField(TEXT("filteredCount")));
+		int32 RowCount = -1;
+		Written->TryGetNumberField(TEXT("rowCount"), RowCount);
+		TestEqual(TEXT("rowCount counts every row"), RowCount, 3);
+
+		TArray<TSharedPtr<FJsonValue>> FileRows;
+		if (LoadRows(AbsolutePath, FileRows))
+		{
+			TestEqual(
+				TEXT("the file holds the rows the inline read returned"),
+				CondenseDataTableRows(FileRows),
+				CondenseDataTableRows(*InlineAllRows));
+		}
+	}
+
+	// ── Writing to the same path again replaces the file rather than
+	// appending to it or refusing.
+	{
+		const TSharedPtr<FJsonObject> Written = Read(TEXT("the second read to the same path"), TEXT("beta"), AbsolutePath);
+		if (!Written.IsValid()) return false;
+
+		TArray<TSharedPtr<FJsonValue>> FileRows;
+		if (LoadRows(AbsolutePath, FileRows))
+		{
+			TestEqual(TEXT("the file now holds only the second read's rows"), FileRows.Num(), 1);
+		}
+	}
+	return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -806,6 +996,224 @@ bool FJsonPropertyNumericReadTest::RunTest(const FString& Parameters)
 		{
 			TestTrue(TEXT("and carries the value"), Read->AsBool());
 		}
+	}
+	return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "None" is what the engine's own DataTable JSON export writes for a reference
+// that is not set, so a row exported, edited and written back carries it. It
+// clears the reference exactly as "" does, and the readback check agrees.
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace
+{
+const TCHAR* const EmptyRefTexturePath = TEXT("/Engine/EngineResources/DefaultTexture.DefaultTexture");
+const TCHAR* const EmptyRefSoftClassPath = TEXT("/Script/Engine.DefaultPawn");
+const TCHAR* const EmptyRefRowName = TEXT("EmptyReferenceRow");
+
+/** Roots a transient table for the length of one test and discards it on
+ *  every way out, so a failed assertion does not leave it behind. */
+struct FTransientDataTableScope
+{
+	UDataTable* Table = nullptr;
+
+	explicit FTransientDataTableScope(UDataTable* InTable) : Table(InTable)
+	{
+		if (Table) Table->AddToRoot();
+	}
+	~FTransientDataTableScope()
+	{
+		if (!Table) return;
+		Table->EmptyTable();
+		Table->RemoveFromRoot();
+		Table->MarkAsGarbage();
+	}
+	FTransientDataTableScope(const FTransientDataTableScope&) = delete;
+	FTransientDataTableScope& operator=(const FTransientDataTableScope&) = delete;
+};
+
+FUEMCPDataTableReferenceRow* FindReferenceRow(const UDataTable* Table, const TCHAR* RowName)
+{
+	uint8* const* Found = Table->GetRowMap().Find(FName(RowName));
+	return (Found && *Found) ? reinterpret_cast<FUEMCPDataTableReferenceRow*>(*Found) : nullptr;
+}
+
+/** Params for asset(fill_datatable_from_json) writing one field of one row. */
+TSharedPtr<FJsonObject> MakeFillParams(
+	const UDataTable* Table,
+	const TCHAR* RowName,
+	const FString& FieldName,
+	const TSharedPtr<FJsonValue>& Value)
+{
+	TSharedPtr<FJsonObject> Fields = MakeShared<FJsonObject>();
+	Fields->SetField(FieldName, Value);
+	TSharedPtr<FJsonObject> Rows = MakeShared<FJsonObject>();
+	Rows->SetObjectField(RowName, Fields);
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("assetPath"), Table->GetPathName());
+	Params->SetObjectField(TEXT("rows"), Rows);
+	return Params;
+}
+
+/** Read straight off the typed row, so the answer does not come from the
+ *  reflection code the verifier itself uses. */
+bool ReferenceFieldIsEmpty(const FUEMCPDataTableReferenceRow& Row, const FString& FieldName)
+{
+	if (FieldName == TEXT("Icon")) return Row.Icon.IsNull();
+	if (FieldName == TEXT("SoftClass")) return Row.SoftClass.IsNull();
+	if (FieldName == TEXT("HardObject")) return Row.HardObject.Get() == nullptr;
+	if (FieldName == TEXT("HardClass")) return Row.HardClass.Get() == nullptr;
+	return false;
+}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDataTableEmptyReferenceSpellingsTest,
+	"UE.MCP.Asset.DataTable.EmptyReferenceSpellingsClear",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDataTableEmptyReferenceSpellingsTest::RunTest(const FString& Parameters)
+{
+	using MCPJsonProperty::IsEmptyReferenceText;
+	using MCPJsonProperty::VerifyJsonOnProperty;
+
+	// The spellings themselves. "none" is a path, as it is to FSoftObjectPath.
+	TestTrue(TEXT("\"None\" is an empty reference"), IsEmptyReferenceText(TEXT("None")));
+	TestTrue(TEXT("\"\" is an empty reference"), IsEmptyReferenceText(TEXT("")));
+	TestFalse(TEXT("\"none\" is not"), IsEmptyReferenceText(TEXT("none")));
+	TestFalse(TEXT("an asset path is not"), IsEmptyReferenceText(EmptyRefTexturePath));
+
+	// Successful writes reach the save step, which declines for a transient
+	// table. That is the cost of keeping the test off a real asset.
+	AddExpectedError(TEXT("SaveLoadedAsset failed"), EAutomationExpectedErrorFlags::Contains, 0);
+
+	UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, EmptyRefTexturePath);
+	if (!TestNotNull(TEXT("the engine's default texture loads"), Texture)) return false;
+
+	const FName TableName(*FString::Printf(TEXT("DT_UEMCP_EmptyRef_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+	UDataTable* Table = NewObject<UDataTable>(GetTransientPackage(), TableName);
+	if (!TestNotNull(TEXT("transient DataTable was created"), Table)) return false;
+	const FTransientDataTableScope TableScope(Table);
+	Table->RowStruct = FUEMCPDataTableReferenceRow::StaticStruct();
+
+	{
+		FUEMCPDataTableReferenceRow Seed;
+		Seed.Count = 3;
+		Table->AddRow(FName(EmptyRefRowName), Seed);
+	}
+
+	// Every reference field points at something real before each write, so
+	// an empty result can only have come from the write.
+	auto SeedReferences = [Table, Texture]()
+	{
+		if (FUEMCPDataTableReferenceRow* Row = FindReferenceRow(Table, EmptyRefRowName))
+		{
+			Row->Icon = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(EmptyRefTexturePath));
+			Row->SoftClass = TSoftClassPtr<UObject>(FSoftObjectPath(EmptyRefSoftClassPath));
+			Row->HardObject = Texture;
+			Row->HardClass = ADefaultPawn::StaticClass();
+		}
+	};
+
+	FMCPHandlerRegistry Registry;
+	FAssetHandlers::RegisterHandlers(Registry);
+	TestTrue(TEXT("fill_datatable_from_json is registered"), Registry.HasHandler(TEXT("fill_datatable_from_json")));
+
+	if (!TestTrue(
+			TEXT("the handler resolves the transient table by path"),
+			MCPLoadAssetObject(Table->GetPathName()) == Table))
+	{
+		return false;
+	}
+
+	const TArray<FString> ReferenceFields = { TEXT("Icon"), TEXT("SoftClass"), TEXT("HardObject"), TEXT("HardClass") };
+	const TArray<FString> Spellings = { TEXT("None"), TEXT("") };
+
+	for (const FString& Field : ReferenceFields)
+	{
+		for (const FString& Spelling : Spellings)
+		{
+			SeedReferences();
+
+			FString Error;
+			const bool bWritten = ResponseSucceeded(
+				Registry.ExecuteHandler(
+					TEXT("fill_datatable_from_json"),
+					MakeFillParams(Table, EmptyRefRowName, Field, MakeShared<FJsonValueString>(Spelling))),
+				Error);
+			TestTrue(
+				FString::Printf(TEXT("clearing %s with '%s' succeeds (%s)"), *Field, *Spelling, *Error),
+				bWritten);
+
+			const FUEMCPDataTableReferenceRow* Row = FindReferenceRow(Table, EmptyRefRowName);
+			if (!TestNotNull(TEXT("the row still exists"), Row)) return false;
+
+			TestTrue(
+				FString::Printf(TEXT("%s reads back empty after '%s'"), *Field, *Spelling),
+				ReferenceFieldIsEmpty(*Row, Field));
+			for (const FString& Other : ReferenceFields)
+			{
+				if (Other == Field) continue;
+				TestFalse(
+					FString::Printf(TEXT("clearing %s left %s alone"), *Field, *Other),
+					ReferenceFieldIsEmpty(*Row, Other));
+			}
+			TestEqual(TEXT("the plain value is untouched"), Row->Count, 3);
+		}
+	}
+
+	// Neither spelling verifies against a reference that still points at an
+	// asset. The acceptance is "stored empty", not "any empty spelling".
+	SeedReferences();
+	FUEMCPDataTableReferenceRow* Row = FindReferenceRow(Table, EmptyRefRowName);
+	if (!TestNotNull(TEXT("the row still exists"), Row)) return false;
+	const UScriptStruct* RowStruct = Table->GetRowStruct();
+	for (const FString& Field : ReferenceFields)
+	{
+		FProperty* Prop = RowStruct->FindPropertyByName(FName(*Field));
+		if (!TestNotNull(FString::Printf(TEXT("%s exists on the row struct"), *Field), Prop)) return false;
+		for (const FString& Spelling : Spellings)
+		{
+			FString Detail;
+			TestFalse(
+				FString::Printf(TEXT("'%s' does not verify against a %s that is still set"), *Spelling, *Field),
+				VerifyJsonOnProperty(Prop, Prop->ContainerPtrToValuePtr<void>(Row), MakeShared<FJsonValueString>(Spelling), Detail));
+			TestTrue(TEXT("and the mismatch says what is stored"), Detail.Contains(TEXT("Default")));
+		}
+	}
+
+	// A plain value is not loosened: a genuine mismatch is still one, and
+	// "None" is not a number.
+	FProperty* CountProp = RowStruct->FindPropertyByName(TEXT("Count"));
+	if (!TestNotNull(TEXT("Count exists on the row struct"), CountProp)) return false;
+	void* CountAddr = CountProp->ContainerPtrToValuePtr<void>(Row);
+	{
+		FString Detail;
+		TestTrue(
+			TEXT("the stored plain value verifies"),
+			VerifyJsonOnProperty(CountProp, CountAddr, MakeShared<FJsonValueNumber>(3), Detail));
+		Detail.Reset();
+		TestFalse(
+			TEXT("a different plain value does not verify"),
+			VerifyJsonOnProperty(CountProp, CountAddr, MakeShared<FJsonValueNumber>(7), Detail));
+		Detail.Reset();
+		TestFalse(
+			TEXT("\"None\" does not verify against a plain value"),
+			VerifyJsonOnProperty(CountProp, CountAddr, MakeShared<FJsonValueString>(TEXT("None")), Detail));
+	}
+	{
+		FString Error;
+		TestFalse(
+			TEXT("writing \"None\" to a plain value is refused"),
+			ResponseSucceeded(
+				Registry.ExecuteHandler(
+					TEXT("fill_datatable_from_json"),
+					MakeFillParams(Table, EmptyRefRowName, TEXT("Count"), MakeShared<FJsonValueString>(TEXT("None")))),
+				Error));
+		Row = FindReferenceRow(Table, EmptyRefRowName);
+		if (!TestNotNull(TEXT("the row survived the refused write"), Row)) return false;
+		TestEqual(TEXT("the refused write left the plain value alone"), Row->Count, 3);
 	}
 	return true;
 }

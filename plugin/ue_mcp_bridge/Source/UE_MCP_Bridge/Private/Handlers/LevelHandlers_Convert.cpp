@@ -80,7 +80,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::ConvertBrushesToStaticMesh(const TSharedP
 	TArray<FString> ActorLabels;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* LabelValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("actorLabels"), LabelValues) && LabelValues)
+		if (TryGetArrayParam(Params, TEXT("actorLabels"), LabelValues) && LabelValues)
 		{
 			ActorLabels = JsonArrayToStringList(LabelValues);
 		}

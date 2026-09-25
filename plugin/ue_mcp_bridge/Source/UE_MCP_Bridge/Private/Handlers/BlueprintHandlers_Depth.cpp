@@ -644,17 +644,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetFunctionProperties(const TSharedPt
 	UK2Node_FunctionEntry* Entry = (Kind == EGraphKind::Macro) ? nullptr : FindFunctionEntry(Graph);
 
 	// ── read every request and capture every previous value BEFORE writing ──
-	bool bPure = false;      const bool bHasPure      = Params->TryGetBoolField(TEXT("pure"), bPure);
-	bool bConst = false;     const bool bHasConst     = Params->TryGetBoolField(TEXT("isConst"), bConst);
-	bool bCallInEditor = false; const bool bHasCallInEditor = Params->TryGetBoolField(TEXT("callInEditor"), bCallInEditor);
-	bool bThreadSafe = false;   const bool bHasThreadSafe   = Params->TryGetBoolField(TEXT("threadSafe"), bThreadSafe);
-	bool bDeprecated = false;   const bool bHasDeprecated   = Params->TryGetBoolField(TEXT("deprecated"), bDeprecated);
+	bool bPure = false;      const bool bHasPure      = TryGetBoolParam(Params, TEXT("pure"), bPure);
+	bool bConst = false;     const bool bHasConst     = TryGetBoolParam(Params, TEXT("isConst"), bConst);
+	bool bCallInEditor = false; const bool bHasCallInEditor = TryGetBoolParam(Params, TEXT("callInEditor"), bCallInEditor);
+	bool bThreadSafe = false;   const bool bHasThreadSafe   = TryGetBoolParam(Params, TEXT("threadSafe"), bThreadSafe);
+	bool bDeprecated = false;   const bool bHasDeprecated   = TryGetBoolParam(Params, TEXT("deprecated"), bDeprecated);
 
-	FString Category;          const bool bHasCategory   = Params->TryGetStringField(TEXT("category"), Category);
-	FString Tooltip;           const bool bHasTooltip    = Params->TryGetStringField(TEXT("tooltip"), Tooltip);
-	FString Keywords;          const bool bHasKeywords   = Params->TryGetStringField(TEXT("keywords"), Keywords);
-	FString CompactNodeTitle;  const bool bHasCompact    = Params->TryGetStringField(TEXT("compactNodeTitle"), CompactNodeTitle);
-	FString DeprecationMessage;const bool bHasDeprMsg    = Params->TryGetStringField(TEXT("deprecationMessage"), DeprecationMessage);
+	FString Category;          const bool bHasCategory   = TryGetStringParam(Params, TEXT("category"), Category);
+	FString Tooltip;           const bool bHasTooltip    = TryGetStringParam(Params, TEXT("tooltip"), Tooltip);
+	FString Keywords;          const bool bHasKeywords   = TryGetStringParam(Params, TEXT("keywords"), Keywords);
+	FString CompactNodeTitle;  const bool bHasCompact    = TryGetStringParam(Params, TEXT("compactNodeTitle"), CompactNodeTitle);
+	FString DeprecationMessage;const bool bHasDeprMsg    = TryGetStringParam(Params, TEXT("deprecationMessage"), DeprecationMessage);
 
 	FString AccessSpecifier = OptionalString(Params, TEXT("accessSpecifier"));
 	const bool bHasAccess = !AccessSpecifier.IsEmpty();
@@ -1284,7 +1284,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 		FString ParameterName;
 		if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
 		FString DefaultValue;
-		if (!Params->TryGetStringField(TEXT("defaultValue"), DefaultValue))
+		if (!TryGetStringParam(Params, TEXT("defaultValue"), DefaultValue))
 		{
 			return MCPError(TEXT("Missing required parameter 'defaultValue': the value as Unreal export text (e.g. '5', 'true', '(X=1.000000,Y=0.000000,Z=0.000000)'). Pass an empty string to clear it."));
 		}
@@ -1342,7 +1342,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditGraphParameters(const TSharedPtr<
 	if (Op == TEXT("reorder"))
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Order = nullptr;
-		if (!Params->TryGetArrayField(TEXT("order"), Order) || !Order)
+		if (!TryGetArrayParam(Params, TEXT("order"), Order) || !Order)
 		{
 			return MCPError(FString::Printf(
 				TEXT("Missing required parameter 'order': the COMPLETE list of %s names in their desired order. Parameters: %s"),
@@ -1610,7 +1610,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetBlueprintVariableMetadata(const TS
 	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
 
 	const TSharedPtr<FJsonObject>* MetaObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("metadata"), MetaObj) || !MetaObj || !MetaObj->IsValid())
+	if (!TryGetObjectParam(Params, TEXT("metadata"), MetaObj) || !MetaObj || !MetaObj->IsValid())
 	{
 		return MCPError(TEXT("Missing required parameter 'metadata': an object of key/value strings (ClampMin, UIMin, EditCondition, Bitmask, BitmaskEnum, MakeEditWidget, MultiLine, ...). A JSON null value removes that key."));
 	}
@@ -1974,7 +1974,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditLocalVariable(const TSharedPtr<FJ
 	if (Op == TEXT("set_default"))
 	{
 		FString DefaultValue;
-		if (!Params->TryGetStringField(TEXT("defaultValue"), DefaultValue))
+		if (!TryGetStringParam(Params, TEXT("defaultValue"), DefaultValue))
 		{
 			return MCPError(TEXT("Missing required parameter 'defaultValue': the value as Unreal export text. Pass an empty string to clear it."));
 		}
@@ -2237,7 +2237,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddCustomEvent(const TSharedPtr<FJson
 	struct FPlannedParam { FName Name; FEdGraphPinType Type; FString Spec; };
 	TArray<FPlannedParam> PlannedParams;
 	const TArray<TSharedPtr<FJsonValue>>* ParamArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("parameters"), ParamArray) && ParamArray)
+	if (TryGetArrayParam(Params, TEXT("parameters"), ParamArray) && ParamArray)
 	{
 		TSet<FName> SeenNames;
 		for (int32 Slot = 0; Slot < ParamArray->Num(); ++Slot)
@@ -2392,7 +2392,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::CreateMacro(const TSharedPtr<FJsonObj
 	auto PlanPins = [&](const TCHAR* Field, bool bOutput) -> TSharedPtr<FJsonValue>
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-		if (!Params->TryGetArrayField(Field, Arr) || !Arr) return nullptr;
+		if (!TryGetArrayParam(Params, Field, Arr) || !Arr) return nullptr;
 		for (int32 Slot = 0; Slot < Arr->Num(); ++Slot)
 		{
 			const TSharedPtr<FJsonObject>* Obj = nullptr;

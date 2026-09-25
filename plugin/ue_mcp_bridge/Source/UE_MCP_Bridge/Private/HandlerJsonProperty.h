@@ -70,6 +70,23 @@ namespace MCPJsonProperty
 		return ERefKind::NotAReference;
 	}
 
+	// The text that means "this reference points at nothing", in the forms the
+	// engine itself produces and reads.
+	//
+	// An empty soft path and a null object or class pointer all export as
+	// "None", which is what UDataTable::GetTableAsJSON writes for an unset
+	// Icon or Class cell, and FSoftObjectPath reads both "None" and "" back as
+	// the empty path. A row exported, edited and written back therefore
+	// carries "None" wherever a reference was never set. The match is
+	// case-sensitive, as it is in FSoftObjectPath: "none" is a path.
+	//
+	// Only meaningful for a property ClassifyReference answers as a
+	// reference. "None" is an ordinary value for a name or a string.
+	inline bool IsEmptyReferenceText(const FString& Text)
+	{
+		return Text.IsEmpty() || Text.Equals(TEXT("None"), ESearchCase::CaseSensitive);
+	}
+
 	// Resolve a class path the way a caller means it, without inventing a
 	// suffix the path did not ask for.
 	//
@@ -447,8 +464,17 @@ namespace MCPJsonProperty
 		case ERefKind::Class:
 		{
 			FString Path;
-			if (Value->TryGetString(Path) && !Path.IsEmpty())
+			if (Value->TryGetString(Path))
 			{
+				// The "None" an exported row carries for a null pointer used to
+				// be looked up as a class called None and refused, although the
+				// engine's own importer reads it as null. Both empty spellings
+				// clear, as JSON null does (#420).
+				if (IsEmptyReferenceText(Path))
+				{
+					CastFieldChecked<FClassProperty>(Prop)->SetObjectPropertyValue(ValueAddr, nullptr);
+					return true;
+				}
 				UClass* Loaded = ResolveClassPath(Path);
 				if (!Loaded) { OutError = FString::Printf(TEXT("class not found: %s"), *Path); return false; }
 				CastFieldChecked<FClassProperty>(Prop)->SetObjectPropertyValue(ValueAddr, Loaded);
@@ -459,9 +485,15 @@ namespace MCPJsonProperty
 		case ERefKind::Object:
 		{
 			FString Path;
-			if (Value->TryGetString(Path) && !Path.IsEmpty())
+			if (Value->TryGetString(Path))
 			{
 				FObjectProperty* ObjProp = CastFieldChecked<FObjectProperty>(Prop);
+				// Same as the class case: "None" is null, not an asset name.
+				if (IsEmptyReferenceText(Path))
+				{
+					ObjProp->SetObjectPropertyValue(ValueAddr, nullptr);
+					return true;
+				}
 				UObject* Loaded = StaticLoadObject(ObjProp->PropertyClass, nullptr, *Path);
 				if (!Loaded) { OutError = FString::Printf(TEXT("asset not found: %s"), *Path); return false; }
 				ObjProp->SetObjectPropertyValue(ValueAddr, Loaded);
@@ -475,7 +507,10 @@ namespace MCPJsonProperty
 			if (Value->TryGetString(Path))
 			{
 				FSoftClassProperty* SoftClassProp = CastFieldChecked<FSoftClassProperty>(Prop);
-				if (Path.IsEmpty())
+				// "None" used to go through the class resolver, which tried to
+				// load a class called None (and None_C) before storing a path
+				// the engine then read as empty anyway.
+				if (IsEmptyReferenceText(Path))
 				{
 					SoftClassProp->SetPropertyValue(ValueAddr, FSoftObjectPtr());
 					return true;
@@ -502,7 +537,10 @@ namespace MCPJsonProperty
 			FString Path;
 			if (Value->TryGetString(Path))
 			{
-				FSoftObjectPath PathObj(Path);
+				// The empty spellings are cleared by name rather than left to
+				// the path parser, so the stored value is the empty path on
+				// every engine version the verifier below has to agree with.
+				const FSoftObjectPath PathObj = IsEmptyReferenceText(Path) ? FSoftObjectPath() : FSoftObjectPath(Path);
 				FSoftObjectPtr Ptr(PathObj);
 				CastFieldChecked<FSoftObjectProperty>(Prop)->SetPropertyValue(ValueAddr, Ptr);
 				return true;
@@ -870,7 +908,12 @@ namespace MCPJsonProperty
 
 	/** Read the stored value back and answer whether it is what was asked for.
 	 *
-	 *  Three checks, because they fail on different things.
+	 *  Four checks, because they fail on different things.
+	 *
+	 *  A reference asked to be empty, as "", or as the "None" the engine
+	 *  exports for an unset one, must be stored empty. It is compared as
+	 *  empty or not, never as text, since the two spellings store the same
+	 *  thing (see IsEmptyReferenceText).
 	 *
 	 *  A soft reference is never resolved at write time, so its stored text is
 	 *  whatever the setter chose to write. Comparing that text against the
@@ -905,8 +948,31 @@ namespace MCPJsonProperty
 		FString RequestedPath;
 		const bool bRequestedPath = Requested->TryGetString(RequestedPath) && !RequestedPath.IsEmpty();
 		const ERefKind Kind = ClassifyReference(Prop);
+		const bool bSoftRef = Kind == ERefKind::SoftClass || Kind == ERefKind::SoftObject;
+		const bool bHardRef = Kind == ERefKind::Class || Kind == ERefKind::Object;
 
-		if (bRequestedPath && (Kind == ERefKind::SoftClass || Kind == ERefKind::SoftObject))
+		// An empty reference, asked for in any spelling the engine writes for
+		// one, is satisfied by an empty stored reference and by nothing else.
+		// The path comparison below used to see "None" against the empty path
+		// the setter correctly stored for it and report a mismatch, so a row
+		// exported with GetTableAsJSON could not be written back unchanged.
+		FString RequestedText;
+		if ((bSoftRef || bHardRef) && Requested->Type == EJson::String &&
+			Requested->TryGetString(RequestedText) && IsEmptyReferenceText(RequestedText))
+		{
+			const bool bStoredEmpty = bSoftRef
+				? CastFieldChecked<FSoftObjectProperty>(Prop)->GetPropertyValue(ValueAddr).ToString().IsEmpty()
+				: CastFieldChecked<FObjectProperty>(Prop)->GetObjectPropertyValue(ValueAddr) == nullptr;
+			if (!bStoredEmpty)
+			{
+				OutDetail = FString::Printf(
+					TEXT("requested '%s' (an empty reference), stored '%s'"), *RequestedText, *StoredText);
+				return false;
+			}
+			return true;
+		}
+
+		if (bRequestedPath && bSoftRef)
 		{
 			const FString Stored = CastFieldChecked<FSoftObjectProperty>(Prop)->GetPropertyValue(ValueAddr).ToString();
 			if (!NormalizeAssetPathForCompare(Stored).Equals(
@@ -918,7 +984,7 @@ namespace MCPJsonProperty
 			return true;
 		}
 
-		if (bRequestedPath && (Kind == ERefKind::Class || Kind == ERefKind::Object))
+		if (bRequestedPath && bHardRef)
 		{
 			if (CastFieldChecked<FObjectProperty>(Prop)->GetObjectPropertyValue(ValueAddr) == nullptr)
 			{

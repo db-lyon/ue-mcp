@@ -586,7 +586,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReorderEqsTests(const TSharedPtr<FJson
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* OrderJson = nullptr;
-	if (!Params->TryGetArrayField(TEXT("order"), OrderJson) || !OrderJson)
+	if (!TryGetArrayParam(Params, TEXT("order"), OrderJson) || !OrderJson)
 	{
 		return MCPError(TEXT("Missing 'order': an array of the current test indices, in the order you want them."));
 	}
@@ -683,7 +683,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RunEqsQuery(const TSharedPtr<FJsonObje
 	// (Querier, and anything derived from it) have nothing to resolve against,
 	// which is a silent empty result rather than an error.
 	AActor* Querier = nullptr;
-	if (Params->HasField(TEXT("querierLabel")) || Params->HasField(TEXT("querierPath")))
+	if (HasParam(Params, TEXT("querierLabel")) || HasParam(Params, TEXT("querierPath")))
 	{
 		FMCPActorSelector Selector;
 		Selector.LabelKey = TEXT("querierLabel");

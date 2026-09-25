@@ -18,7 +18,7 @@ bool FMCPHandlerRegistry::ReportsUnreadParams(const FString& Category)
 {
 	// A category joins once scripts/audit-direct-param-reads.mjs lists no
 	// direct reads in its handlers, since those are invisible to the tracking.
-	static const TCHAR* const Reporting[] = { TEXT("animation") };
+	static const TCHAR* const Reporting[] = { TEXT("animation"), TEXT("asset"), TEXT("audio"), TEXT("blueprint"), TEXT("chooser"), TEXT("demo"), TEXT("dialog"), TEXT("diff"), TEXT("editor"), TEXT("epic"), TEXT("fab"), TEXT("foliage"), TEXT("gameplay"), TEXT("gas"), TEXT("landscape"), TEXT("level"), TEXT("lock"), TEXT("mass"), TEXT("material"), TEXT("networking"), TEXT("niagara"), TEXT("pcg"), TEXT("physics"), TEXT("project"), TEXT("reflection"), TEXT("sequencer"), TEXT("skeletalmesh"), TEXT("spline"), TEXT("statetree"), TEXT("widget") };
 	for (const TCHAR* Name : Reporting)
 	{
 		if (Category == Name) return true;

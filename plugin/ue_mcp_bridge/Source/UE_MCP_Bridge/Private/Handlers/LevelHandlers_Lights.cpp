@@ -96,7 +96,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 	auto ParseLightColor = [&](FLinearColor& OutColor) -> bool
 	{
 		const TSharedPtr<FJsonObject>* ColorObj = nullptr;
-		if (!Params->TryGetObjectField(TEXT("color"), ColorObj) || !ColorObj || !(*ColorObj).IsValid())
+		if (!TryGetObjectParam(Params, TEXT("color"), ColorObj) || !ColorObj || !(*ColorObj).IsValid())
 		{
 			return false;
 		}
@@ -135,7 +135,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnLight(const TSharedPtr<FJsonObject>&
 		// It lives on the local-light components (point/spot/rect); directional
 		// and sky lights have no attenuation radius, so they ignore it.
 		double AttenuationRadius = 0.0;
-		if (Params->TryGetNumberField(TEXT("attenuationRadius"), AttenuationRadius) && AttenuationRadius > 0.0)
+		if (TryGetNumberParam(Params, TEXT("attenuationRadius"), AttenuationRadius) && AttenuationRadius > 0.0)
 		{
 			if (UPointLightComponent* PointComp = Cast<UPointLightComponent>(LightComponent))
 			{
@@ -276,7 +276,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	// restore Static after applying the properties.
 	FString MobilityStr;
 	const bool bHasMobilityRequest =
-		Params->TryGetStringField(TEXT("mobility"), MobilityStr) && !MobilityStr.IsEmpty();
+		TryGetStringParam(Params, TEXT("mobility"), MobilityStr) && !MobilityStr.IsEmpty();
 	EComponentMobility::Type RequestedMobility = PreviousMobility;
 	if (bHasMobilityRequest)
 	{
@@ -294,12 +294,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	double DynamicPropertyProbe = 0.0;
 	const TSharedPtr<FJsonObject>* DynamicColorProbe = nullptr;
 	const bool bHasDynamicLightPropertyRequest =
-		Params->TryGetNumberField(TEXT("intensity"), DynamicPropertyProbe)
-		|| Params->TryGetObjectField(TEXT("color"), DynamicColorProbe)
-		|| Params->TryGetNumberField(TEXT("volumetricScatteringIntensity"), DynamicPropertyProbe)
-		|| (PointComponent && Params->TryGetNumberField(TEXT("sourceRadius"), DynamicPropertyProbe))
-		|| (SpotComponent && Params->TryGetNumberField(TEXT("innerConeAngle"), DynamicPropertyProbe))
-		|| (SpotComponent && Params->TryGetNumberField(TEXT("outerConeAngle"), DynamicPropertyProbe));
+		TryGetNumberParam(Params, TEXT("intensity"), DynamicPropertyProbe)
+		|| TryGetObjectParam(Params, TEXT("color"), DynamicColorProbe)
+		|| TryGetNumberParam(Params, TEXT("volumetricScatteringIntensity"), DynamicPropertyProbe)
+		|| (PointComponent && TryGetNumberParam(Params, TEXT("sourceRadius"), DynamicPropertyProbe))
+		|| (SpotComponent && TryGetNumberParam(Params, TEXT("innerConeAngle"), DynamicPropertyProbe))
+		|| (SpotComponent && TryGetNumberParam(Params, TEXT("outerConeAngle"), DynamicPropertyProbe));
 	bool bMobilityAppliedBeforeProperties = false;
 	bool bTemporarilyPromotedStatic = false;
 	if (PreviousMobility == EComponentMobility::Static && bHasDynamicLightPropertyRequest)
@@ -319,7 +319,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	}
 
 	double Intensity = 0.0;
-	if (Params->TryGetNumberField(TEXT("intensity"), Intensity))
+	if (TryGetNumberParam(Params, TEXT("intensity"), Intensity))
 	{
 		PrepareComponentMutation();
 		if (LightComponent) { LightComponent->SetIntensity(Intensity); }
@@ -329,7 +329,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	}
 
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("color"), ColorObj))
+	if (TryGetObjectParam(Params, TEXT("color"), ColorObj))
 	{
 		double R = 255.0, G = 255.0, B = 255.0;
 		(*ColorObj)->TryGetNumberField(TEXT("r"), R);
@@ -346,7 +346,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	if (LightComponent)
 	{
 		double VolScatter = 0.0;
-		if (Params->TryGetNumberField(TEXT("volumetricScatteringIntensity"), VolScatter))
+		if (TryGetNumberParam(Params, TEXT("volumetricScatteringIntensity"), VolScatter))
 		{
 			PrepareComponentMutation();
 			LightComponent->SetVolumetricScatteringIntensity((float)VolScatter);
@@ -354,7 +354,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 			bChangedVolumetricScattering = true;
 		}
 		double SourceRadius = 0.0;
-		if (Params->TryGetNumberField(TEXT("sourceRadius"), SourceRadius))
+		if (TryGetNumberParam(Params, TEXT("sourceRadius"), SourceRadius))
 		{
 			if (PointComponent)
 			{
@@ -367,14 +367,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 		if (SpotComponent)
 		{
 			double Inner = 0.0, Outer = 0.0;
-			if (Params->TryGetNumberField(TEXT("innerConeAngle"), Inner))
+			if (TryGetNumberParam(Params, TEXT("innerConeAngle"), Inner))
 			{
 				PrepareComponentMutation();
 				SpotComponent->SetInnerConeAngle((float)Inner);
 				bAnyChange = true;
 				bChangedInnerConeAngle = true;
 			}
-			if (Params->TryGetNumberField(TEXT("outerConeAngle"), Outer))
+			if (TryGetNumberParam(Params, TEXT("outerConeAngle"), Outer))
 			{
 				PrepareComponentMutation();
 				SpotComponent->SetOuterConeAngle((float)Outer);
@@ -386,7 +386,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	else if (SkyForProps)
 	{
 		double VolScatter = 0.0;
-		if (Params->TryGetNumberField(TEXT("volumetricScatteringIntensity"), VolScatter))
+		if (TryGetNumberParam(Params, TEXT("volumetricScatteringIntensity"), VolScatter))
 		{
 			PrepareComponentMutation();
 			SkyForProps->SetVolumetricScatteringIntensity((float)VolScatter);
@@ -397,7 +397,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 
 	// #94: DirectionalLight rotation support (sun angle for time-of-day)
 	const TSharedPtr<FJsonObject>* RotObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("rotation"), RotObj))
+	if (TryGetObjectParam(Params, TEXT("rotation"), RotObj))
 	{
 		double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
 		(*RotObj)->TryGetNumberField(TEXT("pitch"), Pitch);
@@ -437,7 +437,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetLightProperties(const TSharedPtr<FJson
 	if (USkyLightComponent* Sky = Actor->FindComponentByClass<USkyLightComponent>())
 	{
 		bool bRecapture = false;
-		Params->TryGetBoolField(TEXT("recaptureSky"), bRecapture);
+		TryGetBoolParam(Params, TEXT("recaptureSky"), bRecapture);
 		if (bRecapture || bAnyChange)
 		{
 			Sky->RecaptureSky();
@@ -574,29 +574,29 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFogProperties(const TSharedPtr<FJsonOb
 	bool bAnyChange = false;
 
 	double Density = 0.0;
-	if (Params->TryGetNumberField(TEXT("fogDensity"), Density))
+	if (TryGetNumberParam(Params, TEXT("fogDensity"), Density))
 	{
 		Rollback->SetNumberField(TEXT("fogDensity"), FC->FogDensity);
 		bAnyChange = true;
 		FC->FogDensity = (float)Density;
 	}
 	double HeightFalloff = 0.0;
-	if (Params->TryGetNumberField(TEXT("fogHeightFalloff"), HeightFalloff))
+	if (TryGetNumberParam(Params, TEXT("fogHeightFalloff"), HeightFalloff))
 	{
 		Rollback->SetNumberField(TEXT("fogHeightFalloff"), FC->FogHeightFalloff);
 		bAnyChange = true;
 		FC->FogHeightFalloff = (float)HeightFalloff;
 	}
 	double StartDistance = 0.0;
-	if (Params->TryGetNumberField(TEXT("startDistance"), StartDistance))
+	if (TryGetNumberParam(Params, TEXT("startDistance"), StartDistance))
 	{
 		Rollback->SetNumberField(TEXT("startDistance"), FC->StartDistance);
 		bAnyChange = true;
 		FC->StartDistance = (float)StartDistance;
 	}
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("fogInscatteringColor"), ColorObj) ||
-	    Params->TryGetObjectField(TEXT("color"), ColorObj))
+	if (TryGetObjectParam(Params, TEXT("fogInscatteringColor"), ColorObj) ||
+	    TryGetObjectParam(Params, TEXT("color"), ColorObj))
 	{
 		double R = 255, G = 255, B = 255;
 		(*ColorObj)->TryGetNumberField(TEXT("r"), R);
@@ -615,35 +615,35 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFogProperties(const TSharedPtr<FJsonOb
 	}
 
 	// #608: volumetric fog controls.
-	if (Params->HasField(TEXT("enableVolumetricFog")))
+	if (HasParam(Params, TEXT("enableVolumetricFog")))
 	{
 		Rollback->SetBoolField(TEXT("enableVolumetricFog"), FC->bEnableVolumetricFog != 0);
 		bAnyChange = true;
 		FC->SetVolumetricFog(OptionalBool(Params, TEXT("enableVolumetricFog"), true));
 	}
 	double VolScatterDist = 0.0;
-	if (Params->TryGetNumberField(TEXT("volumetricFogScatteringDistribution"), VolScatterDist))
+	if (TryGetNumberParam(Params, TEXT("volumetricFogScatteringDistribution"), VolScatterDist))
 	{
 		Rollback->SetNumberField(TEXT("volumetricFogScatteringDistribution"), FC->VolumetricFogScatteringDistribution);
 		bAnyChange = true;
 		FC->SetVolumetricFogScatteringDistribution((float)VolScatterDist);
 	}
 	double VolExtinction = 0.0;
-	if (Params->TryGetNumberField(TEXT("volumetricFogExtinctionScale"), VolExtinction))
+	if (TryGetNumberParam(Params, TEXT("volumetricFogExtinctionScale"), VolExtinction))
 	{
 		Rollback->SetNumberField(TEXT("volumetricFogExtinctionScale"), FC->VolumetricFogExtinctionScale);
 		bAnyChange = true;
 		FC->SetVolumetricFogExtinctionScale((float)VolExtinction);
 	}
 	double VolDistance = 0.0;
-	if (Params->TryGetNumberField(TEXT("volumetricFogDistance"), VolDistance))
+	if (TryGetNumberParam(Params, TEXT("volumetricFogDistance"), VolDistance))
 	{
 		Rollback->SetNumberField(TEXT("volumetricFogDistance"), FC->VolumetricFogDistance);
 		bAnyChange = true;
 		FC->SetVolumetricFogDistance((float)VolDistance);
 	}
 	const TSharedPtr<FJsonObject>* AlbedoObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("volumetricFogAlbedo"), AlbedoObj) && AlbedoObj)
+	if (TryGetObjectParam(Params, TEXT("volumetricFogAlbedo"), AlbedoObj) && AlbedoObj)
 	{
 		double R = 255, G = 255, B = 255;
 		(*AlbedoObj)->TryGetNumberField(TEXT("r"), R);

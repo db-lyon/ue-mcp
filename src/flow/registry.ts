@@ -62,6 +62,7 @@ export function buildFlowRegistry(tools: ToolDef[]): TaskRegistry {
       const prep: CallPreparation = {
         action: actionName,
         normalizeParams: tool.options?.normalizeParams,
+        paramGroups: tool.options?.paramGroups,
         nestedParamsKey: tool.options?.nestedParamsKey,
       };
 

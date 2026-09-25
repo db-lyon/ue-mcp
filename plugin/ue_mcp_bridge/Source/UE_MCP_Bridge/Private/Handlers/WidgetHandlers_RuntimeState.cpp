@@ -18,7 +18,7 @@ namespace WidgetRuntimeState
 	{
 		TArray<FString> Result;
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!Params.IsValid() || !Params->TryGetArrayField(FieldName, Values) || !Values)
+		if (!Params.IsValid() || !TryGetArrayParam(Params, FieldName, Values) || !Values)
 		{
 			return Result;
 		}

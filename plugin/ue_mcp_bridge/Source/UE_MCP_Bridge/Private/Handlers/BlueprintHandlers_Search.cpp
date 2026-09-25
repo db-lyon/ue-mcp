@@ -445,7 +445,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchNodes(const TSharedPtr<FJsonObj
 	auto ReadLowerStrings = [&](const TCHAR* Field, TArray<FString>& OutRaw, TSet<FString>& OutLower)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-		if (!Params->TryGetArrayField(Field, Arr) || !Arr) return;
+		if (!TryGetArrayParam(Params, Field, Arr) || !Arr) return;
 		for (const TSharedPtr<FJsonValue>& Value : *Arr)
 		{
 			FString S;
@@ -679,7 +679,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SearchCallSites(const TSharedPtr<FJso
 {
 	// ── Arguments ───────────────────────────────────────────────────────────
 	const TArray<TSharedPtr<FJsonValue>>* NamesArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("functionNames"), NamesArray) || !NamesArray)
+	if (!TryGetArrayParam(Params, TEXT("functionNames"), NamesArray) || !NamesArray)
 	{
 		return MCPError(TEXT("Missing 'functionNames' (string array of function names to find call sites for)"));
 	}

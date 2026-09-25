@@ -515,7 +515,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReadPerception(const TSharedPtr<FJsonO
 	const FString BlueprintPath = OptionalString(Params, TEXT("blueprintPath"));
 	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
 	const bool bHasActorSelector =
-		Params->HasField(TEXT("actorLabel")) || Params->HasField(TEXT("actorPath"));
+		HasParam(Params, TEXT("actorLabel")) || HasParam(Params, TEXT("actorPath"));
 
 	if (BlueprintPath.IsEmpty() && !bHasActorSelector)
 	{
@@ -821,7 +821,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSense(const TSharedPtr<FJsonObje
 
 	// Two selectors: 'index' is exact, 'senseType' is what a caller has when it
 	// only knows it wants the Sight one gone.
-	const bool bHasIndex = Params->HasField(TEXT("index"));
+	const bool bHasIndex = HasParam(Params, TEXT("index"));
 	const int32 RequestedIndex = bHasIndex
 		? static_cast<int32>(OptionalNumber(Params, TEXT("index"), -1.0)) : INDEX_NONE;
 	const FString SenseType = OptionalString(Params, TEXT("senseType"));
@@ -1284,7 +1284,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReportNoiseEvent(const TSharedPtr<FJso
 
 	// Optional instigator, resolved before anything is reported.
 	AActor* Instigator = nullptr;
-	if (Params->HasField(TEXT("instigatorLabel")) || Params->HasField(TEXT("instigatorPath")))
+	if (HasParam(Params, TEXT("instigatorLabel")) || HasParam(Params, TEXT("instigatorPath")))
 	{
 		FMCPActorSelector InstigatorSelector;
 		InstigatorSelector.LabelKey = TEXT("instigatorLabel");
@@ -1300,7 +1300,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReportNoiseEvent(const TSharedPtr<FJso
 	FVector Location = FVector::ZeroVector;
 	bool bHaveLocation = false;
 	const TSharedPtr<FJsonObject>* LocationObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocationObj) && LocationObj)
+	if (TryGetObjectParam(Params, TEXT("location"), LocationObj) && LocationObj)
 	{
 		bHaveLocation = ReadVec3Fields(*LocationObj, Location);
 	}
@@ -1371,7 +1371,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReportNoiseEvent(const TSharedPtr<FJso
 		{
 			// The selector's own "missing parameter" message names the keys but
 			// not why damage needs them, so say that here.
-			if (!Params->HasField(TEXT("targetLabel")) && !Params->HasField(TEXT("targetPath")))
+			if (!HasParam(Params, TEXT("targetLabel")) && !HasParam(Params, TEXT("targetPath")))
 			{
 				return MCPError(TEXT(
 					"senseType \"damage\" needs 'targetLabel' or 'targetPath': a damage event is "
@@ -1381,7 +1381,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReportNoiseEvent(const TSharedPtr<FJso
 			return Error;
 		}
 
-		if (!Params->HasField(TEXT("amount")))
+		if (!HasParam(Params, TEXT("amount")))
 		{
 			return MCPError(TEXT(
 				"senseType \"damage\" needs 'amount': the damage taken. Zero-damage events are NOT "
@@ -1395,7 +1395,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReportNoiseEvent(const TSharedPtr<FJso
 
 		FVector HitLocation = FAISystem::InvalidLocation;
 		const TSharedPtr<FJsonObject>* HitObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("hitLocation"), HitObj) && HitObj)
+		if (TryGetObjectParam(Params, TEXT("hitLocation"), HitObj) && HitObj)
 		{
 			FVector Parsed = FVector::ZeroVector;
 			if (ReadVec3Fields(*HitObj, Parsed)) HitLocation = Parsed;

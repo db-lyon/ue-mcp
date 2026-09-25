@@ -251,9 +251,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieControl(const TSharedPtr<FJsonObject>
 		if (Reg.IsLoadingAssets())
 		{
 			bool bWait = true;
-			Params->TryGetBoolField(TEXT("waitForAssetRegistry"), bWait);
+			TryGetBoolParam(Params, TEXT("waitForAssetRegistry"), bWait);
 			double TimeoutSec = 180.0;
-			if (double Override; Params->TryGetNumberField(TEXT("assetRegistryTimeoutSeconds"), Override))
+			if (double Override; TryGetNumberParam(Params, TEXT("assetRegistryTimeoutSeconds"), Override))
 			{
 				TimeoutSec = Override;
 			}
@@ -275,7 +275,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieControl(const TSharedPtr<FJsonObject>
 		}
 
 		bool bIgnoreBlueprintErrors = false;
-		Params->TryGetBoolField(TEXT("ignoreBlueprintErrors"), bIgnoreBlueprintErrors);
+		TryGetBoolParam(Params, TEXT("ignoreBlueprintErrors"), bIgnoreBlueprintErrors);
 		if (bIgnoreBlueprintErrors)
 		{
 			if (bIgnoreErrorsBypassArmed)
@@ -284,7 +284,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieControl(const TSharedPtr<FJsonObject>
 			}
 
 			FString AuthorizationSource;
-			Params->TryGetStringField(TEXT("authorizationSource"), AuthorizationSource);
+			TryGetStringParam(Params, TEXT("authorizationSource"), AuthorizationSource);
 			if (!IsRecognizedBypassAuthorization(AuthorizationSource))
 			{
 				return MCPError(TEXT("Blueprint-error bypass requires authorizationSource=user_approval (an approval prompt the user accepted) or authorizationSource=config (a standing ue-mcp.pie.allowIgnoreBlueprintErrors opt-in). Call editor(play_in_editor_ignore_blueprint_errors) rather than pie_control directly."));
@@ -477,10 +477,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieGetRuntimeValue(const TSharedPtr<FJso
 	// passing a label in 'actorPath' for two releases must not start getting
 	// "no actor at that path".
 	FString ActorPath;
-	if (!Params->TryGetStringField(TEXT("actorPath"), ActorPath))
+	if (!TryGetStringParam(Params, TEXT("actorPath"), ActorPath))
 	{
 		// Also accept actorLabel as a fallback
-		if (!Params->TryGetStringField(TEXT("actorLabel"), ActorPath))
+		if (!TryGetStringParam(Params, TEXT("actorLabel"), ActorPath))
 		{
 			return MCPError(TEXT("Missing 'actorPath' parameter"));
 		}
@@ -990,7 +990,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 	const FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
 	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
 	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("paths"), PathsArr) || !PathsArr || PathsArr->Num() == 0)
+	if (!TryGetArrayParam(Params, TEXT("paths"), PathsArr) || !PathsArr || PathsArr->Num() == 0)
 	{
 		return MCPError(TEXT("Missing 'paths' (array of dotted property/function paths)"));
 	}
@@ -1103,7 +1103,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 TSharedPtr<FJsonValue> FEditorHandlers::SetPieTimeScale(const TSharedPtr<FJsonObject>& Params)
 {
 	double Factor = 1.0;
-	if (!Params->TryGetNumberField(TEXT("factor"), Factor))
+	if (!TryGetNumberParam(Params, TEXT("factor"), Factor))
 	{
 		return MCPError(TEXT("Missing 'factor' (number) parameter"));
 	}
@@ -1304,7 +1304,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObj
 	// be reached via invoke_function and force execute_python.
 	UObject* CallTarget = Target;
 	FString ComponentName;
-	if (Params->TryGetStringField(TEXT("component"), ComponentName) && !ComponentName.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("component"), ComponentName) && !ComponentName.IsEmpty())
 	{
 		UActorComponent* FoundComp = nullptr;
 		for (UActorComponent* Comp : Target->GetComponents())
@@ -1337,7 +1337,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObj
 	}
 
 	const TSharedPtr<FJsonObject>* ArgObj = nullptr;
-	Params->TryGetObjectField(TEXT("args"), ArgObj);
+	TryGetObjectParam(Params, TEXT("args"), ArgObj);
 
 	// #383: optional actorArgs maps UObject* parameters to live actor labels in
 	// the active world. LoadObject only resolves asset paths, so any actor-to-
@@ -1346,7 +1346,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeFunction(const TSharedPtr<FJsonObj
 	//   invoke_function(actorLabel="Horse_01", functionName="ServerMount",
 	//                   actorArgs={Player: "PlayerCharacter_0"})
 	const TSharedPtr<FJsonObject>* ActorArgObj = nullptr;
-	Params->TryGetObjectField(TEXT("actorArgs"), ActorArgObj);
+	TryGetObjectParam(Params, TEXT("actorArgs"), ActorArgObj);
 
 	if (ArgObj && (*ArgObj).IsValid())
 	{
@@ -1631,7 +1631,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 	};
 
 	const TSharedPtr<FJsonObject>* ArgObj = nullptr;
-	Params->TryGetObjectField(TEXT("args"), ArgObj);
+	TryGetObjectParam(Params, TEXT("args"), ArgObj);
 	if (ArgObj && (*ArgObj).IsValid())
 	{
 		for (TFieldIterator<FProperty> It(Func); It && (It->PropertyFlags & CPF_Parm); ++It)
@@ -1654,7 +1654,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeStaticFunction(const TSharedPtr<FJ
 	// actorArgs: UObject* params resolved from live actor labels (e.g. the sculpt
 	// actor that a Voxel sculpt op operates on).
 	const TSharedPtr<FJsonObject>* ActorArgObj = nullptr;
-	Params->TryGetObjectField(TEXT("actorArgs"), ActorArgObj);
+	TryGetObjectParam(Params, TEXT("actorArgs"), ActorArgObj);
 	if (ActorArgObj && (*ActorArgObj).IsValid())
 	{
 		for (TFieldIterator<FProperty> It(Func); It && (It->PropertyFlags & CPF_Parm); ++It)
@@ -1815,7 +1815,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 
 	bool bAny = false;
 	int32 NumClients = 0;
-	if (Params->TryGetNumberField(TEXT("numClients"), NumClients) && NumClients > 0)
+	if (TryGetNumberParam(Params, TEXT("numClients"), NumClients) && NumClients > 0)
 	{
 		if (!SetIntPropOn(Settings, TEXT("PlayNumberOfClients"), NumClients))
 		{
@@ -1825,7 +1825,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	}
 
 	FString NetMode;
-	if (Params->TryGetStringField(TEXT("netMode"), NetMode) && !NetMode.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("netMode"), NetMode) && !NetMode.IsEmpty())
 	{
 		int64 Resolved = static_cast<int64>(EPlayNetMode::PIE_Standalone);
 		const FString N = NetMode.ToLower();
@@ -1845,12 +1845,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 	}
 
 	bool BVal = false;
-	if (Params->TryGetBoolField(TEXT("runUnderOneProcess"), BVal))
+	if (TryGetBoolParam(Params, TEXT("runUnderOneProcess"), BVal))
 	{
 		SetBoolPropOn(Settings, TEXT("RunUnderOneProcess"), BVal);
 		bAny = true;
 	}
-	if (Params->TryGetBoolField(TEXT("launchSeparateServer"), BVal))
+	if (TryGetBoolParam(Params, TEXT("launchSeparateServer"), BVal))
 	{
 		SetBoolPropOn(Settings, TEXT("bLaunchSeparateServer"), BVal);
 		bAny = true;
@@ -1858,12 +1858,12 @@ TSharedPtr<FJsonValue> FEditorHandlers::ConfigurePie(const TSharedPtr<FJsonObjec
 
 	// #671: Play-in-New-Window resolution.
 	int32 WinW = 0, WinH = 0;
-	if (Params->TryGetNumberField(TEXT("newWindowWidth"), WinW) && WinW > 0)
+	if (TryGetNumberParam(Params, TEXT("newWindowWidth"), WinW) && WinW > 0)
 	{
 		SetIntPropOn(Settings, TEXT("NewWindowWidth"), WinW);
 		bAny = true;
 	}
-	if (Params->TryGetNumberField(TEXT("newWindowHeight"), WinH) && WinH > 0)
+	if (TryGetNumberParam(Params, TEXT("newWindowHeight"), WinH) && WinH > 0)
 	{
 		SetIntPropOn(Settings, TEXT("NewWindowHeight"), WinH);
 		bAny = true;
@@ -1941,9 +1941,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::PieSetPlayerView(const TSharedPtr<FJsonO
 	const FRotator PreviousRot = PC->GetControlRotation();
 	FRotator Rot = PreviousRot;
 	double Tmp;
-	if (Params->TryGetNumberField(TEXT("pitch"), Tmp)) Rot.Pitch = Tmp;
-	if (Params->TryGetNumberField(TEXT("yaw"), Tmp))   Rot.Yaw = Tmp;
-	if (Params->TryGetNumberField(TEXT("roll"), Tmp))  Rot.Roll = Tmp;
+	if (TryGetNumberParam(Params, TEXT("pitch"), Tmp)) Rot.Pitch = Tmp;
+	if (TryGetNumberParam(Params, TEXT("yaw"), Tmp))   Rot.Yaw = Tmp;
+	if (TryGetNumberParam(Params, TEXT("roll"), Tmp))  Rot.Roll = Tmp;
 	PC->SetControlRotation(Rot);
 
 	auto Result = MCPSuccess();

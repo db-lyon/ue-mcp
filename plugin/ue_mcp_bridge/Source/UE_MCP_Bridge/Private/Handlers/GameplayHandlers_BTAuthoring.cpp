@@ -959,7 +959,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBTNode(const TSharedPtr<FJsonObject
 	}
 
 	const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("properties"), PropertiesObj) && PropertiesObj)
+	if (TryGetObjectParam(Params, TEXT("properties"), PropertiesObj) && PropertiesObj)
 	{
 		FString WriteError;
 		if (!MCPBTAApplyProperties(Instance, *PropertiesObj, WriteError))
@@ -974,7 +974,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddBTNode(const TSharedPtr<FJsonObject
 
 	TArray<TSharedPtr<FJsonValue>> AppliedKeys;
 	const TSharedPtr<FJsonObject>* KeysObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("blackboardKeys"), KeysObj) && KeysObj)
+	if (TryGetObjectParam(Params, TEXT("blackboardKeys"), KeysObj) && KeysObj)
 	{
 		FString KeyError;
 		if (!MCPBTAApplyBlackboardKeys(Instance, Tree, *KeysObj, AppliedKeys, KeyError))
@@ -1066,7 +1066,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::MoveBTNode(const TSharedPtr<FJsonObjec
 	const bool bIsSubNode = (Category == TEXT("decorator") || Category == TEXT("service"));
 
 	const FString ParentSpec = OptionalString(Params, TEXT("parent")).TrimStartAndEnd();
-	const bool bHasIndex = Params.IsValid() && Params->HasField(TEXT("index"));
+	const bool bHasIndex = Params.IsValid() && HasParam(Params, TEXT("index"));
 	const int32 RequestedIndex = OptionalInt(Params, TEXT("index"), INDEX_NONE);
 	if (ParentSpec.IsEmpty() && !bHasIndex)
 	{

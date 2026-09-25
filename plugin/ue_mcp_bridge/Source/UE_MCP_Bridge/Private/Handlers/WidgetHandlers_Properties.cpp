@@ -1294,7 +1294,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::SetWidgetStyle(const TSharedPtr<FJsonObj
 	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
-	TSharedPtr<FJsonValue> ValueField = Params->TryGetField(TEXT("value"));
+	TSharedPtr<FJsonValue> ValueField = TryGetParam(Params, TEXT("value"));
 	if (!ValueField.IsValid()) return MCPError(TEXT("Missing 'value' (a JSON object/scalar for the style)"));
 
 	TSharedPtr<FJsonValue> ResolveError;
@@ -1360,7 +1360,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::BulkSetWidgetProperties(const TSharedPtr
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 	const TArray<TSharedPtr<FJsonValue>>* Entries = nullptr;
-	if (!Params->TryGetArrayField(TEXT("properties"), Entries) || !Entries)
+	if (!TryGetArrayParam(Params, TEXT("properties"), Entries) || !Entries)
 	{
 		return MCPError(TEXT("Missing 'properties' array ([{widgetName, propertyName, value}])"));
 	}
@@ -1492,8 +1492,8 @@ TSharedPtr<FJsonValue> FWidgetHandlers::ReorderChild(const TSharedPtr<FJsonObjec
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 	FString WidgetName;
 	if (auto Err = RequireString(Params, TEXT("widgetName"), WidgetName)) return Err;
-	if (!Params->HasField(TEXT("index"))) return MCPError(TEXT("Missing 'index'"));
-	const int32 NewIndex = (int32)Params->GetNumberField(TEXT("index"));
+	if (!HasParam(Params, TEXT("index"))) return MCPError(TEXT("Missing 'index'"));
+	const int32 NewIndex = (int32)OptionalNumber(Params, TEXT("index"), 0.0);
 
 	TSharedPtr<FJsonValue> ResolveError;
 	UWidgetBlueprint* WidgetBP = MCPWidget::ResolveWidgetBlueprintOrError(AssetPath, ResolveError);

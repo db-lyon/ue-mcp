@@ -158,7 +158,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 {
 	// ── Texture set ──────────────────────────────────────────────────────────
 	const TSharedPtr<FJsonObject>* TexturesObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("textures"), TexturesObj) || !TexturesObj || !(*TexturesObj).IsValid())
+	if (!TryGetObjectParam(Params, TEXT("textures"), TexturesObj) || !TexturesObj || !(*TexturesObj).IsValid())
 	{
 		return MCPError(TEXT("Missing 'textures' object mapping a material property to a texture asset path, e.g. {\"baseColor\":\"/Game/T_Body_D\",\"normal\":\"/Game/T_Body_N\",\"orm\":\"/Game/T_Body_ORM\"}"));
 	}
@@ -169,7 +169,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 
 	// ── Optional per-property sampler-type overrides ─────────────────────────
 	const TSharedPtr<FJsonObject>* SamplerTypesObj = nullptr;
-	Params->TryGetObjectField(TEXT("samplerTypes"), SamplerTypesObj);
+	TryGetObjectParam(Params, TEXT("samplerTypes"), SamplerTypesObj);
 
 	// ── Resolve every requested texture before touching the material, so a
 	//    typo in the set never leaves a half-built graph behind. ─────────────
@@ -538,7 +538,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterial(const TSharedPtr<FJsonOb
 		TArray<FString> WantedNames;
 		TArray<int32> WantedIndices;
 		const TArray<TSharedPtr<FJsonValue>>* SlotSpec = nullptr;
-		if (Params->TryGetArrayField(TEXT("meshSlots"), SlotSpec) && SlotSpec)
+		if (TryGetArrayParam(Params, TEXT("meshSlots"), SlotSpec) && SlotSpec)
 		{
 			for (const TSharedPtr<FJsonValue>& Value : *SlotSpec)
 			{

@@ -210,7 +210,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteExactLabeledActorsInLevels(
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* LevelValues = nullptr;
-	if (!Params->TryGetArrayField(TEXT("levels"), LevelValues) ||
+	if (!TryGetArrayParam(Params, TEXT("levels"), LevelValues) ||
 		!LevelValues ||
 		LevelValues->IsEmpty())
 	{

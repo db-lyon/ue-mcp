@@ -253,6 +253,8 @@ TSharedPtr<FJsonValue> MissingWidgetTreeError(const FString& AssetPath)
 
 void FWidgetHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("widget"));
 	Registry.RegisterHandler(TEXT("list_widget_blueprints"), &ListWidgetBlueprints);
 	Registry.RegisterHandler(TEXT("create_widget_blueprint"), &CreateWidgetBlueprint);
 	Registry.RegisterHandler(TEXT("read_widget_tree"), &ReadWidgetTree);
@@ -2414,9 +2416,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeWidget(const TSharedPtr<FJsonO
 	}
 
 	FString WidgetName;
-	Params->TryGetStringField(TEXT("widgetName"), WidgetName);
+	TryGetStringParam(Params, TEXT("widgetName"), WidgetName);
 	FString ClassFilter;
-	Params->TryGetStringField(TEXT("className"), ClassFilter);
+	TryGetStringParam(Params, TEXT("className"), ClassFilter);
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
 	{
 		return MCPError(TEXT("Provide widgetName (exact instance name) or className (first match)."));
@@ -2822,9 +2824,9 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetRuntimeDelegates(const TSharedPtr<FJs
 	}
 
 	FString WidgetName;
-	Params->TryGetStringField(TEXT("widgetName"), WidgetName);
+	TryGetStringParam(Params, TEXT("widgetName"), WidgetName);
 	FString ClassFilter;
-	Params->TryGetStringField(TEXT("className"), ClassFilter);
+	TryGetStringParam(Params, TEXT("className"), ClassFilter);
 	if (WidgetName.IsEmpty() && ClassFilter.IsEmpty())
 	{
 		return MCPError(TEXT("Provide 'widgetName' (exact instance name) or 'className' (first match)."));

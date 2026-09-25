@@ -50,7 +50,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialFunction(const TSharedPt
 
 	UMaterialFunction* MF = Created.Asset;
 	FString Description;
-	if (Params->TryGetStringField(TEXT("description"), Description))
+	if (TryGetStringParam(Params, TEXT("description"), Description))
 	{
 		MF->Description = Description;
 	}
@@ -92,12 +92,12 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialFunctionExpression(const TS
 	if (UMaterialExpressionFunctionInput* AsInput = Cast<UMaterialExpressionFunctionInput>(NewExpr))
 	{
 		FString InputName;
-		if (Params->TryGetStringField(TEXT("inputName"), InputName) || Params->TryGetStringField(TEXT("name"), InputName))
+		if (TryGetStringParam(Params, TEXT("inputName"), InputName) || TryGetStringParam(Params, TEXT("name"), InputName))
 		{
 			AsInput->InputName = FName(*InputName);
 		}
 		FString InputTypeStr;
-		if (Params->TryGetStringField(TEXT("inputType"), InputTypeStr))
+		if (TryGetStringParam(Params, TEXT("inputType"), InputTypeStr))
 		{
 			static const TMap<FString, EFunctionInputType> Map = {
 				{TEXT("Scalar"), FunctionInput_Scalar},
@@ -118,7 +118,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialFunctionExpression(const TS
 	if (UMaterialExpressionFunctionOutput* AsOutput = Cast<UMaterialExpressionFunctionOutput>(NewExpr))
 	{
 		FString OutputName;
-		if (Params->TryGetStringField(TEXT("outputName"), OutputName) || Params->TryGetStringField(TEXT("name"), OutputName))
+		if (TryGetStringParam(Params, TEXT("outputName"), OutputName) || TryGetStringParam(Params, TEXT("name"), OutputName))
 		{
 			AsOutput->OutputName = FName(*OutputName);
 		}
@@ -160,13 +160,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialFunctionExpressions(con
 	{
 		// Numeric index?
 		int32 Idx = -1;
-		if (Params->TryGetNumberField(Key, Idx))
+		if (TryGetNumberParam(Params, Key, Idx))
 		{
 			if (Idx >= 0 && Idx < MF->GetExpressions().Num()) return MF->GetExpressions()[Idx];
 			return nullptr;
 		}
 		FString Str;
-		if (Params->TryGetStringField(Key, Str))
+		if (TryGetStringParam(Params, Key, Str))
 		{
 			// FunctionInput/Output exposes InputName/OutputName; everything else uses Desc.
 			for (UMaterialExpression* Expr : MF->GetExpressions())

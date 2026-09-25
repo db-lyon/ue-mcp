@@ -583,7 +583,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 	// next compile. Types share ParsePinTypeSpec with add_function_parameter.
 	TArray<TPair<FName, FEdGraphPinType>> SignaturePins;
 	const TArray<TSharedPtr<FJsonValue>>* ParamsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("parameters"), ParamsArr) && ParamsArr)
+	if (TryGetArrayParam(Params, TEXT("parameters"), ParamsArr) && ParamsArr)
 	{
 		for (int32 Index = 0; Index < ParamsArr->Num(); ++Index)
 		{
@@ -888,7 +888,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::OverrideFunction(const TSharedPtr<FJs
 	// Blueprint (nor inherited), implement it first so its functions become
 	// overridable. Inherited-via-parent interfaces need no such step.
 	FString InterfacePathStr;
-	if (Params->TryGetStringField(TEXT("interfacePath"), InterfacePathStr) && !InterfacePathStr.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("interfacePath"), InterfacePathStr) && !InterfacePathStr.IsEmpty())
 	{
 		if (UClass* InterfaceClass = LoadObject<UClass>(nullptr, *InterfacePathStr))
 		{

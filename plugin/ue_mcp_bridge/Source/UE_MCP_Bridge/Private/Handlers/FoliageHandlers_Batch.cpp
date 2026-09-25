@@ -76,7 +76,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 
 	// ── What to write ───────────────────────────────────────────────────────
 	const TSharedPtr<FJsonObject>* SettingsObject = nullptr;
-	if (!Params->TryGetObjectField(TEXT("settings"), SettingsObject) ||
+	if (!TryGetObjectParam(Params, TEXT("settings"), SettingsObject) ||
 		!SettingsObject || !(*SettingsObject).IsValid() || (*SettingsObject)->Values.Num() == 0)
 	{
 		return MCPError(TEXT("Missing 'settings' (an object of propertyName -> value; dotted paths such as 'CullDistance.Max' are supported)"));
@@ -91,7 +91,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 	TArray<MCPQuery::FPredicate> Predicates;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* WhereValues = nullptr;
-		Params->TryGetArrayField(TEXT("where"), WhereValues);
+		TryGetArrayParam(Params, TEXT("where"), WhereValues);
 		FString ParseError;
 		if (!MCPQuery::ParsePredicates(WhereValues, MCPFoliageBatchMaxPredicates, Predicates, ParseError))
 		{
@@ -130,7 +130,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 	}
 	{
 		const TArray<TSharedPtr<FJsonValue>>* ExtraValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("propertyNames"), ExtraValues) && ExtraValues)
+		if (TryGetArrayParam(Params, TEXT("propertyNames"), ExtraValues) && ExtraValues)
 		{
 			for (const FString& Path : JsonArrayToStringList(ExtraValues))
 			{
@@ -151,7 +151,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::BatchSetFoliageSettingsWhere(const TSha
 	TArray<FString> ExplicitPaths;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* PathValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("foliageTypePaths"), PathValues) && PathValues)
+		if (TryGetArrayParam(Params, TEXT("foliageTypePaths"), PathValues) && PathValues)
 		{
 			ExplicitPaths = JsonArrayToStringList(PathValues);
 		}

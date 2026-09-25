@@ -1006,7 +1006,7 @@ TSharedPtr<FJsonValue> MCPUvSelectChannels(
 {
 	OutChannels.Reset();
 	const TArray<TSharedPtr<FJsonValue>>* Requested = nullptr;
-	if (Params->TryGetArrayField(TEXT("channels"), Requested) && Requested)
+	if (TryGetArrayParam(Params, TEXT("channels"), Requested) && Requested)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *Requested)
 		{
@@ -1066,7 +1066,7 @@ TSharedPtr<FJsonValue> MCPUvParseSelection(
 	Out.Report = MakeShared<FJsonObject>();
 
 	const TSharedPtr<FJsonObject>* SelectionPtr = nullptr;
-	if (!Params->TryGetObjectField(TEXT("selection"), SelectionPtr) || !SelectionPtr || !SelectionPtr->IsValid())
+	if (!TryGetObjectParam(Params, TEXT("selection"), SelectionPtr) || !SelectionPtr || !SelectionPtr->IsValid())
 	{
 		Out.Mode = TEXT("all");
 		for (const FTriangleID TriangleID : Desc.Triangles().GetElementIDs())
@@ -1385,7 +1385,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetUvChannelCount(const TSharedPtr<FJsonO
 
 	if (Op == TEXT("set"))
 	{
-		if (!Params->HasField(TEXT("channelCount")))
+		if (!HasParam(Params, TEXT("channelCount")))
 		{
 			return MCPError(FString::Printf(
 				TEXT("op='set' needs 'channelCount'. LOD %d of '%s' currently has %d channel(s); pass a number ")
@@ -1400,7 +1400,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetUvChannelCount(const TSharedPtr<FJsonO
 	}
 	else if (Op == TEXT("remove"))
 	{
-		if (!Params->HasField(TEXT("channel")))
+		if (!HasParam(Params, TEXT("channel")))
 		{
 			return MCPError(FString::Printf(
 				TEXT("op='remove' needs 'channel', the index to remove. LOD %d of '%s' has %d channel(s)."),
@@ -1646,7 +1646,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::TransformUvs(const TSharedPtr<FJsonObject
 	// ── The transform ────────────────────────────────────────────────────────
 	FVector2D Translation(0.0, 0.0);
 	const TSharedPtr<FJsonObject>* TranslateObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("translate"), TranslateObj) && TranslateObj)
+	if (TryGetObjectParam(Params, TEXT("translate"), TranslateObj) && TranslateObj)
 	{
 		Translation.X = OptionalNumber(*TranslateObj, TEXT("u"), 0.0);
 		Translation.Y = OptionalNumber(*TranslateObj, TEXT("v"), 0.0);
@@ -1654,7 +1654,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::TransformUvs(const TSharedPtr<FJsonObject
 
 	FVector2D Scale(1.0, 1.0);
 	const TSharedPtr<FJsonObject>* ScaleObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("scale"), ScaleObj) && ScaleObj)
+	if (TryGetObjectParam(Params, TEXT("scale"), ScaleObj) && ScaleObj)
 	{
 		Scale.X = OptionalNumber(*ScaleObj, TEXT("u"), 1.0);
 		Scale.Y = OptionalNumber(*ScaleObj, TEXT("v"), 1.0);
@@ -1672,7 +1672,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::TransformUvs(const TSharedPtr<FJsonObject
 
 	FVector2D Origin(0.5, 0.5);
 	const TSharedPtr<FJsonObject>* OriginObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("origin"), OriginObj) && OriginObj)
+	if (TryGetObjectParam(Params, TEXT("origin"), OriginObj) && OriginObj)
 	{
 		Origin.X = OptionalNumber(*OriginObj, TEXT("u"), 0.5);
 		Origin.Y = OptionalNumber(*OriginObj, TEXT("v"), 0.5);
@@ -1860,7 +1860,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::TransformUvs(const TSharedPtr<FJsonObject
 		? TEXT("translateRotateScaleFlip") : TEXT("flipScaleRotateTranslate"));
 	Payload->SetBoolField(TEXT("save"), bSave);
 	if (const TSharedPtr<FJsonObject>* SelectionObj = nullptr;
-		Params->TryGetObjectField(TEXT("selection"), SelectionObj) && SelectionObj)
+		TryGetObjectParam(Params, TEXT("selection"), SelectionObj) && SelectionObj)
 	{
 		Payload->SetObjectField(TEXT("selection"), *SelectionObj);
 	}

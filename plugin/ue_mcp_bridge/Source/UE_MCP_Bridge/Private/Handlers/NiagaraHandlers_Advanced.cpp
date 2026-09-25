@@ -1868,7 +1868,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetModuleEnabled(const TSharedPtr<FJson
 	if (auto Err = RequireString(Params, TEXT("systemPath"), SystemPath)) return Err;
 	if (auto Err = RequireString(Params, TEXT("stackContext"), StackContext)) return Err;
 	if (auto Err = RequireString(Params, TEXT("moduleName"), ModuleName)) return Err;
-	if (!Params->HasField(TEXT("enabled")))
+	if (!HasParam(Params, TEXT("enabled")))
 	{
 		return MCPError(TEXT("Missing required parameter 'enabled' (boolean). Pass true to enable the module or false to disable it; niagara(list_niagara_dynamic_inputs) reports the current state per module."));
 	}

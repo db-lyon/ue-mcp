@@ -384,28 +384,28 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 
 		// Apply optional settings
 		bool bImportMaterials = true;
-		if (Params->TryGetBoolField(TEXT("importMaterials"), bImportMaterials))
+		if (TryGetBoolParam(Params, TEXT("importMaterials"), bImportMaterials))
 		{
 			ImportUI->bImportMaterials = bImportMaterials;
 		}
 		bool bImportTextures = true;
-		if (Params->TryGetBoolField(TEXT("importTextures"), bImportTextures))
+		if (TryGetBoolParam(Params, TEXT("importTextures"), bImportTextures))
 		{
 			ImportUI->bImportTextures = bImportTextures;
 		}
 		bool bCombineMeshes = false;
-		if (Params->TryGetBoolField(TEXT("combineMeshes"), bCombineMeshes))
+		if (TryGetBoolParam(Params, TEXT("combineMeshes"), bCombineMeshes))
 		{
 			ImportUI->StaticMeshImportData->bCombineMeshes = bCombineMeshes;
 		}
 		bool bGenerateLightmapUVs = true;
-		if (Params->TryGetBoolField(TEXT("generateLightmapUVs"), bGenerateLightmapUVs))
+		if (TryGetBoolParam(Params, TEXT("generateLightmapUVs"), bGenerateLightmapUVs))
 		{
 			ImportUI->StaticMeshImportData->bGenerateLightmapUVs = bGenerateLightmapUVs;
 		}
 		// #687: metre-authored FBX unit conversion. Default 1.0 leaves cm FBX
 		// untouched; pass 100 for metre FBX.
-		if (Params->HasField(TEXT("importUniformScale")) && ImportUI->StaticMeshImportData)
+		if (HasParam(Params, TEXT("importUniformScale")) && ImportUI->StaticMeshImportData)
 		{
 			ImportUI->StaticMeshImportData->ImportUniformScale = (float)OptionalNumber(Params, TEXT("importUniformScale"), 1.0);
 		}
@@ -425,9 +425,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStaticMesh(const TSharedPtr<FJsonOb
 
 	// Optional asset name
 	FString AssetName;
-	if (!Params->TryGetStringField(TEXT("assetName"), AssetName))
+	if (!TryGetStringParam(Params, TEXT("assetName"), AssetName))
 	{
-		Params->TryGetStringField(TEXT("name"), AssetName);
+		TryGetStringParam(Params, TEXT("name"), AssetName);
 	}
 	if (!AssetName.IsEmpty())
 	{
@@ -501,19 +501,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 
 	// Apply optional settings
 	bool bImportMaterials = true;
-	if (Params->TryGetBoolField(TEXT("importMaterials"), bImportMaterials))
+	if (TryGetBoolParam(Params, TEXT("importMaterials"), bImportMaterials))
 	{
 		ImportUI->bImportMaterials = bImportMaterials;
 	}
 	bool bImportTextures = true;
-	if (Params->TryGetBoolField(TEXT("importTextures"), bImportTextures))
+	if (TryGetBoolParam(Params, TEXT("importTextures"), bImportTextures))
 	{
 		ImportUI->bImportTextures = bImportTextures;
 	}
 
 	// Optionally set an existing skeleton
 	FString SkeletonPath;
-	if (Params->TryGetStringField(TEXT("skeletonPath"), SkeletonPath) && !SkeletonPath.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("skeletonPath"), SkeletonPath) && !SkeletonPath.IsEmpty())
 	{
 		USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
 		if (Skeleton)
@@ -556,9 +556,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportSkeletalMesh(const TSharedPtr<FJson
 
 	// Optional asset name
 	FString AssetName;
-	if (!Params->TryGetStringField(TEXT("assetName"), AssetName))
+	if (!TryGetStringParam(Params, TEXT("assetName"), AssetName))
 	{
-		Params->TryGetStringField(TEXT("name"), AssetName);
+		TryGetStringParam(Params, TEXT("name"), AssetName);
 	}
 	if (!AssetName.IsEmpty())
 	{
@@ -667,12 +667,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 
 	// Apply optional animation settings
 	bool bImportCustomAttribute = true;
-	if (Params->TryGetBoolField(TEXT("importCustomAttribute"), bImportCustomAttribute))
+	if (TryGetBoolParam(Params, TEXT("importCustomAttribute"), bImportCustomAttribute))
 	{
 		ImportUI->AnimSequenceImportData->bImportCustomAttribute = bImportCustomAttribute;
 	}
 	bool bRemoveRedundantKeys = true;
-	if (Params->TryGetBoolField(TEXT("removeRedundantKeys"), bRemoveRedundantKeys))
+	if (TryGetBoolParam(Params, TEXT("removeRedundantKeys"), bRemoveRedundantKeys))
 	{
 		ImportUI->AnimSequenceImportData->bRemoveRedundantKeys = bRemoveRedundantKeys;
 	}
@@ -681,7 +681,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 	// FbxImportUI itself (#1134).
 	TArray<TSharedPtr<FJsonValue>> AppliedSettings;
 	const TSharedPtr<FJsonObject>* ImportSettings = nullptr;
-	if (Params->TryGetObjectField(TEXT("importSettings"), ImportSettings) && ImportSettings)
+	if (TryGetObjectParam(Params, TEXT("importSettings"), ImportSettings) && ImportSettings)
 	{
 		UObject* AnimData = ImportUI->AnimSequenceImportData;
 		TArray<UObject*> Targets;
@@ -707,9 +707,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 
 	// Optional asset name
 	FString AssetName;
-	if (!Params->TryGetStringField(TEXT("assetName"), AssetName))
+	if (!TryGetStringParam(Params, TEXT("assetName"), AssetName))
 	{
-		Params->TryGetStringField(TEXT("name"), AssetName);
+		TryGetStringParam(Params, TEXT("name"), AssetName);
 	}
 	if (!AssetName.IsEmpty())
 	{
@@ -808,7 +808,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportFile(const TSharedPtr<FJsonObject>&
 
 	TArray<TSharedPtr<FJsonValue>> AppliedProperties;
 	const TSharedPtr<FJsonObject>* FactoryProperties = nullptr;
-	if (Params->TryGetObjectField(TEXT("factoryProperties"), FactoryProperties) && FactoryProperties)
+	if (TryGetObjectParam(Params, TEXT("factoryProperties"), FactoryProperties) && FactoryProperties)
 	{
 		if (!Factory)
 		{
@@ -833,9 +833,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportFile(const TSharedPtr<FJsonObject>&
 	Task->Factory = Factory; // null lets AssetTools pick by extension
 
 	FString AssetName;
-	if (!Params->TryGetStringField(TEXT("assetName"), AssetName))
+	if (!TryGetStringParam(Params, TEXT("assetName"), AssetName))
 	{
-		Params->TryGetStringField(TEXT("name"), AssetName);
+		TryGetStringParam(Params, TEXT("name"), AssetName);
 	}
 	if (!AssetName.IsEmpty())
 	{
@@ -993,7 +993,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 
 	// Compression settings
 	FString CompressionStr;
-	if (Params->TryGetStringField(TEXT("compressionSettings"), CompressionStr))
+	if (TryGetStringParam(Params, TEXT("compressionSettings"), CompressionStr))
 	{
 		TextureCompressionSettings NewCompression = TC_Default;
 		if (CompressionStr == TEXT("Default"))                    NewCompression = TC_Default;
@@ -1014,7 +1014,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 
 	// LOD group
 	FString LODGroupStr;
-	if (Params->TryGetStringField(TEXT("lodGroup"), LODGroupStr))
+	if (TryGetStringParam(Params, TEXT("lodGroup"), LODGroupStr))
 	{
 		TextureGroup NewGroup = TEXTUREGROUP_World;
 		if (LODGroupStr == TEXT("World"))                    NewGroup = TEXTUREGROUP_World;
@@ -1043,7 +1043,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 
 	// sRGB
 	bool bSRGB;
-	if (Params->TryGetBoolField(TEXT("sRGB"), bSRGB))
+	if (TryGetBoolParam(Params, TEXT("sRGB"), bSRGB))
 	{
 		Texture->SRGB = bSRGB;
 		ModifiedProperties.Add(TEXT("sRGB"));
@@ -1051,7 +1051,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 
 	// NeverStream
 	bool bNeverStream;
-	if (Params->TryGetBoolField(TEXT("neverStream"), bNeverStream))
+	if (TryGetBoolParam(Params, TEXT("neverStream"), bNeverStream))
 	{
 		Texture->NeverStream = bNeverStream;
 		ModifiedProperties.Add(TEXT("neverStream"));
@@ -1127,7 +1127,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetTextureProperties(const TSharedPtr<FJs
 TSharedPtr<FJsonValue> FAssetHandlers::ImportTextureBatch(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
-	if (!Params->TryGetArrayField(TEXT("items"), Items) || !Items)
+	if (!TryGetArrayParam(Params, TEXT("items"), Items) || !Items)
 	{
 		return MCPError(TEXT("Missing 'items' array. Each entry: { filePath, packagePath?, name?, replaceExisting? }"));
 	}
@@ -1291,12 +1291,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 
 	// Apply optional settings
 	bool bNoCompression = false;
-	if (Params->TryGetBoolField(TEXT("noCompression"), bNoCompression))
+	if (TryGetBoolParam(Params, TEXT("noCompression"), bNoCompression))
 	{
 		TextureFactory->NoCompression = bNoCompression;
 	}
 	bool bNoAlpha = false;
-	if (Params->TryGetBoolField(TEXT("noAlpha"), bNoAlpha))
+	if (TryGetBoolParam(Params, TEXT("noAlpha"), bNoAlpha))
 	{
 		TextureFactory->NoAlpha = bNoAlpha;
 	}
@@ -1312,9 +1312,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 
 	// Optional asset name
 	FString AssetName;
-	if (!Params->TryGetStringField(TEXT("assetName"), AssetName))
+	if (!TryGetStringParam(Params, TEXT("assetName"), AssetName))
 	{
-		Params->TryGetStringField(TEXT("name"), AssetName);
+		TryGetStringParam(Params, TEXT("name"), AssetName);
 	}
 	if (!AssetName.IsEmpty())
 	{
@@ -1356,15 +1356,15 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportTexture(const TSharedPtr<FJsonObjec
 	// texture in the same call (folding in the set_texture_settings path) so
 	// callers no longer need a second round-trip.
 	if (ImportedPaths.Num() == 1 &&
-		(Params->HasField(TEXT("sRGB")) || Params->HasField(TEXT("compressionSettings")) ||
-		 Params->HasField(TEXT("lodGroup")) || Params->HasField(TEXT("neverStream"))))
+		(HasParam(Params, TEXT("sRGB")) || HasParam(Params, TEXT("compressionSettings")) ||
+		 HasParam(Params, TEXT("lodGroup")) || HasParam(Params, TEXT("neverStream"))))
 	{
 		TSharedPtr<FJsonObject> SettingsParams = MakeShared<FJsonObject>();
 		SettingsParams->SetStringField(TEXT("assetPath"), ImportedPaths[0]->AsString());
-		if (Params->HasField(TEXT("sRGB"))) SettingsParams->SetBoolField(TEXT("sRGB"), OptionalBool(Params, TEXT("sRGB"), true));
-		if (Params->HasField(TEXT("compressionSettings"))) SettingsParams->SetStringField(TEXT("compressionSettings"), OptionalString(Params, TEXT("compressionSettings")));
-		if (Params->HasField(TEXT("lodGroup"))) SettingsParams->SetStringField(TEXT("lodGroup"), OptionalString(Params, TEXT("lodGroup")));
-		if (Params->HasField(TEXT("neverStream"))) SettingsParams->SetBoolField(TEXT("neverStream"), OptionalBool(Params, TEXT("neverStream"), false));
+		if (HasParam(Params, TEXT("sRGB"))) SettingsParams->SetBoolField(TEXT("sRGB"), OptionalBool(Params, TEXT("sRGB"), true));
+		if (HasParam(Params, TEXT("compressionSettings"))) SettingsParams->SetStringField(TEXT("compressionSettings"), OptionalString(Params, TEXT("compressionSettings")));
+		if (HasParam(Params, TEXT("lodGroup"))) SettingsParams->SetStringField(TEXT("lodGroup"), OptionalString(Params, TEXT("lodGroup")));
+		if (HasParam(Params, TEXT("neverStream"))) SettingsParams->SetBoolField(TEXT("neverStream"), OptionalBool(Params, TEXT("neverStream"), false));
 		TSharedPtr<FJsonValue> SettingsResult = SetTextureProperties(SettingsParams);
 		if (SettingsResult.IsValid() && SettingsResult->AsObject().IsValid())
 		{
@@ -1479,20 +1479,20 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportCurveTable(const TSharedPtr<FJsonOb
 
 	FString Data;
 	FString Format = OptionalString(Params, TEXT("format")).ToLower();
-	if (Params->TryGetStringField(TEXT("jsonString"), Data) && !Data.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("jsonString"), Data) && !Data.IsEmpty())
 	{
 		Format = TEXT("json");
 	}
-	else if (Params->TryGetStringField(TEXT("csvString"), Data) && !Data.IsEmpty())
+	else if (TryGetStringParam(Params, TEXT("csvString"), Data) && !Data.IsEmpty())
 	{
 		Format = TEXT("csv");
 	}
 	else
 	{
 		FString FilePath;
-		if (!Params->TryGetStringField(TEXT("filePath"), FilePath) &&
-			!Params->TryGetStringField(TEXT("jsonPath"), FilePath) &&
-			!Params->TryGetStringField(TEXT("csvPath"), FilePath))
+		if (!TryGetStringParam(Params, TEXT("filePath"), FilePath) &&
+			!TryGetStringParam(Params, TEXT("jsonPath"), FilePath) &&
+			!TryGetStringParam(Params, TEXT("csvPath"), FilePath))
 		{
 			return MCPError(TEXT("Missing jsonString, csvString, or filePath"));
 		}
@@ -1816,7 +1816,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetCurveTableKeys(const TSharedPtr<FJsonO
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* KeyValues = nullptr;
-	if (!Params->TryGetArrayField(TEXT("keys"), KeyValues) || !KeyValues)
+	if (!TryGetArrayParam(Params, TEXT("keys"), KeyValues) || !KeyValues)
 	{
 		return MCPError(TEXT("Missing keys array. Each key is { time, value, interpMode? }."));
 	}
@@ -1941,7 +1941,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddCurveTableKey(const TSharedPtr<FJsonOb
 
 	double Time = 0.0;
 	double Value = 0.0;
-	if (!Params->TryGetNumberField(TEXT("time"), Time) || !Params->TryGetNumberField(TEXT("value"), Value))
+	if (!TryGetNumberParam(Params, TEXT("time"), Time) || !TryGetNumberParam(Params, TEXT("value"), Value))
 	{
 		return MCPError(TEXT("Missing numeric time and value fields."));
 	}
@@ -2142,6 +2142,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 	if (auto Err = LoadDataTableParam(Params, AssetPath, DataTable)) return Err;
 
 	FString RowFilter = OptionalString(Params, TEXT("rowFilter"));
+	// A large table overflows the response inline, so outputPath writes the
+	// rows to a file under the shared dump convention (HandlerUtils.h) and
+	// the response carries only where they went and how much was written.
+	const FString OutputPath = OptionalString(Params, TEXT("outputPath"));
 
 	// Get the row struct for property iteration
 	const UScriptStruct* RowStruct = DataTable->GetRowStruct();
@@ -2157,7 +2161,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 
 	TArray<TSharedPtr<FJsonValue>> ParsedRows;
 	TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(JsonString);
-	if (FJsonSerializer::Deserialize(JsonReader, ParsedRows))
+	const bool bParsed = FJsonSerializer::Deserialize(JsonReader, ParsedRows);
+	if (bParsed)
 	{
 		// Apply row filter if specified
 		if (!RowFilter.IsEmpty())
@@ -2176,12 +2181,59 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadDataTable(const TSharedPtr<FJsonObjec
 					}
 				}
 			}
-			Result->SetArrayField(TEXT("rows"), FilteredRows);
-			Result->SetNumberField(TEXT("filteredCount"), FilteredRows.Num());
+			ParsedRows = MoveTemp(FilteredRows);
 		}
-		else
+	}
+	const bool bFiltered = bParsed && !RowFilter.IsEmpty();
+
+	if (!OutputPath.IsEmpty())
+	{
+		// The file holds the same row objects the inline form returns, so the
+		// export cannot be written when it did not parse: there would be no
+		// rows to filter, and a raw string is not the shape the caller asked for.
+		if (!bParsed)
 		{
-			Result->SetArrayField(TEXT("rows"), ParsedRows);
+			return MCPError(FString::Printf(
+				TEXT("The DataTable's JSON export could not be parsed, so no rows were written to '%s'. ")
+				TEXT("Call read_datatable without outputPath to get the raw export as rawJson."),
+				*OutputPath));
+		}
+
+		FString RowsText;
+		const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RowsText);
+		if (!FJsonSerializer::Serialize(ParsedRows, Writer))
+		{
+			return MCPError(TEXT("Failed to serialize DataTable rows"));
+		}
+
+		const FString ResolvedPath = FPaths::ConvertRelativePathToFull(MCPResolveDumpPath(OutputPath));
+		FString WriteError;
+		if (!MCPWriteDumpFile(ResolvedPath, RowsText, TEXT("DataTable rows"), WriteError))
+		{
+			return MCPError(WriteError);
+		}
+
+		Result->SetStringField(TEXT("assetPath"), AssetPath);
+		Result->SetStringField(TEXT("rowStruct"), RowStruct->GetName());
+		Result->SetNumberField(TEXT("totalRowCount"), DataTable->GetRowMap().Num());
+		if (bFiltered)
+		{
+			Result->SetNumberField(TEXT("filteredCount"), ParsedRows.Num());
+		}
+		Result->SetStringField(TEXT("outputPath"), ResolvedPath);
+		Result->SetNumberField(TEXT("rowCount"), ParsedRows.Num());
+		Result->SetNumberField(TEXT("bytes"), static_cast<double>(IFileManager::Get().FileSize(*ResolvedPath)));
+		// rowNames is left out as well: it grows with the table just as rows
+		// does, and every row in the file carries its own Name.
+		return MCPResult(Result);
+	}
+
+	if (bParsed)
+	{
+		Result->SetArrayField(TEXT("rows"), ParsedRows);
+		if (bFiltered)
+		{
+			Result->SetNumberField(TEXT("filteredCount"), ParsedRows.Num());
 		}
 	}
 	else
@@ -2214,10 +2266,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportDataTable(const TSharedPtr<FJsonO
 
 	// Get JSON string from either inline jsonString or from a file path
 	FString JsonString;
-	if (!Params->TryGetStringField(TEXT("jsonString"), JsonString) || JsonString.IsEmpty())
+	if (!TryGetStringParam(Params, TEXT("jsonString"), JsonString) || JsonString.IsEmpty())
 	{
 		FString JsonPath;
-		if (Params->TryGetStringField(TEXT("jsonPath"), JsonPath) && !JsonPath.IsEmpty())
+		if (TryGetStringParam(Params, TEXT("jsonPath"), JsonPath) && !JsonPath.IsEmpty())
 		{
 			if (!FPaths::FileExists(JsonPath))
 			{
@@ -2290,12 +2342,12 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableRow(const TSharedPtr<FJsonObj
 	if (auto Err = RequireString(Params, TEXT("rowName"), RowName)) return Err;
 
 	const TSharedPtr<FJsonObject>* RowObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("row"), RowObj))
+	if (!TryGetObjectParam(Params, TEXT("row"), RowObj))
 	{
 		// Also accept "fields" or "data" aliases.
-		if (!Params->TryGetObjectField(TEXT("fields"), RowObj))
+		if (!TryGetObjectParam(Params, TEXT("fields"), RowObj))
 		{
-			Params->TryGetObjectField(TEXT("data"), RowObj);
+			TryGetObjectParam(Params, TEXT("data"), RowObj);
 		}
 	}
 	if (!RowObj || !RowObj->IsValid())
@@ -2618,8 +2670,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableCell(const TSharedPtr<FJsonOb
 {
 	FString FieldName;
 	if (auto Err = RequireString(Params, TEXT("fieldName"), FieldName)) return Err;
-	const TSharedPtr<FJsonValue>* ValueField = Params->Values.Find(TEXT("value"));
-	if (!ValueField || !(*ValueField).IsValid())
+	const TSharedPtr<FJsonValue> ValueField = TryGetParam(Params, TEXT("value"));
+	if (!ValueField.IsValid())
 	{
 		return MCPError(TEXT("Missing 'value' parameter"));
 	}
@@ -2637,7 +2689,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetDataTableCell(const TSharedPtr<FJsonOb
 	}
 
 	TSharedPtr<FJsonObject> RowObj = MakeShared<FJsonObject>();
-	RowObj->SetField(FieldName, *ValueField);
+	RowObj->SetField(FieldName, ValueField);
 	TSharedPtr<FJsonObject> Delegated = MakeShared<FJsonObject>();
 	Delegated->SetStringField(TEXT("assetPath"), AssetPath);
 	Delegated->SetStringField(TEXT("rowName"), RowName);
@@ -2721,11 +2773,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::FillDataTableFromJson(const TSharedPtr<FJ
 
 	const TSharedPtr<FJsonObject>* RowsObj = nullptr;
 	TSharedPtr<FJsonObject> ParsedRows;
-	if (!Params->TryGetObjectField(TEXT("rows"), RowsObj))
+	if (!TryGetObjectParam(Params, TEXT("rows"), RowsObj))
 	{
 		// Accept a jsonString carrying the {rowName: {fields}} object.
 		FString JsonStr;
-		if (Params->TryGetStringField(TEXT("jsonString"), JsonStr) && !JsonStr.IsEmpty())
+		if (TryGetStringParam(Params, TEXT("jsonString"), JsonStr) && !JsonStr.IsEmpty())
 		{
 			const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonStr);
 			if (FJsonSerializer::Deserialize(Reader, ParsedRows) && ParsedRows.IsValid())
@@ -2996,10 +3048,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetStringTableEntry(const TSharedPtr<FJso
 	if (auto Err = RequireString(Params, TEXT("key"), Key)) return Err;
 
 	FString SourceString;
-	bool bHasSourceString = Params->TryGetStringField(TEXT("sourceString"), SourceString);
+	bool bHasSourceString = TryGetStringParam(Params, TEXT("sourceString"), SourceString);
 	if (!bHasSourceString)
 	{
-		bHasSourceString = Params->TryGetStringField(TEXT("value"), SourceString);
+		bHasSourceString = TryGetStringParam(Params, TEXT("value"), SourceString);
 	}
 	if (!bHasSourceString)
 	{
@@ -3089,11 +3141,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTable(const TSharedPtr<FJsonO
 	if (auto Err = LoadStringTableAsset(Params, AssetPath, StringTable)) return Err;
 
 	FString FilePath;
-	if (!Params->TryGetStringField(TEXT("filePath"), FilePath) || FilePath.IsEmpty())
+	if (!TryGetStringParam(Params, TEXT("filePath"), FilePath) || FilePath.IsEmpty())
 	{
-		if (!Params->TryGetStringField(TEXT("filename"), FilePath) || FilePath.IsEmpty())
+		if (!TryGetStringParam(Params, TEXT("filename"), FilePath) || FilePath.IsEmpty())
 		{
-			Params->TryGetStringField(TEXT("csvPath"), FilePath);
+			TryGetStringParam(Params, TEXT("csvPath"), FilePath);
 		}
 	}
 	if (FilePath.IsEmpty())
@@ -3262,7 +3314,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportStringTableCsv(const TSharedPtr<FJs
 
 	TArray<FString> ExpectedKeys;
 	const TArray<TSharedPtr<FJsonValue>>* ExpectedField = nullptr;
-	if (Params->TryGetArrayField(TEXT("expectedKeys"), ExpectedField) && ExpectedField)
+	if (TryGetArrayParam(Params, TEXT("expectedKeys"), ExpectedField) && ExpectedField)
 	{
 		ExpectedKeys = JsonArrayToStringList(ExpectedField);
 	}
@@ -3479,7 +3531,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReimportAsset(const TSharedPtr<FJsonObjec
 	// Optionally override the source file path
 	bool bSourceFileUpdated = false;
 	FString NewSourcePath;
-	if (Params->TryGetStringField(TEXT("filePath"), NewSourcePath) || Params->TryGetStringField(TEXT("filename"), NewSourcePath))
+	if (TryGetStringParam(Params, TEXT("filePath"), NewSourcePath) || TryGetStringParam(Params, TEXT("filename"), NewSourcePath))
 	{
 		if (!FPaths::FileExists(NewSourcePath))
 		{

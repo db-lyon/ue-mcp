@@ -128,7 +128,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddNode(const TSharedPtr<FJsonObject>
 
 	// Get optional node params
 	const TSharedPtr<FJsonObject>* NodeParams = nullptr;
-	Params->TryGetObjectField(TEXT("nodeParams"), NodeParams);
+	TryGetObjectParam(Params, TEXT("nodeParams"), NodeParams);
 
 	// Resolve short aliases to full class names
 	FString ResolvedClass = NodeClass;
@@ -803,8 +803,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReadBlueprintGraph(const TSharedPtr<F
 	// #560 optional node filters (case-insensitive substring match)
 	const FString TitleFilter = OptionalString(Params, TEXT("titleFilter"), TEXT(""));
 	const FString ClassFilter = OptionalString(Params, TEXT("classFilter"), TEXT(""));
-	const bool bHasOffset = Params->HasField(TEXT("offset"));
-	const bool bHasLimit = Params->HasField(TEXT("limit"));
+	const bool bHasOffset = HasParam(Params, TEXT("offset"));
+	const bool bHasLimit = HasParam(Params, TEXT("limit"));
 	const int32 RequestedOffset = FMath::Max(0, OptionalInt(Params, TEXT("offset"), 0));
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
@@ -990,8 +990,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 
 	bool bBreakExistingSource = false;
 	bool bBreakExistingTarget = false;
-	Params->TryGetBoolField(TEXT("breakExistingSource"), bBreakExistingSource);
-	Params->TryGetBoolField(TEXT("breakExistingTarget"), bBreakExistingTarget);
+	TryGetBoolParam(Params, TEXT("breakExistingSource"), bBreakExistingSource);
+	TryGetBoolParam(Params, TEXT("breakExistingTarget"), bBreakExistingTarget);
 
 	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
 	if (!Blueprint)
@@ -2350,7 +2350,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ExportNodesT3D(const TSharedPtr<FJson
 	// in the graph (whole-subgraph round-trip).
 	TArray<UEdGraphNode*> SelectedNodes;
 	const TArray<TSharedPtr<FJsonValue>>* IdsArrayPtr = nullptr;
-	if (Params.IsValid() && Params->TryGetArrayField(TEXT("nodeIds"), IdsArrayPtr) && IdsArrayPtr && IdsArrayPtr->Num() > 0)
+	if (Params.IsValid() && TryGetArrayParam(Params, TEXT("nodeIds"), IdsArrayPtr) && IdsArrayPtr && IdsArrayPtr->Num() > 0)
 	{
 		for (const TSharedPtr<FJsonValue>& Val : *IdsArrayPtr)
 		{
@@ -2558,12 +2558,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 
 	// Re-center pasted nodes around an explicit (posX, posY) anchor when given,
 	// otherwise keep their exported positions. Mirrors PasteNodesHere.
-	const bool bRecenter = Params.IsValid() && Params->HasField(TEXT("posX")) && Params->HasField(TEXT("posY"));
+	const bool bRecenter = Params.IsValid() && HasParam(Params, TEXT("posX")) && HasParam(Params, TEXT("posY"));
 	double AnchorX = 0.0, AnchorY = 0.0;
 	if (bRecenter)
 	{
-		Params->TryGetNumberField(TEXT("posX"), AnchorX);
-		Params->TryGetNumberField(TEXT("posY"), AnchorY);
+		TryGetNumberParam(Params, TEXT("posX"), AnchorX);
+		TryGetNumberParam(Params, TEXT("posY"), AnchorY);
 
 		double AvgX = 0.0, AvgY = 0.0;
 		for (UEdGraphNode* Node : PastedNodes)
@@ -2662,7 +2662,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ImportNodesT3D(const TSharedPtr<FJson
 TSharedPtr<FJsonValue> FBlueprintHandlers::CompileBlueprints(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* PathsArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("assetPaths"), PathsArray) || !PathsArray)
+	if (!TryGetArrayParam(Params, TEXT("assetPaths"), PathsArray) || !PathsArray)
 	{
 		return MCPError(TEXT("Missing 'assetPaths' (array of blueprint asset paths)"));
 	}
@@ -2874,7 +2874,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPinsBatch(const TSharedPtr<FJs
 	const FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
 
 	const TArray<TSharedPtr<FJsonValue>>* ConnectionsArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("connections"), ConnectionsArray) || !ConnectionsArray)
+	if (!TryGetArrayParam(Params, TEXT("connections"), ConnectionsArray) || !ConnectionsArray)
 	{
 		return MCPError(TEXT("Missing 'connections' array - each entry: {sourceNode, sourcePin, targetNode, targetPin}"));
 	}

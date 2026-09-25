@@ -266,7 +266,7 @@ namespace
 	{
 		TSet<FString> Filter;
 		const TArray<TSharedPtr<FJsonValue>>* Names = nullptr;
-		if (Params.IsValid() && Params->TryGetArrayField(TEXT("propertyNames"), Names) && Names)
+		if (Params.IsValid() && TryGetArrayParam(Params, TEXT("propertyNames"), Names) && Names)
 		{
 			for (const FString& Name : JsonArrayToStringList(Names))
 			{
@@ -1065,7 +1065,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJs
 	// property + value pair, or both.
 	TArray<TPair<FString, TSharedPtr<FJsonValue>>> Writes;
 	const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("properties"), PropertiesObj) && PropertiesObj && (*PropertiesObj).IsValid())
+	if (TryGetObjectParam(Params, TEXT("properties"), PropertiesObj) && PropertiesObj && (*PropertiesObj).IsValid())
 	{
 		for (const auto& Pair : (*PropertiesObj)->Values)
 		{
@@ -1075,7 +1075,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBTNodeProperty(const TSharedPtr<FJs
 	const FString SingleProperty = OptionalString(Params, TEXT("property")).TrimStartAndEnd();
 	if (!SingleProperty.IsEmpty())
 	{
-		TSharedPtr<FJsonValue> SingleValue = Params->TryGetField(TEXT("value"));
+		TSharedPtr<FJsonValue> SingleValue = TryGetParam(Params, TEXT("value"));
 		if (!SingleValue.IsValid())
 		{
 			return MCPError(TEXT("'property' needs a 'value' alongside it (pass null to clear an object reference)."));

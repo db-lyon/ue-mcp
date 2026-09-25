@@ -37,7 +37,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
 	if (MaterialPath.IsEmpty())
 	{
-		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		TryGetStringParam(Params, TEXT("assetPath"), MaterialPath);
 		if (MaterialPath.IsEmpty())
 		{
 			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
@@ -48,9 +48,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectTextureToMaterial(const TShared
 	if (auto Err = RequireString(Params, TEXT("texturePath"), TexturePath)) return Err;
 
 	FString PropertyName = TEXT("BaseColor");
-	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
+	if (!TryGetStringParam(Params, TEXT("property"), PropertyName))
 	{
-		Params->TryGetStringField(TEXT("materialProperty"), PropertyName);
+		TryGetStringParam(Params, TEXT("materialProperty"), PropertyName);
 	}
 
 	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
@@ -143,7 +143,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialExpressions(const TShar
 	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
 	if (MaterialPath.IsEmpty())
 	{
-		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		TryGetStringParam(Params, TEXT("assetPath"), MaterialPath);
 		if (MaterialPath.IsEmpty())
 		{
 			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
@@ -331,7 +331,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectToMaterialProperty(const TShare
 	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
 	if (MaterialPath.IsEmpty())
 	{
-		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		TryGetStringParam(Params, TEXT("assetPath"), MaterialPath);
 		if (MaterialPath.IsEmpty())
 		{
 			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));

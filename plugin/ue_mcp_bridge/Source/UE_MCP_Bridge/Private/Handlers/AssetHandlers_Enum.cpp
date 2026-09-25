@@ -53,7 +53,7 @@ static TSharedPtr<FJsonObject> EnumeratorToJson(const UEnum* Enum, int32 Index)
 static int32 ResolveEnumeratorIndex(const TSharedPtr<FJsonObject>& Params, const UEnum* Enum)
 {
 	int32 Index = INDEX_NONE;
-	if (Params->TryGetNumberField(TEXT("index"), Index))
+	if (TryGetNumberParam(Params, TEXT("index"), Index))
 	{
 		return Index;
 	}
@@ -93,7 +93,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateUserDefinedEnum(const TSharedPtr<FJ
 	// CreateUserDefinedEnum starts empty (only the trailing _MAX). Populate it.
 	TArray<FString> DisplayNames;
 	const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-	if (Params->TryGetArrayField(TEXT("values"), Values) && Values)
+	if (TryGetArrayParam(Params, TEXT("values"), Values) && Values)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *Values)
 		{

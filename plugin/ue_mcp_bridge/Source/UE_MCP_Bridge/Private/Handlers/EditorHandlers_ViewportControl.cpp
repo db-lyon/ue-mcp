@@ -263,7 +263,7 @@ namespace
 		Target.Count = Clients.Num();
 
 		int32 RequestedIndex = INDEX_NONE;
-		if (Params.IsValid() && Params->HasField(TEXT("viewportIndex")))
+		if (Params.IsValid() && HasParam(Params, TEXT("viewportIndex")))
 		{
 			RequestedIndex = OptionalInt(Params, TEXT("viewportIndex"), 0);
 			if (!Clients.IsValidIndex(RequestedIndex))
@@ -558,8 +558,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetViewportExposure(const TSharedPtr<FJs
 	const FMCPViewportCtlTarget Target = MCPViewportCtlResolveTarget(Params, Error);
 	if (!Target.Client) return Error;
 
-	const bool bHasFixed = Params.IsValid() && Params->HasField(TEXT("fixed"));
-	const bool bHasEv100 = Params.IsValid() && Params->HasField(TEXT("ev100"));
+	const bool bHasFixed = Params.IsValid() && HasParam(Params, TEXT("fixed"));
+	const bool bHasEv100 = Params.IsValid() && HasParam(Params, TEXT("ev100"));
 	FString Mode = OptionalString(Params, TEXT("mode"));
 	Mode.TrimStartAndEndInline();
 
@@ -641,11 +641,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetViewportView(const TSharedPtr<FJsonOb
 	const FMCPViewportCtlTarget Target = MCPViewportCtlResolveTarget(Params, Error);
 	if (!Target.Client) return Error;
 
-	const bool bHasFov = Params.IsValid() && Params->HasField(TEXT("fov"));
-	const bool bHasNear = Params.IsValid() && Params->HasField(TEXT("nearClip"));
-	const bool bHasFar = Params.IsValid() && Params->HasField(TEXT("farClip"));
-	const bool bHasType = Params.IsValid() && Params->HasField(TEXT("viewportType"));
-	const bool bHasSpeed = Params.IsValid() && Params->HasField(TEXT("cameraSpeed"));
+	const bool bHasFov = Params.IsValid() && HasParam(Params, TEXT("fov"));
+	const bool bHasNear = Params.IsValid() && HasParam(Params, TEXT("nearClip"));
+	const bool bHasFar = Params.IsValid() && HasParam(Params, TEXT("farClip"));
+	const bool bHasType = Params.IsValid() && HasParam(Params, TEXT("viewportType"));
+	const bool bHasSpeed = Params.IsValid() && HasParam(Params, TEXT("cameraSpeed"));
 
 	if (!bHasFov && !bHasNear && !bHasFar && !bHasType && !bHasSpeed)
 	{

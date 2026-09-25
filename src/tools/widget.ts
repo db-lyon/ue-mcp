@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { categoryTool, bp, type ToolDef } from "../types.js";
-import { normalizeWidgetParams } from "./widget-params.js";
+import { normalizeWidgetParams, WIDGET_PARAM_GROUPS } from "./widget-params.js";
 import { CURSOR_PARAM, paged } from "../pagination.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/widget.generated.js";
 
@@ -170,5 +170,5 @@ export const widgetTool: ToolDef = categoryTool(
     destinationRootName: z.string().optional().describe("extract_subtree: name override for the extracted root; descendants keep their names"),
     dryRun: z.boolean().optional().describe("extract_subtree: plan only, no asset is created or saved (default true)"),
   },
-  { normalizeParams: normalizeWidgetParams },
+  { normalizeParams: normalizeWidgetParams, paramGroups: WIDGET_PARAM_GROUPS },
 );

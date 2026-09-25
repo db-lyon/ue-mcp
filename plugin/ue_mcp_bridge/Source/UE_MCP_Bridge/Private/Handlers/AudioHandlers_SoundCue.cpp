@@ -63,7 +63,7 @@ namespace
 	void ApplyNodeProps(USoundNode* Node, const TSharedPtr<FJsonObject>& O)
 	{
 		const TSharedPtr<FJsonObject>* PropsObj = nullptr;
-		if (O.IsValid() && O->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj)
+		if (O.IsValid() && TryGetObjectParam(O, TEXT("properties"), PropsObj) && PropsObj)
 		{
 			for (const auto& Pair : (*PropsObj)->Values)
 			{
@@ -90,7 +90,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAddNode(const TSharedPtr<FJsonObj
 	if (USoundNodeWavePlayer* WP = Cast<USoundNodeWavePlayer>(Node))
 	{
 		FString WavePath;
-		if (Params->TryGetStringField(TEXT("soundWavePath"), WavePath) && !WavePath.IsEmpty())
+		if (TryGetStringParam(Params, TEXT("soundWavePath"), WavePath) && !WavePath.IsEmpty())
 		{
 			if (USoundWave* Wave = Cast<USoundWave>(UEditorAssetLibrary::LoadAsset(WavePath)))
 			{
@@ -150,7 +150,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueConnect(const TSharedPtr<FJsonObj
 		USoundNode* Parent = FindSoundCueNodeByName(Cue, ParentNodeId);
 		if (!Parent) return MCPError(FString::Printf(TEXT("Parent node '%s' not found in cue."), *ParentNodeId));
 
-		int32 Index = Params->HasField(TEXT("childIndex"))
+		int32 Index = HasParam(Params, TEXT("childIndex"))
 			? (int32)OptionalNumber(Params, TEXT("childIndex"), 0)
 			: Parent->ChildNodes.Num();
 		Index = FMath::Clamp(Index, 0, Parent->ChildNodes.Num());
@@ -294,7 +294,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAuthor(const TSharedPtr<FJsonObje
 	// 1. Nodes (localId -> USoundNode*).
 	TMap<FString, USoundNode*> NodeMap;
 	const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
-	if (Params->TryGetArrayField(TEXT("nodes"), Nodes) && Nodes)
+	if (TryGetArrayParam(Params, TEXT("nodes"), Nodes) && Nodes)
 	{
 		for (const TSharedPtr<FJsonValue>& E : *Nodes)
 		{
@@ -324,7 +324,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAuthor(const TSharedPtr<FJsonObje
 
 	// 2. Connections.
 	const TArray<TSharedPtr<FJsonValue>>* Conns = nullptr;
-	if (Params->TryGetArrayField(TEXT("connections"), Conns) && Conns)
+	if (TryGetArrayParam(Params, TEXT("connections"), Conns) && Conns)
 	{
 		for (const TSharedPtr<FJsonValue>& E : *Conns)
 		{
@@ -363,7 +363,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAuthor(const TSharedPtr<FJsonObje
 
 	// 3. Explicit root override.
 	FString RootId;
-	if (Params->TryGetStringField(TEXT("root"), RootId) && !RootId.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("root"), RootId) && !RootId.IsEmpty())
 	{
 		if (USoundNode** Root = NodeMap.Find(RootId))
 		{

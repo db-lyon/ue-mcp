@@ -160,6 +160,8 @@ namespace
 
 void FDiffHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("diff"));
 	Registry.RegisterHandler(TEXT("diff_blueprint"), &FDiffHandlers::DiffBlueprint);
 	Registry.RegisterHandler(TEXT("diff_asset"), &FDiffHandlers::DiffAsset);
 }
@@ -173,7 +175,7 @@ TSharedPtr<FJsonValue> FDiffHandlers::DiffBlueprint(const TSharedPtr<FJsonObject
 
 	// Revision-based diffing (loading a depot revision into a transient package)
 	// is a documented follow-up; for now both sides are loadable asset paths.
-	if (Params->HasField(TEXT("fromRevision")) || Params->HasField(TEXT("toRevision")))
+	if (HasParam(Params, TEXT("fromRevision")) || HasParam(Params, TEXT("toRevision")))
 	{
 		return MCPError(TEXT("Revision-based diffing (fromRevision/toRevision via source control) is not wired yet - pass 'otherPath' to diff two loaded Blueprint assets. Revision loading is a staged follow-up."));
 	}

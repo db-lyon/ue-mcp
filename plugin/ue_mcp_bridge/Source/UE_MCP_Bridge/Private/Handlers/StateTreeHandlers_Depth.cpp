@@ -939,9 +939,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddConsideration(const TSharedPtr<FJs
 	}
 
 	TSharedPtr<FJsonObject> InstanceProps;
-	if (Params->HasField(TEXT("instanceProperties")))
+	if (HasParam(Params, TEXT("instanceProperties")))
 	{
-		InstanceProps = Params->GetObjectField(TEXT("instanceProperties"));
+		InstanceProps = TryGetParam(Params, TEXT("instanceProperties"))->AsObject();
 	}
 
 	State->Modify();
@@ -954,9 +954,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddConsideration(const TSharedPtr<FJs
 		return MCPError(Error);
 	}
 
-	if (Params->HasField(TEXT("operand")))
+	if (HasParam(Params, TEXT("operand")))
 	{
-		const FString Op = Params->GetStringField(TEXT("operand"));
+		const FString Op = OptionalString(Params, TEXT("operand"));
 		NewNode->ExpressionOperand = Op.Equals(TEXT("Or"), ESearchCase::IgnoreCase)
 			? EStateTreeExpressionOperand::Or
 			: EStateTreeExpressionOperand::And;
@@ -1007,13 +1007,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveConsideration(const TSharedPtr<
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found. Pass stateId or statePath."));
 
-	if (!Params->HasField(TEXT("considerationIndex")))
+	if (!HasParam(Params, TEXT("considerationIndex")))
 	{
 		return MCPError(FString::Printf(
 			TEXT("Missing required parameter 'considerationIndex'. This state has %d consideration(s); statetree(read_state) lists each one with its index."),
 			State->Considerations.Num()));
 	}
-	const int32 Index = static_cast<int32>(Params->GetNumberField(TEXT("considerationIndex")));
+	const int32 Index = static_cast<int32>(OptionalNumber(Params, TEXT("considerationIndex")));
 	if (!State->Considerations.IsValidIndex(Index))
 	{
 		return MCPError(FString::Printf(
@@ -1081,13 +1081,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTransitionCondition(const TShar
 	UStateTreeState* State = ResolveState(EditorData, Params);
 	if (!State) return MCPError(TEXT("State not found. Pass stateId or statePath."));
 
-	if (!Params->HasField(TEXT("transitionIndex")))
+	if (!HasParam(Params, TEXT("transitionIndex")))
 	{
 		return MCPError(FString::Printf(
 			TEXT("Missing required parameter 'transitionIndex'. This state has %d transition(s); statetree(read_state) lists each with its index and conditions."),
 			State->Transitions.Num()));
 	}
-	const int32 TransIndex = static_cast<int32>(Params->GetNumberField(TEXT("transitionIndex")));
+	const int32 TransIndex = static_cast<int32>(OptionalNumber(Params, TEXT("transitionIndex")));
 	if (!State->Transitions.IsValidIndex(TransIndex))
 	{
 		return MCPError(FString::Printf(
@@ -1099,13 +1099,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RemoveTransitionCondition(const TShar
 	}
 
 	FStateTreeTransition& Transition = State->Transitions[TransIndex];
-	if (!Params->HasField(TEXT("conditionIndex")))
+	if (!HasParam(Params, TEXT("conditionIndex")))
 	{
 		return MCPError(FString::Printf(
 			TEXT("Missing required parameter 'conditionIndex'. Transition %d has %d condition(s)."),
 			TransIndex, Transition.Conditions.Num()));
 	}
-	const int32 CondIndex = static_cast<int32>(Params->GetNumberField(TEXT("conditionIndex")));
+	const int32 CondIndex = static_cast<int32>(OptionalNumber(Params, TEXT("conditionIndex")));
 	if (!Transition.Conditions.IsValidIndex(CondIndex))
 	{
 		return MCPError(FString::Printf(
@@ -1197,13 +1197,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateLink(const TSharedPtr<FJsonOb
 	if (bSubtree)
 	{
 		UStateTreeState* Target = nullptr;
-		if (Params->HasField(TEXT("targetStateId")))
+		if (HasParam(Params, TEXT("targetStateId")))
 		{
-			Target = FindStateByID(EditorData, StateTreeDepthParseGuid(Params->GetStringField(TEXT("targetStateId"))));
+			Target = FindStateByID(EditorData, StateTreeDepthParseGuid(OptionalString(Params, TEXT("targetStateId"))));
 		}
-		else if (Params->HasField(TEXT("targetStatePath")))
+		else if (HasParam(Params, TEXT("targetStatePath")))
 		{
-			Target = FindStateByPath(EditorData, Params->GetStringField(TEXT("targetStatePath")));
+			Target = FindStateByPath(EditorData, OptionalString(Params, TEXT("targetStatePath")));
 		}
 		if (!Target)
 		{
@@ -1345,7 +1345,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 	UStateTreeState* NewParent = OldParent;
 	const bool bToRoot = OptionalBool(Params, TEXT("toRoot"), false);
 	const bool bHasParentSelector =
-		Params->HasField(TEXT("newParentStateId")) || Params->HasField(TEXT("newParentStatePath"));
+		HasParam(Params, TEXT("newParentStateId")) || HasParam(Params, TEXT("newParentStatePath"));
 	if (bToRoot && bHasParentSelector)
 	{
 		return MCPError(TEXT("toRoot=true and newParentStateId / newParentStatePath ask for two different destinations. Pass exactly one: toRoot for the top level, or a parent selector for a state to go under."));
@@ -1356,13 +1356,13 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 	}
 	else if (bHasParentSelector)
 	{
-		if (Params->HasField(TEXT("newParentStateId")))
+		if (HasParam(Params, TEXT("newParentStateId")))
 		{
-			NewParent = FindStateByID(EditorData, StateTreeDepthParseGuid(Params->GetStringField(TEXT("newParentStateId"))));
+			NewParent = FindStateByID(EditorData, StateTreeDepthParseGuid(OptionalString(Params, TEXT("newParentStateId"))));
 		}
 		else
 		{
-			NewParent = FindStateByPath(EditorData, Params->GetStringField(TEXT("newParentStatePath")));
+			NewParent = FindStateByPath(EditorData, OptionalString(Params, TEXT("newParentStatePath")));
 		}
 		if (!NewParent)
 		{
@@ -1384,9 +1384,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::MoveState(const TSharedPtr<FJsonObjec
 	TArray<TObjectPtr<UStateTreeState>>& NewArray = NewParent ? NewParent->Children : EditorData->SubTrees;
 	const int32 TargetMax = (&NewArray == &OldArray) ? NewArray.Num() - 1 : NewArray.Num();
 	int32 InsertIndex = TargetMax;
-	if (Params->HasField(TEXT("insertIndex")))
+	if (HasParam(Params, TEXT("insertIndex")))
 	{
-		InsertIndex = static_cast<int32>(Params->GetNumberField(TEXT("insertIndex")));
+		InsertIndex = static_cast<int32>(OptionalNumber(Params, TEXT("insertIndex")));
 		if (InsertIndex < 0 || InsertIndex > TargetMax)
 		{
 			return MCPError(FString::Printf(
@@ -1654,9 +1654,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SendEvent(const TSharedPtr<FJsonObjec
 		// otherwise would be worse than admitting it.
 		auto Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
-		if (Params->HasField(TEXT("actorPath"))) Payload->SetStringField(TEXT("actorPath"), OptionalString(Params, TEXT("actorPath")));
-		if (Params->HasField(TEXT("componentName"))) Payload->SetStringField(TEXT("componentName"), OptionalString(Params, TEXT("componentName")));
-		if (Params->HasField(TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
+		if (HasParam(Params, TEXT("actorPath"))) Payload->SetStringField(TEXT("actorPath"), OptionalString(Params, TEXT("actorPath")));
+		if (HasParam(Params, TEXT("componentName"))) Payload->SetStringField(TEXT("componentName"), OptionalString(Params, TEXT("componentName")));
+		if (HasParam(Params, TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
 		Payload->SetStringField(TEXT("lossy"), TEXT("Sending an event has NO inverse. Once queued it is consumed on the next tick and whatever transition it triggered has already run; the inverse here only re-reads the runtime so a caller can see what happened. Undo the effect by requesting a transition back with statetree(request_transition), or by restarting the tree."));
 		MCPSetRollback(Result, TEXT("read_state_tree_runtime"), Payload);
 	}
@@ -1671,9 +1671,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RequestTransition(const TSharedPtr<FJ
 
 	FStateTreeStateHandle Target;
 	FString TargetDescription;
-	if (Params->HasField(TEXT("targetStateId")))
+	if (HasParam(Params, TEXT("targetStateId")))
 	{
-		const FString IdStr = Params->GetStringField(TEXT("targetStateId"));
+		const FString IdStr = OptionalString(Params, TEXT("targetStateId"));
 		FGuid Id;
 		if (!FGuid::Parse(IdStr, Id))
 		{
@@ -1682,10 +1682,10 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RequestTransition(const TSharedPtr<FJ
 		Target = RT.StateTree->GetStateHandleFromId(Id);
 		TargetDescription = IdStr;
 	}
-	else if (Params->HasField(TEXT("targetStateTag")))
+	else if (HasParam(Params, TEXT("targetStateTag")))
 	{
 #if UE_MCP_HAS_STATETREE_TAG_STATE_LOOKUP
-		const FString TagStr = Params->GetStringField(TEXT("targetStateTag"));
+		const FString TagStr = OptionalString(Params, TEXT("targetStateTag"));
 		FGameplayTag Tag = FGameplayTag::RequestGameplayTag(FName(*TagStr), /*ErrorIfNotFound=*/ false);
 		if (!Tag.IsValid())
 		{
@@ -1763,9 +1763,9 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::RequestTransition(const TSharedPtr<FJ
 	{
 		auto Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("actorLabel"), ActorLabel);
-		if (Params->HasField(TEXT("actorPath"))) Payload->SetStringField(TEXT("actorPath"), OptionalString(Params, TEXT("actorPath")));
-		if (Params->HasField(TEXT("componentName"))) Payload->SetStringField(TEXT("componentName"), OptionalString(Params, TEXT("componentName")));
-		if (Params->HasField(TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
+		if (HasParam(Params, TEXT("actorPath"))) Payload->SetStringField(TEXT("actorPath"), OptionalString(Params, TEXT("actorPath")));
+		if (HasParam(Params, TEXT("componentName"))) Payload->SetStringField(TEXT("componentName"), OptionalString(Params, TEXT("componentName")));
+		if (HasParam(Params, TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
 		if (Before.Num() > 0)
 		{
 			Payload->SetStringField(TEXT("targetStateTag"), FString());

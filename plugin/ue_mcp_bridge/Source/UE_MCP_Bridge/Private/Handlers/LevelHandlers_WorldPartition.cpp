@@ -180,7 +180,7 @@ namespace
 	bool TryReadBounds(const TSharedPtr<FJsonObject>& Params, FBox& OutBox)
 	{
 		const TSharedPtr<FJsonObject>* BoundsObj = nullptr;
-		if (!Params->TryGetObjectField(TEXT("bounds"), BoundsObj) || !BoundsObj) return false;
+		if (!TryGetObjectParam(Params, TEXT("bounds"), BoundsObj) || !BoundsObj) return false;
 		const TSharedPtr<FJsonObject>* MinObj = nullptr;
 		const TSharedPtr<FJsonObject>* MaxObj = nullptr;
 		if (!(*BoundsObj)->TryGetObjectField(TEXT("min"), MinObj) || !MinObj) return false;
@@ -239,7 +239,7 @@ namespace
 
 		TSet<FString> WantedGuids;
 		const TArray<TSharedPtr<FJsonValue>>* GuidValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("guids"), GuidValues) && GuidValues)
+		if (TryGetArrayParam(Params, TEXT("guids"), GuidValues) && GuidValues)
 		{
 			for (const TSharedPtr<FJsonValue>& Value : *GuidValues)
 			{
@@ -283,7 +283,7 @@ namespace
 	{
 		FString Guids;
 		const TArray<TSharedPtr<FJsonValue>>* GuidValues = nullptr;
-		if (Params.IsValid() && Params->TryGetArrayField(TEXT("guids"), GuidValues) && GuidValues)
+		if (Params.IsValid() && TryGetArrayParam(Params, TEXT("guids"), GuidValues) && GuidValues)
 		{
 			TArray<FString> Sorted;
 			for (const TSharedPtr<FJsonValue>& Value : *GuidValues)

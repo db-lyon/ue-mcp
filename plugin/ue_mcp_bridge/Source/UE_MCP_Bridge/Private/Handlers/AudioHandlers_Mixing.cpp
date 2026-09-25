@@ -35,7 +35,7 @@ namespace
 	void SetNumberProp(UObject* Obj, const FString& Path, const TSharedPtr<FJsonObject>& Params, const FString& Key)
 	{
 		double N;
-		if (Params->TryGetNumberField(Key, N))
+		if (TryGetNumberParam(Params, *Key, N))
 		{
 			FString E; MCPJsonProperty::SetDottedPropertyFromJson(Obj, Path, MakeShared<FJsonValueNumber>(N), E);
 		}
@@ -44,7 +44,7 @@ namespace
 	void SetBoolProp(UObject* Obj, const FString& Path, const TSharedPtr<FJsonObject>& Params, const FString& Key)
 	{
 		bool B;
-		if (Params->TryGetBoolField(Key, B))
+		if (TryGetBoolParam(Params, *Key, B))
 		{
 			FString E; MCPJsonProperty::SetDottedPropertyFromJson(Obj, Path, MakeShared<FJsonValueBoolean>(B), E);
 		}
@@ -73,7 +73,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSubmix(const TSharedPtr<FJsonObject
 	SetNumberProp(Submix, TEXT("DryLevelModulation.Value"), Params, TEXT("dryLevel"));
 
 	FString ParentPath;
-	if (Params->TryGetStringField(TEXT("parentPath"), ParentPath) && !ParentPath.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("parentPath"), ParentPath) && !ParentPath.IsEmpty())
 	{
 		if (USoundSubmixBase* Parent = Cast<USoundSubmixBase>(UEditorAssetLibrary::LoadAsset(ParentPath)))
 		{
@@ -191,7 +191,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::AddSubmixEffect(const TSharedPtr<FJsonObj
 
 	// Apply effect settings, if given, onto the preset's Settings struct.
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj)
+	if (TryGetObjectParam(Params, TEXT("settings"), SettingsObj) && SettingsObj)
 	{
 		FString E;
 		SetProp(Preset, TEXT("Settings"), MakeShared<FJsonValueObject>(*SettingsObj), E);
@@ -253,14 +253,14 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundClass(const TSharedPtr<FJsonOb
 	USoundClass* SoundClass = Created.Asset;
 
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj)
+	if (TryGetObjectParam(Params, TEXT("properties"), PropsObj) && PropsObj)
 	{
 		FString E;
 		SetProp(SoundClass, TEXT("Properties"), MakeShared<FJsonValueObject>(*PropsObj), E);
 	}
 
 	FString ParentPath;
-	if (Params->TryGetStringField(TEXT("parentPath"), ParentPath) && !ParentPath.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("parentPath"), ParentPath) && !ParentPath.IsEmpty())
 	{
 		if (USoundClass* Parent = Cast<USoundClass>(UEditorAssetLibrary::LoadAsset(ParentPath)))
 		{
@@ -297,7 +297,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateSoundMix(const TSharedPtr<FJsonObje
 
 	const TArray<TSharedPtr<FJsonValue>>* Adjusters = nullptr;
 	int32 Added = 0;
-	if (Params->TryGetArrayField(TEXT("adjusters"), Adjusters) && Adjusters)
+	if (TryGetArrayParam(Params, TEXT("adjusters"), Adjusters) && Adjusters)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *Adjusters)
 		{
@@ -346,7 +346,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateConcurrency(const TSharedPtr<FJsonO
 	SetBoolProp(Conc, TEXT("Concurrency.bLimitToOwner"), Params, TEXT("limitToOwner"));
 	SetNumberProp(Conc, TEXT("Concurrency.VolumeScale"), Params, TEXT("volumeScale"));
 	FString Rule;
-	if (Params->TryGetStringField(TEXT("resolutionRule"), Rule) && !Rule.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("resolutionRule"), Rule) && !Rule.IsEmpty())
 	{
 		FString E;
 		SetProp(Conc, TEXT("Concurrency.ResolutionRule"), MakeShared<FJsonValueString>(Rule), E);
@@ -375,7 +375,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateAttenuation(const TSharedPtr<FJsonO
 
 	// Full settings struct, if provided.
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj)
+	if (TryGetObjectParam(Params, TEXT("settings"), SettingsObj) && SettingsObj)
 	{
 		FString E;
 		SetProp(Atten, TEXT("Attenuation"), MakeShared<FJsonValueObject>(*SettingsObj), E);
@@ -385,7 +385,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::CreateAttenuation(const TSharedPtr<FJsonO
 	SetNumberProp(Atten, TEXT("Attenuation.FalloffDistance"), Params, TEXT("falloffDistance"));
 	SetBoolProp(Atten, TEXT("Attenuation.bSpatialize"), Params, TEXT("spatialize"));
 	SetBoolProp(Atten, TEXT("Attenuation.bEnableOcclusion"), Params, TEXT("enableOcclusion"));
-	if (Params->HasField(TEXT("falloffDistance")))
+	if (HasParam(Params, TEXT("falloffDistance")))
 	{
 		// A falloff was requested -> ensure volume attenuation is on.
 		FString E;
@@ -638,7 +638,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SetAudioProperty(const TSharedPtr<FJsonOb
 		MCPQuery::ReadDottedProperty(Asset, PropertyName, PreviousType);
 
 	FString E;
-	if (!MCPJsonProperty::SetDottedPropertyFromJson(Asset, PropertyName, Params->TryGetField(TEXT("value")), E))
+	if (!MCPJsonProperty::SetDottedPropertyFromJson(Asset, PropertyName, TryGetParam(Params, TEXT("value")), E))
 	{
 		return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *E));
 	}

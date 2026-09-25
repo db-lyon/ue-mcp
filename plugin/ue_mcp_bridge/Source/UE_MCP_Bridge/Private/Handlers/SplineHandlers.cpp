@@ -62,6 +62,8 @@ namespace
 
 void FSplineHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("spline"));
 	Registry.RegisterHandler(TEXT("get_spline_info"), &ReadSpline);
 	Registry.RegisterHandler(TEXT("set_spline_points"), &SetSplinePoints);
 }
@@ -121,7 +123,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::ReadSpline(const TSharedPtr<FJsonObject>
 
 	// #555: project a world point onto the spline. Returns the closest location,
 	// the input key, distance along the spline, and the perpendicular distance.
-	if (Params->HasField(TEXT("projectPoint")))
+	if (HasParam(Params, TEXT("projectPoint")))
 	{
 		const FVector P = OptionalVec3(Params, TEXT("projectPoint"), FVector::ZeroVector);
 		const FVector Closest = SplineComp->FindLocationClosestToWorldLocation(P, ESplineCoordinateSpace::World);
@@ -199,13 +201,13 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
 
 	const TArray<TSharedPtr<FJsonValue>>* PointsArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("points"), PointsArray))
+	if (!TryGetArrayParam(Params, TEXT("points"), PointsArray))
 	{
 		return MCPError(TEXT("Missing 'points' parameter (array of {x, y, z} objects)"));
 	}
 
 	REQUIRE_EDITOR_WORLD(World);
-	if (Params->HasField(TEXT("componentName")) && (!Params->TryGetField(TEXT("componentName")).IsValid() || Params->TryGetField(TEXT("componentName"))->Type != EJson::String))
+	if (HasParam(Params, TEXT("componentName")) && (!TryGetParam(Params, TEXT("componentName")).IsValid() || TryGetParam(Params, TEXT("componentName"))->Type != EJson::String))
 		return MCPError(TEXT("componentName must be a string"));
 
 	TSharedPtr<FJsonValue> ActorErr;
@@ -217,7 +219,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 	// to another spline when the caller has identified one.
 	USplineComponent* SplineComp = nullptr;
 	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
-	if (Params->HasField(TEXT("componentName")) && ComponentName.IsEmpty()) return MCPError(TEXT("componentName cannot be empty"));
+	if (HasParam(Params, TEXT("componentName")) && ComponentName.IsEmpty()) return MCPError(TEXT("componentName cannot be empty"));
 	if (!ComponentName.IsEmpty())
 	{
 		TArray<USplineComponent*> Components;
@@ -319,12 +321,12 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 		NewPoints.Add(Point);
 	}
 	bool bClosedLoop = false;
-	const bool bHasClosedLoop = Params->HasField(TEXT("closedLoop"));
+	const bool bHasClosedLoop = HasParam(Params, TEXT("closedLoop"));
 	if (bHasClosedLoop)
 	{
-		if (!Params->TryGetField(TEXT("closedLoop")).IsValid() || Params->TryGetField(TEXT("closedLoop"))->Type != EJson::Boolean)
+		if (!TryGetParam(Params, TEXT("closedLoop")).IsValid() || TryGetParam(Params, TEXT("closedLoop"))->Type != EJson::Boolean)
 			return MCPError(TEXT("closedLoop must be a boolean"));
-		Params->TryGetBoolField(TEXT("closedLoop"), bClosedLoop);
+		TryGetBoolParam(Params, TEXT("closedLoop"), bClosedLoop);
 	}
 	float PreviousInputKey = -TNumericLimits<float>::Max();
 	for (int32 Index = 0; Index < NewPoints.Num(); ++Index)
@@ -341,9 +343,9 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 	const float PreviousLoopPosition = LoopPositionProperty ? LoopPositionProperty->GetPropertyValue_InContainer(SplineComp) : 0.f;
 	bool RequestedLoopOverride = bHasClosedLoop ? false : PreviousLoopOverride;
 	double RequestedLoopPosition = PreviousLoopPosition;
-	if (Params->HasField(TEXT("loopPositionOverride")) && !Params->TryGetBoolField(TEXT("loopPositionOverride"), RequestedLoopOverride))
+	if (HasParam(Params, TEXT("loopPositionOverride")) && !TryGetBoolParam(Params, TEXT("loopPositionOverride"), RequestedLoopOverride))
 		return MCPError(TEXT("loopPositionOverride must be a boolean"));
-	if (Params->HasField(TEXT("loopPosition")) && (!Params->TryGetNumberField(TEXT("loopPosition"), RequestedLoopPosition) || !FMath::IsFinite(RequestedLoopPosition) || !FMath::IsFinite(static_cast<float>(RequestedLoopPosition))))
+	if (HasParam(Params, TEXT("loopPosition")) && (!TryGetNumberParam(Params, TEXT("loopPosition"), RequestedLoopPosition) || !FMath::IsFinite(RequestedLoopPosition) || !FMath::IsFinite(static_cast<float>(RequestedLoopPosition))))
 		return MCPError(TEXT("loopPosition must be a finite float"));
 	if (RequestedLoopOverride && (!((bHasClosedLoop && bClosedLoop) || (!bHasClosedLoop && SplineComp->IsClosedLoop())) || NewPoints.IsEmpty() || static_cast<float>(RequestedLoopPosition) <= PreviousInputKey || FMath::IsNearlyEqual(static_cast<float>(RequestedLoopPosition), PreviousInputKey)))
 		return MCPError(TEXT("An overridden loop position requires a closed nonempty spline and a key after the final point"));
@@ -401,7 +403,7 @@ TSharedPtr<FJsonValue> FSplineHandlers::SetSplinePoints(const TSharedPtr<FJsonOb
 	{
 		SplineComp->SetClosedLoopAtPosition(true, static_cast<float>(RequestedLoopPosition), false);
 	}
-	else if (bHasClosedLoop || Params->HasField(TEXT("loopPositionOverride")))
+	else if (bHasClosedLoop || HasParam(Params, TEXT("loopPositionOverride")))
 	{
 		SplineComp->SetClosedLoop(bHasClosedLoop ? bClosedLoop : bPrevClosedLoop, false);
 	}

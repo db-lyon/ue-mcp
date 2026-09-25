@@ -42,6 +42,8 @@
 
 void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("sequencer"));
 	Registry.RegisterHandler(TEXT("create_level_sequence"), &CreateLevelSequence);
 	Registry.RegisterHandler(TEXT("get_sequence_info"), &ReadSequenceInfo);
 	Registry.RegisterHandler(TEXT("add_sequence_track"), &AddTrack);
@@ -59,9 +61,9 @@ namespace
 {
 	ULevelSequence* LoadSequence(const TSharedPtr<FJsonObject>& Params, FString& OutPath, FString& OutError)
 	{
-		if (!Params->TryGetStringField(TEXT("sequencePath"), OutPath))
+		if (!TryGetStringParam(Params, TEXT("sequencePath"), OutPath))
 		{
-			if (!Params->TryGetStringField(TEXT("assetPath"), OutPath) && !Params->TryGetStringField(TEXT("path"), OutPath))
+			if (!TryGetStringParam(Params, TEXT("assetPath"), OutPath) && !TryGetStringParam(Params, TEXT("path"), OutPath))
 			{
 				OutError = TEXT("Missing 'sequencePath' parameter");
 				return nullptr;
@@ -812,8 +814,8 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ScrubSequence(const TSharedPtr<FJsonO
 
 	double RequestedSeconds = 0.0;
 	double RequestedFrame = 0.0;
-	const bool bHasSeconds = Params->TryGetNumberField(TEXT("seconds"), RequestedSeconds);
-	const bool bHasFrame = Params->TryGetNumberField(TEXT("frame"), RequestedFrame);
+	const bool bHasSeconds = TryGetNumberParam(Params, TEXT("seconds"), RequestedSeconds);
+	const bool bHasFrame = TryGetNumberParam(Params, TEXT("frame"), RequestedFrame);
 	if (bHasSeconds == bHasFrame)
 	{
 		return MCPError(TEXT("Provide exactly one of 'seconds' or 'frame'"));
@@ -947,8 +949,8 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetPlaybackRange(const TSharedPtr<FJs
 	if (!MovieScene) return MCPError(TEXT("Sequence has no MovieScene"));
 
 	double StartSeconds = 0.0, EndSeconds = 0.0;
-	if (!Params->TryGetNumberField(TEXT("startSeconds"), StartSeconds) ||
-		!Params->TryGetNumberField(TEXT("endSeconds"), EndSeconds))
+	if (!TryGetNumberParam(Params, TEXT("startSeconds"), StartSeconds) ||
+		!TryGetNumberParam(Params, TEXT("endSeconds"), EndSeconds))
 	{
 		return MCPError(TEXT("Missing 'startSeconds' and/or 'endSeconds'"));
 	}
@@ -1099,8 +1101,8 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 
 	const FFrameRate Tick = MovieScene->GetTickResolution();
 	double StartSeconds = 0.0, EndSeconds = 0.0;
-	const bool bHasStart = Params->TryGetNumberField(TEXT("startSeconds"), StartSeconds);
-	const bool bHasEnd = Params->TryGetNumberField(TEXT("endSeconds"), EndSeconds);
+	const bool bHasStart = TryGetNumberParam(Params, TEXT("startSeconds"), StartSeconds);
+	const bool bHasEnd = TryGetNumberParam(Params, TEXT("endSeconds"), EndSeconds);
 	if (bHasStart || bHasEnd)
 	{
 		const FFrameNumber Start = Tick.AsFrameNumber(StartSeconds);
@@ -1175,7 +1177,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetKeyframes(const TSharedPtr<FJsonOb
 	if (auto E = RequireString(Params, TEXT("channel"), ChannelName)) return E;
 
 	const TArray<TSharedPtr<FJsonValue>>* Keyframes = nullptr;
-	if (!Params->TryGetArrayField(TEXT("keyframes"), Keyframes) || !Keyframes)
+	if (!TryGetArrayParam(Params, TEXT("keyframes"), Keyframes) || !Keyframes)
 	{
 		return MCPError(TEXT("Missing 'keyframes' array ([{seconds, value}, ...])"));
 	}
@@ -1205,7 +1207,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::SetKeyframes(const TSharedPtr<FJsonOb
 	const TArray<UMovieSceneSection*>& Sections = Track->GetAllSections();
 	if (Sections.Num() == 0) return MCPError(TEXT("Track has no sections (call add_sequence_section first)"));
 	int32 SectionIndex = 0;
-	Params->TryGetNumberField(TEXT("sectionIndex"), SectionIndex);
+	TryGetNumberParam(Params, TEXT("sectionIndex"), SectionIndex);
 	if (SectionIndex < 0 || SectionIndex >= Sections.Num())
 	{
 		return MCPError(FString::Printf(TEXT("sectionIndex %d out of range (sections=%d)"), SectionIndex, Sections.Num()));

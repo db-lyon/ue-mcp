@@ -336,6 +336,8 @@ TSharedPtr<FJsonValue> FFabHandlers::ImportFile(const TSharedPtr<FJsonObject>& P
 
 void FFabHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("fab"));
 	Registry.RegisterHandler(TEXT("fab_status"), &Status);
 	Registry.RegisterHandler(TEXT("fab_login"), &Login);
 	Registry.RegisterHandler(TEXT("fab_logout"), &Logout);

@@ -27,6 +27,8 @@
 
 void FAudioHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("audio"));
 	Registry.RegisterHandler(TEXT("list_sound_assets"), &ListSoundAssets);
 	Registry.RegisterHandler(TEXT("extract_sound_wave_pcm"), &ExtractSoundWavePCM);
 	Registry.RegisterHandler(TEXT("import_audio"), &ImportAudio);
@@ -115,9 +117,9 @@ TSharedPtr<FJsonValue> FAudioHandlers::ImportAudio(const TSharedPtr<FJsonObject>
 	// Factory left null: AssetTools resolves USoundFactory for wav/ogg/flac.
 
 	FString AssetName;
-	if (!Params->TryGetStringField(TEXT("assetName"), AssetName))
+	if (!TryGetStringParam(Params, TEXT("assetName"), AssetName))
 	{
-		Params->TryGetStringField(TEXT("name"), AssetName);
+		TryGetStringParam(Params, TEXT("name"), AssetName);
 	}
 	if (!AssetName.IsEmpty()) Task->DestinationName = AssetName;
 
@@ -136,7 +138,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::ImportAudio(const TSharedPtr<FJsonObject>
 	}
 
 	// Optional looping toggle on the resulting SoundWave.
-	if (ImportedWave && Params->HasField(TEXT("looping")))
+	if (ImportedWave && HasParam(Params, TEXT("looping")))
 	{
 		ImportedWave->bLooping = OptionalBool(Params, TEXT("looping"), false);
 		SaveAssetPackage(ImportedWave);
@@ -184,7 +186,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::ListSoundAssets(const TSharedPtr<FJsonObj
 	// offset re-read a moved library at a row number and could not tell that it
 	// had moved; a cursor names the row it resumes after and says so when that
 	// row shifted or was deleted.
-	if (Params.IsValid() && Params->HasField(TEXT("offset")))
+	if (Params.IsValid() && HasParam(Params, TEXT("offset")))
 	{
 		return MCPError(TEXT(
 			"'offset' is no longer how list_sound_assets pages, because a row number cannot tell you "
@@ -366,13 +368,13 @@ TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJso
 	// Parse optional volume and pitch multipliers (accept both short and long names)
 	double Volume = 1.0;
 	double Pitch = 1.0;
-	if (!Params->TryGetNumberField(TEXT("volume"), Volume))
+	if (!TryGetNumberParam(Params, TEXT("volume"), Volume))
 	{
-		Params->TryGetNumberField(TEXT("volumeMultiplier"), Volume);
+		TryGetNumberParam(Params, TEXT("volumeMultiplier"), Volume);
 	}
-	if (!Params->TryGetNumberField(TEXT("pitch"), Pitch))
+	if (!TryGetNumberParam(Params, TEXT("pitch"), Pitch))
 	{
-		Params->TryGetNumberField(TEXT("pitchMultiplier"), Pitch);
+		TryGetNumberParam(Params, TEXT("pitchMultiplier"), Pitch);
 	}
 
 	// No rollback: destructive/external - playing a one-shot sound has no inverse.
@@ -431,7 +433,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SpawnAmbientSound(const TSharedPtr<FJsonO
 
 			// Apply optional volume multiplier
 			double Volume = 1.0;
-			if (Params->TryGetNumberField(TEXT("volume"), Volume))
+			if (TryGetNumberParam(Params, TEXT("volume"), Volume))
 			{
 				AudioComp->VolumeMultiplier = static_cast<float>(Volume);
 			}

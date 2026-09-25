@@ -143,7 +143,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	TArray<TSharedPtr<FJsonValue>> PropertyRows;
 	int32 PropertyFailures = 0;
 	const TSharedPtr<FJsonObject>* Properties = nullptr;
-	if (Params->TryGetObjectField(TEXT("properties"), Properties) && Properties && Properties->IsValid())
+	if (TryGetObjectParam(Params, TEXT("properties"), Properties) && Properties && Properties->IsValid())
 	{
 		for (const auto& Entry : (*Properties)->Values)
 		{
@@ -153,7 +153,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 			SubParams->SetField(TEXT("value"), Entry.Value);
 			SubParams->SetBoolField(TEXT("force"), true);
 			if (World->IsGameWorld()) SubParams->SetStringField(TEXT("world"), TEXT("pie"));
-			if (Params->HasField(TEXT("pieInstance"))) SubParams->SetField(TEXT("pieInstance"), Params->TryGetField(TEXT("pieInstance")));
+			if (HasParam(Params, TEXT("pieInstance"))) SubParams->SetField(TEXT("pieInstance"), TryGetParam(Params, TEXT("pieInstance")));
 
 			const TSharedPtr<FJsonValue> Response = FLevelHandlers::SetActorProperty(SubParams);
 			const TSharedPtr<FJsonObject> ResponseObject =

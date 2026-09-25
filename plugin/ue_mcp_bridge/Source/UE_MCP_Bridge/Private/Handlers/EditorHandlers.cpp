@@ -225,6 +225,9 @@ namespace
 
 void FEditorHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("editor"));
+
 	// Install log capture ring buffer (#82)
 	FMCPLogCapture::Get().Install();
 
@@ -454,9 +457,9 @@ namespace
 							const TSharedPtr<FJsonObject>& Result)
 	{
 		bool bCaptureLog = true;
-		Params->TryGetBoolField(TEXT("captureLog"), bCaptureLog);
+		TryGetBoolParam(Params, TEXT("captureLog"), bCaptureLog);
 		int32 MaxLogChars = 0;  // 0 means no cap
-		Params->TryGetNumberField(TEXT("maxLogChars"), MaxLogChars);
+		TryGetNumberParam(Params, TEXT("maxLogChars"), MaxLogChars);
 		if (MaxLogChars < 0) MaxLogChars = 0;
 
 		int32 TotalChars = 0;
@@ -637,7 +640,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 	// Optional positional args to expose as sys.argv[1:].
 	TArray<FString> ExtraArgs;
 	const TArray<TSharedPtr<FJsonValue>>* ArgsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("args"), ArgsArr) && ArgsArr)
+	if (TryGetArrayParam(Params, TEXT("args"), ArgsArr) && ArgsArr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *ArgsArr)
 		{
@@ -684,7 +687,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RunPythonFile(const TSharedPtr<FJsonObje
 
 		FString KwargsJson(TEXT("{}"));
 		const TSharedPtr<FJsonObject>* KwargsObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("kwargs"), KwargsObj) && KwargsObj && KwargsObj->IsValid())
+		if (TryGetObjectParam(Params, TEXT("kwargs"), KwargsObj) && KwargsObj && KwargsObj->IsValid())
 		{
 			KwargsJson.Reset();
 			const TSharedRef<TJsonWriter<>> KwargsWriter = TJsonWriterFactory<>::Create(&KwargsJson);
@@ -963,7 +966,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	// accepted `path`/`assetPath`. Take any of the three so callers using the
 	// schema as written don't bounce off "missing required parameter".
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("objectPath"), AssetPath))
+	if (!TryGetStringParam(Params, TEXT("objectPath"), AssetPath))
 	{
 		if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 	}
@@ -979,7 +982,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 		return MCPError(ResolveObjectErr);
 	}
 
-	TSharedPtr<FJsonValue> ValueJsonRef = Params->TryGetField(TEXT("value"));
+	TSharedPtr<FJsonValue> ValueJsonRef = TryGetParam(Params, TEXT("value"));
 	if (!ValueJsonRef.IsValid())
 	{
 		return MCPError(TEXT("Missing 'value' parameter"));
@@ -1213,7 +1216,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 TSharedPtr<FJsonValue> FEditorHandlers::GetProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ObjectPath;
-	if (!Params->TryGetStringField(TEXT("objectPath"), ObjectPath))
+	if (!TryGetStringParam(Params, TEXT("objectPath"), ObjectPath))
 	{
 		if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), ObjectPath)) return Err;
 	}
@@ -1267,7 +1270,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetProperty(const TSharedPtr<FJsonObject
 TSharedPtr<FJsonValue> FEditorHandlers::DescribeObject(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ObjectPath;
-	if (!Params->TryGetStringField(TEXT("objectPath"), ObjectPath))
+	if (!TryGetStringParam(Params, TEXT("objectPath"), ObjectPath))
 	{
 		if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), ObjectPath)) return Err;
 	}
@@ -1301,7 +1304,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::DescribeObject(const TSharedPtr<FJsonObj
 
 	TArray<TSharedPtr<FJsonValue>> Properties;
 	const TArray<TSharedPtr<FJsonValue>>* PropertyNames = nullptr;
-	if (Params->TryGetArrayField(TEXT("propertyNames"), PropertyNames) && PropertyNames)
+	if (TryGetArrayParam(Params, TEXT("propertyNames"), PropertyNames) && PropertyNames)
 	{
 		for (const TSharedPtr<FJsonValue>& NameValue : *PropertyNames)
 		{
@@ -1398,16 +1401,16 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetRealtime(const TSharedPtr<FJsonObject
 TSharedPtr<FJsonValue> FEditorHandlers::SetConfig(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ConfigName;
-	if (!Params->TryGetStringField(TEXT("configName"), ConfigName))
+	if (!TryGetStringParam(Params, TEXT("configName"), ConfigName))
 	{
-		Params->TryGetStringField(TEXT("configFile"), ConfigName);
+		TryGetStringParam(Params, TEXT("configFile"), ConfigName);
 	}
 	FString Section;
 	if (auto Err = RequireString(Params, TEXT("section"), Section)) return Err;
 	FString Key;
 	if (auto Err = RequireString(Params, TEXT("key"), Key)) return Err;
 	FString Value;
-	Params->TryGetStringField(TEXT("value"), Value);
+	TryGetStringParam(Params, TEXT("value"), Value);
 
 	if (ConfigName.IsEmpty())
 	{
@@ -1613,7 +1616,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::HitTestViewportPixel(const TSharedPtr<FJ
 	}
 
 	double PixelX = 0, PixelY = 0;
-	if (!Params->TryGetNumberField(TEXT("x"), PixelX) || !Params->TryGetNumberField(TEXT("y"), PixelY))
+	if (!TryGetNumberParam(Params, TEXT("x"), PixelX) || !TryGetNumberParam(Params, TEXT("y"), PixelY))
 	{
 		return MCPError(TEXT("Missing required parameters 'x' and 'y' (viewport pixel coordinates)"));
 	}
@@ -1635,8 +1638,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::HitTestViewportPixel(const TSharedPtr<FJ
 	const FIntPoint ViewportSize = Viewport->GetSizeXY();
 	double Width = ViewportSize.X;
 	double Height = ViewportSize.Y;
-	Params->TryGetNumberField(TEXT("width"), Width);
-	Params->TryGetNumberField(TEXT("height"), Height);
+	TryGetNumberParam(Params, TEXT("width"), Width);
+	TryGetNumberParam(Params, TEXT("height"), Height);
 	if (Width <= 0 || Height <= 0)
 	{
 		return MCPError(FString::Printf(TEXT("Viewport size is zero (%dx%d) and no explicit width/height supplied. Focus the viewport, or pass width+height matching the screenshot used to pick the pixel."), ViewportSize.X, ViewportSize.Y));
@@ -1678,7 +1681,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::HitTestViewportPixel(const TSharedPtr<FJ
 
 	// Optional ignore list by actor label.
 	const TArray<TSharedPtr<FJsonValue>>* IgnoreArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("ignoreActors"), IgnoreArr) && IgnoreArr)
+	if (TryGetArrayParam(Params, TEXT("ignoreActors"), IgnoreArr) && IgnoreArr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *IgnoreArr)
 		{
@@ -2041,7 +2044,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 
 	double RequestedPIEInstanceValue = INDEX_NONE;
 	const bool bHasRequestedPIEInstance =
-		Params->TryGetNumberField(TEXT("pieInstance"), RequestedPIEInstanceValue);
+		TryGetNumberParam(Params, TEXT("pieInstance"), RequestedPIEInstanceValue);
 	const int32 RequestedPIEInstance = bHasRequestedPIEInstance
 		? FMath::RoundToInt(RequestedPIEInstanceValue)
 		: INDEX_NONE;
@@ -2053,7 +2056,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScreenshot(const TSharedPtr<FJson
 
 	FString RequestedWorldPath;
 	const bool bHasRequestedWorldPath =
-		Params->TryGetStringField(TEXT("worldPath"), RequestedWorldPath)
+		TryGetStringParam(Params, TEXT("worldPath"), RequestedWorldPath)
 		&& !RequestedWorldPath.IsEmpty();
 
 	const FWorldContext* SelectedPIEContext = nullptr;
@@ -2365,9 +2368,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetViewportCamera(const TSharedPtr<FJson
 		// malformed new projection/zoom value into a camera write is unsafe.
 		auto ValidateFiniteObjectFields = [&](const TCHAR* Key, const TArray<FString>& FieldNames) -> TSharedPtr<FJsonValue>
 		{
-				if (!Params->HasField(Key)) return nullptr;
+				if (!HasParam(Params, Key)) return nullptr;
 				const TSharedPtr<FJsonObject>* Object = nullptr;
-				if (!Params->TryGetObjectField(Key, Object) || !Object || !Object->IsValid())
+				if (!TryGetObjectParam(Params, Key, Object) || !Object || !Object->IsValid())
 				{
 						return MCPError(FString::Printf(TEXT("'%s' must be an object"), Key));
 				}
@@ -2402,13 +2405,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetViewportCamera(const TSharedPtr<FJson
 
 		FString RequestedProjection;
 		FString RequestedViewportType;
-		const bool bHasProjection = Params->HasField(TEXT("projection"));
-		const bool bHasViewportType = Params->HasField(TEXT("viewportType"));
-		if (bHasProjection && !Params->TryGetStringField(TEXT("projection"), RequestedProjection))
+		const bool bHasProjection = HasParam(Params, TEXT("projection"));
+		const bool bHasViewportType = HasParam(Params, TEXT("viewportType"));
+		if (bHasProjection && !TryGetStringParam(Params, TEXT("projection"), RequestedProjection))
 		{
 				return MCPError(TEXT("'projection' must be a string such as 'perspective' or 'top'"));
 		}
-		if (bHasViewportType && !Params->TryGetStringField(TEXT("viewportType"), RequestedViewportType))
+		if (bHasViewportType && !TryGetStringParam(Params, TEXT("viewportType"), RequestedViewportType))
 		{
 				return MCPError(TEXT("'viewportType' must be a string such as 'perspective' or 'top'"));
 		}
@@ -2446,11 +2449,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetViewportCamera(const TSharedPtr<FJson
 				}
 		}
 
-		const bool bHasOrthoZoom = Params->HasField(TEXT("orthoZoom"));
+		const bool bHasOrthoZoom = HasParam(Params, TEXT("orthoZoom"));
 		double RequestedOrthoZoom = 0.0;
 		if (bHasOrthoZoom)
 		{
-				if (!Params->TryGetNumberField(TEXT("orthoZoom"), RequestedOrthoZoom) || !FMath::IsFinite(RequestedOrthoZoom)
+				if (!TryGetNumberParam(Params, TEXT("orthoZoom"), RequestedOrthoZoom) || !FMath::IsFinite(RequestedOrthoZoom)
 					|| RequestedOrthoZoom < MIN_ORTHOZOOM || RequestedOrthoZoom > MAX_ORTHOZOOM)
 				{
 						return MCPError(TEXT("'orthoZoom' must be finite and within the engine MIN_ORTHOZOOM/MAX_ORTHOZOOM bounds"));
@@ -2469,11 +2472,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetViewportCamera(const TSharedPtr<FJson
 	{
 		ViewportClient->SetViewportType(NewViewportType);
 	}
-	if (Params->HasField(TEXT("location")))
+	if (HasParam(Params, TEXT("location")))
 	{
 		ViewportClient->SetViewLocation(OptionalVec3(Params, TEXT("location")));
 	}
-		if (Params->HasField(TEXT("rotation")))
+		if (HasParam(Params, TEXT("rotation")))
 		{
 				ViewportClient->SetViewRotation(OptionalRotator(Params, TEXT("rotation")));
 		}
@@ -3353,7 +3356,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetCVars(const TSharedPtr<FJsonObject>& 
 {
 	TArray<FString> Names;
 	const TArray<TSharedPtr<FJsonValue>>* NameArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("names"), NameArr) && NameArr)
+	if (TryGetArrayParam(Params, TEXT("names"), NameArr) && NameArr)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *NameArr)
 		{
@@ -3362,10 +3365,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetCVars(const TSharedPtr<FJsonObject>& 
 		}
 	}
 	FString Single;
-	if (Params->TryGetStringField(TEXT("name"), Single) && !Single.IsEmpty()) Names.Add(Single);
+	if (TryGetStringParam(Params, TEXT("name"), Single) && !Single.IsEmpty()) Names.Add(Single);
 
 	FString Pattern;
-	Params->TryGetStringField(TEXT("pattern"), Pattern);
+	TryGetStringParam(Params, TEXT("pattern"), Pattern);
 	if (Names.Num() == 0 && Pattern.IsEmpty())
 	{
 		return MCPError(TEXT("Supply 'name', 'names' (array) or 'pattern' (substring match against every registered console variable)"));
@@ -3390,7 +3393,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetCVars(const TSharedPtr<FJsonObject>& 
 	// carries help text, so the cap is a real one rather than a formality. It is
 	// reported when it bites so a truncated answer never reads as a complete one.
 	int32 Limit = 100;
-	Params->TryGetNumberField(TEXT("limit"), Limit);
+	TryGetNumberParam(Params, TEXT("limit"), Limit);
 	Limit = FMath::Clamp(Limit, 1, 1000);
 	int32 Matched = 0;
 	if (!Pattern.IsEmpty())
@@ -3433,7 +3436,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetCVars(const TSharedPtr<FJsonObject>& 
 	TArray<TPair<FString, FString>> Requests;
 	const TSharedPtr<FJsonObject>* CVarObj = nullptr;
 	const TArray<TSharedPtr<FJsonValue>>* CVarArr = nullptr;
-	if (Params->TryGetObjectField(TEXT("cvars"), CVarObj) && CVarObj && CVarObj->IsValid())
+	if (TryGetObjectParam(Params, TEXT("cvars"), CVarObj) && CVarObj && CVarObj->IsValid())
 	{
 		for (const auto& Pair : (*CVarObj)->Values)
 		{
@@ -3452,7 +3455,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetCVars(const TSharedPtr<FJsonObject>& 
 			}
 		}
 	}
-	else if (Params->TryGetArrayField(TEXT("cvars"), CVarArr) && CVarArr)
+	else if (TryGetArrayParam(Params, TEXT("cvars"), CVarArr) && CVarArr)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *CVarArr)
 		{

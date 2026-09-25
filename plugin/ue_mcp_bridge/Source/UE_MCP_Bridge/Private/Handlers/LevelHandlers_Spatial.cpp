@@ -56,8 +56,8 @@ namespace
 	bool ReadOptionalBoolStrict(const TSharedPtr<FJsonObject>& Json, const TCHAR* Field, bool DefaultValue, bool& Out)
 	{
 		Out = DefaultValue;
-		if (!Json || !Json->HasField(Field)) return true;
-		return Json->TryGetBoolField(Field, Out);
+		if (!HasParam(Json, Field)) return true;
+		return TryGetBoolParam(Json, Field, Out);
 	}
 
 	TSharedPtr<FJsonObject> BoundsToJson(const USceneComponent& Component)
@@ -196,7 +196,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 	if (auto Error = RequireString(Params, TEXT("componentName"), ComponentName)) return Error;
 
 	FString WorldScope = TEXT("editor");
-	if (Params->HasField(TEXT("world")) && !Params->TryGetStringField(TEXT("world"), WorldScope))
+	if (HasParam(Params, TEXT("world")) && !TryGetStringParam(Params, TEXT("world"), WorldScope))
 	{
 		return MCPError(TEXT("world must be editor or pie"));
 	}
@@ -235,13 +235,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 	const FTransform PreviousRelative = Component->GetRelativeTransform();
 	const FTransform PreviousWorld = Component->GetComponentTransform();
 	const TSharedPtr<FJsonObject>* RestoreJson = nullptr;
-	const bool bHasRestoreField = Params->HasField(TEXT("_restoreRelative"));
-	const bool bRestore = bHasRestoreField && Params->TryGetObjectField(TEXT("_restoreRelative"), RestoreJson) && *RestoreJson;
+	const bool bHasRestoreField = HasParam(Params, TEXT("_restoreRelative"));
+	const bool bRestore = bHasRestoreField && TryGetObjectParam(Params, TEXT("_restoreRelative"), RestoreJson) && *RestoreJson;
 	if (bHasRestoreField && !bRestore) return MCPError(TEXT("Invalid internal rollback transform"));
 	if (bRestore && bDryRun) return MCPError(TEXT("dryRun cannot be combined with internal rollback"));
 
 	FString Frame = TEXT("actor");
-	if (Params->HasField(TEXT("frame")) && !Params->TryGetStringField(TEXT("frame"), Frame))
+	if (HasParam(Params, TEXT("frame")) && !TryGetStringParam(Params, TEXT("frame"), Frame))
 	{
 		return MCPError(TEXT("frame must be world, actor, parent, or component"));
 	}
@@ -289,9 +289,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 		FrameRotation.Normalize();
 
 		const TSharedPtr<FJsonObject>* TranslationJson = nullptr;
-		if (Params->HasField(TEXT("translationDelta")))
+		if (HasParam(Params, TEXT("translationDelta")))
 		{
-			if (!Params->TryGetObjectField(TEXT("translationDelta"), TranslationJson) || !*TranslationJson)
+			if (!TryGetObjectParam(Params, TEXT("translationDelta"), TranslationJson) || !*TranslationJson)
 			{
 				return MCPError(TEXT("translationDelta must be an object with finite numeric values"));
 			}
@@ -311,13 +311,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 
 		const TSharedPtr<FJsonObject>* RotationJson = nullptr;
 		const TSharedPtr<FJsonObject>* ViewRotationJson = nullptr;
-		if (Params->HasField(TEXT("axisRotation")) && Params->HasField(TEXT("viewRotation")))
+		if (HasParam(Params, TEXT("axisRotation")) && HasParam(Params, TEXT("viewRotation")))
 		{
 			return MCPError(TEXT("axisRotation and viewRotation are mutually exclusive"));
 		}
-		if (Params->HasField(TEXT("axisRotation")))
+		if (HasParam(Params, TEXT("axisRotation")))
 		{
-			if (!Params->TryGetObjectField(TEXT("axisRotation"), RotationJson) || !*RotationJson)
+			if (!TryGetObjectParam(Params, TEXT("axisRotation"), RotationJson) || !*RotationJson)
 			{
 				return MCPError(TEXT("axisRotation must be an object"));
 			}
@@ -333,10 +333,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 			RotationAxisWorld = FrameRotation.RotateVector(NamedAxis(RotationAxis)).GetSafeNormal();
 			bHasRotation = !FMath::IsNearlyZero(RotationDegrees);
 		}
-		else if (Params->HasField(TEXT("viewRotation")))
+		else if (HasParam(Params, TEXT("viewRotation")))
 		{
 			FString ViewFrom, ViewDirection;
-			if (!Params->TryGetObjectField(TEXT("viewRotation"), ViewRotationJson) || !*ViewRotationJson ||
+			if (!TryGetObjectParam(Params, TEXT("viewRotation"), ViewRotationJson) || !*ViewRotationJson ||
 				!ResolveViewRotation(*ViewRotationJson, FrameRotation, ViewFrom, ViewDirection,
 					RotationAxis, RotationDegrees, RotationAxisWorld))
 			{
@@ -345,9 +345,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 			bHasRotation = true;
 		}
 
-		if (Params->HasField(TEXT("scaleMultiplier")))
+		if (HasParam(Params, TEXT("scaleMultiplier")))
 		{
-			if (!Params->TryGetNumberField(TEXT("scaleMultiplier"), ScaleMultiplier) ||
+			if (!TryGetNumberParam(Params, TEXT("scaleMultiplier"), ScaleMultiplier) ||
 				!FMath::IsFinite(ScaleMultiplier) || ScaleMultiplier <= 0.0)
 			{
 				return MCPError(TEXT("scaleMultiplier must be a finite number greater than zero"));
@@ -431,9 +431,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 		// axisRotation.degrees or named a viewpoint and let this resolve it.
 		Result->SetNumberField(TEXT("rotationDegrees"), RotationDegrees);
 		Result->SetObjectField(TEXT("resolvedRotationAxisWorld"), MCPVec3ToJsonObject(RotationAxisWorld));
-		if (Params->HasField(TEXT("viewRotation")))
+		if (HasParam(Params, TEXT("viewRotation")))
 		{
-			Result->SetObjectField(TEXT("viewRotation"), Params->GetObjectField(TEXT("viewRotation")));
+			Result->SetObjectField(TEXT("viewRotation"), TryGetParam(Params, TEXT("viewRotation"))->AsObject());
 		}
 	}
 	if (bHasScale) Result->SetNumberField(TEXT("scaleMultiplier"), ScaleMultiplier);
@@ -498,7 +498,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::NudgeComponent(const TSharedPtr<FJsonObje
 	RollbackPayload->SetStringField(TEXT("componentName"), Component->GetName());
 	RollbackPayload->SetStringField(TEXT("world"), WorldScope);
 	double PieInstance = 0.0;
-	if (Params->TryGetNumberField(TEXT("pieInstance"), PieInstance))
+	if (TryGetNumberParam(Params, TEXT("pieInstance"), PieInstance))
 	{
 		RollbackPayload->SetNumberField(TEXT("pieInstance"), PieInstance);
 	}

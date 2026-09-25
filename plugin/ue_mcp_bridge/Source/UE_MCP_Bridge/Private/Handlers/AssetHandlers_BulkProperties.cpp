@@ -114,7 +114,7 @@ namespace
 TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
-	if (!Params->TryGetArrayField(TEXT("items"), Items) || !Items)
+	if (!TryGetArrayParam(Params, TEXT("items"), Items) || !Items)
 	{
 		return MCPError(TEXT("Missing 'items' array"));
 	}
@@ -130,11 +130,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkSetAssetProperties(const TSharedPtr<F
 	}
 
 	bool bSave = true;
-	Params->TryGetBoolField(TEXT("save"), bSave);
+	TryGetBoolParam(Params, TEXT("save"), bSave);
 	bool bDryRun = false;
-	Params->TryGetBoolField(TEXT("dryRun"), bDryRun);
+	TryGetBoolParam(Params, TEXT("dryRun"), bDryRun);
 	bool bContinueOnError = false;
-	Params->TryGetBoolField(TEXT("continueOnError"), bContinueOnError);
+	TryGetBoolParam(Params, TEXT("continueOnError"), bContinueOnError);
 
 	TArray<FPreparedAssetWrite> PreparedAssets;
 	PreparedAssets.Reserve(Items->Num());

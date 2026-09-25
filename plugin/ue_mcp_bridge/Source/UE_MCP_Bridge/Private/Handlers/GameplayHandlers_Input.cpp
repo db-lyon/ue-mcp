@@ -452,7 +452,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 	{
 		auto CaptureClasses = [&](const TCHAR* ParamName, const auto& Objects)
 		{
-			if (!Params->HasField(ParamName)) return;
+			if (!HasParam(Params, ParamName)) return;
 			TArray<TSharedPtr<FJsonValue>> Entries;
 			for (const auto& Object : Objects)
 			{
@@ -480,7 +480,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 
 	// ── Modifiers ──
 	const TArray<TSharedPtr<FJsonValue>>* ModifiersArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("modifiers"), ModifiersArr) && ModifiersArr)
+	if (TryGetArrayParam(Params, TEXT("modifiers"), ModifiersArr) && ModifiersArr)
 	{
 		Mapping.Modifiers.Empty();
 		for (const auto& ModVal : *ModifiersArr)
@@ -631,7 +631,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetMappingModifiers(const TSharedPtr<F
 	// a null; report any failed specs instead of silently corrupting the asset.
 	TArray<TSharedPtr<FJsonValue>> FailedTriggers;
 	const TArray<TSharedPtr<FJsonValue>>* TriggersArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("triggers"), TriggersArr) && TriggersArr)
+	if (TryGetArrayParam(Params, TEXT("triggers"), TriggersArr) && TriggersArr)
 	{
 		TArray<TObjectPtr<UInputTrigger>> NewTriggers;
 		for (const auto& TrigVal : *TriggersArr)
@@ -810,7 +810,7 @@ namespace ImcEdit_Internal
 
 		int32 Idx = INDEX_NONE;
 		double NumIdx = 0;
-		if (Params->TryGetNumberField(TEXT("mappingIndex"), NumIdx))
+		if (TryGetNumberParam(Params, TEXT("mappingIndex"), NumIdx))
 		{
 			Idx = static_cast<int32>(NumIdx);
 			if (!Mappings.IsValidIndex(Idx))
@@ -822,8 +822,8 @@ namespace ImcEdit_Internal
 		}
 
 		FString ActionPath, KeyName;
-		const bool bHasAction = Params->TryGetStringField(TEXT("inputActionPath"), ActionPath) && !ActionPath.IsEmpty();
-		const bool bHasKey    = Params->TryGetStringField(TEXT("key"), KeyName) && !KeyName.IsEmpty();
+		const bool bHasAction = TryGetStringParam(Params, TEXT("inputActionPath"), ActionPath) && !ActionPath.IsEmpty();
+		const bool bHasKey    = TryGetStringParam(Params, TEXT("key"), KeyName) && !KeyName.IsEmpty();
 		if (!bHasAction && !bHasKey)
 		{
 			OutError = TEXT("Provide mappingIndex or (inputActionPath + key) to identify the mapping.");
@@ -869,9 +869,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveImcMapping(const TSharedPtr<FJso
 		// bad call and still errors.
 		FString ActionPath, KeyName;
 		const bool bNamedPair =
-			!Params->HasField(TEXT("mappingIndex"))
-			&& ((Params->TryGetStringField(TEXT("inputActionPath"), ActionPath) && !ActionPath.IsEmpty())
-				|| (Params->TryGetStringField(TEXT("key"), KeyName) && !KeyName.IsEmpty()));
+			!HasParam(Params, TEXT("mappingIndex"))
+			&& ((TryGetStringParam(Params, TEXT("inputActionPath"), ActionPath) && !ActionPath.IsEmpty())
+				|| (TryGetStringParam(Params, TEXT("key"), KeyName) && !KeyName.IsEmpty()));
 		if (bNamedPair)
 		{
 			auto Noop = MCPSuccess();
@@ -1352,7 +1352,7 @@ namespace InputDepth_Internal
 
 		int32 RequestedInstance = INDEX_NONE;
 		double RawInstance = 0.0;
-		const bool bHasInstance = Params->TryGetNumberField(TEXT("pieInstance"), RawInstance);
+		const bool bHasInstance = TryGetNumberParam(Params, TEXT("pieInstance"), RawInstance);
 		if (bHasInstance) RequestedInstance = FMath::RoundToInt(RawInstance);
 		const int32 RequestedPlayer = OptionalInt(Params, TEXT("playerIndex"), 0);
 
@@ -1543,9 +1543,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetActionTriggers(const TSharedPtr<FJs
 	if (!Action) return MCPAssetLoadError(ActionPath, TEXT("InputAction"));
 
 	const TArray<TSharedPtr<FJsonValue>>* TriggerSpecs = nullptr;
-	const bool bHasTriggers = Params->TryGetArrayField(TEXT("triggers"), TriggerSpecs) && TriggerSpecs != nullptr;
+	const bool bHasTriggers = TryGetArrayParam(Params, TEXT("triggers"), TriggerSpecs) && TriggerSpecs != nullptr;
 	const TArray<TSharedPtr<FJsonValue>>* ModifierSpecs = nullptr;
-	const bool bHasModifiers = Params->TryGetArrayField(TEXT("modifiers"), ModifierSpecs) && ModifierSpecs != nullptr;
+	const bool bHasModifiers = TryGetArrayParam(Params, TEXT("modifiers"), ModifierSpecs) && ModifierSpecs != nullptr;
 	const bool bClear = OptionalBool(Params, TEXT("clear"), false);
 
 	if (!bHasTriggers && !bHasModifiers && !bClear)
@@ -1684,7 +1684,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetPlayerMappableSettings(const TShare
 	if (auto Err = RequireString(Params, TEXT("inputActionPath"), ActionPath)) return Err;
 
 	FString MappingName;
-	const bool bHasMappingName = Params.IsValid() && Params->TryGetStringField(TEXT("mappingName"), MappingName);
+	const bool bHasMappingName = Params.IsValid() && TryGetStringParam(Params, TEXT("mappingName"), MappingName);
 	MappingName.TrimStartAndEndInline();
 	if (!bHasMappingName || MappingName.IsEmpty())
 	{
@@ -1692,9 +1692,9 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetPlayerMappableSettings(const TShare
 	}
 
 	FString DisplayName;
-	const bool bHasDisplayName = Params.IsValid() && Params->TryGetStringField(TEXT("displayName"), DisplayName);
+	const bool bHasDisplayName = Params.IsValid() && TryGetStringParam(Params, TEXT("displayName"), DisplayName);
 	FString DisplayCategory;
-	const bool bHasDisplayCategory = Params.IsValid() && Params->TryGetStringField(TEXT("displayCategory"), DisplayCategory);
+	const bool bHasDisplayCategory = Params.IsValid() && TryGetStringParam(Params, TEXT("displayCategory"), DisplayCategory);
 
 	UInputAction* Action = LoadAssetByPath<UInputAction>(ActionPath);
 	if (!Action) return MCPAssetLoadError(ActionPath, TEXT("InputAction"));

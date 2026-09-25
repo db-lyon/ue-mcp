@@ -293,7 +293,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::Sculpt(const TSharedPtr<FJsonObject>&
 	if (!Info) return MCPError(TEXT("Landscape has no LandscapeInfo (not registered yet)"));
 
 	const TSharedPtr<FJsonObject>* CenterObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("center"), CenterObj) || !CenterObj)
+	if (!TryGetObjectParam(Params, TEXT("center"), CenterObj) || !CenterObj)
 	{
 		return MCPError(TEXT("Missing 'center' ({x, y} in world space)"));
 	}
@@ -496,7 +496,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::PaintLayer(const TSharedPtr<FJsonObje
 	}
 
 	const TSharedPtr<FJsonObject>* CenterObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("center"), CenterObj) || !CenterObj)
+	if (!TryGetObjectParam(Params, TEXT("center"), CenterObj) || !CenterObj)
 	{
 		return MCPError(TEXT("Missing 'center' ({x, y} in world space)"));
 	}
@@ -833,7 +833,7 @@ namespace
 		const TSharedPtr<FJsonObject>* CenterObj = nullptr;
 		double R1 = 0.0, R2 = 0.0, R3 = 0.0, R4 = 0.0;
 
-		if (Params->TryGetObjectField(TEXT("region"), RegionObj) && RegionObj && RegionObj->IsValid())
+		if (TryGetObjectParam(Params, TEXT("region"), RegionObj) && RegionObj && RegionObj->IsValid())
 		{
 			const FString Space = OptionalString(Params, TEXT("space"), TEXT("quad")).ToLower();
 			if (!(*RegionObj)->TryGetNumberField(TEXT("minX"), R1)
@@ -870,7 +870,7 @@ namespace
 				return false;
 			}
 		}
-		else if (Params->TryGetObjectField(TEXT("center"), CenterObj) && CenterObj && CenterObj->IsValid())
+		else if (TryGetObjectParam(Params, TEXT("center"), CenterObj) && CenterObj && CenterObj->IsValid())
 		{
 			FVector2D Center(0.0, 0.0);
 			(*CenterObj)->TryGetNumberField(TEXT("x"), Center.X);
@@ -1276,19 +1276,19 @@ namespace
 	bool MCPLscReadWorldPoint(const TSharedPtr<FJsonObject>& Params, double& OutX, double& OutY)
 	{
 		const TSharedPtr<FJsonObject>* PointObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("point"), PointObj) && PointObj && PointObj->IsValid())
+		if (TryGetObjectParam(Params, TEXT("point"), PointObj) && PointObj && PointObj->IsValid())
 		{
 			(*PointObj)->TryGetNumberField(TEXT("x"), OutX);
 			(*PointObj)->TryGetNumberField(TEXT("y"), OutY);
 			return true;
 		}
-		if (Params->HasField(TEXT("x")) && Params->HasField(TEXT("y")))
+		if (HasParam(Params, TEXT("x")) && HasParam(Params, TEXT("y")))
 		{
 			OutX = OptionalNumber(Params, TEXT("x"), 0.0);
 			OutY = OptionalNumber(Params, TEXT("y"), 0.0);
 			return true;
 		}
-		if (Params->HasField(TEXT("worldX")) && Params->HasField(TEXT("worldY")))
+		if (HasParam(Params, TEXT("worldX")) && HasParam(Params, TEXT("worldY")))
 		{
 			OutX = OptionalNumber(Params, TEXT("worldX"), 0.0);
 			OutY = OptionalNumber(Params, TEXT("worldY"), 0.0);
@@ -1356,7 +1356,7 @@ namespace
 	 *  own contribution rather than the merged surface the renderer shows. */
 	bool MCPLscWantsEditLayerRead(const TSharedPtr<FJsonObject>& Params)
 	{
-		return Params->HasField(TEXT("editLayer")) || Params->HasField(TEXT("editLayerIndex"));
+		return HasParam(Params, TEXT("editLayer")) || HasParam(Params, TEXT("editLayerIndex"));
 	}
 
 	/** Resolve the layer to read from, when one was named. */
@@ -1448,7 +1448,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetHeightRegion(const TSharedPtr<FJso
 
 	FString Base64;
 	const TArray<TSharedPtr<FJsonValue>>* HeightArray = nullptr;
-	if (Params->TryGetStringField(TEXT("heightsBase64"), Base64) && !Base64.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("heightsBase64"), Base64) && !Base64.IsEmpty())
 	{
 		FString DecodeError;
 		if (!MCPLscDecodeHeights(Base64, Count, NewHeights, DecodeError))
@@ -1463,7 +1463,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetHeightRegion(const TSharedPtr<FJso
 		}
 		Source = TEXT("heightsBase64");
 	}
-	else if (Params->TryGetArrayField(TEXT("heights"), HeightArray) && HeightArray)
+	else if (TryGetArrayParam(Params, TEXT("heights"), HeightArray) && HeightArray)
 	{
 		if (HeightArray->Num() != Count)
 		{
@@ -1481,9 +1481,9 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetHeightRegion(const TSharedPtr<FJso
 		}
 		Source = TEXT("heights");
 	}
-	else if (Params->HasField(TEXT("height")) || Params->HasField(TEXT("rawHeight")))
+	else if (HasParam(Params, TEXT("height")) || HasParam(Params, TEXT("rawHeight")))
 	{
-		const bool bRaw = Params->HasField(TEXT("rawHeight"));
+		const bool bRaw = HasParam(Params, TEXT("rawHeight"));
 		const double Value = bRaw
 			? OptionalNumber(Params, TEXT("rawHeight"), LandscapeDataAccess::MidValue)
 			: OptionalNumber(Params, TEXT("height"), 0.0);
@@ -1872,7 +1872,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SculptRegion(const TSharedPtr<FJsonOb
 	double FlattenTargetRaw = MeanRaw;
 	if (Operator == TEXT("flatten") || Operator == TEXT("plateau"))
 	{
-		if (Params->HasField(TEXT("targetHeight")))
+		if (HasParam(Params, TEXT("targetHeight")))
 		{
 			FlattenTargetRaw = Space.WorldZToRaw(OptionalNumber(Params, TEXT("targetHeight"), 0.0));
 		}
@@ -2555,7 +2555,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ImportHeightmap(const TSharedPtr<FJso
 	// range for its own elevation band, and the useful control is what that
 	// band means in world Z here.
 	bool bRemapped = false;
-	if (Params->HasField(TEXT("minHeight")) && Params->HasField(TEXT("maxHeight")))
+	if (HasParam(Params, TEXT("minHeight")) && HasParam(Params, TEXT("maxHeight")))
 	{
 		const double MinZ = OptionalNumber(Params, TEXT("minHeight"), 0.0);
 		const double MaxZ = OptionalNumber(Params, TEXT("maxHeight"), 0.0);
@@ -2941,7 +2941,7 @@ namespace
 	{
 		FString Base64;
 		const TArray<TSharedPtr<FJsonValue>>* WeightArray = nullptr;
-		if (Params->TryGetStringField(TEXT("weightsBase64"), Base64) && !Base64.IsEmpty())
+		if (TryGetStringParam(Params, TEXT("weightsBase64"), Base64) && !Base64.IsEmpty())
 		{
 			TArray<uint8> Bytes;
 			if (!FBase64::Decode(Base64, Bytes))
@@ -2960,7 +2960,7 @@ namespace
 			OutSource = TEXT("weightsBase64");
 			return true;
 		}
-		if (Params->TryGetArrayField(TEXT("weights"), WeightArray) && WeightArray)
+		if (TryGetArrayParam(Params, TEXT("weights"), WeightArray) && WeightArray)
 		{
 			if (WeightArray->Num() != Count)
 			{
@@ -2978,9 +2978,9 @@ namespace
 			OutSource = TEXT("weights");
 			return true;
 		}
-		if (Params->HasField(TEXT("weight")) || Params->HasField(TEXT("strength")))
+		if (HasParam(Params, TEXT("weight")) || HasParam(Params, TEXT("strength")))
 		{
-			const double Value = Params->HasField(TEXT("weight"))
+			const double Value = HasParam(Params, TEXT("weight"))
 				? OptionalNumber(Params, TEXT("weight"), 1.0)
 				: OptionalNumber(Params, TEXT("strength"), 1.0);
 			// 0..1 is the schema's own convention for a paint strength, so a
@@ -3263,7 +3263,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::GetHoles(const TSharedPtr<FJsonObject
 	FMCPLscRegion Region;
 	bool bPointQuery = false;
 	int32 QuadX = 0, QuadY = 0;
-	if (!Params->HasField(TEXT("region")) && !Params->HasField(TEXT("center")))
+	if (!HasParam(Params, TEXT("region")) && !HasParam(Params, TEXT("center")))
 	{
 		double Ignored = 0.0;
 		if (MCPLscReadWorldPoint(Params, Ignored, Ignored))
@@ -3336,7 +3336,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetHoles(const TSharedPtr<FJsonObject
 	FMCPLscRegion Region;
 	bool bPointWrite = false;
 	int32 QuadX = 0, QuadY = 0;
-	if (!Params->HasField(TEXT("region")) && !Params->HasField(TEXT("center")))
+	if (!HasParam(Params, TEXT("region")) && !HasParam(Params, TEXT("center")))
 	{
 		double Ignored = 0.0;
 		if (MCPLscReadWorldPoint(Params, Ignored, Ignored))
@@ -3355,7 +3355,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetHoles(const TSharedPtr<FJsonObject
 		// action treats an absent region as "all of it", which is a reasonable
 		// default for a read and for a sculpt; for this one it would punch every
 		// vertex of the terrain into a hole on a call that forgot a parameter.
-		if (!Params->HasField(TEXT("region")) && !Params->HasField(TEXT("center")))
+		if (!HasParam(Params, TEXT("region")) && !HasParam(Params, TEXT("center")))
 		{
 			return MCPError(
 				TEXT("landscape(set_holes) needs an explicit target: 'region' {minX,minY,maxX,maxY}, or 'center' {x,y} with 'radius', or x and y for a single vertex. ")
@@ -3369,7 +3369,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetHoles(const TSharedPtr<FJsonObject
 	FString Source;
 	const TArray<TSharedPtr<FJsonValue>>* MaskArray = nullptr;
 	FString WeightsBase64;
-	if (Params->TryGetStringField(TEXT("weightsBase64"), WeightsBase64) && !WeightsBase64.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("weightsBase64"), WeightsBase64) && !WeightsBase64.IsEmpty())
 	{
 		// The form the rollback record carries: the exact previous visibility
 		// weights, restored byte for byte rather than re-thresholded.
@@ -3387,7 +3387,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SetHoles(const TSharedPtr<FJsonObject
 		NewWeights = MoveTemp(Bytes);
 		Source = TEXT("weightsBase64");
 	}
-	else if (Params->TryGetArrayField(TEXT("holes"), MaskArray) && MaskArray)
+	else if (TryGetArrayParam(Params, TEXT("holes"), MaskArray) && MaskArray)
 	{
 		if (MaskArray->Num() != Count)
 		{
@@ -3494,7 +3494,7 @@ namespace
 		const TSharedPtr<FJsonObject>& Params, FMCPLscGeoBounds& Out, FString& OutError)
 	{
 		const TSharedPtr<FJsonObject>* Obj = nullptr;
-		if (!Params->TryGetObjectField(TEXT("boundsLatLon"), Obj) || !Obj || !Obj->IsValid())
+		if (!TryGetObjectParam(Params, TEXT("boundsLatLon"), Obj) || !Obj || !Obj->IsValid())
 		{
 			OutError = TEXT("Missing 'boundsLatLon' {minLat, minLon, maxLat, maxLon} in decimal degrees.");
 			return false;
@@ -3705,7 +3705,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::PlanRealWorldLandscape(const TSharedP
 	double MetersPerLat = 0.0, MetersPerLon = 0.0;
 
 	const TSharedPtr<FJsonObject>* SizeObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("realWorldSizeMeters"), SizeObj) && SizeObj && SizeObj->IsValid())
+	if (TryGetObjectParam(Params, TEXT("realWorldSizeMeters"), SizeObj) && SizeObj && SizeObj->IsValid())
 	{
 		(*SizeObj)->TryGetNumberField(TEXT("x"), GroundMetersX);
 		(*SizeObj)->TryGetNumberField(TEXT("y"), GroundMetersY);
@@ -3715,7 +3715,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::PlanRealWorldLandscape(const TSharedP
 		}
 		ExtentSource = TEXT("realWorldSizeMeters");
 	}
-	else if (Params->HasField(TEXT("boundsLatLon")))
+	else if (HasParam(Params, TEXT("boundsLatLon")))
 	{
 		FString GeoError;
 		if (!MCPLscReadGeoBounds(Params, Geo, GeoError)) return MCPError(GeoError);
@@ -3739,7 +3739,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::PlanRealWorldLandscape(const TSharedP
 	}
 
 	// ── the elevation band ──────────────────────────────────────────────────
-	if (!Params->HasField(TEXT("minElevationMeters")) || !Params->HasField(TEXT("maxElevationMeters")))
+	if (!HasParam(Params, TEXT("minElevationMeters")) || !HasParam(Params, TEXT("maxElevationMeters")))
 	{
 		return MCPError(
 			TEXT("Missing 'minElevationMeters' and 'maxElevationMeters'. They are what the heightmap's value range means in the real world, ")
@@ -4087,7 +4087,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ProjectGeoCoordinates(const TSharedPt
 	if (!MCPLscReadGeoBounds(Params, Geo, GeoError)) return MCPError(GeoError);
 
 	const TArray<TSharedPtr<FJsonValue>>* PointArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("points"), PointArray) || !PointArray)
+	if (!TryGetArrayParam(Params, TEXT("points"), PointArray) || !PointArray)
 	{
 		return MCPError(
 			TEXT("Missing 'points'. Each entry is either {lat, lon} to place a geographic coordinate on the landscape, or {x, y} to ask what geographic coordinate a world position corresponds to. An optional 'name' is echoed back."));

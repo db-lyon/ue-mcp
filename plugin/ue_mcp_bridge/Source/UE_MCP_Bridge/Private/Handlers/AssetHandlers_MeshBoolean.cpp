@@ -484,6 +484,7 @@ void WriteMeshStats(const TSharedPtr<FJsonObject>& Out, const TCHAR* Prefix, USt
 
 void FAssetMeshBooleanHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("asset"));
 	// A boolean over two dense meshes, plus the copy in and the rebuild out, is
 	// minutes rather than milliseconds on a repair-sized asset. The default
 	// handler timeout would report a hang while the editor was still working.

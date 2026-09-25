@@ -34,6 +34,13 @@ const WIDGET_NAME_ALIASES = ["widgetName", "widgetDisplayName"] as const;
 /** Legacy or engine-side spellings of the canonical `parentWidgetName`. */
 const PARENT_WIDGET_ALIASES = ["parentWidgetName", "parentWidget"] as const;
 
+/** Each group is one parameter after normalization, so the editor reading any member is enough. */
+export const WIDGET_PARAM_GROUPS: readonly (readonly string[])[] = [
+  [...ASSET_PATH_ALIASES, "name", "packagePath"],
+  WIDGET_NAME_ALIASES,
+  PARENT_WIDGET_ALIASES,
+];
+
 /**
  * Actions whose bridge handler is addressed by asset name plus package path
  * rather than by one asset path. They accept the canonical `assetPath` like

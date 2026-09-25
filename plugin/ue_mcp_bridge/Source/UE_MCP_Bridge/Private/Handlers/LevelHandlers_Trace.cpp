@@ -159,17 +159,17 @@ namespace
 	/** One line_trace. Shared by the single-item handler and bulk_line_trace. */
 	static TSharedPtr<FJsonValue> ExecuteLineTrace(UWorld* World, const TSharedPtr<FJsonObject>& Params)
 	{
-		if (!Params->HasField(TEXT("start")))
+		if (!HasParam(Params, TEXT("start")))
 		{
 			return MCPError(TEXT("Missing 'start' vector"));
 		}
 		const FVector Start = OptionalVec3(Params, TEXT("start"));
 		FVector End;
-		if (Params->HasField(TEXT("end")))
+		if (HasParam(Params, TEXT("end")))
 		{
 			End = OptionalVec3(Params, TEXT("end"));
 		}
-		else if (Params->HasField(TEXT("direction")))
+		else if (HasParam(Params, TEXT("direction")))
 		{
 			FVector Dir = OptionalVec3(Params, TEXT("direction"));
 			if (!Dir.Normalize())
@@ -208,7 +208,7 @@ namespace
 		Query.bReturnFaceIndex = bTraceComplex;
 
 		const TArray<TSharedPtr<FJsonValue>>* IgnoreArr = nullptr;
-		if (Params->TryGetArrayField(TEXT("ignoreActors"), IgnoreArr) && IgnoreArr)
+		if (TryGetArrayParam(Params, TEXT("ignoreActors"), IgnoreArr) && IgnoreArr)
 		{
 			for (const TSharedPtr<FJsonValue>& V : *IgnoreArr)
 			{
@@ -269,7 +269,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::BulkLineTrace(const TSharedPtr<FJsonObjec
 
 	constexpr int32 MaxBulkLineTraces = 256;
 	const TArray<TSharedPtr<FJsonValue>>* Traces = nullptr;
-	if (!Params->TryGetArrayField(TEXT("traces"), Traces) || !Traces)
+	if (!TryGetArrayParam(Params, TEXT("traces"), Traces) || !Traces)
 	{
 		return MCPError(TEXT("Missing 'traces' array"));
 	}

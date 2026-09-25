@@ -373,7 +373,7 @@ namespace MCPMaterialDesigner
 			Start = FindAnyObject(AssetPath);
 			if (!Start) return MCPError(FString::Printf(TEXT("Nothing found at assetPath '%s'. Pass a DynamicMaterialInstance, a DynamicMaterialModel, or an object path inside one."), *AssetPath));
 		}
-		else if (Params->HasField(TEXT("actorLabel")) || Params->HasField(TEXT("actorPath")))
+		else if (HasParam(Params, TEXT("actorLabel")) || HasParam(Params, TEXT("actorPath")))
 		{
 			UWorld* World = ResolveWorldFromParams(Params, TEXT("editor"));
 			if (!World) return MCPError(TEXT("The requested world is not available. Start PIE first, or pass world=editor."));
@@ -385,7 +385,7 @@ namespace MCPMaterialDesigner
 
 			const FString ComponentName = OptionalString(Params, TEXT("componentName"));
 			const FString SlotName = OptionalString(Params, TEXT("slotName"));
-			const bool bSlotIndexGiven = Params->HasField(TEXT("slotIndex"));
+			const bool bSlotIndexGiven = HasParam(Params, TEXT("slotIndex"));
 			const int32 SlotIndex = OptionalInt(Params, TEXT("slotIndex"), 0);
 
 			TArray<UPrimitiveComponent*> Components;
@@ -462,7 +462,7 @@ namespace MCPMaterialDesigner
 	{
 		const TArray<UObject*> Slots = GetObjectArrayProp(T.EditorOnlyData, TEXT("Slots"));
 		const TArray<TPair<FString, UObject*>> Mapped = PropertySlots(T.EditorOnlyData);
-		TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("designerSlot"));
+		TSharedPtr<FJsonValue> Field = TryGetParam(Params, TEXT("designerSlot"));
 		FString Text;
 		int32 Index = INDEX_NONE;
 		if (Field.IsValid() && Field->Type == EJson::Number)
@@ -519,7 +519,7 @@ namespace MCPMaterialDesigner
 	inline UObject* ResolveLayer(UObject* Slot, const TSharedPtr<FJsonObject>& Params, FString& OutError)
 	{
 		const TArray<UObject*> Layers = GetObjectArrayProp(Slot, TEXT("LayerObjects"));
-		if (Params->HasField(TEXT("layerIndex")))
+		if (HasParam(Params, TEXT("layerIndex")))
 		{
 			const int32 Index = OptionalInt(Params, TEXT("layerIndex"), -1);
 			if (Layers.IsValidIndex(Index) && Layers[Index]) return Layers[Index];
@@ -806,7 +806,7 @@ namespace MCPMaterialDesigner
 			return nullptr;
 		}
 
-		if (Params->HasField(TEXT("layerIndex")) || Params->HasField(TEXT("layerName")))
+		if (HasParam(Params, TEXT("layerIndex")) || HasParam(Params, TEXT("layerName")))
 		{
 			FString Error;
 			UObject* Slot = ResolveSlot(T, Params, TEXT("BaseColor"), Error);
@@ -923,13 +923,13 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterialDesigner(const TSharedPtr<
 
 	// Optional narrowing to one slot and/or layer.
 	UObject* OnlySlot = nullptr;
-	if (Params->HasField(TEXT("designerSlot")))
+	if (HasParam(Params, TEXT("designerSlot")))
 	{
 		FString Error;
 		OnlySlot = ResolveSlot(T, Params, FString(), Error);
 		if (!OnlySlot) return MCPError(Error);
 	}
-	const bool bOnlyLayer = Params->HasField(TEXT("layerIndex"));
+	const bool bOnlyLayer = HasParam(Params, TEXT("layerIndex"));
 	const int32 OnlyLayer = OptionalInt(Params, TEXT("layerIndex"), -1);
 
 	TArray<TSharedPtr<FJsonValue>> SlotItems;
@@ -996,7 +996,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialDesignerValue(const TShared
 	using namespace MCPMaterialDesigner;
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
-	TSharedPtr<FJsonValue> Value = Params->TryGetField(TEXT("value"));
+	TSharedPtr<FJsonValue> Value = TryGetParam(Params, TEXT("value"));
 	if (!Value.IsValid()) return MCPError(TEXT("Missing required parameter 'value'"));
 
 	FDesignerClasses C;

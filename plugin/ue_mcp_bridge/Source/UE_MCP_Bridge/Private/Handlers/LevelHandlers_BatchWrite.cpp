@@ -86,7 +86,7 @@ namespace
 		FMCPBatchSelector& OutSelector)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* LabelValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("actorLabels"), LabelValues) && LabelValues)
+		if (TryGetArrayParam(Params, TEXT("actorLabels"), LabelValues) && LabelValues)
 		{
 			OutSelector.ActorLabels = JsonArrayToStringList(LabelValues);
 		}
@@ -264,7 +264,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchSetActorProperties(const TSharedPtr<
 	REQUIRE_EDITOR_WORLD(World);
 
 	const TSharedPtr<FJsonObject>* PropertiesObject = nullptr;
-	if (!Params->TryGetObjectField(TEXT("properties"), PropertiesObject) ||
+	if (!TryGetObjectParam(Params, TEXT("properties"), PropertiesObject) ||
 		!PropertiesObject || !(*PropertiesObject).IsValid() || (*PropertiesObject)->Values.Num() == 0)
 	{
 		return MCPError(TEXT("Missing 'properties' (an object of propertyName -> value; dotted paths are supported)"));
@@ -457,7 +457,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::BulkSetComponentProperty(const TSharedPtr
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
-	const TSharedPtr<FJsonValue>* ValueField = Params->Values.Find(TEXT("value"));
+	const TSharedPtr<FJsonValue> ValueParam = TryGetParam(Params, TEXT("value"));
+	const TSharedPtr<FJsonValue>* ValueField = ValueParam.IsValid() ? &ValueParam : nullptr;
 	if (!ValueField)
 	{
 		return MCPError(TEXT("Missing 'value' parameter (pass JSON null to clear an object reference)"));
@@ -850,7 +851,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorsBatch(const TSharedPtr<FJsonOb
 		Params, TEXT("transactionLabel"), TEXT("MCP spawn actors batch"));
 
 	const TSharedPtr<FJsonObject>* SharedProperties = nullptr;
-	Params->TryGetObjectField(TEXT("properties"), SharedProperties);
+	TryGetObjectParam(Params, TEXT("properties"), SharedProperties);
 
 	// ── Build the transform list ────────────────────────────────────────────
 	//
@@ -871,9 +872,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnActorsBatch(const TSharedPtr<FJsonOb
 	const TArray<TSharedPtr<FJsonValue>>* InstanceValues = nullptr;
 	const TSharedPtr<FJsonObject>* FromComponents = nullptr;
 	const TSharedPtr<FJsonObject>* AlongSpline = nullptr;
-	const bool bHasInstances = Params->TryGetArrayField(TEXT("instances"), InstanceValues) && InstanceValues;
-	const bool bHasFromComponents = Params->TryGetObjectField(TEXT("fromComponents"), FromComponents) && FromComponents;
-	const bool bHasAlongSpline = Params->TryGetObjectField(TEXT("alongSpline"), AlongSpline) && AlongSpline;
+	const bool bHasInstances = TryGetArrayParam(Params, TEXT("instances"), InstanceValues) && InstanceValues;
+	const bool bHasFromComponents = TryGetObjectParam(Params, TEXT("fromComponents"), FromComponents) && FromComponents;
+	const bool bHasAlongSpline = TryGetObjectParam(Params, TEXT("alongSpline"), AlongSpline) && AlongSpline;
 
 	const int32 SourceCount = (bHasInstances ? 1 : 0) + (bHasFromComponents ? 1 : 0) + (bHasAlongSpline ? 1 : 0);
 	if (SourceCount == 0)
@@ -1249,7 +1250,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentMaterials(const TSharedPtr<FJ
 	const FString SingleMaterialPath = OptionalString(Params, TEXT("material"));
 
 	const TArray<TSharedPtr<FJsonValue>>* MaterialValues = nullptr;
-	const bool bHasMaterialList = Params->TryGetArrayField(TEXT("materials"), MaterialValues) && MaterialValues;
+	const bool bHasMaterialList = TryGetArrayParam(Params, TEXT("materials"), MaterialValues) && MaterialValues;
 
 	const int32 ModeCount = (bHasMaterialList ? 1 : 0) + (SingleMaterialPath.IsEmpty() ? 0 : 1) + (bClearOverrides ? 1 : 0);
 	if (ModeCount == 0)
@@ -1487,12 +1488,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorHLODLayer(const TSharedPtr<FJsonO
 
 	// null clears the override, which is a legitimate request and has to be
 	// distinguishable from "the parameter was omitted".
-	if (!Params->HasField(TEXT("hlodLayer")))
+	if (!HasParam(Params, TEXT("hlodLayer")))
 	{
 		return MCPError(TEXT("Missing 'hlodLayer': an HLODLayer asset path, or null to clear the per-actor override"));
 	}
 	FString LayerPath;
-	Params->TryGetStringField(TEXT("hlodLayer"), LayerPath);
+	TryGetStringParam(Params, TEXT("hlodLayer"), LayerPath);
 	LayerPath.TrimStartAndEndInline();
 
 	UHLODLayer* Layer = nullptr;
@@ -1510,7 +1511,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorHLODLayer(const TSharedPtr<FJsonO
 	}
 
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), false);
-	const bool bHasAutoLODField = Params->HasField(TEXT("enableAutoLODGeneration"));
+	const bool bHasAutoLODField = HasParam(Params, TEXT("enableAutoLODGeneration"));
 	const bool bEnableAutoLOD = OptionalBool(Params, TEXT("enableAutoLODGeneration"), true);
 	const FString TransactionLabel = OptionalString(
 		Params, TEXT("transactionLabel"), TEXT("MCP set actor HLOD layer"));

@@ -253,7 +253,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RerunConstruction(const TSharedPtr<FJsonO
 	TArray<FString> ActorLabels;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* LabelValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("actorLabels"), LabelValues) && LabelValues)
+		if (TryGetArrayParam(Params, TEXT("actorLabels"), LabelValues) && LabelValues)
 		{
 			ActorLabels = JsonArrayToStringList(LabelValues);
 		}
@@ -411,7 +411,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RecreatePhysicsState(const TSharedPtr<FJs
 	TArray<FString> ActorLabels;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* LabelValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("actorLabels"), LabelValues) && LabelValues)
+		if (TryGetArrayParam(Params, TEXT("actorLabels"), LabelValues) && LabelValues)
 		{
 			ActorLabels = JsonArrayToStringList(LabelValues);
 		}

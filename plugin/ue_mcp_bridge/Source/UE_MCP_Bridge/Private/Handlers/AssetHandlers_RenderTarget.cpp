@@ -103,13 +103,13 @@ namespace
 
 	bool TryReadColor(const TSharedPtr<FJsonObject>& Params, FLinearColor& OutColor, FString& OutError)
 	{
-		if (!Params->HasField(TEXT("clearColor")))
+		if (!HasParam(Params, TEXT("clearColor")))
 		{
 			return true;
 		}
 
 		const TSharedPtr<FJsonObject>* ColorObject = nullptr;
-		if (!Params->TryGetObjectField(TEXT("clearColor"), ColorObject) || !ColorObject || !ColorObject->IsValid())
+		if (!TryGetObjectParam(Params, TEXT("clearColor"), ColorObject) || !ColorObject || !ColorObject->IsValid())
 		{
 			OutError = TEXT("clearColor must be an object with numeric r, g, b, and a channels");
 			return false;

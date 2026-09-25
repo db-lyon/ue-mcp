@@ -18,6 +18,8 @@
 
 void FPhysicsHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("physics"));
 	Registry.RegisterHandler(TEXT("set_collision_profile"), &SetCollisionProfile);
 	Registry.RegisterHandler(TEXT("set_collision_enabled"), &SetCollisionEnabled);
 	Registry.RegisterHandler(TEXT("set_collision"), &SetCollision);
@@ -186,8 +188,8 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetPhysicsEnabled(const TSharedPtr<FJso
 	// silently no-opped. Accept either spelling (simulate | enabled) and error
 	// explicitly when neither is present rather than succeeding silently.
 	bool bEnabled = true;
-	if (!Params->TryGetBoolField(TEXT("simulate"), bEnabled) &&
-		!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+	if (!TryGetBoolParam(Params, TEXT("simulate"), bEnabled) &&
+		!TryGetBoolParam(Params, TEXT("enabled"), bEnabled))
 	{
 		return MCPError(TEXT("Missing 'simulate' (aka 'enabled') parameter (true/false)"));
 	}
@@ -291,9 +293,9 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollisionEnabled(const TSharedPtr<FJ
 	// failed on a parameter the caller had supplied under the documented name.
 	// Both spellings are read, and the error below names both.
 	FString CollisionType;
-	if (!Params->TryGetStringField(TEXT("collisionType"), CollisionType) || CollisionType.IsEmpty())
+	if (!TryGetStringParam(Params, TEXT("collisionType"), CollisionType) || CollisionType.IsEmpty())
 	{
-		if (!Params->TryGetStringField(TEXT("collisionEnabled"), CollisionType) || CollisionType.IsEmpty())
+		if (!TryGetStringParam(Params, TEXT("collisionEnabled"), CollisionType) || CollisionType.IsEmpty())
 		{
 			return MCPError(TEXT(
 				"Missing 'collisionEnabled' (aka 'collisionType'). Pass one of NoCollision, QueryOnly, PhysicsOnly "
@@ -436,7 +438,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollision(const TSharedPtr<FJsonObje
 
 	FString AssetPath;
 	FString ActorLabel;
-	if (Params->TryGetStringField(TEXT("assetPath"), AssetPath) && !AssetPath.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("assetPath"), AssetPath) && !AssetPath.IsEmpty())
 	{
 		Blueprint = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(AssetPath));
 		if (!Blueprint)
@@ -458,8 +460,8 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollision(const TSharedPtr<FJsonObje
 		Targets.Add(Prim);
 		TargetDesc = FString::Printf(TEXT("%s:%s"), *AssetPath, *ComponentName);
 	}
-	else if ((Params->TryGetStringField(TEXT("actorLabel"), ActorLabel) && !ActorLabel.IsEmpty())
-		|| Params->HasField(TEXT("actorPath")))
+	else if ((TryGetStringParam(Params, TEXT("actorLabel"), ActorLabel) && !ActorLabel.IsEmpty())
+		|| HasParam(Params, TEXT("actorPath")))
 	{
 		UWorld* World = GetEditorWorld();
 		if (!World) return MCPError(TEXT("No editor world available"));
@@ -522,7 +524,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetCollision(const TSharedPtr<FJsonObje
 	// fails before any mutation.
 	TArray<TPair<ECollisionChannel, ECollisionResponse>> ChannelResponses;
 	const TSharedPtr<FJsonObject>* ResponsesObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("responses"), ResponsesObj) && ResponsesObj && (*ResponsesObj).IsValid())
+	if (TryGetObjectParam(Params, TEXT("responses"), ResponsesObj) && ResponsesObj && (*ResponsesObj).IsValid())
 	{
 		for (const auto& Pair : (*ResponsesObj)->Values)
 		{
@@ -799,22 +801,22 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 		if (!bCapturedPrev)
 		{
 			double Mass = 0.0;
-			if (Params->TryGetNumberField(TEXT("mass"), Mass))
+			if (TryGetNumberParam(Params, TEXT("mass"), Mass))
 			{
 				PrevPayload->SetNumberField(TEXT("mass"), BodyInstance->GetMassOverride());
 			}
 			double LinearDamping = 0.0;
-			if (Params->TryGetNumberField(TEXT("linearDamping"), LinearDamping))
+			if (TryGetNumberParam(Params, TEXT("linearDamping"), LinearDamping))
 			{
 				PrevPayload->SetNumberField(TEXT("linearDamping"), BodyInstance->LinearDamping);
 			}
 			double AngularDamping = 0.0;
-			if (Params->TryGetNumberField(TEXT("angularDamping"), AngularDamping))
+			if (TryGetNumberParam(Params, TEXT("angularDamping"), AngularDamping))
 			{
 				PrevPayload->SetNumberField(TEXT("angularDamping"), BodyInstance->AngularDamping);
 			}
 			bool bEnableGravity = true;
-			if (Params->TryGetBoolField(TEXT("enableGravity"), bEnableGravity))
+			if (TryGetBoolParam(Params, TEXT("enableGravity"), bEnableGravity))
 			{
 				PrevPayload->SetBoolField(TEXT("enableGravity"), BodyInstance->bEnableGravity);
 			}
@@ -823,7 +825,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 
 		// Set mass override if provided
 		double Mass = 0.0;
-		if (Params->TryGetNumberField(TEXT("mass"), Mass))
+		if (TryGetNumberParam(Params, TEXT("mass"), Mass))
 		{
 			BodyInstance->SetMassOverride(Mass);
 			if (ComponentsModified == 0) PropertiesSet.Add(TEXT("mass"));
@@ -831,7 +833,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 
 		// Set linear damping if provided
 		double LinearDamping = 0.0;
-		if (Params->TryGetNumberField(TEXT("linearDamping"), LinearDamping))
+		if (TryGetNumberParam(Params, TEXT("linearDamping"), LinearDamping))
 		{
 			BodyInstance->LinearDamping = LinearDamping;
 			PrimComp->SetLinearDamping(LinearDamping);
@@ -840,7 +842,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 
 		// Set angular damping if provided
 		double AngularDamping = 0.0;
-		if (Params->TryGetNumberField(TEXT("angularDamping"), AngularDamping))
+		if (TryGetNumberParam(Params, TEXT("angularDamping"), AngularDamping))
 		{
 			BodyInstance->AngularDamping = AngularDamping;
 			PrimComp->SetAngularDamping(AngularDamping);
@@ -849,7 +851,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::SetBodyProperties(const TSharedPtr<FJso
 
 		// Set gravity enabled if provided
 		bool bEnableGravity = true;
-		if (Params->TryGetBoolField(TEXT("enableGravity"), bEnableGravity))
+		if (TryGetBoolParam(Params, TEXT("enableGravity"), bEnableGravity))
 		{
 			PrimComp->SetEnableGravity(bEnableGravity);
 			if (ComponentsModified == 0) PropertiesSet.Add(TEXT("enableGravity"));
@@ -980,7 +982,7 @@ TSharedPtr<FJsonValue> FPhysicsHandlers::AddImpulse(const TSharedPtr<FJsonObject
 	const FVector AngularBefore = Prim->GetPhysicsAngularVelocityInDegrees();
 
 	const TSharedPtr<FJsonObject>* AtLoc = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), AtLoc) && AtLoc)
+	if (TryGetObjectParam(Params, TEXT("location"), AtLoc) && AtLoc)
 	{
 		FVector Loc = FVector::ZeroVector; ReadVec3Fields(*AtLoc, Loc);
 		Prim->AddImpulseAtLocation(Vec, Loc, Bone);

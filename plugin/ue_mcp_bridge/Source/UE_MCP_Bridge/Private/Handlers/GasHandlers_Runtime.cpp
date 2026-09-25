@@ -318,7 +318,7 @@ TSharedPtr<FJsonValue> FGasHandlers::ApplyEffect(const TSharedPtr<FJsonObject>& 
 	// tag when the key resolves to one; otherwise use the FName overload.
 	const TSharedPtr<FJsonObject>* SetByCaller = nullptr;
 	TArray<FString> AppliedKeys;
-	if (Params->TryGetObjectField(TEXT("setByCaller"), SetByCaller) && SetByCaller && (*SetByCaller).IsValid())
+	if (TryGetObjectParam(Params, TEXT("setByCaller"), SetByCaller) && SetByCaller && (*SetByCaller).IsValid())
 	{
 		for (const auto& KV : (*SetByCaller)->Values)
 		{
@@ -591,7 +591,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAttribute(const TSharedPtr<FJsonObject>&
 	if (auto Err = RequireString(Params, TEXT("attribute"), AttrName)) return Err;
 
 	double NewValue = 0.0;
-	if (!Params->TryGetNumberField(TEXT("value"), NewValue))
+	if (!TryGetNumberParam(Params, TEXT("value"), NewValue))
 	{
 		return MCPError(TEXT("Missing required parameter 'value'"));
 	}
@@ -862,7 +862,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetLiveAttributeValue(const TSharedPtr<FJso
 	MCP_CHECK_GAME_THREAD();
 
 	double NewValue = 0.0;
-	if (!Params->TryGetNumberField(TEXT("value"), NewValue))
+	if (!TryGetNumberParam(Params, TEXT("value"), NewValue))
 	{
 		return MCPError(TEXT("Missing required parameter 'value'"));
 	}

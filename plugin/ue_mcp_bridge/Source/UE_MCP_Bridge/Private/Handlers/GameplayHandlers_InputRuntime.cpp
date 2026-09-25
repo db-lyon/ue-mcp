@@ -161,12 +161,12 @@ TSharedPtr<FJsonValue> FGameplayHandlers::GetInputMappingContexts(const TSharedP
 
 	int32 RequestedInstance = INDEX_NONE;
 	double RawInstance = 0.0;
-	const bool bHasInstance = Params->TryGetNumberField(TEXT("pieInstance"), RawInstance);
+	const bool bHasInstance = TryGetNumberParam(Params, TEXT("pieInstance"), RawInstance);
 	if (bHasInstance) RequestedInstance = FMath::RoundToInt(RawInstance);
 
 	int32 RequestedPlayer = INDEX_NONE;
 	double RawPlayer = 0.0;
-	if (Params->TryGetNumberField(TEXT("playerIndex"), RawPlayer)) RequestedPlayer = FMath::RoundToInt(RawPlayer);
+	if (TryGetNumberParam(Params, TEXT("playerIndex"), RawPlayer)) RequestedPlayer = FMath::RoundToInt(RawPlayer);
 
 	TArray<TSharedPtr<FJsonValue>> Worlds;
 	int32 WorldsSeen = 0;

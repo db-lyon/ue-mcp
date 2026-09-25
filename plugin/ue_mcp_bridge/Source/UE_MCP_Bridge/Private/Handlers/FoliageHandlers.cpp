@@ -22,6 +22,8 @@
 
 void FFoliageHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("foliage"));
 	Registry.RegisterHandler(TEXT("list_foliage_types"), &ListFoliageTypes);
 	Registry.RegisterHandler(TEXT("sample_foliage"), &SampleFoliage);
 	Registry.RegisterHandler(TEXT("get_foliage_type_settings"), &GetFoliageSettings);
@@ -194,7 +196,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SampleFoliage(const TSharedPtr<FJsonObj
 TSharedPtr<FJsonValue> FFoliageHandlers::GetFoliageSettings(const TSharedPtr<FJsonObject>& Params)
 {
 	FString FoliageTypePath;
-	if (!Params->TryGetStringField(TEXT("foliageTypePath"), FoliageTypePath) || FoliageTypePath.IsEmpty())
+	if (!TryGetStringParam(Params, TEXT("foliageTypePath"), FoliageTypePath) || FoliageTypePath.IsEmpty())
 	{
 		// #988: a caller who reaches this error usually wants the whole set,
 		// not one asset, so the error names the action that answers that.
@@ -270,9 +272,9 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SetFoliageTypeSettings(const TSharedPtr
 {
 	// Accept either foliageTypePath or foliageTypeName for lookup
 	FString FoliageTypePath;
-	if (!Params->TryGetStringField(TEXT("foliageTypePath"), FoliageTypePath))
+	if (!TryGetStringParam(Params, TEXT("foliageTypePath"), FoliageTypePath))
 	{
-		Params->TryGetStringField(TEXT("foliageTypeName"), FoliageTypePath);
+		TryGetStringParam(Params, TEXT("foliageTypeName"), FoliageTypePath);
 	}
 	if (FoliageTypePath.IsEmpty())
 	{
@@ -280,7 +282,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::SetFoliageTypeSettings(const TSharedPtr
 	}
 
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("settings"), SettingsObj) || !SettingsObj || !(*SettingsObj).IsValid())
+	if (!TryGetObjectParam(Params, TEXT("settings"), SettingsObj) || !SettingsObj || !(*SettingsObj).IsValid())
 	{
 		return MCPError(TEXT("Missing 'settings' parameter (object with property name/value pairs)"));
 	}
@@ -515,7 +517,7 @@ TSharedPtr<FJsonValue> FFoliageHandlers::CreateFoliageType(const TSharedPtr<FJso
 
 	// Apply optional settings if provided
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && (*SettingsObj).IsValid())
+	if (TryGetObjectParam(Params, TEXT("settings"), SettingsObj) && SettingsObj && (*SettingsObj).IsValid())
 	{
 		for (const auto& KV : (*SettingsObj)->Values)
 		{

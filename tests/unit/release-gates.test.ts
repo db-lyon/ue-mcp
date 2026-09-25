@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fsSync from "node:fs";
 // @ts-expect-error - plain ESM script, no types
-import { parseVersion, versionDeltaProblem, docsFreshnessProblem } from "../../scripts/check-release-gates.mjs";
+import { parseVersion, versionDeltaProblem, docsFreshnessProblem, docsExemptionReason } from "../../scripts/check-release-gates.mjs";
 
 const problem = (from: string, to: string): string | null =>
   versionDeltaProblem(from, to) as string | null;
@@ -138,5 +138,20 @@ describe("every gate is reachable from the entry point", () => {
     );
     expect(src).toContain("no baseline commit to compare against");
     expect(src).not.toContain('console.log("version-delta   - no main to compare against, skipped")');
+  });
+});
+
+describe("docs-freshness exemption", () => {
+  it("takes a stated reason from the PR body", () => {
+    const body = ["Fix.", "", "Docs: not needed - a GC lifetime fix, no surface change", ""].join("\n");
+    expect(docsExemptionReason(body)).toBe("a GC lifetime fix, no surface change");
+  });
+  it("refuses an exemption without a reason", () => {
+    expect(docsExemptionReason("Docs: not needed -")).toBeNull();
+    expect(docsExemptionReason("Docs: not needed")).toBeNull();
+  });
+  it("ignores a body without the line", () => {
+    expect(docsExemptionReason("nothing here")).toBeNull();
+    expect(docsExemptionReason(null)).toBeNull();
   });
 });

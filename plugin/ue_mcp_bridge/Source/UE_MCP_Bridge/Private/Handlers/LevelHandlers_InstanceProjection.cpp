@@ -128,7 +128,7 @@ namespace
 		TArray<int32>& OutIndices)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!Params->HasField(TEXT("instanceIndices")))
+		if (!HasParam(Params, TEXT("instanceIndices")))
 		{
 			if (InstanceCount > MaxInstances)
 			{
@@ -140,7 +140,7 @@ namespace
 			for (int32 Index = 0; Index < InstanceCount; ++Index) OutIndices.Add(Index);
 			return nullptr;
 		}
-		if (!Params->TryGetArrayField(TEXT("instanceIndices"), Values) || !Values)
+		if (!TryGetArrayParam(Params, TEXT("instanceIndices"), Values) || !Values)
 		{
 			return MCPError(TEXT("instanceIndices must be an array of integers"));
 		}
@@ -309,8 +309,8 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 	ActorLabel = Actor->GetActorLabel();
 
 	FString ComponentName;
-	if (Params->HasField(TEXT("componentName"))
-		&& !Params->TryGetStringField(TEXT("componentName"), ComponentName))
+	if (HasParam(Params, TEXT("componentName"))
+		&& !TryGetStringParam(Params, TEXT("componentName"), ComponentName))
 	{
 		return MCPError(TEXT("componentName must be a string"));
 	}
@@ -323,10 +323,10 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 	if (InstanceCount <= 0) return MCPError(FString::Printf(TEXT("Component '%s' has no instances"), *ISMC->GetName()));
 
 	int32 MaxInstances = DefaultMaxInstances;
-	if (Params->HasField(TEXT("maxInstances")))
+	if (HasParam(Params, TEXT("maxInstances")))
 	{
 		double RawMaxInstances = 0.0;
-		if (!Params->TryGetNumberField(TEXT("maxInstances"), RawMaxInstances)
+		if (!TryGetNumberParam(Params, TEXT("maxInstances"), RawMaxInstances)
 			|| !FMath::IsFinite(RawMaxInstances)
 			|| RawMaxInstances != FMath::RoundToDouble(RawMaxInstances))
 		{
@@ -355,7 +355,7 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 	}
 
 	FVector Direction(0.0, 0.0, -1.0);
-	if (Params->HasField(TEXT("direction")))
+	if (HasParam(Params, TEXT("direction")))
 	{
 		if (TSharedPtr<FJsonValue> Error = RequireVec3(Params, TEXT("direction"), Direction)) return Error;
 	}
@@ -366,18 +366,18 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 	double TraceStartOffset = 1000.0;
 	double TraceDistance = 200000.0;
 	double SurfaceOffset = 0.0;
-	if (Params->HasField(TEXT("traceStartOffset"))
-		&& !Params->TryGetNumberField(TEXT("traceStartOffset"), TraceStartOffset))
+	if (HasParam(Params, TEXT("traceStartOffset"))
+		&& !TryGetNumberParam(Params, TEXT("traceStartOffset"), TraceStartOffset))
 	{
 		return MCPError(TEXT("traceStartOffset must be a number"));
 	}
-	if (Params->HasField(TEXT("traceDistance"))
-		&& !Params->TryGetNumberField(TEXT("traceDistance"), TraceDistance))
+	if (HasParam(Params, TEXT("traceDistance"))
+		&& !TryGetNumberParam(Params, TEXT("traceDistance"), TraceDistance))
 	{
 		return MCPError(TEXT("traceDistance must be a number"));
 	}
-	if (Params->HasField(TEXT("surfaceOffset"))
-		&& !Params->TryGetNumberField(TEXT("surfaceOffset"), SurfaceOffset))
+	if (HasParam(Params, TEXT("surfaceOffset"))
+		&& !TryGetNumberParam(Params, TEXT("surfaceOffset"), SurfaceOffset))
 	{
 		return MCPError(TEXT("surfaceOffset must be a number"));
 	}
@@ -393,8 +393,8 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 
 	EMissPolicy MissPolicy = EMissPolicy::Error;
 	FString MissPolicyText = TEXT("error");
-	if (Params->HasField(TEXT("onMiss"))
-		&& !Params->TryGetStringField(TEXT("onMiss"), MissPolicyText))
+	if (HasParam(Params, TEXT("onMiss"))
+		&& !TryGetStringParam(Params, TEXT("onMiss"), MissPolicyText))
 	{
 		return MCPError(TEXT("onMiss must be a string"));
 	}
@@ -405,8 +405,8 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 
 	UClass* SurfaceClass = nullptr;
 	FString SurfaceClassSpec;
-	if (Params->HasField(TEXT("surfaceActorClass"))
-		&& !Params->TryGetStringField(TEXT("surfaceActorClass"), SurfaceClassSpec))
+	if (HasParam(Params, TEXT("surfaceActorClass"))
+		&& !TryGetStringParam(Params, TEXT("surfaceActorClass"), SurfaceClassSpec))
 	{
 		return MCPError(TEXT("surfaceActorClass must be a string"));
 	}
@@ -418,8 +418,8 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 
 	TSet<FString> SurfaceActorLabels;
 	const TArray<TSharedPtr<FJsonValue>>* LabelValues = nullptr;
-	if (Params->HasField(TEXT("surfaceActorLabels"))
-		&& (!Params->TryGetArrayField(TEXT("surfaceActorLabels"), LabelValues) || !LabelValues))
+	if (HasParam(Params, TEXT("surfaceActorLabels"))
+		&& (!TryGetArrayParam(Params, TEXT("surfaceActorLabels"), LabelValues) || !LabelValues))
 	{
 		return MCPError(TEXT("surfaceActorLabels must be an array of non-empty strings"));
 	}
@@ -448,8 +448,8 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 	ECollisionChannel Channel = ECC_Visibility;
 	FString ChannelName;
 	FString RequestedChannel = TEXT("Visibility");
-	if (Params->HasField(TEXT("channel"))
-		&& !Params->TryGetStringField(TEXT("channel"), RequestedChannel))
+	if (HasParam(Params, TEXT("channel"))
+		&& !TryGetStringParam(Params, TEXT("channel"), RequestedChannel))
 	{
 		return MCPError(TEXT("channel must be a string"));
 	}
@@ -459,13 +459,13 @@ TSharedPtr<FJsonValue> UEMCPInstanceProjection::SnapInstancesToSurfaceInWorld(
 	}
 	bool bTraceComplex = false;
 	bool bDryRun = true;
-	if (Params->HasField(TEXT("traceComplex"))
-		&& !Params->TryGetBoolField(TEXT("traceComplex"), bTraceComplex))
+	if (HasParam(Params, TEXT("traceComplex"))
+		&& !TryGetBoolParam(Params, TEXT("traceComplex"), bTraceComplex))
 	{
 		return MCPError(TEXT("traceComplex must be a boolean"));
 	}
-	if (Params->HasField(TEXT("dryRun"))
-		&& !Params->TryGetBoolField(TEXT("dryRun"), bDryRun))
+	if (HasParam(Params, TEXT("dryRun"))
+		&& !TryGetBoolParam(Params, TEXT("dryRun"), bDryRun))
 	{
 		return MCPError(TEXT("dryRun must be a boolean"));
 	}

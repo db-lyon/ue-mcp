@@ -155,7 +155,7 @@ namespace
 		if (Target == TEXT("subsystem"))
 		{
 			FString SubsystemName;
-			if (!Params->TryGetStringField(TEXT("subsystemClass"), SubsystemName) || SubsystemName.IsEmpty())
+			if (!TryGetStringParam(Params, TEXT("subsystemClass"), SubsystemName) || SubsystemName.IsEmpty())
 			{
 				OutError = TEXT("target=subsystem requires 'subsystemClass'");
 				return nullptr;
@@ -275,7 +275,7 @@ namespace
 		};
 
 		const TSharedPtr<FJsonObject>* ArgObj = nullptr;
-		Params->TryGetObjectField(TEXT("args"), ArgObj);
+		TryGetObjectParam(Params, TEXT("args"), ArgObj);
 		if (ArgObj && (*ArgObj).IsValid())
 		{
 			for (TFieldIterator<FProperty> It(Func); It && (It->PropertyFlags & CPF_Parm); ++It)
@@ -454,7 +454,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::InvokeObjectFunction(const TSharedPtr<FJ
 TSharedPtr<FJsonValue> FEditorHandlers::InvokeObjectFunctions(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Calls = nullptr;
-	if (!Params->TryGetArrayField(TEXT("calls"), Calls) || !Calls || Calls->IsEmpty())
+	if (!TryGetArrayParam(Params, TEXT("calls"), Calls) || !Calls || Calls->IsEmpty())
 	{
 		return MCPError(TEXT("Missing required non-empty array parameter 'calls'"));
 	}
@@ -604,7 +604,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetObjectProperties(const TSharedPtr<FJs
 
 	TArray<FString> Wanted;
 	const TArray<TSharedPtr<FJsonValue>>* NameValues = nullptr;
-	if (Params->TryGetArrayField(TEXT("propertyNames"), NameValues) && NameValues)
+	if (TryGetArrayParam(Params, TEXT("propertyNames"), NameValues) && NameValues)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *NameValues)
 		{
@@ -867,7 +867,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ReadBoneTransforms(const TSharedPtr<FJso
 
 	TArray<FString> RequestedBones;
 	const TArray<TSharedPtr<FJsonValue>>* BoneValues = nullptr;
-	if (Params->TryGetArrayField(TEXT("bones"), BoneValues) && BoneValues)
+	if (TryGetArrayParam(Params, TEXT("bones"), BoneValues) && BoneValues)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *BoneValues)
 		{
@@ -986,10 +986,10 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 	// requested rotation when the caller omits one, and an inverse call needs
 	// the value the actor actually had before the move.
 	const FRotator StartRotation = Actor->GetActorRotation();
-	const FVector Location = Params->HasField(TEXT("location"))
+	const FVector Location = HasParam(Params, TEXT("location"))
 		? OptionalVec3(Params, TEXT("location"))
 		: StartLocation;
-	const bool bHasRotation = Params->HasField(TEXT("rotation"));
+	const bool bHasRotation = HasParam(Params, TEXT("rotation"));
 	const FRotator Rotation = bHasRotation ? OptionalRotator(Params, TEXT("rotation")) : Actor->GetActorRotation();
 
 	// Stop the movement component first, otherwise the pending velocity is
@@ -1056,8 +1056,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::TeleportRuntimeActor(const TSharedPtr<FJ
 	Payload->SetObjectField(TEXT("location"), VectorJson(StartLocation));
 	Payload->SetObjectField(TEXT("rotation"), RotatorJson(StartRotation));
 	Payload->SetBoolField(TEXT("stopMovement"), bStopMovement);
-	if (Params->HasField(TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
-	if (Params->HasField(TEXT("pieInstance"))) Payload->SetNumberField(TEXT("pieInstance"), OptionalInt(Params, TEXT("pieInstance"), 0));
+	if (HasParam(Params, TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
+	if (HasParam(Params, TEXT("pieInstance"))) Payload->SetNumberField(TEXT("pieInstance"), OptionalInt(Params, TEXT("pieInstance"), 0));
 	MCPSetRollback(Result, TEXT("teleport_runtime_actor"), Payload);
 	const bool bVelocityDiscarded = bStopMovement && Movement != nullptr;
 	Result->SetBoolField(TEXT("rollbackLossy"), bVelocityDiscarded || bSweep);
@@ -1142,7 +1142,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 		}
 
 		int32 CustomMode = OptionalInt(Params, TEXT("customMode"), 0);
-		if (Mode != MOVE_Custom && Params->HasField(TEXT("customMode")))
+		if (Mode != MOVE_Custom && HasParam(Params, TEXT("customMode")))
 		{
 			return MCPError(TEXT("customMode only applies with mode='custom'; passing it with another mode would be silently ignored."));
 		}
@@ -1158,7 +1158,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 
 	bool bVelocityChanged = false;
 	FString Result_VelocityNote;
-	if (Params->HasField(TEXT("velocity")))
+	if (HasParam(Params, TEXT("velocity")))
 	{
 		// Write through the component, not the actor: the actor has no velocity
 		// of its own and CharacterMovement is what integrates this next tick.
@@ -1240,8 +1240,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetMovementMode(const TSharedPtr<FJsonOb
 		// one mode that accepts it.
 		if (PrevModeEnum == MOVE_Custom) Payload->SetNumberField(TEXT("customMode"), PrevCustom);
 		Payload->SetObjectField(TEXT("velocity"), VectorJson(PrevVelocity));
-		if (Params->HasField(TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
-		if (Params->HasField(TEXT("pieInstance"))) Payload->SetNumberField(TEXT("pieInstance"), OptionalInt(Params, TEXT("pieInstance"), 0));
+		if (HasParam(Params, TEXT("world"))) Payload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world")));
+		if (HasParam(Params, TEXT("pieInstance"))) Payload->SetNumberField(TEXT("pieInstance"), OptionalInt(Params, TEXT("pieInstance"), 0));
 		MCPSetRollback(Result, TEXT("set_movement_mode"), Payload);
 		// NavWalking is the one mode the component can refuse and replace on the
 		// way back in, exactly as it can on the way in.
@@ -1532,7 +1532,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
-	TSharedPtr<FJsonValue> NewValue = Params->TryGetField(TEXT("value"));
+	TSharedPtr<FJsonValue> NewValue = TryGetParam(Params, TEXT("value"));
 	if (!NewValue.IsValid()) return MCPError(TEXT("Missing 'value' parameter"));
 
 	UWorld* World = ResolveWorldFromParams(Params, TEXT("auto"));

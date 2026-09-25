@@ -476,6 +476,12 @@ export interface CategoryOptions {
    */
   normalizeParams?: (params: Record<string, unknown>) => Record<string, unknown>;
   /**
+   * Keys that are one parameter under different names after normalizeParams
+   * (a mirrored alias, or a path split into name + packagePath). A key is only
+   * reported as not read by the editor when no member of its group was read.
+   */
+  paramGroups?: readonly (readonly string[])[];
+  /**
    * This tool is a gateway: every real parameter arrives nested under this key
    * rather than at the top level.
    *
@@ -636,6 +642,7 @@ export function categoryTool(
       const pipeline = prepareCall(params, {
         action,
         normalizeParams: options?.normalizeParams,
+        paramGroups: options?.paramGroups,
         nestedParamsKey: options?.nestedParamsKey,
       });
       const requestedTimeout = pipeline.timeoutMs;

@@ -198,9 +198,9 @@ TSharedPtr<FJsonValue> FEditorHandlers::ValidateAssets(const TSharedPtr<FJsonObj
 		return MCPError(TEXT("EditorValidatorSubsystem is not available"));
 	}
 
-	const bool bHasAssetPaths = Params->HasField(TEXT("assetPaths"));
-	const bool bHasAssetPath = Params->HasField(TEXT("assetPath"));
-	const bool bHasDirectory = Params->HasField(TEXT("directory"));
+	const bool bHasAssetPaths = HasParam(Params, TEXT("assetPaths"));
+	const bool bHasAssetPath = HasParam(Params, TEXT("assetPath"));
+	const bool bHasDirectory = HasParam(Params, TEXT("directory"));
 	if ((bHasAssetPaths || bHasAssetPath) && bHasDirectory)
 	{
 		return MCPError(TEXT("Specify either assetPaths/assetPath or directory, not both"));
@@ -230,7 +230,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ValidateAssets(const TSharedPtr<FJsonObj
 		if (bHasAssetPaths)
 		{
 			const TArray<TSharedPtr<FJsonValue>>* PathValues = nullptr;
-			if (!Params->TryGetArrayField(TEXT("assetPaths"), PathValues) || !PathValues || PathValues->Num() == 0)
+			if (!TryGetArrayParam(Params, TEXT("assetPaths"), PathValues) || !PathValues || PathValues->Num() == 0)
 			{
 				return MCPError(TEXT("assetPaths must be a non-empty array of exact asset paths"));
 			}
@@ -248,7 +248,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::ValidateAssets(const TSharedPtr<FJsonObj
 		else
 		{
 			FString RequestedPath;
-			if (!Params->TryGetStringField(TEXT("assetPath"), RequestedPath) || RequestedPath.TrimStartAndEnd().IsEmpty())
+			if (!TryGetStringParam(Params, TEXT("assetPath"), RequestedPath) || RequestedPath.TrimStartAndEnd().IsEmpty())
 			{
 				return MCPError(TEXT("assetPath must be a non-empty exact package or object path"));
 			}

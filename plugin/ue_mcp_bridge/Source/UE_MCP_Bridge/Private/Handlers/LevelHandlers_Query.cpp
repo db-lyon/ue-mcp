@@ -273,7 +273,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 	bool bAnyFieldRequested = false;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* FieldValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("fields"), FieldValues) && FieldValues)
+		if (TryGetArrayParam(Params, TEXT("fields"), FieldValues) && FieldValues)
 		{
 			for (const FString& Name : JsonArrayToStringList(FieldValues))
 			{
@@ -303,7 +303,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 	TArray<FString> ProjectedProperties;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* PropertyValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("propertyNames"), PropertyValues) && PropertyValues)
+		if (TryGetArrayParam(Params, TEXT("propertyNames"), PropertyValues) && PropertyValues)
 		{
 			ProjectedProperties = JsonArrayToStringList(PropertyValues);
 		}
@@ -320,7 +320,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 	TArray<MCPQuery::FPredicate> Predicates;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* WhereValues = nullptr;
-		Params->TryGetArrayField(TEXT("where"), WhereValues);
+		TryGetArrayParam(Params, TEXT("where"), WhereValues);
 		FString ParseError;
 		if (!MCPQuery::ParsePredicates(WhereValues, MCPQueryMaxPredicates, Predicates, ParseError))
 		{
@@ -347,7 +347,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 	TArray<FString> CountByPaths;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* CountByValues = nullptr;
-		if (Params->TryGetArrayField(TEXT("countBy"), CountByValues) && CountByValues)
+		if (TryGetArrayParam(Params, TEXT("countBy"), CountByValues) && CountByValues)
 		{
 			CountByPaths = JsonArrayToStringList(CountByValues);
 		}

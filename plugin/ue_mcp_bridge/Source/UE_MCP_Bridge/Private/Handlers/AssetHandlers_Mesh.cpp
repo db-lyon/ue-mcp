@@ -219,7 +219,7 @@ namespace
 TSharedPtr<FJsonValue> FAssetHandlers::SetMeshMaterialsBatch(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Assignments = nullptr;
-	if (!Params->TryGetArrayField(TEXT("assignments"), Assignments) || !Assignments)
+	if (!TryGetArrayParam(Params, TEXT("assignments"), Assignments) || !Assignments)
 	{
 		return MCPError(TEXT("Missing 'assignments' array"));
 	}
@@ -620,7 +620,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 	const TArray<TSharedPtr<FJsonValue>>* PathsArray = nullptr;
 	FString SinglePath;
 
-	if (Params->TryGetArrayField(TEXT("assetPaths"), PathsArray))
+	if (TryGetArrayParam(Params, TEXT("assetPaths"), PathsArray))
 	{
 		for (const auto& Val : *PathsArray)
 		{
@@ -631,7 +631,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::RecenterPivot(const TSharedPtr<FJsonObjec
 			}
 		}
 	}
-	else if (Params->TryGetStringField(TEXT("assetPath"), SinglePath) || Params->TryGetStringField(TEXT("path"), SinglePath))
+	else if (TryGetStringParam(Params, TEXT("assetPath"), SinglePath) || TryGetStringParam(Params, TEXT("path"), SinglePath))
 	{
 		if (!SinglePath.IsEmpty())
 		{
@@ -733,7 +733,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSkeletalMeshMaterialSlots(const TShare
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	const TArray<TSharedPtr<FJsonValue>>* SlotsArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("slots"), SlotsArr))
+	if (!TryGetArrayParam(Params, TEXT("slots"), SlotsArr))
 	{
 		return MCPError(TEXT("Missing 'slots' array parameter"));
 	}
@@ -1296,7 +1296,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshNav(const TSharedPtr<FJsonObject>&
 	const bool bPrevHasNavData = Mesh->bHasNavigationData;
 
 	bool bHasNavData = false;
-	if (Params->TryGetBoolField(TEXT("bHasNavigationData"), bHasNavData))
+	if (TryGetBoolParam(Params, TEXT("bHasNavigationData"), bHasNavData))
 	{
 		Mesh->bHasNavigationData = bHasNavData;
 		bChanged = true;
@@ -1304,7 +1304,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetMeshNav(const TSharedPtr<FJsonObject>&
 
 	bool bClearNavCollision = false;
 	bool bClearedNavCollision = false;
-	if (Params->TryGetBoolField(TEXT("clearNavCollision"), bClearNavCollision) && bClearNavCollision)
+	if (TryGetBoolParam(Params, TEXT("clearNavCollision"), bClearNavCollision) && bClearNavCollision)
 	{
 		bClearedNavCollision = Mesh->GetNavCollision() != nullptr;
 		Mesh->SetNavCollision(nullptr);
@@ -1540,9 +1540,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::BindClothToSection(const TSharedPtr<FJson
 	FString MeshPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("skeletalMeshPath"), TEXT("assetPath"), MeshPath)) return Err;
 	int32 LodIndex = 0;
-	if (!Params->TryGetNumberField(TEXT("lodIndex"), LodIndex)) return MCPError(TEXT("Missing required parameter 'lodIndex'"));
+	if (!TryGetNumberParam(Params, TEXT("lodIndex"), LodIndex)) return MCPError(TEXT("Missing required parameter 'lodIndex'"));
 	int32 SectionIndex = 0;
-	if (!Params->TryGetNumberField(TEXT("sectionIndex"), SectionIndex)) return MCPError(TEXT("Missing required parameter 'sectionIndex'"));
+	if (!TryGetNumberParam(Params, TEXT("sectionIndex"), SectionIndex)) return MCPError(TEXT("Missing required parameter 'sectionIndex'"));
 
 	USkeletalMesh* Mesh = LoadAssetByPath<USkeletalMesh>(MeshPath);
 	if (!Mesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
@@ -1561,7 +1561,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BindClothToSection(const TSharedPtr<FJson
 	const int32 AssetLodCount = Cloth->LodData.Num();
 	if (AssetLodCount == 0) return MCPError(FString::Printf(TEXT("Clothing asset '%s' has no LOD data to bind"), *Cloth->GetName()));
 	int32 AssetLodIndex = FMath::Min(LodIndex, AssetLodCount - 1);
-	Params->TryGetNumberField(TEXT("assetLodIndex"), AssetLodIndex);
+	TryGetNumberParam(Params, TEXT("assetLodIndex"), AssetLodIndex);
 	if (AssetLodIndex < 0 || AssetLodIndex >= AssetLodCount)
 	{
 		return MCPError(FString::Printf(TEXT("assetLodIndex %d out of range for '%s' (0-%d)"), AssetLodIndex, *Cloth->GetName(), AssetLodCount - 1));
@@ -1644,9 +1644,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::UnbindClothFromSection(const TSharedPtr<F
 	FString MeshPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("skeletalMeshPath"), TEXT("assetPath"), MeshPath)) return Err;
 	int32 LodIndex = 0;
-	if (!Params->TryGetNumberField(TEXT("lodIndex"), LodIndex)) return MCPError(TEXT("Missing required parameter 'lodIndex'"));
+	if (!TryGetNumberParam(Params, TEXT("lodIndex"), LodIndex)) return MCPError(TEXT("Missing required parameter 'lodIndex'"));
 	int32 SectionIndex = 0;
-	if (!Params->TryGetNumberField(TEXT("sectionIndex"), SectionIndex)) return MCPError(TEXT("Missing required parameter 'sectionIndex'"));
+	if (!TryGetNumberParam(Params, TEXT("sectionIndex"), SectionIndex)) return MCPError(TEXT("Missing required parameter 'sectionIndex'"));
 
 	USkeletalMesh* Mesh = LoadAssetByPath<USkeletalMesh>(MeshPath);
 	if (!Mesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
@@ -1740,7 +1740,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetClothConfig(const TSharedPtr<FJsonObje
 	const FString ClothName = OptionalString(Params, TEXT("clothingAsset"));
 	const FString ConfigType = OptionalString(Params, TEXT("configType"));
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("properties"), PropsObj) || !PropsObj)
+	if (!TryGetObjectParam(Params, TEXT("properties"), PropsObj) || !PropsObj)
 	{
 		return MCPError(TEXT("Missing 'properties' object"));
 	}

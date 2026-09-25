@@ -256,6 +256,8 @@ UActorComponent* FindComponentOnActorCDO(
 
 void FCollisionQueryHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("blueprint"));
 	Registry.RegisterHandler(TEXT("get_component_collision"), &GetComponentCollision);
 	Registry.RegisterHandler(TEXT("resolve_collision_profile"), &ResolveCollisionProfile);
 }

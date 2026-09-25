@@ -61,10 +61,10 @@ namespace
 		TArray<FString>& OutValues,
 		FString& OutError)
 	{
-		if (!Params->HasField(Field)) return true;
+		if (!HasParam(Params, Field)) return true;
 
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!Params->TryGetArrayField(Field, Values) || !Values)
+		if (!TryGetArrayParam(Params, Field, Values) || !Values)
 		{
 			OutError = FString::Printf(TEXT("'%s' must be an array of strings"), Field);
 			return false;
@@ -286,8 +286,8 @@ namespace
 		const FWorldContext*& OutContext)
 	{
 		FString WorldScope = TEXT("pie");
-		if (Params->HasField(TEXT("world")) &&
-			(!Params->TryGetStringField(TEXT("world"), WorldScope) || WorldScope.IsEmpty()))
+		if (HasParam(Params, TEXT("world")) &&
+			(!TryGetStringParam(Params, TEXT("world"), WorldScope) || WorldScope.IsEmpty()))
 		{
 			return MCPError(TEXT("'world' must be the string 'pie'"));
 		}
@@ -298,8 +298,8 @@ namespace
 		}
 
 		double RawPIEInstance = INDEX_NONE;
-		const bool bHasPIEInstance = Params->HasField(TEXT("pieInstance"));
-		if (bHasPIEInstance && !Params->TryGetNumberField(TEXT("pieInstance"), RawPIEInstance))
+		const bool bHasPIEInstance = HasParam(Params, TEXT("pieInstance"));
+		if (bHasPIEInstance && !TryGetNumberParam(Params, TEXT("pieInstance"), RawPIEInstance))
 		{
 			return MCPError(TEXT("'pieInstance' must be an integer"));
 		}
@@ -346,11 +346,11 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetRuntimeVisibility(const TSharedPtr<FJ
 	if (!Params.IsValid()) return MCPError(TEXT("Missing params"));
 
 	bool bHidden = false;
-	if (!Params->TryGetBoolField(TEXT("hidden"), bHidden))
+	if (!TryGetBoolParam(Params, TEXT("hidden"), bHidden))
 	{
 		return MCPError(TEXT("Missing required boolean 'hidden'"));
 	}
-	if (Params->HasField(TEXT("all")))
+	if (HasParam(Params, TEXT("all")))
 	{
 		return MCPError(TEXT("'all' is not supported; use explicit actorLabels/actorPaths or actorClass"));
 	}
@@ -382,17 +382,17 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetRuntimeVisibility(const TSharedPtr<FJ
 	}
 
 	FString ActorClass;
-	const bool bHasActorClass = Params->HasField(TEXT("actorClass"));
+	const bool bHasActorClass = HasParam(Params, TEXT("actorClass"));
 	if (bHasActorClass &&
-		(!Params->TryGetStringField(TEXT("actorClass"), ActorClass) || ActorClass.TrimStartAndEnd().IsEmpty()))
+		(!TryGetStringParam(Params, TEXT("actorClass"), ActorClass) || ActorClass.TrimStartAndEnd().IsEmpty()))
 	{
 		return MCPError(TEXT("'actorClass' must be a non-empty string"));
 	}
 	ActorClass = ActorClass.TrimStartAndEnd();
 
 	const int32 SelectorCount =
-		(Params->HasField(TEXT("actorLabels")) ? 1 : 0) +
-		(Params->HasField(TEXT("actorPaths")) ? 1 : 0) +
+		(HasParam(Params, TEXT("actorLabels")) ? 1 : 0) +
+		(HasParam(Params, TEXT("actorPaths")) ? 1 : 0) +
 		(bHasActorClass ? 1 : 0);
 	if (SelectorCount != 1)
 	{
@@ -641,7 +641,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::RestoreRuntimeVisibility(const TSharedPt
 	if (!Params.IsValid()) return MCPError(TEXT("Missing params"));
 
 	FString RollbackToken;
-	if (!Params->TryGetStringField(TEXT("rollbackToken"), RollbackToken) ||
+	if (!TryGetStringParam(Params, TEXT("rollbackToken"), RollbackToken) ||
 		RollbackToken.TrimStartAndEnd().IsEmpty())
 	{
 		return MCPError(TEXT("Restore requires non-empty 'rollbackToken' from the set response"));
@@ -675,19 +675,19 @@ TSharedPtr<FJsonValue> FEditorHandlers::RestoreRuntimeVisibility(const TSharedPt
 		return MCPError(TEXT("Rollback token belongs to an expired PIE session"));
 	}
 
-	if (Params->HasField(TEXT("world")))
+	if (HasParam(Params, TEXT("world")))
 	{
 		FString WorldScope;
-		if (!Params->TryGetStringField(TEXT("world"), WorldScope) ||
+		if (!TryGetStringParam(Params, TEXT("world"), WorldScope) ||
 			!WorldScope.Equals(TEXT("pie"), ESearchCase::IgnoreCase))
 		{
 			return MCPError(TEXT("Runtime visibility restore is PIE-only; 'world' must be 'pie'"));
 		}
 	}
-	if (Params->HasField(TEXT("pieInstance")))
+	if (HasParam(Params, TEXT("pieInstance")))
 	{
 		double RawPIEInstance = 0.0;
-		if (!Params->TryGetNumberField(TEXT("pieInstance"), RawPIEInstance) ||
+		if (!TryGetNumberParam(Params, TEXT("pieInstance"), RawPIEInstance) ||
 			!FMath::IsNearlyEqual(RawPIEInstance, FMath::RoundToInt(RawPIEInstance)))
 		{
 			return MCPError(TEXT("'pieInstance' must be an integer"));

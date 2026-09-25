@@ -56,6 +56,8 @@
 
 void FMaterialHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("material"));
 	Registry.RegisterHandler(TEXT("list_expression_types"), &ListExpressionTypes);
 	Registry.RegisterHandler(TEXT("create_material"), &CreateMaterial);
 	Registry.RegisterHandler(TEXT("read_material"), &ReadMaterial);
@@ -461,13 +463,13 @@ namespace
 		if (!Params.IsValid()) return false;
 
 		const TSharedPtr<FJsonObject>* AsObject = nullptr;
-		if (Params->TryGetObjectField(FieldName, AsObject) && AsObject)
+		if (TryGetObjectParam(Params, FieldName, AsObject) && AsObject)
 		{
 			return TryReadMaterialColorObject(*AsObject, OutColor);
 		}
 
 		const TArray<TSharedPtr<FJsonValue>>* AsArray = nullptr;
-		if (Params->TryGetArrayField(FieldName, AsArray) && AsArray && AsArray->Num() > 0)
+		if (TryGetArrayParam(Params, FieldName, AsArray) && AsArray && AsArray->Num() > 0)
 		{
 			double Components[4] = { 0.0, 0.0, 0.0, 1.0 };
 			for (int32 Index = 0; Index < AsArray->Num() && Index < 4; ++Index)
@@ -479,7 +481,7 @@ namespace
 		}
 
 		FString AsString;
-		if (Params->TryGetStringField(FieldName, AsString) && !AsString.IsEmpty())
+		if (TryGetStringParam(Params, FieldName, AsString) && !AsString.IsEmpty())
 		{
 			TSharedPtr<FJsonObject> Reparsed;
 			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(AsString);
@@ -1374,7 +1376,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialBaseColor(const TSharedPtr<
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("color"), ColorObj))
+	if (!TryGetObjectParam(Params, TEXT("color"), ColorObj))
 	{
 		return MCPError(TEXT("Missing 'color' parameter (object with r,g,b,a)"));
 	}
@@ -1457,7 +1459,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	if (MaterialPath.IsEmpty())
 	{
 		// Also try assetPath as a third key
-		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		TryGetStringParam(Params, TEXT("assetPath"), MaterialPath);
 		if (MaterialPath.IsEmpty())
 		{
 			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
@@ -1486,7 +1488,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 
 	// Apply optional properties
 	FString ExpressionName;
-	if (Params->TryGetStringField(TEXT("name"), ExpressionName) || Params->TryGetStringField(TEXT("expressionName"), ExpressionName))
+	if (TryGetStringParam(Params, TEXT("name"), ExpressionName) || TryGetStringParam(Params, TEXT("expressionName"), ExpressionName))
 	{
 		NewExpression->Desc = ExpressionName;
 	}
@@ -1496,7 +1498,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	// TextureObjectParameter; route through the common UMaterialExpressionParameter
 	// base class so every Parameter subclass is covered uniformly).
 	FString ParameterName;
-	if (Params->TryGetStringField(TEXT("parameterName"), ParameterName))
+	if (TryGetStringParam(Params, TEXT("parameterName"), ParameterName))
 	{
 		if (UMaterialExpressionParameter* AsParameter = Cast<UMaterialExpressionParameter>(NewExpression))
 		{
@@ -1522,7 +1524,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	// flags on ComponentMask. Without these the corresponding parameter
 	// authoring workflows had to fall back to MaterialEditingLibrary.
 	FString GroupName;
-	if (Params->TryGetStringField(TEXT("group"), GroupName))
+	if (TryGetStringParam(Params, TEXT("group"), GroupName))
 	{
 		if (UMaterialExpressionParameter* AsParameter = Cast<UMaterialExpressionParameter>(NewExpression))
 		{
@@ -1534,7 +1536,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 		}
 	}
 	double SortPriority = 0.0;
-	if (Params->TryGetNumberField(TEXT("sortPriority"), SortPriority))
+	if (TryGetNumberParam(Params, TEXT("sortPriority"), SortPriority))
 	{
 		if (UMaterialExpressionParameter* AsParameter = Cast<UMaterialExpressionParameter>(NewExpression))
 		{
@@ -1545,7 +1547,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	if (UMaterialExpressionScalarParameter* ScalarParam = Cast<UMaterialExpressionScalarParameter>(NewExpression))
 	{
 		double DefaultValue = 0.0;
-		if (Params->TryGetNumberField(TEXT("defaultValue"), DefaultValue))
+		if (TryGetNumberParam(Params, TEXT("defaultValue"), DefaultValue))
 		{
 			ScalarParam->DefaultValue = static_cast<float>(DefaultValue);
 		}
@@ -1553,7 +1555,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	else if (UMaterialExpressionVectorParameter* VectorParam = Cast<UMaterialExpressionVectorParameter>(NewExpression))
 	{
 		const TSharedPtr<FJsonObject>* DefaultColorObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("defaultValue"), DefaultColorObj) && DefaultColorObj && (*DefaultColorObj).IsValid())
+		if (TryGetObjectParam(Params, TEXT("defaultValue"), DefaultColorObj) && DefaultColorObj && (*DefaultColorObj).IsValid())
 		{
 			double R = 0.0, G = 0.0, B = 0.0, A = 1.0;
 			(*DefaultColorObj)->TryGetNumberField(TEXT("r"), R);
@@ -1585,11 +1587,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	{
 		const TSharedPtr<FJsonObject>* ConstColor = nullptr;
 		FLinearColor Col = Const3->Constant;
-		if (Params->TryGetObjectField(TEXT("value"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
+		if (TryGetObjectParam(Params, TEXT("value"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
 		{
 			Const3->Constant = Col;
 		}
-		else if (Params->TryGetObjectField(TEXT("defaultValue"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
+		else if (TryGetObjectParam(Params, TEXT("defaultValue"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
 		{
 			Const3->Constant = Col;
 		}
@@ -1598,11 +1600,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	{
 		const TSharedPtr<FJsonObject>* ConstColor = nullptr;
 		FLinearColor Col = Const4->Constant;
-		if (Params->TryGetObjectField(TEXT("value"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
+		if (TryGetObjectParam(Params, TEXT("value"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
 		{
 			Const4->Constant = Col;
 		}
-		else if (Params->TryGetObjectField(TEXT("defaultValue"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
+		else if (TryGetObjectParam(Params, TEXT("defaultValue"), ConstColor) && ConstColor && (*ConstColor).IsValid() && ReadColorAny(*ConstColor, Col))
 		{
 			Const4->Constant = Col;
 		}
@@ -1610,7 +1612,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	if (UMaterialExpressionConstant* Const1 = Cast<UMaterialExpressionConstant>(NewExpression))
 	{
 		double Scalar = 0.0;
-		if (Params->TryGetNumberField(TEXT("value"), Scalar))
+		if (TryGetNumberParam(Params, TEXT("value"), Scalar))
 		{
 			Const1->R = static_cast<float>(Scalar);
 		}
@@ -1618,7 +1620,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	if (UMaterialExpressionConstant2Vector* Const2 = Cast<UMaterialExpressionConstant2Vector>(NewExpression))
 	{
 		const TSharedPtr<FJsonObject>* Vec2 = nullptr;
-		if (Params->TryGetObjectField(TEXT("value"), Vec2) && Vec2 && (*Vec2).IsValid())
+		if (TryGetObjectParam(Params, TEXT("value"), Vec2) && Vec2 && (*Vec2).IsValid())
 		{
 			double X = 0.0, Y = 0.0;
 			(*Vec2)->TryGetNumberField(TEXT("r"), X); (*Vec2)->TryGetNumberField(TEXT("x"), X);
@@ -1632,7 +1634,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 	if (UMaterialExpressionComponentMask* Mask = Cast<UMaterialExpressionComponentMask>(NewExpression))
 	{
 		const TSharedPtr<FJsonObject>* Channels = nullptr;
-		if (Params->TryGetObjectField(TEXT("channels"), Channels) && Channels && (*Channels).IsValid())
+		if (TryGetObjectParam(Params, TEXT("channels"), Channels) && Channels && (*Channels).IsValid())
 		{
 			bool BR = false, BG = false, BB = false, BA = false;
 			(*Channels)->TryGetBoolField(TEXT("r"), BR);
@@ -1645,11 +1647,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialExpression(const TSharedPtr
 
 	// Set position
 	double PosX = 0, PosY = 0;
-	if (Params->TryGetNumberField(TEXT("positionX"), PosX))
+	if (TryGetNumberParam(Params, TEXT("positionX"), PosX))
 	{
 		NewExpression->MaterialExpressionEditorX = static_cast<int32>(PosX);
 	}
-	if (Params->TryGetNumberField(TEXT("positionY"), PosY))
+	if (TryGetNumberParam(Params, TEXT("positionY"), PosY))
 	{
 		NewExpression->MaterialExpressionEditorY = static_cast<int32>(PosY);
 	}
@@ -1721,7 +1723,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialExpressionsInternal(
 		static const TCHAR* const PathKeys[] = { TEXT("materialPath"), TEXT("path"), TEXT("assetPath") };
 		for (const TCHAR* Key : PathKeys)
 		{
-			if (Params->TryGetStringField(Key, MaterialPath) && !MaterialPath.IsEmpty()) break;
+			if (TryGetStringParam(Params, Key, MaterialPath) && !MaterialPath.IsEmpty()) break;
 			MaterialPath.Reset();
 		}
 	}
@@ -1732,7 +1734,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialExpressionsInternal(
 
 	// read_graph only: one node and the sources it reads from, no paging.
 	int32 SingleIndex = INDEX_NONE;
-	const bool bSingle = bIncludeRootConnections && Params->TryGetNumberField(TEXT("expressionIndex"), SingleIndex);
+	const bool bSingle = bIncludeRootConnections && TryGetNumberParam(Params, TEXT("expressionIndex"), SingleIndex);
 
 	// T3: paged. A production master material carries several hundred nodes.
 	// ActionName is the cursor identity, so list and read_graph cursors do not
@@ -1920,7 +1922,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RecompileMaterial(const TSharedPtr<FJs
 	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
 	if (MaterialPath.IsEmpty())
 	{
-		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
+		TryGetStringParam(Params, TEXT("assetPath"), MaterialPath);
 		if (MaterialPath.IsEmpty())
 		{
 			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
@@ -1945,7 +1947,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::RecompileMaterial(const TSharedPtr<FJs
 	// #421 gap 8: cascade to MaterialInstances so existing instance instances
 	// pick up shader changes without the caller re-saving each one manually.
 	bool bRecompileChildren = false;
-	Params->TryGetBoolField(TEXT("recompileChildren"), bRecompileChildren);
+	TryGetBoolParam(Params, TEXT("recompileChildren"), bRecompileChildren);
 	if (bRecompileChildren)
 	{
 		FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
@@ -2118,7 +2120,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 	if (TypeLower == TEXT("scalar"))
 	{
 		double ScalarValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("value"), ScalarValue))
+		if (!TryGetNumberParam(Params, TEXT("value"), ScalarValue))
 		{
 			return MCPError(TEXT("Missing 'value' number field for scalar parameter"));
 		}
@@ -2242,9 +2244,9 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialParameter(const TSharedPtr<
 	else if (TypeLower == TEXT("texture"))
 	{
 		FString TexturePath;
-		if (!Params->TryGetStringField(TEXT("value"), TexturePath) || TexturePath.IsEmpty())
+		if (!TryGetStringParam(Params, TEXT("value"), TexturePath) || TexturePath.IsEmpty())
 		{
-			Params->TryGetStringField(TEXT("texturePath"), TexturePath);
+			TryGetStringParam(Params, TEXT("texturePath"), TexturePath);
 		}
 		if (TexturePath.IsEmpty())
 		{
@@ -2323,7 +2325,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ReadMaterialInstance(const TSharedPtr<
 
 	// #1114: a material on a placed component, including a transient
 	// MaterialInstanceDynamic created at runtime in PIE.
-	if (AssetPath.IsEmpty() && (Params->HasField(TEXT("actorLabel")) || Params->HasField(TEXT("actorPath"))))
+	if (AssetPath.IsEmpty() && (HasParam(Params, TEXT("actorLabel")) || HasParam(Params, TEXT("actorPath"))))
 	{
 		return ReadComponentMaterial(Params);
 	}
@@ -2543,7 +2545,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialInstanceParent(const TShare
 TSharedPtr<FJsonValue> FMaterialHandlers::BatchSetInstances(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Instances = nullptr;
-	if (!Params->TryGetArrayField(TEXT("instances"), Instances) || !Instances)
+	if (!TryGetArrayParam(Params, TEXT("instances"), Instances) || !Instances)
 	{
 		return MCPError(TEXT("Missing 'instances' array of {assetPath, parentPath?, parameters?}"));
 	}
@@ -2883,7 +2885,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialStaticSwitch(const TSharedP
 	if (auto Err = RequireString(Params, TEXT("parameterName"), ParameterName)) return Err;
 
 	bool bValue = false;
-	if (!Params->TryGetBoolField(TEXT("value"), bValue))
+	if (!TryGetBoolParam(Params, TEXT("value"), bValue))
 	{
 		return MCPError(TEXT("Missing 'value' bool field for static switch parameter"));
 	}
@@ -2942,7 +2944,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialStaticSwitch(const TSharedP
 TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJsonObject>& Params)
 {
 	int32 ExpressionIndex = -1;
-	if (!Params->TryGetNumberField(TEXT("expressionIndex"), ExpressionIndex))
+	if (!TryGetNumberParam(Params, TEXT("expressionIndex"), ExpressionIndex))
 	{
 		// Name the call that produces the index rather than only the key that is
 		// missing: this action has no name-based address, so a caller who does
@@ -2987,7 +2989,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	if (UMaterialExpressionConstant* ConstExpr = Cast<UMaterialExpressionConstant>(Expression))
 	{
 		double Value = 0.0;
-		if (Params->TryGetNumberField(TEXT("value"), Value))
+		if (TryGetNumberParam(Params, TEXT("value"), Value))
 		{
 			RollbackPayload->SetNumberField(TEXT("value"), ConstExpr->R);
 			bRollbackExpressible = true;
@@ -3059,7 +3061,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	else if (UMaterialExpressionScalarParameter* ScalarParamExpr = Cast<UMaterialExpressionScalarParameter>(Expression))
 	{
 		double Value = 0.0;
-		if (Params->TryGetNumberField(TEXT("value"), Value))
+		if (TryGetNumberParam(Params, TEXT("value"), Value))
 		{
 			RollbackPayload->SetNumberField(TEXT("value"), ScalarParamExpr->DefaultValue);
 			bRollbackExpressible = true;
@@ -3069,7 +3071,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 		}
 
 		FString ParamName;
-		if (Params->TryGetStringField(TEXT("parameterName"), ParamName))
+		if (TryGetStringParam(Params, TEXT("parameterName"), ParamName))
 		{
 			RollbackPayload->SetStringField(TEXT("parameterName"), ScalarParamExpr->ParameterName.ToString());
 			bRollbackExpressible = true;
@@ -3093,7 +3095,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 		}
 
 		FString ParamName;
-		if (Params->TryGetStringField(TEXT("parameterName"), ParamName))
+		if (TryGetStringParam(Params, TEXT("parameterName"), ParamName))
 		{
 			RollbackPayload->SetStringField(TEXT("parameterName"), VectorParamExpr->ParameterName.ToString());
 			bRollbackExpressible = true;
@@ -3106,7 +3108,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	else if (UMaterialExpressionTextureSample* TexSampleExpr = Cast<UMaterialExpressionTextureSample>(Expression))
 	{
 		FString TexturePath;
-		if (Params->TryGetStringField(TEXT("texturePath"), TexturePath))
+		if (TryGetStringParam(Params, TEXT("texturePath"), TexturePath))
 		{
 			UTexture* Texture = Cast<UTexture>(StaticLoadObject(UTexture::StaticClass(), nullptr, *TexturePath));
 			if (!Texture)
@@ -3140,14 +3142,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	else if (UMaterialExpressionTextureCoordinate* TexCoordExpr = Cast<UMaterialExpressionTextureCoordinate>(Expression))
 	{
 		double UTiling = 1.0, VTiling = 1.0;
-		if (Params->TryGetNumberField(TEXT("uTiling"), UTiling))
+		if (TryGetNumberParam(Params, TEXT("uTiling"), UTiling))
 		{
 			RollbackPayload->SetNumberField(TEXT("uTiling"), TexCoordExpr->UTiling);
 			bRollbackExpressible = true;
 			TexCoordExpr->UTiling = static_cast<float>(UTiling);
 			bValueSet = true;
 		}
-		if (Params->TryGetNumberField(TEXT("vTiling"), VTiling))
+		if (TryGetNumberParam(Params, TEXT("vTiling"), VTiling))
 		{
 			RollbackPayload->SetNumberField(TEXT("vTiling"), TexCoordExpr->VTiling);
 			bRollbackExpressible = true;
@@ -3156,7 +3158,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 		}
 
 		int32 CoordinateIndex = 0;
-		if (Params->TryGetNumberField(TEXT("coordinateIndex"), CoordinateIndex))
+		if (TryGetNumberParam(Params, TEXT("coordinateIndex"), CoordinateIndex))
 		{
 			RollbackPayload->SetNumberField(TEXT("coordinateIndex"), TexCoordExpr->CoordinateIndex);
 			bRollbackExpressible = true;
@@ -3177,7 +3179,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 	if (!bValueSet)
 	{
 		FString PropertyName;
-		if (Params->TryGetStringField(TEXT("propertyName"), PropertyName))
+		if (TryGetStringParam(Params, TEXT("propertyName"), PropertyName))
 		{
 			FProperty* Prop = Expression->GetClass()->FindPropertyByName(FName(*PropertyName));
 			if (Prop)
@@ -3186,7 +3188,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 
 				// Determine the string value to import
 				FString ValueStr;
-				TSharedPtr<FJsonValue> ValueJsonRef = Params->TryGetField(TEXT("value"));
+				TSharedPtr<FJsonValue> ValueJsonRef = TryGetParam(Params, TEXT("value"));
 				if (ValueJsonRef.IsValid())
 				{
 					if (ValueJsonRef->Type == EJson::String)
@@ -3211,15 +3213,15 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetExpressionValue(const TSharedPtr<FJ
 					// Try direct number/bool/string params as fallback
 					double NumVal = 0.0;
 					bool BoolVal = false;
-					if (Params->TryGetNumberField(TEXT("value"), NumVal))
+					if (TryGetNumberParam(Params, TEXT("value"), NumVal))
 					{
 						ValueStr = FString::SanitizeFloat(NumVal);
 					}
-					else if (Params->TryGetBoolField(TEXT("value"), BoolVal))
+					else if (TryGetBoolParam(Params, TEXT("value"), BoolVal))
 					{
 						ValueStr = BoolVal ? TEXT("True") : TEXT("False");
 					}
-					else if (!Params->TryGetStringField(TEXT("value"), ValueStr))
+					else if (!TryGetStringParam(Params, TEXT("value"), ValueStr))
 					{
 						Target.CancelEdit();
 						return MCPError(FString::Printf(TEXT("Found property '%s' on expression '%s' but no 'value' parameter provided"), *PropertyName, *ExpressionClass));
@@ -3616,7 +3618,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 	const FString MaterialPath = Target.GetPathName();
 
 	int32 ExpressionIndex = -1;
-	if (!Params->TryGetNumberField(TEXT("expressionIndex"), ExpressionIndex))
+	if (!TryGetNumberParam(Params, TEXT("expressionIndex"), ExpressionIndex))
 	{
 		return MCPError(TEXT("Missing required parameter 'expressionIndex' (index from list_expressions, or list_function_expressions for a MaterialFunction)"));
 	}
@@ -3668,14 +3670,14 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 	bool bInputsRebuilt = false;
 
 	FString Code;
-	if (Params->TryGetStringField(TEXT("code"), Code) && Code != PreviousCode)
+	if (TryGetStringParam(Params, TEXT("code"), Code) && Code != PreviousCode)
 	{
 		Custom->Code = Code;
 		bChanged = true;
 	}
 
 	FString Description;
-	if (Params->TryGetStringField(TEXT("description"), Description) && Description != PreviousDescription)
+	if (TryGetStringParam(Params, TEXT("description"), Description) && Description != PreviousDescription)
 	{
 		Custom->Description = Description;
 		bChanged = true;
@@ -3683,7 +3685,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 
 	// Output type: CMOT_Float1..4 / CMOT_MaterialAttributes (accept "float3" etc.)
 	FString OutputTypeStr;
-	if (Params->TryGetStringField(TEXT("outputType"), OutputTypeStr))
+	if (TryGetStringParam(Params, TEXT("outputType"), OutputTypeStr))
 	{
 		const FString L = OutputTypeStr.ToLower();
 		ECustomMaterialOutputType Requested = PreviousOutputType;
@@ -3702,7 +3704,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetCustomExpression(const TSharedPtr<F
 	// Inputs: array of input names (rebuilds the input pin list). Wire them
 	// afterward with connect_expressions targetInput=<name>.
 	const TArray<TSharedPtr<FJsonValue>>* InputsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("inputs"), InputsArr) && InputsArr)
+	if (TryGetArrayParam(Params, TEXT("inputs"), InputsArr) && InputsArr)
 	{
 		Custom->Inputs.Empty();
 		for (const TSharedPtr<FJsonValue>& V : *InputsArr)
@@ -3846,7 +3848,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialUsage(const TSharedPtr<FJso
 
 	TArray<FString> UsagesIn;
 	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-	if (Params->TryGetArrayField(TEXT("usages"), Arr) && Arr)
+	if (TryGetArrayParam(Params, TEXT("usages"), Arr) && Arr)
 	{
 		for (const auto& V : *Arr)
 		{
@@ -3854,7 +3856,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::SetMaterialUsage(const TSharedPtr<FJso
 		}
 	}
 	FString Single;
-	if (Params->TryGetStringField(TEXT("usage"), Single)) UsagesIn.Add(Single);
+	if (TryGetStringParam(Params, TEXT("usage"), Single)) UsagesIn.Add(Single);
 	if (UsagesIn.Num() == 0) return MCPError(TEXT("Missing 'usage' or 'usages' array"));
 
 	// No 'enabled' parameter. This action turns flags on and nothing else; the
@@ -3994,7 +3996,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialSimple(const TSharedPtr<
 	UMaterialEditorOnlyData* EOD = Material->GetEditorOnlyData();
 
 	const TSharedPtr<FJsonObject>* ColorObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("baseColor"), ColorObj))
+	if (TryGetObjectParam(Params, TEXT("baseColor"), ColorObj))
 	{
 		double R = 0.5, G = 0.5, B = 0.5;
 		(*ColorObj)->TryGetNumberField(TEXT("r"), R);
@@ -4004,22 +4006,22 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialSimple(const TSharedPtr<
 		if (EOD) EOD->BaseColor.Connect(0, C);
 	}
 	double Roughness = -1, Metallic = -1, Specular = -1, Emissive = -1;
-	if (Params->TryGetNumberField(TEXT("roughness"), Roughness))
+	if (TryGetNumberParam(Params, TEXT("roughness"), Roughness))
 	{
 		UMaterialExpressionConstant* Expr = AddConstant(Roughness);
 		if (EOD) EOD->Roughness.Connect(0, Expr);
 	}
-	if (Params->TryGetNumberField(TEXT("metallic"), Metallic))
+	if (TryGetNumberParam(Params, TEXT("metallic"), Metallic))
 	{
 		UMaterialExpressionConstant* Expr = AddConstant(Metallic);
 		if (EOD) EOD->Metallic.Connect(0, Expr);
 	}
-	if (Params->TryGetNumberField(TEXT("specular"), Specular))
+	if (TryGetNumberParam(Params, TEXT("specular"), Specular))
 	{
 		UMaterialExpressionConstant* Expr = AddConstant(Specular);
 		if (EOD) EOD->Specular.Connect(0, Expr);
 	}
-	if (Params->TryGetNumberField(TEXT("emissive"), Emissive))
+	if (TryGetNumberParam(Params, TEXT("emissive"), Emissive))
 	{
 		UMaterialExpressionConstant3Vector* Expr = AddConstant3(Emissive, Emissive, Emissive);
 		if (EOD) EOD->EmissiveColor.Connect(0, Expr);
@@ -4027,7 +4029,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::CreateMaterialSimple(const TSharedPtr<
 
 	// Usage flags
 	const TArray<TSharedPtr<FJsonValue>>* UsagesArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("usages"), UsagesArr) && UsagesArr)
+	if (TryGetArrayParam(Params, TEXT("usages"), UsagesArr) && UsagesArr)
 	{
 		for (const auto& V : *UsagesArr)
 		{

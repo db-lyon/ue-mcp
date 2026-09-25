@@ -64,6 +64,8 @@ static FGameplayAttribute FindGameplayAttributeByName(const FString& Name, FStri
 
 void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("gas"));
 	Registry.RegisterHandler(TEXT("create_gameplay_effect"), &CreateGameplayEffect);
 	Registry.RegisterHandler(TEXT("get_gas_info"), &GetGasInfo);
 	Registry.RegisterHandler(TEXT("create_gameplay_ability"), &CreateGameplayAbility);
@@ -417,7 +419,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SetAbilityTags(const TSharedPtr<FJsonObject
 	for (const TPair<FString, FString>& Entry : TagMap)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* TagArray = nullptr;
-		if (!Params->TryGetArrayField(*Entry.Key, TagArray) || !TagArray) continue;
+		if (!TryGetArrayParam(Params, *Entry.Key, TagArray) || !TagArray) continue;
 
 		FStructProperty* Prop = CastField<FStructProperty>(CDO->GetClass()->FindPropertyByName(*Entry.Value));
 		if (!Prop || Prop->Struct != FGameplayTagContainer::StaticStruct())

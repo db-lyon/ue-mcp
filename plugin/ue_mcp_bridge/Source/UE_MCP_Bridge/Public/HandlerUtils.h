@@ -9,6 +9,8 @@
 #include "UObject/SavePackage.h"
 #include "HAL/FileManager.h"
 #include "HAL/CriticalSection.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
 #include "Misc/OutputDevice.h"
 #include "Misc/OutputDeviceRedirector.h"
@@ -2261,6 +2263,44 @@ inline TSharedPtr<FJsonValue> MCPExportPropertyValue(const FProperty* Prop, cons
 inline bool MCPPropertyIsFixedArray(const FProperty* Prop)
 {
 	return Prop != nullptr && Prop->ArrayDim > 1;
+}
+
+// ── File dumps ───────────────────────────────────────────────────────────────
+//
+// A read whose result is too large to return inline writes it to a file
+// instead. Every action that does (read_graph, search_call_sites,
+// get_mesh_geometry, read_datatable) follows one convention, so it lives here
+// rather than as a copy per handler: a relative path resolves under Saved/
+// directory, a missing directory is created, an existing file is overwritten,
+// and the response echoes the resolved path.
+
+/** Resolve a caller's dump path. A relative path lands under Saved/, so a bare
+ *  file name cannot scatter output across the engine's working directory. */
+inline FString MCPResolveDumpPath(const FString& RequestedPath)
+{
+	return FPaths::IsRelative(RequestedPath)
+		? FPaths::Combine(FPaths::ProjectSavedDir(), RequestedPath)
+		: RequestedPath;
+}
+
+/** Write already-serialized dump text to a path from MCPResolveDumpPath,
+ *  creating its directory first. `What` names the content in the error. */
+inline bool MCPWriteDumpFile(const FString& ResolvedPath, const FString& Text, const TCHAR* What, FString& OutError)
+{
+	const FString Directory = FPaths::GetPath(ResolvedPath);
+	if (!Directory.IsEmpty() && !IFileManager::Get().MakeDirectory(*Directory, true))
+	{
+		OutError = FString::Printf(TEXT("Failed to create dump directory: %s"), *Directory);
+		return false;
+	}
+
+	if (!FFileHelper::SaveStringToFile(Text, *ResolvedPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		OutError = FString::Printf(TEXT("Failed to write %s: %s"), What, *ResolvedPath);
+		return false;
+	}
+
+	return true;
 }
 
 // ── Package save ─────────────────────────────────────────────────────────────

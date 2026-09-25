@@ -22,6 +22,8 @@ namespace
 
 void FLockHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("lock"));
 	Registry.RegisterHandler(TEXT("acquire_lock"), &FLockHandlers::AcquireLock);
 	Registry.RegisterHandler(TEXT("release_lock"), &FLockHandlers::ReleaseLock);
 	Registry.RegisterHandler(TEXT("release_session_locks"), &FLockHandlers::ReleaseSessionLocks);

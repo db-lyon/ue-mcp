@@ -314,12 +314,12 @@ TSharedPtr<FJsonObject> BuildItemResult(
 TSharedPtr<FJsonValue> FAssetHandlers::BulkRestoreDataAssets(const TSharedPtr<FJsonObject>& Params)
 {
 	bool bSave = true;
-	Params->TryGetBoolField(TEXT("save"), bSave);
+	TryGetBoolParam(Params, TEXT("save"), bSave);
 
 	const TArray<TSharedPtr<FJsonValue>>* UpdatedItems = nullptr;
-	Params->TryGetArrayField(TEXT("updatedItems"), UpdatedItems);
+	TryGetArrayParam(Params, TEXT("updatedItems"), UpdatedItems);
 	const TArray<TSharedPtr<FJsonValue>>* CreatedAssetPaths = nullptr;
-	Params->TryGetArrayField(TEXT("createdAssetPaths"), CreatedAssetPaths);
+	TryGetArrayParam(Params, TEXT("createdAssetPaths"), CreatedAssetPaths);
 
 	int32 RestoredAssetCount = 0;
 	int32 DeletedAssetCount = 0;
@@ -430,7 +430,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkRestoreDataAssets(const TSharedPtr<FJ
 TSharedPtr<FJsonValue> FAssetHandlers::BulkUpsertDataAssets(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
-	if (!Params->TryGetArrayField(TEXT("items"), Items) || !Items)
+	if (!TryGetArrayParam(Params, TEXT("items"), Items) || !Items)
 	{
 		return MCPError(TEXT("Missing 'items' array"));
 	}
@@ -447,11 +447,11 @@ TSharedPtr<FJsonValue> FAssetHandlers::BulkUpsertDataAssets(const TSharedPtr<FJs
 	}
 
 	bool bDryRun = false;
-	Params->TryGetBoolField(TEXT("dryRun"), bDryRun);
+	TryGetBoolParam(Params, TEXT("dryRun"), bDryRun);
 	bool bSave = true;
-	Params->TryGetBoolField(TEXT("save"), bSave);
+	TryGetBoolParam(Params, TEXT("save"), bSave);
 	FString OnConflict = TEXT("update");
-	Params->TryGetStringField(TEXT("onConflict"), OnConflict);
+	TryGetStringParam(Params, TEXT("onConflict"), OnConflict);
 	OnConflict.TrimStartAndEndInline();
 	OnConflict.ToLowerInline();
 	if (OnConflict != TEXT("update") && OnConflict != TEXT("skip") && OnConflict != TEXT("error"))

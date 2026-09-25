@@ -397,6 +397,8 @@ namespace
 
 void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("landscape"));
 	Registry.RegisterHandler(TEXT("get_landscape_info"), &GetLandscapeInfo);
 	Registry.RegisterHandler(TEXT("list_landscape_layers"), &ListLandscapeLayers);
 	Registry.RegisterHandler(TEXT("sample_landscape"), &SampleLandscape);
@@ -571,20 +573,20 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::SampleLandscape(const TSharedPtr<FJso
 	bool bHavePosition = false;
 
 	const TSharedPtr<FJsonObject>* PointObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("point"), PointObj) && PointObj && PointObj->IsValid())
+	if (TryGetObjectParam(Params, TEXT("point"), PointObj) && PointObj && PointObj->IsValid())
 	{
 		(*PointObj)->TryGetNumberField(TEXT("x"), WorldX);
 		(*PointObj)->TryGetNumberField(TEXT("y"), WorldY);
 		(*PointObj)->TryGetNumberField(TEXT("z"), TraceOriginZ);
 		bHavePosition = true;
 	}
-	else if (Params->HasField(TEXT("x")) && Params->HasField(TEXT("y")))
+	else if (HasParam(Params, TEXT("x")) && HasParam(Params, TEXT("y")))
 	{
 		WorldX = OptionalNumber(Params, TEXT("x"), 0.0);
 		WorldY = OptionalNumber(Params, TEXT("y"), 0.0);
 		bHavePosition = true;
 	}
-	else if (Params->HasField(TEXT("worldX")) && Params->HasField(TEXT("worldY")))
+	else if (HasParam(Params, TEXT("worldX")) && HasParam(Params, TEXT("worldY")))
 	{
 		// The names landscape(find_proxy_at) takes. A caller moving between the
 		// two actions should not have to rename the same two numbers.
@@ -881,9 +883,9 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ListLandscapeSplines(const TSharedPtr
 TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeComponent(const TSharedPtr<FJsonObject>& Params)
 {
 	int32 ComponentIndex = 0;
-	if (Params->HasField(TEXT("componentIndex")))
+	if (HasParam(Params, TEXT("componentIndex")))
 	{
-		ComponentIndex = static_cast<int32>(Params->GetNumberField(TEXT("componentIndex")));
+		ComponentIndex = static_cast<int32>(OptionalNumber(Params, TEXT("componentIndex"), 0.0));
 	}
 
 	REQUIRE_EDITOR_WORLD(World);
@@ -944,7 +946,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeComponent(const TSharedPt
 TSharedPtr<FJsonValue> FLandscapeHandlers::SetLandscapeMaterial(const TSharedPtr<FJsonObject>& Params)
 {
 	FString MaterialPath;
-	if (!Params->TryGetStringField(TEXT("materialPath"), MaterialPath) && !Params->TryGetStringField(TEXT("path"), MaterialPath) && !Params->TryGetStringField(TEXT("assetPath"), MaterialPath))
+	if (!TryGetStringParam(Params, TEXT("materialPath"), MaterialPath) && !TryGetStringParam(Params, TEXT("path"), MaterialPath) && !TryGetStringParam(Params, TEXT("assetPath"), MaterialPath))
 	{
 		return MCPError(TEXT("Missing 'materialPath', 'path', or 'assetPath' parameter"));
 	}
@@ -1373,7 +1375,7 @@ PRAGMA_ENABLE_DEPRECATION_WARNINGS
 	}
 
 	double Hardness = 0.0;
-	if (Params->TryGetNumberField(TEXT("hardness"), Hardness))
+	if (TryGetNumberParam(Params, TEXT("hardness"), Hardness))
 	{
 #if UE_MCP_HAS_5_5_API
 		// Hardness is becoming private; the setter also handles Modify() and the
@@ -1566,7 +1568,7 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::FindLandscapeProxyAt(const TSharedPtr
 {
 	REQUIRE_EDITOR_WORLD(World);
 
-	if (!Params->HasField(TEXT("worldX")) || !Params->HasField(TEXT("worldY")))
+	if (!HasParam(Params, TEXT("worldX")) || !HasParam(Params, TEXT("worldY")))
 	{
 		return MCPError(TEXT("Missing 'worldX'/'worldY' world position"));
 	}
@@ -1642,11 +1644,11 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::RefreshPhysicalMaterialCollision(cons
 	}
 
 	TSet<FString> WantedLabels;
-	const bool bHasLabelFilter = Params->HasField(TEXT("actorLabels"));
+	const bool bHasLabelFilter = HasParam(Params, TEXT("actorLabels"));
 	if (bHasLabelFilter)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!Params->TryGetArrayField(TEXT("actorLabels"), Values) || !Values || Values->IsEmpty() || Values->Num() > 256)
+		if (!TryGetArrayParam(Params, TEXT("actorLabels"), Values) || !Values || Values->IsEmpty() || Values->Num() > 256)
 		{
 			return MCPError(TEXT("'actorLabels' must be a non-empty array of at most 256 strings"));
 		}
@@ -1662,11 +1664,11 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::RefreshPhysicalMaterialCollision(cons
 	}
 
 	TSet<FGuid> WantedGuids;
-	const bool bHasGuidFilter = Params->HasField(TEXT("guids"));
+	const bool bHasGuidFilter = HasParam(Params, TEXT("guids"));
 	if (bHasGuidFilter)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!Params->TryGetArrayField(TEXT("guids"), Values) || !Values || Values->IsEmpty() || Values->Num() > 256)
+		if (!TryGetArrayParam(Params, TEXT("guids"), Values) || !Values || Values->IsEmpty() || Values->Num() > 256)
 		{
 			return MCPError(TEXT("'guids' must be a non-empty array of at most 256 GUID strings"));
 		}
@@ -1683,13 +1685,13 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::RefreshPhysicalMaterialCollision(cons
 	}
 
 	FBox FilterBounds(ForceInit);
-	const bool bHasBoundsFilter = Params->HasField(TEXT("bounds"));
+	const bool bHasBoundsFilter = HasParam(Params, TEXT("bounds"));
 	if (bHasBoundsFilter)
 	{
 		const TSharedPtr<FJsonObject>* BoundsObject = nullptr;
 		const TSharedPtr<FJsonObject>* MinObject = nullptr;
 		const TSharedPtr<FJsonObject>* MaxObject = nullptr;
-		if (!Params->TryGetObjectField(TEXT("bounds"), BoundsObject) || !BoundsObject ||
+		if (!TryGetObjectParam(Params, TEXT("bounds"), BoundsObject) || !BoundsObject ||
 			!(*BoundsObject)->TryGetObjectField(TEXT("min"), MinObject) || !MinObject ||
 			!(*BoundsObject)->TryGetObjectField(TEXT("max"), MaxObject) || !MaxObject)
 		{

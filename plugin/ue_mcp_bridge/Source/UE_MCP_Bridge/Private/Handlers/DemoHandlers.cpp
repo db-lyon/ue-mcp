@@ -112,6 +112,8 @@ namespace DemoConstants
 // ---------------------------------------------------------------------------
 void FDemoHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("demo"));
 	Registry.RegisterHandler(TEXT("demo_step"),      &DemoStep);
 	Registry.RegisterHandler(TEXT("demo_get_steps"), &DemoGetSteps);
 	Registry.RegisterHandler(TEXT("demo_cleanup"),   &DemoCleanup);
@@ -264,7 +266,7 @@ TSharedPtr<FJsonValue> FDemoHandlers::DemoStep(const TSharedPtr<FJsonObject>& Pa
 {
 	// If no step param, return step list
 	double StepNum = -1;
-	if (!Params->TryGetNumberField(TEXT("step"), StepNum))
+	if (!TryGetNumberParam(Params, TEXT("step"), StepNum))
 	{
 		return DemoGetSteps(Params);
 	}

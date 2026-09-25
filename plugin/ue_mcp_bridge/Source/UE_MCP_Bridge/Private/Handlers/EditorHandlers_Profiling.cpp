@@ -163,7 +163,7 @@ namespace
 	FString MCPProfilingReadChannelList(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-		if (Params->TryGetArrayField(Key, Arr) && Arr)
+		if (TryGetArrayParam(Params, Key, Arr) && Arr)
 		{
 			TArray<FString> Names;
 			for (const TSharedPtr<FJsonValue>& Value : *Arr)

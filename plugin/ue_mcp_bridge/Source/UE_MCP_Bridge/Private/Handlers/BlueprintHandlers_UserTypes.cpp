@@ -547,7 +547,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReorderEnumValues(const TSharedPtr<FJ
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* Order = nullptr;
-	if (!Params->TryGetArrayField(TEXT("order"), Order) || !Order)
+	if (!TryGetArrayParam(Params, TEXT("order"), Order) || !Order)
 	{
 		return MCPError(FString::Printf(
 			TEXT("Missing required parameter 'order': the COMPLETE list of enumerators in their desired order, by display name, authored name or index. This enum has %d: %s"),
@@ -678,7 +678,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetEnumMetadata(const TSharedPtr<FJso
 	}
 
 	bool bBitflags = false;
-	const bool bHasBitflags = Params->TryGetBoolField(TEXT("bitflags"), bBitflags);
+	const bool bHasBitflags = TryGetBoolParam(Params, TEXT("bitflags"), bBitflags);
 
 	// Validate every entry against the enum BEFORE the first write, so a bad
 	// entry at position nine does not leave the first eight applied.
@@ -692,7 +692,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetEnumMetadata(const TSharedPtr<FJso
 	TArray<FPlannedTooltip> Planned;
 
 	const TArray<TSharedPtr<FJsonValue>>* Entries = nullptr;
-	if (Params->TryGetArrayField(TEXT("entries"), Entries) && Entries)
+	if (TryGetArrayParam(Params, TEXT("entries"), Entries) && Entries)
 	{
 		for (int32 Slot = 0; Slot < Entries->Num(); ++Slot)
 		{
@@ -868,7 +868,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::SetStructFieldDefault(const TSharedPt
 	}
 
 	FString DefaultValue;
-	if (!Params->TryGetStringField(TEXT("defaultValue"), DefaultValue))
+	if (!TryGetStringParam(Params, TEXT("defaultValue"), DefaultValue))
 	{
 		return MCPError(TEXT("Missing required parameter 'defaultValue': the member's default as Unreal export text (e.g. '5', 'true', 'Hello', '(X=1.000000,Y=2.000000,Z=0.000000)'). Pass an empty string to clear it."));
 	}
@@ -955,7 +955,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ReorderStructFields(const TSharedPtr<
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* Order = nullptr;
-	if (!Params->TryGetArrayField(TEXT("order"), Order) || !Order)
+	if (!TryGetArrayParam(Params, TEXT("order"), Order) || !Order)
 	{
 		return MCPError(FString::Printf(
 			TEXT("Missing required parameter 'order': the COMPLETE list of members in their desired order, by display name, internal name or GUID. This struct has %d: %s"),
@@ -1115,7 +1115,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditStructMetadata(const TSharedPtr<F
 	}
 
 	FString StructTooltip;
-	const bool bHasStructTooltip = Params->TryGetStringField(TEXT("tooltip"), StructTooltip);
+	const bool bHasStructTooltip = TryGetStringParam(Params, TEXT("tooltip"), StructTooltip);
 	const FString PreviousStructTooltip = FStructureEditorUtils::GetTooltip(Struct);
 
 	// One planned edit per member. Everything is resolved and validated here,
@@ -1138,7 +1138,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::EditStructMetadata(const TSharedPtr<F
 	TArray<FPlannedField> Planned;
 
 	const TArray<TSharedPtr<FJsonValue>>* Fields = nullptr;
-	if (Params->TryGetArrayField(TEXT("fields"), Fields) && Fields)
+	if (TryGetArrayParam(Params, TEXT("fields"), Fields) && Fields)
 	{
 		TSet<FGuid> SeenFields;
 		for (int32 Slot = 0; Slot < Fields->Num(); ++Slot)

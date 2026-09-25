@@ -36,6 +36,8 @@
 
 void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("reflection"));
 	Registry.RegisterHandler(TEXT("reflect_class"), &ReflectClass);
 	Registry.RegisterHandler(TEXT("reflect_struct"), &ReflectStruct);
 	Registry.RegisterHandler(TEXT("reflect_enum"), &ReflectEnum);
@@ -164,10 +166,10 @@ TSharedPtr<FJsonValue> FReflectionHandlers::InspectSaveGame(const TSharedPtr<FJs
 	FString SlotName;
 	if (auto Err = RequireString(Params, TEXT("slotName"), SlotName)) return Err;
 	int32 UserIndex = 0;
-	if (Params->HasField(TEXT("userIndex")))
+	if (HasParam(Params, TEXT("userIndex")))
 	{
 		double RawUserIndex = 0.0;
-		if (!Params->TryGetNumberField(TEXT("userIndex"), RawUserIndex) ||
+		if (!TryGetNumberParam(Params, TEXT("userIndex"), RawUserIndex) ||
 			!FMath::IsFinite(RawUserIndex) || RawUserIndex < 0.0 ||
 			RawUserIndex > static_cast<double>(MAX_int32) || FMath::TruncToDouble(RawUserIndex) != RawUserIndex)
 		{
@@ -1277,7 +1279,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateEnum(const TSharedPtr<FJsonObj
 	// Optional entries[] - array of strings or {name, displayName?}.
 	const TArray<TSharedPtr<FJsonValue>>* EntriesArr = nullptr;
 	int32 Added = 0;
-	if (Params->TryGetArrayField(TEXT("entries"), EntriesArr) && EntriesArr)
+	if (TryGetArrayParam(Params, TEXT("entries"), EntriesArr) && EntriesArr)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *EntriesArr)
 		{
@@ -1330,7 +1332,7 @@ TSharedPtr<FJsonValue> FReflectionHandlers::SetEnumEntries(const TSharedPtr<FJso
 	if (!Enum) return MCPError(FString::Printf(TEXT("UserDefinedEnum not found: %s"), *AssetPath));
 
 	const TArray<TSharedPtr<FJsonValue>>* EntriesArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("entries"), EntriesArr) || !EntriesArr)
+	if (!TryGetArrayParam(Params, TEXT("entries"), EntriesArr) || !EntriesArr)
 	{
 		return MCPError(TEXT("Missing 'entries' (array of strings or {name, displayName})"));
 	}

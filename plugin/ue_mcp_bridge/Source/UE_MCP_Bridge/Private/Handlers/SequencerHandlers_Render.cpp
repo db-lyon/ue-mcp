@@ -110,10 +110,10 @@ TSharedPtr<FJsonValue> FSequencerHandlers::RenderSequenceFrames(const TSharedPtr
 	const bool bRangeBounded = PlaybackRange.HasLowerBound() && PlaybackRange.HasUpperBound();
 
 	double StartFrameIn = 0.0, EndFrameIn = 0.0, StartSecondsIn = 0.0, EndSecondsIn = 0.0;
-	const bool bHasStartFrame = Params->TryGetNumberField(TEXT("startFrame"), StartFrameIn);
-	const bool bHasEndFrame = Params->TryGetNumberField(TEXT("endFrame"), EndFrameIn);
-	const bool bHasStartSeconds = Params->TryGetNumberField(TEXT("startSeconds"), StartSecondsIn);
-	const bool bHasEndSeconds = Params->TryGetNumberField(TEXT("endSeconds"), EndSecondsIn);
+	const bool bHasStartFrame = TryGetNumberParam(Params, TEXT("startFrame"), StartFrameIn);
+	const bool bHasEndFrame = TryGetNumberParam(Params, TEXT("endFrame"), EndFrameIn);
+	const bool bHasStartSeconds = TryGetNumberParam(Params, TEXT("startSeconds"), StartSecondsIn);
+	const bool bHasEndSeconds = TryGetNumberParam(Params, TEXT("endSeconds"), EndSecondsIn);
 	if (bHasStartFrame && bHasStartSeconds) return MCPError(TEXT("Pass startFrame or startSeconds, not both"));
 	if (bHasEndFrame && bHasEndSeconds) return MCPError(TEXT("Pass endFrame or endSeconds, not both"));
 
@@ -196,7 +196,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::RenderSequenceFrames(const TSharedPtr
 	float FixedFov = 90.0f;
 	UMovieSceneTrack* CutTrack = nullptr;
 
-	if (Params->HasField(TEXT("cameraActorLabel")) || Params->HasField(TEXT("cameraActorPath")))
+	if (HasParam(Params, TEXT("cameraActorLabel")) || HasParam(Params, TEXT("cameraActorPath")))
 	{
 		Mode = ECameraMode::Actor;
 		FMCPActorSelector CameraSel;
@@ -211,7 +211,7 @@ TSharedPtr<FJsonValue> FSequencerHandlers::RenderSequenceFrames(const TSharedPtr
 			return MCPError(FString::Printf(TEXT("Actor '%s' has no CameraComponent"), *CameraActor->GetActorLabel()));
 		}
 	}
-	else if (Params->HasField(TEXT("location")))
+	else if (HasParam(Params, TEXT("location")))
 	{
 		Mode = ECameraMode::Fixed;
 		FixedLocation = OptionalVec3(Params, TEXT("location"));

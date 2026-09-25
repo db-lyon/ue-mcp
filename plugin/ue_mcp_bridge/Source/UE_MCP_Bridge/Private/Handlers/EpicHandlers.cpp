@@ -298,7 +298,7 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 	// Build the JSON input: prefer an `input` object, fall back to `inputJson`.
 	FString Input = OptionalString(Params, TEXT("inputJson"), TEXT(""));
 	const TSharedPtr<FJsonObject>* InObj = nullptr;
-	if (Input.IsEmpty() && Params->TryGetObjectField(TEXT("input"), InObj) && InObj && (*InObj).IsValid())
+	if (Input.IsEmpty() && TryGetObjectParam(Params, TEXT("input"), InObj) && InObj && (*InObj).IsValid())
 	{
 		TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Input);
 		FJsonSerializer::Serialize((*InObj).ToSharedRef(), Writer);
@@ -399,6 +399,8 @@ TSharedPtr<FJsonValue> FEpicHandlers::CallTool(const TSharedPtr<FJsonObject>& Pa
 
 void FEpicHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("epic"));
 	Registry.RegisterHandler(TEXT("epic_status"), &Status);
 	Registry.RegisterHandler(TEXT("epic_list_toolsets"), &ListToolsets);
 	Registry.RegisterHandler(TEXT("epic_describe_toolset"), &DescribeToolset);

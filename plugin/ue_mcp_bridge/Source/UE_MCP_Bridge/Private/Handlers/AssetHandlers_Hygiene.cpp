@@ -237,7 +237,7 @@ TSharedPtr<FJsonValue> MCPHygBuildNamingRules(
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* Custom = nullptr;
-	if (Params->TryGetArrayField(TEXT("namingRules"), Custom) && Custom)
+	if (TryGetArrayParam(Params, TEXT("namingRules"), Custom) && Custom)
 	{
 		for (int32 Index = 0; Index < Custom->Num(); ++Index)
 		{
@@ -343,7 +343,7 @@ struct FMCPHygScope
 TSharedPtr<FJsonValue> MCPHygParseScope(const TSharedPtr<FJsonObject>& Params, FMCPHygScope& Out)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Dirs = nullptr;
-	if (Params->TryGetArrayField(TEXT("directories"), Dirs) && Dirs)
+	if (TryGetArrayParam(Params, TEXT("directories"), Dirs) && Dirs)
 	{
 		Out.Directories = JsonArrayToStringList(Dirs);
 	}
@@ -371,12 +371,12 @@ TSharedPtr<FJsonValue> MCPHygParseScope(const TSharedPtr<FJsonObject>& Params, F
 		OptionalInt(Params, TEXT("maxAssets"), MCPHygDefaultMaxAssets), 1, MCPHygMaxMaxAssets);
 
 	const TArray<TSharedPtr<FJsonValue>>* Excludes = nullptr;
-	if (Params->TryGetArrayField(TEXT("excludePaths"), Excludes) && Excludes)
+	if (TryGetArrayParam(Params, TEXT("excludePaths"), Excludes) && Excludes)
 	{
 		Out.ExcludePrefixes = JsonArrayToStringList(Excludes);
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Classes = nullptr;
-	if (Params->TryGetArrayField(TEXT("classNames"), Classes) && Classes)
+	if (TryGetArrayParam(Params, TEXT("classNames"), Classes) && Classes)
 	{
 		Out.ClassFilter = JsonArrayToStringList(Classes);
 	}
@@ -660,7 +660,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AuditAssetHygiene(const TSharedPtr<FJsonO
 	};
 	TArray<FString> Checks;
 	const TArray<TSharedPtr<FJsonValue>>* RequestedChecks = nullptr;
-	if (Params->TryGetArrayField(TEXT("checks"), RequestedChecks) && RequestedChecks)
+	if (TryGetArrayParam(Params, TEXT("checks"), RequestedChecks) && RequestedChecks)
 	{
 		for (const FString& Raw : JsonArrayToStringList(RequestedChecks))
 		{
@@ -699,7 +699,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::AuditAssetHygiene(const TSharedPtr<FJsonO
 
 	TArray<FString> KeepPrefixes;
 	const TArray<TSharedPtr<FJsonValue>>* Keep = nullptr;
-	if (Params->TryGetArrayField(TEXT("keepPaths"), Keep) && Keep)
+	if (TryGetArrayParam(Params, TEXT("keepPaths"), Keep) && Keep)
 	{
 		KeepPrefixes = JsonArrayToStringList(Keep);
 	}
@@ -1097,14 +1097,14 @@ TSharedPtr<FJsonValue> FAssetHandlers::FixAssetHygiene(const TSharedPtr<FJsonObj
 	// then hand back exactly the paths that were approved.
 	TArray<FString> ExplicitPaths;
 	const TArray<TSharedPtr<FJsonValue>>* PathArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("assetPaths"), PathArray) && PathArray)
+	if (TryGetArrayParam(Params, TEXT("assetPaths"), PathArray) && PathArray)
 	{
 		ExplicitPaths = JsonArrayToStringList(PathArray);
 	}
 
 	TArray<FString> KeepPrefixes;
 	const TArray<TSharedPtr<FJsonValue>>* Keep = nullptr;
-	if (Params->TryGetArrayField(TEXT("keepPaths"), Keep) && Keep)
+	if (TryGetArrayParam(Params, TEXT("keepPaths"), Keep) && Keep)
 	{
 		KeepPrefixes = JsonArrayToStringList(Keep);
 	}

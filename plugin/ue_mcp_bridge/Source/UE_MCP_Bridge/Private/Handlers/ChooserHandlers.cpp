@@ -254,7 +254,7 @@ static TMap<int32, FString> CollectCellAssignments(const TSharedPtr<FJsonObject>
 
 	// cells: array aligned to column order.
 	const TArray<TSharedPtr<FJsonValue>>* Cells = nullptr;
-	if (Params->TryGetArrayField(TEXT("cells"), Cells) && Cells)
+	if (TryGetArrayParam(Params, TEXT("cells"), Cells) && Cells)
 	{
 		for (int32 i = 0; i < Cells->Num() && i < Table->ColumnsStructs.Num(); ++i)
 		{
@@ -268,7 +268,7 @@ static TMap<int32, FString> CollectCellAssignments(const TSharedPtr<FJsonObject>
 
 	// inputs: object keyed by column index-string or column name.
 	const TSharedPtr<FJsonObject>* Inputs = nullptr;
-	if (Params->TryGetObjectField(TEXT("inputs"), Inputs) && Inputs)
+	if (TryGetObjectParam(Params, TEXT("inputs"), Inputs) && Inputs)
 	{
 		for (const auto& Pair : (*Inputs)->Values)
 		{
@@ -656,7 +656,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
 
 	int32 RowIndex = INDEX_NONE;
-	if (!Params->TryGetNumberField(TEXT("index"), RowIndex))
+	if (!TryGetNumberParam(Params, TEXT("index"), RowIndex))
 	{
 		return MCPError(TEXT("Missing required parameter 'index'"));
 	}
@@ -708,7 +708,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::SetRow(const TSharedPtr<FJsonObject>& P
 
 	// Optional: toggle disabled.
 	bool bDisabled;
-	if (Params->TryGetBoolField(TEXT("disabled"), bDisabled))
+	if (TryGetBoolParam(Params, TEXT("disabled"), bDisabled))
 	{
 		if (!MCPChooserRowDisableSupported())
 		{
@@ -787,7 +787,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 	if (!Table) return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *TablePath));
 
 	int32 RowIndex = INDEX_NONE;
-	if (!Params->TryGetNumberField(TEXT("index"), RowIndex))
+	if (!TryGetNumberParam(Params, TEXT("index"), RowIndex))
 	{
 		return MCPError(TEXT("Missing required parameter 'index'"));
 	}
@@ -897,6 +897,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 
 void FChooserHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("chooser"));
 	Registry.RegisterHandler(TEXT("chooser_create"), &Create);
 	Registry.RegisterHandler(TEXT("chooser_describe"), &Describe);
 	Registry.RegisterHandler(TEXT("chooser_add_column"), &AddColumn);

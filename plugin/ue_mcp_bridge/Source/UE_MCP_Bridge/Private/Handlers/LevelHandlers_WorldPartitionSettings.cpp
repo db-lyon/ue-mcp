@@ -376,8 +376,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldPartitionSettings(const TSharedPt
 	// riddle rather than an interface.
 	TArray<TPair<FString, TSharedPtr<FJsonValue>>> Writes;
 
-	const bool bWantsCellSize = Params->HasField(TEXT("cellSize"));
-	const bool bWantsLoadingRange = Params->HasField(TEXT("loadingRange"));
+	const bool bWantsCellSize = HasParam(Params, TEXT("cellSize"));
+	const bool bWantsLoadingRange = HasParam(Params, TEXT("loadingRange"));
 	if (bWantsCellSize || bWantsLoadingRange)
 	{
 		TArray<FMCPWorldPartitionGrid> Grids;
@@ -448,7 +448,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldPartitionSettings(const TSharedPt
 	}
 
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && SettingsObj->IsValid())
+	if (TryGetObjectParam(Params, TEXT("settings"), SettingsObj) && SettingsObj && SettingsObj->IsValid())
 	{
 		for (const auto& Pair : (*SettingsObj)->Values)
 		{
@@ -683,7 +683,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddRuntimeCellTransformer(const TSharedPt
 
 	const TSharedPtr<FJsonObject>* PropertiesField = nullptr;
 	TSharedPtr<FJsonObject> Properties;
-	if (Params->TryGetObjectField(TEXT("properties"), PropertiesField) && PropertiesField && (*PropertiesField).IsValid())
+	if (TryGetObjectParam(Params, TEXT("properties"), PropertiesField) && PropertiesField && (*PropertiesField).IsValid())
 	{
 		Properties = *PropertiesField;
 	}

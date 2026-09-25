@@ -94,6 +94,8 @@ namespace
 
 void FNiagaraHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("niagara"));
 	Registry.RegisterHandler(TEXT("list_niagara_systems"), &ListNiagaraSystems);
 	Registry.RegisterHandler(TEXT("list_niagara_modules"), &ListNiagaraModules);
 	Registry.RegisterHandler(TEXT("create_niagara_system"), &CreateNiagaraSystem);
@@ -427,9 +429,10 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SpawnNiagaraAtLocation(const TSharedPtr
 	// Parse scale
 	FVector Scale = FVector::OneVector;
 	double ScaleX = 1, ScaleY = 1, ScaleZ = 1;
-	if (Params->TryGetNumberField(TEXT("scaleX"), ScaleX) ||
-		Params->TryGetNumberField(TEXT("scaleY"), ScaleY) ||
-		Params->TryGetNumberField(TEXT("scaleZ"), ScaleZ))
+	// Bitwise | so every axis is read; || stopped at the first one present.
+	if (TryGetNumberParam(Params, TEXT("scaleX"), ScaleX) |
+		TryGetNumberParam(Params, TEXT("scaleY"), ScaleY) |
+		TryGetNumberParam(Params, TEXT("scaleZ"), ScaleZ))
 	{
 		Scale = FVector(ScaleX, ScaleY, ScaleZ);
 	}
@@ -638,7 +641,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 	if (ParameterType == TEXT("float"))
 	{
 		double Value = 0;
-		if (!Params->TryGetNumberField(TEXT("value"), Value))
+		if (!TryGetNumberParam(Params, TEXT("value"), Value))
 		{
 			return MCPError(TEXT("Missing 'value' parameter for float type"));
 		}
@@ -664,9 +667,9 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetNiagaraParameter(const TSharedPtr<FJ
 	else if (ParameterType == TEXT("vector"))
 	{
 		double VX = 0, VY = 0, VZ = 0;
-		Params->TryGetNumberField(TEXT("valueX"), VX);
-		Params->TryGetNumberField(TEXT("valueY"), VY);
-		Params->TryGetNumberField(TEXT("valueZ"), VZ);
+		TryGetNumberParam(Params, TEXT("valueX"), VX);
+		TryGetNumberParam(Params, TEXT("valueY"), VY);
+		TryGetNumberParam(Params, TEXT("valueZ"), VZ);
 		FVector VecValue(VX, VY, VZ);
 		bool bIsValid = false;
 #if UE_MCP_HAS_5_5_API
@@ -1358,7 +1361,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 	R->Modify();
 	if (FBoolProperty* BP = CastField<FBoolProperty>(Prop))
 	{
-		if (!Params->TryGetBoolField(TEXT("value"), BoolValue)) return MCPError(TEXT("Expected bool 'value'"));
+		if (!TryGetBoolParam(Params, TEXT("value"), BoolValue)) return MCPError(TEXT("Expected bool 'value'"));
 		void* Addr = BP->ContainerPtrToValuePtr<void>(R);
 		RollbackPayload->SetBoolField(TEXT("value"), BP->GetPropertyValue(Addr));
 		bRollbackExpressible = true;
@@ -1366,7 +1369,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 	}
 	else if (FNumericProperty* NP = CastField<FNumericProperty>(Prop))
 	{
-		if (!Params->TryGetNumberField(TEXT("value"), NumValue)) return MCPError(TEXT("Expected numeric 'value'"));
+		if (!TryGetNumberParam(Params, TEXT("value"), NumValue)) return MCPError(TEXT("Expected numeric 'value'"));
 		// SetFloatingPointPropertyValue is only implemented for float/double
 		// properties; integer and enum-backed numerics need the integer setter.
 		void* Addr = NP->ContainerPtrToValuePtr<void>(R);
@@ -1385,7 +1388,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 	}
 	else if (FStrProperty* SP = CastField<FStrProperty>(Prop))
 	{
-		if (!Params->TryGetStringField(TEXT("value"), StringValue)) return MCPError(TEXT("Expected string 'value'"));
+		if (!TryGetStringParam(Params, TEXT("value"), StringValue)) return MCPError(TEXT("Expected string 'value'"));
 		void* Addr = SP->ContainerPtrToValuePtr<void>(R);
 		RollbackPayload->SetStringField(TEXT("value"), SP->GetPropertyValue(Addr));
 		bRollbackExpressible = true;
@@ -1395,7 +1398,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 	{
 		// Object/asset reference (e.g. a sprite renderer's Material): 'value' is
 		// the asset path.
-		if (!Params->TryGetStringField(TEXT("value"), StringValue)) return MCPError(TEXT("Expected string asset path 'value'"));
+		if (!TryGetStringParam(Params, TEXT("value"), StringValue)) return MCPError(TEXT("Expected string asset path 'value'"));
 		UObject* Asset = UEditorAssetLibrary::LoadAsset(StringValue);
 		if (!Asset) return MCPError(FString::Printf(TEXT("Asset not found: %s"), *StringValue));
 		if (OP->PropertyClass && !Asset->IsA(OP->PropertyClass))
@@ -1422,7 +1425,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::SetRendererProperty(const TSharedPtr<FJ
 		// name or array property. Route the rest through the shared recursive
 		// JSON setter (the one behind set_pcg_node_settings and
 		// set_component_property) instead of maintaining a type whitelist.
-		const TSharedPtr<FJsonValue> RawValue = Params->TryGetField(TEXT("value"));
+		const TSharedPtr<FJsonValue> RawValue = TryGetParam(Params, TEXT("value"));
 		if (!RawValue.IsValid())
 		{
 			return MCPError(TEXT("Expected a 'value' for this property"));
@@ -1526,7 +1529,7 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateNiagaraSystemFromSpec(const TShar
 	FString PackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game/VFX"));
 
 	const TArray<TSharedPtr<FJsonValue>>* EmittersArr = nullptr;
-	Params->TryGetArrayField(TEXT("emitters"), EmittersArr);
+	TryGetArrayParam(Params, TEXT("emitters"), EmittersArr);
 
 	// Create the system through UNiagaraSystemFactoryNew, not a bare NewObject.
 	// A NewObject'd UNiagaraSystem has no system spawn/update scripts and no
@@ -2650,9 +2653,9 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateModuleFromHlsl(const TSharedPtr<F
 
 	// Touch inputs/outputs array for informational echo (the CustomHLSL node manages its own pins via HLSL parsing)
 	const TArray<TSharedPtr<FJsonValue>>* InputsArr = nullptr;
-	Params->TryGetArrayField(TEXT("inputs"), InputsArr);
+	TryGetArrayParam(Params, TEXT("inputs"), InputsArr);
 	const TArray<TSharedPtr<FJsonValue>>* OutputsArr = nullptr;
-	Params->TryGetArrayField(TEXT("outputs"), OutputsArr);
+	TryGetArrayParam(Params, TEXT("outputs"), OutputsArr);
 
 	Graph->NotifyGraphChanged();
 	Script->MarkPackageDirty();
@@ -2691,9 +2694,9 @@ TSharedPtr<FJsonValue> FNiagaraHandlers::CreateScratchModule(const TSharedPtr<FJ
 
 	// Optionally add input/output pins on a CustomHLSL node stub so the module has declared parameters
 	const TArray<TSharedPtr<FJsonValue>>* InputsArr = nullptr;
-	Params->TryGetArrayField(TEXT("inputs"), InputsArr);
+	TryGetArrayParam(Params, TEXT("inputs"), InputsArr);
 	const TArray<TSharedPtr<FJsonValue>>* OutputsArr = nullptr;
-	Params->TryGetArrayField(TEXT("outputs"), OutputsArr);
+	TryGetArrayParam(Params, TEXT("outputs"), OutputsArr);
 
 	int32 InputCount = InputsArr ? InputsArr->Num() : 0;
 	int32 OutputCount = OutputsArr ? OutputsArr->Num() : 0;

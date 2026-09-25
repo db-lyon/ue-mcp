@@ -592,7 +592,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveMassTrait(const TSharedPtr<FJson
 	}
 
 	const FString TraitClassSpec = OptionalString(Params, TEXT("traitClass"));
-	const bool bHasIndex = Params->HasField(TEXT("index"));
+	const bool bHasIndex = HasParam(Params, TEXT("index"));
 	if (TraitClassSpec.IsEmpty() && !bHasIndex)
 	{
 		return MCPError(TEXT("Provide traitClass (idempotent: removes the first trait of that class) or index (positional: removes whatever currently sits there)"));
@@ -749,7 +749,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ReorderMassTraits(const TSharedPtr<FJs
 	if (!ReadConfigTraitObjects(Asset, Traits, Error)) return MCPError(Error);
 
 	const TArray<TSharedPtr<FJsonValue>>* OrderArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("order"), OrderArray) || !OrderArray)
+	if (!TryGetArrayParam(Params, TEXT("order"), OrderArray) || !OrderArray)
 	{
 		return MCPError(FString::Printf(
 			TEXT("Missing required parameter 'order': the current trait indices in the order wanted, a full permutation of 0..%d"),
@@ -1087,7 +1087,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::QueryZoneGraph(const TSharedPtr<FJsonO
 	// project-settings detail no caller should have to know.
 	TSet<FString> WantedTags;
 	const TArray<TSharedPtr<FJsonValue>>* TagArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("tags"), TagArray) && TagArray)
+	if (TryGetArrayParam(Params, TEXT("tags"), TagArray) && TagArray)
 	{
 		for (const TSharedPtr<FJsonValue>& Value : *TagArray)
 		{

@@ -369,7 +369,7 @@ TSharedPtr<FJsonValue> FGasHandlers::BindAbilityInput(const TSharedPtr<FJsonObje
 	FString AbilitySpecName;
 	if (auto Err = RequireString(Params, TEXT("abilityClass"), AbilitySpecName)) return Err;
 
-	if (!Params->HasField(TEXT("inputId")))
+	if (!HasParam(Params, TEXT("inputId")))
 	{
 		return MCPError(TEXT(
 			"Missing required parameter 'inputId'. It is the integer an ability is activated by, the same "
@@ -552,7 +552,7 @@ TSharedPtr<FJsonValue> FGasHandlers::SendAbilityInput(const TSharedPtr<FJsonObje
 		InputID = Spec->InputID;
 		Result->SetStringField(TEXT("abilityClass"), AbilityClass->GetPathName());
 	}
-	else if (Params->HasField(TEXT("inputId")))
+	else if (HasParam(Params, TEXT("inputId")))
 	{
 		InputID = static_cast<int32>(OptionalNumber(Params, TEXT("inputId"), -1.0));
 	}
@@ -1144,7 +1144,7 @@ TSharedPtr<FJsonValue> FGasHandlers::AuditAttributeSet(const TSharedPtr<FJsonObj
 	MCP_CHECK_GAME_THREAD();
 
 	const FString SetSpec = OptionalString(Params, TEXT("attributeSet"));
-	const bool bHasActor = Params->HasField(TEXT("actorLabel")) || Params->HasField(TEXT("actorPath"));
+	const bool bHasActor = HasParam(Params, TEXT("actorLabel")) || HasParam(Params, TEXT("actorPath"));
 	const bool bProbeClamping = OptionalBool(Params, TEXT("probeClamping"), false);
 
 	if (SetSpec.IsEmpty() && !bHasActor)

@@ -30,19 +30,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 	FRotator RelRot = FRotator::ZeroRotator;
 	FVector RelScale = FVector::OneVector;
 
-	if (const TSharedPtr<FJsonObject>* LocObj; Params->TryGetObjectField(TEXT("relativeLocation"), LocObj))
+	if (const TSharedPtr<FJsonObject>* LocObj; TryGetObjectParam(Params, TEXT("relativeLocation"), LocObj))
 	{
 		RelLoc.X = (*LocObj)->GetNumberField(TEXT("x"));
 		RelLoc.Y = (*LocObj)->GetNumberField(TEXT("y"));
 		RelLoc.Z = (*LocObj)->GetNumberField(TEXT("z"));
 	}
-	if (const TSharedPtr<FJsonObject>* RotObj; Params->TryGetObjectField(TEXT("relativeRotation"), RotObj))
+	if (const TSharedPtr<FJsonObject>* RotObj; TryGetObjectParam(Params, TEXT("relativeRotation"), RotObj))
 	{
 		RelRot.Pitch = (*RotObj)->GetNumberField(TEXT("pitch"));
 		RelRot.Yaw   = (*RotObj)->GetNumberField(TEXT("yaw"));
 		RelRot.Roll  = (*RotObj)->GetNumberField(TEXT("roll"));
 	}
-	if (const TSharedPtr<FJsonObject>* ScaleObj; Params->TryGetObjectField(TEXT("relativeScale"), ScaleObj))
+	if (const TSharedPtr<FJsonObject>* ScaleObj; TryGetObjectParam(Params, TEXT("relativeScale"), ScaleObj))
 	{
 		RelScale.X = (*ScaleObj)->GetNumberField(TEXT("x"));
 		RelScale.Y = (*ScaleObj)->GetNumberField(TEXT("y"));
@@ -59,9 +59,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::AddSocket(const TSharedPtr<FJsonObject>& 
 
 	// Track which transform fields the caller actually supplied so onConflict=update
 	// only overwrites what was passed in (matches set_socket_transform semantics).
-	const bool bHasLoc   = Params->HasField(TEXT("relativeLocation"));
-	const bool bHasRot   = Params->HasField(TEXT("relativeRotation"));
-	const bool bHasScale = Params->HasField(TEXT("relativeScale"));
+	const bool bHasLoc   = HasParam(Params, TEXT("relativeLocation"));
+	const bool bHasRot   = HasParam(Params, TEXT("relativeRotation"));
+	const bool bHasScale = HasParam(Params, TEXT("relativeScale"));
 
 	// Try StaticMesh first
 	if (UStaticMesh* SM = Cast<UStaticMesh>(Asset))
@@ -607,9 +607,9 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSocketTransform(const TSharedPtr<FJson
 	}
 
 	// Optional transform components - only fields that are passed are written.
-	const bool bHasLoc = Params->HasField(TEXT("relativeLocation"));
-	const bool bHasRot = Params->HasField(TEXT("relativeRotation"));
-	const bool bHasScale = Params->HasField(TEXT("relativeScale"));
+	const bool bHasLoc = HasParam(Params, TEXT("relativeLocation"));
+	const bool bHasRot = HasParam(Params, TEXT("relativeRotation"));
+	const bool bHasScale = HasParam(Params, TEXT("relativeScale"));
 	if (!bHasLoc && !bHasRot && !bHasScale)
 	{
 		return MCPError(TEXT("Pass at least one of relativeLocation, relativeRotation, relativeScale"));
@@ -618,19 +618,19 @@ TSharedPtr<FJsonValue> FAssetHandlers::SetSocketTransform(const TSharedPtr<FJson
 	FVector NewLoc = FVector::ZeroVector;
 	FRotator NewRot = FRotator::ZeroRotator;
 	FVector NewScale = FVector::OneVector;
-	if (const TSharedPtr<FJsonObject>* LocObj; Params->TryGetObjectField(TEXT("relativeLocation"), LocObj))
+	if (const TSharedPtr<FJsonObject>* LocObj; TryGetObjectParam(Params, TEXT("relativeLocation"), LocObj))
 	{
 		NewLoc.X = (*LocObj)->GetNumberField(TEXT("x"));
 		NewLoc.Y = (*LocObj)->GetNumberField(TEXT("y"));
 		NewLoc.Z = (*LocObj)->GetNumberField(TEXT("z"));
 	}
-	if (const TSharedPtr<FJsonObject>* RotObj; Params->TryGetObjectField(TEXT("relativeRotation"), RotObj))
+	if (const TSharedPtr<FJsonObject>* RotObj; TryGetObjectParam(Params, TEXT("relativeRotation"), RotObj))
 	{
 		NewRot.Pitch = (*RotObj)->GetNumberField(TEXT("pitch"));
 		NewRot.Yaw   = (*RotObj)->GetNumberField(TEXT("yaw"));
 		NewRot.Roll  = (*RotObj)->GetNumberField(TEXT("roll"));
 	}
-	if (const TSharedPtr<FJsonObject>* ScaleObj; Params->TryGetObjectField(TEXT("relativeScale"), ScaleObj))
+	if (const TSharedPtr<FJsonObject>* ScaleObj; TryGetObjectParam(Params, TEXT("relativeScale"), ScaleObj))
 	{
 		NewScale.X = (*ScaleObj)->GetNumberField(TEXT("x"));
 		NewScale.Y = (*ScaleObj)->GetNumberField(TEXT("y"));

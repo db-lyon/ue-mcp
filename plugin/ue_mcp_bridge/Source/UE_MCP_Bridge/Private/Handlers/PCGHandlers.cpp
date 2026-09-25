@@ -140,6 +140,8 @@ namespace
 
 void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("pcg"));
 	Registry.RegisterHandler(TEXT("list_pcg_graphs"), &ListPCGGraphs);
 	Registry.RegisterHandler(TEXT("get_pcg_components"), &GetPCGComponents);
 	Registry.RegisterHandler(TEXT("create_pcg_graph"), &CreatePCGGraph);
@@ -422,7 +424,8 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 	DefaultSettings->PostEditChange();
 
 	double PosX = 0, PosY = 0;
-	if (Params->TryGetNumberField(TEXT("posX"), PosX) || Params->TryGetNumberField(TEXT("posY"), PosY))
+	// Bitwise | so both are read; || ignored posY whenever posX was given.
+	if (TryGetNumberParam(Params, TEXT("posX"), PosX) | TryGetNumberParam(Params, TEXT("posY"), PosY))
 	{
 		NewNode->PositionX = (int32)PosX;
 		NewNode->PositionY = (int32)PosY;
@@ -525,14 +528,14 @@ TSharedPtr<FJsonValue> FPCGHandlers::ConnectPCGNodes(const TSharedPtr<FJsonObjec
 
 	// Get pin labels if specified, otherwise use the first available pins
 	FString SourcePinLabel;
-	if (!Params->TryGetStringField(TEXT("sourcePinLabel"), SourcePinLabel))
+	if (!TryGetStringParam(Params, TEXT("sourcePinLabel"), SourcePinLabel))
 	{
-		Params->TryGetStringField(TEXT("sourcePin"), SourcePinLabel);
+		TryGetStringParam(Params, TEXT("sourcePin"), SourcePinLabel);
 	}
 	FString TargetPinLabel;
-	if (!Params->TryGetStringField(TEXT("targetPinLabel"), TargetPinLabel))
+	if (!TryGetStringParam(Params, TEXT("targetPinLabel"), TargetPinLabel))
 	{
-		Params->TryGetStringField(TEXT("targetPin"), TargetPinLabel);
+		TryGetStringParam(Params, TEXT("targetPin"), TargetPinLabel);
 	}
 
 	// UE 5.7: Pin and edge APIs refactored; use Graph->AddEdge() with node+label
@@ -953,15 +956,15 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetPCGNodeSettings(const TSharedPtr<FJsonOb
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
 	FString PropertyName;
 	FString PropertyValue;
-	bool bUseSettingsObject = Params->TryGetObjectField(TEXT("settings"), SettingsObj) && SettingsObj && (*SettingsObj).IsValid();
-	bool bUseSingleProperty = !bUseSettingsObject && Params->TryGetStringField(TEXT("propertyName"), PropertyName);
+	bool bUseSettingsObject = TryGetObjectParam(Params, TEXT("settings"), SettingsObj) && SettingsObj && (*SettingsObj).IsValid();
+	bool bUseSingleProperty = !bUseSettingsObject && TryGetStringParam(Params, TEXT("propertyName"), PropertyName);
 
 	if (!bUseSettingsObject && !bUseSingleProperty)
 	{
 		return MCPError(TEXT("Missing 'settings' object or 'propertyName'/'propertyValue' parameters"));
 	}
 
-	if (bUseSingleProperty && !Params->TryGetStringField(TEXT("propertyValue"), PropertyValue))
+	if (bUseSingleProperty && !TryGetStringParam(Params, TEXT("propertyValue"), PropertyValue))
 	{
 		return MCPError(TEXT("Missing 'propertyValue' parameter"));
 	}
@@ -1145,7 +1148,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExecutePCGGraph(const TSharedPtr<FJsonObjec
 
 	// Set seed if provided
 	double Seed = 0;
-	if (Params->TryGetNumberField(TEXT("seed"), Seed))
+	if (TryGetNumberParam(Params, TEXT("seed"), Seed))
 	{
 		PCGComp->Seed = (int32)Seed;
 	}
@@ -1239,7 +1242,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject
 	{
 		bool bAny = false;
 		const TSharedPtr<FJsonObject>* Obj = nullptr;
-		if (Params->TryGetObjectField(ObjKey, Obj) && Obj && Obj->IsValid())
+		if (TryGetObjectParam(Params, ObjKey, Obj) && Obj && Obj->IsValid())
 		{
 			double V = 0;
 			if ((*Obj)->TryGetNumberField(TEXT("x"), V)) { Out.X = V; bAny = true; }
@@ -1247,9 +1250,9 @@ TSharedPtr<FJsonValue> FPCGHandlers::SpawnPCGVolume(const TSharedPtr<FJsonObject
 			if ((*Obj)->TryGetNumberField(TEXT("z"), V)) { Out.Z = V; bAny = true; }
 		}
 		double V = 0;
-		if (Params->TryGetNumberField(FlatX, V)) { Out.X = V; bAny = true; }
-		if (Params->TryGetNumberField(FlatY, V)) { Out.Y = V; bAny = true; }
-		if (Params->TryGetNumberField(FlatZ, V)) { Out.Z = V; bAny = true; }
+		if (TryGetNumberParam(Params, FlatX, V)) { Out.X = V; bAny = true; }
+		if (TryGetNumberParam(Params, FlatY, V)) { Out.Y = V; bAny = true; }
+		if (TryGetNumberParam(Params, FlatZ, V)) { Out.Z = V; bAny = true; }
 		return bAny;
 	};
 
@@ -1570,7 +1573,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::SetStaticMeshSpawnerMeshes(const TSharedPtr
 	if (auto Err = RequireString(Params, TEXT("nodeName"), NodeName)) return Err;
 
 	const TArray<TSharedPtr<FJsonValue>>* EntriesArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("entries"), EntriesArr) || !EntriesArr)
+	if (!TryGetArrayParam(Params, TEXT("entries"), EntriesArr) || !EntriesArr)
 	{
 		return MCPError(TEXT("Missing 'entries' array - each item should be {mesh: <path>, weight?: <int>}"));
 	}
@@ -1911,7 +1914,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ToggleGraphPCG(const TSharedPtr<FJsonObject
 	// If the caller supplies graphPath, load and use that; otherwise re-apply the current graph.
 	FString GraphPath;
 	UPCGGraph* TargetGraph = nullptr;
-	if (Params->TryGetStringField(TEXT("graphPath"), GraphPath) && !GraphPath.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("graphPath"), GraphPath) && !GraphPath.IsEmpty())
 	{
 		TargetGraph = LoadObject<UPCGGraph>(nullptr, *GraphPath);
 		if (!TargetGraph) return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *GraphPath));
@@ -1980,7 +1983,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	const TArray<TSharedPtr<FJsonValue>>* NodesArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("nodes"), NodesArr) || !NodesArr)
+	if (!TryGetArrayParam(Params, TEXT("nodes"), NodesArr) || !NodesArr)
 	{
 		return MCPError(TEXT("Missing 'nodes' array"));
 	}
@@ -2145,7 +2148,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 	// to the graph's own nodes (Input/Output/already-existing) by engine name.
 	const TArray<TSharedPtr<FJsonValue>>* ConnsArr = nullptr;
 	int32 ConnectionsMade = 0;
-	if (Params->TryGetArrayField(TEXT("connections"), ConnsArr) && ConnsArr)
+	if (TryGetArrayParam(Params, TEXT("connections"), ConnsArr) && ConnsArr)
 	{
 		auto Resolve = [&](const FString& Name) -> UPCGNode*
 		{

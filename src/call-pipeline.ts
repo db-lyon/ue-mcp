@@ -75,6 +75,8 @@ export interface CallPreparation {
   action?: string;
   /** The category's `normalizeParams`, folding accepted spellings into the canonical ones. */
   normalizeParams?: (params: Record<string, unknown>) => Record<string, unknown>;
+  /** Keys that are one parameter under different names; see `CategoryOptions.paramGroups`. */
+  paramGroups?: readonly (readonly string[])[];
   /**
    * The real parameters live under this key rather than at the top level.
    *
@@ -105,6 +107,10 @@ export interface CallPipeline {
   supplied: string[];
   /** Supplied keys the action's mapParams did not send. Set by `forwardToBridge`. */
   unforwarded?: string[];
+  /** Keys that are one parameter under different names, from the category. */
+  paramGroups?: readonly (readonly string[])[];
+  /** Keys actually sent to the bridge. Set by `forwardToBridge`. */
+  sentKeys?: string[];
 }
 
 function isParamBag(value: unknown): value is Record<string, unknown> {
@@ -188,6 +194,7 @@ export function prepareCall(
     selection: outerSelection.selection,
     timeoutMs: outerTimeout.timeoutMs,
     supplied: Object.keys(outerSelection.rest),
+    paramGroups: prep.paramGroups,
   };
 }
 
@@ -208,8 +215,12 @@ export function forwardToBridge(
   mapParams: ((p: Record<string, unknown>) => Record<string, unknown>) | undefined,
   label: string,
 ): Record<string, unknown> {
-  if (!mapParams) return bag;
+  if (!mapParams) {
+    pipeline.sentKeys = Object.keys(bag);
+    return bag;
+  }
   const { params, unforwarded } = mapTracked(mapParams, bag, pipeline.supplied);
+  pipeline.sentKeys = Object.keys(params);
   if (unforwarded.length === 0) return params;
   if (process.env[STRICT_PARAMS_ENV] === "1") {
     throw new McpError(
@@ -246,18 +257,26 @@ export function attachUnforwarded<T>(result: T, unforwarded: string[] | undefine
  *
  * A C++ handler of a reporting category lists the keys that arrived and were
  * never read. The list is taken from the unprojected answer and written after
- * the projection, so a narrow `select` cannot filter it away.
+ * the projection, so a narrow `select` cannot filter it away. A key whose
+ * group (the same parameter under another name) had a member read is dropped:
+ * the server mirrored it, the caller did not misspell it.
  */
-export function attachNotRead<T>(result: T, answered: unknown): T {
+export function attachNotRead<T>(result: T, answered: unknown, pipeline?: Pick<CallPipeline, "paramGroups" | "sentKeys" | "params">): T {
   if (answered === null || typeof answered !== "object" || Array.isArray(answered)) return result;
   const listed = (answered as Record<string, unknown>).paramsNotRead;
   if (!Array.isArray(listed)) return result;
-  const names = listed.filter((n): n is string => typeof n === "string");
+  const unread = listed.filter((n): n is string => typeof n === "string");
+  const unreadSet = new Set(unread);
+  const sent = new Set(pipeline?.sentKeys ?? Object.keys(pipeline?.params ?? {}));
+  const groupRead = (key: string): boolean =>
+    (pipeline?.paramGroups ?? []).some((group) =>
+      group.includes(key) && group.some((member) => sent.has(member) && !unreadSet.has(member)));
+  const names = unread.filter((key) => !groupRead(key));
   if (names.length === 0) return result;
   if (result === null || typeof result !== "object" || Array.isArray(result)) return result;
   const record = result as Record<string, unknown>;
   if (record.__directive === true && "result" in record) {
-    return { ...record, result: attachNotRead(record.result, answered) } as T;
+    return { ...record, result: attachNotRead(record.result, answered, pipeline) } as T;
   }
   return {
     ...record,
@@ -284,6 +303,7 @@ export function finishCall(raw: unknown, pipeline: CallPipeline): unknown {
       pipeline.unforwarded,
     ),
     raw,
+    pipeline,
   );
 }
 

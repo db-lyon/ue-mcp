@@ -36,7 +36,7 @@ namespace
 		if (LodCount <= 0) return MCPError(TEXT("SkeletalMesh has no LODs"));
 
 		const bool bAllLods = OptionalBool(Params, TEXT("allLods"), false);
-		if (bAllLods && Params->HasField(TEXT("lodIndex")))
+		if (bAllLods && HasParam(Params, TEXT("lodIndex")))
 		{
 			return MCPError(TEXT("Specify either allLods=true or lodIndex, not both"));
 		}
@@ -49,10 +49,10 @@ namespace
 		else
 		{
 			int32 LodIndex = 0;
-			if (Params->HasField(TEXT("lodIndex")))
+			if (HasParam(Params, TEXT("lodIndex")))
 			{
 				double LodNumber = 0.0;
-				if (!Params->TryGetNumberField(TEXT("lodIndex"), LodNumber)
+				if (!TryGetNumberParam(Params, TEXT("lodIndex"), LodNumber)
 					|| !FMath::IsFinite(LodNumber)
 					|| !FMath::IsNearlyEqual(LodNumber, FMath::RoundToDouble(LodNumber)))
 				{
@@ -178,7 +178,7 @@ namespace
 			return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *AssetPath));
 		}
 
-		if (Params->HasField(TEXT("lodIndex")))
+		if (HasParam(Params, TEXT("lodIndex")))
 		{
 			if (TSharedPtr<FJsonValue> Error = MCPParseFiniteInteger(Params, TEXT("lodIndex"), Out.LodIndex, TEXT("params")))
 			{
@@ -218,10 +218,10 @@ namespace
 				*Out.Mesh->GetPathName()));
 		}
 
-		if (Params->HasField(TEXT("profileName")))
+		if (HasParam(Params, TEXT("profileName")))
 		{
 			FString RequestedProfile;
-			if (!Params->TryGetStringField(TEXT("profileName"), RequestedProfile))
+			if (!TryGetStringParam(Params, TEXT("profileName"), RequestedProfile))
 			{
 				return MCPError(TEXT("profileName must be a string"));
 			}
@@ -294,7 +294,7 @@ namespace
 		TArray<int32>& OutVertexIndices)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!Params->TryGetArrayField(TEXT("vertexIndices"), Values) || !Values || Values->IsEmpty())
+		if (!TryGetArrayParam(Params, TEXT("vertexIndices"), Values) || !Values || Values->IsEmpty())
 		{
 			return MCPError(TEXT("vertexIndices must contain at least one source MeshDescription vertex index"));
 		}
@@ -418,14 +418,14 @@ namespace
 		TArray<FMCPSkinWeightEdit>& OutEdits)
 	{
 		bool bRestoreRawWeights = false;
-		if (Params->HasField(TEXT("restoreRawWeights"))
-			&& !Params->TryGetBoolField(TEXT("restoreRawWeights"), bRestoreRawWeights))
+		if (HasParam(Params, TEXT("restoreRawWeights"))
+			&& !TryGetBoolParam(Params, TEXT("restoreRawWeights"), bRestoreRawWeights))
 		{
 			return MCPError(TEXT("restoreRawWeights must be a boolean"));
 		}
 
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!Params->TryGetArrayField(TEXT("edits"), Values) || !Values || Values->IsEmpty())
+		if (!TryGetArrayParam(Params, TEXT("edits"), Values) || !Values || Values->IsEmpty())
 		{
 			return MCPError(TEXT("edits must contain at least one {vertexIndex, influences} entry"));
 		}
@@ -694,6 +694,8 @@ namespace
 }
 void FSkeletalMeshHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("skeletalmesh"));
 	Registry.RegisterHandler(TEXT("set_skeletal_mesh_optimize_for_instancing"), &SetOptimizeForInstancing);
 	Registry.RegisterHandler(TEXT("read_skeletal_mesh_build_settings"), &ReadBuildSettings);
 	Registry.RegisterHandler(TEXT("read_skeletal_mesh_skin_weights"), &ReadSkinWeights);
@@ -956,7 +958,7 @@ TSharedPtr<FJsonValue> FSkeletalMeshHandlers::SetOptimizeForInstancing(const TSh
 	FString AssetPath;
 	if (auto Err = RequireString(Params, TEXT("assetPath"), AssetPath)) return Err;
 	bool bEnabled = false;
-	if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+	if (!TryGetBoolParam(Params, TEXT("enabled"), bEnabled))
 	{
 		return MCPError(TEXT("Missing required parameter 'enabled'"));
 	}

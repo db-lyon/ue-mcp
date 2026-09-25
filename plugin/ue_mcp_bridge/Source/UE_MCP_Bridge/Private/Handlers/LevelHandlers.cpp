@@ -101,6 +101,8 @@
 
 void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("level"));
 	Registry.RegisterHandler(TEXT("get_world_outliner"), &GetOutliner);
 	// #717: query/set per-actor editor-only visibility (temporarily hidden).
 	Registry.RegisterHandler(TEXT("set_editor_visibility"), &SetEditorVisibility);
@@ -270,7 +272,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetOutliner(const TSharedPtr<FJsonObject>
 	// per-actor editorHidden flag is always reported so callers can find lights
 	// that are hidden in the viewport but still render in game.
 	bool bEditorHiddenFilterValue = false;
-	const bool bHasEditorHiddenFilter = Params->TryGetBoolField(TEXT("editorHidden"), bEditorHiddenFilterValue);
+	const bool bHasEditorHiddenFilter = TryGetBoolParam(Params, TEXT("editorHidden"), bEditorHiddenFilterValue);
 
 	// T3: paged. The default of 50 kept this snappy on World Partition levels
 	// and told nobody it had cut anything, so an agent reading a 900-actor map
@@ -427,7 +429,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetEditorVisibility(const TSharedPtr<FJso
 	REQUIRE_EDITOR_WORLD(World);
 
 	bool bHidden = false;
-	if (!Params->TryGetBoolField(TEXT("hidden"), bHidden))
+	if (!TryGetBoolParam(Params, TEXT("hidden"), bHidden))
 	{
 		return MCPError(TEXT("Missing 'hidden' parameter (true = hide in editor, false = show)"));
 	}
@@ -436,7 +438,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetEditorVisibility(const TSharedPtr<FJso
 
 	TSet<FString> TargetLabels;
 	const TArray<TSharedPtr<FJsonValue>>* LabelsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("actorLabels"), LabelsArr) && LabelsArr)
+	if (TryGetArrayParam(Params, TEXT("actorLabels"), LabelsArr) && LabelsArr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *LabelsArr)
 		{
@@ -551,7 +553,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActor(const TSharedPtr<FJsonObject>&
 		NewActor->SetActorLabel(Label);
 	}
 
-	if (Params->HasField(TEXT("scale")))
+	if (HasParam(Params, TEXT("scale")))
 	{
 		NewActor->SetActorScale3D(OptionalVec3(Params, TEXT("scale"), FVector::OneVector));
 	}
@@ -1268,15 +1270,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::MoveActor(const TSharedPtr<FJsonObject>& 
 	const FRotator PreviousRotation = Actor->GetActorRotation();
 	const FVector PreviousScale = Actor->GetActorScale3D();
 
-	if (Params->HasField(TEXT("location")))
+	if (HasParam(Params, TEXT("location")))
 	{
 		Actor->SetActorLocation(OptionalVec3(Params, TEXT("location"), Actor->GetActorLocation()));
 	}
-	if (Params->HasField(TEXT("rotation")))
+	if (HasParam(Params, TEXT("rotation")))
 	{
 		Actor->SetActorRotation(OptionalRotator(Params, TEXT("rotation"), Actor->GetActorRotation()));
 	}
-	if (Params->HasField(TEXT("scale")))
+	if (HasParam(Params, TEXT("scale")))
 	{
 		Actor->SetActorScale3D(OptionalVec3(Params, TEXT("scale"), Actor->GetActorScale3D()));
 	}
@@ -1322,7 +1324,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 
 	// Resolve the target point: an explicit target Vec3, or another actor's location.
 	FVector TargetLocation;
-	if (Params->HasField(TEXT("targetActor")) || Params->HasField(TEXT("targetActorPath")))
+	if (HasParam(Params, TEXT("targetActor")) || HasParam(Params, TEXT("targetActorPath")))
 	{
 		FMCPActorSelector TargetSel;
 		TargetSel.LabelKey = TEXT("targetActor");
@@ -1331,7 +1333,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 		if (!TargetActor) return ActorErr;
 		TargetLocation = TargetActor->GetActorLocation();
 	}
-	else if (Params->HasField(TEXT("target")))
+	else if (HasParam(Params, TEXT("target")))
 	{
 		TargetLocation = OptionalVec3(Params, TEXT("target"), FVector::ZeroVector);
 	}
@@ -1376,7 +1378,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AimActorAt(const TSharedPtr<FJsonObject>&
 // editor or PIE (navmesh must be built/generated for the world).
 TSharedPtr<FJsonValue> FLevelHandlers::NavProjectPoint(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Params->HasField(TEXT("point"))) return MCPError(TEXT("Missing 'point' (Vec3)"));
+	if (!HasParam(Params, TEXT("point"))) return MCPError(TEXT("Missing 'point' (Vec3)"));
 	const FVector Point = OptionalVec3(Params, TEXT("point"), FVector::ZeroVector);
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
@@ -1386,7 +1388,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::NavProjectPoint(const TSharedPtr<FJsonObj
 	UNavigationSystemV1* Nav = UNavigationSystemV1::GetCurrent(World);
 	if (!Nav) return MCPError(TEXT("No navigation system in this world (add a NavMeshBoundsVolume and build navigation)"));
 
-	const FVector Extent = Params->HasField(TEXT("extent"))
+	const FVector Extent = HasParam(Params, TEXT("extent"))
 		? OptionalVec3(Params, TEXT("extent"), FVector(100.f, 100.f, 100.f))
 		: FVector(100.f, 100.f, 100.f);
 
@@ -1404,9 +1406,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 {
 	static const TArray<TSharedPtr<FJsonValue>> EmptySelection;
 	const TArray<TSharedPtr<FJsonValue>>* ActorLabelsArray = &EmptySelection;
-	const bool bHasLabels = Params->TryGetArrayField(TEXT("actorLabels"), ActorLabelsArray);
+	const bool bHasLabels = TryGetArrayParam(Params, TEXT("actorLabels"), ActorLabelsArray);
 	if (!bHasLabels) ActorLabelsArray = &EmptySelection;
-	if (!bHasLabels && !Params->HasField(TEXT("actorPaths")))
+	if (!bHasLabels && !HasParam(Params, TEXT("actorPaths")))
 	{
 		return MCPError(TEXT("Missing 'actorLabels' parameter (or 'actorPaths')"));
 	}
@@ -1460,7 +1462,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SelectActors(const TSharedPtr<FJsonObject
 	// An explicit path list selects exactly what it names, with no label
 	// resolution in the way at all.
 	const TArray<TSharedPtr<FJsonValue>>* ActorPathsArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("actorPaths"), ActorPathsArray))
+	if (TryGetArrayParam(Params, TEXT("actorPaths"), ActorPathsArray))
 	{
 		for (const TSharedPtr<FJsonValue>& PathValue : *ActorPathsArray)
 		{
@@ -2176,7 +2178,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 		}
 	}
 
-	const TSharedPtr<FJsonValue>* ValueField = Params->Values.Find(TEXT("value"));
+	const TSharedPtr<FJsonValue> ValueParam = TryGetParam(Params, TEXT("value"));
+	const TSharedPtr<FJsonValue>* ValueField = ValueParam.IsValid() ? &ValueParam : nullptr;
 	if (!ValueField || !(*ValueField).IsValid())
 	{
 		return MCPError(TEXT("Missing 'value' parameter"));
@@ -2361,7 +2364,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentDetails(const TSharedPtr<FJso
 	// actor's live component instance too.
 	const bool bIncludeValues = OptionalBool(Params, TEXT("includeValues"), false);
 	const TArray<TSharedPtr<FJsonValue>>* PropNamesArr = nullptr;
-	Params->TryGetArrayField(TEXT("propertyNames"), PropNamesArr);
+	TryGetArrayParam(Params, TEXT("propertyNames"), PropNamesArr);
 	TArray<FString> PropFilter = JsonArrayToStringList(PropNamesArr);
 
 	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
@@ -2513,7 +2516,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 	TSharedPtr<FJsonObject> PrevPayload = MakeShared<FJsonObject>();
 
 	FString GameModeStr;
-	if (Params->TryGetStringField(TEXT("defaultGameMode"), GameModeStr))
+	if (TryGetStringParam(Params, TEXT("defaultGameMode"), GameModeStr))
 	{
 		if (GameModeStr.Equals(TEXT("None"), ESearchCase::IgnoreCase) || GameModeStr.IsEmpty())
 		{
@@ -2542,7 +2545,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 	}
 
 	double KillZ;
-	if (Params->TryGetNumberField(TEXT("killZ"), KillZ))
+	if (TryGetNumberParam(Params, TEXT("killZ"), KillZ))
 	{
 		Settings->KillZ = KillZ;
 		Changes.Add(MakeShared<FJsonValueString>(TEXT("killZ")));
@@ -2550,7 +2553,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 	}
 
 	double GravityZ;
-	if (Params->TryGetNumberField(TEXT("globalGravityZ"), GravityZ))
+	if (TryGetNumberParam(Params, TEXT("globalGravityZ"), GravityZ))
 	{
 		Settings->GlobalGravityZ = GravityZ;
 		Changes.Add(MakeShared<FJsonValueString>(TEXT("globalGravityZ")));
@@ -2558,7 +2561,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWorldSettings(const TSharedPtr<FJsonOb
 	}
 
 	bool bBoundsChecks;
-	if (Params->TryGetBoolField(TEXT("enableWorldBoundsChecks"), bBoundsChecks))
+	if (TryGetBoolParam(Params, TEXT("enableWorldBoundsChecks"), bBoundsChecks))
 	{
 		Settings->bEnableWorldBoundsChecks = bBoundsChecks;
 		Changes.Add(MakeShared<FJsonValueString>(TEXT("enableWorldBoundsChecks")));
@@ -2897,7 +2900,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJs
 
 	FString ValueStr;
 	bool bHaveValue = false;
-	TSharedPtr<FJsonValue> V = Params->TryGetField(TEXT("value"));
+	TSharedPtr<FJsonValue> V = TryGetParam(Params, TEXT("value"));
 	if (V.IsValid())
 	{
 		if (V->TryGetString(ValueStr)) bHaveValue = true;
@@ -3103,7 +3106,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 	FString PropertyName;
 	if (auto Err = RequireString(Params, TEXT("propertyName"), PropertyName)) return Err;
 
-	const TSharedPtr<FJsonValue>* ValueField = Params->Values.Find(TEXT("value"));
+	const TSharedPtr<FJsonValue> ValueParam = TryGetParam(Params, TEXT("value"));
+	const TSharedPtr<FJsonValue>* ValueField = ValueParam.IsValid() ? &ValueParam : nullptr;
 	if (!ValueField || !(*ValueField).IsValid())
 	{
 		return MCPError(TEXT("Missing 'value' parameter"));
@@ -3121,7 +3125,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 	AActor* TargetActor = nullptr;
 	const bool bWorldSettings =
 		ActorLabel.Equals(TEXT("WorldSettings"), ESearchCase::IgnoreCase)
-		&& !Params->HasField(TEXT("actorPath"));
+		&& !HasParam(Params, TEXT("actorPath"));
 	if (bWorldSettings)
 	{
 		TargetActor = World->GetWorldSettings();
@@ -3434,12 +3438,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReadActorMotion(const TSharedPtr<FJsonObj
 
 	TArray<FString> Labels;
 	FString Single;
-	if (Params->TryGetStringField(TEXT("actorLabel"), Single) && !Single.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("actorLabel"), Single) && !Single.IsEmpty())
 	{
 		Labels.Add(Single);
 	}
 	const TArray<TSharedPtr<FJsonValue>>* LabelsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("actorLabels"), LabelsArr) && LabelsArr)
+	if (TryGetArrayParam(Params, TEXT("actorLabels"), LabelsArr) && LabelsArr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *LabelsArr)
 		{
@@ -3453,12 +3457,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::ReadActorMotion(const TSharedPtr<FJsonObj
 	// resolve here exactly as they do everywhere else.
 	TArray<FString> Paths;
 	FString SinglePath;
-	if (Params->TryGetStringField(TEXT("actorPath"), SinglePath) && !SinglePath.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("actorPath"), SinglePath) && !SinglePath.IsEmpty())
 	{
 		Paths.Add(SinglePath);
 	}
 	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("actorPaths"), PathsArr) && PathsArr)
+	if (TryGetArrayParam(Params, TEXT("actorPaths"), PathsArr) && PathsArr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *PathsArr)
 		{
@@ -3596,7 +3600,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddHismcInstances(const TSharedPtr<FJsonO
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("transforms"), Arr) || !Arr)
+	if (!TryGetArrayParam(Params, TEXT("transforms"), Arr) || !Arr)
 	{
 		return MCPError(TEXT("Missing 'transforms' array ([{location, rotation?, scale?}])"));
 	}
@@ -3763,7 +3767,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::UpdateInstanceTransform(const TSharedPtr<
 	UInstancedStaticMeshComponent* ISMC = ResolveISMC(Actor, ComponentName);
 	if (!ISMC) return MCPError(FString::Printf(TEXT("No InstancedStaticMeshComponent on actor '%s'"), *ActorLabel));
 
-	if (!Params->HasField(TEXT("index"))) return MCPError(TEXT("Missing 'index'"));
+	if (!HasParam(Params, TEXT("index"))) return MCPError(TEXT("Missing 'index'"));
 	const int32 Index = OptionalInt(Params, TEXT("index"), -1);
 	if (Index < 0 || Index >= ISMC->GetInstanceCount())
 	{
@@ -3779,9 +3783,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::UpdateInstanceTransform(const TSharedPtr<
 	FRotator Rot = Xf.Rotator();
 	FVector Scale = Xf.GetScale3D();
 	const TSharedPtr<FJsonObject>* Sub = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), Sub) && Sub) ReadVec3Fields(*Sub, Loc);
-	if (Params->TryGetObjectField(TEXT("rotation"), Sub) && Sub) ReadRotatorFields(*Sub, Rot);
-	if (Params->TryGetObjectField(TEXT("scale"), Sub) && Sub) ReadVec3Fields(*Sub, Scale);
+	if (TryGetObjectParam(Params, TEXT("location"), Sub) && Sub) ReadVec3Fields(*Sub, Loc);
+	if (TryGetObjectParam(Params, TEXT("rotation"), Sub) && Sub) ReadRotatorFields(*Sub, Rot);
+	if (TryGetObjectParam(Params, TEXT("scale"), Sub) && Sub) ReadVec3Fields(*Sub, Scale);
 
 	// The transform this call is about to overwrite, in the same space the
 	// inverse will be replayed in.
@@ -3841,7 +3845,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveInstance(const TSharedPtr<FJsonObje
 	UInstancedStaticMeshComponent* ISMC = ResolveISMC(Actor, ComponentName);
 	if (!ISMC) return MCPError(FString::Printf(TEXT("No InstancedStaticMeshComponent on actor '%s'"), *ActorLabel));
 
-	if (!Params->HasField(TEXT("index"))) return MCPError(TEXT("Missing 'index'"));
+	if (!HasParam(Params, TEXT("index"))) return MCPError(TEXT("Missing 'index'"));
 	const int32 Index = OptionalInt(Params, TEXT("index"), -1);
 	if (Index < 0 || Index >= ISMC->GetInstanceCount())
 	{
@@ -3905,7 +3909,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetNaniteSettings(const TSharedPtr<FJsonO
 	const bool bPreviousEnabled = Settings.bEnabled != 0;
 	const int32 PreviousPositionPrecision = Settings.PositionPrecision;
 	Settings.bEnabled = bEnabled;
-	if (Params->HasField(TEXT("positionPrecision")))
+	if (HasParam(Params, TEXT("positionPrecision")))
 	{
 		Settings.PositionPrecision = OptionalInt(Params, TEXT("positionPrecision"), Settings.PositionPrecision);
 	}
@@ -4145,7 +4149,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnSkeletalMeshActor(const TSharedPtr<F
 		Comp->SetSkeletalMeshAsset(Mesh);
 
 		const TArray<TSharedPtr<FJsonValue>>* Mats = nullptr;
-		if (Params->TryGetArrayField(TEXT("materials"), Mats) && Mats)
+		if (TryGetArrayParam(Params, TEXT("materials"), Mats) && Mats)
 		{
 			const int32 SlotCount = Comp->GetNumMaterials();
 			for (int32 i = 0; i < Mats->Num(); ++i)
@@ -4240,7 +4244,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnSkeletalMeshActor(const TSharedPtr<F
 // buffers for the new skeleton.
 TSharedPtr<FJsonValue> FLevelHandlers::SetComponentSkeletalMesh(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Params->HasField(TEXT("skeletalMesh")))
+	if (!HasParam(Params, TEXT("skeletalMesh")))
 	{
 		return MCPError(TEXT("Missing 'skeletalMesh': a SkeletalMesh asset path, or null to clear the mesh"));
 	}
@@ -4290,7 +4294,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentSkeletalMesh(const TSharedPtr
 	Actor->Modify();
 	FString PreviousMesh;
 	FString MeshErr;
-	if (!MCPSkinnedAsset::AssignFromJson(Comp, Params->TryGetField(TEXT("skeletalMesh")), PreviousMesh, MeshErr))
+	if (!MCPSkinnedAsset::AssignFromJson(Comp, TryGetParam(Params, TEXT("skeletalMesh")), PreviousMesh, MeshErr))
 	{
 		Transaction.Cancel();
 		return MCPError(MeshErr);
@@ -4334,7 +4338,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorFolderPath(const TSharedPtr<FJson
 	// An empty folder path is legitimate - it moves actors back to the root -
 	// so the parameter must be PRESENT but may be empty. RequireString rejects
 	// empty strings, which made the documented root-move impossible.
-	if (!Params->HasField(TEXT("folderPath")))
+	if (!HasParam(Params, TEXT("folderPath")))
 	{
 		return MCPError(TEXT("Missing required parameter 'folderPath' (pass \"\" to move actors to the root)"));
 	}
@@ -4348,7 +4352,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorFolderPath(const TSharedPtr<FJson
 
 	TSet<FString> ExactLabels;
 	const TArray<TSharedPtr<FJsonValue>>* LabelValues = nullptr;
-	if (Params->TryGetArrayField(TEXT("actorLabels"), LabelValues) && LabelValues)
+	if (TryGetArrayParam(Params, TEXT("actorLabels"), LabelValues) && LabelValues)
 	{
 		for (const TSharedPtr<FJsonValue>& Value : *LabelValues)
 		{
@@ -4476,7 +4480,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::DeleteActors(const TSharedPtr<FJsonObject
 		ClassPathNeedles.Add(ClassPathContains);
 	}
 	const TArray<TSharedPtr<FJsonValue>>* ClassPathAny = nullptr;
-	if (Params.IsValid() && Params->TryGetArrayField(TEXT("classPathContainsAny"), ClassPathAny) && ClassPathAny)
+	if (Params.IsValid() && TryGetArrayParam(Params, TEXT("classPathContainsAny"), ClassPathAny) && ClassPathAny)
 	{
 		for (const TSharedPtr<FJsonValue>& Value : *ClassPathAny)
 		{
@@ -4678,7 +4682,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorTags(const TSharedPtr<FJsonObject
 	ActorLabel = A->GetActorLabel();
 
 	const TArray<TSharedPtr<FJsonValue>>* TagsArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("tags"), TagsArr) || !TagsArr)
+	if (!TryGetArrayParam(Params, TEXT("tags"), TagsArr) || !TagsArr)
 	{
 		return MCPError(TEXT("Missing 'tags' array"));
 	}
@@ -5267,9 +5271,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetCurrentEditLevel(const TSharedPtr<FJso
 {
 	REQUIRE_EDITOR_WORLD(World);
 	FString LevelName;
-	if (!Params->TryGetStringField(TEXT("levelName"), LevelName))
+	if (!TryGetStringParam(Params, TEXT("levelName"), LevelName))
 	{
-		Params->TryGetStringField(TEXT("levelPath"), LevelName);
+		TryGetStringParam(Params, TEXT("levelPath"), LevelName);
 	}
 	if (LevelName.IsEmpty()) return MCPError(TEXT("Missing levelName (or levelPath)"));
 
@@ -5412,10 +5416,10 @@ TSharedPtr<FJsonValue> FLevelHandlers::AddStreamingSublevel(const TSharedPtr<FJs
 		return MCPError(FString::Printf(TEXT("Failed to add sub-level '%s'"), *LevelPath));
 	}
 
-	if (Params->HasField(TEXT("initiallyLoaded"))) SL->SetShouldBeLoaded(OptionalBool(Params, TEXT("initiallyLoaded"), true));
-	if (Params->HasField(TEXT("initiallyVisible"))) SL->SetShouldBeVisible(OptionalBool(Params, TEXT("initiallyVisible"), true));
+	if (HasParam(Params, TEXT("initiallyLoaded"))) SL->SetShouldBeLoaded(OptionalBool(Params, TEXT("initiallyLoaded"), true));
+	if (HasParam(Params, TEXT("initiallyVisible"))) SL->SetShouldBeVisible(OptionalBool(Params, TEXT("initiallyVisible"), true));
 
-	if (Params->HasField(TEXT("location")))
+	if (HasParam(Params, TEXT("location")))
 	{
 		FTransform T = SL->LevelTransform;
 		T.SetLocation(OptionalVec3(Params, TEXT("location")));
@@ -5439,7 +5443,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveStreamingSublevel(const TSharedPtr<
 {
 	REQUIRE_EDITOR_WORLD(World);
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("levelName"), Name)) Params->TryGetStringField(TEXT("levelPath"), Name);
+	if (!TryGetStringParam(Params, TEXT("levelName"), Name)) TryGetStringParam(Params, TEXT("levelPath"), Name);
 	if (Name.IsEmpty()) return MCPError(TEXT("Missing levelName (or levelPath)"));
 
 	ULevelStreaming* SL = FindStreamingByName(World, Name);
@@ -5510,7 +5514,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetStreamingSublevelProperties(const TSha
 {
 	REQUIRE_EDITOR_WORLD(World);
 	FString Name;
-	if (!Params->TryGetStringField(TEXT("levelName"), Name)) Params->TryGetStringField(TEXT("levelPath"), Name);
+	if (!TryGetStringParam(Params, TEXT("levelName"), Name)) TryGetStringParam(Params, TEXT("levelPath"), Name);
 	if (Name.IsEmpty()) return MCPError(TEXT("Missing levelName (or levelPath)"));
 
 	ULevelStreaming* SL = FindStreamingByName(World, Name);
@@ -5529,11 +5533,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetStreamingSublevelProperties(const TSha
 	const bool bPreviousEditorVisible = SL->GetShouldBeVisibleInEditor();
 
 	bool bChanged = false;
-	if (Params->HasField(TEXT("initiallyLoaded"))) { SL->SetShouldBeLoaded(OptionalBool(Params, TEXT("initiallyLoaded"), true)); bChanged = true; }
-	if (Params->HasField(TEXT("initiallyVisible"))) { SL->SetShouldBeVisible(OptionalBool(Params, TEXT("initiallyVisible"), true)); bChanged = true; }
+	if (HasParam(Params, TEXT("initiallyLoaded"))) { SL->SetShouldBeLoaded(OptionalBool(Params, TEXT("initiallyLoaded"), true)); bChanged = true; }
+	if (HasParam(Params, TEXT("initiallyVisible"))) { SL->SetShouldBeVisible(OptionalBool(Params, TEXT("initiallyVisible"), true)); bChanged = true; }
 
 	const TSharedPtr<FJsonObject>* LocObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("location"), LocObj) && LocObj && (*LocObj).IsValid())
+	if (TryGetObjectParam(Params, TEXT("location"), LocObj) && LocObj && (*LocObj).IsValid())
 	{
 		double X = 0, Y = 0, Z = 0;
 		(*LocObj)->TryGetNumberField(TEXT("x"), X);
@@ -5548,7 +5552,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetStreamingSublevelProperties(const TSha
 	bool bEditorVisibleSet = false;
 	bool bEditorVisibleSkipped = false;
 	const bool bEditorVisible = OptionalBool(Params, TEXT("editorVisible"), true);
-	if (Params->HasField(TEXT("editorVisible")))
+	if (HasParam(Params, TEXT("editorVisible")))
 	{
 		ULevel* Loaded = SL->GetLoadedLevel();
 		if (Loaded)
@@ -5590,9 +5594,9 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetStreamingSublevelProperties(const TSha
 		// one that is unique.
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("levelName"), SL->GetWorldAssetPackageName());
-		if (Params->HasField(TEXT("initiallyLoaded"))) Payload->SetBoolField(TEXT("initiallyLoaded"), bPreviousLoaded);
-		if (Params->HasField(TEXT("initiallyVisible"))) Payload->SetBoolField(TEXT("initiallyVisible"), bPreviousVisible);
-		if (Params->HasField(TEXT("location"))) Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(PreviousLocation));
+		if (HasParam(Params, TEXT("initiallyLoaded"))) Payload->SetBoolField(TEXT("initiallyLoaded"), bPreviousLoaded);
+		if (HasParam(Params, TEXT("initiallyVisible"))) Payload->SetBoolField(TEXT("initiallyVisible"), bPreviousVisible);
+		if (HasParam(Params, TEXT("location"))) Payload->SetObjectField(TEXT("location"), MCPVec3ToJsonObject(PreviousLocation));
 		if (bEditorVisibleSet) Payload->SetBoolField(TEXT("editorVisible"), bPreviousEditorVisible);
 		MCPSetRollback(Result, TEXT("set_streaming_sublevel_properties"), Payload);
 	}
@@ -5671,7 +5675,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchTranslate(const TSharedPtr<FJsonObje
 
 	TSet<AActor*> Targets;
 	const TArray<TSharedPtr<FJsonValue>>* LabelArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("actorLabels"), LabelArr) && LabelArr)
+	if (TryGetArrayParam(Params, TEXT("actorLabels"), LabelArr) && LabelArr)
 	{
 		for (const auto& V : *LabelArr)
 		{
@@ -5686,7 +5690,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchTranslate(const TSharedPtr<FJsonObje
 		}
 	}
 	const TArray<TSharedPtr<FJsonValue>>* PathArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("actorPaths"), PathArr) && PathArr)
+	if (TryGetArrayParam(Params, TEXT("actorPaths"), PathArr) && PathArr)
 	{
 		for (const auto& V : *PathArr)
 		{
@@ -5696,7 +5700,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::BatchTranslate(const TSharedPtr<FJsonObje
 			}
 		}
 	}
-	FString TagFilter; if (Params->TryGetStringField(TEXT("tag"), TagFilter) && !TagFilter.IsEmpty())
+	FString TagFilter; if (TryGetStringParam(Params, TEXT("tag"), TagFilter) && !TagFilter.IsEmpty())
 	{
 		const FName TagName(*TagFilter);
 		for (TActorIterator<AActor> It(World); It; ++It)
@@ -5755,7 +5759,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::PlaceActorsBatch(const TSharedPtr<FJsonOb
 	REQUIRE_EDITOR_WORLD(World);
 
 	const TArray<TSharedPtr<FJsonValue>>* ActorsArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("actors"), ActorsArr) || !ActorsArr)
+	if (!TryGetArrayParam(Params, TEXT("actors"), ActorsArr) || !ActorsArr)
 	{
 		return MCPError(TEXT("Missing 'actors' (array of {staticMesh, location?, rotation?, scale?, label?})"));
 	}

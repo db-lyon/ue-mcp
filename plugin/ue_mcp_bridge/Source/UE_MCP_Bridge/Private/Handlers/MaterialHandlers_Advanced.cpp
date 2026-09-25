@@ -347,7 +347,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("materialPath"), AssetPath)) return Err;
 
 	const TArray<TSharedPtr<FJsonValue>>* NodesArr = nullptr;
-	if (!Params->TryGetArrayField(TEXT("nodes"), NodesArr))
+	if (!TryGetArrayParam(Params, TEXT("nodes"), NodesArr))
 	{
 		return MCPError(TEXT("Missing 'nodes' array"));
 	}
@@ -403,7 +403,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::BuildMaterialGraph(const TSharedPtr<FJ
 	const TArray<TSharedPtr<FJsonValue>>* PropArr = nullptr;
 	int32 Connections = 0;
 	TArray<TSharedPtr<FJsonValue>> OverwrittenProperties;
-	if (Params->TryGetArrayField(TEXT("propertyConnections"), PropArr))
+	if (TryGetArrayParam(Params, TEXT("propertyConnections"), PropArr))
 	{
 		for (const TSharedPtr<FJsonValue>& V : *PropArr)
 		{

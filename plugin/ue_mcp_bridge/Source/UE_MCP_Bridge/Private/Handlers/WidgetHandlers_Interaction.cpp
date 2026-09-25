@@ -43,7 +43,7 @@ namespace WidgetInteraction_Internal
 	static TSharedPtr<FJsonValue> ReadValueField(const TSharedPtr<FJsonObject>& Params)
 	{
 		if (!Params.IsValid()) return TSharedPtr<FJsonValue>();
-		TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("value"));
+		TSharedPtr<FJsonValue> Field = TryGetParam(Params, TEXT("value"));
 		if (Field.IsValid() && Field->Type == EJson::Null) return TSharedPtr<FJsonValue>();
 		return Field;
 	}

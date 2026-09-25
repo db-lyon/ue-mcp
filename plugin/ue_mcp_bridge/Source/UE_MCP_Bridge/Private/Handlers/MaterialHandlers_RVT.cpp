@@ -718,11 +718,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddRvtVolume(const TSharedPtr<FJsonObj
 	TSharedPtr<FJsonObject> FitParams = MakeShared<FJsonObject>();
 	FitParams->SetStringField(TEXT("rvtPath"), Rvt->GetPathName());
 	FitParams->SetStringField(TEXT("actorPath"), Volume->GetPathName());
-	if (Params->HasField(TEXT("boundsMode")))
+	if (HasParam(Params, TEXT("boundsMode")))
 	{
 		FitParams->SetStringField(TEXT("boundsMode"), OptionalString(Params, TEXT("boundsMode")));
 	}
-	if (Params->HasField(TEXT("boundsAlignActor")))
+	if (HasParam(Params, TEXT("boundsAlignActor")))
 	{
 		FitParams->SetStringField(TEXT("boundsAlignActor"), OptionalString(Params, TEXT("boundsAlignActor")));
 	}
@@ -1345,7 +1345,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AssignRvtToLandscape(const TSharedPtr<
 
 	TArray<FString> RvtPaths;
 	const TArray<TSharedPtr<FJsonValue>>* PathArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("rvtPaths"), PathArray) && PathArray)
+	if (TryGetArrayParam(Params, TEXT("rvtPaths"), PathArray) && PathArray)
 	{
 		for (const TSharedPtr<FJsonValue>& Value : *PathArray)
 		{

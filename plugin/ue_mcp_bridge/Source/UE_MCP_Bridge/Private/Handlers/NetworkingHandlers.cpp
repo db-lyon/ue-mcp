@@ -16,6 +16,8 @@
 
 void FNetworkingHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("networking"));
 	Registry.RegisterHandler(TEXT("get_networking_info"), &GetNetworkingInfo);
 	Registry.RegisterHandler(TEXT("set_replicates"), &SetReplicates);
 	Registry.RegisterHandler(TEXT("configure_net_update_frequency"), &ConfigureNetUpdateFrequency);
@@ -152,7 +154,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetUpdateFrequency(const TS
 #endif
 
 	double NetUpdateFrequency = 0;
-	if (Params->TryGetNumberField(TEXT("netUpdateFrequency"), NetUpdateFrequency))
+	if (TryGetNumberParam(Params, TEXT("netUpdateFrequency"), NetUpdateFrequency))
 	{
 #if UE_MCP_HAS_5_5_API
 		CDO->SetNetUpdateFrequency((float)NetUpdateFrequency);
@@ -161,7 +163,7 @@ TSharedPtr<FJsonValue> FNetworkingHandlers::ConfigureNetUpdateFrequency(const TS
 #endif
 	}
 	double MinNetUpdateFrequency = 0;
-	if (Params->TryGetNumberField(TEXT("minNetUpdateFrequency"), MinNetUpdateFrequency))
+	if (TryGetNumberParam(Params, TEXT("minNetUpdateFrequency"), MinNetUpdateFrequency))
 	{
 #if UE_MCP_HAS_5_5_API
 		CDO->SetMinNetUpdateFrequency((float)MinNetUpdateFrequency);

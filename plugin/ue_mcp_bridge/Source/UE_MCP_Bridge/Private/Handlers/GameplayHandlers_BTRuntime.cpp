@@ -804,7 +804,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetLiveBlackboard(const TSharedPtr<FJs
 	if (auto Err = RequireString(Params, TEXT("key"), KeyName)) return Err;
 
 	const bool bClear = OptionalBool(Params, TEXT("clear"), false);
-	const TSharedPtr<FJsonValue> Value = Params->TryGetField(TEXT("value"));
+	const TSharedPtr<FJsonValue> Value = TryGetParam(Params, TEXT("value"));
 	if (!bClear && !Value.IsValid())
 	{
 		return MCPError(TEXT("Missing required parameter 'value'. Pass clear=true to reset the key to its unset state instead."));

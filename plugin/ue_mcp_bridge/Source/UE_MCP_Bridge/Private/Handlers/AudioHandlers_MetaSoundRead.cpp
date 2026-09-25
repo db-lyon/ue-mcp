@@ -945,7 +945,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::MetaSoundListConnections(const TSharedPtr
 	FGuid FilterNode;
 	bool bFilter = false;
 	FString NodeId;
-	if (Params->TryGetStringField(TEXT("nodeId"), NodeId) && !NodeId.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("nodeId"), NodeId) && !NodeId.IsEmpty())
 	{
 		const FMetasoundFrontendNode* Node = MSReadRequireNode(Params, T, Error);
 		if (!Node) return Error;

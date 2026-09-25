@@ -49,7 +49,7 @@ A path that matches nothing comes back in a `fieldsNotFound` field on the result
 A parameter the action does not use is reported, not silently dropped:
 
 - `paramsNotForwarded` lists keys you sent that the action never passes to the editor. With `UE_MCP_STRICT_PARAMS=1` the call is refused instead and nothing reaches the editor.
-- `paramsNotRead` lists keys that reached the editor and that the handler never read. Only the animation category reports it so far; more categories join as their handlers move to the shared parameter readers.
+- `paramsNotRead` lists keys that reached the editor and that the handler never read. Every category reports it.
 
 Either field means the call ran without that parameter. Check the spelling against the action's `Params:` list before trusting the result.
 
@@ -260,7 +260,7 @@ Nothing outside these modes ever answers a dialog by itself. `editor(set_dialog_
 | `compare_textures` | Compare two Texture2D assets by dimensions, pixel format, and source-content identity (FTextureSource id) - tells you whether an authored texture actually changed without offline pixel-diffing. Params: `assetPathA, assetPathB (#697)` |
 | `import_texture_batch` | Import many textures in one call - the loop stays inside the editor (no per-file bridge round-trip), so this finishes far faster than N import_texture calls. Per-item result records mirror import_texture. Params: `items[]: [{filePath, packagePath?, name?, replaceExisting?}], packagePath? (default for items that don't set it), save? (default true), automated? (default true)` |
 | `reimport` | Reimport asset from source file. Params: `assetPath, filePath?` |
-| `read_datatable` | Read DataTable rows. Params: `assetPath, rowFilter?` |
+| `read_datatable` | Read DataTable rows. A large table overflows the response inline: pass outputPath to write the rows (after rowFilter) to a file as a JSON array instead. The response then carries outputPath (resolved absolute path), rowCount, bytes, rowStruct and totalRowCount, with no rows or rowNames. A relative outputPath resolves under the project's Saved/, missing folders are created and an existing file is overwritten. Params: `assetPath, rowFilter?, outputPath?` |
 | `create_datatable` | Create DataTable. Params: `name, packagePath?, rowStruct` |
 | `reimport_datatable` | Reimport DataTable from JSON. Params: `assetPath, jsonPath?, jsonString?` |
 | `set_datatable_row` | Append or overwrite a single DataTable row. Params: `assetPath, rowName, row (object with row-struct fields - partial updates merge with the existing row)` |

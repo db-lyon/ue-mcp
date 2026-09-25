@@ -44,10 +44,10 @@ namespace
 	bool SplitAssetPath(const TSharedPtr<FJsonObject>& Params, FString& OutName, FString& OutPackagePath)
 	{
 		FString AssetPath;
-		Params->TryGetStringField(TEXT("assetPath"), AssetPath);
+		TryGetStringParam(Params, TEXT("assetPath"), AssetPath);
 		if (AssetPath.IsEmpty())
 		{
-			if (!Params->TryGetStringField(TEXT("name"), OutName) || OutName.IsEmpty()) return false;
+			if (!TryGetStringParam(Params, TEXT("name"), OutName) || OutName.IsEmpty()) return false;
 			OutPackagePath = OptionalString(Params, TEXT("packagePath"), TEXT("/Game"));
 			return !OutPackagePath.IsEmpty();
 		}
@@ -191,6 +191,8 @@ namespace
 }
 void FMassHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("mass"));
 	Registry.RegisterHandler(TEXT("ensure_mass_entity_config"), &EnsureEntityConfig);
 	Registry.RegisterHandler(TEXT("read_mass_entity_config"), &ReadEntityConfig);
 }
@@ -285,9 +287,9 @@ TSharedPtr<FJsonValue> FMassHandlers::EnsureEntityConfig(const TSharedPtr<FJsonO
 		return MCPError(TEXT("onConflict must be one of: skip, error, update"));
 	}
 
-	const TSharedPtr<FJsonValue>* TraitsValue = Params->Values.Find(TEXT("traits"));
+	const TSharedPtr<FJsonValue> TraitsValue = TryGetParam(Params, TEXT("traits"));
 	const TArray<TSharedPtr<FJsonValue>>* TraitArray = nullptr;
-	if (!TraitsValue || !(*TraitsValue).IsValid() || !(*TraitsValue)->TryGetArray(TraitArray) || !TraitArray)
+	if (!TraitsValue.IsValid() || !TraitsValue->TryGetArray(TraitArray) || !TraitArray)
 	{
 		return MCPError(TEXT("Missing required 'traits' array"));
 	}

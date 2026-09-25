@@ -106,7 +106,7 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateUserDefinedStruct(const TSharedPtr<
 
 	const TArray<TSharedPtr<FJsonValue>>* Fields = nullptr;
 	int32 AddedCount = 0;
-	if (Params->TryGetArrayField(TEXT("fields"), Fields) && Fields)
+	if (TryGetArrayParam(Params, TEXT("fields"), Fields) && Fields)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *Fields)
 		{

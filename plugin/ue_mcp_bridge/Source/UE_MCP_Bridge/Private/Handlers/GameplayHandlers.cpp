@@ -105,6 +105,8 @@
 
 void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("gameplay"));
 	Registry.RegisterHandler(TEXT("create_smart_object_definition"), &CreateSmartObjectDefinition);
 	Registry.RegisterHandler(TEXT("get_navmesh_info"), &GetNavmeshInfo);
 	Registry.RegisterHandler(TEXT("get_game_framework_info"), &GetGameFrameworkInfo);
@@ -290,24 +292,24 @@ namespace
 		};
 		const TSharedPtr<FJsonObject>* SubObj = nullptr;
 		FString Err;
-		if (Src->TryGetObjectField(TEXT("offset"), SubObj))
+		if (TryGetObjectParam(Src, TEXT("offset"), SubObj))
 		{
 			Err = SetField(TEXT("Offset"), MakeShared<FJsonValueObject>(*SubObj));
 			if (!Err.IsEmpty()) return Err;
 		}
-		if (Src->TryGetObjectField(TEXT("rotation"), SubObj))
+		if (TryGetObjectParam(Src, TEXT("rotation"), SubObj))
 		{
 			Err = SetField(TEXT("Rotation"), MakeShared<FJsonValueObject>(*SubObj));
 			if (!Err.IsEmpty()) return Err;
 		}
 		const TArray<TSharedPtr<FJsonValue>>* TagArr = nullptr;
-		if (Src->TryGetArrayField(TEXT("tags"), TagArr) && TagArr)
+		if (TryGetArrayParam(Src, TEXT("tags"), TagArr) && TagArr)
 		{
 			Err = SetField(TEXT("RuntimeTags"), MakeShared<FJsonValueArray>(*TagArr));
 			if (!Err.IsEmpty()) return Err;
 		}
 		FString NameStr;
-		if (Src->TryGetStringField(TEXT("name"), NameStr))
+		if (TryGetStringParam(Src, TEXT("name"), NameStr))
 		{
 			FProperty* P = SlotStruct->Struct->FindPropertyByName(FName(TEXT("Name")));
 			if (P)
@@ -482,7 +484,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateSmartObjectDefinition(const TSha
 	if (!DefaultBehavior.IsEmpty())
 	{
 		const TSharedPtr<FJsonObject>* InstanceProps = nullptr;
-		Params->TryGetObjectField(TEXT("instanceProperties"), InstanceProps);
+		TryGetObjectParam(Params, TEXT("instanceProperties"), InstanceProps);
 		UObject* Instance = nullptr;
 		int32 Index = INDEX_NONE;
 		Created.Asset->Modify();
@@ -533,7 +535,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectDefaultBehavior(const TS
 	if (auto Err = RequireString(Params, TEXT("behaviorClass"), BehaviorSpec)) return Err;
 
 	const TSharedPtr<FJsonObject>* InstanceProps = nullptr;
-	Params->TryGetObjectField(TEXT("instanceProperties"), InstanceProps);
+	TryGetObjectParam(Params, TEXT("instanceProperties"), InstanceProps);
 
 	SA.Asset->Modify();
 	UObject* Instance = nullptr;
@@ -584,7 +586,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlot(const TSharedPtr<FJ
 	if (!BehaviorSpec.IsEmpty())
 	{
 		const TSharedPtr<FJsonObject>* InstanceProps = nullptr;
-		Params->TryGetObjectField(TEXT("instanceProperties"), InstanceProps);
+		TryGetObjectParam(Params, TEXT("instanceProperties"), InstanceProps);
 		UObject* Instance = nullptr;
 		int32 BehaviorIndex = INDEX_NONE;
 		const FString BehaviorErr = AppendBehaviorDefinition(
@@ -622,7 +624,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetSmartObjectSlot(const TSharedPtr<FJ
 	FSlotsAccess SA;
 	if (auto Err = ResolveSlots(Params, SA)) return Err;
 	int32 SlotIdx = -1;
-	if (!Params->TryGetNumberField(TEXT("slotIndex"), SlotIdx) || SlotIdx < 0)
+	if (!TryGetNumberParam(Params, TEXT("slotIndex"), SlotIdx) || SlotIdx < 0)
 	{
 		return MCPError(TEXT("Missing 'slotIndex' (non-negative integer)"));
 	}
@@ -659,10 +661,10 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetSmartObjectSlot(const TSharedPtr<FJ
 		const TSharedPtr<FJsonObject>* ObjProbe = nullptr;
 		const TArray<TSharedPtr<FJsonValue>>* ArrProbe = nullptr;
 		FString StrProbe;
-		if (Params->TryGetObjectField(TEXT("offset"), ObjProbe))   CapturePrevious(TEXT("offset"),   TEXT("Offset"));
-		if (Params->TryGetObjectField(TEXT("rotation"), ObjProbe)) CapturePrevious(TEXT("rotation"), TEXT("Rotation"));
-		if (Params->TryGetArrayField(TEXT("tags"), ArrProbe))      CapturePrevious(TEXT("tags"),     TEXT("RuntimeTags"));
-		if (Params->TryGetStringField(TEXT("name"), StrProbe))     CapturePrevious(TEXT("name"),     TEXT("Name"));
+		if (TryGetObjectParam(Params, TEXT("offset"), ObjProbe))   CapturePrevious(TEXT("offset"),   TEXT("Offset"));
+		if (TryGetObjectParam(Params, TEXT("rotation"), ObjProbe)) CapturePrevious(TEXT("rotation"), TEXT("Rotation"));
+		if (TryGetArrayParam(Params, TEXT("tags"), ArrProbe))      CapturePrevious(TEXT("tags"),     TEXT("RuntimeTags"));
+		if (TryGetStringParam(Params, TEXT("name"), StrProbe))     CapturePrevious(TEXT("name"),     TEXT("Name"));
 	}
 
 	// The whole slot as text, before and after. Exact, and it covers every
@@ -710,7 +712,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::RemoveSmartObjectSlot(const TSharedPtr
 	FSlotsAccess SA;
 	if (auto Err = ResolveSlots(Params, SA)) return Err;
 	int32 SlotIdx = -1;
-	if (!Params->TryGetNumberField(TEXT("slotIndex"), SlotIdx) || SlotIdx < 0)
+	if (!TryGetNumberParam(Params, TEXT("slotIndex"), SlotIdx) || SlotIdx < 0)
 	{
 		return MCPError(TEXT("Missing 'slotIndex' (non-negative integer)"));
 	}
@@ -864,7 +866,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlotBehavior(const TShar
 	FSlotsAccess SA;
 	if (auto Err = ResolveSlots(Params, SA)) return Err;
 	int32 SlotIdx = -1;
-	if (!Params->TryGetNumberField(TEXT("slotIndex"), SlotIdx) || SlotIdx < 0)
+	if (!TryGetNumberParam(Params, TEXT("slotIndex"), SlotIdx) || SlotIdx < 0)
 	{
 		return MCPError(TEXT("Missing 'slotIndex' (non-negative integer)"));
 	}
@@ -879,7 +881,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddSmartObjectSlotBehavior(const TShar
 	// add_smart_object_slot and add_smart_object_default_behavior: one route to
 	// a behavior definition, so a name that works on one works on all three.
 	const TSharedPtr<FJsonObject>* InstObj = nullptr;
-	Params->TryGetObjectField(TEXT("instanceProperties"), InstObj);
+	TryGetObjectParam(Params, TEXT("instanceProperties"), InstObj);
 
 	SA.Asset->Modify();
 	UObject* BehaviorAsset = nullptr;
@@ -1647,7 +1649,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SpawnNavModifierVolume(const TSharedPt
 	// hand-rolled UCubeBuilder::Build - the model, polys, brush-component
 	// wiring and csgPrepMovingBrush all have to happen, and doing a subset
 	// silently yields the same inert actor.
-	const FVector Extent = Params->HasField(TEXT("extent"))
+	const FVector Extent = HasParam(Params, TEXT("extent"))
 		? OptionalVec3(Params, TEXT("extent"), FVector(100.f, 100.f, 100.f))
 		: FVector(100.f, 100.f, 100.f);
 	if (Extent.X <= 0.f || Extent.Y <= 0.f || Extent.Z <= 0.f)
@@ -1736,7 +1738,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::FindNavPath(const TSharedPtr<FJsonObje
 	// matching navigation filter / agent.
 	AActor* Context = nullptr;
 	FString ContextLabel = OptionalString(Params, TEXT("pathfindingContext"));
-	if (!ContextLabel.IsEmpty() || Params->HasField(TEXT("pathfindingContextPath")))
+	if (!ContextLabel.IsEmpty() || HasParam(Params, TEXT("pathfindingContextPath")))
 	{
 		// #983: the context actor decides which navigation filter and agent
 		// answer the query, so picking the wrong namesake changes the path.
@@ -2095,7 +2097,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetBlackboardParent(const TSharedPtr<F
 	if (auto Err = RequireString(Params, TEXT("blackboardPath"), BlackboardPath)) return Err;
 
 	FString ParentPath;
-	const bool bHasParent = Params->TryGetStringField(TEXT("parentPath"), ParentPath);
+	const bool bHasParent = TryGetStringParam(Params, TEXT("parentPath"), ParentPath);
 
 	const bool bAutoPrune = OptionalBool(Params, TEXT("autoPruneDuplicateKeys"), true);
 
@@ -2520,7 +2522,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::AddPerceptionComponent(const TSharedPt
 	// never configure it. Nothing is mutated until this pass succeeds.
 	TArray<UClass*> SenseClasses;
 	const TArray<TSharedPtr<FJsonValue>>* SenseArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("senses"), SenseArray) && SenseArray)
+	if (TryGetArrayParam(Params, TEXT("senses"), SenseArray) && SenseArray)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *SenseArray)
 		{
@@ -2740,7 +2742,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::ConfigureAiPerceptionSense(const TShar
 	// same guarantee, and gets it from the same check plus a per-key snapshot.
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 	const bool bHasSettings =
-		Params->TryGetObjectField(TEXT("settings"), PropsObj) && PropsObj && (*PropsObj).IsValid();
+		TryGetObjectParam(Params, TEXT("settings"), PropsObj) && PropsObj && (*PropsObj).IsValid();
 
 	if (bHasSettings)
 	{

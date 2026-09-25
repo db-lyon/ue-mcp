@@ -453,7 +453,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetPostProcessSettings(const TSharedPtr<F
 	if (!ResolveActorAndPostProcessTarget(World, Params, Actor, Target, ResolveError)) return ResolveError;
 
 	const TSharedPtr<FJsonObject>* SettingsObj = nullptr;
-	if (!Params->TryGetObjectField(TEXT("settings"), SettingsObj) || !SettingsObj || !SettingsObj->IsValid())
+	if (!TryGetObjectParam(Params, TEXT("settings"), SettingsObj) || !SettingsObj || !SettingsObj->IsValid())
 	{
 		return MCPError(TEXT("Missing 'settings' object of settingName -> value, e.g. {\"AutoExposureMinBrightness\": 1.0, \"AutoExposureMaxBrightness\": 1.0}"));
 	}
@@ -544,7 +544,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetPostProcessSettings(const TSharedPtr<F
 
 	TArray<FString> WantedNames;
 	const TArray<TSharedPtr<FJsonValue>>* NamesArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("names"), NamesArr) && NamesArr)
+	if (TryGetArrayParam(Params, TEXT("names"), NamesArr) && NamesArr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *NamesArr)
 		{
@@ -622,11 +622,11 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFixedExposure(const TSharedPtr<FJsonOb
 	TSharedPtr<FJsonValue> ResolveError;
 	if (!ResolveActorAndPostProcessTarget(World, Params, Actor, Target, ResolveError)) return ResolveError;
 
-	if (!Params->HasField(TEXT("exposure")) && !Params->HasField(TEXT("brightness")))
+	if (!HasParam(Params, TEXT("exposure")) && !HasParam(Params, TEXT("brightness")))
 	{
 		return MCPError(TEXT("Missing 'exposure' (the fixed adaptation brightness written to both AutoExposureMinBrightness and AutoExposureMaxBrightness)"));
 	}
-	const double Exposure = Params->HasField(TEXT("exposure"))
+	const double Exposure = HasParam(Params, TEXT("exposure"))
 		? OptionalNumber(Params, TEXT("exposure"), 1.0)
 		: OptionalNumber(Params, TEXT("brightness"), 1.0);
 
@@ -635,7 +635,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetFixedExposure(const TSharedPtr<FJsonOb
 		TEXT("AutoExposureMinBrightness"), MakeShared<FJsonValueNumber>(Exposure)));
 	Writes.Add(TPair<FString, TSharedPtr<FJsonValue>>(
 		TEXT("AutoExposureMaxBrightness"), MakeShared<FJsonValueNumber>(Exposure)));
-	if (Params->HasField(TEXT("bias")))
+	if (HasParam(Params, TEXT("bias")))
 	{
 		Writes.Add(TPair<FString, TSharedPtr<FJsonValue>>(
 			TEXT("AutoExposureBias"), MakeShared<FJsonValueNumber>(OptionalNumber(Params, TEXT("bias"), 0.0))));
