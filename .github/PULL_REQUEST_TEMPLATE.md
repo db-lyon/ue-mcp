@@ -18,6 +18,10 @@
 - [ ] `npm run test:live`
 - [ ] `npm run audit` (prose, config, flows, unity, docs, params)
 
+<!-- A handler change with no docs/ change fails the docs-freshness gate. If a
+     reader cannot see this change, keep this line and give the reason:
+Docs: not needed - <reason> -->
+
 ## Notes for the release
 
 <!-- Optional. A line in the voice of the release notes, under the section it

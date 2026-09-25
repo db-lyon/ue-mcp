@@ -210,9 +210,30 @@ export function docsFreshnessProblem(changedFiles) {
   return (
     "Handler or tool sources changed and nothing under docs/ did. The published docs are "
     + "the thing users read; a surface change that does not reach them is the stale-docs "
-    + "complaint that keeps coming back. Update docs/, or say in the PR why this change is "
-    + "invisible to a reader."
+    + "complaint that keeps coming back. Update docs/, or add a line to the PR body: "
+    + "'Docs: not needed - <why a reader cannot see this change>'."
   );
+}
+
+/**
+ * A PR can state that its change never reaches a reader, as a line in its body:
+ * `Docs: not needed - <reason>`. The reason is required and printed, so the
+ * exemption is on the record rather than silent.
+ */
+export function docsExemptionReason(prBody) {
+  if (typeof prBody !== "string") return null;
+  const match = prBody.match(/^\s*Docs:\s*not needed\s*-\s*(\S.*)$/im);
+  return match ? match[1].trim() : null;
+}
+
+function prBodyFromEvent() {
+  const file = process.env.GITHUB_EVENT_PATH;
+  if (!file || !fs.existsSync(file)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"))?.pull_request?.body ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function checkDocsFreshness() {
@@ -229,6 +250,11 @@ function checkDocsFreshness() {
     return 0;
   }
   const problem = docsFreshnessProblem(changed);
+  const exemption = problem ? docsExemptionReason(prBodyFromEvent()) : null;
+  if (exemption) {
+    console.log(`docs-freshness  - exempted by the PR: ${exemption}`);
+    return 0;
+  }
   if (problem) {
     console.error(`docs-freshness  - ${problem}`);
     return 1;
