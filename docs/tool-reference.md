@@ -44,6 +44,15 @@ asset(action="get_metadata", assetPath="/Game/Hero", omit="thumbnail")
 
 A path that matches nothing comes back in a `fieldsNotFound` field on the result rather than being ignored, because the alternative failure is a caller concluding a field is absent from the data when it only misspelled the path. If **no** path matched, the filter is not applied at all and the full result is returned with the same report: handing back `{}` would read as an empty answer from the editor rather than as a filter that did not fit.
 
+#### Parameters that went nowhere
+
+A parameter the action does not use is reported, not silently dropped:
+
+- `paramsNotForwarded` lists keys you sent that the action never passes to the editor. With `UE_MCP_STRICT_PARAMS=1` the call is refused instead and nothing reaches the editor.
+- `paramsNotRead` lists keys that reached the editor and that the handler never read. Only the animation category reports it so far; more categories join as their handlers move to the shared parameter readers.
+
+Either field means the call ran without that parameter. Check the spelling against the action's `Params:` list before trusting the result.
+
 #### `timeoutMs`
 
 How long to wait for this call, in milliseconds. Omitted, the wait is 30 seconds, or longer for the actions the editor itself allows longer. Raise it for a large batch, or for an editor busy compiling shaders.
