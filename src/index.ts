@@ -42,13 +42,14 @@ import {
   isDialogRefusal,
   stampBlockedEditor,
 } from "./dialog-guard.js";
-import { resolveDialogMode, clientAdvertisesElicitation } from "./editor-control.js";
+import { resolveDialogMode, clientAdvertisesElicitation, connectedEditorOf } from "./editor-control.js";
+import { contestedProject } from "./project-holders.js";
 import { info, warn, debug } from "./log.js";
 import { startVersionCheck, consumeUpgradeNotice } from "./version-check.js";
 import { buildFlowRegistry } from "./flow/registry.js";
 import { GuardRegistry } from "./flow/guard.js";
 import { assertNoLegacyGuardTasks, buildGuards } from "./flow/guards.js";
-import type { GuardDeclarations } from "./flow/guard-schema.js";
+import { createLiveGuardSource } from "./flow/guard-config.js";
 import { loadFlowConfig } from "./flow/loader.js";
 import { createFlowTool } from "./flow/flow-tool.js";
 import { startFlowHttpServer } from "./flow/http-server.js";
@@ -62,7 +63,7 @@ import * as path from "node:path";
 import yaml from "js-yaml";
 
 import { ALL_TOOLS, setLiveToolGraph } from "./tools.js";
-import { nearestActions } from "./action-schema.js";
+import { unknownActionMessage } from "./action-schema.js";
 import { applyNativeToolsConfig } from "./epic-surface.js";
 import { checkPluginFreshness } from "./plugin-freshness.js";
 import { readEngineSnapshot } from "./engine-observer.js";
@@ -503,74 +504,43 @@ async function main() {
       getPlugins: () => getPlugins(load.surface.session),
       getToolGraph: (forSession) => getToolGraph(forSession ?? load.surface.session),
     };
-    const readProjectConfig = () => loadFlowConfig(load.surface.tools, load.configDir, {
-      tasks: load.pluginLoad.taskDefs,
-      flows: load.pluginLoad.flowDefs,
-    }).config;
-
-    // Guard options track ue-mcp.yml (#1061). Gated on mtime and size, because
-    // a before hook runs on every call it covers and parsing YAML there would
-    // put a config read on the hot path. An unchanged file costs one stat.
-    const configPath = path.join(load.configDir ?? process.cwd(), "ue-mcp.yml");
-    let cachedStamp: string | null = null;
-    let cachedGuards: GuardDeclarations = {};
-    const liveGuardDeclarations = (): GuardDeclarations => {
-      let stamp: string;
-      try {
-        const st = fs.statSync(configPath);
-        stamp = `${st.mtimeMs}:${st.size}`;
-      } catch {
-        // No project file: plugin-declared guards keep their manifest options.
-        return {};
-      }
-      if (stamp === cachedStamp) return cachedGuards;
-      try {
-        cachedGuards = (readProjectConfig().guards ?? {}) as GuardDeclarations;
-        cachedStamp = stamp;
-      } catch (e) {
-        // A half-written file must not disarm a guard.
-        console.error(
-          `[ue-mcp] ${load.surface.session.name}: ue-mcp.yml changed but could not be re-read, `
-          + `guard options are unchanged: ${e instanceof Error ? e.message : String(e)}`,
-        );
-        cachedStamp = stamp;
-      }
-      return cachedGuards;
-    };
-
     const deps = {
       registry: load.registry!,
       ctx: guardCtx,
       rawBridge: load.surface.session.bridge,
-      liveOptions: (guardName: string, phase: "before" | "after") =>
-        liveGuardDeclarations()[guardName]?.[phase]?.options,
     };
 
-    const projectConfig = readProjectConfig();
-
-    const sources: Array<{ label: string; guards: GuardDeclarations }> = [
+    const yamlSource = createLiveGuardSource(load.surface.tools, load.configDir, {
+      tasks: load.pluginLoad.taskDefs,
+      flows: load.pluginLoad.flowDefs,
+    }, (message) => {
+      console.error(`[ue-mcp] ${load.surface.session.name}: ${message}`);
+    });
+    const sources = [
       ...load.pluginLoad.guardsByPlugin.map((g) => ({ label: g.plugin, guards: g.guards })),
-      { label: "ue-mcp.yml", guards: (projectConfig.guards ?? {}) as GuardDeclarations },
+      yamlSource,
     ];
 
     // A task still named like a guard is fatal, whoever declared it: under the
     // declaration model nothing discovers it, so it would sit in the config
     // gating nothing.
-    assertNoLegacyGuardTasks(Object.keys(projectConfig.tasks ?? {}), { label: "ue-mcp.yml" });
+    assertNoLegacyGuardTasks(Object.keys(yamlSource.config.tasks ?? {}), yamlSource);
     for (const { plugin, taskNames } of load.pluginLoad.taskNamesByPlugin) {
       assertNoLegacyGuardTasks(taskNames, { label: plugin });
     }
 
-    let count = 0;
+    const built = [];
     for (const source of sources) {
       if (Object.keys(source.guards).length === 0) continue;
-      for (const guard of await buildGuards(source.guards, deps, { label: source.label })) {
-        load.surface.session.guards.register(guard);
-        count++;
+      for (const guard of await buildGuards(source.guards, deps, source)) {
+        built.push(guard);
       }
     }
-    if (count > 0) {
-      console.error(`[ue-mcp] ${load.surface.session.name}: ${count} guard(s) registered`);
+    // Publish only after every source has resolved, so retrying a failed build
+    // cannot leave a partial or duplicated guard pipeline behind.
+    for (const guard of built) load.surface.session.guards.register(guard);
+    if (built.length > 0) {
+      console.error(`[ue-mcp] ${load.surface.session.name}: ${built.length} guard(s) registered`);
     }
   };
   for (const load of loads) await buildGuardsFor(load);
@@ -606,9 +576,9 @@ async function main() {
       const load = await buildSessionLoad(session, pkg.version, true);
       applyContextStrategy(load);
       await buildRegistryFor(load);
+      await buildGuardsFor(load);
       perSession.set(session, load);
       surfaces.push(load.surface);
-      await buildGuardsFor(load);
       // The union is what explainMissingAction refuses from, so it has to know
       // about this editor before the first call is routed to it.
       refreshDispatchUnion();
@@ -727,8 +697,13 @@ async function main() {
   /** The serving editor, appended to a response only beyond one editor (5.3). */
   const attribution = (session: EditorSession): TextBlock[] => {
     const line = editorAttribution(
-      { name: session.name, projectPath: session.project.projectPath },
+      {
+        name: session.name,
+        projectPath: session.project.projectPath,
+        pid: connectedEditorOf(session.bridge)?.pid,
+      },
       sessions.size,
+      contestedProject(session.project.projectPath) !== null,
     );
     return line ? [{ type: "text" as const, text: line }] : [];
   };
@@ -855,16 +830,11 @@ async function main() {
       // .ts paths it tried to load the action from, which is worse than what
       // it replaced.
       if (!sessionRegistry.listRegistered().includes(taskName)) {
-        const available = Object.keys(tool.actions);
-        const close = nearestActions(action, available);
         return {
           content: withUpgradeNotice([
             {
               type: "text" as const,
-              text: `Error [NOT_FOUND]: Unknown action '${action}' on '${tool.name}'.`
-                + (close.length ? ` Did you mean: ${close.join(", ")}?` : "")
-                + ` ${available.length} actions available - project(action="describe_action", category="${tool.name}")`
-                + ` lists them with their parameters, and project(action="search_tools") searches by intent.`,
+              text: `Error [NOT_FOUND]: ${unknownActionMessage(action, tool.name, Object.keys(tool.actions))}`,
             },
           ]),
           isError: true,
@@ -1077,7 +1047,7 @@ async function main() {
   console.error(`[ue-mcp] ue-mcp.yml loaded - ${Object.keys(initialLoad.config.flows).length} flow(s), ${Object.keys(initialLoad.config.tasks).length} custom task(s)`);
 
   // Config is reloaded on every flow call - edit ue-mcp.yml without restarting.
-  // Guard options are re-read the same way, gated on the file's mtime (#1061).
+  // Guard options track all YAML layers through a separate last-good cache.
   // Resolved from the addressed editor: a flow declared in one project's
   // ue-mcp.yml belongs to that project, and its steps have to dispatch through
   // that project's registry or a step naming an action only that project has

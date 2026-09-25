@@ -52,6 +52,9 @@ private:
 	static TSharedPtr<FJsonValue> ListOverridableFunctions(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ConnectPins(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> DeleteNode(const TSharedPtr<FJsonObject>& Params);
+	// #1132: ReconstructNode on one node, and breaking one or all links on a pin.
+	static TSharedPtr<FJsonValue> RefreshNode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DisconnectPins(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetNodeProperty(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListGraphs(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ResolveGraph(const TSharedPtr<FJsonObject>& Params);

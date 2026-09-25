@@ -4,6 +4,7 @@
 #include "HandlerPagination.h"
 #include "HandlerAssetCreate.h"
 #include "HandlerJsonProperty.h"
+#include "HandlerAnimNotify.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
@@ -75,6 +76,8 @@
 
 void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 {
+	// Reports parameters its handlers never read (#1057 pilot).
+	FMCPHandlerRegistry::FCategoryScope CategoryScope(Registry, TEXT("animation"));
 	Registry.RegisterHandler(TEXT("list_anim_assets"), &ListAnimAssets);
 	Registry.RegisterHandler(TEXT("create_skeleton"), &CreateSkeleton);
 	Registry.RegisterHandler(TEXT("begin_skeleton_edit"), &BeginSkeletonEdit);
@@ -159,6 +162,7 @@ void FAnimationHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_control_rig_variables"), &ListControlRigVariables);
 	Registry.RegisterHandler(TEXT("read_control_rig_graph"), &ReadControlRigGraph);
 	Registry.RegisterHandler(TEXT("read_control_rig_hierarchy"), &ReadControlRigHierarchy);
+	Registry.RegisterHandler(TEXT("create_control_rig"), &CreateControlRig);
 	Registry.RegisterHandler(TEXT("begin_control_rig_edit"), &BeginControlRigEdit);
 	Registry.RegisterHandler(TEXT("read_control_rig_edit"), &ReadControlRigEdit);
 	Registry.RegisterHandler(TEXT("capture_control_rig_pose"), &CaptureControlRigPose);
@@ -361,7 +365,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetSkeletonInfo(const TSharedPtr<FJso
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
 	USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(LoadedAsset);
 	if (!SkeletalMesh)
 	{
@@ -439,7 +443,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateSkeleton(const TSharedPtr<FJson
 
 	FString SkeletalMeshPath;
 	if (auto Err = RequireString(Params, TEXT("skeletalMeshPath"), SkeletalMeshPath)) return Err;
-	USkeletalMesh* SkeletalMesh = LoadObject<USkeletalMesh>(nullptr, *SkeletalMeshPath);
+	USkeletalMesh* SkeletalMesh = LoadAssetByPath<USkeletalMesh>(SkeletalMeshPath);
 	if (!SkeletalMesh)
 	{
 		return MCPError(FString::Printf(TEXT("Failed to load SkeletalMesh at '%s'"), *SkeletalMeshPath));
@@ -620,7 +624,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListSockets(const TSharedPtr<FJsonObj
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
 	USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(LoadedAsset);
 	if (!SkeletalMesh)
 	{
@@ -687,7 +691,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetPhysicsAssetInfo(const TSharedPtr<
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
 	USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(LoadedAsset);
 	if (!SkeletalMesh)
 	{
@@ -729,11 +733,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimBlueprint(const TSharedPtr<FJ
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
 	UAnimBlueprint* AnimBP = Cast<UAnimBlueprint>(LoadedAsset);
 	if (!AnimBP)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load AnimBlueprint at '%s'"), *AssetPath));
+		return LoadedAsset
+			? MCPAssetWrongTypeError(AssetPath, LoadedAsset, TEXT("AnimBlueprint"))
+			: MCPAssetNotFoundError(AssetPath);
 	}
 
 	auto Result = MCPSuccess();
@@ -815,7 +821,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimMontage(const TSharedPtr<FJso
 	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		return MCPAssetLoadError(AssetPath, TEXT("AnimMontage"));
 	}
 
 	auto Result = MCPSuccess();
@@ -855,10 +861,20 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadAnimMontage(const TSharedPtr<FJso
 		if (NotifyEvent.Notify)
 		{
 			NotifyObj->SetStringField(TEXT("class"), NotifyEvent.Notify->GetClass()->GetName());
+			NotifyObj->SetStringField(TEXT("objectPath"), NotifyEvent.Notify->GetPathName());
+			NotifyObj->SetObjectField(TEXT("properties"), MCPAnimNotify::EditableProperties(NotifyEvent.Notify));
+		}
+		// objectPath is the placed instance, editable in place with editor(set_property).
+		if (NotifyEvent.NotifyStateClass)
+		{
+			NotifyObj->SetStringField(TEXT("notifyStateClass"), NotifyEvent.NotifyStateClass->GetClass()->GetName());
+			NotifyObj->SetStringField(TEXT("objectPath"), NotifyEvent.NotifyStateClass->GetPathName());
+			NotifyObj->SetObjectField(TEXT("properties"), MCPAnimNotify::EditableProperties(NotifyEvent.NotifyStateClass));
 		}
 		NotifiesArray.Add(MakeShared<FJsonValueObject>(NotifyObj));
 	}
 	Result->SetArrayField(TEXT("notifies"), NotifiesArray);
+	Result->SetArrayField(TEXT("notifyStates"), MCPAnimNotify::ListNotifyStates(Montage));
 
 	// Slot anim tracks
 	TArray<TSharedPtr<FJsonValue>> SlotTracksArray;
@@ -902,7 +918,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateAnimBlueprint(const TSharedPtr<
 	FString ParentClassName = OptionalString(Params, TEXT("parentClass"));
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip"));
 
-	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
+	UObject* SkeletonAsset = MCPLoadAssetObject(SkeletonPath);
 	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
 	if (!Skeleton)
 	{
@@ -1036,7 +1052,7 @@ namespace
 TSharedPtr<FJsonValue> FAnimationHandlers::AuthorMontagesBatch(const TSharedPtr<FJsonObject>& Params)
 {
 	const TArray<TSharedPtr<FJsonValue>>* Items = nullptr;
-	if (!Params->TryGetArrayField(TEXT("items"), Items) || !Items)
+	if (!TryGetArrayParam(Params, TEXT("items"), Items) || !Items)
 	{
 		return MCPError(TEXT("Missing 'items' array"));
 	}
@@ -1244,7 +1260,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadBlendspace(const TSharedPtr<FJson
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
 	UBlendSpace* BlendSpace = Cast<UBlendSpace>(LoadedAsset);
 	if (!BlendSpace)
 	{
@@ -1322,7 +1338,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	if (auto Err = RequireString(Params, TEXT("notifyName"), NotifyName)) return Err;
 
 	double TriggerTime = 0.0;
-	if (!Params->TryGetNumberField(TEXT("triggerTime"), TriggerTime))
+	if (!TryGetNumberParam(Params, TEXT("triggerTime"), TriggerTime))
 	{
 		return MCPError(TEXT("Missing 'triggerTime' parameter"));
 	}
@@ -1379,7 +1395,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 	// somewhere to land when notifyClass resolved. Reporting success while
 	// quietly dropping the requested values is the failure mode this guards.
 	const TSharedPtr<FJsonObject>* NotifyProperties = nullptr;
-	if (Params->TryGetObjectField(TEXT("notifyProperties"), NotifyProperties)
+	if (TryGetObjectParam(Params, TEXT("notifyProperties"), NotifyProperties)
 		&& NotifyProperties && (*NotifyProperties).IsValid() && (*NotifyProperties)->Values.Num() > 0)
 	{
 		if (!NewNotify)
@@ -1471,7 +1487,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddAnimNotify(const TSharedPtr<FJsonO
 		}
 	}
 	bool bExplicitBranchingPoint = false;
-	if (Params->TryGetBoolField(TEXT("branchingPoint"), bExplicitBranchingPoint))
+	if (TryGetBoolParam(Params, TEXT("branchingPoint"), bExplicitBranchingPoint))
 	{
 		bWantBranchingPoint = bExplicitBranchingPoint;
 	}
@@ -1723,7 +1739,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace(const TSharedPtr<FJs
 	double VerticalMin = OptionalNumber(Params, TEXT("verticalMin"), -180.0);
 	double VerticalMax = OptionalNumber(Params, TEXT("verticalMax"), 180.0);
 
-	UObject* SkeletonAsset = UEditorAssetLibrary::LoadAsset(SkeletonPath);
+	UObject* SkeletonAsset = MCPLoadAssetObject(SkeletonPath);
 	USkeleton* Skeleton = Cast<USkeleton>(SkeletonAsset);
 	if (!Skeleton)
 	{
@@ -1779,7 +1795,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateBlendspace1D(const TSharedPtr<F
 	const double AxisMax = OptionalNumber(Params, TEXT("axisMax"), 500.0);
 	const int32 GridNum = (int32)OptionalNumber(Params, TEXT("gridNum"), 4.0);
 
-	USkeleton* Skeleton = Cast<USkeleton>(UEditorAssetLibrary::LoadAsset(SkeletonPath));
+	USkeleton* Skeleton = Cast<USkeleton>(MCPLoadAssetObject(SkeletonPath));
 	if (!Skeleton) return MCPError(FString::Printf(TEXT("Failed to load Skeleton at '%s'"), *SkeletonPath));
 
 	UBlendSpaceFactory1D* Factory = NewObject<UBlendSpaceFactory1D>();
@@ -1919,7 +1935,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::PopulateBlendspace(const TSharedPtr<F
 	};
 
 	const TArray<TSharedPtr<FJsonValue>>* AxesArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("axes"), AxesArr) && AxesArr)
+	if (TryGetArrayParam(Params, TEXT("axes"), AxesArr) && AxesArr)
 	{
 		for (int32 i = 0; i < AxesArr->Num(); ++i)
 		{
@@ -1928,7 +1944,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::PopulateBlendspace(const TSharedPtr<F
 		}
 	}
 	const TSharedPtr<FJsonObject>* AxisObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("axis"), AxisObj) && *AxisObj)
+	if (TryGetObjectParam(Params, TEXT("axis"), AxisObj) && *AxisObj)
 	{
 		int32 AxisIdx = (int32)OptionalNumber(Params, TEXT("axisIndex"), 0.0);
 		ApplyAxis(AxisIdx, *AxisObj);
@@ -1938,21 +1954,21 @@ TSharedPtr<FJsonValue> FAnimationHandlers::PopulateBlendspace(const TSharedPtr<F
 	{
 		FBlendParameter& BP0 = const_cast<FBlendParameter&>(BS->GetBlendParameter(0));
 		FString S; double D = 0;
-		if (Params->TryGetStringField(TEXT("axisHorizontal"), S)) BP0.DisplayName = S;
-		if (Params->TryGetNumberField(TEXT("horizontalMin"), D)) BP0.Min = D;
-		if (Params->TryGetNumberField(TEXT("horizontalMax"), D)) BP0.Max = D;
+		if (TryGetStringParam(Params, TEXT("axisHorizontal"), S)) BP0.DisplayName = S;
+		if (TryGetNumberParam(Params, TEXT("horizontalMin"), D)) BP0.Min = D;
+		if (TryGetNumberParam(Params, TEXT("horizontalMax"), D)) BP0.Max = D;
 		int32 I = 0;
-		if (Params->TryGetNumberField(TEXT("gridNumHorizontal"), I)) BP0.GridNum = I;
+		if (TryGetNumberParam(Params, TEXT("gridNumHorizontal"), I)) BP0.GridNum = I;
 
 		// Only touch axis 1 if the asset has one (BlendSpace1D returns a stub for index 1 in some versions).
 		const bool bIs1D = BS->IsA<UBlendSpace1D>();
 		if (!bIs1D)
 		{
 			FBlendParameter& BP1 = const_cast<FBlendParameter&>(BS->GetBlendParameter(1));
-			if (Params->TryGetStringField(TEXT("axisVertical"), S)) BP1.DisplayName = S;
-			if (Params->TryGetNumberField(TEXT("verticalMin"), D)) BP1.Min = D;
-			if (Params->TryGetNumberField(TEXT("verticalMax"), D)) BP1.Max = D;
-			if (Params->TryGetNumberField(TEXT("gridNumVertical"), I)) BP1.GridNum = I;
+			if (TryGetStringParam(Params, TEXT("axisVertical"), S)) BP1.DisplayName = S;
+			if (TryGetNumberParam(Params, TEXT("verticalMin"), D)) BP1.Min = D;
+			if (TryGetNumberParam(Params, TEXT("verticalMax"), D)) BP1.Max = D;
+			if (TryGetNumberParam(Params, TEXT("gridNumVertical"), I)) BP1.GridNum = I;
 		}
 	}
 
@@ -1972,7 +1988,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::PopulateBlendspace(const TSharedPtr<F
 	TArray<TSharedPtr<FJsonValue>> AddedIndices;
 	TArray<TSharedPtr<FJsonValue>> Failed;
 	const TArray<TSharedPtr<FJsonValue>>* SamplesArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("samples"), SamplesArr) && SamplesArr)
+	if (TryGetArrayParam(Params, TEXT("samples"), SamplesArr) && SamplesArr)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *SamplesArr)
 		{
@@ -2050,15 +2066,15 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddBlendSample(const TSharedPtr<FJson
 
 	double PosX = 0.0, PosY = 0.0;
 	const TSharedPtr<FJsonObject>* PosObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("position"), PosObj) && PosObj && (*PosObj).IsValid())
+	if (TryGetObjectParam(Params, TEXT("position"), PosObj) && PosObj && (*PosObj).IsValid())
 	{
 		(*PosObj)->TryGetNumberField(TEXT("x"), PosX);
 		(*PosObj)->TryGetNumberField(TEXT("y"), PosY);
 	}
 	else
 	{
-		Params->TryGetNumberField(TEXT("x"), PosX);
-		Params->TryGetNumberField(TEXT("y"), PosY);
+		TryGetNumberParam(Params, TEXT("x"), PosX);
+		TryGetNumberParam(Params, TEXT("y"), PosY);
 	}
 
 	// Captured before the append. There is no remove-by-index action, so the
@@ -2110,7 +2126,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	}
 
 	int32 SampleIndex = -1;
-	if (!Params->TryGetNumberField(TEXT("sampleIndex"), SampleIndex))
+	if (!TryGetNumberParam(Params, TEXT("sampleIndex"), SampleIndex))
 	{
 		return MCPError(TEXT("Missing required parameter 'sampleIndex'"));
 	}
@@ -2131,7 +2147,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 
 	const TSharedPtr<FJsonObject>* PosObj = nullptr;
 	bool bHasPos = false;
-	if (Params->TryGetObjectField(TEXT("position"), PosObj) && PosObj && (*PosObj).IsValid())
+	if (TryGetObjectParam(Params, TEXT("position"), PosObj) && PosObj && (*PosObj).IsValid())
 	{
 		double PX = NewPos.X, PY = NewPos.Y;
 		(*PosObj)->TryGetNumberField(TEXT("x"), PX);
@@ -2142,8 +2158,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	else
 	{
 		double PX = 0, PY = 0;
-		const bool bX = Params->TryGetNumberField(TEXT("x"), PX);
-		const bool bY = Params->TryGetNumberField(TEXT("y"), PY);
+		const bool bX = TryGetNumberParam(Params, TEXT("x"), PX);
+		const bool bY = TryGetNumberParam(Params, TEXT("y"), PY);
 		if (bX || bY)
 		{
 			NewPos = FVector(bX ? PX : NewPos.X, bY ? PY : NewPos.Y, NewPos.Z);
@@ -2160,7 +2176,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	}
 
 	FString NewAnimPath;
-	if (Params->TryGetStringField(TEXT("animation"), NewAnimPath) && !NewAnimPath.IsEmpty())
+	if (TryGetStringParam(Params, TEXT("animation"), NewAnimPath) && !NewAnimPath.IsEmpty())
 	{
 		UAnimSequence* NewAnim = LoadAssetByPath<UAnimSequence>(NewAnimPath);
 		if (!NewAnim)
@@ -2276,7 +2292,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		return MCPAssetLoadError(AssetPath, TEXT("AnimMontage"));
 	}
 
 	// Load the new sequence
@@ -2297,7 +2313,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSequence(const TSharedPtr<F
 
 	// #626: when segmentIndex is given, replace only that one segment's
 	// sequence; otherwise replace every segment in the slot (prior behavior).
-	const bool bHasSegmentIndex = Params->HasField(TEXT("segmentIndex"));
+	const bool bHasSegmentIndex = HasParam(Params, TEXT("segmentIndex"));
 	const int32 SegmentIndex = OptionalInt(Params, TEXT("segmentIndex"), -1);
 	if (bHasSegmentIndex)
 	{
@@ -2455,7 +2471,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		return MCPAssetLoadError(AssetPath, TEXT("AnimMontage"));
 	}
 
 	// Capture previous values for rollback
@@ -2469,7 +2485,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 
 	// sequenceLength - update via property reflection (SequenceLength is protected)
 	double SeqLen;
-	const bool bHasSeqLen = Params->TryGetNumberField(TEXT("sequenceLength"), SeqLen);
+	const bool bHasSeqLen = TryGetNumberParam(Params, TEXT("sequenceLength"), SeqLen);
 	if (bHasSeqLen)
 	{
 		float NewLength = static_cast<float>(SeqLen);
@@ -2487,7 +2503,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 
 	// rateScale
 	double RateScale;
-	const bool bHasRate = Params->TryGetNumberField(TEXT("rateScale"), RateScale);
+	const bool bHasRate = TryGetNumberParam(Params, TEXT("rateScale"), RateScale);
 	if (bHasRate)
 	{
 		float NewRate = static_cast<float>(RateScale);
@@ -2501,7 +2517,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 
 	// blendIn
 	double BlendIn;
-	const bool bHasBlendIn = Params->TryGetNumberField(TEXT("blendIn"), BlendIn);
+	const bool bHasBlendIn = TryGetNumberParam(Params, TEXT("blendIn"), BlendIn);
 	if (bHasBlendIn)
 	{
 		float NewIn = static_cast<float>(BlendIn);
@@ -2515,7 +2531,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageProperties(const TSharedPtr
 
 	// blendOut
 	double BlendOut;
-	const bool bHasBlendOut = Params->TryGetNumberField(TEXT("blendOut"), BlendOut);
+	const bool bHasBlendOut = TryGetNumberParam(Params, TEXT("blendOut"), BlendOut);
 	if (bHasBlendOut)
 	{
 		float NewOut = static_cast<float>(BlendOut);
@@ -2584,7 +2600,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetMontageSlot(const TSharedPtr<FJson
 	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		return MCPAssetLoadError(AssetPath, TEXT("AnimMontage"));
 	}
 
 	if (TrackIndex < 0 || TrackIndex >= Montage->SlotAnimTracks.Num())
@@ -2772,14 +2788,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSection(const TSharedPtr<FJ
 	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		return MCPAssetLoadError(AssetPath, TEXT("AnimMontage"));
 	}
 
 	// #826: anchor the section to a specific segment. A bare startTime marker
 	// drifts the moment a segment is inserted ahead of it; a linked section
 	// follows its segment instead. Resolved before the idempotency check so a
 	// bad slot or segment index is reported rather than silently skipped.
-	const bool bHasSegmentIndex = Params->HasField(TEXT("segmentIndex"));
+	const bool bHasSegmentIndex = HasParam(Params, TEXT("segmentIndex"));
 	int32 SlotIndex = 0;
 	int32 SegmentIndex = INDEX_NONE;
 	FString SlotNameUsed;
@@ -2884,7 +2900,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMontageSegment(const TSharedPtr<FJ
 	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		return MCPAssetLoadError(AssetPath, TEXT("AnimMontage"));
 	}
 
 	UAnimSequenceBase* Source = LoadAssetByPath<UAnimSequenceBase>(AnimSequencePath);
@@ -3050,7 +3066,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveMontageSegment(const TSharedPtr
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	if (!Params->HasField(TEXT("segmentIndex")))
+	if (!HasParam(Params, TEXT("segmentIndex")))
 	{
 		return MCPError(TEXT("Missing required parameter 'segmentIndex'"));
 	}
@@ -3059,7 +3075,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveMontageSegment(const TSharedPtr
 	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		return MCPAssetLoadError(AssetPath, TEXT("AnimMontage"));
 	}
 
 	int32 SlotIndex = 0;
@@ -3130,7 +3146,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListMontageSegments(const TSharedPtr<
 	UAnimMontage* Montage = LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage)
 	{
-		return MCPError(FString::Printf(TEXT("Failed to load AnimMontage at '%s'"), *AssetPath));
+		return MCPAssetLoadError(AssetPath, TEXT("AnimMontage"));
 	}
 
 	const FString SlotFilter = OptionalString(Params, TEXT("slotName"));
@@ -3206,7 +3222,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ListControlRigVariables(const TShared
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
 	// In UE 5.7, ControlRigBlueprint was removed - load as a generic UBlueprint
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
 	UBlueprint* CRBlueprint = Cast<UBlueprint>(LoadedAsset);
 	if (!CRBlueprint)
 	{
@@ -3267,7 +3283,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigHierarchy(const TShared
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
 	UBlueprint* CRBlueprint = Cast<UBlueprint>(LoadedAsset);
 	if (!CRBlueprint) return MCPError(FString::Printf(TEXT("Failed to load Blueprint at '%s'"), *AssetPath));
 
@@ -3326,22 +3342,22 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetRootMotionSettings(const TSharedPt
 
 	Seq->Modify();
 	bool EnableRootMotion;
-	if (Params->TryGetBoolField(TEXT("enableRootMotion"), EnableRootMotion))
+	if (TryGetBoolParam(Params, TEXT("enableRootMotion"), EnableRootMotion))
 	{
 		Seq->bEnableRootMotion = EnableRootMotion;
 	}
 	bool ForceRootLock;
-	if (Params->TryGetBoolField(TEXT("forceRootLock"), ForceRootLock))
+	if (TryGetBoolParam(Params, TEXT("forceRootLock"), ForceRootLock))
 	{
 		Seq->bForceRootLock = ForceRootLock;
 	}
 	bool UseNormalizedRootMotionScale;
-	if (Params->TryGetBoolField(TEXT("useNormalizedRootMotionScale"), UseNormalizedRootMotionScale))
+	if (TryGetBoolParam(Params, TEXT("useNormalizedRootMotionScale"), UseNormalizedRootMotionScale))
 	{
 		Seq->bUseNormalizedRootMotionScale = UseNormalizedRootMotionScale;
 	}
 	FString RootMotionMode;
-	if (Params->TryGetStringField(TEXT("rootMotionRootLock"), RootMotionMode))
+	if (TryGetStringParam(Params, TEXT("rootMotionRootLock"), RootMotionMode))
 	{
 		if      (RootMotionMode.Equals(TEXT("RefPose"),       ESearchCase::IgnoreCase)) Seq->RootMotionRootLock = ERootMotionRootLock::RefPose;
 		else if (RootMotionMode.Equals(TEXT("AnimFirstFrame"), ESearchCase::IgnoreCase)) Seq->RootMotionRootLock = ERootMotionRootLock::AnimFirstFrame;
@@ -3479,9 +3495,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetAnimBlueprintSkeleton(const TShare
 	FString SkeletonPath;
 	if (auto Err = RequireString(Params, TEXT("skeletonPath"), SkeletonPath)) return Err;
 
-	UAnimBlueprint* AnimBP = LoadObject<UAnimBlueprint>(nullptr, *AssetPath);
+	UAnimBlueprint* AnimBP = LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!AnimBP) return MCPError(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
-	USkeleton* Skeleton = LoadObject<USkeleton>(nullptr, *SkeletonPath);
+	USkeleton* Skeleton = LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return MCPError(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 
 	// The skeleton the Blueprint targeted, read before the assignment: it is the

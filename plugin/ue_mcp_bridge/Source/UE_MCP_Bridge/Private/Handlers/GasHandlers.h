@@ -172,6 +172,12 @@ private:
 	static TSharedPtr<FJsonValue> GetActiveEffects(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> TraceAbilityActivation(const TSharedPtr<FJsonObject>& Params);
 
+	// #1104: loose gameplay tags on a live ASC. AddLooseGameplayTag is not
+	// Blueprint- or Python-callable, so the bridge is the only route. Both
+	// report the resulting tag count. Implemented in GasHandlers_Runtime.cpp.
+	static TSharedPtr<FJsonValue> AddLooseGameplayTag(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveLooseGameplayTag(const TSharedPtr<FJsonObject>& Params);
+
 	// ── T4 remainder: input, cues, attribute diagnosis ──────────────────
 	// Implemented in GasHandlers_Abilities.cpp.
 	//

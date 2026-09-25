@@ -8,7 +8,9 @@
 #include "UObject/UnrealType.h"
 #include "UObject/UObjectIterator.h"
 #include "Engine/Engine.h"
+#include "Engine/DataTable.h"
 #include "Engine/UserDefinedEnum.h"
+#include "UObject/Package.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Kismet2/EnumEditorUtils.h"
@@ -19,6 +21,7 @@
 #include "GameplayTagsManager.h"
 #include "GameplayTagsSettings.h"
 #include "GameplayTagContainer.h"
+#include "GameplayTagsEditorModule.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -37,6 +40,7 @@ void FReflectionHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("reflect_struct"), &ReflectStruct);
 	Registry.RegisterHandler(TEXT("reflect_enum"), &ReflectEnum);
 	Registry.RegisterHandler(TEXT("list_classes"), &ListClasses);
+	Registry.RegisterHandler(TEXT("list_structs"), &ListStructs);
 	Registry.RegisterHandler(TEXT("list_gameplay_tags"), &ListGameplayTags);
 	Registry.RegisterHandler(TEXT("create_gameplay_tag"), &CreateGameplayTag);
 	Registry.RegisterHandler(TEXT("create_enum"), &CreateEnum);
@@ -659,6 +663,78 @@ TSharedPtr<FJsonValue> FReflectionHandlers::ListClasses(const TSharedPtr<FJsonOb
 	return MCPResult(Result);
 }
 
+TSharedPtr<FJsonValue> FReflectionHandlers::ListStructs(const TSharedPtr<FJsonObject>& Params)
+{
+	// package takes a /Script/<Module> or content path, or a bare module name.
+	FString PackageFilter = OptionalString(Params, TEXT("package")).TrimStartAndEnd();
+	const FString NameFilter = OptionalString(Params, TEXT("filter")).TrimStartAndEnd();
+	PackageFilter.RemoveFromEnd(TEXT("/"));
+	if (!PackageFilter.IsEmpty() && !PackageFilter.StartsWith(TEXT("/")))
+	{
+		PackageFilter = TEXT("/Script/") + PackageFilter;
+	}
+
+	MCPPagination::FPageRequest Page;
+	if (auto Err = MCPPagination::ReadPageRequest(
+			Params,
+			FString::Printf(TEXT("list_structs|package=%s|filter=%s"), *PackageFilter, *NameFilter),
+			/*DefaultLimit*/ 200, /*MaxLimit*/ 5000, Page))
+	{
+		return Err;
+	}
+
+	UPackage* TransientPackage = GetTransientPackage();
+	TArray<MCPPagination::FPageRow> Rows;
+	for (TObjectIterator<UScriptStruct> It; It; ++It)
+	{
+		UScriptStruct* Struct = *It;
+		if (!Struct) continue;
+		UPackage* Package = Struct->GetOutermost();
+		if (!Package || Package == TransientPackage) continue;
+
+		const FString PackageName = Package->GetName();
+		// Exact package, or anything under a content folder.
+		if (!PackageFilter.IsEmpty()
+			&& !PackageName.Equals(PackageFilter, ESearchCase::IgnoreCase)
+			&& !PackageName.StartsWith(PackageFilter + TEXT("/"), ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+
+		const FString Name = Struct->GetName();
+		const FString CppName = Struct->GetStructCPPName();
+		if (!NameFilter.IsEmpty()
+			&& !Name.Contains(NameFilter, ESearchCase::IgnoreCase)
+			&& !CppName.Contains(NameFilter, ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		// name is the registered spelling; cppName carries the F prefix.
+		Row->SetStringField(TEXT("name"), Name);
+		Row->SetStringField(TEXT("cppName"), CppName);
+		Row->SetStringField(TEXT("path"), Struct->GetPathName());
+		Row->SetStringField(TEXT("package"), PackageName);
+		if (const UStruct* Super = Struct->GetSuperStruct())
+		{
+			Row->SetStringField(TEXT("parent"), Super->GetName());
+		}
+		Row->SetBoolField(TEXT("native"), Package->HasAnyPackageFlags(PKG_CompiledIn));
+		Row->SetBoolField(TEXT("tableRow"), Struct->IsChildOf(FTableRowBase::StaticStruct()));
+		Rows.Add({ Struct->GetPathName(), MakeShared<FJsonValueObject>(Row) });
+	}
+	// Object hash order is not stable, so sort before paging.
+	Rows.Sort([](const MCPPagination::FPageRow& A, const MCPPagination::FPageRow& B)
+		{ return A.Id < B.Id; });
+
+	auto Result = MCPSuccess();
+	if (!PackageFilter.IsEmpty()) Result->SetStringField(TEXT("package"), PackageFilter);
+	if (!NameFilter.IsEmpty()) Result->SetStringField(TEXT("filter"), NameFilter);
+	MCPPagination::EmitPage(Page, Rows, TEXT("structs"), Result);
+	return MCPResult(Result);
+}
+
 TSharedPtr<FJsonValue> FReflectionHandlers::ListGameplayTags(const TSharedPtr<FJsonObject>& Params)
 {
 	FString FilterPrefix = OptionalString(Params, TEXT("filter"));
@@ -715,12 +791,23 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateGameplayTag(const TSharedPtr<F
 
 	FString Comment = OptionalString(Params, TEXT("comment"));
 
+	// Checked up front: both write paths below would otherwise store a tag the
+	// manager refuses to register.
+	FText InvalidTagReason;
+	if (!UGameplayTagsManager::Get().IsValidGameplayTagString(Tag, &InvalidTagReason))
+	{
+		return MCPError(FString::Printf(
+			TEXT("'%s' is not a valid gameplay tag: %s"), *Tag, *InvalidTagReason.ToString()));
+	}
+
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("tag"), Tag);
 
 	// Add tag via DefaultGameplayTags.ini (not AddNativeGameplayTag which asserts after init)
 	FString ProjectDir = FPaths::ProjectDir();
 	FString TagFile = FPaths::Combine(ProjectDir, TEXT("Config"), TEXT("DefaultGameplayTags.ini"));
+	const FString FullTagFile = FPaths::ConvertRelativePathToFull(TagFile);
+	Result->SetStringField(TEXT("iniPath"), FullTagFile);
 
 	const FString SectionName = TEXT("/Script/GameplayTags.GameplayTagsSettings");
 	const FString Section = FString::Printf(TEXT("[%s]"), *SectionName);
@@ -966,25 +1053,84 @@ TSharedPtr<FJsonValue> FReflectionHandlers::CreateGameplayTag(const TSharedPtr<F
 		return MCPResult(Result);
 	}
 
+	// The bridge registers no action that removes a gameplay tag: the tag
+	// surface is list_gameplay_tags and this one. Nothing is named as an
+	// inverse, because nothing would answer to the name.
+	const TCHAR* NoInverseNote = TEXT(
+		"No action removes a gameplay tag. This added a GameplayTagList entry to "
+		"Config/DefaultGameplayTags.ini, and undoing it means deleting that line from the file by hand or "
+		"through the Gameplay Tags editor.");
+
+	// Preferred path: the Gameplay Tags editor writes the same ini and rebuilds
+	// the tag tree, so the tag is usable immediately with no restart.
+	FString LiveOutcome;
+	if (IGameplayTagsEditorModule::IsAvailable())
+	{
+		if (IGameplayTagsEditorModule::Get().AddNewGameplayTagToINI(
+				Tag, Comment, FName(TEXT("DefaultGameplayTags.ini"))))
+		{
+			const bool bRegistered =
+				UGameplayTagsManager::Get().RequestGameplayTag(FName(*Tag), /*ErrorIfNotFound*/ false).IsValid();
+			MCPSetCreated(Result);
+			Result->SetBoolField(TEXT("unchanged"), false);
+			Result->SetStringField(TEXT("method"), TEXT("gameplay_tags_editor"));
+			Result->SetBoolField(TEXT("registeredLive"), bRegistered);
+			Result->SetStringField(TEXT("note"), bRegistered
+				? TEXT("Registered live; no editor restart needed.")
+				: TEXT("Written to the ini, but the tag manager does not report it yet. Restart the editor to pick it up."));
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"), NoInverseNote);
+			return MCPResult(Result);
+		}
+		LiveOutcome = TEXT("IGameplayTagsEditorModule::AddNewGameplayTagToINI refused it (the project may not import tags ")
+			TEXT("from ini, or the file could not be saved; the editor log names which)");
+	}
+	else
+	{
+		LiveOutcome = TEXT("the GameplayTagsEditor module is not loaded, so the tag could not be registered live");
+	}
+
+	// Fallback: append to the ini directly. The tag appears after a restart.
 	if (FFileHelper::SaveStringToFile(FileContent, *TagFile))
 	{
 		MCPSetCreated(Result);
 		Result->SetBoolField(TEXT("unchanged"), false);
 		Result->SetStringField(TEXT("method"), TEXT("ini_append"));
+		Result->SetBoolField(TEXT("registeredLive"), false);
+		Result->SetStringField(TEXT("liveRegistration"), LiveOutcome);
 		Result->SetStringField(TEXT("note"), TEXT("Restart editor to pick up new tag"));
-
-		// The bridge registers no action that removes a gameplay tag: the tag
-		// surface is list_gameplay_tags and this one. Nothing is named as an
-		// inverse, because nothing would answer to the name.
 		Result->SetBoolField(TEXT("rollbackPossible"), false);
-		Result->SetStringField(TEXT("rollbackNote"), TEXT(
-			"No action removes a gameplay tag. This appended a GameplayTagList entry to "
-			"Config/DefaultGameplayTags.ini, and undoing it means deleting that line from the file by hand or "
-			"through the Gameplay Tags editor."));
+		Result->SetStringField(TEXT("rollbackNote"), NoInverseNote);
 		return MCPResult(Result);
 	}
 
-	return MCPError(TEXT("Could not add gameplay tag via available APIs"));
+	// Name the file and the reason, so the caller knows whether to check the
+	// file out, clear a flag, or give up.
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	const bool bIniReadOnly = PlatformFile.FileExists(*FullTagFile) && PlatformFile.IsReadOnly(*FullTagFile);
+	FString Cause;
+	if (bIniReadOnly)
+	{
+		Cause = TEXT("the file is read-only, which usually means it is checked in under source control and not checked out. ")
+			TEXT("Check it out or clear the read-only flag, then retry");
+	}
+	else if (!PlatformFile.DirectoryExists(*FPaths::GetPath(FullTagFile)))
+	{
+		Cause = TEXT("the Config directory does not exist and could not be created");
+	}
+	else
+	{
+		Cause = TEXT("the write failed although the file is not read-only; another process may hold it open, ")
+			TEXT("or the editor lacks permission to write there");
+	}
+
+	TSharedPtr<FJsonValue> Error = MCPError(FString::Printf(
+		TEXT("Could not add gameplay tag '%s'. Live registration: %s. Writing %s: %s."),
+		*Tag, *LiveOutcome, *FullTagFile, *Cause));
+	Error->AsObject()->SetStringField(TEXT("iniPath"), FullTagFile);
+	Error->AsObject()->SetBoolField(TEXT("iniReadOnly"), bIniReadOnly);
+	Error->AsObject()->SetStringField(TEXT("liveRegistration"), LiveOutcome);
+	return Error;
 }
 
 UClass* FReflectionHandlers::FindClass(const FString& ClassName)

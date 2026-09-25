@@ -122,6 +122,18 @@ describe("selectEditorsForProject", () => {
     expect(selected.map((p) => p.pid)).toEqual([2]);
   });
 
+  it("keeps headless editors of the project when asked to, for stop and ownership (#1150)", () => {
+    const selected = selectEditorsForProject(
+      [
+        proc({ pid: 1, projectPath: GAME_A, headless: true }),
+        proc({ pid: 2, projectPath: GAME_B, headless: true }),
+      ],
+      GAME_A,
+      { includeHeadless: true },
+    );
+    expect(selected.map((p) => p.pid)).toEqual([1]);
+  });
+
   it("reports nothing when only other projects are running", () => {
     const selected = selectEditorsForProject([proc({ pid: 2, projectPath: GAME_B })], GAME_A);
     expect(selected).toEqual([]);

@@ -435,14 +435,19 @@ export interface PluginContribution {
  * Layer order (lowest precedence first):
  *   built-in defaults
  *   plugin contributions
+ *   ~/.ue-mcp/config.yml (warn and ignore on read/parse errors)
  *   ue-mcp.yml
  *   ue-mcp.{env}.yml
  *   ue-mcp.local.yml
+ *
+ * onGlobalConfigError lets a live reader preserve an earlier valid snapshot;
+ * the default warns and ignores the optional user-global file.
  */
 export function loadFlowConfig(
   tools: ToolDef[],
   configDir?: string,
   pluginContribution?: PluginContribution,
+  onGlobalConfigError?: (file: string, error: unknown) => void,
 ): LoadedConfig<FlowConfig> {
   const dir = configDir ?? process.cwd();
   const configPath = path.join(dir, "ue-mcp.yml");
@@ -458,7 +463,7 @@ export function loadFlowConfig(
   // User-global layer (~/.ue-mcp/config.yml): sits above built-in defaults and
   // below the project file. Folding it into `defaults` gives flowkit's loader
   // the right precedence for free - global < project < {env} < local.
-  const globalDoc = readGlobalConfigDoc();
+  const globalDoc = readGlobalConfigDoc(onGlobalConfigError);
   if (Object.keys(globalDoc).length > 0) {
     defaults = deepMerge(defaults, globalDoc) as Record<string, unknown>;
   }

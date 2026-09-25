@@ -14,14 +14,40 @@ FMCPHandlerRegistry::~FMCPHandlerRegistry()
 	Clear();
 }
 
+bool FMCPHandlerRegistry::ReportsUnreadParams(const FString& Category)
+{
+	// A category joins once scripts/audit-direct-param-reads.mjs lists no
+	// direct reads in its handlers, since those are invisible to the tracking.
+	static const TCHAR* const Reporting[] = { TEXT("animation") };
+	for (const TCHAR* Name : Reporting)
+	{
+		if (Category == Name) return true;
+	}
+	return false;
+}
+
+void FMCPHandlerRegistry::TagCategory(const FString& MethodName)
+{
+	if (RegistrationCategory.IsEmpty())
+	{
+		HandlerCategories.Remove(MethodName);
+	}
+	else
+	{
+		HandlerCategories.Add(MethodName, RegistrationCategory);
+	}
+}
+
 void FMCPHandlerRegistry::RegisterHandler(const FString& MethodName, FHandlerFunction Handler)
 {
 	CppHandlers.Add(MethodName, Handler);
+	TagCategory(MethodName);
 }
 
 void FMCPHandlerRegistry::RegisterHandlerWithTimeout(const FString& MethodName, FHandlerFunction Handler, float TimeoutSeconds)
 {
 	CppHandlers.Add(MethodName, Handler);
+	TagCategory(MethodName);
 	if (TimeoutSeconds > 0.0f)
 	{
 		HandlerTimeouts.Add(MethodName, TimeoutSeconds);
@@ -55,9 +81,18 @@ void FMCPHandlerRegistry::RegisterPythonHandler(const FString& MethodName, const
 TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecuteHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params)
 {
 	// Try C++ handler first
-	if (CppHandlers.Contains(MethodName))
+	if (const FHandlerFunction* Handler = CppHandlers.Find(MethodName))
 	{
-		return CppHandlers[MethodName](Params);
+		const FString* Category = HandlerCategories.Find(MethodName);
+		if (!Category || !ReportsUnreadParams(*Category) || !Params.IsValid())
+		{
+			return (*Handler)(Params);
+		}
+		// #1057: a key the handler never read had no effect, so say so.
+		FMCPParamReadScope ReadScope(Params);
+		TSharedPtr<FJsonValue> Result = (*Handler)(Params);
+		MCPAttachParamsNotRead(Result, ReadScope.Unread());
+		return Result;
 	}
 
 	// Try Python handler
@@ -110,6 +145,7 @@ void FMCPHandlerRegistry::Clear()
 	CppHandlers.Empty();
 	PythonHandlers.Empty();
 	HandlerTimeouts.Empty();
+	HandlerCategories.Empty();
 }
 
 TSharedPtr<FJsonValue> FMCPHandlerRegistry::ExecutePythonHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& /*Params*/)

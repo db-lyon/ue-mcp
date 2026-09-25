@@ -32,9 +32,11 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "HandlerEditorState.h"
+#include "HandlerJsonProperty.h"
 #include "HandlerPagination.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "JsonSerializer.h"
 
 namespace
 {
@@ -134,6 +136,49 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 		Actor->SetActorLabel(Label, /*bMarkDirty*/ false);
 	}
 
+	// #1103: properties go through set_actor_property, the same path
+	// spawn_actors_batch uses, before construction and BeginPlay so both see
+	// them. Every entry is reported with the value read back, and a failed one
+	// fails the call rather than reporting a configured actor that is not.
+	TArray<TSharedPtr<FJsonValue>> PropertyRows;
+	int32 PropertyFailures = 0;
+	const TSharedPtr<FJsonObject>* Properties = nullptr;
+	if (Params->TryGetObjectField(TEXT("properties"), Properties) && Properties && Properties->IsValid())
+	{
+		for (const auto& Entry : (*Properties)->Values)
+		{
+			TSharedPtr<FJsonObject> SubParams = MakeShared<FJsonObject>();
+			SubParams->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+			SubParams->SetStringField(TEXT("propertyName"), Entry.Key);
+			SubParams->SetField(TEXT("value"), Entry.Value);
+			SubParams->SetBoolField(TEXT("force"), true);
+			if (World->IsGameWorld()) SubParams->SetStringField(TEXT("world"), TEXT("pie"));
+			if (Params->HasField(TEXT("pieInstance"))) SubParams->SetField(TEXT("pieInstance"), Params->TryGetField(TEXT("pieInstance")));
+
+			const TSharedPtr<FJsonValue> Response = FLevelHandlers::SetActorProperty(SubParams);
+			const TSharedPtr<FJsonObject> ResponseObject =
+				Response.IsValid() && Response->Type == EJson::Object ? Response->AsObject() : nullptr;
+			bool bOk = false;
+			FString Error = TEXT("set_actor_property returned no result");
+			if (ResponseObject.IsValid())
+			{
+				bOk = !ResponseObject->HasField(TEXT("success")) || ResponseObject->GetBoolField(TEXT("success"));
+				Error.Reset();
+				ResponseObject->TryGetStringField(TEXT("error"), Error);
+			}
+
+			TSharedPtr<FJsonObject> PropertyRow = MakeShared<FJsonObject>();
+			PropertyRow->SetStringField(TEXT("propertyName"), Entry.Key);
+			PropertyRow->SetBoolField(TEXT("ok"), bOk);
+			if (!bOk)
+			{
+				PropertyRow->SetStringField(TEXT("error"), Error);
+				++PropertyFailures;
+			}
+			PropertyRows.Add(MakeShared<FJsonValueObject>(PropertyRow));
+		}
+	}
+
 	FString InitializeNote;
 #if WITH_EDITOR
 	if (Initialize == TEXT("construction"))
@@ -156,6 +201,23 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	InitializeNote = TEXT("Non-editor build: no construction or begin-play cycle was run.");
 #endif
 
+	// Read back after initialization, so the report shows what the actor holds
+	// now rather than what the write returned.
+	for (const TSharedPtr<FJsonValue>& RowValue : PropertyRows)
+	{
+		const TSharedPtr<FJsonObject> PropertyRow = RowValue->AsObject();
+		if (!PropertyRow.IsValid() || !PropertyRow->GetBoolField(TEXT("ok"))) continue;
+		FProperty* Prop = nullptr;
+		void* ValueAddr = nullptr;
+		UObject* LeafOwner = nullptr;
+		FString ReadError;
+		if (MCPJsonProperty::ResolveDottedPath(
+				Actor, PropertyRow->GetStringField(TEXT("propertyName")), Prop, ValueAddr, LeafOwner, ReadError))
+		{
+			PropertyRow->SetField(TEXT("value"), FMCPJsonSerializer::SerializeValue(ValueAddr, Prop));
+		}
+	}
+
 	TArray<TSharedPtr<FJsonValue>> Components;
 	for (UActorComponent* Component : Actor->GetComponents())
 	{
@@ -176,6 +238,18 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnTransientActor(const TSharedPtr<FJso
 	Result->SetStringField(TEXT("initialize"), Initialize);
 	Result->SetStringField(TEXT("initializeNote"), InitializeNote);
 	Result->SetArrayField(TEXT("components"), Components);
+	if (PropertyRows.Num() > 0)
+	{
+		Result->SetArrayField(TEXT("properties"), PropertyRows);
+		Result->SetNumberField(TEXT("propertyFailures"), PropertyFailures);
+	}
+	if (PropertyFailures > 0)
+	{
+		Result->SetBoolField(TEXT("success"), false);
+		Result->SetStringField(TEXT("error"), FString::Printf(
+			TEXT("The actor was spawned but %d of %d properties did not apply; see properties[]. It is still in the world, so destroy it or fix the values."),
+			PropertyFailures, PropertyRows.Num()));
+	}
 	Result->SetStringField(TEXT("cleanupNote"), FString::Printf(
 		TEXT("Destroy this with level(destroy_transient_actor, actorPath:'%s') when you are done. It is RF_Transient and a save cannot write it into the map, but it stays in the open world until it is destroyed or the map is reloaded."),
 		*Actor->GetPathName()));

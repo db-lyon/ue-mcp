@@ -1,4 +1,5 @@
 #include "BridgeStateFiles.h"
+#include "MCPBridgeStateDir.h"
 #include "UE_MCP_BridgeModule.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
@@ -43,7 +44,7 @@ FString FMCPBridgeStateFiles::ThisProjectRoot()
 
 FString FMCPBridgeStateFiles::StateDir()
 {
-	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("UE_MCP_Bridge"));
+	return UEMCP::BridgeStateDir();
 }
 
 FString FMCPBridgeStateFiles::InstancesDir()

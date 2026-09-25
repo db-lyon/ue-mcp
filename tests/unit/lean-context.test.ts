@@ -232,6 +232,26 @@ describe("buildMicroGateway", () => {
     expect(out).toEqual({ bridgeCalled: "compile_blueprint", params: { target: "BP_X" } });
   });
 
+  // One preparation, not a copy of it (#1081): the call goes through the
+  // target category's own handler, and the budget still reaches the bridge.
+  it("call dispatches through the target category's handler", async () => {
+    const tools = microFixture();
+    const seen: Array<Record<string, unknown>> = [];
+    const original = tools[0].handler;
+    tools[0].handler = async (c, p) => { seen.push(p); return original(c, p); };
+    let timeout: number | undefined;
+    const bridge = { ...mockBridge, call: async (method: string, params?: Record<string, unknown>, t?: number) => { timeout = t; return { bridgeCalled: method, params }; } };
+    const gw = buildMicroGateway(tools);
+
+    const out = await gw.actions.call.handler!(
+      { bridge, callTimeoutMs: 4321 } as unknown as ToolContext,
+      { action: "call", category: "blueprint", method: "compile", args: { target: "BP_X" } },
+    );
+    expect(seen).toEqual([{ target: "BP_X", action: "compile", timeoutMs: 4321 }]);
+    expect(out).toEqual({ bridgeCalled: "compile_blueprint", params: { target: "BP_X" } });
+    expect(timeout).toBe(4321);
+  });
+
   it("call throws on unknown category or method", async () => {
     const gw = buildMicroGateway(microFixture());
     await expect(invoke(gw, { category: "nope", method: "create" })).rejects.toThrow(/Unknown category/);

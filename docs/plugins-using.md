@@ -15,9 +15,10 @@ It's a thin wrapper that:
 1. Runs `npm install --save <package-name>` so the package lands in `node_modules/` and is recorded in your `package.json`.
 2. Validates the plugin's `ue-mcp.plugin.yml` - checks that `actionPrefix` is a legal identifier, every `inject:` target is a real registered category, every `class_path` resolves, and `minServerVersion` is satisfied.
 3. Appends a `- name: <package-name>` entry to your `ue-mcp.yml`'s `plugins:` array (creating the array if needed).
-4. Prints the restart instruction.
+4. Copies any skills the plugin ships into `.claude/skills/`.
+5. Prints the restart instruction.
 
-You can also install manually - `npm install --save <package-name>` and edit `ue-mcp.yml` yourself. The end state is identical.
+You can also install manually - `npm install --save <package-name>` and edit `ue-mcp.yml` yourself. The plugin's skills then arrive on the next `ue-mcp plugin update`, `ue-mcp init` or `ue-mcp deploy`.
 
 ## The `plugins:` array
 
@@ -106,4 +107,4 @@ For source-distributed UE plugins, drop the source under `Plugins/<DepName>/` - 
 
 ## Removing a plugin
 
-There is no separate uninstall command - `npm uninstall <package-name>` and delete the entry from `ue-mcp.yml`. On next restart, the actions are gone.
+`ue-mcp plugin uninstall <package-name>` removes the plugin's skills and native module, deletes its entry from `ue-mcp.yml`, and runs `npm uninstall`. On next restart, the actions are gone.

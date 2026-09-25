@@ -84,7 +84,7 @@ static bool ReadRequiredString(
 	FString& Out,
 	FString& OutError)
 {
-	if (!Object.IsValid() || !Object->TryGetStringField(Field, Out))
+	if (!Object.IsValid() || !TryGetStringParam(Object, Field, Out))
 	{
 		OutError = FString::Printf(TEXT("'%s' must be a string"), Field);
 		return false;
@@ -209,9 +209,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 	}
 
 	FString AutoSetup;
-	if (Params->HasField(TEXT("autoSetup")))
+	if (HasParam(Params, TEXT("autoSetup")))
 	{
-		if (!Params->TryGetStringField(TEXT("autoSetup"), AutoSetup) ||
+		if (!TryGetStringParam(Params, TEXT("autoSetup"), AutoSetup) ||
 			(AutoSetup != TEXT("retarget") && AutoSetup != TEXT("full_body")))
 		{
 			return Error(TEXT("invalid_params"), TEXT("'autoSetup' must be 'retarget' or 'full_body'"));
@@ -221,7 +221,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 	const bool bAutoFullBody = AutoSetup == TEXT("full_body");
 
 	TOptional<FName> RetargetRoot;
-	if (Params->HasField(TEXT("retargetRoot")))
+	if (HasParam(Params, TEXT("retargetRoot")))
 	{
 		FString Value;
 		if (!ReadRequiredString(Params, TEXT("retargetRoot"), Value, ParseError))
@@ -232,7 +232,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 	}
 
 	TOptional<FName> RootMotionBone;
-	if (Params->HasField(TEXT("rootMotionBone")))
+	if (HasParam(Params, TEXT("rootMotionBone")))
 	{
 		FString Value;
 		if (!ReadRequiredString(Params, TEXT("rootMotionBone"), Value, ParseError))
@@ -244,10 +244,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 
 	TArray<FChainRequest> Chains;
 	TSet<FName> RequestedChainNames;
-	if (Params->HasField(TEXT("chains")))
+	if (HasParam(Params, TEXT("chains")))
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!Params->TryGetArrayField(TEXT("chains"), Values) || !Values || Values->Num() > MaxChains)
+		if (!TryGetArrayParam(Params, TEXT("chains"), Values) || !Values || Values->Num() > MaxChains)
 		{
 			return Error(TEXT("invalid_params"), FString::Printf(TEXT("'chains' must be an array with at most %d entries"), MaxChains));
 		}
@@ -284,10 +284,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 	}
 
 	FFullBodyRequest FullBody;
-	if (Params->HasField(TEXT("fullBodyIK")))
+	if (HasParam(Params, TEXT("fullBodyIK")))
 	{
 		const TSharedPtr<FJsonObject>* ObjectPtr = nullptr;
-		if (!Params->TryGetObjectField(TEXT("fullBodyIK"), ObjectPtr) || !ObjectPtr || !ObjectPtr->IsValid())
+		if (!TryGetObjectParam(Params, TEXT("fullBodyIK"), ObjectPtr) || !ObjectPtr || !ObjectPtr->IsValid())
 		{
 			return Error(TEXT("invalid_params"), TEXT("'fullBodyIK' must be an object"));
 		}
@@ -352,10 +352,10 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 
 	TArray<FExclusionRequest> Exclusions;
 	TSet<FName> RequestedExclusionBones;
-	if (Params->HasField(TEXT("exclusions")))
+	if (HasParam(Params, TEXT("exclusions")))
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (!Params->TryGetArrayField(TEXT("exclusions"), Values) || !Values || Values->Num() > MaxExclusions)
+		if (!TryGetArrayParam(Params, TEXT("exclusions"), Values) || !Values || Values->Num() > MaxExclusions)
 		{
 			return Error(TEXT("invalid_params"), FString::Printf(TEXT("'exclusions' must be an array with at most %d entries"), MaxExclusions));
 		}
@@ -384,7 +384,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRig(const TSharedPtr<FJson
 	}
 
 	if (!bAutoRetarget && !RetargetRoot.IsSet() && !RootMotionBone.IsSet() &&
-		!Params->HasField(TEXT("chains")) && !FullBody.bPresent && !Params->HasField(TEXT("exclusions")))
+		!HasParam(Params, TEXT("chains")) && !FullBody.bPresent && !HasParam(Params, TEXT("exclusions")))
 	{
 		return Error(TEXT("invalid_params"), TEXT("No IK Rig configuration was requested"));
 	}

@@ -578,6 +578,40 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 	//   6. Add to DelegateSignatureGraphs
 	//   7. MarkBlueprintAsStructurallyModified
 
+	// Resolve every signature parameter before anything is created, so a bad
+	// type refuses the call instead of leaving a wildcard pin that fails the
+	// next compile. Types share ParsePinTypeSpec with add_function_parameter.
+	TArray<TPair<FName, FEdGraphPinType>> SignaturePins;
+	const TArray<TSharedPtr<FJsonValue>>* ParamsArr = nullptr;
+	if (Params->TryGetArrayField(TEXT("parameters"), ParamsArr) && ParamsArr)
+	{
+		for (int32 Index = 0; Index < ParamsArr->Num(); ++Index)
+		{
+			const TSharedPtr<FJsonValue>& V = (*ParamsArr)[Index];
+			const TSharedPtr<FJsonObject>* Obj = nullptr;
+			if (!V.IsValid() || !V->TryGetObject(Obj) || !Obj || !Obj->IsValid())
+			{
+				return MCPError(FString::Printf(TEXT("parameters[%d] must be an object {name, type}"), Index));
+			}
+			FString PName, PType;
+			if (!(*Obj)->TryGetStringField(TEXT("name"), PName) || PName.IsEmpty())
+			{
+				return MCPError(FString::Printf(TEXT("parameters[%d] has no name"), Index));
+			}
+			if (!(*Obj)->TryGetStringField(TEXT("type"), PType) || PType.IsEmpty())
+			{
+				return MCPError(FString::Printf(TEXT("Parameter '%s' has no type"), *PName));
+			}
+			FEdGraphPinType PinType;
+			FString TypeError;
+			if (!ParsePinTypeSpec(PType, PinType, TypeError))
+			{
+				return MCPError(FString::Printf(TEXT("Parameter '%s': %s"), *PName, *TypeError));
+			}
+			SignaturePins.Emplace(FName(*PName), PinType);
+		}
+	}
+
 	FEdGraphPinType DelegateType;
 	DelegateType.PinCategory = UEdGraphSchema_K2::PC_MCDelegate;
 
@@ -608,53 +642,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 
 	Blueprint->DelegateSignatureGraphs.Add(NewGraph);
 
-	// Optional: declare typed parameters on the dispatcher signature.
-	// Params: parameters: [{ name, type }] where type is a K2 pin category
-	// shorthand ("bool", "int", "float", "string", "name", "vector",
-	// "rotator", "object:/Script/Module.ClassName", "struct:/Script/...").
-	const TArray<TSharedPtr<FJsonValue>>* ParamsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("parameters"), ParamsArr) && ParamsArr)
+	// Typed signature pins go on the entry node CreateFunctionGraphTerminators made.
+	if (SignaturePins.Num() > 0)
 	{
-		for (const TSharedPtr<FJsonValue>& V : *ParamsArr)
+		TArray<UK2Node_EditablePinBase*> EntryNodes;
+		NewGraph->GetNodesOfClass(EntryNodes);
+		if (EntryNodes.Num() > 0 && EntryNodes[0])
 		{
-			const TSharedPtr<FJsonObject>* Obj = nullptr;
-			if (!V.IsValid() || !V->TryGetObject(Obj) || !Obj || !Obj->IsValid()) continue;
-			FString PName, PType;
-			if (!(*Obj)->TryGetStringField(TEXT("name"), PName) || PName.IsEmpty()) continue;
-			(*Obj)->TryGetStringField(TEXT("type"), PType);
-
-			FEdGraphPinType PinType;
-			PinType.PinCategory = UEdGraphSchema_K2::PC_Wildcard;
-			const FString T = PType.ToLower();
-			if (T == TEXT("bool"))                 PinType.PinCategory = UEdGraphSchema_K2::PC_Boolean;
-			else if (T == TEXT("int") || T == TEXT("integer")) PinType.PinCategory = UEdGraphSchema_K2::PC_Int;
-			else if (T == TEXT("float") || T == TEXT("real"))  { PinType.PinCategory = UEdGraphSchema_K2::PC_Real; PinType.PinSubCategory = UEdGraphSchema_K2::PC_Double; }
-			else if (T == TEXT("string"))          PinType.PinCategory = UEdGraphSchema_K2::PC_String;
-			else if (T == TEXT("name"))            PinType.PinCategory = UEdGraphSchema_K2::PC_Name;
-			else if (T == TEXT("text"))            PinType.PinCategory = UEdGraphSchema_K2::PC_Text;
-			else if (T == TEXT("vector"))          { PinType.PinCategory = UEdGraphSchema_K2::PC_Struct; PinType.PinSubCategoryObject = TBaseStructure<FVector>::Get(); }
-			else if (T == TEXT("rotator"))         { PinType.PinCategory = UEdGraphSchema_K2::PC_Struct; PinType.PinSubCategoryObject = TBaseStructure<FRotator>::Get(); }
-			else if (T == TEXT("transform"))       { PinType.PinCategory = UEdGraphSchema_K2::PC_Struct; PinType.PinSubCategoryObject = TBaseStructure<FTransform>::Get(); }
-			else if (T.StartsWith(TEXT("object:")))
+			for (const TPair<FName, FEdGraphPinType>& Pin : SignaturePins)
 			{
-				PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
-				const FString ClassPath = PType.Mid(7);
-				PinType.PinSubCategoryObject = LoadObject<UClass>(nullptr, *ClassPath);
-				if (!PinType.PinSubCategoryObject.IsValid()) PinType.PinSubCategoryObject = UObject::StaticClass();
-			}
-			else if (T.StartsWith(TEXT("struct:")))
-			{
-				PinType.PinCategory = UEdGraphSchema_K2::PC_Struct;
-				PinType.PinSubCategoryObject = LoadObject<UScriptStruct>(nullptr, *PType.Mid(7));
-			}
-
-			// Pin is added to the function entry node's user-defined pin list.
-			// Nodes were created above by CreateFunctionGraphTerminators.
-			TArray<UK2Node_EditablePinBase*> EntryNodes;
-			NewGraph->GetNodesOfClass(EntryNodes);
-			if (EntryNodes.Num() > 0 && EntryNodes[0])
-			{
-				EntryNodes[0]->CreateUserDefinedPin(FName(*PName), PinType, EGPD_Output);
+				EntryNodes[0]->CreateUserDefinedPin(Pin.Key, Pin.Value, EGPD_Output);
 			}
 		}
 	}
@@ -669,10 +666,12 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddEventDispatcher(const TSharedPtr<F
 	Result->SetStringField(TEXT("name"), DispatcherName);
 	Result->SetStringField(TEXT("signatureGraph"), NewGraph->GetName());
 
+	// remove_event_dispatcher takes the signature graph too; delete_variable
+	// would leave it behind for the compiler to trip on.
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
-	Payload->SetStringField(TEXT("path"), BlueprintPath);
+	Payload->SetStringField(TEXT("blueprintPath"), BlueprintPath);
 	Payload->SetStringField(TEXT("name"), DispatcherName);
-	MCPSetRollback(Result, TEXT("delete_variable"), Payload);
+	MCPSetRollback(Result, TEXT("remove_event_dispatcher"), Payload);
 
 	return MCPResult(Result);
 }

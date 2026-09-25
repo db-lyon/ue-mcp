@@ -252,7 +252,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchSchema(const TSharedP
 
 	Schema->AddSkeleton(Skeleton, MirrorTable);
 	int32 SampleRate = 0;
-	if (Params->TryGetNumberField(TEXT("sampleRate"), SampleRate) && SampleRate > 0)
+	if (TryGetNumberParam(Params, TEXT("sampleRate"), SampleRate) && SampleRate > 0)
 	{
 		Schema->SampleRate = SampleRate;
 	}
@@ -284,7 +284,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaPoseChannel(const 
 	if (!Schema) return MCPError(FString::Printf(TEXT("PoseSearchSchema not found: %s"), *AssetPath));
 
 	const TArray<TSharedPtr<FJsonValue>>* Bones = nullptr;
-	if (!Params->TryGetArrayField(TEXT("bones"), Bones) || !Bones || Bones->Num() == 0)
+	if (!TryGetArrayParam(Params, TEXT("bones"), Bones) || !Bones || Bones->Num() == 0)
 	{
 		return MCPError(TEXT("Missing 'bones' (array of {bone, flags?:[velocity,position,rotation,phase], weight?})"));
 	}
@@ -319,7 +319,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaPoseChannel(const 
 
 	Schema->Modify();
 	double ChannelWeight = 0.0;
-	const bool bHasChannelWeight = Params->TryGetNumberField(TEXT("weight"), ChannelWeight);
+	const bool bHasChannelWeight = TryGetNumberParam(Params, TEXT("weight"), ChannelWeight);
 
 #if UE_MCP_HAS_5_5_API
 	UPoseSearchFeatureChannel_Pose* Channel = NewObject<UPoseSearchFeatureChannel_Pose>(Schema, NAME_None, RF_Transactional);
@@ -386,7 +386,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaTrajectoryChannel(
 	if (!Schema) return MCPError(FString::Printf(TEXT("PoseSearchSchema not found: %s"), *AssetPath));
 
 	const TArray<TSharedPtr<FJsonValue>>* Samples = nullptr;
-	if (!Params->TryGetArrayField(TEXT("samples"), Samples) || !Samples || Samples->Num() == 0)
+	if (!TryGetArrayParam(Params, TEXT("samples"), Samples) || !Samples || Samples->Num() == 0)
 	{
 		return MCPError(TEXT("Missing 'samples' (array of {offset, flags?:[position,velocity,facingDirection,...], weight?}). Negative offsets are history, positive are prediction."));
 	}
@@ -410,7 +410,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseSearchSchemaTrajectoryChannel(
 
 	Schema->Modify();
 	double ChannelWeight = 0.0;
-	const bool bHasChannelWeight = Params->TryGetNumberField(TEXT("weight"), ChannelWeight);
+	const bool bHasChannelWeight = TryGetNumberParam(Params, TEXT("weight"), ChannelWeight);
 
 #if UE_MCP_HAS_5_5_API
 	UPoseSearchFeatureChannel_Trajectory* Channel = NewObject<UPoseSearchFeatureChannel_Trajectory>(Schema, NAME_None, RF_Transactional);
@@ -538,7 +538,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreateMirrorDataTable(const TSharedPt
 
 	Table->MirrorFindReplaceExpressions.Empty();
 	const TArray<TSharedPtr<FJsonValue>>* Exprs = nullptr;
-	if (Params->TryGetArrayField(TEXT("expressions"), Exprs) && Exprs && Exprs->Num() > 0)
+	if (TryGetArrayParam(Params, TEXT("expressions"), Exprs) && Exprs && Exprs->Num() > 0)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *Exprs)
 		{
@@ -615,7 +615,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CreatePoseSearchNormalizationSet(cons
 
 	TArray<TSharedPtr<FJsonValue>> AddedDatabases;
 	const TArray<TSharedPtr<FJsonValue>>* Databases = nullptr;
-	if (Params->TryGetArrayField(TEXT("databases"), Databases) && Databases)
+	if (TryGetArrayParam(Params, TEXT("databases"), Databases) && Databases)
 	{
 		for (const TSharedPtr<FJsonValue>& V : *Databases)
 		{
@@ -671,14 +671,14 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 
 	Database->Modify();
 	double Num = 0.0;
-	if (Params->TryGetNumberField(TEXT("continuingPoseCostBias"), Num)) Database->ContinuingPoseCostBias = (float)Num;
-	if (Params->TryGetNumberField(TEXT("baseCostBias"), Num)) Database->BaseCostBias = (float)Num;
-	if (Params->TryGetNumberField(TEXT("loopingCostBias"), Num)) Database->LoopingCostBias = (float)Num;
+	if (TryGetNumberParam(Params, TEXT("continuingPoseCostBias"), Num)) Database->ContinuingPoseCostBias = (float)Num;
+	if (TryGetNumberParam(Params, TEXT("baseCostBias"), Num)) Database->BaseCostBias = (float)Num;
+	if (TryGetNumberParam(Params, TEXT("loopingCostBias"), Num)) Database->LoopingCostBias = (float)Num;
 	int32 IntVal = 0;
-	if (Params->TryGetNumberField(TEXT("kdTreeQueryNumNeighbors"), IntVal)) Database->KDTreeQueryNumNeighbors = IntVal;
+	if (TryGetNumberParam(Params, TEXT("kdTreeQueryNumNeighbors"), IntVal)) Database->KDTreeQueryNumNeighbors = IntVal;
 
 	FString Mode;
-	if (Params->TryGetStringField(TEXT("poseSearchMode"), Mode))
+	if (TryGetStringParam(Params, TEXT("poseSearchMode"), Mode))
 	{
 		if (Mode.Equals(TEXT("bruteforce"), ESearchCase::IgnoreCase)) Database->PoseSearchMode = EPoseSearchMode::BruteForce;
 		else if (Mode.Equals(TEXT("pcakdtree"), ESearchCase::IgnoreCase)) Database->PoseSearchMode = EPoseSearchMode::PCAKDTree;
@@ -689,7 +689,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetPoseSearchDatabaseSettings(const T
 	}
 
 #if WITH_EDITORONLY_DATA
-	if (Params->TryGetNumberField(TEXT("numberOfPrincipalComponents"), IntVal)) Database->NumberOfPrincipalComponents = IntVal;
+	if (TryGetNumberParam(Params, TEXT("numberOfPrincipalComponents"), IntVal)) Database->NumberOfPrincipalComponents = IntVal;
 	const FString NormSetPath = OptionalString(Params, TEXT("normalizationSetPath"));
 	if (!NormSetPath.IsEmpty())
 	{
@@ -792,7 +792,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddMotionMatchingNode(const TSharedPt
 	{
 		if (Database) SetNodeObject(NodeStruct, NodeData, TEXT("Database"), Database);
 		double BlendTime = 0.0;
-		if (Params->TryGetNumberField(TEXT("blendTime"), BlendTime)) SetNodeFloat(NodeStruct, NodeData, TEXT("BlendTime"), (float)BlendTime);
+		if (TryGetNumberParam(Params, TEXT("blendTime"), BlendTime)) SetNodeFloat(NodeStruct, NodeData, TEXT("BlendTime"), (float)BlendTime);
 	}
 
 	bool bConnected = false;
@@ -867,13 +867,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddPoseHistoryNode(const TSharedPtr<F
 	if (NodeStruct && NodeData)
 	{
 		int32 IntVal = 0;
-		if (Params->TryGetNumberField(TEXT("poseCount"), IntVal)) SetNodeInt(NodeStruct, NodeData, TEXT("PoseCount"), IntVal);
+		if (TryGetNumberParam(Params, TEXT("poseCount"), IntVal)) SetNodeInt(NodeStruct, NodeData, TEXT("PoseCount"), IntVal);
 		double Num = 0.0;
-		if (Params->TryGetNumberField(TEXT("samplingInterval"), Num)) SetNodeFloat(NodeStruct, NodeData, TEXT("SamplingInterval"), (float)Num);
+		if (TryGetNumberParam(Params, TEXT("samplingInterval"), Num)) SetNodeFloat(NodeStruct, NodeData, TEXT("SamplingInterval"), (float)Num);
 		// Default to self-generated trajectory so no external trajectory pin is required.
 		SetNodeBool(NodeStruct, NodeData, TEXT("bGenerateTrajectory"), OptionalBool(Params, TEXT("generateTrajectory"), true));
-		if (Params->TryGetNumberField(TEXT("trajectoryHistoryCount"), IntVal)) SetNodeInt(NodeStruct, NodeData, TEXT("TrajectoryHistoryCount"), IntVal);
-		if (Params->TryGetNumberField(TEXT("trajectoryPredictionCount"), IntVal)) SetNodeInt(NodeStruct, NodeData, TEXT("TrajectoryPredictionCount"), IntVal);
+		if (TryGetNumberParam(Params, TEXT("trajectoryHistoryCount"), IntVal)) SetNodeInt(NodeStruct, NodeData, TEXT("TrajectoryHistoryCount"), IntVal);
+		if (TryGetNumberParam(Params, TEXT("trajectoryPredictionCount"), IntVal)) SetNodeInt(NodeStruct, NodeData, TEXT("TrajectoryPredictionCount"), IntVal);
 	}
 
 	// Insert into the pose chain feeding the output: whatever currently drives the
@@ -1144,9 +1144,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddSequenceEvaluator(const TSharedPtr
 	{
 		if (Sequence) SetNodeObject(NodeStruct, NodeData, TEXT("Sequence"), Sequence);
 		double Num = 0.0;
-		if (Params->TryGetNumberField(TEXT("explicitTime"), Num)) SetNodeFloat(NodeStruct, NodeData, TEXT("ExplicitTime"), (float)Num);
+		if (TryGetNumberParam(Params, TEXT("explicitTime"), Num)) SetNodeFloat(NodeStruct, NodeData, TEXT("ExplicitTime"), (float)Num);
 		bool bFlag = false;
-		if (Params->TryGetBoolField(TEXT("shouldLoop"), bFlag)) SetNodeBool(NodeStruct, NodeData, TEXT("bShouldLoop"), bFlag);
+		if (TryGetBoolParam(Params, TEXT("shouldLoop"), bFlag)) SetNodeBool(NodeStruct, NodeData, TEXT("bShouldLoop"), bFlag);
 		// Distance matching wants time to advance (root motion extraction), so the
 		// default here flips the engine default of bTeleportToExplicitTime=true.
 		SetNodeBool(NodeStruct, NodeData, TEXT("bTeleportToExplicitTime"),

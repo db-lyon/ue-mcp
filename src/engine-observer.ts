@@ -243,7 +243,7 @@ async function queryEditorProcesses(): Promise<ProcessProbe> {
 }
 
 /** Two .uproject paths that name the same file, whatever their spelling. */
-function sameProjectFile(a: string, b: string): boolean {
+export function sameProjectFile(a: string, b: string): boolean {
   const norm = (v: string): string => path.resolve(v).replace(/\\/g, "/").toLowerCase();
   return norm(a) === norm(b);
 }
@@ -262,18 +262,19 @@ export function editorOwnsProject(proc: EditorProcess, projectPath: string): boo
 }
 
 /**
- * Narrow a process list to the interactive editors for one project. Pure, so
- * the matching rule can be tested without a process table.
+ * Narrow a process list to the editors for one project. Pure, so the matching
+ * rule can be tested without a process table.
  *
- * Headless shards are excluded, and so are editors for other projects -
- * launching a second project while a shard or another project's editor runs is
- * legitimate (#804).
+ * Editors for other projects are always excluded. Headless shards are excluded
+ * unless `includeHeadless` is set: launching beside a shard is legitimate
+ * (#804), but stopping has to see every editor holding the project (#1150).
  */
 export function selectEditorsForProject(
   processes: EditorProcess[],
   projectPath?: string | null,
+  opts: { includeHeadless?: boolean } = {},
 ): EditorProcess[] {
-  const interactive = processes.filter((p) => !p.headless);
+  const interactive = opts.includeHeadless ? processes : processes.filter((p) => !p.headless);
   if (!projectPath) return interactive;
   const matched = interactive.filter((p) => editorOwnsProject(p, projectPath));
   // A process whose command line could not be read (permissions, race) has a
@@ -287,6 +288,14 @@ export function selectEditorsForProject(
 /** The interactive editor(s) holding `projectPath` open, from the live process table. */
 export async function findInteractiveEditors(projectPath?: string | null): Promise<EditorProcess[]> {
   return selectEditorsForProject(await listEditorProcesses(), projectPath);
+}
+
+/**
+ * Every editor holding `projectPath` open, headless ones included. Stop and
+ * ownership checks use this: a -nullrhi editor still holds the project (#1150).
+ */
+export async function findProjectEditors(projectPath?: string | null): Promise<EditorProcess[]> {
+  return selectEditorsForProject(await listEditorProcesses(), projectPath, { includeHeadless: true });
 }
 
 /** The running editor with this PID, or null when it is gone. */

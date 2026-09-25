@@ -12,6 +12,7 @@
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
 #include "AssetImportTask.h"
+#include "Factories/Factory.h"
 #include "Factories/FbxFactory.h"
 #include "Factories/FbxImportUI.h"
 #include "Factories/FbxStaticMeshImportData.h"
@@ -207,6 +208,75 @@ namespace
 			TEXT("asset does not bring it back. And the delete runs with the default force=false, so it refuses any of these that ")
 			TEXT("something outside the rollback still references, and reports that rather than removing them."),
 			ImportedPaths.Num()));
+	}
+
+	/** Write every field of Settings onto the first target that has a property
+	 *  by that name. Keys are UPROPERTY names or dotted paths; a bool may drop
+	 *  its "b" prefix (snapToClosestFrameBoundary). Any key that matches nothing,
+	 *  or any value that does not convert, fails the whole call before import. */
+	bool MCPApplyImportSettings(
+		const TArray<UObject*>& Targets,
+		const TSharedPtr<FJsonObject>& Settings,
+		TArray<TSharedPtr<FJsonValue>>& OutApplied,
+		FString& OutError)
+	{
+		if (!Settings.IsValid()) return true;
+		for (const auto& Pair : Settings->Values)
+		{
+			// The key type is not FString on every supported engine.
+			const FString Key(*Pair.Key);
+			TArray<FString> Names;
+			Names.Add(Key);
+			if (!Key.Contains(TEXT(".")) && !Key.StartsWith(TEXT("b"), ESearchCase::CaseSensitive))
+			{
+				Names.Add(TEXT("b") + Key);
+			}
+
+			bool bApplied = false;
+			for (UObject* Target : Targets)
+			{
+				if (!Target || bApplied) continue;
+				for (const FString& Name : Names)
+				{
+					FProperty* Prop = nullptr;
+					void* ValueAddr = nullptr;
+					UObject* LeafOwner = nullptr;
+					FString ResolveError;
+					if (!MCPJsonProperty::ResolveDottedPath(Target, Name, Prop, ValueAddr, LeafOwner, ResolveError)) continue;
+					// The prefixed spelling only stands in for a bool.
+					if (Name != Key && !CastField<FBoolProperty>(Prop)) continue;
+
+					FString SetError;
+					if (!MCPJsonProperty::SetJsonOnProperty(Prop, ValueAddr, Pair.Value, SetError))
+					{
+						OutError = FString::Printf(TEXT("Setting '%s' on %s failed: %s"),
+							*Key, *Target->GetClass()->GetName(), *SetError);
+						return false;
+					}
+					TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+					Entry->SetStringField(TEXT("key"), Key);
+					Entry->SetStringField(TEXT("property"), Name);
+					Entry->SetStringField(TEXT("target"), Target->GetClass()->GetName());
+					OutApplied.Add(MakeShared<FJsonValueObject>(Entry));
+					bApplied = true;
+					break;
+				}
+			}
+
+			if (!bApplied)
+			{
+				TArray<FString> ClassNames;
+				for (UObject* Target : Targets)
+				{
+					if (Target) ClassNames.Add(Target->GetClass()->GetName());
+				}
+				OutError = FString::Printf(
+					TEXT("Unknown setting '%s': no property by that name on %s. Keys are UPROPERTY names or dotted paths (reflection(reflect_class) lists them). Nothing was imported."),
+					*Key, *FString::Join(ClassNames, TEXT(" or ")));
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/** What a set_curvetable_keys replay does NOT carry back.
@@ -607,6 +677,23 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 		ImportUI->AnimSequenceImportData->bRemoveRedundantKeys = bRemoveRedundantKeys;
 	}
 
+	// importSettings reaches every FbxAnimSequenceImportData field first, then
+	// FbxImportUI itself (#1134).
+	TArray<TSharedPtr<FJsonValue>> AppliedSettings;
+	const TSharedPtr<FJsonObject>* ImportSettings = nullptr;
+	if (Params->TryGetObjectField(TEXT("importSettings"), ImportSettings) && ImportSettings)
+	{
+		UObject* AnimData = ImportUI->AnimSequenceImportData;
+		TArray<UObject*> Targets;
+		Targets.Add(AnimData);
+		Targets.Add(ImportUI);
+		FString SettingsError;
+		if (!MCPApplyImportSettings(Targets, *ImportSettings, AppliedSettings, SettingsError))
+		{
+			return MCPError(SettingsError);
+		}
+	}
+
 	FbxFactory->ImportUI = ImportUI;
 
 	UAssetImportTask* Task = NewObject<UAssetImportTask>();
@@ -652,12 +739,135 @@ TSharedPtr<FJsonValue> FAssetHandlers::ImportAnimation(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("filename"), FileName);
 	Result->SetStringField(TEXT("skeletonPath"), SkeletonPath);
 	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
+	if (AppliedSettings.Num() > 0) Result->SetArrayField(TEXT("importSettingsApplied"), AppliedSettings);
 	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
 	Result->SetNumberField(TEXT("importedCount"), ImportedPaths.Num());
 	Result->SetBoolField(TEXT("success"), ImportedPaths.Num() > 0);
 	if (ImportedPaths.Num() == 0)
 	{
 		Result->SetStringField(TEXT("error"), TEXT("Import task completed but no assets were produced"));
+	}
+
+	EmitImportedAssetsRollback(Result, ImportedPaths);
+
+	return MCPResult(Result);
+}
+
+// #1096: one import path for any factory, including ones a third-party plugin
+// ships. The factory class is resolved at runtime, so no module dependency.
+// factoryProperties is how a caller turns off a factory's own options dialog,
+// which unattended mode would otherwise cancel along with the import.
+TSharedPtr<FJsonValue> FAssetHandlers::ImportFile(const TSharedPtr<FJsonObject>& Params)
+{
+	FString FileName;
+	if (auto Err = RequireStringAlt(Params, TEXT("filename"), TEXT("filePath"), FileName)) return Err;
+
+	FString DestinationPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("destinationPath"), TEXT("packagePath"), DestinationPath)) return Err;
+	DestinationPath.RemoveFromEnd(TEXT("/"));
+	if (MCPIsProtectedAssetPath(DestinationPath)) return MCPProtectedPathError(DestinationPath);
+
+	if (!FPaths::FileExists(FileName))
+	{
+		return MCPError(FString::Printf(TEXT("File not found: %s"), *FileName));
+	}
+
+	UFactory* Factory = nullptr;
+	const FString FactoryClassSpec = OptionalString(Params, TEXT("factoryClass"));
+	if (!FactoryClassSpec.IsEmpty())
+	{
+		UClass* FactoryClass = MCPResolveClassOfType(FactoryClassSpec, UFactory::StaticClass());
+		if (!FactoryClass) return MCPClassNotFoundError(FactoryClassSpec, TEXT("factoryClass"));
+		if (auto Err = MCPCheckClassUsable(FactoryClassSpec, FactoryClass, UFactory::StaticClass())) return Err;
+
+		Factory = NewObject<UFactory>(GetTransientPackage(), FactoryClass);
+		if (!Factory->bEditorImport)
+		{
+			return MCPError(FString::Printf(
+				TEXT("%s is not an import factory (bEditorImport is false), so it cannot read a source file."),
+				*FactoryClass->GetName()));
+		}
+
+		// Refused here rather than handed to AssetTools, which would fall back
+		// to another factory and report that one's result as this one's.
+		TArray<FString> Extensions;
+		Factory->GetSupportedFileExtensions(Extensions);
+		const FString Ext = FPaths::GetExtension(FileName);
+		bool bExtensionSupported = Extensions.Num() == 0;
+		for (const FString& Candidate : Extensions)
+		{
+			if (Candidate.Equals(Ext, ESearchCase::IgnoreCase)) { bExtensionSupported = true; break; }
+		}
+		if (!bExtensionSupported)
+		{
+			return MCPError(FString::Printf(TEXT("%s does not import .%s files. It accepts: %s"),
+				*FactoryClass->GetName(), *Ext, *FString::Join(Extensions, TEXT(", "))));
+		}
+	}
+	FGCRootScope FactoryRoot(Factory);
+
+	TArray<TSharedPtr<FJsonValue>> AppliedProperties;
+	const TSharedPtr<FJsonObject>* FactoryProperties = nullptr;
+	if (Params->TryGetObjectField(TEXT("factoryProperties"), FactoryProperties) && FactoryProperties)
+	{
+		if (!Factory)
+		{
+			return MCPError(TEXT("factoryProperties needs factoryClass: without a named factory there is no object to set them on."));
+		}
+		TArray<UObject*> Targets;
+		Targets.Add(Factory);
+		FString PropertiesError;
+		if (!MCPApplyImportSettings(Targets, *FactoryProperties, AppliedProperties, PropertiesError))
+		{
+			return MCPError(PropertiesError);
+		}
+	}
+
+	UAssetImportTask* Task = NewObject<UAssetImportTask>();
+	FGCRootScope TaskRoot(Task);
+	Task->bAutomated = OptionalBool(Params, TEXT("automated"), true);
+	Task->bReplaceExisting = OptionalBool(Params, TEXT("replaceExisting"), true);
+	Task->bSave = OptionalBool(Params, TEXT("save"), false);
+	Task->Filename = FileName;
+	Task->DestinationPath = DestinationPath;
+	Task->Factory = Factory; // null lets AssetTools pick by extension
+
+	FString AssetName;
+	if (!Params->TryGetStringField(TEXT("assetName"), AssetName))
+	{
+		Params->TryGetStringField(TEXT("name"), AssetName);
+	}
+	if (!AssetName.IsEmpty())
+	{
+		Task->DestinationName = AssetName;
+	}
+
+	FAssetToolsModule& AssetToolsModule = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	TArray<UAssetImportTask*> Tasks;
+	Tasks.Add(Task);
+	AssetToolsModule.Get().ImportAssetTasks(Tasks);
+
+	TArray<TSharedPtr<FJsonValue>> ImportedPaths;
+	for (UObject* ImportedObj : Task->GetObjects())
+	{
+		if (ImportedObj) ImportedPaths.Add(MakeShared<FJsonValueString>(ImportedObj->GetPathName()));
+	}
+
+	auto Result = MCPSuccess();
+	if (ImportedPaths.Num() > 0) { MCPSetCreated(Result); }
+	Result->SetStringField(TEXT("filename"), FileName);
+	Result->SetStringField(TEXT("destinationPath"), DestinationPath);
+	Result->SetStringField(TEXT("factoryClass"), Factory ? Factory->GetClass()->GetPathName() : TEXT("auto"));
+	if (AppliedProperties.Num() > 0) Result->SetArrayField(TEXT("factoryPropertiesApplied"), AppliedProperties);
+	Result->SetArrayField(TEXT("importedAssets"), ImportedPaths);
+	Result->SetNumberField(TEXT("importedCount"), ImportedPaths.Num());
+	Result->SetBoolField(TEXT("success"), ImportedPaths.Num() > 0);
+	if (ImportedPaths.Num() == 0)
+	{
+		Result->SetStringField(TEXT("error"),
+			TEXT("Import task completed but no assets were produced. A factory that raises its own options dialog is cancelled in ")
+			TEXT("unattended mode: set the property that makes it use the supplied options through factoryProperties. ")
+			TEXT("The output log carries the factory's reason."));
 	}
 
 	EmitImportedAssetsRollback(Result, ImportedPaths);

@@ -92,6 +92,8 @@ public class UE_MCP_Bridge : ModuleRules
 	// Private/Tests/OpenAssetEditorTests.cpp (#1112): same reason.
 	// Private/Tests/LevelPlaceVolumeTests.cpp (#1119): same reason.
 	// Private/Tests/BlueprintTransactionalNodeTests.cpp (#1086): same reason.
+	// Private/Handlers/MaterialHandlers_Designer.cpp (#1131): same reason.
+	// Private/Handlers/LevelHandlers_Water.cpp (#1156): same reason.
 	public UE_MCP_Bridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -160,6 +162,9 @@ public class UE_MCP_Bridge : ModuleRules
 				"Foliage",
 				"GameProjectGeneration",
 				"GameplayAbilities",
+				// IGameplayTagsEditorModule::AddNewGameplayTagToINI, which
+				// reflection(create_tag) uses to register a tag without a restart.
+				"GameplayTagsEditor",
 				"GameplayTasks",
 				"HTTP",
 				"IKRig",
@@ -283,3 +288,5 @@ public class UE_MCP_Bridge : ModuleRules
 // Live post-process AnimBP handler automation coverage added.
 // Private/Tests/AnimationSkeletonCreateTests.cpp.
 // Rescan trigger: Private/Tests/NativeStructFPrefixTests.cpp (#1088).
+// Rescan trigger: Private/Tests/ReflectionSurfaceTests.cpp (#1106).
+// Rescan trigger: Private/Handlers/SequencerHandlers_Render.cpp (#1098).

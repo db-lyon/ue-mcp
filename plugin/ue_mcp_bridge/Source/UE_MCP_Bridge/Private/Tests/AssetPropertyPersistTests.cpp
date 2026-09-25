@@ -33,38 +33,11 @@
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
 #include "MCPEngineCompat.h"
+#include "Tests/MCPScopedTestMount.h"
 
 namespace
 {
 	const TCHAR* const MCPPersistTestRoot = TEXT("/UEMCPAssetPersistTest/");
-
-	/** Mount a private content root for the duration of the test and take it
-	 *  back down again, so no assertion here can touch a user's content. */
-	struct FScopedPersistTestMount
-	{
-		FString RootPath;
-		FString ContentPath;
-
-		FScopedPersistTestMount()
-			: RootPath(MCPPersistTestRoot)
-			, ContentPath(FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FString(FPlatformProcess::UserTempDir())),
-				FString(TEXT("UEMCPAssetPersistTest")),
-				FGuid::NewGuid().ToString(EGuidFormats::Digits)))
-		{
-			IFileManager::Get().MakeDirectory(*ContentPath, /*Tree=*/true);
-			FPackageName::RegisterMountPoint(RootPath, ContentPath);
-		}
-
-		~FScopedPersistTestMount()
-		{
-			FPackageName::UnRegisterMountPoint(RootPath, ContentPath);
-			IFileManager::Get().DeleteDirectory(*ContentPath, /*RequireExists=*/false, /*Tree=*/true);
-		}
-
-		FScopedPersistTestMount(const FScopedPersistTestMount&) = delete;
-		FScopedPersistTestMount& operator=(const FScopedPersistTestMount&) = delete;
-	};
 
 	TSharedPtr<FJsonObject> ResponseObject(const TSharedPtr<FJsonValue>& Response)
 	{
@@ -99,7 +72,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPSetAssetPropertyPersistsTest::RunTest(const FString& Parameters)
 {
-	const FScopedPersistTestMount Mount;
+	const FMCPScopedTestMount Mount{ FString(MCPPersistTestRoot), TEXT("UEMCPAssetPersistTest") };
 
 	const FString PackageName = FString(MCPPersistTestRoot) + TEXT("DT_PersistProbe");
 	UPackage* Package = CreatePackage(*PackageName);

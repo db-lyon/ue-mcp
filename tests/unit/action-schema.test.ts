@@ -28,6 +28,7 @@ import {
   allActionSchemas,
   forwardedParams,
   nearestActions,
+  unknownActionMessage,
   parseParams,
   parseParamsClause,
   resolveActionRef,
@@ -530,6 +531,18 @@ describe("suggestions", () => {
 
   it("nearestActions works off a plain name list", () => {
     expect(nearestActions("scul", ["sculpt", "paint_layer", "create"])).toEqual(["sculpt"]);
+  });
+
+  it("points a miss that is not a typo at the native-module route (#1105)", () => {
+    const miss = unknownActionMessage("zzzz", "gas", ["sculpt"]);
+    expect(miss).toContain("UEMCP::RegisterExternalHandler");
+    expect(miss).toContain("handlers:");
+    expect(miss).toContain("docs/plugins-native-modules.md");
+    expect(miss).toContain("overwritten");
+    // A typo gets its spellings, not the plugin lecture.
+    const typo = unknownActionMessage("scul", "landscape", ["sculpt"]);
+    expect(typo).toContain("Did you mean: sculpt?");
+    expect(typo).not.toContain("RegisterExternalHandler");
   });
 
   it("returns nothing rather than noise for an empty reference", () => {

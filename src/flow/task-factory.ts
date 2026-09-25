@@ -1,7 +1,7 @@
 import type { TaskResult, TaskConstructor } from "@db-lyon/flowkit";
 import { UeMcpTask } from "../task.js";
 import { stripAction, stripEditorTarget } from "../types.js";
-import { prepareCall, finishCall, type CallPreparation } from "../call-pipeline.js";
+import { prepareCall, finishCall, forwardToBridge, type CallPreparation } from "../call-pipeline.js";
 import type { FlowContext } from "./context.js";
 import { liftRollback } from "./rollback.js";
 import { applyHandlerOutcome } from "./handler-outcome.js";
@@ -68,7 +68,7 @@ export function bridgeTaskClass(
       // the routing parameters come off, the paths are repaired, and the
       // category folds its accepted spellings into the canonical ones.
       const pipeline = prepareCall(options, prep);
-      const params = mapParams ? mapParams(pipeline.params) : pipeline.params;
+      const params = forwardToBridge(pipeline, pipeline.params, mapParams, name);
       // The caller's budget wins over the action's authored one: an action
       // that declares 120s is stating a floor it needs, not a ceiling the
       // caller may not raise.

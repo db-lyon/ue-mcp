@@ -281,14 +281,14 @@ namespace
 		FString& OutError)
 	{
 		OutRate = Default;
-		const TSharedPtr<FJsonValue>* Value = Params->Values.Find(Field);
-		if (!Value || !Value->IsValid() || (*Value)->IsNull())
+		const TSharedPtr<FJsonValue> Value = TryGetParam(Params, Field);
+		if (!Value.IsValid() || Value->IsNull())
 		{
 			return true;
 		}
-		if ((*Value)->Type == EJson::Number)
+		if (Value->Type == EJson::Number)
 		{
-			const double Number = (*Value)->AsNumber();
+			const double Number = Value->AsNumber();
 			if (!FMath::IsFinite(Number) || Number <= 0.0 || Number > static_cast<double>(MAX_int32))
 			{
 				OutError = FString::Printf(TEXT("'%s' must be a positive frame rate"), Field);
@@ -297,12 +297,12 @@ namespace
 			OutRate = FFrameRate(FMath::RoundToInt(Number), 1);
 			return OutRate.IsValid();
 		}
-		if ((*Value)->Type != EJson::Object)
+		if (Value->Type != EJson::Object)
 		{
 			OutError = FString::Printf(TEXT("'%s' must be a number or {numerator, denominator}"), Field);
 			return false;
 		}
-		const TSharedPtr<FJsonObject> Object = (*Value)->AsObject();
+		const TSharedPtr<FJsonObject> Object = Value->AsObject();
 		double Numerator = 0.0;
 		double Denominator = 1.0;
 		if (!Object.IsValid() || !Object->TryGetNumberField(TEXT("numerator"), Numerator))
@@ -773,7 +773,7 @@ namespace
 		FString& OutError)
 	{
 		double SingleFrame = 0.0;
-		if (Object->TryGetNumberField(TEXT("frame"), SingleFrame))
+		if (TryGetNumberParam(Object, TEXT("frame"), SingleFrame))
 		{
 			if (!FMath::IsFinite(SingleFrame)
 				|| !FMath::IsNearlyEqual(SingleFrame, FMath::RoundToDouble(SingleFrame))
@@ -786,7 +786,7 @@ namespace
 		}
 
 		const TArray<TSharedPtr<FJsonValue>>* Frames = nullptr;
-		if (Object->TryGetArrayField(TEXT("frames"), Frames) && Frames)
+		if (TryGetArrayParam(Object, TEXT("frames"), Frames) && Frames)
 		{
 			for (const TSharedPtr<FJsonValue>& FrameValue : *Frames)
 			{
@@ -852,18 +852,18 @@ namespace
 		FControlRigSequenceSession& OutSession,
 		FString& OutError)
 	{
-		if (!Params->TryGetStringField(TEXT("sequencePath"), OutSession.SequencePath) || OutSession.SequencePath.IsEmpty())
+		if (!TryGetStringParam(Params, TEXT("sequencePath"), OutSession.SequencePath) || OutSession.SequencePath.IsEmpty())
 		{
 			OutError = TEXT("Missing 'sequencePath' parameter");
 			return false;
 		}
-		if (!Params->TryGetStringField(TEXT("bindingTag"), OutSession.BindingTag) || OutSession.BindingTag.IsEmpty())
+		if (!TryGetStringParam(Params, TEXT("bindingTag"), OutSession.BindingTag) || OutSession.BindingTag.IsEmpty())
 		{
 			OutError = TEXT("Missing 'bindingTag' parameter");
 			return false;
 		}
 
-		OutSession.Sequence = Cast<ULevelSequence>(UEditorAssetLibrary::LoadAsset(OutSession.SequencePath));
+		OutSession.Sequence = Cast<ULevelSequence>(MCPLoadAssetObject(OutSession.SequencePath));
 		if (!OutSession.Sequence)
 		{
 			OutError = FString::Printf(TEXT("LevelSequence not found: %s"), *OutSession.SequencePath);
@@ -1775,9 +1775,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 	FString Error;
 	if (!ControlRigSequencerSplitAssetPath(SequencePath, PackagePath, AssetName, Error)) return MCPError(Error);
 
-	USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(UEditorAssetLibrary::LoadAsset(SkeletalMeshPath));
+	USkeletalMesh* SkeletalMesh = Cast<USkeletalMesh>(MCPLoadAssetObject(SkeletalMeshPath));
 	if (!SkeletalMesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *SkeletalMeshPath));
-	UAnimSequence* SourceAnimation = Cast<UAnimSequence>(UEditorAssetLibrary::LoadAsset(SourceAnimationPath));
+	UAnimSequence* SourceAnimation = Cast<UAnimSequence>(MCPLoadAssetObject(SourceAnimationPath));
 	if (!SourceAnimation) return MCPError(FString::Printf(TEXT("AnimSequence not found: %s"), *SourceAnimationPath));
 	if (!SkeletalMesh->GetSkeleton() || !SourceAnimation->GetSkeleton()
 		|| !SkeletalMesh->GetSkeleton()->IsCompatibleForEditor(SourceAnimation->GetSkeleton()))
@@ -1809,7 +1809,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 	{
 		FString ControlRigPath;
 		if (auto RigError = RequireString(Params, TEXT("controlRigPath"), ControlRigPath)) return RigError;
-		UBlueprint* Blueprint = Cast<UBlueprint>(UEditorAssetLibrary::LoadAsset(ControlRigPath));
+		UBlueprint* Blueprint = Cast<UBlueprint>(MCPLoadAssetObject(ControlRigPath));
 		if (!Blueprint || !Blueprint->GeneratedClass || !Blueprint->GeneratedClass->IsChildOf(UControlRig::StaticClass()))
 		{
 			return MCPError(FString::Printf(TEXT("Control Rig asset is invalid or has no generated Control Rig class: %s"), *ControlRigPath));
@@ -1833,7 +1833,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 		return MCPError(Error);
 	}
 	double StartNumber = 0.0;
-	Params->TryGetNumberField(TEXT("startFrame"), StartNumber);
+	TryGetNumberParam(Params, TEXT("startFrame"), StartNumber);
 	if (!FMath::IsFinite(StartNumber)
 		|| !FMath::IsNearlyEqual(StartNumber, FMath::RoundToDouble(StartNumber))
 		|| StartNumber < static_cast<double>(MIN_int32) || StartNumber > static_cast<double>(MAX_int32))
@@ -1843,7 +1843,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 	const int32 StartFrame = static_cast<int32>(FMath::RoundToInt(StartNumber));
 	const int32 DefaultDuration = FMath::Max(1, static_cast<int32>(FMath::RoundToInt(SourceAnimation->GetPlayLength() * DisplayRate.AsDecimal())));
 	double EndNumber = static_cast<double>(StartFrame) + static_cast<double>(DefaultDuration);
-	Params->TryGetNumberField(TEXT("endFrame"), EndNumber);
+	TryGetNumberParam(Params, TEXT("endFrame"), EndNumber);
 	if (!FMath::IsFinite(EndNumber)
 		|| !FMath::IsNearlyEqual(EndNumber, FMath::RoundToDouble(EndNumber))
 		|| EndNumber < static_cast<double>(MIN_int32) || EndNumber > static_cast<double>(MAX_int32))
@@ -1867,7 +1867,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BeginControlRigEdit(const TSharedPtr<
 	if (BindingTag.IsEmpty()) return MCPError(TEXT("'bindingTag' must not be empty"));
 	const bool bLayered = OptionalBool(Params, TEXT("layered"), false);
 
-	ULevelSequence* Sequence = Cast<ULevelSequence>(UEditorAssetLibrary::LoadAsset(SequencePath));
+	ULevelSequence* Sequence = Cast<ULevelSequence>(MCPLoadAssetObject(SequencePath));
 	const bool bCreated = Sequence == nullptr;
 	if (Sequence && OnConflict == TEXT("error"))
 	{
@@ -2067,7 +2067,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigEdit(const TSharedPtr<F
 #else
 	FString SequencePath;
 	if (auto Error = RequireString(Params, TEXT("sequencePath"), SequencePath)) return Error;
-	ULevelSequence* Sequence = Cast<ULevelSequence>(UEditorAssetLibrary::LoadAsset(SequencePath));
+	ULevelSequence* Sequence = Cast<ULevelSequence>(MCPLoadAssetObject(SequencePath));
 	if (!Sequence) return MCPError(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
 	FControlRigSequenceFocusGuard Focus(Sequence);
 	if (!Focus.IsReady()) return MCPError(TEXT("Could not focus the LevelSequence in Sequencer"));
@@ -2088,7 +2088,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigEdit(const TSharedPtr<F
 	TArray<FName> FloatControlNames;
 	TArray<FName> IntControlNames;
 	const TArray<TSharedPtr<FJsonValue>>* RequestedNames = nullptr;
-	if (Params->TryGetArrayField(TEXT("controlNames"), RequestedNames) && RequestedNames)
+	if (TryGetArrayParam(Params, TEXT("controlNames"), RequestedNames) && RequestedNames)
 	{
 		for (const TSharedPtr<FJsonValue>& Value : *RequestedNames)
 		{
@@ -2159,7 +2159,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigEdit(const TSharedPtr<F
 	if (ControlNames.IsEmpty()) return MCPError(TEXT("No readable controls were requested or available"));
 
 	TArray<FFrameNumber> Frames;
-	if (Params->HasField(TEXT("frame")) || Params->HasField(TEXT("frames")))
+	if (HasParam(Params, TEXT("frame")) || HasParam(Params, TEXT("frames")))
 	{
 		if (!ControlRigSequencerReadFrames(Params, Frames, Error)) return MCPError(Error);
 	}
@@ -2302,7 +2302,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::CaptureControlRigPose(const TSharedPt
 	SelectedControls.Sort(FNameLexicalLess());
 	TArray<FName> CaptureControls;
 	const TArray<TSharedPtr<FJsonValue>>* RequestedControls = nullptr;
-	if (Params->TryGetArrayField(TEXT("controlNames"), RequestedControls) && RequestedControls)
+	if (TryGetArrayParam(Params, TEXT("controlNames"), RequestedControls) && RequestedControls)
 	{
 		for (const TSharedPtr<FJsonValue>& Value : *RequestedControls)
 		{
@@ -2410,7 +2410,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 	{
 		return MCPError(FString::Printf(TEXT("Protected asset cannot be modified: %s"), *SequencePath));
 	}
-	ULevelSequence* Sequence = Cast<ULevelSequence>(UEditorAssetLibrary::LoadAsset(SequencePath));
+	ULevelSequence* Sequence = Cast<ULevelSequence>(MCPLoadAssetObject(SequencePath));
 	if (!Sequence) return MCPError(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
 	FControlRigSequenceFocusGuard Focus(Sequence);
 	if (!Focus.IsReady()) return MCPError(TEXT("Could not focus the LevelSequence in Sequencer"));
@@ -2420,7 +2420,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ApplyControlRigEdits(const TSharedPtr
 	if (!ControlRigSequencerResolveSession(Params, Session, Error)) return MCPError(Error);
 	if (Session.Section->GetDoNotKey()) return MCPError(TEXT("The resolved Control Rig section is marked Do Not Key"));
 	const TArray<TSharedPtr<FJsonValue>>* Operations = nullptr;
-	if (!Params->TryGetArrayField(TEXT("operations"), Operations) || !Operations || Operations->IsEmpty())
+	if (!TryGetArrayParam(Params, TEXT("operations"), Operations) || !Operations || Operations->IsEmpty())
 	{
 		return MCPError(TEXT("'operations' must be a non-empty array"));
 	}
@@ -4022,7 +4022,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeControlRigEdit(const TSharedPtr<F
 	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("error")).ToLower();
 	if (OnConflict != TEXT("skip") && OnConflict != TEXT("error"))
 		return MCPError(TEXT("'onConflict' must be 'skip' or 'error'; bake never overwrites an AnimSequence"));
-	if (UObject* Existing = UEditorAssetLibrary::LoadAsset(OutputAssetPath))
+	if (UObject* Existing = MCPLoadAssetObject(OutputAssetPath))
 	{
 		if (OnConflict == TEXT("error")) return MCPError(FString::Printf(TEXT("Output asset already exists: %s"), *OutputAssetPath));
 		if (!Existing->IsA<UAnimSequence>()) return MCPError(FString::Printf(TEXT("Existing output is not an AnimSequence: %s"), *OutputAssetPath));
@@ -4032,7 +4032,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::BakeControlRigEdit(const TSharedPtr<F
 		return MCPResult(Result);
 	}
 
-	ULevelSequence* Sequence = Cast<ULevelSequence>(UEditorAssetLibrary::LoadAsset(SequencePath));
+	ULevelSequence* Sequence = Cast<ULevelSequence>(MCPLoadAssetObject(SequencePath));
 	if (!Sequence) return MCPError(FString::Printf(TEXT("LevelSequence not found: %s"), *SequencePath));
 	FControlRigSequenceFocusGuard Focus(Sequence);
 	if (!Focus.IsReady()) return MCPError(TEXT("Could not focus the LevelSequence in Sequencer"));

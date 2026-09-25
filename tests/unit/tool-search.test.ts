@@ -86,10 +86,12 @@ describe("searchToolGraph", () => {
         "widget.epic_replace_widget_with_template",
         "widget.epic_replace_widget_with_child",
       ]);
-      expect(ids("marked frame", 2)).toEqual([
+      // "frame" is in the capture synonym group, so editor.render_sequence_frames
+      // legitimately ranks here too; both Epic actions must still surface.
+      expect(ids("marked frame", 3)).toEqual(expect.arrayContaining([
         "animation.epic_add_marked_frame",
         "animation.epic_delete_all_marked_frames",
-      ]);
+      ]));
     });
   });
 });

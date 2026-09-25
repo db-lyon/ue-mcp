@@ -988,6 +988,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 	if (!GEditor) return MCPError(TEXT("Editor not available"));
 
 	const FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
+	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
 	const TArray<TSharedPtr<FJsonValue>>* PathsArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("paths"), PathsArr) || !PathsArr || PathsArr->Num() == 0)
 	{
@@ -1029,21 +1030,40 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 			}
 			return false;
 		};
-		bool bActorMatch = ClassFilter.IsEmpty() || ClassMatches(Actor->GetClass());
+		// #1113: componentName roots the read at the component with that
+		// instance name (case-insensitive); actors without one are skipped, and
+		// classFilter then matches the actor class or that component's class.
 		UActorComponent* ComponentMatch = nullptr;
-		if (!bActorMatch)
+		if (!ComponentName.IsEmpty())
 		{
 			for (UActorComponent* Comp : Actor->GetComponents())
 			{
-				if (Comp && ClassMatches(Comp->GetClass()))
+				if (Comp && Comp->GetName().Equals(ComponentName, ESearchCase::IgnoreCase))
 				{
 					ComponentMatch = Comp;
-					bActorMatch = true;
 					break;
 				}
 			}
+			if (!ComponentMatch) continue;
+			if (!ClassMatches(Actor->GetClass()) && !ClassMatches(ComponentMatch->GetClass())) continue;
 		}
-		if (!bActorMatch) continue;
+		else
+		{
+			bool bActorMatch = ClassFilter.IsEmpty() || ClassMatches(Actor->GetClass());
+			if (!bActorMatch)
+			{
+				for (UActorComponent* Comp : Actor->GetComponents())
+				{
+					if (Comp && ClassMatches(Comp->GetClass()))
+					{
+						ComponentMatch = Comp;
+						bActorMatch = true;
+						break;
+					}
+				}
+			}
+			if (!bActorMatch) continue;
+		}
 
 		++Matched;
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -1072,6 +1092,7 @@ TSharedPtr<FJsonValue> FEditorHandlers::GetRuntimeValues(const TSharedPtr<FJsonO
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("world"), World == (UWorld*)GEditor->PlayWorld ? TEXT("pie") : TEXT("editor"));
 	Result->SetStringField(TEXT("classFilter"), ClassFilter);
+	if (!ComponentName.IsEmpty()) Result->SetStringField(TEXT("componentName"), ComponentName);
 	Result->SetNumberField(TEXT("matched"), Matched);
 	Result->SetArrayField(TEXT("rows"), Rows);
 	return MCPResult(Result);

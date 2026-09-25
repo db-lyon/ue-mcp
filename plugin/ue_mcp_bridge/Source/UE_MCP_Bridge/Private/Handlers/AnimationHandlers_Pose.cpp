@@ -341,8 +341,8 @@ TSharedPtr<FJsonValue> ResolvePoseSampleTimes(
 {
 	const TArray<TSharedPtr<FJsonValue>>* FramesArray = nullptr;
 	const TArray<TSharedPtr<FJsonValue>>* TimesArray = nullptr;
-	const bool bHasFrames = Params->TryGetArrayField(TEXT("frames"), FramesArray) && FramesArray;
-	const bool bHasTimes = Params->TryGetArrayField(TEXT("times"), TimesArray) && TimesArray;
+	const bool bHasFrames = TryGetArrayParam(Params, TEXT("frames"), FramesArray) && FramesArray;
+	const bool bHasTimes = TryGetArrayParam(Params, TEXT("times"), TimesArray) && TimesArray;
 
 	if (bHasFrames && bHasTimes)
 	{
@@ -418,7 +418,7 @@ TSharedPtr<FJsonValue> ResolvePoseSampleTimes(
 void ReadRequestedBoneNames(const TSharedPtr<FJsonObject>& Params, TArray<FName>& OutBones)
 {
 	const TArray<TSharedPtr<FJsonValue>>* BonesArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("boneNames"), BonesArray) || !BonesArray) return;
+	if (!TryGetArrayParam(Params, TEXT("boneNames"), BonesArray) || !BonesArray) return;
 	for (const TSharedPtr<FJsonValue>& Entry : *BonesArray)
 	{
 		if (!Entry.IsValid()) continue;
@@ -456,7 +456,7 @@ TSharedPtr<FJsonValue> ResolveBlendSpaceLength(FPoseEvaluationTarget& Target, co
 FVector ReadBlendPosition(const TSharedPtr<FJsonObject>& Params)
 {
 	const TSharedPtr<FJsonObject>* PositionObject = nullptr;
-	if (Params->TryGetObjectField(TEXT("blendPosition"), PositionObject) && PositionObject && (*PositionObject).IsValid())
+	if (TryGetObjectParam(Params, TEXT("blendPosition"), PositionObject) && PositionObject && (*PositionObject).IsValid())
 	{
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		(*PositionObject)->TryGetNumberField(TEXT("x"), X);
@@ -586,7 +586,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::MeasureNaturalSpeed(const TSharedPtr<
 	TArray<FName> FootBones;
 	{
 		const TArray<TSharedPtr<FJsonValue>>* FootArray = nullptr;
-		if (!Params->TryGetArrayField(TEXT("footBones"), FootArray) || !FootArray || FootArray->Num() == 0)
+		if (!TryGetArrayParam(Params, TEXT("footBones"), FootArray) || !FootArray || FootArray->Num() == 0)
 		{
 			return MCPError(TEXT("Missing required parameter 'footBones' (array of bone names, e.g. [\"foot_l\",\"foot_r\"])"));
 		}
@@ -657,7 +657,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::MeasureNaturalSpeed(const TSharedPtr<
 	// Contact threshold: an explicit height in Unreal units, or derived from the
 	// clip itself as the lowest foot height plus a margin, which is what makes
 	// this work across skeletons of different scale without being told the scale.
-	const bool bHasExplicitThreshold = Params->HasField(TEXT("contactThreshold"));
+	const bool bHasExplicitThreshold = HasParam(Params, TEXT("contactThreshold"));
 	double LowestFootHeight = TNumericLimits<double>::Max();
 	double HighestFootHeight = -TNumericLimits<double>::Max();
 	for (const FEvaluatedPoseSample& Sample : Samples)

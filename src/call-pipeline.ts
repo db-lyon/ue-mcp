@@ -36,6 +36,8 @@ import {
   attachFieldReport,
   type FieldSelection,
 } from "./field-select.js";
+import { mapTracked } from "./param-forwarding.js";
+import { McpError, ErrorCode } from "./errors.js";
 
 /**
  * Separate the per-call timeout budget from the action's own parameters.
@@ -99,6 +101,10 @@ export interface CallPipeline {
    * value wins and the authored one is the floor it falls back to.
    */
   timeoutMs?: number;
+  /** Keys the caller sent, before folding. Empty on a gateway call. */
+  supplied: string[];
+  /** Supplied keys the action's mapParams did not send. Set by `forwardToBridge`. */
+  unforwarded?: string[];
 }
 
 function isParamBag(value: unknown): value is Record<string, unknown> {
@@ -171,6 +177,7 @@ export function prepareCall(
         omit: outerSelection.selection.omit ?? innerSelection.selection.omit,
       },
       timeoutMs: outerTimeout.timeoutMs ?? innerTimeout.timeoutMs,
+      supplied: [],
     };
   }
 
@@ -180,7 +187,86 @@ export function prepareCall(
     repairs: repaired.repairs,
     selection: outerSelection.selection,
     timeoutMs: outerTimeout.timeoutMs,
+    supplied: Object.keys(outerSelection.rest),
   };
+}
+
+/** Set to 1 to refuse a call instead of warning when a parameter is not forwarded (#1057). */
+export const STRICT_PARAMS_ENV = "UE_MCP_STRICT_PARAMS";
+
+/**
+ * Map a bridge action's parameters and record what the mapper ignored (#1057).
+ *
+ * The category shape accepts every parameter any of its actions declares, so a
+ * key meant for another action, or one this mapper forgot, used to vanish here
+ * while the call reported success. It is now reported as `paramsNotForwarded`
+ * on the result, or refused under the strict flag.
+ */
+export function forwardToBridge(
+  pipeline: CallPipeline,
+  bag: Record<string, unknown>,
+  mapParams: ((p: Record<string, unknown>) => Record<string, unknown>) | undefined,
+  label: string,
+): Record<string, unknown> {
+  if (!mapParams) return bag;
+  const { params, unforwarded } = mapTracked(mapParams, bag, pipeline.supplied);
+  if (unforwarded.length === 0) return params;
+  if (process.env[STRICT_PARAMS_ENV] === "1") {
+    throw new McpError(
+      ErrorCode.INVALID_PARAMS,
+      `${label} does not take ${unforwarded.join(", ")}, so the call was not sent. `
+      + `project(action="describe_action") lists what it takes.`,
+    );
+  }
+  pipeline.unforwarded = unforwarded;
+  return params;
+}
+
+/** Report the parameters an action dropped, beside the result. */
+export function attachUnforwarded<T>(result: T, unforwarded: string[] | undefined): T {
+  if (!unforwarded || unforwarded.length === 0) return result;
+  if (result === null || typeof result !== "object" || Array.isArray(result)) return result;
+  const record = result as Record<string, unknown>;
+  if ("paramsNotForwarded" in record) return result;
+  if (record.__directive === true && "result" in record) {
+    return { ...record, result: attachUnforwarded(record.result, unforwarded) } as T;
+  }
+  return {
+    ...record,
+    paramsNotForwarded: {
+      params: unforwarded,
+      note: "This action does not send these parameters to the editor, so they had no effect. "
+        + "project(action=\"describe_action\") lists what it takes.",
+    },
+  } as T;
+}
+
+/**
+ * Reshape the editor's `paramsNotRead` into a report beside the result (#1057).
+ *
+ * A C++ handler of a reporting category lists the keys that arrived and were
+ * never read. The list is taken from the unprojected answer and written after
+ * the projection, so a narrow `select` cannot filter it away.
+ */
+export function attachNotRead<T>(result: T, answered: unknown): T {
+  if (answered === null || typeof answered !== "object" || Array.isArray(answered)) return result;
+  const listed = (answered as Record<string, unknown>).paramsNotRead;
+  if (!Array.isArray(listed)) return result;
+  const names = listed.filter((n): n is string => typeof n === "string");
+  if (names.length === 0) return result;
+  if (result === null || typeof result !== "object" || Array.isArray(result)) return result;
+  const record = result as Record<string, unknown>;
+  if (record.__directive === true && "result" in record) {
+    return { ...record, result: attachNotRead(record.result, answered) } as T;
+  }
+  return {
+    ...record,
+    paramsNotRead: {
+      params: names,
+      note: "The editor received these parameters and this action never read them, so they had no effect. "
+        + "project(action=\"describe_action\") lists what it takes.",
+    },
+  } as T;
 }
 
 /**
@@ -192,7 +278,13 @@ export function prepareCall(
  */
 export function finishCall(raw: unknown, pipeline: CallPipeline): unknown {
   const projection = projectResult(raw, pipeline.selection);
-  return attachPathRepairs(attachFieldReport(projection.result, projection), pipeline.repairs);
+  return attachNotRead(
+    attachUnforwarded(
+      attachPathRepairs(attachFieldReport(projection.result, projection), pipeline.repairs),
+      pipeline.unforwarded,
+    ),
+    raw,
+  );
 }
 
 /**
@@ -205,6 +297,7 @@ export function finishCall(raw: unknown, pipeline: CallPipeline): unknown {
 export function isPipelineNoop(pipeline: CallPipeline): boolean {
   return (
     pipeline.repairs.length === 0
+    && (pipeline.unforwarded?.length ?? 0) === 0
     && pipeline.selection.select === undefined
     && pipeline.selection.omit === undefined
   );

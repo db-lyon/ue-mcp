@@ -17,6 +17,7 @@
 #include "HandlerFunctionCall.h"
 #include "HandlerJsonProperty.h"
 #include "HandlerPropertyText.h"
+#include "HandlerSkinnedAsset.h"
 #include "JsonSerializer.h"
 
 #include "Components/SkeletalMeshComponent.h"
@@ -1561,6 +1562,28 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetObjectProperty(const TSharedPtr<FJson
 	}
 
 	UObject* ExportOwner = LeafOwner ? LeafOwner : Target;
+
+	// A skinned mesh's mesh pointer goes through the engine setter (#1099).
+	if (MCPSkinnedAsset::IsMeshProperty(Prop))
+	{
+		USkinnedMeshComponent* SkinnedComp = Cast<USkinnedMeshComponent>(ExportOwner);
+		FString PreviousMesh;
+		FString MeshErr;
+		if (!SkinnedComp || !MCPSkinnedAsset::AssignFromJson(SkinnedComp, NewValue, PreviousMesh, MeshErr))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName,
+				SkinnedComp ? *MeshErr : TEXT("the owning skinned mesh component could not be resolved")));
+		}
+		auto MeshResult = MCPSuccess();
+		MCPSetUpdated(MeshResult);
+		MeshResult->SetStringField(TEXT("target"), Description);
+		MeshResult->SetStringField(TEXT("objectPath"), Target->GetPathName());
+		MeshResult->SetStringField(TEXT("propertyName"), ResolvedName);
+		MCPSkinnedAsset::Report(MeshResult, SkinnedComp, PreviousMesh);
+		MCPSetNoRollback(MeshResult,
+			TEXT("No rollback payload is built for a mesh swap here. Restore previousValue with level(set_component_skeletal_mesh)."));
+		return MCPResult(MeshResult);
+	}
 
 	// Structured, not export text, and reported under the same field names and
 	// in the same form editor(set_property) uses: a caller reading

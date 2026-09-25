@@ -119,8 +119,11 @@ private:
 	// set_action_triggers earns its place because the ACTION's own Triggers
 	// and Modifiers are Instanced arrays, and the JSON property setter can
 	// only assign an object it can LOAD FROM A PATH, never mint one.
+	// set_player_mappable_settings is the same kind of exception for the
+	// protected Instanced UPlayerMappableKeySettings subobject.
 	static TSharedPtr<FJsonValue> ReadInputAction(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetActionTriggers(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> SetPlayerMappableSettings(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ApplyMappingContext(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> RemoveMappingContext(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> GetActionValue(const TSharedPtr<FJsonObject>& Params);

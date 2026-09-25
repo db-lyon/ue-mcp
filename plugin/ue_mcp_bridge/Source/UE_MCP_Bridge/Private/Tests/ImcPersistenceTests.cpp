@@ -18,14 +18,16 @@
 #include "Misc/Paths.h"
 #include "UObject/GarbageCollection.h"
 #include "UObject/Package.h"
+#include "Tests/MCPScopedTestMount.h"
 
 namespace ImcPersistenceTests
 {
 	struct FFixture
 	{
 		FAutomationTestBase& Test;
+		// Declared before everything it owns, so it is destroyed after them.
+		FMCPScopedTestMount Mount;
 		FString RootPath;
-		FString ContentPath;
 		FString ContextPath;
 		FString ContextFile;
 		UInputAction* ActionA = nullptr;
@@ -34,16 +36,11 @@ namespace ImcPersistenceTests
 		FMCPHandlerRegistry Registry;
 		bool bReady = false;
 
-		explicit FFixture(FAutomationTestBase& InTest) : Test(InTest)
+		explicit FFixture(FAutomationTestBase& InTest)
+			: Test(InTest)
+			, Mount(TEXT("/UEMCPImcPersistence_") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT("/"), TEXT("UEMCPImcPersistence"))
+			, RootPath(Mount.RootPath)
 		{
-			const FString Id = FGuid::NewGuid().ToString(EGuidFormats::Digits);
-			RootPath = TEXT("/UEMCPImcPersistence_") + Id + TEXT("/");
-			ContentPath = FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FString(FPlatformProcess::UserTempDir())),
-				TEXT("UEMCPImcPersistence"), Id);
-			IFileManager::Get().MakeDirectory(*ContentPath, true);
-			FPackageName::RegisterMountPoint(RootPath, ContentPath);
-
 			ActionA = NewObject<UInputAction>(CreatePackage(*(RootPath + TEXT("IA_A"))), TEXT("IA_A"), RF_Public | RF_Standalone);
 			ActionB = NewObject<UInputAction>(CreatePackage(*(RootPath + TEXT("IA_B"))), TEXT("IA_B"), RF_Public | RF_Standalone);
 			ActionA->AddToRoot();
@@ -71,8 +68,6 @@ namespace ImcPersistenceTests
 				Asset->GetOutermost()->SetDirtyFlag(false);
 				ResetLoaders(Asset->GetOutermost());
 			}
-			FPackageName::UnRegisterMountPoint(RootPath, ContentPath);
-			IFileManager::Get().DeleteDirectory(*ContentPath, false, true);
 		}
 
 		TSharedPtr<FJsonObject> Params() const

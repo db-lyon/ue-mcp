@@ -29,6 +29,7 @@ vi.mock("../../src/engine-observer.js", async (importOriginal) => {
     ...actual,
     listEditorProcesses: vi.fn(async () => []),
     findInteractiveEditors: vi.fn(async () => []),
+    findProjectEditors: vi.fn(async () => []),
     findEditorByPid: vi.fn(async () => null),
     readEngineState: vi.fn(async () => ({
       running: true,
@@ -48,6 +49,8 @@ const { bridgeLockfilePath } = await import("../../src/editor-target.js");
 const { setDialogMode } = await import("../../src/user-state.js");
 
 const findInteractiveEditors = vi.mocked(observer.findInteractiveEditors);
+// Stop and ownership also see headless editors; one list stands in for both here.
+vi.mocked(observer.findProjectEditors).mockImplementation((p) => findInteractiveEditors(p));
 const findEditorByPid = vi.mocked(observer.findEditorByPid);
 
 const EDITOR_PID = 4242;

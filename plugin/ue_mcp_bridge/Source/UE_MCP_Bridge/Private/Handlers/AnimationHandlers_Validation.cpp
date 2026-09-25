@@ -198,7 +198,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AnalyzeAnimation(const TSharedPtr<FJs
 	FString AssetPath;
 	if (auto Error = RequireString(Params, TEXT("assetPath"), AssetPath)) return Error;
 
-	UAnimSequence* Sequence = LoadObject<UAnimSequence>(nullptr, *AssetPath);
+	UAnimSequence* Sequence = LoadAssetByPath<UAnimSequence>(AssetPath);
 	if (!Sequence)
 	{
 		return MCPError(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
@@ -216,7 +216,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AnalyzeAnimation(const TSharedPtr<FJs
 	USkeletalMesh* SkeletalMesh = nullptr;
 	if (!SkeletalMeshPath.IsEmpty())
 	{
-		SkeletalMesh = LoadObject<USkeletalMesh>(nullptr, *SkeletalMeshPath);
+		SkeletalMesh = LoadAssetByPath<USkeletalMesh>(SkeletalMeshPath);
 		if (!SkeletalMesh)
 		{
 			return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *SkeletalMeshPath));
@@ -297,7 +297,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AnalyzeAnimation(const TSharedPtr<FJs
 
 	TArray<int32> BoneIndices;
 	const TArray<TSharedPtr<FJsonValue>>* BoneNamesJson = nullptr;
-	if (Params->TryGetArrayField(TEXT("boneNames"), BoneNamesJson))
+	if (TryGetArrayParam(Params, TEXT("boneNames"), BoneNamesJson))
 	{
 		for (const TSharedPtr<FJsonValue>& Value : *BoneNamesJson)
 		{
@@ -343,7 +343,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AnalyzeAnimation(const TSharedPtr<FJs
 	const bool bLoop = OptionalBool(Params, TEXT("loop"), false);
 	TArray<int32> Frames;
 	const TArray<TSharedPtr<FJsonValue>>* FramesJson = nullptr;
-	if (Params->TryGetArrayField(TEXT("frames"), FramesJson))
+	if (TryGetArrayParam(Params, TEXT("frames"), FramesJson))
 	{
 		if (FramesJson->Num() > 2401)
 		{
@@ -365,8 +365,8 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AnalyzeAnimation(const TSharedPtr<FJs
 	else
 	{
 		double RequestedRate = SourceRateDecimal;
-		if (Params->HasField(TEXT("sampleRate"))
-			&& (!Params->TryGetNumberField(TEXT("sampleRate"), RequestedRate)
+		if (HasParam(Params, TEXT("sampleRate"))
+			&& (!TryGetNumberParam(Params, TEXT("sampleRate"), RequestedRate)
 				|| !FMath::IsFinite(RequestedRate) || RequestedRate < 1.0 || RequestedRate > 240.0))
 		{
 			return MCPError(TEXT("'sampleRate' must be a finite number in [1, 240]"));

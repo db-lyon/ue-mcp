@@ -4269,3 +4269,122 @@ TSharedPtr<FJsonValue> FLandscapeHandlers::ProjectGeoCoordinates(const TSharedPt
 		TEXT("The mapping stretches the given latitude/longitude box across the landscape's whole quad extent, which is only true if the landscape was built for that box - plan it with landscape(plan_real_world_landscape) and pass the same boundsLatLon here. Distances come from a local tangent plane on WGS84 at the box centre latitude, not a datum reprojection."));
 	return MCPResult(Result);
 }
+
+// ─── #1156 edit layers: list and re-merge ────────────────────────────
+
+namespace
+{
+	/** One reflected bool/float field of an edit layer, when it exists. */
+	void MCPLscEditLayerField(const UStruct* Type, const void* Container, const TCHAR* Name, const TCHAR* JsonKey, const TSharedPtr<FJsonObject>& Out)
+	{
+		if (!Type || !Container) return;
+		const FProperty* Prop = Type->FindPropertyByName(FName(Name));
+		if (!Prop) return;
+		const void* Addr = Prop->ContainerPtrToValuePtr<void>(Container);
+		if (const FBoolProperty* Bool = CastField<FBoolProperty>(Prop))
+		{
+			Out->SetBoolField(JsonKey, Bool->GetPropertyValue(Addr));
+		}
+		else if (const FNumericProperty* Num = CastField<FNumericProperty>(Prop))
+		{
+			Out->SetNumberField(JsonKey, Num->IsFloatingPoint()
+				? Num->GetFloatingPointPropertyValue(Addr)
+				: static_cast<double>(Num->GetSignedIntPropertyValue(Addr)));
+		}
+	}
+
+	/** Edit layers as JSON rows: index, name, guid, visible, locked, alphas. */
+	TArray<TSharedPtr<FJsonValue>> MCPLscDescribeEditLayers(ALandscape* Landscape)
+	{
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		auto AddRow = [&Rows](int32 Index, const FString& Name, const FGuid& Guid, const UStruct* Type, const void* Container, const FString& Kind)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetNumberField(TEXT("index"), Index);
+			Row->SetStringField(TEXT("name"), Name);
+			Row->SetStringField(TEXT("guid"), Guid.ToString(EGuidFormats::DigitsWithHyphens));
+			if (!Kind.IsEmpty()) Row->SetStringField(TEXT("class"), Kind);
+			// Read by reflection: the accessors moved between 5.4 and 5.8,
+			// the property names did not.
+			MCPLscEditLayerField(Type, Container, TEXT("bVisible"), TEXT("visible"), Row);
+			MCPLscEditLayerField(Type, Container, TEXT("bLocked"), TEXT("locked"), Row);
+			MCPLscEditLayerField(Type, Container, TEXT("HeightmapAlpha"), TEXT("heightmapAlpha"), Row);
+			MCPLscEditLayerField(Type, Container, TEXT("WeightmapAlpha"), TEXT("weightmapAlpha"), Row);
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		};
+#if UE_MCP_HAS_5_5_API
+		int32 Index = 0;
+		for (const ULandscapeEditLayerBase* Layer : Landscape->GetEditLayersConst())
+		{
+			if (Layer)
+			{
+				AddRow(Index, Layer->GetName().ToString(), Layer->GetGuid(), Layer->GetClass(), Layer, Layer->GetClass()->GetName());
+			}
+			++Index;
+		}
+#else
+		for (int32 Index = 0; Index < static_cast<int32>(Landscape->GetLayerCount()); ++Index)
+		{
+			if (const FLandscapeLayer* Layer = Landscape->GetLayer(Index))
+			{
+				AddRow(Index, Layer->Name.ToString(), Layer->Guid, FLandscapeLayer::StaticStruct(), Layer, FString());
+			}
+		}
+#endif
+		return Rows;
+	}
+}
+
+// landscape(list_edit_layers): the edit layer stack by name, not as objects.
+TSharedPtr<FJsonValue> FLandscapeHandlers::ListEditLayers(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+	TSharedPtr<FJsonValue> Err;
+	ALandscape* Landscape = ResolveLandscape(World, Params, Err);
+	if (!Landscape) return Err;
+
+	const TArray<TSharedPtr<FJsonValue>> Rows = MCPLscDescribeEditLayers(Landscape);
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Landscape->GetActorLabel());
+	Result->SetStringField(TEXT("actorPath"), Landscape->GetPathName());
+	Result->SetBoolField(TEXT("hasLayersContent"), Landscape->HasLayersContent());
+	Result->SetNumberField(TEXT("count"), Rows.Num());
+	Result->SetArrayField(TEXT("editLayers"), Rows);
+	return MCPResult(Result);
+}
+
+// landscape(merge_edit_layers): re-merge every edit layer into the final
+// height and weight maps now, or on the next editor tick with updateNow=false.
+TSharedPtr<FJsonValue> FLandscapeHandlers::MergeEditLayers(const TSharedPtr<FJsonObject>& Params)
+{
+	REQUIRE_EDITOR_WORLD(World);
+	TSharedPtr<FJsonValue> Err;
+	ALandscape* Landscape = ResolveLandscape(World, Params, Err);
+	if (!Landscape) return Err;
+	if (!Landscape->HasLayersContent())
+	{
+		return MCPError(FString::Printf(TEXT("Landscape '%s' has no edit layers, so there is nothing to merge"), *Landscape->GetActorLabel()));
+	}
+
+	const bool bUpdateNow = OptionalBool(Params, TEXT("updateNow"), true);
+	Landscape->ForceLayersFullUpdate();
+	if (bUpdateNow)
+	{
+		Landscape->ForceUpdateLayersContent();
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("actorLabel"), Landscape->GetActorLabel());
+	Result->SetStringField(TEXT("actorPath"), Landscape->GetPathName());
+	Result->SetBoolField(TEXT("updatedNow"), bUpdateNow);
+	Result->SetArrayField(TEXT("editLayers"), MCPLscDescribeEditLayers(Landscape));
+	if (!bUpdateNow)
+	{
+		Result->SetStringField(TEXT("note"), TEXT("A full update was requested; the landscape merges it on the next editor tick."));
+	}
+	// Regenerates merged data from the layers; no authored value changes.
+	Result->SetBoolField(TEXT("updated"), false);
+	MCPSetNoRollback(Result,
+		TEXT("A re-merge rebuilds the landscape's final height and weight maps from its unchanged edit layers, so there is no previous state to restore."));
+	return MCPResult(Result);
+}

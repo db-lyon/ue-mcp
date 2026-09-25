@@ -68,4 +68,8 @@ private:
 	// tiles and the opinionated landcover-to-content passes stay outside core.
 	static TSharedPtr<FJsonValue> PlanRealWorldLandscape(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ProjectGeoCoordinates(const TSharedPtr<FJsonObject>& Params);
+
+	// #1156: edit layer names and a forced re-merge. LandscapeHandlers_Sculpt.cpp.
+	static TSharedPtr<FJsonValue> ListEditLayers(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> MergeEditLayers(const TSharedPtr<FJsonObject>& Params);
 };

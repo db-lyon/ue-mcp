@@ -16,6 +16,8 @@ private:
 	static TSharedPtr<FJsonValue> ReflectStruct(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ReflectEnum(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListClasses(const TSharedPtr<FJsonObject>& Params);
+	// #1088: enumerate UScriptStructs, filtered by package and name, paged.
+	static TSharedPtr<FJsonValue> ListStructs(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ListGameplayTags(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateGameplayTag(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> CreateEnum(const TSharedPtr<FJsonObject>& Params);

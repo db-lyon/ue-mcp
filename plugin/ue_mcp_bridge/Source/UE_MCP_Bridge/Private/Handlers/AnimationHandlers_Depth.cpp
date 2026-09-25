@@ -47,6 +47,8 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
+#include "HandlerAnimNotify.h"
+#include "HandlerAnimStateGraph.h"
 
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimMontage.h"
@@ -165,74 +167,10 @@ static TArray<FString> MCPAnimDepthListStates(UAnimationStateMachineGraph* SMGra
 	return Names;
 }
 
-/**
- * Remove one state-like node and the graph it owns.
- *
- * UAnimStateNodeBase::DestroyNode() also disposes of the bound graph, but what
- * it does with it is not visible from the header, and a bound graph left in the
- * blueprint after its node is gone makes the next compile assert on a graph
- * with no owning node. So the sequence is explicit: break the links, detach the
- * bound graph from the node, drop the node, then remove the graph through
- * FBlueprintEditorUtils, which is the call that unregisters it from the
- * blueprint's graph lists. A transition may SHARE its rule graph with another
- * transition, and removing a shared graph would break the sibling, so that case
- * leaves the graph in place and the caller is told.
- */
-static void MCPAnimDepthRemoveStateLikeNode(
-	UBlueprint* BP,
-	UEdGraph* OwningGraph,
-	UAnimStateNodeBase* Node,
-	bool& bOutBoundGraphKeptBecauseShared)
-{
-	bOutBoundGraphKeptBecauseShared = false;
-	if (!Node || !OwningGraph) return;
-
-	UEdGraph* Bound = Node->GetBoundGraph();
-	if (UAnimStateTransitionNode* Transition = Cast<UAnimStateTransitionNode>(Node))
-	{
-		if (Bound && Transition->IsBoundGraphShared())
-		{
-			bOutBoundGraphKeptBecauseShared = true;
-			Bound = nullptr;
-		}
-	}
-
-	Node->BreakAllNodeLinks();
-	Node->ClearBoundGraph();
-	OwningGraph->RemoveNode(Node);
-
-	if (Bound)
-	{
-		FBlueprintEditorUtils::RemoveGraph(BP, Bound, EGraphRemoveFlags::MarkTransient);
-	}
-}
-
 static void MCPAnimDepthCompileAndSave(UBlueprint* BP)
 {
 	FKismetEditorUtilities::CompileBlueprint(BP);
 	SaveAssetPackage(BP);
-}
-
-/** A transition described the way add_transition / read_state_machine report it. */
-static TSharedPtr<FJsonObject> MCPAnimDepthDescribeTransition(UAnimStateTransitionNode* T)
-{
-	TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-	if (!T) return O;
-	O->SetStringField(TEXT("transitionGuid"), T->NodeGuid.ToString());
-	if (UAnimStateNodeBase* Prev = T->GetPreviousState())
-	{
-		O->SetStringField(TEXT("fromState"), Prev->GetStateName());
-	}
-	if (UAnimStateNodeBase* Next = T->GetNextState())
-	{
-		O->SetStringField(TEXT("toState"), Next->GetStateName());
-	}
-	if (T->BoundGraph)
-	{
-		O->SetStringField(TEXT("boundGraph"), T->BoundGraph->GetName());
-	}
-	O->SetNumberField(TEXT("blendDuration"), T->CrossfadeDuration);
-	return O;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -419,35 +357,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveState(const TSharedPtr<FJsonObj
 		return MCPResult(Noop);
 	}
 
-	// Was this the entry state? Removing it silently would leave the machine
-	// with no initial state, which is the failure this file exists to stop.
-	bool bWasEntryState = false;
-	if (SMGraph->EntryNode)
-	{
-		if (UEdGraphNode* Current = SMGraph->EntryNode->GetOutputNode())
-		{
-			bWasEntryState = (Current == State);
-		}
-	}
-
-	// Every transition touching the state has to go with it: a transition whose
-	// endpoint no longer exists fails the blueprint compile.
-	TArray<UAnimStateTransitionNode*> Transitions;
-	State->GetTransitionList(Transitions);
-
-	TArray<TSharedPtr<FJsonValue>> RemovedTransitions;
-	int32 SharedRuleGraphsKept = 0;
-	for (UAnimStateTransitionNode* T : Transitions)
-	{
-		if (!T) continue;
-		RemovedTransitions.Add(MakeShared<FJsonValueObject>(MCPAnimDepthDescribeTransition(T)));
-		bool bShared = false;
-		MCPAnimDepthRemoveStateLikeNode(AnimBP, SMGraph, T, bShared);
-		if (bShared) SharedRuleGraphsKept++;
-	}
-
-	bool bStateGraphShared = false;
-	MCPAnimDepthRemoveStateLikeNode(AnimBP, SMGraph, State, bStateGraphShared);
+	// Every transition touching the state goes with it; blueprint(delete_node)
+	// shares this teardown.
+	const MCPAnimStateGraph::FStateTeardown Teardown =
+		MCPAnimStateGraph::RemoveStateWithTransitions(AnimBP, SMGraph, State);
+	const TArray<TSharedPtr<FJsonValue>>& RemovedTransitions = Teardown.RemovedTransitions;
+	const int32 SharedRuleGraphsKept = Teardown.SharedRuleGraphsKept;
+	const bool bWasEntryState = Teardown.bWasEntryState;
 
 	MCPAnimDepthCompileAndSave(AnimBP);
 
@@ -565,13 +481,13 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveTransition(const TSharedPtr<FJs
 	FString FirstFrom, FirstTo;
 	for (UAnimStateTransitionNode* T : Matches)
 	{
-		TSharedPtr<FJsonObject> Described = MCPAnimDepthDescribeTransition(T);
+		TSharedPtr<FJsonObject> Described = MCPAnimStateGraph::DescribeTransition(T);
 		if (FirstFrom.IsEmpty()) Described->TryGetStringField(TEXT("fromState"), FirstFrom);
 		if (FirstTo.IsEmpty()) Described->TryGetStringField(TEXT("toState"), FirstTo);
 		Removed.Add(MakeShared<FJsonValueObject>(Described));
 
 		bool bShared = false;
-		MCPAnimDepthRemoveStateLikeNode(AnimBP, SMGraph, T, bShared);
+		MCPAnimStateGraph::RemoveStateLikeNode(AnimBP, SMGraph, T, bShared);
 		if (bShared) SharedRuleGraphsKept++;
 	}
 
@@ -655,7 +571,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveStateMachine(const TSharedPtr<F
 		{
 			if (!Node->IsA<UAnimStateTransitionNode>()) continue;
 			bool bShared = false;
-			MCPAnimDepthRemoveStateLikeNode(AnimBP, SMGraph, Node, bShared);
+			MCPAnimStateGraph::RemoveStateLikeNode(AnimBP, SMGraph, Node, bShared);
 			if (bShared) SharedRuleGraphsKept++;
 			RemovedTransitions++;
 		}
@@ -663,7 +579,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveStateMachine(const TSharedPtr<F
 		{
 			if (Node->IsA<UAnimStateTransitionNode>()) continue;
 			bool bShared = false;
-			MCPAnimDepthRemoveStateLikeNode(AnimBP, SMGraph, Node, bShared);
+			MCPAnimStateGraph::RemoveStateLikeNode(AnimBP, SMGraph, Node, bShared);
 			RemovedStates++;
 		}
 	}
@@ -894,26 +810,6 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveAnimCurve(const TSharedPtr<FJso
 // effects had no route through the bridge at all.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Every notify STATE on the asset, reported the way add_notify_state takes them. */
-static TArray<TSharedPtr<FJsonValue>> MCPAnimDepthListNotifyStates(UAnimSequenceBase* Asset)
-{
-	TArray<TSharedPtr<FJsonValue>> Out;
-	if (!Asset) return Out;
-	for (const FAnimNotifyEvent& Event : Asset->Notifies)
-	{
-		if (!Event.NotifyStateClass) continue;
-		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
-		O->SetStringField(TEXT("notifyName"), Event.NotifyName.ToString());
-		O->SetStringField(TEXT("notifyStateClass"), Event.NotifyStateClass->GetClass()->GetName());
-		O->SetStringField(TEXT("objectPath"), Event.NotifyStateClass->GetPathName());
-		O->SetNumberField(TEXT("triggerTime"), Event.GetTriggerTime());
-		O->SetNumberField(TEXT("duration"), Event.GetDuration());
-		O->SetNumberField(TEXT("endTime"), Event.GetEndTriggerTime());
-		Out.Add(MakeShared<FJsonValueObject>(O));
-	}
-	return Out;
-}
-
 TSharedPtr<FJsonValue> FAnimationHandlers::AddNotifyState(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
@@ -926,12 +822,12 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddNotifyState(const TSharedPtr<FJson
 	if (auto Err = RequireString(Params, TEXT("notifyStateClass"), StateClassName)) return Err;
 
 	double TriggerTime = 0.0;
-	if (!Params->TryGetNumberField(TEXT("triggerTime"), TriggerTime))
+	if (!TryGetNumberParam(Params, TEXT("triggerTime"), TriggerTime))
 	{
 		return MCPError(TEXT("Missing required parameter 'triggerTime' (seconds from the start of the animation)"));
 	}
 	double Duration = 0.0;
-	if (!Params->TryGetNumberField(TEXT("duration"), Duration))
+	if (!TryGetNumberParam(Params, TEXT("duration"), Duration))
 	{
 		return MCPError(TEXT("Missing required parameter 'duration' (seconds; a notify state spans a window, which is what distinguishes it from add_notify)"));
 	}
@@ -995,7 +891,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddNotifyState(const TSharedPtr<FJson
 		Existed->SetStringField(TEXT("notifyStateClass"), StateClass->GetName());
 		Existed->SetNumberField(TEXT("triggerTime"), ClampedStart);
 		Existed->SetNumberField(TEXT("duration"), ClampedDuration);
-		Existed->SetArrayField(TEXT("notifyStates"), MCPAnimDepthListNotifyStates(AnimAsset));
+		Existed->SetArrayField(TEXT("notifyStates"), MCPAnimNotify::ListNotifyStates(AnimAsset));
 		TSharedPtr<FJsonObject> ExistedPayload = MakeShared<FJsonObject>();
 		ExistedPayload->SetStringField(TEXT("assetPath"), AssetPath);
 		ExistedPayload->SetStringField(TEXT("notifyName"), NotifyName);
@@ -1008,7 +904,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddNotifyState(const TSharedPtr<FJson
 	// a bad property name cannot leave a half-configured notify behind.
 	UAnimNotifyState* StateObject = NewObject<UAnimNotifyState>(AnimAsset, StateClass);
 	const TSharedPtr<FJsonObject>* NotifyProperties = nullptr;
-	if (Params->TryGetObjectField(TEXT("notifyProperties"), NotifyProperties)
+	if (TryGetObjectParam(Params, TEXT("notifyProperties"), NotifyProperties)
 		&& NotifyProperties && (*NotifyProperties).IsValid())
 	{
 		for (const auto& JsonEntry : (*NotifyProperties)->Values)
@@ -1058,7 +954,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddNotifyState(const TSharedPtr<FJson
 	// branching point ticks inline and is the only form montage branching logic
 	// observes. Left at the engine default unless asked, matching add_notify.
 	bool bBranchingPoint = false;
-	if (AnimAsset->IsA<UAnimMontage>() && Params->TryGetBoolField(TEXT("branchingPoint"), bBranchingPoint) && bBranchingPoint)
+	if (AnimAsset->IsA<UAnimMontage>() && TryGetBoolParam(Params, TEXT("branchingPoint"), bBranchingPoint) && bBranchingPoint)
 	{
 		NewEvent.MontageTickType = EMontageNotifyTickType::BranchingPoint;
 	}
@@ -1079,7 +975,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AddNotifyState(const TSharedPtr<FJson
 	Result->SetNumberField(TEXT("duration"), ClampedDuration);
 	Result->SetNumberField(TEXT("endTime"), ClampedStart + ClampedDuration);
 	Result->SetBoolField(TEXT("branchingPoint"), bBranchingPoint);
-	Result->SetArrayField(TEXT("notifyStates"), MCPAnimDepthListNotifyStates(AnimAsset));
+	Result->SetArrayField(TEXT("notifyStates"), MCPAnimNotify::ListNotifyStates(AnimAsset));
 	Result->SetStringField(TEXT("note"),
 		TEXT("Further fields on the spawned state object are plain UPROPERTYs: write them with editor(set_property) at the returned objectPath."));
 
@@ -1158,7 +1054,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveNotifyState(const TSharedPtr<FJ
 		Noop->SetStringField(TEXT("assetPath"), AssetPath);
 		Noop->SetStringField(TEXT("notifyName"), NotifyName);
 		Noop->SetStringField(TEXT("notifyStateClass"), StateClassName);
-		Noop->SetArrayField(TEXT("notifyStates"), MCPAnimDepthListNotifyStates(AnimAsset));
+		Noop->SetArrayField(TEXT("notifyStates"), MCPAnimNotify::ListNotifyStates(AnimAsset));
 		Noop->SetStringField(TEXT("note"), TEXT("No notify state matched; nothing was removed. Point notifies are removed with animation(remove_notify)."));
 		return MCPResult(Noop);
 	}
@@ -1175,7 +1071,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::RemoveNotifyState(const TSharedPtr<FJ
 	Result->SetStringField(TEXT("assetPath"), AssetPath);
 	Result->SetArrayField(TEXT("removed"), Removed);
 	Result->SetNumberField(TEXT("removedCount"), Removed.Num());
-	Result->SetArrayField(TEXT("notifyStates"), MCPAnimDepthListNotifyStates(AnimAsset));
+	Result->SetArrayField(TEXT("notifyStates"), MCPAnimNotify::ListNotifyStates(AnimAsset));
 
 	// The inverse restores the first one removed, with default property values.
 	const TSharedPtr<FJsonObject> First = Removed[0]->AsObject();
@@ -1232,7 +1128,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSyncMarkers(const TSharedPtr<FJson
 	struct FParsedMarker { FName Name; float Time; };
 	TArray<FParsedMarker> Parsed;
 	const TArray<TSharedPtr<FJsonValue>>* MarkerArray = nullptr;
-	const bool bHasMarkers = Params->TryGetArrayField(TEXT("markers"), MarkerArray) && MarkerArray;
+	const bool bHasMarkers = TryGetArrayParam(Params, TEXT("markers"), MarkerArray) && MarkerArray;
 	if (bHasMarkers)
 	{
 		int32 Index = 0;
@@ -1266,7 +1162,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetSyncMarkers(const TSharedPtr<FJson
 
 	TArray<FString> RemoveNames;
 	const TArray<TSharedPtr<FJsonValue>>* RemoveArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("removeMarkers"), RemoveArray) && RemoveArray)
+	if (TryGetArrayParam(Params, TEXT("removeMarkers"), RemoveArray) && RemoveArray)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *RemoveArray)
 		{

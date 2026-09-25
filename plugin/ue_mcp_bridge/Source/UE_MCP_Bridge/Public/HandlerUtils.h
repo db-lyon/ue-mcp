@@ -8,6 +8,11 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "HAL/FileManager.h"
+#include "HAL/CriticalSection.h"
+#include "Misc/ScopeLock.h"
+#include "Misc/OutputDevice.h"
+#include "Misc/OutputDeviceRedirector.h"
+#include "Misc/FeedbackContext.h"
 #include "Misc/PackageName.h"
 #include "Engine/World.h"
 #include "Engine/Blueprint.h"
@@ -135,6 +140,121 @@ inline TSharedPtr<FJsonObject> MCPSuccess()
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 	Obj->SetBoolField(TEXT("success"), true);
 	return Obj;
+}
+
+// ── Parameter read tracking (#1057) ──────────────────────────────────────────
+//
+// The registry opens a scope around each handler of a reporting category. The
+// parameter helpers below note every top-level key they read, and a key that
+// arrived and was never read comes back as `paramsNotRead`. Reads of nested
+// objects are not noted, and with no scope open nothing is.
+
+/** Names the dispatcher consumes. Mirrors ROUTING_PARAM_NAMES in src/routing-params.ts. */
+inline const TArray<FString>& MCPRoutingParamNames()
+{
+	static const TArray<FString> Names = {
+		TEXT("action"), TEXT("timeoutMs"), TEXT("select"), TEXT("omit"), TEXT("editor"), TEXT("toEditor"),
+	};
+	return Names;
+}
+
+class FMCPParamReadScope
+{
+public:
+	explicit FMCPParamReadScope(const TSharedPtr<FJsonObject>& InParams)
+		: Root(InParams.Get())
+		, Previous(ActiveSlot())
+	{
+		if (Root)
+		{
+			// The key type differs across engine versions; the pair conversion is the portable read.
+			for (const auto& JsonEntry : Root->Values)
+			{
+				const TPair<FString, TSharedPtr<FJsonValue>> Pair(JsonEntry.Key, JsonEntry.Value);
+				Arrived.Add(Pair.Key);
+			}
+		}
+		ActiveSlot() = this;
+	}
+
+	~FMCPParamReadScope()
+	{
+		ActiveSlot() = Previous;
+	}
+
+	FMCPParamReadScope(const FMCPParamReadScope&) = delete;
+	FMCPParamReadScope& operator=(const FMCPParamReadScope&) = delete;
+
+	/** The innermost open scope on this thread, or nullptr. */
+	static FMCPParamReadScope* Active()
+	{
+		return ActiveSlot();
+	}
+
+	void Note(const FJsonObject* Object, const TCHAR* Key)
+	{
+		if (Object != nullptr && Object == Root && Key != nullptr)
+		{
+			Read.Add(FString(Key));
+		}
+	}
+
+	/** Keys that arrived, were not read and are not routing names, sorted. */
+	TArray<FString> Unread() const
+	{
+		TArray<FString> Out;
+		for (const FString& Key : Arrived)
+		{
+			if (!Read.Contains(Key) && !MCPRoutingParamNames().Contains(Key))
+			{
+				Out.Add(Key);
+			}
+		}
+		Out.Sort();
+		return Out;
+	}
+
+private:
+	static FMCPParamReadScope*& ActiveSlot()
+	{
+		static thread_local FMCPParamReadScope* Slot = nullptr;
+		return Slot;
+	}
+
+	const FJsonObject* Root;
+	FMCPParamReadScope* Previous;
+	TArray<FString> Arrived;
+	TSet<FString> Read;
+};
+
+/** Note that a handler read `Key` off `Params`. A no-op unless `Params` is the dispatch's own object. */
+inline void MCPNoteParamRead(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key)
+{
+	if (FMCPParamReadScope* Scope = FMCPParamReadScope::Active())
+	{
+		Scope->Note(Params.Get(), Key);
+	}
+}
+
+/** Add `paramsNotRead` to a successful object result. Failures are left as they are. */
+inline void MCPAttachParamsNotRead(const TSharedPtr<FJsonValue>& Result, const TArray<FString>& Unread)
+{
+	if (Unread.Num() == 0 || !Result.IsValid() || Result->Type != EJson::Object)
+	{
+		return;
+	}
+	const TSharedPtr<FJsonObject> Object = Result->AsObject();
+	bool bSuccess = true;
+	if (!Object.IsValid() || (Object->TryGetBoolField(TEXT("success"), bSuccess) && !bSuccess))
+	{
+		return;
+	}
+	TArray<TSharedPtr<FJsonValue>> Names;
+	for (const FString& Key : Unread)
+	{
+		Names.Add(MakeShared<FJsonValueString>(Key));
+	}
+	Object->SetArrayField(TEXT("paramsNotRead"), Names);
 }
 
 /** Attach a rollback record to a result. The TS bridge lifts this onto
@@ -459,6 +579,18 @@ inline FString MCPPlayInEditorLoadNote()
 	return TEXT(" A play-in-editor session is running, which changes how assets load: ")
 		TEXT("the editor's own asset loader refuses every call while in play mode. ")
 		TEXT("Stop play with editor(action=\"stop_pie\") and retry before treating this as an asset problem.");
+}
+
+/** A precondition refusal for an editor-world action while PIE is running,
+ *  nullptr otherwise. Without it the load fails as "not found" (#1098). */
+inline TSharedPtr<FJsonValue> MCPRefuseDuringPlayInEditor(const TCHAR* ActionName)
+{
+	if (!MCPIsPlayInEditorActive()) return nullptr;
+	return MCPError(FString::Printf(
+		TEXT("%s cannot run while a play-in-editor session is running: the editor's asset loader refuses every call in play mode, ")
+		TEXT("so the sequence would read as missing and captures would not follow the playhead. ")
+		TEXT("Stop play with editor(action=\"stop_pie\") and retry."),
+		ActionName));
 }
 
 /** The answer for a path MCPLoadAssetObject could not resolve.
@@ -990,10 +1122,13 @@ inline AActor* MCPResolveActor(
 	FString Token;
 	if (Params.IsValid())
 	{
+		MCPNoteParamRead(Params, Selector.PathKey);
+		MCPNoteParamRead(Params, Selector.LabelKey);
 		Params->TryGetStringField(Selector.PathKey, Path);
 		Params->TryGetStringField(Selector.LabelKey, Token);
 		if (Token.IsEmpty() && Selector.AltLabelKey)
 		{
+			MCPNoteParamRead(Params, Selector.AltLabelKey);
 			Params->TryGetStringField(Selector.AltLabelKey, Token);
 		}
 	}
@@ -1134,6 +1269,7 @@ inline TSharedPtr<FJsonValue> RequireString(
 	const TCHAR* Key,
 	FString& OutValue)
 {
+	MCPNoteParamRead(Params, Key);
 	if (Params.IsValid() && Params->TryGetStringField(Key, OutValue) && !OutValue.IsEmpty())
 		return nullptr;
 	return MCPError(FString::Printf(TEXT("Missing required parameter '%s'"), Key));
@@ -1146,6 +1282,8 @@ inline TSharedPtr<FJsonValue> RequireStringAlt(
 	const TCHAR* Key2,
 	FString& OutValue)
 {
+	MCPNoteParamRead(Params, Key1);
+	MCPNoteParamRead(Params, Key2);
 	if (Params.IsValid())
 	{
 		if (Params->TryGetStringField(Key1, OutValue) && !OutValue.IsEmpty())
@@ -1162,6 +1300,7 @@ inline FString OptionalString(
 	const TCHAR* Key,
 	const FString& DefaultValue = TEXT(""))
 {
+	MCPNoteParamRead(Params, Key);
 	FString Value;
 	return (Params.IsValid() && Params->TryGetStringField(Key, Value)) ? Value : DefaultValue;
 }
@@ -1172,6 +1311,7 @@ inline int32 OptionalInt(
 	const TCHAR* Key,
 	int32 DefaultValue = 0)
 {
+	MCPNoteParamRead(Params, Key);
 	int32 Value;
 	return (Params.IsValid() && Params->TryGetNumberField(Key, Value)) ? Value : DefaultValue;
 }
@@ -1182,6 +1322,7 @@ inline double OptionalNumber(
 	const TCHAR* Key,
 	double DefaultValue = 0.0)
 {
+	MCPNoteParamRead(Params, Key);
 	double Value;
 	return (Params.IsValid() && Params->TryGetNumberField(Key, Value)) ? Value : DefaultValue;
 }
@@ -1192,8 +1333,58 @@ inline bool OptionalBool(
 	const TCHAR* Key,
 	bool DefaultValue = false)
 {
+	MCPNoteParamRead(Params, Key);
 	bool Value;
 	return (Params.IsValid() && Params->TryGetBoolField(Key, Value)) ? Value : DefaultValue;
+}
+
+// Read-tracked forms of FJsonObject::HasField and TryGet*Field. A handler that
+// reads a parameter with these is seen by the #1057 read tracking; a direct
+// Params->TryGet*Field call is not, and scripts/audit-direct-param-reads.mjs
+// lists those.
+
+inline bool HasParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key)
+{
+	MCPNoteParamRead(Params, Key);
+	return Params.IsValid() && Params->HasField(Key);
+}
+
+inline TSharedPtr<FJsonValue> TryGetParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key)
+{
+	MCPNoteParamRead(Params, Key);
+	if (!Params.IsValid()) return nullptr;
+	return Params->TryGetField(Key);
+}
+
+inline bool TryGetStringParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, FString& Out)
+{
+	MCPNoteParamRead(Params, Key);
+	return Params.IsValid() && Params->TryGetStringField(Key, Out);
+}
+
+template <typename TNumber>
+inline bool TryGetNumberParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, TNumber& Out)
+{
+	MCPNoteParamRead(Params, Key);
+	return Params.IsValid() && Params->TryGetNumberField(Key, Out);
+}
+
+inline bool TryGetBoolParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, bool& Out)
+{
+	MCPNoteParamRead(Params, Key);
+	return Params.IsValid() && Params->TryGetBoolField(Key, Out);
+}
+
+inline bool TryGetArrayParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, const TArray<TSharedPtr<FJsonValue>>*& Out)
+{
+	MCPNoteParamRead(Params, Key);
+	return Params.IsValid() && Params->TryGetArrayField(Key, Out);
+}
+
+inline bool TryGetObjectParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, const TSharedPtr<FJsonObject>*& Out)
+{
+	MCPNoteParamRead(Params, Key);
+	return Params.IsValid() && Params->TryGetObjectField(Key, Out);
 }
 
 /**
@@ -1359,6 +1550,7 @@ inline FVector OptionalVec3(
 	const TCHAR* Key,
 	const FVector& DefaultValue = FVector::ZeroVector)
 {
+	MCPNoteParamRead(Params, Key);
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
 	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
 	FVector Out = DefaultValue;
@@ -1372,6 +1564,7 @@ inline TSharedPtr<FJsonValue> RequireVec3(
 	const TCHAR* Key,
 	FVector& Out)
 {
+	MCPNoteParamRead(Params, Key);
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
 	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid())
 		return MCPError(FString::Printf(TEXT("Missing required vector parameter '%s' ({x,y,z})"), Key));
@@ -1386,6 +1579,7 @@ inline FRotator OptionalRotator(
 	const TCHAR* Key,
 	const FRotator& DefaultValue = FRotator::ZeroRotator)
 {
+	MCPNoteParamRead(Params, Key);
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
 	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
 	FRotator Out = DefaultValue;
@@ -1398,6 +1592,7 @@ inline TSharedPtr<FJsonValue> RequireRotator(
 	const TCHAR* Key,
 	FRotator& Out)
 {
+	MCPNoteParamRead(Params, Key);
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
 	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid())
 		return MCPError(FString::Printf(TEXT("Missing required rotator parameter '%s' ({pitch,yaw,roll})"), Key));
@@ -1412,6 +1607,7 @@ inline FLinearColor OptionalLinearColor(
 	const TCHAR* Key,
 	const FLinearColor& DefaultValue = FLinearColor::White)
 {
+	MCPNoteParamRead(Params, Key);
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
 	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return DefaultValue;
 	FLinearColor Out = DefaultValue;
@@ -1455,6 +1651,7 @@ inline FTransform OptionalTransform(
 	const TSharedPtr<FJsonObject>& Params,
 	const TCHAR* Key)
 {
+	MCPNoteParamRead(Params, Key);
 	const TSharedPtr<FJsonObject>* Obj = nullptr;
 	if (!Params.IsValid() || !Params->TryGetObjectField(Key, Obj) || !Obj || !(*Obj).IsValid()) return FTransform::Identity;
 	FVector  Loc   = FVector::ZeroVector;
@@ -1974,6 +2171,7 @@ inline UWorld* ResolveWorldFromParams(const TSharedPtr<FJsonObject>& Params, con
 	const FString Scope = OptionalString(Params, TEXT("world"), DefaultScope);
 	int32 PIEInstance = INDEX_NONE;
 	double Raw = 0.0;
+	MCPNoteParamRead(Params, TEXT("pieInstance"));
 	if (Params.IsValid() && Params->TryGetNumberField(TEXT("pieInstance"), Raw))
 	{
 		PIEInstance = FMath::RoundToInt(Raw);
@@ -2166,6 +2364,104 @@ inline bool MCPPackageWriteBlocked(UObject* Asset, FString& OutReason)
 	return false;
 }
 
+/** Collects the warnings and errors the engine logs about a save while it is
+ *  in scope, so a refusal can quote the engine's own reason instead of
+ *  pointing at the output log (#1120). */
+class FMCPSaveDiagnostics : public FOutputDevice
+{
+public:
+	FMCPSaveDiagnostics() { if (GLog) GLog->AddOutputDevice(this); }
+	virtual ~FMCPSaveDiagnostics() override { if (GLog) GLog->RemoveOutputDevice(this); }
+	FMCPSaveDiagnostics(const FMCPSaveDiagnostics&) = delete;
+	FMCPSaveDiagnostics& operator=(const FMCPSaveDiagnostics&) = delete;
+
+	virtual void Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity, const class FName& Category) override
+	{
+		const ELogVerbosity::Type Level = (ELogVerbosity::Type)(Verbosity & ELogVerbosity::VerbosityMask);
+		if (Level == ELogVerbosity::NoLogging || Level > ELogVerbosity::Warning || !V) return;
+		static const FName SavePackageCategory(TEXT("LogSavePackage"));
+		const FString Line(V);
+		if (Category != SavePackageCategory && !Line.Contains(TEXT("Can't save")) && !Line.Contains(TEXT("Illegal reference")))
+		{
+			return;
+		}
+		FScopeLock Lock(&Guard);
+		if (Lines.Num() < 8) Lines.Add(Line.Left(2000));
+	}
+	virtual bool CanBeUsedOnAnyThread() const override { return true; }
+
+	TArray<FString> GetLines() const
+	{
+		FScopeLock Lock(&Guard);
+		return Lines;
+	}
+
+	/** The line that names the cause: the engine's "Can't save" sentence when
+	 *  there is one, otherwise the first captured line, otherwise empty. */
+	FString GetReason() const
+	{
+		FScopeLock Lock(&Guard);
+		for (const FString& Line : Lines)
+		{
+			if (Line.Contains(TEXT("Can't save"))) return Line;
+		}
+		return Lines.Num() > 0 ? Lines[0] : FString();
+	}
+
+private:
+	mutable FCriticalSection Guard;
+	TArray<FString> Lines;
+};
+
+/** Split the engine's "Illegal reference to private object" sentence into the
+ *  private object, the object holding the reference and its property, with a
+ *  hint on clearing it. Returns nullptr when Message is not that sentence. */
+inline TSharedPtr<FJsonObject> MCPDescribeIllegalReference(const FString& Message)
+{
+	static const TCHAR* Marker = TEXT("Illegal reference to private object: '");
+	const int32 Start = Message.Find(Marker);
+	if (Start == INDEX_NONE) return nullptr;
+	const FString Rest = Message.Mid(Start + FCString::Strlen(Marker));
+
+	FString PrivateObject, AfterObject, Referencer, AfterReferencer, Outer, AfterOuter, Property, AfterProperty;
+	if (!Rest.Split(TEXT("' referenced by '"), &PrivateObject, &AfterObject)) return nullptr;
+	if (!AfterObject.Split(TEXT("' (at '"), &Referencer, &AfterReferencer)) return nullptr;
+	if (!AfterReferencer.Split(TEXT("') in its '"), &Outer, &AfterOuter)) return nullptr;
+	if (!AfterOuter.Split(TEXT("' property"), &Property, &AfterProperty)) return nullptr;
+
+	TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+	Out->SetStringField(TEXT("privateObject"), PrivateObject);
+	Out->SetStringField(TEXT("referencer"), Referencer);
+	Out->SetStringField(TEXT("referencerOuter"), Outer);
+	Out->SetStringField(TEXT("property"), Property);
+	Out->SetStringField(TEXT("hint"), FString::Printf(
+		TEXT("'%s' (inside '%s') holds, in its '%s' property, a reference to '%s', which is private to another package, so the engine will not save. ")
+		TEXT("Point that reference, or the field inside '%s' that carries it, at a saved public asset or clear it to null, for example with asset(set_property) ")
+		TEXT("on the referencer's object path, then save again. The private object is usually one that was never saved or was left behind by a move."),
+		*Referencer, *Outer, *Property, *PrivateObject, *Property));
+	return Out;
+}
+
+/** Add what a failed save's diagnostics say to Result: saveDiagnostics with
+ *  the captured lines, and illegalReference when the engine named one. */
+inline void MCPAttachSaveDiagnostics(const TSharedPtr<FJsonObject>& Result, const FMCPSaveDiagnostics& Diagnostics)
+{
+	if (!Result.IsValid()) return;
+	const TArray<FString> Lines = Diagnostics.GetLines();
+	if (Lines.Num() == 0) return;
+	TArray<TSharedPtr<FJsonValue>> Json;
+	for (const FString& Line : Lines) Json.Add(MakeShared<FJsonValueString>(Line));
+	Result->SetArrayField(TEXT("saveDiagnostics"), Json);
+	for (const FString& Line : Lines)
+	{
+		if (TSharedPtr<FJsonObject> Illegal = MCPDescribeIllegalReference(Line))
+		{
+			Result->SetObjectField(TEXT("illegalReference"), Illegal);
+			break;
+		}
+	}
+}
+
 /** Mark the asset's package dirty and save it to disk. Used by every create/
  *  mutate handler that wants changes persisted across editor restarts.
  *  No-op if Asset or its package is null. Returns true on successful save.
@@ -2191,6 +2487,9 @@ inline bool SaveAssetPackage(UObject* Asset)
 	if (!ResolvePackageFileName(Package, PackageFileName)) return false;
 	FSavePackageArgs SaveArgs;
 	SaveArgs.TopLevelFlags = RF_Standalone;
+	// The default GError treats a save warning as fatal. GWarn logs it, which
+	// is what the editor's own save does and what FMCPSaveDiagnostics reads.
+	SaveArgs.Error = GWarn;
 	return UPackage::SavePackage(Package, nullptr, *PackageFileName, SaveArgs);
 }
 
@@ -2200,12 +2499,23 @@ inline bool SaveAssetPackage(UObject* Asset)
 inline bool SaveAssetPackageChecked(UObject* Asset, FString& OutReason)
 {
 	if (MCPPackageWriteBlocked(Asset, OutReason)) return false;
+	FMCPSaveDiagnostics Diagnostics;
 	if (SaveAssetPackage(Asset)) return true;
 
 	UPackage* Package = Asset ? Asset->GetOutermost() : nullptr;
-	OutReason = FString::Printf(
-		TEXT("The editor refused to write '%s'. The output log carries the reason."),
-		Package ? *Package->GetName() : TEXT("(no package)"));
+	const FString EngineReason = Diagnostics.GetReason();
+	if (EngineReason.IsEmpty())
+	{
+		OutReason = FString::Printf(
+			TEXT("The editor refused to write '%s'. The output log carries the reason."),
+			Package ? *Package->GetName() : TEXT("(no package)"));
+		return false;
+	}
+	OutReason = EngineReason;
+	if (TSharedPtr<FJsonObject> Illegal = MCPDescribeIllegalReference(EngineReason))
+	{
+		OutReason += TEXT(" ") + Illegal->GetStringField(TEXT("hint"));
+	}
 	return false;
 }
 

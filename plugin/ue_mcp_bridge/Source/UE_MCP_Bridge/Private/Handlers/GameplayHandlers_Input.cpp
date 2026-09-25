@@ -31,6 +31,7 @@
 #include "EnhancedPlayerInput.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "PlayerMappableKeySettings.h"
 #include "Kismet/GameplayStatics.h"
 #include "InputModifiers.h"
 #include "InputTriggers.h"
@@ -64,22 +65,22 @@ namespace ImcEdit_Internal
 	// With save=true, refuse a package that cannot be written before anything
 	// changes, so a failed save never leaves a dirty edit behind (#932).
 	static TSharedPtr<FJsonValue> RefuseUnwritable(
-		UInputMappingContext* IMC,
+		UObject* Asset,
 		const TSharedPtr<FJsonObject>& Params,
 		const TCHAR* Operation)
 	{
 		if (!OptionalBool(Params, TEXT("save"), true)) return nullptr;
-		return MCPAssetWriteBlockedError(IMC, IMC->GetPathName(), Operation);
+		return MCPAssetWriteBlockedError(Asset, Asset->GetPathName(), Operation);
 	}
 
 	// #1097/#1109: a successful in-memory edit does not establish persistence.
 	static void FinishEdit(
-		UInputMappingContext* IMC,
+		UObject* Asset,
 		const TSharedPtr<FJsonObject>& Params,
 		const TSharedPtr<FJsonObject>& Result,
 		bool bChanged)
 	{
-		UPackage* Package = IMC->GetOutermost();
+		UPackage* Package = Asset->GetOutermost();
 		if (bChanged && Package)
 		{
 			Package->MarkPackageDirty();
@@ -111,21 +112,21 @@ namespace ImcEdit_Internal
 			{
 				// SaveAssetPackageChecked refuses unwritable packages before
 				// SavePackage, which covers the FinalizeFile crash of #197 (#932).
-				bSaved = SaveAssetPackageChecked(IMC, Reason);
-				MCPNoteSaveOutcome(Result, IMC->GetPathName(), bSaved, Reason);
+				bSaved = SaveAssetPackageChecked(Asset, Reason);
+				MCPNoteSaveOutcome(Result, Asset->GetPathName(), bSaved, Reason);
 				if (bSaved && Package) UnmarkedEdits().Remove(Package->GetFName());
 			}
 			bPersisted = bSaved || !bPending;
 		}
 		else
 		{
-			Reason = TEXT("save=false was requested; no package write was attempted. Call asset(save) to persist the context.");
+			Reason = TEXT("save=false was requested; no package write was attempted. Call asset(save) to persist the asset.");
 			if (bChanged && (!Package || !Package->IsDirty()))
 			{
 				// Unreal can suppress MarkPackageDirty during PIE, loading or undo.
 				// Respect that policy and expose the failure instead of overriding
 				// it or promising that save_dirty can discover this changed asset.
-				Reason = TEXT("The context changed in memory, but Unreal did not mark its package dirty. Dirty-package saves will not discover this edit; retry with save=true or explicitly save the context.");
+				Reason = TEXT("The asset changed in memory, but Unreal did not mark its package dirty. Dirty-package saves will not discover this edit; retry with save=true or explicitly save the asset.");
 				Result->SetBoolField(TEXT("success"), false);
 				Result->SetStringField(TEXT("error"), Reason);
 			}
@@ -1442,6 +1443,27 @@ namespace InputDepth_Internal
 		Obj->SetObjectField(TEXT("properties"), Properties);
 		return Obj;
 	}
+
+	/** PlayerMappableKeySettings is protected on UInputAction. Reflection
+	 *  ignores C++ access specifiers, so the setter can reach the Instanced pointer. */
+	static FObjectPropertyBase* FindPlayerMappableSettingsProperty(const UInputAction* Action)
+	{
+		if (!Action) return nullptr;
+		return CastField<FObjectPropertyBase>(
+			Action->GetClass()->FindPropertyByName(TEXT("PlayerMappableKeySettings")));
+	}
+
+	static void ReportPlayerMappableMetadata(
+		TSharedPtr<FJsonObject>& Result,
+		const UInputAction* Action,
+		const UPlayerMappableKeySettings* Settings)
+	{
+		Result->SetStringField(TEXT("inputActionPath"), Action->GetPathName());
+		Result->SetStringField(TEXT("playerMappableKeySettings"), Settings ? Settings->GetPathName() : TEXT("None"));
+		Result->SetStringField(TEXT("mappingName"), Settings ? Settings->Name.ToString() : FString());
+		Result->SetStringField(TEXT("displayName"), Settings ? Settings->DisplayName.ToString() : FString());
+		Result->SetStringField(TEXT("displayCategory"), Settings ? Settings->DisplayCategory.ToString() : FString());
+	}
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1647,6 +1669,136 @@ TSharedPtr<FJsonValue> FGameplayHandlers::SetActionTriggers(const TSharedPtr<FJs
 	Payload->SetArrayField(TEXT("modifiers"), PriorModifierSpecs);
 	MCPSetRollback(Result, TEXT("set_action_triggers"), Payload);
 	Result->SetBoolField(TEXT("rollbackAvailable"), true);
+	return MCPResult(Result);
+}
+
+// ─────────────────────────────────────────────────────────────
+// set_player_mappable_settings - mint or update the protected Instanced
+// UPlayerMappableKeySettings subobject a property write cannot create
+// ─────────────────────────────────────────────────────────────
+TSharedPtr<FJsonValue> FGameplayHandlers::SetPlayerMappableSettings(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace InputDepth_Internal;
+
+	FString ActionPath;
+	if (auto Err = RequireString(Params, TEXT("inputActionPath"), ActionPath)) return Err;
+
+	FString MappingName;
+	const bool bHasMappingName = Params.IsValid() && Params->TryGetStringField(TEXT("mappingName"), MappingName);
+	MappingName.TrimStartAndEndInline();
+	if (!bHasMappingName || MappingName.IsEmpty())
+	{
+		return MCPError(TEXT("mappingName must be a non-empty string"));
+	}
+
+	FString DisplayName;
+	const bool bHasDisplayName = Params.IsValid() && Params->TryGetStringField(TEXT("displayName"), DisplayName);
+	FString DisplayCategory;
+	const bool bHasDisplayCategory = Params.IsValid() && Params->TryGetStringField(TEXT("displayCategory"), DisplayCategory);
+
+	UInputAction* Action = LoadAssetByPath<UInputAction>(ActionPath);
+	if (!Action) return MCPAssetLoadError(ActionPath, TEXT("InputAction"));
+
+	FObjectPropertyBase* SettingsProperty = FindPlayerMappableSettingsProperty(Action);
+	if (!SettingsProperty)
+	{
+		return MCPError(TEXT("InputAction has no PlayerMappableKeySettings property (engine layout changed?)"));
+	}
+
+	UPlayerMappableKeySettings* Settings = Action->GetPlayerMappableKeySettings().Get();
+	const bool bCreated = Settings == nullptr;
+	const FName DesiredName(*MappingName);
+	if (DesiredName.IsNone())
+	{
+		return MCPError(TEXT("mappingName must not resolve to None"));
+	}
+
+	const FName PreviousName = Settings ? Settings->Name : NAME_None;
+	const FString PreviousDisplayName = Settings ? Settings->DisplayName.ToString() : FString();
+	const FString PreviousDisplayCategory = Settings ? Settings->DisplayCategory.ToString() : FString();
+
+	const bool bNameUnchanged = Settings && PreviousName.ToString().Equals(MappingName, ESearchCase::CaseSensitive);
+	const bool bDisplayNameUnchanged = !bHasDisplayName || (Settings && PreviousDisplayName == DisplayName);
+	const bool bDisplayCategoryUnchanged = !bHasDisplayCategory || (Settings && PreviousDisplayCategory == DisplayCategory);
+	const bool bUnchanged = !bCreated && bNameUnchanged && bDisplayNameUnchanged && bDisplayCategoryUnchanged;
+	if (auto Blocked = ImcEdit_Internal::RefuseUnwritable(Action, Params, TEXT("set player-mappable settings"))) return Blocked;
+
+	if (bUnchanged)
+	{
+		auto Result = MCPSuccess();
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("unchanged"), true);
+		ReportPlayerMappableMetadata(Result, Action, Settings);
+		MCPSetNoRollback(Result,
+			TEXT("The InputAction already carried these player-mappable settings, so nothing changed and there is nothing to undo."));
+		ImcEdit_Internal::FinishEdit(Action, Params, Result, false);
+		return MCPResult(Result);
+	}
+
+	const bool bShouldActuallyTransact = GEditor != nullptr;
+	FScopedTransaction Transaction(
+		NSLOCTEXT("UEMCP", "SetPlayerMappableSettings", "Set Player Mappable Key Settings"),
+		bShouldActuallyTransact);
+	Action->Modify();
+	if (bCreated)
+	{
+		Settings = NewObject<UPlayerMappableKeySettings>(Action, NAME_None, RF_Transactional);
+		if (!Settings)
+		{
+			Transaction.Cancel();
+			return MCPError(TEXT("Failed to create UPlayerMappableKeySettings on the InputAction"));
+		}
+		SettingsProperty->SetObjectPropertyValue_InContainer(Action, Settings);
+	}
+	else
+	{
+		Settings->Modify();
+	}
+
+	Settings->Name = DesiredName;
+	if (bHasDisplayName) Settings->DisplayName = FText::FromString(DisplayName);
+	if (bHasDisplayCategory) Settings->DisplayCategory = FText::FromString(DisplayCategory);
+
+#if WITH_EDITOR
+	Action->PostEditChange();
+#endif
+	auto Result = MCPSuccess();
+	if (bCreated)
+	{
+		MCPSetCreated(Result);
+		Result->SetBoolField(TEXT("updated"), false);
+	}
+	else
+	{
+		MCPSetExisted(Result);
+		MCPSetUpdated(Result);
+	}
+	Result->SetBoolField(TEXT("unchanged"), false);
+	ReportPlayerMappableMetadata(Result, Action, Settings);
+
+	if (bCreated)
+	{
+		MCPSetNoRollback(Result,
+			TEXT("This call created the UPlayerMappableKeySettings subobject. Nothing in this surface deletes that subobject, so there is no inverse that restores 'no settings'."));
+	}
+	else if (PreviousName.IsNone())
+	{
+		MCPSetNoRollback(Result,
+			TEXT("The previous mappingName was empty, and this action refuses an empty mappingName, so there is no call that puts it back to none."));
+	}
+	else
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("inputActionPath"), Action->GetPathName());
+		Payload->SetStringField(TEXT("mappingName"), PreviousName.ToString());
+		if (bHasDisplayName) Payload->SetStringField(TEXT("displayName"), PreviousDisplayName);
+		if (bHasDisplayCategory) Payload->SetStringField(TEXT("displayCategory"), PreviousDisplayCategory);
+		MCPSetRollback(Result, TEXT("set_player_mappable_settings"), Payload);
+		// FText::ToString loses string-table/localization identity on rollback.
+		Result->SetBoolField(TEXT("rollbackLossy"), bHasDisplayName || bHasDisplayCategory);
+	}
+	ImcEdit_Internal::FinishEdit(Action, Params, Result, true);
 	return MCPResult(Result);
 }
 

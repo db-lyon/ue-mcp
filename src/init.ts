@@ -8,7 +8,14 @@ import { dumpYaml } from "./yaml-dump.js";
 import { ProjectContext } from "./project.js";
 import { deploy } from "./deployer.js";
 import { inspectInstall, installWarning } from "./install-check.js";
-import { installSkills, uninstallSkills } from "./skills.js";
+import {
+  coreSkillsInstalled,
+  installCoreSkills,
+  projectSkillsRoot,
+  removeCoreSkills,
+  conflictMessages,
+  syncPluginSkills,
+} from "./skills.js";
 import { warn as logWarn } from "./log.js";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, fail, info, ok, warn } from "./ui/ansi.js";
 import { checkboxSelect, singleSelect, type CheckboxItem } from "./ui/select.js";
@@ -550,9 +557,7 @@ async function init() {
       path.resolve(claudeSettingsPathForSeed),
     );
 
-    const skillsDir = path.join(project.projectDir!, ".claude", "skills");
-    const skillsCurrentlyInstalled =
-      fs.existsSync(skillsDir) && fs.readdirSync(skillsDir).length > 0;
+    const skillsCurrentlyInstalled = coreSkillsInstalled(project.projectDir!);
 
     behaviorItems.push({
       label: "Auto-nudge agent to offer feedback after execute_python",
@@ -563,8 +568,7 @@ async function init() {
     });
     behaviorItems.push({
       label: "Install bundled Claude Code skills (workflow guides)",
-      // Fresh install: off. Re-init: on if any skill file is currently
-      // present (a non-empty skills dir means they were installed before).
+      // Fresh install: off. Re-init: on if ue-mcp's skills are installed.
       checked: skillsCurrentlyInstalled,
       suffix:
         "Recommended for Claude Code. Copies skill markdown into .claude/skills/.",
@@ -609,22 +613,31 @@ async function init() {
     }
 
     if (installSkillsEnabled) {
-      const skillsResult = installSkills(project.projectDir!);
-      if (skillsResult.error) {
-        warn(`Skills install skipped: ${skillsResult.error}`);
-      } else if (skillsResult.installed.length > 0) {
+      const skillsResult = installCoreSkills(project.projectDir!);
+      for (const line of conflictMessages(skillsResult)) warn(line);
+      if (skillsResult.installed.length > 0) {
         ok(`Claude Code skills installed: ${skillsResult.installed.join(", ")}`);
         info(skillsResult.skillsDir);
         wrote.push({ what: "workflow skills", where: skillsResult.skillsDir });
       }
     } else {
-      // Symmetric uninstall: opting out on re-init removes any skills we
-      // copied in on a previous run. Leaves user-added skill files alone.
-      const removed = uninstallSkills(project.projectDir!);
-      if (removed.removed.length > 0) {
-        ok(`Claude Code skills removed: ${removed.removed.join(", ")}`);
-        info(removed.skillsDir);
+      // Symmetric uninstall: opting out on re-init removes the skills ue-mcp
+      // copied in. Plugin skills and user-added skills are left alone.
+      const removed = removeCoreSkills(project.projectDir!);
+      if (removed.length > 0) {
+        ok(`Claude Code skills removed: ${removed.join(", ")}`);
+        info(projectSkillsRoot(project.projectDir!));
       }
+    }
+
+    // Plugin skills follow the plugin, not the checkbox above.
+    const pluginSkills = syncPluginSkills(
+      project.projectDir!,
+      path.join(project.projectDir!, "ue-mcp.yml"),
+    );
+    for (const [plugin, r] of Object.entries(pluginSkills.plugins)) {
+      for (const line of conflictMessages(r)) warn(line);
+      if (r.installed.length > 0) ok(`${plugin} skills installed: ${r.installed.join(", ")}`);
     }
 
     // OAuth only when the prompt hook is on - the user has explicitly opted

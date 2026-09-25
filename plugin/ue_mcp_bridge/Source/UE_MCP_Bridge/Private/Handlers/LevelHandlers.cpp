@@ -2,6 +2,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerPagination.h"
+#include "HandlerSkinnedAsset.h"
 #include "VolumeHelpers_Internal.h"
 #include "EditorScriptingUtilities/Public/EditorLevelLibrary.h"
 #include "ScopedTransaction.h"
@@ -146,6 +147,8 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("count_actors_by_class"), &CountActorsByClass);
 	Registry.RegisterHandler(TEXT("get_runtime_virtual_texture_summary"), &GetRVTSummary);
 	Registry.RegisterHandler(TEXT("set_water_body_property"), &SetWaterBodyProperty);
+	Registry.RegisterHandlerWithTimeout(TEXT("rebuild_water_zone"), &RebuildWaterZone, 120.0f);
+	Registry.RegisterHandler(TEXT("get_water_state"), &GetWaterState);
 	Registry.RegisterHandler(TEXT("get_actor_bounds"), &GetActorBounds);
 	Registry.RegisterHandler(TEXT("resolve_actor"), &ResolveActor);
 	Registry.RegisterHandler(TEXT("set_actor_property"), &SetActorProperty);
@@ -174,6 +177,7 @@ void FLevelHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #679/#677: spawn a SkeletalMeshActor for visual/deform verification.
 	Registry.RegisterHandler(TEXT("spawn_skeletal_mesh_actor"), &SpawnSkeletalMeshActor);
 	Registry.RegisterHandler(TEXT("place_skeletal_actor"), &SpawnSkeletalMeshActor);
+	Registry.RegisterHandler(TEXT("set_component_skeletal_mesh"), &SetComponentSkeletalMesh);
 	// #666: add a material blendable to a PostProcessVolume.
 	Registry.RegisterHandler(TEXT("add_post_process_blendable"), &AddPostProcessBlendable);
 	// #950: LevelHandlers_PostProcess.cpp. The value half and the bOverride_ half
@@ -855,6 +859,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 
 	const bool bIncludeProperties = OptionalBool(Params, TEXT("includeProperties"));
 	const FString PropertyFilter = OptionalString(Params, TEXT("componentClass"));
+	// #1113: address one component by instance name (case-insensitive).
+	const FString ComponentNameFilter = OptionalString(Params, TEXT("componentName"));
 
 	TArray<UActorComponent*> Components;
 	Actor->GetComponents(Components);
@@ -864,6 +870,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetComponentTree(const TSharedPtr<FJsonOb
 	{
 		if (!Comp) continue;
 		if (!PropertyFilter.IsEmpty() && !Comp->GetClass()->GetName().Contains(PropertyFilter, ESearchCase::IgnoreCase)) continue;
+		if (!ComponentNameFilter.IsEmpty() && !Comp->GetName().Equals(ComponentNameFilter, ESearchCase::IgnoreCase)) continue;
 
 		TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
 		C->SetStringField(TEXT("name"), Comp->GetName());
@@ -2175,6 +2182,41 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetComponentProperty(const TSharedPtr<FJs
 		return MCPError(TEXT("Missing 'value' parameter"));
 	}
 
+	// A skinned mesh's mesh pointer goes through the engine setter (#1099). The
+	// property is owned by a component class, so its container is that component.
+	if (MCPSkinnedAsset::IsMeshProperty(Prop))
+	{
+		USkinnedMeshComponent* SkinnedComp = Cast<USkinnedMeshComponent>(static_cast<UObject*>(CurrentContainer));
+		if (!SkinnedComp)
+		{
+			return MCPError(TEXT("The skinned mesh component could not be resolved. Use level(set_component_skeletal_mesh)."));
+		}
+		FString PreviousMesh;
+		FString MeshErr;
+		if (!MCPSkinnedAsset::AssignFromJson(SkinnedComp, *ValueField, PreviousMesh, MeshErr))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *MeshErr));
+		}
+		SkinnedComp->MarkPackageDirty();
+
+		auto MeshResult = MCPSuccess();
+		MCPSetUpdated(MeshResult);
+		MeshResult->SetStringField(TEXT("actorLabel"), ActorLabel);
+		MeshResult->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
+		MeshResult->SetStringField(TEXT("componentClass"), SkinnedComp->GetClass()->GetName());
+		MeshResult->SetStringField(TEXT("propertyName"), PropertyName);
+		MCPSkinnedAsset::Report(MeshResult, SkinnedComp, PreviousMesh);
+
+		TSharedPtr<FJsonObject> MeshPayload = MakeShared<FJsonObject>();
+		MeshPayload->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
+		MeshPayload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		if (!ComponentName.IsEmpty()) MeshPayload->SetStringField(TEXT("componentName"), ComponentName);
+		MeshPayload->SetStringField(TEXT("propertyName"), PropertyName);
+		MeshPayload->SetStringField(TEXT("value"), PreviousMesh.IsEmpty() ? FString(TEXT("None")) : PreviousMesh);
+		MCPSetRollback(MeshResult, TEXT("set_component_property"), MeshPayload);
+		return MCPResult(MeshResult);
+	}
+
 	void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(CurrentContainer, LeafArrayIndex);
 
 	// Capture previous value as a string for self-inverse rollback.
@@ -2602,8 +2644,15 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorMaterial(const TSharedPtr<FJsonOb
 }
 TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByClass(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ClassName;
-	if (auto Err = RequireString(Params, TEXT("className"), ClassName)) return Err;
+	// #1113: labelPrefix is a case-sensitive prefix over the editor label, and
+	// with it className may be omitted to match every actor class.
+	const FString LabelPrefix = OptionalString(Params, TEXT("labelPrefix"));
+	FString ClassName = OptionalString(Params, TEXT("className"));
+	if (ClassName.IsEmpty() && LabelPrefix.IsEmpty())
+	{
+		return MCPError(TEXT("Pass className, labelPrefix, or both"));
+	}
+	if (ClassName.IsEmpty()) ClassName = TEXT("Actor");
 
 	FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor"));
 	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
@@ -2633,6 +2682,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::GetActorsByClass(const TSharedPtr<FJsonOb
 	{
 		AActor* A = *It;
 		if (!A) continue;
+		if (!LabelPrefix.IsEmpty() && !A->GetActorLabel().StartsWith(LabelPrefix, ESearchCase::CaseSensitive)) continue;
 		FString CName = A->GetClass()->GetName();
 		const bool bMatch = TargetClass
 			? A->GetClass()->IsChildOf(TargetClass)
@@ -2878,7 +2928,14 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJs
 	}
 	if (!WBComp) return MCPError(FString::Printf(TEXT("Actor '%s' has no WaterBodyComponent"), *ActorLabel));
 
+	// #1156: TessellatedWaterMeshExtent is deprecated and not serialized, so a
+	// write to it is lost on save. Refuse the miss by name and warn on a hit.
+	const bool bTessellatedExtent = PropertyName.StartsWith(TEXT("TessellatedWaterMeshExtent"), ESearchCase::IgnoreCase);
 	FProperty* Prop = WBComp->GetClass()->FindPropertyByName(FName(*PropertyName));
+	if (!Prop && bTessellatedExtent)
+	{
+		return MCPError(TEXT("TessellatedWaterMeshExtent is not a WaterBodyComponent property. It is deprecated (TessellatedWaterMeshExtent_DEPRECATED on the WaterZone) and not serialized, so a write would be lost. Size the water mesh with level(rebuild_water_zone, zoneExtent, tileSize) instead."));
+	}
 	if (!Prop) return MCPError(FString::Printf(TEXT("Property '%s' not found on %s"), *PropertyName, *WBComp->GetClass()->GetName()));
 
 	WBComp->Modify();
@@ -2912,6 +2969,12 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetWaterBodyProperty(const TSharedPtr<FJs
 	Result->SetStringField(TEXT("propertyName"), PropertyName);
 	Result->SetStringField(TEXT("value"), ValueStr);
 	Result->SetStringField(TEXT("previousValue"), PreviousValue);
+	if (bTessellatedExtent || Prop->HasAnyPropertyFlags(CPF_Deprecated))
+	{
+		Result->SetStringField(TEXT("warning"), FString::Printf(
+			TEXT("'%s' is deprecated and is not serialized, so this write is lost on save. For the water mesh extent use level(rebuild_water_zone, zoneExtent, tileSize)."),
+			*Prop->GetName()));
+	}
 
 	// The undo travels by actor path so replaying it cannot land on a namesake.
 	// Emitted only when the value actually moved: restoring a value that was
@@ -3169,6 +3232,40 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetActorProperty(const TSharedPtr<FJsonOb
 			Prop = Seg;
 			LeafArrayIndex = SegmentIndex;
 		}
+	}
+
+	// A skinned mesh's mesh pointer goes through the engine setter (#1099). The
+	// property is owned by a component class, so its container is that component.
+	if (MCPSkinnedAsset::IsMeshProperty(Prop))
+	{
+		USkinnedMeshComponent* SkinnedComp = Cast<USkinnedMeshComponent>(static_cast<UObject*>(CurrentContainer));
+		if (!SkinnedComp)
+		{
+			return MCPError(TEXT("The skinned mesh component could not be resolved. Use level(set_component_skeletal_mesh)."));
+		}
+		TargetActor->Modify();
+		FString PreviousMesh;
+		FString MeshErr;
+		if (!MCPSkinnedAsset::AssignFromJson(SkinnedComp, *ValueField, PreviousMesh, MeshErr))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *MeshErr));
+		}
+		TargetActor->MarkPackageDirty();
+
+		auto MeshResult = MCPSuccess();
+		MCPSetUpdated(MeshResult);
+		MeshResult->SetStringField(TEXT("actorLabel"), ActorLabel);
+		MeshResult->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
+		MeshResult->SetStringField(TEXT("propertyName"), PropertyName);
+		MCPSkinnedAsset::Report(MeshResult, SkinnedComp, PreviousMesh);
+
+		TSharedPtr<FJsonObject> MeshPayload = MakeShared<FJsonObject>();
+		MeshPayload->SetStringField(TEXT("actorPath"), TargetActor->GetPathName());
+		MeshPayload->SetStringField(TEXT("actorLabel"), ActorLabel);
+		MeshPayload->SetStringField(TEXT("propertyName"), PropertyName);
+		MeshPayload->SetStringField(TEXT("value"), PreviousMesh.IsEmpty() ? FString(TEXT("None")) : PreviousMesh);
+		MCPSetRollback(MeshResult, TEXT("set_actor_property"), MeshPayload);
+		return MCPResult(MeshResult);
 	}
 
 	// Strip the EditDefaultsOnly gate locally for the duration of the write,
@@ -4135,6 +4232,93 @@ TSharedPtr<FJsonValue> FLevelHandlers::SpawnSkeletalMeshActor(const TSharedPtr<F
 	TSharedPtr<FJsonObject> Rb = MakeShared<FJsonObject>();
 	Rb->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
 	MCPSetRollback(Result, TEXT("delete_actor"), Rb);
+	return MCPResult(Result);
+}
+
+// #1099: swap the mesh on a skinned mesh component that is already placed.
+// Goes through SetSkinnedAssetAndUpdate, the only write that resizes the pose
+// buffers for the new skeleton.
+TSharedPtr<FJsonValue> FLevelHandlers::SetComponentSkeletalMesh(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params->HasField(TEXT("skeletalMesh")))
+	{
+		return MCPError(TEXT("Missing 'skeletalMesh': a SkeletalMesh asset path, or null to clear the mesh"));
+	}
+	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
+
+	const FString WorldScope = OptionalString(Params, TEXT("world"), TEXT("editor")).ToLower();
+	UWorld* World = ResolveWorldFromParams(Params, *WorldScope);
+	if (!World)
+	{
+		return MCPError(WorldScope == TEXT("pie")
+			? TEXT("PIE not running (or no such pieInstance). See editor(list_pie_instances).")
+			: TEXT("Editor world not available"));
+	}
+
+	FMCPActorSelector ActorSel;
+	ActorSel.Match = EMCPActorMatch::LabelNameOrPath;
+	ActorSel.WorldLabel = World->IsGameWorld() ? TEXT("PIE") : TEXT("editor");
+	TSharedPtr<FJsonValue> ActorErr;
+	AActor* Actor = MCPResolveActor(World, Params, ActorErr, ActorSel);
+	if (!Actor) return ActorErr;
+
+	USkinnedMeshComponent* Comp = nullptr;
+	if (ComponentName.IsEmpty())
+	{
+		Comp = Actor->FindComponentByClass<USkinnedMeshComponent>();
+	}
+	else
+	{
+		Comp = Cast<USkinnedMeshComponent>(FindNamedComponentOnActor(Actor, ComponentName));
+	}
+	if (!Comp)
+	{
+		TArray<FString> Available;
+		for (UActorComponent* Candidate : Actor->GetComponents())
+		{
+			if (Cast<USkinnedMeshComponent>(Candidate)) Available.Add(Candidate->GetName());
+		}
+		const FString Named = ComponentName.IsEmpty()
+			? FString()
+			: FString::Printf(TEXT(" named '%s'"), *ComponentName);
+		return MCPError(FString::Printf(
+			TEXT("No skinned mesh component%s on '%s'. Skinned mesh components: [%s]"),
+			*Named, *Actor->GetActorLabel(), *FString::Join(Available, TEXT(", "))));
+	}
+
+	FScopedTransaction Transaction(FText::FromString(TEXT("MCP set component skeletal mesh")));
+	Actor->Modify();
+	FString PreviousMesh;
+	FString MeshErr;
+	if (!MCPSkinnedAsset::AssignFromJson(Comp, Params->TryGetField(TEXT("skeletalMesh")), PreviousMesh, MeshErr))
+	{
+		Transaction.Cancel();
+		return MCPError(MeshErr);
+	}
+	Comp->MarkRenderStateDirty();
+	Actor->MarkPackageDirty();
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("actorLabel"), Actor->GetActorLabel());
+	Result->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	Result->SetStringField(TEXT("componentName"), Comp->GetName());
+	Result->SetStringField(TEXT("componentClass"), Comp->GetClass()->GetName());
+	MCPSkinnedAsset::Report(Result, Comp, PreviousMesh);
+	TArray<TSharedPtr<FJsonValue>> SlotNames;
+	for (const FName& SlotName : Comp->GetMaterialSlotNames())
+	{
+		SlotNames.Add(MakeShared<FJsonValueString>(SlotName.ToString()));
+	}
+	Result->SetArrayField(TEXT("materialSlotNames"), SlotNames);
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("actorPath"), Actor->GetPathName());
+	Payload->SetStringField(TEXT("componentName"), Comp->GetName());
+	if (PreviousMesh.IsEmpty()) Payload->SetField(TEXT("skeletalMesh"), MakeShared<FJsonValueNull>());
+	else Payload->SetStringField(TEXT("skeletalMesh"), PreviousMesh);
+	if (World->IsGameWorld()) Payload->SetStringField(TEXT("world"), TEXT("pie"));
+	MCPSetRollback(Result, TEXT("set_component_skeletal_mesh"), Payload);
 	return MCPResult(Result);
 }
 

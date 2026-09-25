@@ -142,8 +142,8 @@ TSharedPtr<FJsonValue> FAssetHandlers::CreateSubobject(const TSharedPtr<FJsonObj
 			TEXT("a graph node is created through its graph's schema, which allocates its pins and parents it to "
 			     "the graph. Constructed here it would get neither: no pins, so it can never be connected, and the "
 			     "asset as its outer instead of the graph. The result opens as a broken node. Read the graph with "
-			     "asset(action=\"read_graph\") and author nodes through the editor or an action that knows the "
-			     "schema for that graph type."));
+			     "asset(action=\"read_graph\"), create nodes with asset(action=\"add_graph_node\") and wire them with "
+			     "asset(action=\"connect_graph_pins\"), which go through the graph's schema."));
 	}
 	if (Class->IsChildOf(UEdGraph::StaticClass()))
 	{

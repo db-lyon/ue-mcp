@@ -7,7 +7,8 @@ import { categoryTool, bp, type ToolContext, type ToolDef } from "../types.js";
 import { deploy, deploySummary, attach, attachSummary } from "../deployer.js";
 import { selectEngine } from "../engine-root.js";
 import { collapsingEnvWarnings } from "../session-env.js";
-import { buildProject, startEditor, isBridgeReachable } from "../editor-control.js";
+import { buildProject, startEditor, isBridgeReachable, connectedEditorOf } from "../editor-control.js";
+import { detectProjectHolders } from "../project-holders.js";
 import { resolveConfigPath, findIniFiles, parseIni, buildTagTree } from "../config-parser.js";
 import { parseHeader, collectFiles, findSourceRoots, resolveModuleDir } from "../cpp-parser.js";
 import { loadEngineIndex, type EngineIndex } from "../engine-index.js";
@@ -158,7 +159,7 @@ export const projectTool: ToolDef = categoryTool(
     get_status: {
       kind: "handler",
       effect: "read",
-      description: "Check server mode and editor connection. pluginBuildStale reports the compiled bridge being older than its source, read from disk. deployedPlugin is what the binary that answered says about itself: when it was built, and how many methods this server advertises that it does not register, which is what 'Unknown method' on a real action means. Params: none (#785, #1002, #1021)",
+      description: "Check server mode and editor connection. pluginBuildStale reports the compiled bridge being older than its source, read from disk. deployedPlugin is what the binary that answered says about itself: when it was built, and how many methods this server advertises that it does not register, which is what 'Unknown method' on a real action means. answeringPid is the editor process the bridge is connected to; projectEditors and projectEditorsWarning appear when several editor processes (headless included) hold the project, and every response then carries the answering pid. Params: none (#785, #1002, #1021, #1150)",
       handler: async (ctx) => {
         const flows = ctx.getFlows?.() ?? [];
         const bridgeApiVersion = ctx.project.projectDir
@@ -211,6 +212,10 @@ export const projectTool: ToolDef = categoryTool(
         // project read as a healthy session.
         const target = ctx.bridge.getTarget();
 
+        // #1150: with several editors on one project, name the one answering.
+        const answeringPid = connectedEditorOf(ctx.bridge)?.pid ?? null;
+        const holders = await detectProjectHolders(ctx.project.projectDir, ctx.project.projectPath, answeringPid);
+
         return {
           engine: offlineEngine ?? undefined,
           pluginBuildStale: freshness.checked ? freshness.stale : undefined,
@@ -226,11 +231,15 @@ export const projectTool: ToolDef = categoryTool(
           deployedPlugin: deployedPlugin(ctx.bridge.capabilities, parity),
           mode: ctx.bridge.isConnected ? "live" : "disconnected",
           editorConnected: ctx.bridge.isConnected,
+          answeringPid: answeringPid ?? undefined,
           editorTarget: {
             projectPath: target.projectPath,
             port: target.port,
             portSource: target.portSource,
           },
+          // Absent unless more than one editor process holds this project.
+          projectEditors: holders ? { count: holders.count, editors: holders.editors } : undefined,
+          projectEditorsWarning: holders?.warning,
           // Bridge calls and path resolution would be hitting different
           // projects. Unreachable through set_project, reported so it can
           // never be silent again.

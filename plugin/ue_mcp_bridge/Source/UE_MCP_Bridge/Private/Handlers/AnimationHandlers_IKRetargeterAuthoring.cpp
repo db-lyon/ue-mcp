@@ -103,13 +103,13 @@ namespace
 		FString& OutValue,
 		FString& OutError)
 	{
-		bOutPresent = Object->HasField(Field);
+		bOutPresent = HasParam(Object, Field);
 		if (!bOutPresent)
 		{
 			OutValue.Reset();
 			return true;
 		}
-		if (!Object->TryGetStringField(Field, OutValue) || OutValue.IsEmpty())
+		if (!TryGetStringParam(Object, Field, OutValue) || OutValue.IsEmpty())
 		{
 			OutError = FString::Printf(TEXT("'%s' must be a non-empty string"), Field);
 			return false;
@@ -125,8 +125,8 @@ namespace
 		FString& OutError)
 	{
 		OutValue = DefaultValue;
-		if (!Object->HasField(Field)) return true;
-		if (!Object->TryGetBoolField(Field, OutValue))
+		if (!HasParam(Object, Field)) return true;
+		if (!TryGetBoolParam(Object, Field, OutValue))
 		{
 			OutError = FString::Printf(TEXT("'%s' must be a boolean"), Field);
 			return false;
@@ -453,7 +453,7 @@ namespace
 		FString& OutError)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* OpsArray = nullptr;
-		if (!Params->TryGetArrayField(TEXT("ops"), OpsArray) || !OpsArray) return true;
+		if (!TryGetArrayParam(Params, TEXT("ops"), OpsArray) || !OpsArray) return true;
 
 		const TArray<FInstancedStruct>& Ops = Retargeter->GetRetargetOps();
 		auto NameOfOp = [&Ops](int32 Index) -> FString
@@ -766,9 +766,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRetargeter(const TSharedPt
 	TArray<FPreparedChainMapping> PreparedMappings;
 	TSet<FName> RequestedTargetChains;
 	const TArray<TSharedPtr<FJsonValue>>* MappingValues = nullptr;
-	if (Params->HasField(TEXT("chainMappings")))
+	if (HasParam(Params, TEXT("chainMappings")))
 	{
-		if (!Params->TryGetArrayField(TEXT("chainMappings"), MappingValues) || !MappingValues)
+		if (!TryGetArrayParam(Params, TEXT("chainMappings"), MappingValues) || !MappingValues)
 			return MCPError(TEXT("'chainMappings' must be an array"));
 		if (MappingValues->Num() > MaxRetargeterItems)
 			return MCPError(FString::Printf(TEXT("'chainMappings' exceeds the %d item limit"), MaxRetargeterItems));
@@ -815,9 +815,9 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ConfigureIKRetargeter(const TSharedPt
 
 	TOptional<FPreparedRetargetPose> PreparedPose;
 	const TSharedPtr<FJsonObject>* PoseObjectPointer = nullptr;
-	if (Params->HasField(TEXT("pose")))
+	if (HasParam(Params, TEXT("pose")))
 	{
-		if (!Params->TryGetObjectField(TEXT("pose"), PoseObjectPointer)
+		if (!TryGetObjectParam(Params, TEXT("pose"), PoseObjectPointer)
 			|| !PoseObjectPointer || !PoseObjectPointer->IsValid())
 		{
 			return MCPError(TEXT("'pose' must be an object"));

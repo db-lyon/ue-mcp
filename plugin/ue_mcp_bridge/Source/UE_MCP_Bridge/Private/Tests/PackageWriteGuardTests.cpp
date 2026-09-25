@@ -33,36 +33,11 @@
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
 #include "MCPEngineCompat.h"
+#include "Tests/MCPScopedTestMount.h"
 
 namespace
 {
 	const TCHAR* const MCPWriteGuardTestRoot = TEXT("/UEMCPPackageWriteGuardTest/");
-
-	struct FScopedWriteGuardMount
-	{
-		FString RootPath;
-		FString ContentPath;
-
-		FScopedWriteGuardMount()
-			: RootPath(MCPWriteGuardTestRoot)
-			, ContentPath(FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FString(FPlatformProcess::UserTempDir())),
-				FString(TEXT("UEMCPPackageWriteGuardTest")),
-				FGuid::NewGuid().ToString(EGuidFormats::Digits)))
-		{
-			IFileManager::Get().MakeDirectory(*ContentPath, /*Tree=*/true);
-			FPackageName::RegisterMountPoint(RootPath, ContentPath);
-		}
-
-		~FScopedWriteGuardMount()
-		{
-			FPackageName::UnRegisterMountPoint(RootPath, ContentPath);
-			IFileManager::Get().DeleteDirectory(*ContentPath, /*RequireExists=*/false, /*Tree=*/true);
-		}
-
-		FScopedWriteGuardMount(const FScopedWriteGuardMount&) = delete;
-		FScopedWriteGuardMount& operator=(const FScopedWriteGuardMount&) = delete;
-	};
 
 	/** Clear the read-only bit again however the test leaves, so the temp
 	 *  directory can be deleted on the way out. */
@@ -97,7 +72,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPReadOnlyPackageIsRefusedNotWrittenTest::RunTest(const FString& Parameters)
 {
-	const FScopedWriteGuardMount Mount;
+	const FMCPScopedTestMount Mount{ FString(MCPWriteGuardTestRoot), TEXT("UEMCPPackageWriteGuardTest") };
 
 	const FString PackageName = FString(MCPWriteGuardTestRoot) + TEXT("DT_WriteGuardProbe");
 	UPackage* Package = CreatePackage(*PackageName);

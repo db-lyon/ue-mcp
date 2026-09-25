@@ -559,14 +559,12 @@ void FMCPBridgeServer::Exit()
 // .uproject path the client was given) is the cheapest way to do that.
 FString FMCPBridgeServer::GetPortLockfilePath()
 {
-	const FString Dir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("UE_MCP_Bridge"));
-	return FPaths::Combine(Dir, TEXT("port.json"));
+	return FPaths::Combine(FMCPBridgeStateFiles::StateDir(), TEXT("port.json"));
 }
 
 FString FMCPBridgeServer::GetBridgeErrorFilePath()
 {
-	const FString Dir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("UE_MCP_Bridge"));
-	return FPaths::Combine(Dir, TEXT("bridge-error.json"));
+	return FPaths::Combine(FMCPBridgeStateFiles::StateDir(), TEXT("bridge-error.json"));
 }
 
 namespace

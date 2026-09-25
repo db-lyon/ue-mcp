@@ -162,6 +162,9 @@ void FPCGHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// #213: bulk JSON-driven graph authoring (mirrors material.import_graph).
 	Registry.RegisterHandler(TEXT("import_pcg_graph"), &ImportGraph);
 	Registry.RegisterHandler(TEXT("export_pcg_graph"), &ExportGraph);
+
+	// #1087: give instance nodes their own settings so the editor can edit them.
+	Registry.RegisterHandler(TEXT("unwrap_pcg_instance_nodes"), &UnwrapInstanceNodes);
 }
 
 TSharedPtr<FJsonValue> FPCGHandlers::ListPCGGraphs(const TSharedPtr<FJsonObject>& Params)
@@ -401,18 +404,17 @@ TSharedPtr<FJsonValue> FPCGHandlers::AddPCGNode(const TSharedPtr<FJsonObject>& P
 		return MCPError(TEXT("Failed to create PCG settings instance"));
 	}
 
-	// AddNodeInstance matches the proven Python path: wraps settings in a
-	// UPCGSettingsInstance parented to the new node. AddNode(UPCGSettings*)
-	// still persists but diverges from how the PCG editor authors nodes.
-	UPCGNode* NewNode = Graph->AddNodeInstance(DefaultSettings);
+	// The node owns its settings, as the PCG editor's default node creation
+	// does. AddNodeInstance would wrap them in a UPCGSettingsInstance, which
+	// the details panel shows read-only (#1087).
+	UPCGNode* NewNode = Graph->AddNode(DefaultSettings);
 	if (!NewNode)
 	{
 		return MCPError(TEXT("Failed to add node to PCG graph"));
 	}
 
-	// Keep settings parented to the node so duplicate/rename of the graph
-	// carries settings with it. AddNodeInstance already does this for the
-	// SettingsInstance wrapper; we also reparent the underlying settings.
+	// AddNode does not manage ownership: parent the settings to the node so
+	// duplicating or renaming the graph carries them along.
 	if (DefaultSettings->GetOuter() != NewNode && !DefaultSettings->GetOuter()->IsA<UPackage>())
 	{
 		DefaultSettings->Rename(nullptr, NewNode, REN_DontCreateRedirectors | REN_DoNotDirty);
@@ -2070,10 +2072,11 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 			continue;
 		}
 
-		UPCGNode* NewNode = Graph->AddNodeInstance(DefaultSettings);
+		// Node-owned settings stay editable in the PCG editor (#1087).
+		UPCGNode* NewNode = Graph->AddNode(DefaultSettings);
 		if (!NewNode)
 		{
-			Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("node '%s': AddNodeInstance failed"), *LocalName)));
+			Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("node '%s': AddNode failed"), *LocalName)));
 			continue;
 		}
 
@@ -2083,7 +2086,7 @@ TSharedPtr<FJsonValue> FPCGHandlers::ImportGraph(const TSharedPtr<FJsonObject>& 
 		}
 
 		// #236: preserve the user-supplied node name when there's no collision.
-		// AddNodeInstance assigns engine-derived names (e.g. SurfaceSampler_0),
+		// AddNode assigns engine-derived names (e.g. SurfaceSampler_0),
 		// which makes export -> import not name-stable. Rename the new node
 		// to the local id when nothing else in the graph already uses it.
 		if (!LocalName.IsEmpty() && NewNode->GetName() != LocalName)
@@ -2409,5 +2412,126 @@ TSharedPtr<FJsonValue> FPCGHandlers::ExportGraph(const TSharedPtr<FJsonObject>& 
 	Result->SetArrayField(TEXT("connections"), ConnsArr);
 	Result->SetNumberField(TEXT("nodeCount"), NodesArr.Num());
 	Result->SetNumberField(TEXT("connectionCount"), ConnsArr.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FPCGHandlers::UnwrapInstanceNodes(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
+	const FString OnlyNode = OptionalString(Params, TEXT("nodeName"));
+
+	UPCGGraph* Graph = LoadObject<UPCGGraph>(nullptr, *AssetPath);
+	if (!Graph)
+	{
+		return MCPError(FString::Printf(TEXT("PCGGraph not found: %s"), *AssetPath));
+	}
+	if (MCPIsProtectedAssetPath(Graph->GetPathName()))
+	{
+		return MCPProtectedPathError(Graph->GetPathName());
+	}
+
+	TArray<UPCGNode*> Targets;
+	if (!OnlyNode.IsEmpty())
+	{
+		UPCGNode* Node = FindPCGNodeByName(Graph, OnlyNode);
+		if (!Node)
+		{
+			return MCPError(FString::Printf(TEXT("Node not found: %s"), *OnlyNode));
+		}
+		Targets.Add(Node);
+	}
+	else
+	{
+		for (UPCGNode* Node : Graph->GetNodes())
+		{
+			if (Node) Targets.Add(Node);
+		}
+	}
+
+	auto CountEdges = [](const UPCGNode* Node) -> int32
+	{
+		int32 Count = 0;
+		for (const TObjectPtr<UPCGPin>& Pin : Node->GetInputPins()) { if (Pin) Count += Pin->Edges.Num(); }
+		for (const TObjectPtr<UPCGPin>& Pin : Node->GetOutputPins()) { if (Pin) Count += Pin->Edges.Num(); }
+		return Count;
+	};
+
+	FScopedTransaction Transaction(NSLOCTEXT("UEMCPBridge", "UnwrapPCGInstanceNodes", "Unwrap PCG Instance Nodes"));
+	Graph->Modify();
+
+	TArray<TSharedPtr<FJsonValue>> Unwrapped;
+	TArray<TSharedPtr<FJsonValue>> Warnings;
+	int32 AlreadyOwned = 0;
+	for (UPCGNode* Node : Targets)
+	{
+		if (!Node->IsInstance())
+		{
+			++AlreadyOwned;
+			continue;
+		}
+
+		UPCGSettingsInterface* Wrapper = Node->GetSettingsInterface();
+		UPCGSettings* Inner = Node->GetSettings();
+		if (!Wrapper || !Inner)
+		{
+			Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("node '%s': instance has no settings to unwrap"), *Node->GetName())));
+			continue;
+		}
+
+		const int32 EdgesBefore = CountEdges(Node);
+		Node->Modify();
+
+		// Settings the node already owns are adopted as they are. Anything else
+		// (a shared settings asset, or settings outered to the wrapper) is copied
+		// into the node, because SetSettingsInterface discards the wrapper.
+		const bool bCopied = Inner->GetOuter() != Node;
+		UPCGSettings* Owned = Inner;
+		if (bCopied)
+		{
+			Owned = DuplicateObject<UPCGSettings>(Inner, Node);
+			if (!Owned)
+			{
+				Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("node '%s': failed to copy settings %s"), *Node->GetName(), *Inner->GetPathName())));
+				continue;
+			}
+		}
+		Owned->SetFlags(RF_Transactional);
+		Owned->Modify();
+		Owned->bEnabled = Wrapper->bEnabled;
+
+		// Same settings class, so the pins and the edges on them are unchanged.
+		Node->SetSettingsInterface(Owned, /*bUpdatePins=*/false);
+		Node->PostEditChange();
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("nodeName"), Node->GetName());
+		Row->SetStringField(TEXT("settingsClass"), Owned->GetClass()->GetName());
+		Row->SetStringField(TEXT("settingsPath"), Owned->GetPathName());
+		Row->SetBoolField(TEXT("copiedSettings"), bCopied);
+		if (bCopied) Row->SetStringField(TEXT("copiedFrom"), Inner->GetPathName());
+		Row->SetNumberField(TEXT("edgesBefore"), EdgesBefore);
+		Row->SetNumberField(TEXT("edgesAfter"), CountEdges(Node));
+		Unwrapped.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	bool bSaved = false;
+	if (Unwrapped.Num() > 0)
+	{
+		Graph->PostEditChange();
+		if (UPackage* Pkg = Graph->GetOutermost()) { Pkg->MarkPackageDirty(); }
+		bSaved = UEditorAssetLibrary::SaveLoadedAsset(Graph, /*bOnlyIfIsDirty=*/false);
+	}
+
+	auto Result = MCPSuccess();
+	if (Unwrapped.Num() > 0) MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("assetPath"), AssetPath);
+	Result->SetArrayField(TEXT("unwrapped"), Unwrapped);
+	Result->SetNumberField(TEXT("unwrappedCount"), Unwrapped.Num());
+	Result->SetNumberField(TEXT("alreadyOwnedCount"), AlreadyOwned);
+	Result->SetBoolField(TEXT("unchanged"), Unwrapped.Num() == 0);
+	Result->SetBoolField(TEXT("saved"), bSaved);
+	if (Warnings.Num() > 0) Result->SetArrayField(TEXT("warnings"), Warnings);
+	MCPSetNoRollback(Result, TEXT("Unwrapping discards the UPCGSettingsInstance wrappers, and no bridge action builds instance nodes to restore them. Editor undo reverts it."));
 	return MCPResult(Result);
 }

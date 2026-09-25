@@ -29,6 +29,9 @@
 #include "PointWeightMap.h"
 #include "ClothConfigBase.h"
 #include "Rendering/SkeletalMeshRenderData.h"
+#include "Rendering/SkeletalMeshModel.h"
+#include "Rendering/SkeletalMeshLODModel.h"
+#include "SkeletalMeshTypes.h"
 #include "Animation/Skeleton.h"
 #include "StaticMeshResources.h"
 #include "Materials/MaterialInterface.h"
@@ -1352,7 +1355,49 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadClothData(const TSharedPtr<FJsonObjec
 	USkeletalMesh* Mesh = LoadAssetByPath<USkeletalMesh>(MeshPath);
 	if (!Mesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
 
+	// #1139: a clothing asset only simulates on a render section whose
+	// ClothingData names it, so report every section's binding.
+	TArray<TSharedPtr<FJsonValue>> Sections;
+	TMap<FGuid, TArray<TSharedPtr<FJsonValue>>> BindingsByGuid;
+	if (const FSkeletalMeshModel* Model = Mesh->GetImportedModel())
+	{
+		for (int32 LodIdx = 0; LodIdx < Model->LODModels.Num(); ++LodIdx)
+		{
+			const FSkeletalMeshLODModel& LodModel = Model->LODModels[LodIdx];
+			for (int32 SectionIdx = 0; SectionIdx < LodModel.Sections.Num(); ++SectionIdx)
+			{
+				const FSkelMeshSection& Section = LodModel.Sections[SectionIdx];
+				TSharedPtr<FJsonObject> SObj = MakeShared<FJsonObject>();
+				SObj->SetNumberField(TEXT("lodIndex"), LodIdx);
+				SObj->SetNumberField(TEXT("sectionIndex"), SectionIdx);
+				SObj->SetNumberField(TEXT("materialIndex"), Section.MaterialIndex);
+				SObj->SetBoolField(TEXT("disabled"), Section.bDisabled);
+				const bool bBound = Section.ClothingData.IsValid();
+				SObj->SetBoolField(TEXT("usesCloth"), bBound);
+				if (bBound)
+				{
+					UClothingAssetBase* BoundAsset = Mesh->GetClothingAsset(Section.ClothingData.AssetGuid);
+					if (BoundAsset) SObj->SetStringField(TEXT("clothingAsset"), BoundAsset->GetName());
+					else SObj->SetField(TEXT("clothingAsset"), MakeShared<FJsonValueNull>());
+					SObj->SetNumberField(TEXT("assetLodIndex"), Section.ClothingData.AssetLodIndex);
+
+					TSharedPtr<FJsonObject> Binding = MakeShared<FJsonObject>();
+					Binding->SetNumberField(TEXT("lodIndex"), LodIdx);
+					Binding->SetNumberField(TEXT("sectionIndex"), SectionIdx);
+					Binding->SetNumberField(TEXT("assetLodIndex"), Section.ClothingData.AssetLodIndex);
+					BindingsByGuid.FindOrAdd(Section.ClothingData.AssetGuid).Add(MakeShared<FJsonValueObject>(Binding));
+				}
+				else
+				{
+					SObj->SetField(TEXT("clothingAsset"), MakeShared<FJsonValueNull>());
+				}
+				Sections.Add(MakeShared<FJsonValueObject>(SObj));
+			}
+		}
+	}
+
 	TArray<TSharedPtr<FJsonValue>> Assets;
+	TArray<TSharedPtr<FJsonValue>> Unbound;
 	for (UClothingAssetBase* Base : Mesh->GetMeshClothingAssets())
 	{
 		UClothingAssetCommon* Cloth = Cast<UClothingAssetCommon>(Base);
@@ -1360,6 +1405,10 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadClothData(const TSharedPtr<FJsonObjec
 
 		TSharedPtr<FJsonObject> AObj = MakeShared<FJsonObject>();
 		AObj->SetStringField(TEXT("name"), Cloth->GetName());
+		const TArray<TSharedPtr<FJsonValue>>* Bindings = BindingsByGuid.Find(Cloth->GetAssetGuid());
+		AObj->SetArrayField(TEXT("boundSections"), Bindings ? *Bindings : TArray<TSharedPtr<FJsonValue>>());
+		AObj->SetBoolField(TEXT("bound"), Bindings && Bindings->Num() > 0);
+		if (!Bindings || Bindings->Num() == 0) Unbound.Add(MakeShared<FJsonValueString>(Cloth->GetName()));
 
 		// Configs (each a UClothConfigBase subclass) - dump editable UPROPERTYs.
 		TSharedPtr<FJsonObject> Configs = MakeShared<FJsonObject>();
@@ -1412,6 +1461,270 @@ TSharedPtr<FJsonValue> FAssetHandlers::ReadClothData(const TSharedPtr<FJsonObjec
 	Result->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
 	Result->SetNumberField(TEXT("clothingAssetCount"), Assets.Num());
 	Result->SetArrayField(TEXT("clothingAssets"), Assets);
+	Result->SetArrayField(TEXT("sections"), Sections);
+	Result->SetArrayField(TEXT("unboundClothingAssets"), Unbound);
+	if (Unbound.Num() > 0)
+	{
+		Result->SetStringField(TEXT("note"), TEXT("A clothing asset bound to no section never simulates. Bind it with asset(bind_cloth_to_section)."));
+	}
+	return MCPResult(Result);
+}
+
+namespace
+{
+	/** The mesh's clothing asset by name, or its only one when Name is empty. */
+	UClothingAssetCommon* FindMeshClothingAsset(USkeletalMesh* Mesh, const FString& Name, FString& OutError)
+	{
+		TArray<UClothingAssetCommon*> All;
+		for (UClothingAssetBase* Base : Mesh->GetMeshClothingAssets())
+		{
+			if (UClothingAssetCommon* Cloth = Cast<UClothingAssetCommon>(Base)) All.Add(Cloth);
+		}
+		TArray<FString> Names;
+		for (UClothingAssetCommon* Cloth : All)
+		{
+			if (!Name.IsEmpty() && Cloth->GetName() == Name) return Cloth;
+			Names.Add(Cloth->GetName());
+		}
+		if (Name.IsEmpty() && All.Num() == 1) return All[0];
+		OutError = All.Num() == 0
+			? FString::Printf(TEXT("SkeletalMesh %s has no clothing assets"), *Mesh->GetPathName())
+			: Name.IsEmpty()
+				? FString::Printf(TEXT("SkeletalMesh has %d clothing assets; pass clothingAsset as one of [%s]"), All.Num(), *FString::Join(Names, TEXT(", ")))
+				: FString::Printf(TEXT("Clothing asset '%s' not found; available: [%s]"), *Name, *FString::Join(Names, TEXT(", ")));
+		return nullptr;
+	}
+
+	/** Validate lodIndex/sectionIndex against the imported model. */
+	FSkelMeshSection* FindClothSection(USkeletalMesh* Mesh, int32 LodIndex, int32 SectionIndex, FString& OutError)
+	{
+		FSkeletalMeshModel* Model = Mesh->GetImportedModel();
+		if (!Model || Model->LODModels.Num() == 0)
+		{
+			OutError = TEXT("SkeletalMesh has no imported model data");
+			return nullptr;
+		}
+		if (LodIndex < 0 || LodIndex >= Model->LODModels.Num())
+		{
+			OutError = FString::Printf(TEXT("lodIndex %d out of range (0-%d)"), LodIndex, Model->LODModels.Num() - 1);
+			return nullptr;
+		}
+		FSkeletalMeshLODModel& LodModel = Model->LODModels[LodIndex];
+		if (SectionIndex < 0 || SectionIndex >= LodModel.Sections.Num())
+		{
+			OutError = FString::Printf(TEXT("sectionIndex %d out of range for LOD %d (0-%d)"), SectionIndex, LodIndex, LodModel.Sections.Num() - 1);
+			return nullptr;
+		}
+		return &LodModel.Sections[SectionIndex];
+	}
+
+	TSharedPtr<FJsonObject> DescribeClothSection(USkeletalMesh* Mesh, const FSkelMeshSection& Section)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		const bool bBound = Section.ClothingData.IsValid();
+		Obj->SetBoolField(TEXT("usesCloth"), bBound);
+		UClothingAssetBase* Asset = bBound ? Mesh->GetClothingAsset(Section.ClothingData.AssetGuid) : nullptr;
+		if (Asset) Obj->SetStringField(TEXT("clothingAsset"), Asset->GetName());
+		else Obj->SetField(TEXT("clothingAsset"), MakeShared<FJsonValueNull>());
+		if (bBound) Obj->SetNumberField(TEXT("assetLodIndex"), Section.ClothingData.AssetLodIndex);
+		return Obj;
+	}
+}
+
+// ─── #1139 bind_cloth_to_section ────────────────────────────────────
+// Apply a clothing asset to one render section, the way the skeletal mesh
+// editor's section clothing dropdown does. Whatever the section held is
+// unbound first.
+TSharedPtr<FJsonValue> FAssetHandlers::BindClothToSection(const TSharedPtr<FJsonObject>& Params)
+{
+	FString MeshPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("skeletalMeshPath"), TEXT("assetPath"), MeshPath)) return Err;
+	int32 LodIndex = 0;
+	if (!Params->TryGetNumberField(TEXT("lodIndex"), LodIndex)) return MCPError(TEXT("Missing required parameter 'lodIndex'"));
+	int32 SectionIndex = 0;
+	if (!Params->TryGetNumberField(TEXT("sectionIndex"), SectionIndex)) return MCPError(TEXT("Missing required parameter 'sectionIndex'"));
+
+	USkeletalMesh* Mesh = LoadAssetByPath<USkeletalMesh>(MeshPath);
+	if (!Mesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
+	if (MCPIsProtectedAssetPath(Mesh->GetPathName())) return MCPProtectedPathError(Mesh->GetPathName());
+
+	FString Error;
+	UClothingAssetCommon* Cloth = FindMeshClothingAsset(Mesh, OptionalString(Params, TEXT("clothingAsset")), Error);
+	if (!Cloth) return MCPError(Error);
+	FSkelMeshSection* Section = FindClothSection(Mesh, LodIndex, SectionIndex, Error);
+	if (!Section) return MCPError(Error);
+	if (Section->bDisabled)
+	{
+		return MCPError(FString::Printf(TEXT("Section %d of LOD %d is disabled and cannot carry cloth"), SectionIndex, LodIndex));
+	}
+
+	const int32 AssetLodCount = Cloth->LodData.Num();
+	if (AssetLodCount == 0) return MCPError(FString::Printf(TEXT("Clothing asset '%s' has no LOD data to bind"), *Cloth->GetName()));
+	int32 AssetLodIndex = FMath::Min(LodIndex, AssetLodCount - 1);
+	Params->TryGetNumberField(TEXT("assetLodIndex"), AssetLodIndex);
+	if (AssetLodIndex < 0 || AssetLodIndex >= AssetLodCount)
+	{
+		return MCPError(FString::Printf(TEXT("assetLodIndex %d out of range for '%s' (0-%d)"), AssetLodIndex, *Cloth->GetName(), AssetLodCount - 1));
+	}
+
+	TSharedPtr<FJsonObject> Previous = DescribeClothSection(Mesh, *Section);
+	UClothingAssetBase* PreviousAsset = Section->ClothingData.IsValid() ? Mesh->GetClothingAsset(Section->ClothingData.AssetGuid) : nullptr;
+	const int32 PreviousAssetLod = Section->ClothingData.AssetLodIndex;
+	if (PreviousAsset == Cloth && PreviousAssetLod == AssetLodIndex)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetBoolField(TEXT("unchanged"), true);
+		Noop->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
+		Noop->SetNumberField(TEXT("lodIndex"), LodIndex);
+		Noop->SetNumberField(TEXT("sectionIndex"), SectionIndex);
+		Noop->SetObjectField(TEXT("section"), Previous);
+		return MCPResult(Noop);
+	}
+
+	bool bBound = false;
+	{
+		Mesh->Modify();
+		FScopedSkeletalMeshPostEditChange ScopedPostEditChange(Mesh);
+		if (PreviousAsset)
+		{
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+			PreviousAsset->UnbindFromSkeletalMesh(Mesh, LodIndex, SectionIndex);
+#else
+			PreviousAsset->UnbindFromSkeletalMesh(Mesh, LodIndex);
+#endif
+		}
+		bBound = Cloth->BindToSkeletalMesh(Mesh, LodIndex, SectionIndex, AssetLodIndex);
+	}
+
+	// Sections is re-read: binding can rebuild the LOD's section array.
+	Section = FindClothSection(Mesh, LodIndex, SectionIndex, Error);
+	if (!bBound)
+	{
+		return MCPError(FString::Printf(TEXT("BindToSkeletalMesh refused '%s' on LOD %d section %d (asset LOD %d). The Output Log names the reason, usually a mesh/cloth vertex mismatch.%s"),
+			*Cloth->GetName(), LodIndex, SectionIndex, AssetLodIndex,
+			PreviousAsset ? TEXT(" The section's previous clothing asset was already unbound.") : TEXT("")));
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
+	Result->SetStringField(TEXT("clothingAsset"), Cloth->GetName());
+	Result->SetNumberField(TEXT("lodIndex"), LodIndex);
+	Result->SetNumberField(TEXT("sectionIndex"), SectionIndex);
+	Result->SetNumberField(TEXT("assetLodIndex"), AssetLodIndex);
+	Result->SetObjectField(TEXT("previous"), Previous);
+	if (Section) Result->SetObjectField(TEXT("section"), DescribeClothSection(Mesh, *Section));
+	Result->SetBoolField(TEXT("hasActiveClothingAssetsForLod"), Mesh->HasActiveClothingAssetsForLOD(LodIndex));
+	Result->SetBoolField(TEXT("saved"), SaveAssetPackage(Mesh));
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("skeletalMeshPath"), Mesh->GetPathName());
+	Payload->SetNumberField(TEXT("lodIndex"), LodIndex);
+	Payload->SetNumberField(TEXT("sectionIndex"), SectionIndex);
+	if (PreviousAsset)
+	{
+		Payload->SetStringField(TEXT("clothingAsset"), PreviousAsset->GetName());
+		Payload->SetNumberField(TEXT("assetLodIndex"), PreviousAssetLod);
+		MCPSetRollback(Result, TEXT("bind_cloth_to_section"), Payload);
+	}
+	else
+	{
+		MCPSetRollback(Result, TEXT("unbind_cloth_from_section"), Payload);
+	}
+	return MCPResult(Result);
+}
+
+// ─── #1139 unbind_cloth_from_section ────────────────────────────────
+// Remove the clothing asset bound to one render section. The engine unbinds
+// per LOD, so any other section of the same LOD bound to that asset is
+// released too and reported.
+TSharedPtr<FJsonValue> FAssetHandlers::UnbindClothFromSection(const TSharedPtr<FJsonObject>& Params)
+{
+	FString MeshPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("skeletalMeshPath"), TEXT("assetPath"), MeshPath)) return Err;
+	int32 LodIndex = 0;
+	if (!Params->TryGetNumberField(TEXT("lodIndex"), LodIndex)) return MCPError(TEXT("Missing required parameter 'lodIndex'"));
+	int32 SectionIndex = 0;
+	if (!Params->TryGetNumberField(TEXT("sectionIndex"), SectionIndex)) return MCPError(TEXT("Missing required parameter 'sectionIndex'"));
+
+	USkeletalMesh* Mesh = LoadAssetByPath<USkeletalMesh>(MeshPath);
+	if (!Mesh) return MCPError(FString::Printf(TEXT("SkeletalMesh not found: %s"), *MeshPath));
+	if (MCPIsProtectedAssetPath(Mesh->GetPathName())) return MCPProtectedPathError(Mesh->GetPathName());
+
+	FString Error;
+	FSkelMeshSection* Section = FindClothSection(Mesh, LodIndex, SectionIndex, Error);
+	if (!Section) return MCPError(Error);
+
+	UClothingAssetBase* Bound = Section->ClothingData.IsValid() ? Mesh->GetClothingAsset(Section->ClothingData.AssetGuid) : nullptr;
+	if (!Bound)
+	{
+		auto Noop = MCPSuccess();
+		MCPSetExisted(Noop);
+		Noop->SetBoolField(TEXT("unchanged"), true);
+		Noop->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
+		Noop->SetNumberField(TEXT("lodIndex"), LodIndex);
+		Noop->SetNumberField(TEXT("sectionIndex"), SectionIndex);
+		Noop->SetObjectField(TEXT("section"), DescribeClothSection(Mesh, *Section));
+		return MCPResult(Noop);
+	}
+	const FString ExpectedName = OptionalString(Params, TEXT("clothingAsset"));
+	if (!ExpectedName.IsEmpty() && Bound->GetName() != ExpectedName)
+	{
+		return MCPError(FString::Printf(TEXT("Section %d of LOD %d is bound to '%s', not '%s'"), SectionIndex, LodIndex, *Bound->GetName(), *ExpectedName));
+	}
+	const int32 PreviousAssetLod = Section->ClothingData.AssetLodIndex;
+
+	// 5.8 unbinds one section; older engines release every section of the LOD bound to the asset.
+	TArray<TSharedPtr<FJsonValue>> Released;
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+	Released.Add(MakeShared<FJsonValueNumber>(SectionIndex));
+#else
+	{
+		const FGuid BoundGuid = Bound->GetAssetGuid();
+		const FSkeletalMeshLODModel& LodModel = Mesh->GetImportedModel()->LODModels[LodIndex];
+		for (int32 i = 0; i < LodModel.Sections.Num(); ++i)
+		{
+			if (LodModel.Sections[i].ClothingData.AssetGuid == BoundGuid) Released.Add(MakeShared<FJsonValueNumber>(i));
+		}
+	}
+#endif
+
+	{
+		Mesh->Modify();
+		FScopedSkeletalMeshPostEditChange ScopedPostEditChange(Mesh);
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+		Bound->UnbindFromSkeletalMesh(Mesh, LodIndex, SectionIndex);
+#else
+		Bound->UnbindFromSkeletalMesh(Mesh, LodIndex);
+#endif
+	}
+
+	auto Result = MCPSuccess();
+	MCPSetUpdated(Result);
+	Result->SetStringField(TEXT("skeletalMesh"), Mesh->GetPathName());
+	Result->SetStringField(TEXT("clothingAsset"), Bound->GetName());
+	Result->SetNumberField(TEXT("lodIndex"), LodIndex);
+	Result->SetNumberField(TEXT("sectionIndex"), SectionIndex);
+	Result->SetArrayField(TEXT("releasedSections"), Released);
+	if (FSkelMeshSection* After = FindClothSection(Mesh, LodIndex, SectionIndex, Error))
+	{
+		Result->SetObjectField(TEXT("section"), DescribeClothSection(Mesh, *After));
+	}
+	Result->SetBoolField(TEXT("saved"), SaveAssetPackage(Mesh));
+
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("skeletalMeshPath"), Mesh->GetPathName());
+	Payload->SetStringField(TEXT("clothingAsset"), Bound->GetName());
+	Payload->SetNumberField(TEXT("lodIndex"), LodIndex);
+	Payload->SetNumberField(TEXT("sectionIndex"), SectionIndex);
+	Payload->SetNumberField(TEXT("assetLodIndex"), PreviousAssetLod);
+	MCPSetRollback(Result, TEXT("bind_cloth_to_section"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), Released.Num() > 1);
+	if (Released.Num() > 1)
+	{
+		Result->SetStringField(TEXT("rollbackNote"), TEXT("The unbind released every section of this LOD bound to the asset; the rollback rebinds only sectionIndex. Rebind the others listed in releasedSections."));
+	}
 	return MCPResult(Result);
 }
 

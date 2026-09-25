@@ -4,6 +4,7 @@
 #include "UObject/UnrealType.h"
 #include "UObject/PropertyPortFlags.h"
 #include "Misc/OutputDeviceNull.h"
+#include "Misc/DefaultValueHelper.h"
 
 // Structured UE export-text import for container properties (#820).
 //
@@ -208,6 +209,23 @@ namespace MCPPropertyText
 	// return is the failure signal the callers act on.
 	inline bool ImportTextRaw(const FProperty* Prop, void* ValueAddr, const FString& Text, UObject* Owner, int32 PortFlags, FString& OutError)
 	{
+		// The engine's numeric import reads "banana" as 0 and reports success.
+		if (const FNumericProperty* Num = CastField<const FNumericProperty>(Prop))
+		{
+			if (!Num->IsEnum())
+			{
+				const FString Trimmed = Text.TrimStartAndEnd();
+				const bool bValid = Num->IsInteger()
+					? FDefaultValueHelper::IsStringValidInteger(Trimmed)
+					: (FDefaultValueHelper::IsStringValidFloat(Trimmed) || FDefaultValueHelper::IsStringValidInteger(Trimmed));
+				if (!bValid)
+				{
+					OutError = FString::Printf(TEXT("'%s' is not a number"), *Text);
+					return false;
+				}
+			}
+		}
+
 		FOutputDeviceNull Silent;
 		const TCHAR* Rest = Prop->ImportText_Direct(*Text, ValueAddr, Owner, PortFlags, &Silent);
 		if (Rest == nullptr)

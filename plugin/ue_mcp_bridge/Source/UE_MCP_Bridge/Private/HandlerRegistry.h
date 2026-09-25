@@ -20,6 +20,30 @@ public:
 	FMCPHandlerRegistry();
 	~FMCPHandlerRegistry();
 
+	// #1057: handlers registered while this is alive are tagged with Category.
+	class FCategoryScope
+	{
+	public:
+		FCategoryScope(FMCPHandlerRegistry& InRegistry, const FString& Category)
+			: Registry(InRegistry)
+			, Previous(InRegistry.RegistrationCategory)
+		{
+			Registry.RegistrationCategory = Category;
+		}
+		~FCategoryScope()
+		{
+			Registry.RegistrationCategory = Previous;
+		}
+		FCategoryScope(const FCategoryScope&) = delete;
+		FCategoryScope& operator=(const FCategoryScope&) = delete;
+	private:
+		FMCPHandlerRegistry& Registry;
+		FString Previous;
+	};
+
+	// Categories whose handlers report the parameters they never read (#1057).
+	static bool ReportsUnreadParams(const FString& Category);
+
 	// Register a C++ handler
 	void RegisterHandler(const FString& MethodName, FHandlerFunction Handler);
 
@@ -57,6 +81,12 @@ private:
 
 	// Per-handler game-thread timeouts (seconds). Absent = use default.
 	TMap<FString, float> HandlerTimeouts;
+
+	// Category each C++ handler was registered under, when one was set.
+	TMap<FString, FString> HandlerCategories;
+	FString RegistrationCategory;
+
+	void TagCategory(const FString& MethodName);
 
 	// Execute Python handler
 	TSharedPtr<FJsonValue> ExecutePythonHandler(const FString& MethodName, const TSharedPtr<FJsonObject>& Params);

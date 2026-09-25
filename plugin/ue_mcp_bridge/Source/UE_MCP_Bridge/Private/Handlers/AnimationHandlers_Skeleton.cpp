@@ -223,7 +223,7 @@ static TArray<FString> SkeletonNamesToStrings(const TArray<FName>& Names)
 static FString SkeletonReadString(const TSharedPtr<FJsonObject>& Obj, const TCHAR* Key)
 {
 	FString Value;
-	if (Obj.IsValid()) Obj->TryGetStringField(Key, Value);
+	if (Obj.IsValid()) TryGetStringParam(Obj, Key, Value);
 	Value.TrimStartAndEndInline();
 	return Value;
 }
@@ -234,7 +234,7 @@ static TArray<FString> SkeletonReadStringList(const TSharedPtr<FJsonObject>& Par
 	TArray<FString> Out;
 	if (!Params.IsValid()) return Out;
 	const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
-	if (Params->TryGetArrayField(Key, Array) && Array)
+	if (TryGetArrayParam(Params, Key, Array) && Array)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *Array)
 		{
@@ -1041,7 +1041,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditSkeletonBones(const TSharedPtr<FJ
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* EditsArray = nullptr;
-	if (!Params->TryGetArrayField(TEXT("edits"), EditsArray) || !EditsArray || EditsArray->Num() == 0)
+	if (!TryGetArrayParam(Params, TEXT("edits"), EditsArray) || !EditsArray || EditsArray->Num() == 0)
 	{
 		return SkeletonError(
 			TEXT("invalid_params"),
@@ -1868,7 +1868,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBoneRetargeting(const TSharedPtr<F
 	// has no single 'mode' to require. Reading it here is what makes the
 	// rollback replay through this same action rather than needing a second one.
 	const TArray<TSharedPtr<FJsonValue>>* RestoreArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("restore"), RestoreArray) && RestoreArray)
+	if (TryGetArrayParam(Params, TEXT("restore"), RestoreArray) && RestoreArray)
 	{
 		TArray<TSharedPtr<FJsonValue>> RestoreRows;
 		TArray<TSharedPtr<FJsonValue>> PriorForInverse;
@@ -2248,7 +2248,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AuthorBlendProfile(const TSharedPtr<F
 	TArray<FEntryRequest> EntryRequests;
 
 	const TArray<TSharedPtr<FJsonValue>>* EntriesArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("entries"), EntriesArray) && EntriesArray)
+	if (TryGetArrayParam(Params, TEXT("entries"), EntriesArray) && EntriesArray)
 	{
 		int32 EntryIndex = -1;
 		for (const TSharedPtr<FJsonValue>& Value : *EntriesArray)
@@ -2304,7 +2304,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::AuthorBlendProfile(const TSharedPtr<F
 
 	EBlendProfileMode Mode = EBlendProfileMode::TimeFactor;
 	bool bModeRequested = false;
-	if (Params->HasField(TEXT("mode")))
+	if (HasParam(Params, TEXT("mode")))
 	{
 		const FString ModeText = SkeletonReadString(Params, TEXT("mode"));
 		if (!SkeletonParseBlendProfileMode(ModeText, Mode))
@@ -2470,7 +2470,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditCurveMetadata(const TSharedPtr<FJ
 	struct FRenameRequest { FString From; FString To; };
 	TArray<FRenameRequest> Renames;
 	const TArray<TSharedPtr<FJsonValue>>* RenameArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("rename"), RenameArray) && RenameArray)
+	if (TryGetArrayParam(Params, TEXT("rename"), RenameArray) && RenameArray)
 	{
 		int32 Index = -1;
 		for (const TSharedPtr<FJsonValue>& Value : *RenameArray)
@@ -2498,7 +2498,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::EditCurveMetadata(const TSharedPtr<FJ
 	};
 	TArray<FFlagRequest> Flags;
 	const TArray<TSharedPtr<FJsonValue>>* FlagArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("flags"), FlagArray) && FlagArray)
+	if (TryGetArrayParam(Params, TEXT("flags"), FlagArray) && FlagArray)
 	{
 		int32 Index = -1;
 		for (const TSharedPtr<FJsonValue>& Value : *FlagArray)

@@ -8,6 +8,7 @@
 #include "Handlers/AssetHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "Tests/MCPScopedTestMount.h"
 
 #include "EdGraph/EdGraph.h"
 #include "Engine/Blueprint.h"
@@ -24,34 +25,6 @@
 namespace
 {
 	const TCHAR* const MCPGraphTestRoot = TEXT("/UEMCPGraphTest/");
-
-	/** A private content root for the duration of the test, so nothing here
-	 *  can touch the project the bridge happens to be attached to. */
-	struct FScopedGraphTestMount
-	{
-		FString RootPath;
-		FString ContentPath;
-
-		FScopedGraphTestMount()
-			: RootPath(MCPGraphTestRoot)
-			, ContentPath(FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FString(FPlatformProcess::UserTempDir())),
-				FString(TEXT("UEMCPGraphTest")),
-				FGuid::NewGuid().ToString(EGuidFormats::Digits)))
-		{
-			IFileManager::Get().MakeDirectory(*ContentPath, /*Tree=*/true);
-			FPackageName::RegisterMountPoint(RootPath, ContentPath);
-		}
-
-		~FScopedGraphTestMount()
-		{
-			FPackageName::UnRegisterMountPoint(RootPath, ContentPath);
-			IFileManager::Get().DeleteDirectory(*ContentPath, /*RequireExists=*/false, /*Tree=*/true);
-		}
-
-		FScopedGraphTestMount(const FScopedGraphTestMount&) = delete;
-		FScopedGraphTestMount& operator=(const FScopedGraphTestMount&) = delete;
-	};
 
 	/** Through the registry, which also proves the action is registered. */
 	TSharedPtr<FJsonObject> ReadGraph(const FString& AssetPath, int32 MaxNodes = 0)
@@ -95,7 +68,7 @@ bool FMCPAssetReadGraphDefersTest::RunTest(const FString& Parameters)
 {
 	// A Blueprint has blueprint(read_graph) and blueprint(get_connections).
 	// Answering it here too would be a second shape for the same question.
-	const FScopedGraphTestMount Mount;
+	const FMCPScopedTestMount Mount{ FString(MCPGraphTestRoot), TEXT("UEMCPGraphTest") };
 
 	const FString ProbeName = TEXT("BP_GraphProbe_") + FGuid::NewGuid().ToString(EGuidFormats::Digits);
 	const FString PackageName = FString(MCPGraphTestRoot) + ProbeName;

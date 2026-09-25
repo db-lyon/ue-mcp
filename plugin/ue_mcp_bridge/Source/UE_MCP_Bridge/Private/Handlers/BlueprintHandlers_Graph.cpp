@@ -8,6 +8,7 @@
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
 #include "HandlerJsonProperty.h"
+#include "HandlerAnimStateGraph.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/CompilerResultsLog.h"
@@ -973,7 +974,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
-	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
+	FString GraphName = ReadGraphNameOrSelector(Params, TEXT("EventGraph"));
 
 	FString SourceNodeId;
 	if (auto Err = RequireStringAlt(Params, TEXT("sourceNodeId"), TEXT("sourceNode"), SourceNodeId)) return Err;
@@ -1051,39 +1052,48 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 	// Compiling a Blueprint can reinstate pins while leaving links that identify the
 	// same logical pin through a different pointer. Compare stable pin/node identity
 	// as well as pointer identity so an idempotent replay does not break/recreate it.
-	auto IsLogicallyLinkedTo = [](const UEdGraphPin* FromPin, const UEdGraphPin* ToPin)
+	auto IsSameLogicalPin = [](const UEdGraphPin* A, const UEdGraphPin* B)
 	{
-		if (!FromPin || !ToPin)
-		{
-			return false;
-		}
-
+		if (!A || !B) return false;
+		if (A == B || (A->PinId.IsValid() && B->PinId.IsValid() && A->PinId == B->PinId)) return true;
+		const UEdGraphNode* NodeA = A->GetOwningNode();
+		const UEdGraphNode* NodeB = B->GetOwningNode();
+		return NodeA && NodeB && NodeA->NodeGuid == NodeB->NodeGuid
+			&& A->PinName == B->PinName && A->Direction == B->Direction;
+	};
+	auto IsLogicallyLinkedTo = [&IsSameLogicalPin](const UEdGraphPin* FromPin, const UEdGraphPin* ToPin)
+	{
+		if (!FromPin || !ToPin) return false;
 		for (const UEdGraphPin* LinkedPin : FromPin->LinkedTo)
 		{
-			if (!LinkedPin)
-			{
-				continue;
-			}
-			if (LinkedPin == ToPin ||
-				(LinkedPin->PinId.IsValid() && ToPin->PinId.IsValid() && LinkedPin->PinId == ToPin->PinId))
-			{
-				return true;
-			}
-
-			const UEdGraphNode* LinkedNode = LinkedPin->GetOwningNode();
-			const UEdGraphNode* ToNode = ToPin->GetOwningNode();
-			if (LinkedNode && ToNode && LinkedNode->NodeGuid == ToNode->NodeGuid &&
-				LinkedPin->PinName == ToPin->PinName && LinkedPin->Direction == ToPin->Direction)
-			{
-				return true;
-			}
+			if (IsSameLogicalPin(LinkedPin, ToPin)) return true;
 		}
-
 		return false;
 	};
 
-	// Idempotency: if already linked between these two pins, short-circuit.
-	if (IsLogicallyLinkedTo(SourcePin, TargetPin) || IsLogicallyLinkedTo(TargetPin, SourcePin))
+	const bool bAlreadyLinked = IsLogicallyLinkedTo(SourcePin, TargetPin) || IsLogicallyLinkedTo(TargetPin, SourcePin);
+
+	// The links a break flag would sever, not counting the requested wire itself.
+	TArray<UEdGraphPin*> PreviousSourceLinks;
+	TArray<UEdGraphPin*> PreviousTargetLinks;
+	if (bBreakExistingSource)
+	{
+		for (UEdGraphPin* Linked : SourcePin->LinkedTo)
+		{
+			if (Linked && !IsSameLogicalPin(Linked, TargetPin)) PreviousSourceLinks.Add(Linked);
+		}
+	}
+	if (bBreakExistingTarget)
+	{
+		for (UEdGraphPin* Linked : TargetPin->LinkedTo)
+		{
+			if (Linked && !IsSameLogicalPin(Linked, SourcePin)) PreviousTargetLinks.Add(Linked);
+		}
+	}
+
+	// Idempotency: the wire exists and no break flag has anything else to sever.
+	// A requested break is still applied when the wire already exists.
+	if (bAlreadyLinked && PreviousSourceLinks.Num() == 0 && PreviousTargetLinks.Num() == 0)
 	{
 		auto Existed = MCPSuccess();
 		MCPSetExisted(Existed);
@@ -1105,24 +1115,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		return MCPError(TEXT("Graph has no schema"));
 	}
 
-	TArray<UEdGraphPin*> PreviousSourceLinks;
-	TArray<UEdGraphPin*> PreviousTargetLinks;
-	if (bBreakExistingSource)
-	{
-		PreviousSourceLinks = SourcePin->LinkedTo;
-	}
-	if (bBreakExistingTarget)
-	{
-		PreviousTargetLinks = TargetPin->LinkedTo;
-	}
+	// Everything the failure path must restore, the requested wire included.
+	const TArray<UEdGraphPin*> RestoreSourceLinks = bBreakExistingSource ? SourcePin->LinkedTo : TArray<UEdGraphPin*>();
+	const TArray<UEdGraphPin*> RestoreTargetLinks = bBreakExistingTarget ? TargetPin->LinkedTo : TArray<UEdGraphPin*>();
 	const int32 BrokenSourceLinks = PreviousSourceLinks.Num();
 	const int32 BrokenTargetLinks = PreviousTargetLinks.Num();
 
 	// Identity of every link about to be broken, recorded while the pins are
-	// still linked. There is no action that breaks a pin link, so the only undo
-	// is re-making these with connect_pins; a result that said "re-connect them"
-	// while reporting nothing but a COUNT prescribed something the caller had no
-	// way to do.
+	// still linked, so connect_pins can re-make each one.
 	auto DescribeLinks = [](const TArray<UEdGraphPin*>& Links)
 	{
 		TArray<TSharedPtr<FJsonValue>> Out;
@@ -1177,32 +1177,58 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 		SaveAssetPackage(Blueprint);
 
 		auto Result = MCPSuccess();
-		MCPSetCreated(Result);
+		if (bAlreadyLinked)
+		{
+			MCPSetUpdated(Result);
+		}
+		else
+		{
+			MCPSetCreated(Result);
+		}
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("graphName"), GraphName);
 		Result->SetStringField(TEXT("sourceNodeId"), SourceNodeId);
 		Result->SetStringField(TEXT("sourcePinName"), SourcePinName);
 		Result->SetStringField(TEXT("targetNodeId"), TargetNodeId);
 		Result->SetStringField(TEXT("targetPinName"), TargetPinName);
+		Result->SetBoolField(TEXT("alreadyConnected"), bAlreadyLinked);
 		Result->SetNumberField(TEXT("brokenSourceLinks"), BrokenSourceLinks);
 		Result->SetNumberField(TEXT("brokenTargetLinks"), BrokenTargetLinks);
 		Result->SetArrayField(TEXT("brokenSourceLinkDetail"), BrokenSourceDetail);
 		Result->SetArrayField(TEXT("brokenTargetLinkDetail"), BrokenTargetDetail);
-		// Undoing a wire means breaking it, and the Blueprint surface has no
-		// action that breaks a pin link: delete_node removes whole nodes, which
-		// would destroy work this call never touched. Nothing is invented here.
-		Result->SetBoolField(TEXT("rollbackPossible"), false);
-		Result->SetStringField(TEXT("rollbackNote"), (BrokenSourceLinks + BrokenTargetLinks) > 0
-			? FString::Printf(TEXT(
-				"No action breaks a Blueprint pin link, so this connection has no inverse call. delete_node is not "
-				"it: it would remove a whole node this call only wired up. The %d link(s) that breakExistingSource "
-				"or breakExistingTarget severed are named in brokenSourceLinkDetail and brokenTargetLinkDetail, "
-				"each with its nodeId, pinName and direction; feed those back through connect_pins to re-make them."),
-				BrokenSourceLinks + BrokenTargetLinks)
-			: FString(TEXT(
-				"No action breaks a Blueprint pin link, so this connection has no inverse call. delete_node is not "
-				"it: it would remove a whole node this call only wired up. This call broke no existing links, so "
-				"the only thing to undo is the one wire it made.")));
+
+		const int32 BrokenTotal = BrokenSourceLinks + BrokenTargetLinks;
+		if (bAlreadyLinked)
+		{
+			// Only the breaks changed anything, and re-making those is one
+			// connect_pins call per link, so no single inverse exists.
+			Result->SetBoolField(TEXT("rollbackPossible"), false);
+			Result->SetStringField(TEXT("rollbackNote"), FString::Printf(TEXT(
+				"The wire already existed; this call only severed %d other link(s). They are named in "
+				"brokenSourceLinkDetail and brokenTargetLinkDetail; feed each back through connect_pins to re-make it."),
+				BrokenTotal));
+		}
+		else
+		{
+			// disconnect_pins breaks exactly the wire this call made.
+			TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+			Payload->SetStringField(TEXT("path"), AssetPath);
+			Payload->SetStringField(TEXT("graphName"), GraphName);
+			Payload->SetStringField(TEXT("nodeId"), SourceNode->NodeGuid.ToString());
+			Payload->SetStringField(TEXT("pinName"), SourcePinName);
+			Payload->SetStringField(TEXT("linkedNodeId"), TargetNode->NodeGuid.ToString());
+			Payload->SetStringField(TEXT("linkedPinName"), TargetPinName);
+			MCPSetRollback(Result, TEXT("disconnect_pins"), Payload);
+			if (BrokenTotal > 0)
+			{
+				Result->SetBoolField(TEXT("rollbackLossy"), true);
+				Result->SetStringField(TEXT("rollbackNote"), FString::Printf(TEXT(
+					"disconnect_pins removes the wire this call made. The %d link(s) that breakExistingSource or "
+					"breakExistingTarget severed are named in brokenSourceLinkDetail and brokenTargetLinkDetail; "
+					"feed each back through connect_pins to re-make it."),
+					BrokenTotal));
+			}
+		}
 		return MCPResult(Result);
 	}
 	else
@@ -1215,14 +1241,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ConnectPins(const TSharedPtr<FJsonObj
 			ErrorMsg = FString::Printf(TEXT("Connection failed: %s"), *Response.Message.ToString());
 		}
 
-		for (UEdGraphPin* PreviousPin : PreviousSourceLinks)
+		for (UEdGraphPin* PreviousPin : RestoreSourceLinks)
 		{
 			if (PreviousPin && !SourcePin->LinkedTo.Contains(PreviousPin))
 			{
 				SourcePin->MakeLinkTo(PreviousPin);
 			}
 		}
-		for (UEdGraphPin* PreviousPin : PreviousTargetLinks)
+		for (UEdGraphPin* PreviousPin : RestoreTargetLinks)
 		{
 			if (PreviousPin && !TargetPin->LinkedTo.Contains(PreviousPin))
 			{
@@ -1243,7 +1269,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
 
-	FString GraphName = OptionalString(Params, TEXT("graphName"), TEXT("EventGraph"));
+	FString GraphName = ReadGraphNameOrSelector(Params, TEXT("EventGraph"));
 
 	FString NodeId;
 	if (auto Err = RequireStringAlt(Params, TEXT("nodeId"), TEXT("nodeName"), NodeId)) return Err;
@@ -1454,7 +1480,17 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	// MarkBlueprintAsStructurallyModified on its own way out
 	// (BlueprintEditorUtils.cpp:2575-2578).
 	const bool bDestroyUnregistersArchetype = bIsAddComponent || bIsTimeline;
-	if (bDestroyUnregistersArchetype)
+	// A state machine node (state, conduit, alias, transition) goes through the
+	// same teardown as animation(remove_state): every transition touching it and
+	// every bound graph, or the next compile fails.
+	UAnimStateNodeBase* AnimStateNode = Cast<UAnimStateNodeBase>(NodeToDelete);
+	MCPAnimStateGraph::FStateTeardown AnimTeardown;
+	if (AnimStateNode)
+	{
+		UEdGraph* OwningGraph = NodeToDelete->GetGraph() ? NodeToDelete->GetGraph() : TargetGraph;
+		AnimTeardown = MCPAnimStateGraph::RemoveStateWithTransitions(Blueprint, OwningGraph, AnimStateNode);
+	}
+	else if (bDestroyUnregistersArchetype)
 	{
 		NodeToDelete->BreakAllNodeLinks();
 		TargetGraph->RemoveNode(NodeToDelete);
@@ -1472,6 +1508,19 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 	Result->SetStringField(TEXT("graphName"), GraphName);
 	Result->SetStringField(TEXT("nodeId"), NodeId);
 	Result->SetBoolField(TEXT("deleted"), true);
+	if (AnimStateNode)
+	{
+		Result->SetArrayField(TEXT("removedTransitions"), AnimTeardown.RemovedTransitions);
+		Result->SetNumberField(TEXT("removedTransitionCount"), AnimTeardown.RemovedTransitions.Num());
+		Result->SetNumberField(TEXT("sharedRuleGraphsKept"), AnimTeardown.SharedRuleGraphsKept);
+		Result->SetBoolField(TEXT("wasEntryState"), AnimTeardown.bWasEntryState);
+		if (AnimTeardown.bWasEntryState)
+		{
+			Result->SetStringField(TEXT("warning"),
+				TEXT("This was the state machine's entry state, so the machine now has no initial state. ")
+				TEXT("Point it at another state with animation(set_state_machine_entry)."));
+		}
+	}
 
 	// The inverse is import_nodes_t3d fed the node's own exported text. It puts
 	// an equivalent node back in the same graph, but either removal path above
@@ -1554,6 +1603,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 				"(UEdGraphSchema_K2::CreateSubstituteNode), which overrides nothing. Paste back into the state the "
 				"delete left, not after re-adding the event.");
 		}
+		if (AnimStateNode && AnimTeardown.RemovedTransitions.Num() > 0)
+		{
+			Note += FString::Printf(TEXT(
+				" The %d transition(s) removed with this state are not restored. They are listed in removedTransitions "
+				"so they can be replayed with animation(add_transition)."),
+				AnimTeardown.RemovedTransitions.Num());
+		}
 		Result->SetStringField(TEXT("rollbackNote"), Note);
 	}
 	else
@@ -1565,6 +1621,287 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteNode(const TSharedPtr<FJsonObje
 			"reads the same CanDuplicateNode and would refuse the block, so exporting it would have produced a "
 			"rollback that does nothing. Rebuild the node with add_node."),
 			*NodeId, *NodeClassName));
+	}
+	return MCPResult(Result);
+}
+
+
+// ---------------------------------------------------------------------------
+// refresh_node: the editor's Refresh Node. Rebuilds the pins from the node's
+// current definition; breakOrphanedPins also clears pins that only survive
+// because they are still linked (a removed enum value, a deleted parameter).
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::RefreshNode(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+
+	FString GraphName = ReadGraphNameOrSelector(Params, TEXT("EventGraph"));
+
+	FString NodeId;
+	if (auto Err = RequireStringAlt(Params, TEXT("nodeId"), TEXT("nodeName"), NodeId)) return Err;
+
+	const bool bBreakOrphanedPins = OptionalBool(Params, TEXT("breakOrphanedPins"), false);
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+
+	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
+	if (!TargetGraph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	UEdGraphNode* Node = FindNodeByGuidOrName(TargetGraph, NodeId);
+	if (!Node) return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeId));
+
+	const UEdGraphSchema* Schema = Node->GetSchema();
+	if (!Schema) return MCPError(TEXT("Node has no schema"));
+
+	auto DescribeLink = [](const UEdGraphPin* LinkedPin)
+	{
+		const UEdGraphNode* Owner = LinkedPin->GetOwningNode();
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("nodeId"), Owner ? Owner->NodeGuid.ToString() : FString());
+		O->SetStringField(TEXT("pinName"), LinkedPin->PinName.ToString());
+		O->SetStringField(TEXT("direction"), LinkedPin->Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
+		return O;
+	};
+	// Pin name, category and link count per pin: enough to tell whether the
+	// rebuild changed anything.
+	auto PinSignature = [](const UEdGraphNode* N)
+	{
+		TArray<FString> Parts;
+		for (const UEdGraphPin* Pin : N->Pins)
+		{
+			if (!Pin) continue;
+			Parts.Add(FString::Printf(TEXT("%s:%s:%s:%d:%d"), *Pin->PinName.ToString(),
+				*Pin->PinType.PinCategory.ToString(), *Pin->PinType.PinSubCategory.ToString(),
+				Pin->LinkedTo.Num(), Pin->bOrphanedPin ? 1 : 0));
+		}
+		return FString::Join(Parts, TEXT("|"));
+	};
+	auto OrphanedPins = [&DescribeLink](const UEdGraphNode* N)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const UEdGraphPin* Pin : N->Pins)
+		{
+			if (!Pin || !Pin->bOrphanedPin) continue;
+			TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("pinName"), Pin->PinName.ToString());
+			O->SetStringField(TEXT("direction"), Pin->Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
+			TArray<TSharedPtr<FJsonValue>> Links;
+			for (const UEdGraphPin* Linked : Pin->LinkedTo)
+			{
+				if (Linked) Links.Add(MakeShared<FJsonValueObject>(DescribeLink(Linked)));
+			}
+			O->SetArrayField(TEXT("links"), Links);
+			Out.Add(MakeShared<FJsonValueObject>(O));
+		}
+		return Out;
+	};
+
+	const FString Before = PinSignature(Node);
+	const int32 PinsBefore = Node->Pins.Num();
+
+	Schema->ReconstructNode(*Node);
+
+	// An orphaned pin survives a rebuild only while it is linked, so breaking
+	// its links and rebuilding again removes it.
+	TArray<TSharedPtr<FJsonValue>> BrokenOrphanLinks;
+	if (bBreakOrphanedPins)
+	{
+		TArray<UEdGraphPin*> Orphans;
+		for (UEdGraphPin* Pin : Node->Pins)
+		{
+			if (Pin && Pin->bOrphanedPin && Pin->LinkedTo.Num() > 0) Orphans.Add(Pin);
+		}
+		for (UEdGraphPin* Pin : Orphans)
+		{
+			for (const UEdGraphPin* Linked : Pin->LinkedTo)
+			{
+				if (!Linked) continue;
+				TSharedPtr<FJsonObject> O = DescribeLink(Linked);
+				O->SetStringField(TEXT("orphanedPin"), Pin->PinName.ToString());
+				BrokenOrphanLinks.Add(MakeShared<FJsonValueObject>(O));
+			}
+			Schema->BreakPinLinks(*Pin, true);
+		}
+		if (Orphans.Num() > 0)
+		{
+			Schema->ReconstructNode(*Node);
+		}
+	}
+
+	const FString After = PinSignature(Node);
+	const bool bChanged = Before != After || BrokenOrphanLinks.Num() > 0;
+	const TArray<TSharedPtr<FJsonValue>> RemainingOrphans = OrphanedPins(Node);
+
+	if (bChanged)
+	{
+		FKismetEditorUtilities::CompileBlueprint(Blueprint);
+		SaveAssetPackage(Blueprint);
+	}
+
+	auto Result = MCPSuccess();
+	if (bChanged)
+	{
+		MCPSetUpdated(Result);
+	}
+	else
+	{
+		MCPSetExisted(Result);
+	}
+	Result->SetBoolField(TEXT("unchanged"), !bChanged);
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("graphName"), GraphName);
+	Result->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
+	Result->SetNumberField(TEXT("pinsBefore"), PinsBefore);
+	Result->SetNumberField(TEXT("pinsAfter"), Node->Pins.Num());
+	Result->SetArrayField(TEXT("brokenOrphanLinks"), BrokenOrphanLinks);
+	Result->SetArrayField(TEXT("orphanedPins"), RemainingOrphans);
+	if (RemainingOrphans.Num() > 0)
+	{
+		Result->SetStringField(TEXT("note"), TEXT(
+			"Some pins are orphaned: they no longer exist on the node's definition but are still linked, which fails "
+			"the compile. Pass breakOrphanedPins=true, or break those links with disconnect_pins."));
+	}
+	MCPSetNoRollback(Result, BrokenOrphanLinks.Num() > 0
+		? FString(TEXT("A rebuild restores nothing it removed. The links broken on orphaned pins are listed in "
+			"brokenOrphanLinks, and those pins no longer exist, so they cannot be re-made."))
+		: FString(TEXT("A rebuild derives the pins from the node's current definition; there is no earlier pin set "
+			"to return to.")));
+	return MCPResult(Result);
+}
+
+
+// ---------------------------------------------------------------------------
+// disconnect_pins: break one link (linkedNodeId, optionally linkedPinName) or
+// every link on a pin. The inverse of connect_pins.
+// ---------------------------------------------------------------------------
+TSharedPtr<FJsonValue> FBlueprintHandlers::DisconnectPins(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	if (auto Err = RequireStringAlt(Params, TEXT("path"), TEXT("assetPath"), AssetPath)) return Err;
+
+	FString GraphName = ReadGraphNameOrSelector(Params, TEXT("EventGraph"));
+
+	FString NodeId;
+	if (auto Err = RequireStringAlt(Params, TEXT("nodeId"), TEXT("nodeName"), NodeId)) return Err;
+
+	FString PinName;
+	if (auto Err = RequireString(Params, TEXT("pinName"), PinName)) return Err;
+
+	const FString LinkedNodeId = OptionalString(Params, TEXT("linkedNodeId"));
+	const FString LinkedPinName = OptionalString(Params, TEXT("linkedPinName"));
+
+	UBlueprint* Blueprint = LoadBlueprint(AssetPath);
+	if (!Blueprint) return BlueprintNotFoundError(AssetPath);
+
+	UEdGraph* TargetGraph = FindGraph(Blueprint, GraphName);
+	if (!TargetGraph) return MCPError(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+
+	UEdGraphNode* Node = FindNodeByGuidOrName(TargetGraph, NodeId);
+	if (!Node) return MCPError(FString::Printf(TEXT("Node not found: %s"), *NodeId));
+
+	UEdGraphPin* Pin = nullptr;
+	TArray<FString> PinNames;
+	for (UEdGraphPin* Candidate : Node->Pins)
+	{
+		if (!Candidate) continue;
+		PinNames.Add(Candidate->PinName.ToString());
+		if (!Pin && Candidate->PinName.ToString() == PinName) Pin = Candidate;
+	}
+	if (!Pin)
+	{
+		return MCPError(FString::Printf(TEXT("Pin not found: '%s' on node '%s'. Pins: %s"),
+			*PinName, *NodeId, *FString::Join(PinNames, TEXT(", "))));
+	}
+
+	UEdGraphNode* LinkedNode = nullptr;
+	if (!LinkedNodeId.IsEmpty())
+	{
+		LinkedNode = FindNodeByGuidOrName(TargetGraph, LinkedNodeId);
+		if (!LinkedNode) return MCPError(FString::Printf(TEXT("Linked node not found: %s"), *LinkedNodeId));
+	}
+
+	TArray<UEdGraphPin*> ToBreak;
+	for (UEdGraphPin* Linked : Pin->LinkedTo)
+	{
+		if (!Linked) continue;
+		if (LinkedNode && Linked->GetOwningNode() != LinkedNode) continue;
+		if (!LinkedPinName.IsEmpty() && Linked->PinName.ToString() != LinkedPinName) continue;
+		ToBreak.Add(Linked);
+	}
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("path"), AssetPath);
+	Result->SetStringField(TEXT("graphName"), GraphName);
+	Result->SetStringField(TEXT("nodeId"), Node->NodeGuid.ToString());
+	Result->SetStringField(TEXT("pinName"), PinName);
+
+	if (ToBreak.Num() == 0)
+	{
+		MCPSetExisted(Result);
+		Result->SetBoolField(TEXT("alreadyDisconnected"), true);
+		Result->SetNumberField(TEXT("brokenLinkCount"), 0);
+		Result->SetArrayField(TEXT("brokenLinks"), TArray<TSharedPtr<FJsonValue>>());
+		return MCPResult(Result);
+	}
+
+	const UEdGraphSchema* Schema = TargetGraph->GetSchema();
+	if (!Schema) return MCPError(TEXT("Graph has no schema"));
+
+	TArray<TSharedPtr<FJsonValue>> BrokenLinks;
+	for (UEdGraphPin* Linked : ToBreak)
+	{
+		const UEdGraphNode* Owner = Linked->GetOwningNode();
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("nodeId"), Owner ? Owner->NodeGuid.ToString() : FString());
+		O->SetStringField(TEXT("pinName"), Linked->PinName.ToString());
+		O->SetStringField(TEXT("direction"), Linked->Direction == EGPD_Input ? TEXT("input") : TEXT("output"));
+		BrokenLinks.Add(MakeShared<FJsonValueObject>(O));
+	}
+
+	// One link: the inverse is a single connect_pins, output side as source.
+	TSharedPtr<FJsonObject> Payload;
+	if (ToBreak.Num() == 1)
+	{
+		UEdGraphPin* Other = ToBreak[0];
+		const bool bPinIsSource = Pin->Direction == EGPD_Output;
+		UEdGraphPin* SourcePin = bPinIsSource ? Pin : Other;
+		UEdGraphPin* TargetPinForRollback = bPinIsSource ? Other : Pin;
+		if (SourcePin->GetOwningNode() && TargetPinForRollback->GetOwningNode())
+		{
+			Payload = MakeShared<FJsonObject>();
+			Payload->SetStringField(TEXT("path"), AssetPath);
+			Payload->SetStringField(TEXT("graphName"), GraphName);
+			Payload->SetStringField(TEXT("sourceNodeId"), SourcePin->GetOwningNode()->NodeGuid.ToString());
+			Payload->SetStringField(TEXT("sourcePin"), SourcePin->PinName.ToString());
+			Payload->SetStringField(TEXT("targetNodeId"), TargetPinForRollback->GetOwningNode()->NodeGuid.ToString());
+			Payload->SetStringField(TEXT("targetPin"), TargetPinForRollback->PinName.ToString());
+		}
+	}
+
+	for (UEdGraphPin* Linked : ToBreak)
+	{
+		Schema->BreakSinglePinLink(Pin, Linked);
+	}
+
+	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+	SaveAssetPackage(Blueprint);
+
+	MCPSetUpdated(Result);
+	Result->SetBoolField(TEXT("alreadyDisconnected"), false);
+	Result->SetNumberField(TEXT("brokenLinkCount"), BrokenLinks.Num());
+	Result->SetArrayField(TEXT("brokenLinks"), BrokenLinks);
+	if (Payload.IsValid())
+	{
+		MCPSetRollback(Result, TEXT("connect_pins"), Payload);
+	}
+	else
+	{
+		MCPSetNoRollback(Result, FString::Printf(TEXT(
+			"%d links were broken and one call re-makes one link. Each is listed in brokenLinks with its nodeId, "
+			"pinName and direction; feed each back through connect_pins against '%s' on this node."),
+			BrokenLinks.Num(), *PinName));
 	}
 	return MCPResult(Result);
 }

@@ -180,4 +180,42 @@ bool FGasLiveAttributeRegistrationTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGasLooseTagRegistrationTest,
+	"UE.MCP.Gas.LooseTags.RegistrationAndPreflight",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGasLooseTagRegistrationTest::RunTest(const FString& Parameters)
+{
+	FMCPHandlerRegistry Registry;
+	FGasHandlers::RegisterHandlers(Registry);
+
+	for (const TCHAR* Method : { TEXT("add_loose_gameplay_tag"), TEXT("remove_loose_gameplay_tag") })
+	{
+		TestTrue(FString::Printf(TEXT("%s is registered"), Method), Registry.HasHandler(Method));
+
+		// #1104: tag and count are checked before any world lookup.
+		const TSharedPtr<FJsonValue> Missing = Registry.ExecuteHandler(Method, MakeShared<FJsonObject>());
+		if (TestTrue(TEXT("preflight returns an object"), Missing.IsValid() && Missing->Type == EJson::Object))
+		{
+			TestFalse(TEXT("a missing tag is refused"), Missing->AsObject()->GetBoolField(TEXT("success")));
+			TestTrue(TEXT("the refusal names the tag parameter"),
+				Missing->AsObject()->GetStringField(TEXT("error")).Contains(TEXT("tag")));
+		}
+
+		TSharedPtr<FJsonObject> ZeroCount = MakeShared<FJsonObject>();
+		ZeroCount->SetStringField(TEXT("tag"), TEXT("Any.Tag"));
+		ZeroCount->SetNumberField(TEXT("count"), 0);
+		const TSharedPtr<FJsonValue> Zero = Registry.ExecuteHandler(Method, ZeroCount);
+		if (TestTrue(TEXT("count preflight returns an object"), Zero.IsValid() && Zero->Type == EJson::Object))
+		{
+			TestFalse(TEXT("count 0 is refused"), Zero->AsObject()->GetBoolField(TEXT("success")));
+			TestTrue(TEXT("the refusal names count"),
+				Zero->AsObject()->GetStringField(TEXT("error")).Contains(TEXT("count")));
+		}
+	}
+
+	return true;
+}
+
 #endif

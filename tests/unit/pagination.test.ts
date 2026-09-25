@@ -111,7 +111,7 @@ describe("paged()", () => {
 });
 
 describe("the reflection category, which is the first adopter", () => {
-  const pagedActions = ["list_classes", "list_tags", "list_loaded_modules", "reflect_instance"];
+  const pagedActions = ["list_classes", "list_structs", "list_tags", "list_loaded_modules", "reflect_instance"];
 
   it("declares cursor and limit in its shape", () => {
     expect(reflectionTool.schema.cursor).toBeDefined();
@@ -152,6 +152,14 @@ describe("the reflection category, which is the first adopter", () => {
     }
     // objectPath is the one required selector; everything else narrows.
     expect(documented.find((p) => p.name === "objectPath")?.optional).toBe(false);
+  });
+
+  it("forwards list_structs' package and name filters to the bridge (#1088)", () => {
+    const spec = reflectionTool.actions.list_structs;
+    expect(spec.bridge).toBe("list_structs");
+    expect(reflectionTool.schema.package).toBeDefined();
+    expect(spec.mapParams!({ action: "list_structs", package: "/Script/Engine", filter: "Row" }))
+      .toMatchObject({ package: "/Script/Engine", filter: "Row" });
   });
 
   it("keeps limit a positive whole number now that pagination owns it", () => {

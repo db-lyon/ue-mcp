@@ -1,4 +1,5 @@
 #include "MCPEngineStatus.h"
+#include "MCPBridgeStateDir.h"
 
 #include "CoreGlobals.h"
 #include "Containers/Ticker.h"
@@ -525,7 +526,7 @@ TSharedPtr<FJsonObject> FMCPEngineStatus::Snapshot() const
 
 FString FMCPEngineStatus::StatusDir()
 {
-	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("UE_MCP_Bridge"));
+	return UEMCP::BridgeStateDir();
 }
 
 FString FMCPEngineStatus::StatusFilePath()

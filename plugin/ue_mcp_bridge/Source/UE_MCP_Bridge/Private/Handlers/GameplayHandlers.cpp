@@ -138,6 +138,7 @@ void FGameplayHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// mapping context, the live action value, and the audit.
 	Registry.RegisterHandler(TEXT("read_input_action"), &ReadInputAction);
 	Registry.RegisterHandler(TEXT("set_action_triggers"), &SetActionTriggers);
+	Registry.RegisterHandler(TEXT("set_player_mappable_settings"), &SetPlayerMappableSettings);
 	Registry.RegisterHandler(TEXT("apply_mapping_context"), &ApplyMappingContext);
 	Registry.RegisterHandler(TEXT("remove_mapping_context"), &RemoveMappingContext);
 	Registry.RegisterHandler(TEXT("get_action_value"), &GetActionValue);
@@ -1215,8 +1216,26 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJ
 		return MCPError(TEXT("BehaviorTree class not found."));
 	}
 
+	// Resolved before the asset exists, so a bad path creates nothing.
+	const FString BlackboardPath = OptionalString(Params, TEXT("blackboardPath"));
+	UBlackboardData* BB = nullptr;
+	if (!BlackboardPath.IsEmpty())
+	{
+		BB = LoadObject<UBlackboardData>(nullptr, *BlackboardPath);
+		if (!BB) return MCPError(FString::Printf(TEXT("BlackboardData not found: %s"), *BlackboardPath));
+	}
+
 	auto Created = MCPCreateAssetIdempotent<UObject>(Name, PackagePath, OnConflict, TEXT("BehaviorTree"), BTClass, nullptr);
 	if (Created.EarlyReturn) return Created.EarlyReturn;
+
+	if (BB)
+	{
+		if (UBehaviorTree* BT = Cast<UBehaviorTree>(Created.Asset))
+		{
+			BT->BlackboardAsset = BB;
+			BT->PostEditChange();
+		}
+	}
 
 	UEditorAssetLibrary::SaveAsset(Created.Asset->GetPathName());
 
@@ -1224,6 +1243,7 @@ TSharedPtr<FJsonValue> FGameplayHandlers::CreateBehaviorTree(const TSharedPtr<FJ
 	MCPSetCreated(Result);
 	Result->SetStringField(TEXT("path"), Created.Asset->GetPathName());
 	Result->SetStringField(TEXT("name"), Name);
+	if (BB) Result->SetStringField(TEXT("blackboardPath"), BB->GetPathName());
 	MCPSetDeleteAssetRollback(Result, Created.Asset->GetPathName());
 
 	return MCPResult(Result);

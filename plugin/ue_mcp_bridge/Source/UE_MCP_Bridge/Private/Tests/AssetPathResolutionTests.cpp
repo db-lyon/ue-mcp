@@ -17,6 +17,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerUtils.h"
+#include "Tests/MCPScopedTestMount.h"
 
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
@@ -32,32 +33,10 @@ namespace
 {
 	const TCHAR* const MCPAssetPathTestRoot = TEXT("/UEMCPAssetPathTest/");
 
-	/** Mount a private content root for the duration of the test and take it
-	 *  back down again, so no assertion here can touch a user's content. */
-	struct FScopedAssetPathTestMount
+	/** A private content root for one test, so no assertion here can touch a user's content. */
+	struct FScopedAssetPathTestMount : FMCPScopedTestMount
 	{
-		FString RootPath;
-		FString ContentPath;
-
-		FScopedAssetPathTestMount()
-			: RootPath(MCPAssetPathTestRoot)
-			, ContentPath(FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FString(FPlatformProcess::UserTempDir())),
-				FString(TEXT("UEMCPAssetPathTest")),
-				FGuid::NewGuid().ToString(EGuidFormats::Digits)))
-		{
-			IFileManager::Get().MakeDirectory(*ContentPath, /*Tree=*/true);
-			FPackageName::RegisterMountPoint(RootPath, ContentPath);
-		}
-
-		~FScopedAssetPathTestMount()
-		{
-			FPackageName::UnRegisterMountPoint(RootPath, ContentPath);
-			IFileManager::Get().DeleteDirectory(*ContentPath, /*RequireExists=*/false, /*Tree=*/true);
-		}
-
-		FScopedAssetPathTestMount(const FScopedAssetPathTestMount&) = delete;
-		FScopedAssetPathTestMount& operator=(const FScopedAssetPathTestMount&) = delete;
+		FScopedAssetPathTestMount() : FMCPScopedTestMount(FString(MCPAssetPathTestRoot), TEXT("UEMCPAssetPathTest")) {}
 	};
 
 	/** Read one string field off an error response. */

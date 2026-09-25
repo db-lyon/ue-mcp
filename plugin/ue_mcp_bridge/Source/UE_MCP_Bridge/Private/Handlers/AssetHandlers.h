@@ -80,6 +80,15 @@ private:
 	// UPROPERTY and UEdGraphPin is not a UObject - so this is the only way to
 	// read a graph's topology. Lives in AssetHandlers_Graph.cpp.
 	static TSharedPtr<FJsonValue> ReadAssetGraph(const TSharedPtr<FJsonObject>& Params);
+	// #1059: graph authoring through the graph's own schema, and the Mutable
+	// compile. Live in AssetHandlers_Graph.cpp.
+	static TSharedPtr<FJsonValue> ConnectGraphPins(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> DisconnectGraphPins(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> AddGraphNode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> RemoveGraphNode(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> CompileCustomizableObject(const TSharedPtr<FJsonObject>& Params);
+	// A CustomizableObject with its Source graph, through Mutable's factory.
+	static TSharedPtr<FJsonValue> CreateCustomizableObject(const TSharedPtr<FJsonObject>& Params);
 	// A named subobject inside an existing asset's package (#975). Lives in
 	// AssetHandlers_Subobject.cpp.
 	static TSharedPtr<FJsonValue> CreateSubobject(const TSharedPtr<FJsonObject>& Params);
@@ -117,7 +126,12 @@ private:
 	// #595: read/write Chaos cloth data on a skeletal mesh's clothing assets.
 	static TSharedPtr<FJsonValue> ReadClothData(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> SetClothConfig(const TSharedPtr<FJsonObject>& Params);
+	// #1139: bind a clothing asset to a render section, or remove the binding.
+	static TSharedPtr<FJsonValue> BindClothToSection(const TSharedPtr<FJsonObject>& Params);
+	static TSharedPtr<FJsonValue> UnbindClothFromSection(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ImportAnimation(const TSharedPtr<FJsonObject>& Params);
+	// #1096: any source file through a chosen UFactory, unattended.
+	static TSharedPtr<FJsonValue> ImportFile(const TSharedPtr<FJsonObject>& Params);
 
 	// Mesh material handlers
 	static TSharedPtr<FJsonValue> SetMeshMaterial(const TSharedPtr<FJsonObject>& Params);

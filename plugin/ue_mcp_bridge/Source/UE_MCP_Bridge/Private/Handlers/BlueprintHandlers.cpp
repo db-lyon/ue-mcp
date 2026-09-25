@@ -106,6 +106,8 @@ void FBlueprintHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("list_overridable_functions"), &ListOverridableFunctions);
 	Registry.RegisterHandler(TEXT("connect_pins"), &ConnectPins);
 	Registry.RegisterHandler(TEXT("delete_node"), &DeleteNode);
+	Registry.RegisterHandler(TEXT("refresh_node"), &RefreshNode);
+	Registry.RegisterHandler(TEXT("disconnect_pins"), &DisconnectPins);
 	Registry.RegisterHandler(TEXT("set_node_property"), &SetNodeProperty);
 	Registry.RegisterHandler(TEXT("list_blueprint_graphs"), &ListGraphs);
 	Registry.RegisterHandler(TEXT("resolve_blueprint_graph"), &ResolveGraph);
@@ -1442,11 +1444,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 		}
 	}
 
-	FEdGraphPinType PinType = MakePinType(VarType);
-
-	if (PinType.PinCategory == NAME_None)
+	// Containers (int[], set<Name>, map<enum:/Game/E_Foo.E_Foo,float>) share
+	// the vocabulary edit_graph_parameters and list_graph_parameters use.
+	FEdGraphPinType PinType;
+	FString TypeError;
+	if (!ParsePinTypeSpec(VarType, PinType, TypeError))
 	{
-		return MCPError(FString::Printf(TEXT("Unrecognized variable type: '%s'. Use a known type (Bool, Int, Float, String, Name, Text, Byte, Object, Vector, Rotator, Transform, GameplayTag, etc.) or a full class/struct path."), *VarType));
+		return MCPError(FString::Printf(TEXT("Unrecognized variable type: %s"), *TypeError));
 	}
 
 	bool bSuccess = FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarNameFName, PinType);
@@ -1461,6 +1465,8 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddVariable(const TSharedPtr<FJsonObj
 		Result->SetStringField(TEXT("path"), AssetPath);
 		Result->SetStringField(TEXT("variableName"), VarName);
 		Result->SetStringField(TEXT("variableType"), VarType);
+		bool bTypeRoundTrips = true;
+		Result->SetStringField(TEXT("resolvedType"), PinTypeSpec(PinType, bTypeRoundTrips));
 
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("path"), AssetPath);
@@ -2355,6 +2361,9 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::ListBlueprintVariables(const TSharedP
 		TSharedPtr<FJsonObject> VarObj = MakeShared<FJsonObject>();
 		VarObj->SetStringField(TEXT("name"), Var.VarName.ToString());
 		VarObj->SetStringField(TEXT("type"), Var.VarType.PinCategory.ToString());
+		// type stays the pin category; typeSpec is the full add_variable spelling, containers included.
+		bool bSpecRoundTrips = false;
+		VarObj->SetStringField(TEXT("typeSpec"), PinTypeSpec(Var.VarType, bSpecRoundTrips));
 		VarObj->SetStringField(TEXT("guid"), Var.VarGuid.ToString());
 
 		// Check metadata
@@ -2708,13 +2717,10 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::DeleteVariable(const TSharedPtr<FJson
 
 	// The inverse is add_variable, which re-declares the variable with the same
 	// name and type. It is offered only when the type survives the round trip
-	// through add_variable's own vocabulary: that param goes through MakePinType,
-	// which reads scalars, so a container variable has no spelling to hand back
-	// and a rollback naming one would fail on replay.
+	// through add_variable's own vocabulary (ParsePinTypeSpec, containers included).
 	bool bTypeRoundTrips = true;
 	const FString RemovedTypeSpec = PinTypeSpec(RemovedType, bTypeRoundTrips);
-	const bool bScalar = RemovedType.ContainerType == EPinContainerType::None;
-	if (bTypeRoundTrips && bScalar)
+	if (bTypeRoundTrips)
 	{
 		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 		Payload->SetStringField(TEXT("path"), AssetPath);
@@ -2833,11 +2839,11 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::AddLocalVariable(const TSharedPtr<FJs
 		}
 	}
 
-	FEdGraphPinType PinType = MakePinType(TypeStr);
-
-	if (PinType.PinCategory == NAME_None)
+	FEdGraphPinType PinType;
+	FString TypeError;
+	if (!ParsePinTypeSpec(TypeStr, PinType, TypeError))
 	{
-		return MCPError(FString::Printf(TEXT("Unrecognized variable type: '%s'. Use a known type (Bool, Int, Float, String, Name, Text, Byte, Object, Vector, Rotator, Transform, GameplayTag, etc.) or a full class/struct path."), *TypeStr));
+		return MCPError(FString::Printf(TEXT("Unrecognized variable type: %s"), *TypeError));
 	}
 
 	FBPVariableDescription NewVar;

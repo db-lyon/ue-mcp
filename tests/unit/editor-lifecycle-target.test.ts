@@ -17,6 +17,7 @@ vi.mock("../../src/engine-observer.js", async (importOriginal) => {
     ...actual,
     listEditorProcesses: vi.fn(async () => []),
     findInteractiveEditors: vi.fn(async () => []),
+    findProjectEditors: vi.fn(async () => []),
     findEditorByPid: vi.fn(async () => null),
     readEngineState: vi.fn(async () => ({
       running: true,
@@ -31,11 +32,13 @@ vi.mock("../../src/engine-observer.js", async (importOriginal) => {
 });
 
 const observer = await import("../../src/engine-observer.js");
-const { startEditor, stopEditor, restartEditor } = await import("../../src/editor-control.js");
+const { startEditor, stopEditor, restartEditor, resolveOwnedEditor, connectedEditorOf } = await import("../../src/editor-control.js");
 const { bridgeLockfilePath } = await import("../../src/editor-target.js");
 const { ProjectContext } = await import("../../src/project.js");
 
 const findInteractiveEditors = vi.mocked(observer.findInteractiveEditors);
+// Stop and ownership also see headless editors; one list stands in for both here.
+vi.mocked(observer.findProjectEditors).mockImplementation((p) => findInteractiveEditors(p));
 const findEditorByPid = vi.mocked(observer.findEditorByPid);
 
 const temporaryRoots: string[] = [];
@@ -61,6 +64,7 @@ function editor(pid: number, projectPath: string | null): EditorProcess {
 afterEach(() => {
   vi.clearAllMocks();
   findInteractiveEditors.mockResolvedValue([]);
+  findEditorByPid.mockReset();
   findEditorByPid.mockResolvedValue(null);
   while (temporaryRoots.length > 0) {
     fs.rmSync(temporaryRoots.pop()!, { recursive: true, force: true });
@@ -189,6 +193,87 @@ describe("stopEditor targeting", () => {
     expect(result.success).toBe(false);
     expect(result.alreadyStopped).toBe(true);
     expect(result.message).toContain("no pid");
+  });
+});
+
+/**
+ * A live bridge session knows which editor is answering. A stale port.json
+ * must not turn that into "already stopped" (#1150).
+ */
+describe("the connected session outranks the lockfile", () => {
+  function headless(pid: number, projectPath: string | null): EditorProcess {
+    return { ...editor(pid, projectPath), headless: true };
+  }
+
+  it("aims at the connected headless editor while port.json names a dead pid", async () => {
+    const { projectDir, projectPath } = makeProject();
+    writeLockfile(projectDir, { port: 51999, pid: 4242 });
+    findEditorByPid.mockImplementation(async (pid) => (pid === 777 ? headless(777, projectPath) : null));
+
+    const ownership = await resolveOwnedEditor(projectDir, projectPath, { pid: 777, port: 52222, projectPath });
+    expect(ownership).toMatchObject({ owned: true, pid: 777, port: 52222, source: "connected-session" });
+  });
+
+  it("stop_editor does not report alreadyStopped while a session is connected", async () => {
+    const { projectDir, projectPath } = makeProject();
+    writeLockfile(projectDir, { port: 51999, pid: 4242 });
+    findEditorByPid.mockImplementation(async (pid) => (pid === 777 ? headless(777, projectPath) : null));
+    findInteractiveEditors.mockResolvedValue([headless(777, projectPath)]);
+
+    const result = await stopEditor(projectDir, { connected: { pid: 777, port: 52222, projectPath } });
+    expect(result.alreadyStopped).toBeUndefined();
+    expect(result.message).not.toContain("Stale lockfile");
+    // Nothing listens on 52222 in a unit test; reaching the dial is the point.
+    expect(result.message).toContain("bridge is unreachable");
+  });
+
+  it("trusts a live pid the process probe could not see", async () => {
+    const { projectDir, projectPath } = makeProject();
+    writeLockfile(projectDir, { port: 51999, pid: 4242 });
+
+    const ownership = await resolveOwnedEditor(projectDir, projectPath, { pid: process.pid, port: 52222, projectPath: null });
+    expect(ownership).toMatchObject({ owned: true, pid: process.pid, source: "connected-session" });
+  });
+
+  it("ignores a session aimed at another project", async () => {
+    const { projectDir, projectPath } = makeProject();
+    const other = path.join(os.tmpdir(), "SomeoneElse", "Other.uproject");
+    writeLockfile(projectDir, { port: 51999, pid: 4242 });
+    findEditorByPid.mockImplementation(async (pid) => (pid === 777 ? editor(777, other) : null));
+
+    const ownership = await resolveOwnedEditor(projectDir, projectPath, { pid: 777, port: 52222, projectPath: other });
+    expect(ownership.owned).toBe(false);
+    if (!ownership.owned) expect(ownership.message).toContain("Stale lockfile");
+  });
+
+  it("ignores a connected pid whose process has another project open", async () => {
+    const { projectDir, projectPath } = makeProject();
+    const other = path.join(os.tmpdir(), "SomeoneElse", "Other.uproject");
+    writeLockfile(projectDir, { port: 51999, pid: 4242 });
+    findEditorByPid.mockImplementation(async (pid) => (pid === 777 ? editor(777, other) : null));
+
+    const ownership = await resolveOwnedEditor(projectDir, projectPath, { pid: 777, port: 52222, projectPath });
+    expect(ownership.owned).toBe(false);
+  });
+});
+
+describe("connectedEditorOf", () => {
+  const target = { projectPath: "C:/p/Demo.uproject", port: 51000 };
+
+  it("is null without a live session or a reported pid", () => {
+    expect(connectedEditorOf(null)).toBeNull();
+    expect(connectedEditorOf({ isConnected: false, capabilities: { pid: 7 }, getTarget: () => target })).toBeNull();
+    expect(connectedEditorOf({ isConnected: true, capabilities: {}, getTarget: () => target })).toBeNull();
+  });
+
+  it("takes the pid and port the handshake reported", () => {
+    expect(connectedEditorOf({ isConnected: true, capabilities: { pid: 7, port: 52000 }, getTarget: () => target }))
+      .toEqual({ pid: 7, port: 52000, projectPath: target.projectPath });
+  });
+
+  it("falls back to the target port when the handshake carried none", () => {
+    expect(connectedEditorOf({ isConnected: true, capabilities: { pid: 7 }, getTarget: () => target }))
+      .toEqual({ pid: 7, port: 51000, projectPath: target.projectPath });
   });
 });
 

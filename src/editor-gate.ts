@@ -188,17 +188,20 @@ export const EDITOR_ATTRIBUTION_PREFIX = "MACHINE_EDITOR=";
  * Name the editor a response came from.
  *
  * Returns null at one editor, which is what keeps a single-editor response
- * byte-identical. The prose of the result is never touched: this is an extra
+ * byte-identical, unless several processes hold that editor's project; then
+ * the answering pid is the point (#1150). The prose of the result is never touched: this is an extra
  * content block, the same way MACHINE_ERROR and MACHINE_DIRECTIVE are, so a
  * client that only reads the first block sees exactly what it saw before.
  */
 export function editorAttribution(
-  editor: { name: string; projectPath: string | null },
+  editor: { name: string; projectPath: string | null; pid?: number | null },
   editorCount: number,
+  /** Several processes hold this session's project (#1150). */
+  contested = false,
 ): string | null {
-  if (editorCount <= 1) return null;
+  if (editorCount <= 1 && !contested) return null;
   return (
     EDITOR_ATTRIBUTION_PREFIX +
-    JSON.stringify({ editor: editor.name, project: editor.projectPath })
+    JSON.stringify({ editor: editor.name, project: editor.projectPath, pid: editor.pid ?? undefined })
   );
 }

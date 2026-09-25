@@ -10,6 +10,7 @@
 #include "JsonSerializer.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceConstant.h"
+#include "Materials/MaterialFunction.h"
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionConstant.h"
 #include "Materials/MaterialExpressionConstant3Vector.h"
@@ -435,36 +436,29 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectToMaterialProperty(const TShare
 
 TSharedPtr<FJsonValue> FMaterialHandlers::DeleteMaterialExpression(const TSharedPtr<FJsonObject>& Params)
 {
-	FString MaterialPath;
-	if (auto Err = RequireStringAlt(Params, TEXT("materialPath"), TEXT("path"), MaterialPath)) return Err;
-	if (MaterialPath.IsEmpty())
-	{
-		Params->TryGetStringField(TEXT("assetPath"), MaterialPath);
-		if (MaterialPath.IsEmpty())
-		{
-			return MCPError(TEXT("Missing required parameter 'materialPath' (or 'path')"));
-		}
-	}
+	// #1138: functionPath deletes from a MaterialFunction graph instead.
+	FMaterialGraphTarget Target;
+	if (auto Err = ResolveMaterialGraphTarget(Params, Target)) return Err;
 
 	FString ExpressionName;
 	if (auto Err = RequireString(Params, TEXT("expressionName"), ExpressionName)) return Err;
 
-	UMaterial* Material = LoadMaterialFromPath(MaterialPath);
-	if (!Material)
-	{
-		return MCPError(FString::Printf(TEXT("Failed to load material at '%s'"), *MaterialPath));
-	}
-
-	UMaterialExpression* Expression = FindExpressionByName(Material, ExpressionName);
+	UMaterialExpression* Expression = FindExpressionInList(Target.GetExpressions(), ExpressionName);
 	if (!Expression)
 	{
 		// Idempotent: already deleted
 		auto Noop = MCPSuccess();
-		Noop->SetStringField(TEXT("materialPath"), Material->GetPathName());
+		Noop->SetStringField(Target.GetPathKey(), Target.GetPathName());
 		Noop->SetStringField(TEXT("expressionName"), ExpressionName);
 		Noop->SetBoolField(TEXT("alreadyDeleted"), true);
 		return MCPResult(Noop);
 	}
+
+	if (UMaterialFunction* Function = Target.Function)
+	{
+		return DeleteFunctionExpression(Function, Expression, ExpressionName);
+	}
+	UMaterial* Material = Target.Material;
 
 	FString DeletedClass = Expression->GetClass()->GetName();
 	// Desc, not GetDescription(). Desc is the comment a level designer typed;

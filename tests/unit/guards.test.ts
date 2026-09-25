@@ -90,8 +90,8 @@ describe("options are what the file says now", () => {
     let enabled = true;
     const guards = await buildGuards(
       declare({ freeze: { before: { class_path: "check", options: { enabled: true } } } }),
-      { ...deps(registry), liveOptions: () => ({ enabled }) },
-      SOURCE,
+      deps(registry),
+      { ...SOURCE, liveOptions: () => ({ enabled }) },
     );
 
     await guards[0].before!(callCtx("set_asset_property"));
@@ -114,14 +114,14 @@ describe("options are what the file says now", () => {
           after: { class_path: "audit", options: { which: "declared-after" } },
         },
       }),
+      deps(registry),
       {
-        ...deps(registry),
+        ...SOURCE,
         liveOptions: (name: string, phase: string) => {
           asked.push([name, phase]);
           return { which: `live-${phase}` };
         },
       },
-      SOURCE,
     );
 
     await guards[0].before!(callCtx("set_asset_property"));
@@ -136,8 +136,8 @@ describe("options are what the file says now", () => {
     const registry = registryWith({ check: ALLOW });
     const guards = await buildGuards(
       declare({ fromPlugin: { before: { class_path: "check", options: { enabled: true } } } }),
-      { ...deps(registry), liveOptions: () => undefined },
-      SOURCE,
+      deps(registry),
+      { ...SOURCE, liveOptions: () => undefined },
     );
 
     await guards[0].before!(callCtx("set_asset_property"));

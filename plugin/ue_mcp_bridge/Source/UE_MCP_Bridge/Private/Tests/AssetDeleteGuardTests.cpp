@@ -38,38 +38,11 @@
 #include "UObject/ObjectRedirector.h"
 #include "UObject/Package.h"
 #include "MCPEngineCompat.h"
+#include "Tests/MCPScopedTestMount.h"
 
 namespace
 {
 	const TCHAR* const MCPDeleteGuardTestRoot = TEXT("/UEMCPAssetDeleteGuardTest/");
-
-	/** Mount a private content root for the duration of the test and take it
-	 *  back down again, so no delete here can reach a user's content. */
-	struct FScopedDeleteGuardMount
-	{
-		FString RootPath;
-		FString ContentPath;
-
-		FScopedDeleteGuardMount()
-			: RootPath(MCPDeleteGuardTestRoot)
-			, ContentPath(FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FString(FPlatformProcess::UserTempDir())),
-				FString(TEXT("UEMCPAssetDeleteGuardTest")),
-				FGuid::NewGuid().ToString(EGuidFormats::Digits)))
-		{
-			IFileManager::Get().MakeDirectory(*ContentPath, /*Tree=*/true);
-			FPackageName::RegisterMountPoint(RootPath, ContentPath);
-		}
-
-		~FScopedDeleteGuardMount()
-		{
-			FPackageName::UnRegisterMountPoint(RootPath, ContentPath);
-			IFileManager::Get().DeleteDirectory(*ContentPath, /*RequireExists=*/false, /*Tree=*/true);
-		}
-
-		FScopedDeleteGuardMount(const FScopedDeleteGuardMount&) = delete;
-		FScopedDeleteGuardMount& operator=(const FScopedDeleteGuardMount&) = delete;
-	};
 
 	TSharedPtr<FJsonObject> GuardResponseObject(const TSharedPtr<FJsonValue>& Response)
 	{
@@ -129,7 +102,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPDeleteAssetRefusesReferencedAssetTest::RunTest(const FString& Parameters)
 {
-	const FScopedDeleteGuardMount Mount;
+	const FMCPScopedTestMount Mount{ FString(MCPDeleteGuardTestRoot), TEXT("UEMCPAssetDeleteGuardTest") };
 
 	FMCPHandlerRegistry Registry;
 	FAssetHandlers::RegisterHandlers(Registry);

@@ -25,33 +25,24 @@
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectHash.h"
+#include "Tests/MCPScopedTestMount.h"
 
 namespace MCPBlueprintTransactionalTests
 {
 struct FProbe
 {
+	// First member, so it is destroyed last and evicts the probe package.
+	FMCPScopedTestMount Mount;
 	FString Root;
-	FString Directory;
 	FString PackageName;
 	FString ObjectPath;
 
 	FProbe()
+		: Mount(TEXT("/UEMCPNodeFlags_") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT("/"), TEXT("UEMCPNodeFlags"))
+		, Root(Mount.RootPath)
+		, PackageName(Root + TEXT("BP_Probe"))
+		, ObjectPath(PackageName + TEXT(".BP_Probe"))
 	{
-		const FString Id = FGuid::NewGuid().ToString(EGuidFormats::Digits);
-		Root = TEXT("/UEMCPNodeFlags_") + Id + TEXT("/");
-		Directory = FPaths::Combine(FPlatformProcess::UserTempDir(), TEXT("UEMCPNodeFlags"), Id);
-		IFileManager::Get().MakeDirectory(*Directory, true);
-		FPackageName::RegisterMountPoint(Root, Directory);
-		PackageName = Root + TEXT("BP_Probe");
-		ObjectPath = PackageName + TEXT(".BP_Probe");
-	}
-
-	~FProbe()
-	{
-		ReleasePackage();
-		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
-		FPackageName::UnRegisterMountPoint(Root, Directory);
-		IFileManager::Get().DeleteDirectory(*Directory, false, true);
 	}
 
 	UBlueprint* Create(bool bAnimation = false) const

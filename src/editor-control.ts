@@ -11,6 +11,8 @@ import {
   editorOwnsProject,
   findEditorByPid,
   findInteractiveEditors,
+  findProjectEditors,
+  sameProjectFile,
   readEngineState,
   readEngineSnapshot,
   readLogState,
@@ -1078,9 +1080,42 @@ export type EditorOwnership =
       alreadyStopped?: boolean;
     };
 
+/** The editor the live bridge session is talking to, as its handshake reported it. */
+export interface ConnectedEditor {
+  pid: number;
+  port: number;
+  /** The .uproject the session was aimed at, when known. */
+  projectPath: string | null;
+}
+
+/** What `connectedEditorOf` reads from a bridge. Every field optional so test doubles fit. */
+export interface ConnectedEditorSource {
+  readonly isConnected?: boolean;
+  readonly capabilities?: { pid?: number; port?: number } | null;
+  getTarget?: () => { projectPath: string | null; port: number };
+}
+
+/**
+ * The connected editor's pid and port, or null when there is no live session
+ * or the plugin did not report a pid.
+ */
+export function connectedEditorOf(bridge?: ConnectedEditorSource | null): ConnectedEditor | null {
+  if (!bridge?.isConnected) return null;
+  const pid = bridge.capabilities?.pid;
+  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return null;
+  const target = bridge.getTarget?.();
+  const reported = bridge.capabilities?.port;
+  const port = typeof reported === "number" && reported > 0 ? reported : target?.port;
+  if (typeof port !== "number" || port <= 0) return null;
+  return { pid, port, projectPath: target?.projectPath ?? null };
+}
+
 /**
  * The editor holding `projectPath` open, resolved from what this project
  * published and cross-checked against the process table.
+ *
+ * A live bridge session outranks the lockfile: its pid is the editor that is
+ * answering right now, and port.json can name a crashed one (#1150).
  *
  * A lockfile that no longer describes a live editor of this project is a stale
  * lockfile, and it is said in those words. It is never reported as a project
@@ -1091,6 +1126,7 @@ export type EditorOwnership =
 export async function resolveOwnedEditor(
   projectDir?: string | null,
   projectPath?: string | null,
+  connected?: ConnectedEditor | null,
 ): Promise<EditorOwnership> {
   if (!projectDir || !projectPath) {
     return {
@@ -1101,9 +1137,20 @@ export async function resolveOwnedEditor(
     };
   }
 
+  // A session aimed at another project, or a pid whose process has another
+  // project open, is not evidence about this one. An unreadable command line
+  // or a failed probe is not evidence against it: the socket is open now.
+  if (connected && (connected.projectPath === null || sameProjectFile(connected.projectPath, projectPath))) {
+    const proc = await findEditorByPid(connected.pid);
+    const ours = proc ? proc.projectPath === null || editorOwnsProject(proc, projectPath) : isPidAlive(connected.pid);
+    if (ours) {
+      return { owned: true, port: connected.port, pid: connected.pid, source: "connected-session" };
+    }
+  }
+
   const target = resolveBridgeTarget(projectDir);
   if (!target.ok) {
-    const running = await findInteractiveEditors(projectPath);
+    const running = await findProjectEditors(projectPath);
     if (running.length === 0) {
       return {
         owned: false,
@@ -1125,7 +1172,7 @@ export async function resolveOwnedEditor(
   // Plugin builds before the lockfile carried a pid leave nothing to identify
   // the listener with, so the process table has to answer instead.
   if (target.pid === null) {
-    if ((await findInteractiveEditors(projectPath)).length === 0) {
+    if ((await findProjectEditors(projectPath)).length === 0) {
       return {
         owned: false,
         alreadyStopped: true,
@@ -1152,7 +1199,7 @@ export async function resolveOwnedEditor(
   // instances/<pid>.json, which no other instance can take away (#934). Telling
   // the user to delete a file while a healthy editor is listening would throw
   // away the bridge's only handle on it, which is exactly what used to happen.
-  const live = await findInteractiveEditors(projectPath);
+  const live = await findProjectEditors(projectPath);
   const record = live.length > 0 ? findLiveInstanceRecord(projectDir, (pid) => live.some((p) => p.pid === pid)) : null;
   if (record) {
     return {
@@ -1315,7 +1362,7 @@ export async function findRemainingInstances(
   projectDir: string | undefined,
   projectPath: string | null | undefined,
   stoppedPid: number | null,
-  listEditors: (p?: string | null) => Promise<Array<{ pid: number }>> = findInteractiveEditors,
+  listEditors: (p?: string | null) => Promise<Array<{ pid: number }>> = findProjectEditors,
 ): Promise<Array<{ pid: number; port: number }>> {
   if (!projectDir) return [];
   let live: Array<{ pid: number }>;
@@ -1336,7 +1383,8 @@ export async function findRemainingInstances(
 export async function stopEditor(
   projectDir?: string,
   opts: {
-
+    /** The live bridge session, which outranks the lockfile when it names this project's editor. */
+    connected?: ConnectedEditor | null;
 
     /**
      * How long each poll of the confirm wait sleeps, in milliseconds.
@@ -1356,7 +1404,7 @@ export async function stopEditor(
   // Whether the user can be shown a form is a property of the CONNECTED
   // client, not of whether a gate function was handed over. See
   // clientAdvertisesElicitation.
-  const ownership = await resolveOwnedEditor(projectDir, projectPath);
+  const ownership = await resolveOwnedEditor(projectDir, projectPath, opts.connected);
   if (!ownership.owned) {
     // No editor was closed, so the verdict is false on every branch here. What
     // varies is the reason, and `alreadyStopped` is the one reason a caller
@@ -1377,7 +1425,7 @@ export async function stopEditor(
   const port = ownership.port;
   const host = bridgeHost(projectDir);
   const bridgeUp = await isBridgeAvailable(host, port);
-  if (!bridgeUp && (await findInteractiveEditors(projectPath)).length === 0) {
+  if (!bridgeUp && (await findProjectEditors(projectPath)).length === 0) {
     // Same reason, one branch later: a published port with no listener and no
     // editor process holding the project means the editor this call would have
     // stopped is already gone, so nothing was quit and the marker says why.
@@ -1496,7 +1544,9 @@ export async function stopEditor(
         : ` ${remaining.length} other editor${remaining.length === 1 ? "" : "s"} of this project ${
             remaining.length === 1 ? "is" : "are"} still running (${
             remaining.map((r) => `pid ${r.pid} on port ${r.port}`).join(", ")
-          }). This call closed one editor, the one this project's lockfile named. Stop ${
+          }). This call closed one editor, the one ${
+            ownership.source === "connected-session" ? "the bridge session was connected to" : "this project's lockfile named"
+          }. Stop ${
             remaining.length === 1 ? "it" : "them"} by targeting ${
             remaining.length === 1 ? "its" : "their"} own editor session.`;
       return {
@@ -1528,7 +1578,7 @@ export async function stopEditor(
 
 export async function restartEditor(
   project: ProjectContext,
-  bridge?: { connect: (timeoutMs?: number) => Promise<void> },
+  bridge?: { connect: (timeoutMs?: number) => Promise<void> } & ConnectedEditorSource,
   opts: { confirmPollMs?: number } = {},
 ): Promise<RestartEditorResult> {
   // Same rule as start and stop: without a loaded project there is no editor
@@ -1539,7 +1589,7 @@ export async function restartEditor(
 
   // A stop and then a start. No dialog behaviour of its own; the gate refuses
   // both halves while a modal is up.
-  const stopResult = await stopEditor(project.projectDir ?? undefined);
+  const stopResult = await stopEditor(project.projectDir ?? undefined, { connected: connectedEditorOf(bridge) });
   // Whether the stop mattered is a question about THIS project's editor: a
   // failed stop with nothing of ours left running just means it was already
   // down, and another project's editor being up says nothing either way.

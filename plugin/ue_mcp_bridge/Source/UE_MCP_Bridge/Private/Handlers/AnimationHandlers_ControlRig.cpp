@@ -14,8 +14,28 @@
 
 #include "EditorAssetLibrary.h"
 #include "Engine/Blueprint.h"
+#include "Engine/SkeletalMesh.h"
+#include "Animation/Skeleton.h"
+#include "ReferenceSkeleton.h"
+#include "Misc/PackageName.h"
 #include "UObject/UObjectGlobals.h"
 #include "UObject/UObjectHash.h"
+
+// UControlRigBlueprint lives in ControlRigBlueprintLegacy.h from 5.7 and in
+// ControlRigBlueprint.h before it; the factory needs the complete type.
+#if __has_include("ControlRigBlueprintLegacy.h")
+#include "ControlRigBlueprintLegacy.h"
+#elif __has_include("ControlRigBlueprint.h")
+#include "ControlRigBlueprint.h"
+#endif
+#ifndef MCP_HAS_CONTROL_RIG_BLUEPRINT_FACTORY
+#if __has_include("ControlRigBlueprintFactory.h")
+#include "ControlRigBlueprintFactory.h"
+#define MCP_HAS_CONTROL_RIG_BLUEPRINT_FACTORY 1
+#else
+#define MCP_HAS_CONTROL_RIG_BLUEPRINT_FACTORY 0
+#endif
+#endif
 
 #include "RigVMModel/RigVMGraph.h"
 #include "RigVMModel/RigVMLink.h"
@@ -77,7 +97,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigGraph(const TSharedPtr<
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
-	UObject* LoadedAsset = UEditorAssetLibrary::LoadAsset(AssetPath);
+	UObject* LoadedAsset = MCPLoadAssetObject(AssetPath);
 	UBlueprint* Blueprint = Cast<UBlueprint>(LoadedAsset);
 	if (!Blueprint)
 	{
@@ -225,5 +245,109 @@ TSharedPtr<FJsonValue> FAnimationHandlers::ReadControlRigGraph(const TSharedPtr<
 	{
 		Result->SetStringField(TEXT("note"), TEXT("Some graphs hit the node limit; raise 'limit' or narrow with 'graphName'."));
 	}
+	return MCPResult(Result);
+}
+
+// ─── #1133  create_control_rig ──────────────────────────────────────
+//
+// Runs the engine's own "Create Control Rig" path, which imports the source's
+// bone hierarchy and sets the preview mesh. That helper always names the asset
+// "<Source>_CtrlRig" beside the source, so a requested name or folder is
+// reached by renaming the fresh asset before it is saved.
+
+TSharedPtr<FJsonValue> FAnimationHandlers::CreateControlRig(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString SkeletalMeshPath = OptionalString(Params, TEXT("skeletalMeshPath"));
+	const FString SkeletonPath = OptionalString(Params, TEXT("skeletonPath"));
+	if (SkeletalMeshPath.IsEmpty() == SkeletonPath.IsEmpty())
+	{
+		return MCPError(TEXT("Pass exactly one of 'skeletalMeshPath' or 'skeletonPath' as the source of the Control Rig's bone hierarchy"));
+	}
+	const FString SourcePath = SkeletalMeshPath.IsEmpty() ? SkeletonPath : SkeletalMeshPath;
+
+	const FString OnConflict = OptionalString(Params, TEXT("onConflict"), TEXT("skip")).ToLower();
+	if (OnConflict != TEXT("skip") && OnConflict != TEXT("error"))
+	{
+		return MCPError(TEXT("'onConflict' must be 'skip' or 'error'; create_control_rig never overwrites an asset"));
+	}
+
+	UObject* Source = MCPLoadAssetObject(SourcePath);
+	if (!Source)
+	{
+		return MCPAssetNotFoundError(SourcePath);
+	}
+	USkeleton* Skeleton = nullptr;
+	if (USkeletalMesh* Mesh = Cast<USkeletalMesh>(Source))
+	{
+		Skeleton = Mesh->GetSkeleton();
+	}
+	else if (USkeleton* AsSkeleton = Cast<USkeleton>(Source))
+	{
+		Skeleton = AsSkeleton;
+	}
+	else
+	{
+		return MCPAssetWrongTypeError(SourcePath, Source, SkeletalMeshPath.IsEmpty() ? TEXT("Skeleton") : TEXT("SkeletalMesh"));
+	}
+
+	const FString SourcePackage = Source->GetOutermost()->GetName();
+	const FString Name = OptionalString(Params, TEXT("name"), Source->GetName() + TEXT("_CtrlRig"));
+	const FString PackagePath = OptionalString(Params, TEXT("packagePath"), FPackageName::GetLongPackagePath(SourcePackage));
+	if (auto Existing = MCPCheckAssetExists(PackagePath, Name, OnConflict, TEXT("ControlRigBlueprint")))
+	{
+		return Existing;
+	}
+
+	UObject* Created = nullptr;
+#if MCP_HAS_CONTROL_RIG_BLUEPRINT_FACTORY
+	Created = UControlRigBlueprintFactory::CreateControlRigFromSkeletalMeshOrSkeleton(Source);
+#endif
+	if (!Created)
+	{
+		return MCPError(FString::Printf(
+			TEXT("The Control Rig factory did not create an asset from '%s'. Is the Control Rig plugin enabled and the source folder writable?"),
+			*SourcePath));
+	}
+
+	const FString DesiredPackage = PackagePath / Name;
+	const FString CreatedPackage = Created->GetOutermost()->GetName();
+	if (CreatedPackage != DesiredPackage)
+	{
+		if (!UEditorAssetLibrary::RenameAsset(CreatedPackage, DesiredPackage))
+		{
+			UEditorAssetLibrary::DeleteAsset(CreatedPackage);
+			return MCPError(FString::Printf(
+				TEXT("Created the Control Rig at '%s' but could not move it to '%s', so it was deleted again"),
+				*CreatedPackage, *DesiredPackage));
+		}
+		Created = MCPLoadAssetObject(DesiredPackage);
+		if (!Created)
+		{
+			return MCPError(FString::Printf(TEXT("Moved the Control Rig to '%s' but could not load it back"), *DesiredPackage));
+		}
+	}
+
+	FString SaveError;
+	const bool bSaved = SaveAssetPackageChecked(Created, SaveError);
+
+	auto Result = MCPSuccess();
+	MCPSetCreated(Result);
+	Result->SetStringField(TEXT("assetPath"), Created->GetPathName());
+	Result->SetStringField(TEXT("name"), Created->GetName());
+	Result->SetStringField(TEXT("packagePath"), PackagePath);
+	Result->SetStringField(TEXT("class"), Created->GetClass()->GetName());
+	Result->SetStringField(TEXT("sourcePath"), Source->GetPathName());
+	Result->SetStringField(TEXT("sourceType"), Source->GetClass()->GetName());
+	if (Skeleton)
+	{
+		Result->SetStringField(TEXT("skeletonPath"), Skeleton->GetPathName());
+		Result->SetNumberField(TEXT("sourceBoneCount"), Skeleton->GetReferenceSkeleton().GetNum());
+	}
+	Result->SetBoolField(TEXT("saved"), bSaved);
+	if (!bSaved)
+	{
+		Result->SetStringField(TEXT("saveError"), SaveError);
+	}
+	MCPSetDeleteAssetRollback(Result, Created->GetPathName());
 	return MCPResult(Result);
 }

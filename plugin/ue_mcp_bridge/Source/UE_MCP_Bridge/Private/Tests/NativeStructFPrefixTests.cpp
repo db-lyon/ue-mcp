@@ -14,6 +14,7 @@
 #include "HandlerUtils.h"
 #include "Handlers/AssetHandlers.h"
 #include "Handlers/ReflectionHandlers.h"
+#include "Tests/MCPScopedTestMount.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -29,32 +30,6 @@
 
 namespace MCPNativeStructPrefixTests
 {
-	struct FScopedNativeStructPrefixMount
-	{
-		FString RootPath;
-		FString ContentPath;
-
-		FScopedNativeStructPrefixMount()
-			: RootPath(TEXT("/UEMCPNativeStructPrefix_") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT("/"))
-			, ContentPath(FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FString(FPlatformProcess::UserTempDir())),
-				FString(TEXT("UEMCPNativeStructPrefixTest")),
-				FGuid::NewGuid().ToString(EGuidFormats::Digits)))
-		{
-			IFileManager::Get().MakeDirectory(*ContentPath, /*Tree=*/true);
-			FPackageName::RegisterMountPoint(RootPath, ContentPath);
-		}
-
-		~FScopedNativeStructPrefixMount()
-		{
-			FPackageName::UnRegisterMountPoint(RootPath, ContentPath);
-			IFileManager::Get().DeleteDirectory(*ContentPath, /*RequireExists=*/false, /*Tree=*/true);
-		}
-
-		FScopedNativeStructPrefixMount(const FScopedNativeStructPrefixMount&) = delete;
-		FScopedNativeStructPrefixMount& operator=(const FScopedNativeStructPrefixMount&) = delete;
-	};
-
 	TSharedPtr<FJsonObject> StructPrefixResponseObject(const TSharedPtr<FJsonValue>& Response)
 	{
 		return (Response.IsValid() && Response->Type == EJson::Object)
@@ -220,7 +195,9 @@ bool FMCPNativeStructFPrefixTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("and returns the qualified candidates"),
 		StructPrefixResponseString(ReflectAmbiguous, TEXT("error")).Contains(AmbiguousB->GetPathName()));
 
-	const FScopedNativeStructPrefixMount Mount;
+	const FMCPScopedTestMount Mount{
+		TEXT("/UEMCPNativeStructPrefix_") + FGuid::NewGuid().ToString(EGuidFormats::Digits) + TEXT("/"),
+		TEXT("UEMCPNativeStructPrefixTest") };
 	FMCPHandlerRegistry AssetRegistry;
 	FAssetHandlers::RegisterHandlers(AssetRegistry);
 	if (!TestTrue(TEXT("create_datatable is registered"), AssetRegistry.HasHandler(TEXT("create_datatable"))))

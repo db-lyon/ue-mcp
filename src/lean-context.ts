@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { actionEnum, categoryTool, stripAction, takeTimeout, type ActionSpec, type ToolDef } from "./types.js";
-import { applyCategoryFolding } from "./call-pipeline.js";
 import { McpError, ErrorCode } from "./errors.js";
 import { actionSchema } from "./action-schema.js";
 import { searchToolGraph } from "./tool-search.js";
@@ -298,28 +297,12 @@ export function buildMicroGateway(tools: ToolDef[]): ToolDef {
           throw new McpError(ErrorCode.UNKNOWN_ACTION, `Unknown action "${method}" on ${category}. Use tools(action="describe", category="${category}").`);
         }
         const rawArgs = p.args && typeof p.args === "object" ? (p.args as Record<string, unknown>) : {};
-        // #989: the gateway honours the same per-call budget the category tools
-        // take, whether it arrives beside `args` or inside it. Dispatch has
-        // already read both levels and put the answer on the context; this
-        // second read is what keeps a direct call to this handler working.
-        const inner = takeTimeout(rawArgs);
-        const requestedTimeout = ctx.callTimeoutMs ?? inner.timeoutMs;
-        // The TARGET category's parameter folding, which only this handler can
-        // apply: dispatch prepared the gateway's own envelope and has no way
-        // to know which category `args` were written for. Without it the whole
-        // advertised spelling contract of a category is off in micro mode
-        // while being on everywhere else.
-        const args = applyCategoryFolding(inner.rest, {
-          action: method,
-          normalizeParams: tool.options?.normalizeParams,
-        });
-        if (spec.handler) return spec.handler(ctx, args);
-        if (spec.bridge) {
-          const base = stripAction(args);
-          const mapped = spec.mapParams ? spec.mapParams(base) : base;
-          return ctx.bridge.call(spec.bridge, mapped, requestedTimeout ?? spec.timeoutMs);
-        }
-        throw new McpError(ErrorCode.NO_HANDLER, `Action ${category}.${method} has no handler.`);
+        // The target category's own handler does the per-call preparation
+        // (folding, path repair, routing params), so it is written once (#1081).
+        // Dispatch already took the budget off `args` and put it on the context.
+        const subParams: Record<string, unknown> = { ...rawArgs, action: method };
+        if (ctx.callTimeoutMs !== undefined) subParams.timeoutMs = ctx.callTimeoutMs;
+        return tool.handler(ctx, subParams);
       },
     },
   };

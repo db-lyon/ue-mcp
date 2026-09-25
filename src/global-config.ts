@@ -37,16 +37,19 @@ export function globalConfigPath(): string {
  * The full parsed `~/.ue-mcp/config.yml` document (`ue-mcp:` block, `tasks:`,
  * `flows:`, ...). Returns {} when the file is absent, empty, or unparseable.
  */
-export function readGlobalConfigDoc(): Record<string, unknown> {
+export function readGlobalConfigDoc(
+  onError: (file: string, error: unknown) => void = (file, error) =>
+    warn("config", `failed to parse ${file} - ignoring the user-global config layer`, error),
+): Record<string, unknown> {
   const file = globalConfigPath();
   if (!fs.existsSync(file)) return {};
   try {
-    const raw = yaml.load(fs.readFileSync(file, "utf-8"));
+    const raw = yaml.load(fs.readFileSync(file, "utf-8"), { filename: file });
     return raw && typeof raw === "object" && !Array.isArray(raw)
       ? (raw as Record<string, unknown>)
       : {};
   } catch (e) {
-    warn("config", `failed to parse ${file} - ignoring the user-global config layer`, e);
+    onError(file, e);
     return {};
   }
 }

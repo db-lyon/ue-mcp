@@ -30,38 +30,11 @@
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
 #include "MCPEngineCompat.h"
+#include "Tests/MCPScopedTestMount.h"
 
 namespace
 {
 	const TCHAR* const MCPSubobjectTestRoot = TEXT("/UEMCPSubobjectTest/");
-
-	/** Mount a private content root for the duration of the test and take it
-	 *  back down again, so no assertion here can touch a user's content. */
-	struct FScopedSubobjectTestMount
-	{
-		FString RootPath;
-		FString ContentPath;
-
-		FScopedSubobjectTestMount()
-			: RootPath(MCPSubobjectTestRoot)
-			, ContentPath(FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FString(FPlatformProcess::UserTempDir())),
-				FString(TEXT("UEMCPSubobjectTest")),
-				FGuid::NewGuid().ToString(EGuidFormats::Digits)))
-		{
-			IFileManager::Get().MakeDirectory(*ContentPath, /*Tree=*/true);
-			FPackageName::RegisterMountPoint(RootPath, ContentPath);
-		}
-
-		~FScopedSubobjectTestMount()
-		{
-			FPackageName::UnRegisterMountPoint(RootPath, ContentPath);
-			IFileManager::Get().DeleteDirectory(*ContentPath, /*RequireExists=*/false, /*Tree=*/true);
-		}
-
-		FScopedSubobjectTestMount(const FScopedSubobjectTestMount&) = delete;
-		FScopedSubobjectTestMount& operator=(const FScopedSubobjectTestMount&) = delete;
-	};
 
 	TSharedPtr<FJsonObject> SubobjectResponseObject(const TSharedPtr<FJsonValue>& Response)
 	{
@@ -96,7 +69,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FMCPCreateSubobjectTest::RunTest(const FString& Parameters)
 {
-	const FScopedSubobjectTestMount Mount;
+	const FMCPScopedTestMount Mount{ FString(MCPSubobjectTestRoot), TEXT("UEMCPSubobjectTest") };
 
 	const FString PackageName = FString(MCPSubobjectTestRoot) + TEXT("DA_SubobjectOwner");
 	UPackage* Package = CreatePackage(*PackageName);

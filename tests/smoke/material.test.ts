@@ -167,3 +167,46 @@ describe("material - delete_expression cleans up references (#44)", () => {
     expect(recompile.ok, recompile.error).toBe(true);
   });
 });
+
+describe("material - editing inside a MaterialFunction (#1138)", () => {
+  const fnPath = `${TEST_PREFIX}/MF_EditTest`;
+
+  afterAll(async () => {
+    await callBridge(bridge, "delete_asset", { assetPath: fnPath });
+  });
+
+  it("adds by short name, edits Custom and VectorParameter nodes, and deletes", async () => {
+    const created = await callBridge(bridge, "create_material_function", { name: "MF_EditTest", packagePath: TEST_PREFIX });
+    expect(created.ok, created.error).toBe(true);
+
+    const vec = await callBridge(bridge, "add_expression_in_function", { functionPath: fnPath, expressionType: "VectorParameter" });
+    expect(vec.ok, vec.error).toBe(true);
+    const vecIndex = (vec.result as { expressionIndex: number }).expressionIndex;
+
+    const custom = await callBridge(bridge, "add_expression_in_function", { functionPath: fnPath, expressionType: "Custom" });
+    expect(custom.ok, custom.error).toBe(true);
+    const customIndex = (custom.result as { expressionIndex: number }).expressionIndex;
+
+    const named = await callBridge(bridge, "set_expression_value", {
+      functionPath: fnPath, expressionIndex: vecIndex, propertyName: "ParameterName", value: "Motion",
+    });
+    expect(named.ok, named.error).toBe(true);
+    expect((named.result as { functionPath?: string }).functionPath).toBeDefined();
+
+    const code = await callBridge(bridge, "set_custom_expression", {
+      functionPath: fnPath, expressionIndex: customIndex, code: "return M.xyz;", inputs: ["M"], outputType: "float3",
+    });
+    expect(code.ok, code.error).toBe(true);
+    expect((code.result as { code: string }).code).toBe("return M.xyz;");
+
+    const wired = await callBridge(bridge, "connect_expressions_in_function", {
+      functionPath: fnPath, sourceExpression: vecIndex, targetExpression: customIndex, targetInput: "M",
+    });
+    expect(wired.ok, wired.error).toBe(true);
+    expect(Array.isArray((wired.result as { sourceOutputs?: unknown[] }).sourceOutputs)).toBe(true);
+
+    const del = await callBridge(bridge, "delete_material_expression", { functionPath: fnPath, expressionName: "Motion" });
+    expect(del.ok, del.error).toBe(true);
+    expect((del.result as { deleted?: boolean }).deleted).toBe(true);
+  });
+});

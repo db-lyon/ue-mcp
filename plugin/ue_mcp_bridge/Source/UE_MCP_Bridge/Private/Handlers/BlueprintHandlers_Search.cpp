@@ -276,11 +276,15 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::GetConnections(const TSharedPtr<FJson
 
 	const bool bIncludeNestedGraphs = OptionalBool(Params, TEXT("includeNestedGraphs"), true);
 
+	// Optional node filter (GUID or name): only edges into or out of that node.
+	const FString NodeFilter = OptionalString(Params, TEXT("nodeId"), TEXT(""));
+	int32 NodeFilterHits = 0;
+
 	MCPPagination::FPageRequest Page;
 	if (auto Err = MCPPagination::ReadPageRequest(
 			Params,
-			FString::Printf(TEXT("get_blueprint_connections|asset=%s|graph=%s|kind=%s|nested=%d"),
-				*Blueprint->GetPathName(), *Requested, *Kind, bIncludeNestedGraphs ? 1 : 0),
+			FString::Printf(TEXT("get_blueprint_connections|asset=%s|graph=%s|kind=%s|nested=%d|node=%s"),
+				*Blueprint->GetPathName(), *Requested, *Kind, bIncludeNestedGraphs ? 1 : 0, *NodeFilter),
 			DefaultCallSiteLimit, MaxCallSiteLimit, Page))
 	{
 		return Err;
@@ -317,6 +321,13 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::GetConnections(const TSharedPtr<FJson
 		}
 
 		++GraphsScanned;
+		const UEdGraphNode* FilterNode = nullptr;
+		if (!NodeFilter.IsEmpty())
+		{
+			FilterNode = FindNodeByGuidOrName(Graph, NodeFilter);
+			if (!FilterNode) continue;
+			++NodeFilterHits;
+		}
 		for (UEdGraphNode* Node : Graph->Nodes)
 		{
 			if (!Node) continue;
@@ -334,6 +345,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::GetConnections(const TSharedPtr<FJson
 					if (!Linked) continue;
 					const UEdGraphNode* const Target = Linked->GetOwningNodeUnchecked();
 					if (!Target) continue;
+					if (FilterNode && Node != FilterNode && Target != FilterNode) continue;
 
 					TSharedPtr<FJsonObject> Edge = MakeShared<FJsonObject>();
 					Edge->SetStringField(TEXT("kind"), bExec ? TEXT("exec") : TEXT("data"));
@@ -384,9 +396,16 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::GetConnections(const TSharedPtr<FJson
 			TEXT("no graph named '%s' in %s; blueprint(list_graphs) reports the names and selectors it has"),
 			*Requested, *Blueprint->GetPathName()));
 	}
+	if (!NodeFilter.IsEmpty() && NodeFilterHits == 0)
+	{
+		return MCPError(FString::Printf(
+			TEXT("no node '%s' (GUID, object name or title) in the graphs scanned in %s; find_nodes reports node GUIDs"),
+			*NodeFilter, *Blueprint->GetPathName()));
+	}
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("assetPath"), Blueprint->GetPathName());
 	if (!Requested.IsEmpty()) Result->SetStringField(TEXT("graph"), Requested);
+	if (!NodeFilter.IsEmpty()) Result->SetStringField(TEXT("nodeId"), NodeFilter);
 	Result->SetStringField(TEXT("kind"), Kind);
 	Result->SetBoolField(TEXT("includeNestedGraphs"), bIncludeNestedGraphs);
 	if (NameMatches > 1)

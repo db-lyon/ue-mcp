@@ -899,6 +899,26 @@ export function nearestActions(ref: string, available: string[], limit = 5): str
     .map((x) => x.a);
 }
 
+/** How a project adds an action of its own, for a miss that is not a typo (#1105). */
+export const PROJECT_ACTIONS_HINT =
+  "To add a project-side action, register it from a native-module plugin with UEMCP::RegisterExternalHandler"
+  + " and list it in a handlers: manifest (docs/plugins-native-modules.md). Edits to the vendored bridge plugin"
+  + " are overwritten on the next deploy.";
+
+/**
+ * The refusal for an action a category does not have. Leads with the closest
+ * spellings; with none, the name is probably not a typo, so it says how a
+ * project adds one.
+ */
+export function unknownActionMessage(action: string, category: string, available: string[]): string {
+  const close = nearestActions(action, available);
+  return `Unknown action '${action}' on '${category}'.`
+    + (close.length ? ` Did you mean: ${close.join(", ")}?` : "")
+    + ` ${available.length} actions available - project(action="describe_action", category="${category}")`
+    + ` lists them with their parameters, and project(action="search_tools") searches by intent.`
+    + (close.length ? "" : ` ${PROJECT_ACTIONS_HINT}`);
+}
+
 /**
  * Every action on the surface, with the drift each one carries. Used by the
  * schema-drift unit test and by `project(describe_action)` when it is asked

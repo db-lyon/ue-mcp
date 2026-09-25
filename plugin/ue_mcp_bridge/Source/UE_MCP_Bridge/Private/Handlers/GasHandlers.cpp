@@ -86,6 +86,8 @@ void FGasHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("revoke_ability"), &RevokeAbility);
 	Registry.RegisterHandler(TEXT("get_active_effects"), &GetActiveEffects);
 	Registry.RegisterHandler(TEXT("trace_ability_activation"), &TraceAbilityActivation);
+	Registry.RegisterHandler(TEXT("add_loose_gameplay_tag"), &AddLooseGameplayTag);
+	Registry.RegisterHandler(TEXT("remove_loose_gameplay_tag"), &RemoveLooseGameplayTag);
 
 	// Input binding, cues and the attribute audit (GasHandlers_Abilities.cpp).
 	Registry.RegisterHandler(TEXT("bind_ability_input"), &BindAbilityInput);

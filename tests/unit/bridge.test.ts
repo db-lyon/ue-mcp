@@ -472,7 +472,7 @@ describe("bridge capability handshake", () => {
       expect(failure).toContain("Unknown method: set_water_body_property");
       expect(failure).toContain("protocol version 1");
       expect(failure).toContain(`version ${CLIENT_PROTOCOL_VERSION}`);
-      expect(failure).toContain("npx ue-mcp update");
+      expect(failure).toContain("ue-mcp update --build");
     } finally {
       bridge.disconnect();
       await server.close();

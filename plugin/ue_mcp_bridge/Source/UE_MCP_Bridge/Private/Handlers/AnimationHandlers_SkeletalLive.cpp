@@ -460,7 +460,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::PreviewAnimation(const TSharedPtr<FJs
 	FString ActorLabel;
 	if (auto Err = RequireStringAlt(Params, TEXT("actorLabel"), TEXT("actorPath"), ActorLabel)) return Err;
 	bool bEnabled = true;
-	Params->TryGetBoolField(TEXT("enabled"), bEnabled);
+	TryGetBoolParam(Params, TEXT("enabled"), bEnabled);
 
 	TSharedPtr<FJsonValue> ActorErr;
 	AActor* Actor = MCPResolveActor(World, Params, ActorErr);
@@ -524,7 +524,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetLivePostProcessAnimBlueprint(const
 	const FString ComponentName = OptionalString(Params, TEXT("componentName"));
 	const FString AnimBlueprintClassPath = OptionalString(Params, TEXT("animBlueprintClassPath"));
 	bool bClear = false;
-	Params->TryGetBoolField(TEXT("clear"), bClear);
+	TryGetBoolParam(Params, TEXT("clear"), bClear);
 	if (bClear && !AnimBlueprintClassPath.IsEmpty())
 	{
 		return MCPError(TEXT("Pass either animBlueprintClassPath or clear=true, not both"));
@@ -676,7 +676,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::GetLiveBoneTransforms(const TSharedPt
 	// caller diagnosing a pose wants and is a few hundred entries on a character.
 	TArray<FName> RequestedBones;
 	const TArray<TSharedPtr<FJsonValue>>* BonesArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("boneNames"), BonesArray) && BonesArray)
+	if (TryGetArrayParam(Params, TEXT("boneNames"), BonesArray) && BonesArray)
 	{
 		for (const TSharedPtr<FJsonValue>& Entry : *BonesArray)
 		{

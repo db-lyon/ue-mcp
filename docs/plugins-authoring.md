@@ -49,6 +49,9 @@ my-plugin/
     check.mjs                # pre-publish validator: manifest parses, task refs resolve
   knowledge/
     gameplay.md              # one markdown file per target category
+  skills/
+    import/
+      SKILL.md               # Claude Code skill, installed as .claude/skills/<prefix>-import
   LICENSE
   README.md
 ```
@@ -215,6 +218,36 @@ Quick start:
 2. Press Play, do your thing, stop PIE
 3. `gameplay(action="pie_replay_arm", recording_id="<id>", eject=true, time_scale=0.1)` - replay at 10%
 ```
+
+## Skills
+
+A plugin can ship Claude Code skills: one directory per skill under `skills/`, each holding a `SKILL.md`. No manifest key is needed. Add `skills` to `files` in `package.json` so it ships.
+
+```markdown
+---
+name: import
+description: Use when importing a character with MyPlugin. Claude reads this line to decide whether to load the skill.
+---
+
+# Importing a character
+
+1. `myplugin(action="import", path="...")`
+2. `animation(action="list_skeletal_meshes")` to confirm the skeleton
+```
+
+`ue-mcp plugin install` copies every skill directory into the project's `.claude/skills/`, and `ue-mcp plugin uninstall` removes them. `ue-mcp plugin update`, `ue-mcp init` and `ue-mcp deploy` refresh them and delete any your new version stopped shipping. Which package installed each skill is recorded in `.ue-mcp/skills.json`.
+
+Each skill installs under your package's prefix: the package name without `ue-mcp-`, with a scope folded in. `skills/import/` in `ue-mcp-meshy` installs as `.claude/skills/meshy-import/`, and in `@studio/ue-mcp-foo` as `studio-foo-import/`. The installer sets the `name:` field to match. Two plugins can therefore ship the same skill name without colliding. A name that already starts with the prefix is not prefixed again.
+
+A skill directory the user created by hand under the same installed name is never overwritten; the install skips it with a warning.
+
+Check your skills before publishing:
+
+```bash
+ue-mcp plugin check-skills .
+```
+
+It prints the name each skill installs as, and fails on a `SKILL.md` without a `description:` or with a `category(action="x")` call that does not exist, counting the actions your plugin adds. A call into another plugin's category cannot be checked and is listed as unverified. The scaffold's `npm run check` runs it.
 
 ## Publishing
 

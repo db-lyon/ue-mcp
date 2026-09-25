@@ -2118,6 +2118,7 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveEventDispatcher(const TSharedPt
 	// Capture the signature so the inverse re-declares the same parameters
 	// rather than a bare delegate that no existing binding matches.
 	TArray<TSharedPtr<FJsonValue>> SignatureParams;
+	TArray<TSharedPtr<FJsonValue>> ReplayParams;
 	TArray<FString> UnreplayableTypes;
 	if (Signature)
 	{
@@ -2127,23 +2128,19 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveEventDispatcher(const TSharedPt
 			{
 				if (!Info.IsValid()) continue;
 				bool bRoundTrips = true;
-				FString TypeSpec = PinTypeSpec(Info->PinType, bRoundTrips);
-				// add_event_dispatcher reads a narrower type vocabulary than
-				// PinTypeSpec writes: it spells the double-precision real as
-				// "float", and it has no form at all for a container or a
-				// wrapper type. Translate what translates, and name what does
-				// not so the rollback record is not read as exact.
-				if (TypeSpec == TEXT("double")) TypeSpec = TEXT("float");
-				if (!bRoundTrips || Info->PinType.ContainerType != EPinContainerType::None
-					|| TypeSpec.StartsWith(TEXT("TSubclassOf<")) || TypeSpec.StartsWith(TEXT("TSoftObjectPtr<"))
-					|| TypeSpec.StartsWith(TEXT("TSoftClassPtr<")) || TypeSpec.StartsWith(TEXT("enum:")))
-				{
-					UnreplayableTypes.Add(FString::Printf(TEXT("%s (%s)"), *Info->PinName.ToString(), *TypeSpec));
-				}
+				const FString TypeSpec = PinTypeSpec(Info->PinType, bRoundTrips);
 				TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
 				P->SetStringField(TEXT("name"), Info->PinName.ToString());
 				P->SetStringField(TEXT("type"), TypeSpec);
 				SignatureParams.Add(MakeShared<FJsonValueObject>(P));
+				// add_event_dispatcher refuses a type ParsePinTypeSpec cannot
+				// spell, so such a parameter stays out of the replay payload.
+				if (!bRoundTrips)
+				{
+					UnreplayableTypes.Add(FString::Printf(TEXT("%s (%s)"), *Info->PinName.ToString(), *TypeSpec));
+					continue;
+				}
+				ReplayParams.Add(MakeShared<FJsonValueObject>(P));
 			}
 		}
 	}
@@ -2171,14 +2168,14 @@ TSharedPtr<FJsonValue> FBlueprintHandlers::RemoveEventDispatcher(const TSharedPt
 	Result->SetBoolField(TEXT("rollbackLossy"), true);
 	Result->SetStringField(TEXT("rollbackNote"), UnreplayableTypes.Num() > 0
 		? FString::Printf(
-			TEXT("Re-adding restores the dispatcher, and Bind, Unbind and Call nodes that referenced it are removed with the variable and stay removed. These parameters carry a type add_event_dispatcher cannot declare and come back as wildcards: %s."),
+			TEXT("Re-adding restores the dispatcher, and Bind, Unbind and Call nodes that referenced it are removed with the variable and stay removed. These parameters carry a type add_event_dispatcher cannot declare and are left out of the replay: %s."),
 			*FString::Join(UnreplayableTypes, TEXT(", ")))
 		: FString(TEXT("Re-adding restores the dispatcher and its parameter signature. Bind, Unbind and Call nodes that referenced it are removed with the variable and are not restored.")));
 
 	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
 	Payload->SetStringField(TEXT("blueprintPath"), AssetPath);
 	Payload->SetStringField(TEXT("name"), Name);
-	if (SignatureParams.Num() > 0) Payload->SetArrayField(TEXT("parameters"), SignatureParams);
+	if (ReplayParams.Num() > 0) Payload->SetArrayField(TEXT("parameters"), ReplayParams);
 	MCPSetRollback(Result, TEXT("add_event_dispatcher"), Payload);
 	return MCPResult(Result);
 }

@@ -1,7 +1,10 @@
 #include "EditorHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerCommitSave.h"
 #include "HandlerPagination.h"
+#include "HandlerSkinnedAsset.h"
+#include "HandlerSceneCapture.h"
 
 #include "MessageLogModule.h"
 #include "IMessageLogListing.h"
@@ -989,6 +992,50 @@ TSharedPtr<FJsonValue> FEditorHandlers::SetProperty(const TSharedPtr<FJsonObject
 	if (!MCPJsonProperty::ResolveDottedPath(Asset, PropertyName, Property, PropertyValue, LeafOwner, ResolvePropertyErr))
 	{
 		return MCPError(ResolvePropertyErr);
+	}
+
+	// A skinned mesh's mesh pointer goes through the engine setter (#1099).
+	if (MCPSkinnedAsset::IsMeshProperty(Property))
+	{
+		USkinnedMeshComponent* SkinnedComp = Cast<USkinnedMeshComponent>(LeafOwner);
+		if (!SkinnedComp)
+		{
+			return MCPError(FString::Printf(
+				TEXT("'%s' is a skinned mesh component's mesh and can only be set on the component itself. Use level(set_component_skeletal_mesh) for a placed actor."),
+				*PropertyName));
+		}
+		Asset->Modify();
+		FString PreviousMesh;
+		FString MeshErr;
+		if (!MCPSkinnedAsset::AssignFromJson(SkinnedComp, ValueJsonRef, PreviousMesh, MeshErr))
+		{
+			return MCPError(FString::Printf(TEXT("Failed to set '%s': %s"), *PropertyName, *MeshErr));
+		}
+		Asset->MarkPackageDirty();
+		const bool bSaveMesh = OptionalBool(Params, TEXT("save"), true);
+		if (bSaveMesh)
+		{
+			UEditorAssetLibrary::SaveLoadedAsset(Asset, /*bOnlyIfIsDirty=*/true);
+		}
+
+		auto MeshResult = MCPSuccess();
+		MeshResult->SetStringField(TEXT("path"), AssetPath);
+		MeshResult->SetStringField(TEXT("resolvedPath"), Asset->GetPathName());
+		MeshResult->SetStringField(TEXT("resolvedKind"), ResolvedKind);
+		MeshResult->SetStringField(TEXT("propertyName"), PropertyName);
+		MeshResult->SetStringField(TEXT("type"), Property->GetCPPType());
+		MeshResult->SetBoolField(TEXT("saved"), bSaveMesh);
+		MCPSkinnedAsset::Report(MeshResult, SkinnedComp, PreviousMesh);
+		MeshResult->SetBoolField(TEXT("changeDetected"), true);
+		MCPSetUpdated(MeshResult);
+
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("objectPath"), AssetPath);
+		Payload->SetStringField(TEXT("propertyName"), PropertyName);
+		Payload->SetStringField(TEXT("value"), PreviousMesh.IsEmpty() ? FString(TEXT("None")) : PreviousMesh);
+		Payload->SetBoolField(TEXT("save"), bSaveMesh);
+		MCPSetRollback(MeshResult, TEXT("set_property"), Payload);
+		return MCPResult(MeshResult);
 	}
 
 	// Capture what is about to be overwritten. This is the only value an
@@ -2562,6 +2609,13 @@ TSharedPtr<FJsonValue> FEditorHandlers::SaveDirty(const TSharedPtr<FJsonObject>&
 	const bool bIncludeMaps = OptionalBool(Params, TEXT("includeMaps"), true);
 	const bool bIncludeContent = OptionalBool(Params, TEXT("includeContent"), true);
 
+	// #1156: a deleted World Partition actor's package cannot be written, only
+	// deleted; the editor's save path does that and reports it.
+	if (OptionalBool(Params, TEXT("commitDeletes"), false))
+	{
+		return MCPResult(MCPSaveDirtyCommittingDeletes(bIncludeMaps, bIncludeContent));
+	}
+
 	TArray<UPackage*> Dirty;
 	for (TObjectIterator<UPackage> It; It; ++It)
 	{
@@ -3703,120 +3757,32 @@ TSharedPtr<FJsonValue> FEditorHandlers::CaptureScenePng(const TSharedPtr<FJsonOb
 	}
 	if (Location.ContainsNaN() || Rotation.ContainsNaN()) return MCPError(TEXT("Capture camera location and rotation must be finite"));
 
-	// #966: the capture actor used to be spawned once and LEFT IN THE LEVEL.
-	// It is a level actor, so it was saved into the map and committed to source
-	// control as though somebody had authored it, and list_dirty_packages
-	// reported nothing while it sat there, so the usual "did I change
-	// anything" check missed it entirely. A capture must leave the level
-	// exactly as it found it.
-	//
-	// Two halves. First, sweep any debris earlier builds left behind, so a
-	// project that already has one is cleaned by the next capture rather than
-	// by hand.
-	static const FString CaptureLabel = TEXT("__ClaudeSceneCapture");
-	int32 RemovedStrayCaptures = 0;
-	{
-		TArray<ASceneCapture2D*> Strays;
-		for (TActorIterator<ASceneCapture2D> It(World); It; ++It)
-		{
-			if (It->GetActorLabel() == CaptureLabel)
-			{
-				Strays.Add(*It);
-			}
-		}
-		for (ASceneCapture2D* Stray : Strays)
-		{
-			// These ones ARE in the map, so their removal is a real edit and
-			// goes through Modify(): the level has to become dirty, or the
-			// debris comes straight back on the next load.
-			if (IsValid(Stray) && World->DestroyActor(Stray))
-			{
-				++RemovedStrayCaptures;
-			}
-		}
-	}
+	// #966: a capture must leave the level exactly as it found it. Sweep any
+	// capture actors earlier builds saved into the map, then capture through a
+	// transient rig that is destroyed on every exit from here.
+	const int32 RemovedStrayCaptures = UEMCP::SceneCapture::RemoveStrayCaptureActors(World);
 
-	// Second, this capture's own actor: transient, outside the scene outliner,
-	// in no actor package of its own, and destroyed on every exit from here.
-	// The transient flag alone is not enough, because the debris that prompted
-	// this was visible in the outliner and in the map's actor list either way.
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.ObjectFlags |= RF_Transient;
-#if WITH_EDITOR
-	SpawnParams.bTemporaryEditorActor = true;
-	SpawnParams.bHideFromSceneOutliner = true;
-	SpawnParams.bCreateActorPackage = false;
-#endif
-	ASceneCapture2D* CaptureActor = World->SpawnActor<ASceneCapture2D>(ASceneCapture2D::StaticClass(), Location, Rotation, SpawnParams);
-	if (!CaptureActor) return MCPError(TEXT("Failed to spawn SceneCapture2D actor"));
-	CaptureActor->SetActorHiddenInGame(true);
+	UEMCP::SceneCapture::FTransientCapture Rig;
+	FString RigError;
+	if (!Rig.Spawn(World, Location, Rotation, Width, Height, CaptureFov, RigError)) return MCPError(RigError);
+	USceneCaptureComponent2D* Comp = Rig.GetComponent();
+	UTextureRenderTarget2D* RT = Rig.GetTarget();
 
-	ON_SCOPE_EXIT
-	{
-		if (IsValid(CaptureActor))
-		{
-			// Drop the render target first: the component holds the only
-			// reference keeping it alive past this call.
-			if (USceneCaptureComponent2D* Dying = CaptureActor->GetCaptureComponent2D())
-			{
-				Dying->TextureTarget = nullptr;
-			}
-			// bShouldModifyLevel=false: this actor was never part of the map,
-			// so removing it is not an edit and must not dirty the package.
-			World->DestroyActor(CaptureActor, /*bNetForce*/ false, /*bShouldModifyLevel*/ false);
-		}
-	};
-
-	USceneCaptureComponent2D* Comp = CaptureActor->GetCaptureComponent2D();
-	if (!Comp) return MCPError(TEXT("SceneCapture2D has no capture component"));
-	Comp->FOVAngle = (float)Fov;
-	Comp->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
-	Comp->bCaptureEveryFrame = false;
-	Comp->bCaptureOnMovement = false;
-
-	// Transient render target
-	UTextureRenderTarget2D* RT = UKismetRenderingLibrary::CreateRenderTarget2D(
-		World, Width, Height, ETextureRenderTargetFormat::RTF_RGBA8_SRGB, FLinearColor::Black, false);
-	if (!RT) return MCPError(TEXT("Failed to create RenderTarget2D"));
-	Comp->TextureTarget = RT;
-
-	// #662: force-stream all textures to full resolution and flush the render
-	// thread so the capture is a complete, resident frame rather than the
-	// unloaded-texture checker or a stale cached image. Double-capture ensures
-	// streamed mips that arrive after the first pass are present in the second.
+	// #662: force-stream textures so the capture is a complete, resident frame
+	// rather than the unloaded-texture checker or a stale cached image.
 	const bool bFullyLoadTextures = OptionalBool(Params, TEXT("fullyLoadTextures"), true);
-	if (bFullyLoadTextures)
-	{
-		IStreamingManager::Get().StreamAllResources(0.0f);
-		FlushRenderingCommands();
-		Comp->CaptureScene();
-		FlushRenderingCommands();
-	}
-	Comp->CaptureScene();
-	FlushRenderingCommands();
+	Rig.Capture(bFullyLoadTextures);
 
-	// Split outputPath into directory + filename for ExportRenderTarget.
-	FString AbsPath = OutputPath;
-	if (FPaths::IsRelative(AbsPath))
-	{
-		AbsPath = FPaths::Combine(FPaths::ProjectDir(), AbsPath);
-	}
+	FString AbsPath = UEMCP::SceneCapture::ResolveOutputPath(OutputPath);
 	if (!AbsPath.EndsWith(TEXT(".png"))) AbsPath += TEXT(".png");
-	FString OutDir = FPaths::GetPath(AbsPath);
-	FString OutName = FPaths::GetCleanFilename(AbsPath);
-	IFileManager::Get().MakeDirectory(*OutDir, /*Tree*/ true);
 
 	// Asked before the export, because it is the difference between creating a
 	// file and destroying whatever was at that path.
 	const bool bOverwrote = IFileManager::Get().FileExists(*AbsPath);
 
-	UKismetRenderingLibrary::ExportRenderTarget(World, RT, OutDir, OutName);
-
-	const int64 Size = IFileManager::Get().FileSize(*AbsPath);
-	if (Size < 0)
-	{
-		return MCPError(FString::Printf(TEXT("Export did not produce a file at %s"), *AbsPath));
-	}
+	int64 Size = -1;
+	FString ExportError;
+	if (!Rig.ExportPng(AbsPath, Size, ExportError)) return MCPError(ExportError);
 
 	auto Result = MCPSuccess();
 	Result->SetStringField(TEXT("path"), AbsPath);

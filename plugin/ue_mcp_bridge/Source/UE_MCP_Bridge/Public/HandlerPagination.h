@@ -226,8 +226,8 @@ namespace MCPPagination
 		// and there a page cap that is read by nobody is a silent wrong answer:
 		// the caller asks for one row and is handed the default page.
 		const TCHAR* LimitField = nullptr;
-		if (Params.IsValid() && Params->HasField(TEXT("limit"))) LimitField = TEXT("limit");
-		else if (Params.IsValid() && Params->HasField(TEXT("maxResults"))) LimitField = TEXT("maxResults");
+		if (HasParam(Params, TEXT("limit"))) LimitField = TEXT("limit");
+		else if (HasParam(Params, TEXT("maxResults"))) LimitField = TEXT("maxResults");
 
 		if (LimitField)
 		{

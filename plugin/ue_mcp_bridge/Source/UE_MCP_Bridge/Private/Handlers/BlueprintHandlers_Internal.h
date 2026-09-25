@@ -130,6 +130,16 @@ inline FString MakeGraphSelector(const FString& Name, int32 DuplicateIndex, int3
 		: Name;
 }
 
+/** The graph a single-graph write addresses: graphSelector (the exact selector
+ *  list_graphs reports) wins over graphName. FindGraph resolves both. */
+inline FString ReadGraphNameOrSelector(const TSharedPtr<FJsonObject>& Params, const FString& Default)
+{
+	FString Value;
+	if (Params.IsValid() && Params->TryGetStringField(TEXT("graphSelector"), Value) && !Value.IsEmpty()) return Value;
+	if (Params.IsValid() && Params->TryGetStringField(TEXT("graphName"), Value) && !Value.IsEmpty()) return Value;
+	return Default;
+}
+
 /** How many graphs share each name, which is what decides whether a selector
  *  needs its index suffix. */
 inline void CountGraphNames(const TArray<UEdGraph*>& Graphs, TMap<FString, int32>& OutNameCounts)

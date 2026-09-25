@@ -1600,6 +1600,169 @@ TSharedPtr<FJsonValue> FGasHandlers::TraceAbilityActivation(const TSharedPtr<FJs
 	return MCPResult(Result);
 }
 
+// ── Loose gameplay tags (#1104) ──────────────────────────────────────────────
+//
+// Loose tags share one counter with effect-granted tags, so every result reads
+// the count back rather than trusting the request.
+
+namespace
+{
+	/** Params shared by add_loose_gameplay_tag and remove_loose_gameplay_tag. */
+	struct FLooseTagRequest
+	{
+		AActor* Actor = nullptr;
+		UAbilitySystemComponent* ASC = nullptr;
+		FGameplayTag Tag;
+		int32 Count = 1;
+	};
+
+	bool ResolveLooseTagRequest(
+		const TSharedPtr<FJsonObject>& Params,
+		FLooseTagRequest& Out,
+		TSharedPtr<FJsonValue>& OutError)
+	{
+		FString TagName;
+		if (auto Err = RequireString(Params, TEXT("tag"), TagName))
+		{
+			OutError = Err;
+			return false;
+		}
+
+		const double RequestedCount = OptionalNumber(Params, TEXT("count"), 1.0);
+		if (RequestedCount < 1.0 || RequestedCount != FMath::FloorToDouble(RequestedCount))
+		{
+			OutError = MCPError(FString::Printf(
+				TEXT("count must be a whole number of at least 1, got %s"),
+				*FString::SanitizeFloat(RequestedCount)));
+			return false;
+		}
+		Out.Count = static_cast<int32>(RequestedCount);
+
+		// Refused rather than added: an unregistered tag is an invalid FGameplayTag
+		// and the ASC would silently count nothing.
+		Out.Tag = FGameplayTag::RequestGameplayTag(FName(*TagName), /*ErrorIfNotFound*/ false);
+		if (!Out.Tag.IsValid())
+		{
+			OutError = MCPError(FString::Printf(
+				TEXT("Gameplay tag '%s' is not registered. Create it with reflection(action=\"create_tag\") first, ")
+				TEXT("or check the spelling with reflection(action=\"list_tags\")."),
+				*TagName));
+			return false;
+		}
+
+		Out.ASC = ResolveASC(Params, Out.Actor, OutError);
+		return Out.ASC != nullptr;
+	}
+
+	void WriteLooseTagFields(
+		TSharedPtr<FJsonObject> Obj,
+		const FLooseTagRequest& Req,
+		int32 PreviousCount,
+		int32 NewCount)
+	{
+		Obj->SetStringField(TEXT("actorLabel"), Req.Actor->GetActorLabel());
+		Obj->SetStringField(TEXT("actorPath"), Req.Actor->GetPathName());
+		Obj->SetStringField(TEXT("tag"), Req.Tag.ToString());
+		Obj->SetNumberField(TEXT("previousTagCount"), PreviousCount);
+		Obj->SetNumberField(TEXT("tagCount"), NewCount);
+		Obj->SetBoolField(TEXT("hasTag"), NewCount > 0);
+	}
+}
+
+TSharedPtr<FJsonValue> FGasHandlers::AddLooseGameplayTag(const TSharedPtr<FJsonObject>& Params)
+{
+	MCP_CHECK_GAME_THREAD();
+
+	FLooseTagRequest Req;
+	TSharedPtr<FJsonValue> Err;
+	if (!ResolveLooseTagRequest(Params, Req, Err)) return Err;
+
+	const int32 Before = Req.ASC->GetTagCount(Req.Tag);
+	Req.ASC->AddLooseGameplayTag(Req.Tag, Req.Count);
+	const int32 After = Req.ASC->GetTagCount(Req.Tag);
+	const int32 Added = After - Before;
+
+	auto Result = MCPSuccess();
+	if (Added > 0) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), Added <= 0);
+	WriteLooseTagFields(Result, Req, Before, After);
+	Result->SetNumberField(TEXT("count"), Req.Count);
+
+	if (Added <= 0)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The tag count did not move, so there is nothing to undo."));
+		return MCPResult(Result);
+	}
+
+	// Removes exactly what this call added, so counts that predate it survive.
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	RollbackPayload->SetStringField(TEXT("actorPath"), Req.Actor->GetPathName());
+	RollbackPayload->SetStringField(TEXT("tag"), Req.Tag.ToString());
+	RollbackPayload->SetNumberField(TEXT("count"), Added);
+	RollbackPayload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world"), TEXT("auto")));
+	MCPSetRollback(Result, TEXT("remove_loose_gameplay_tag"), RollbackPayload);
+	Result->SetBoolField(TEXT("rollbackLossy"), false);
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FGasHandlers::RemoveLooseGameplayTag(const TSharedPtr<FJsonObject>& Params)
+{
+	MCP_CHECK_GAME_THREAD();
+
+	FLooseTagRequest Req;
+	TSharedPtr<FJsonValue> Err;
+	if (!ResolveLooseTagRequest(Params, Req, Err)) return Err;
+
+	const int32 Before = Req.ASC->GetTagCount(Req.Tag);
+
+	auto Result = MCPSuccess();
+	// Idempotent so a replayed rollback is safe, and the engine is not asked to
+	// remove a tag it would only warn about.
+	if (Before <= 0)
+	{
+		Result->SetBoolField(TEXT("updated"), false);
+		Result->SetBoolField(TEXT("unchanged"), true);
+		Result->SetBoolField(TEXT("alreadyRemoved"), true);
+		WriteLooseTagFields(Result, Req, Before, Before);
+		Result->SetNumberField(TEXT("count"), 0);
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"), TEXT("The ASC did not own this tag, so nothing was removed."));
+		return MCPResult(Result);
+	}
+
+	// Never more than the ASC holds, so the rollback can restore the exact count.
+	const int32 ToRemove = FMath::Min(Req.Count, Before);
+	Req.ASC->RemoveLooseGameplayTag(Req.Tag, ToRemove);
+	const int32 After = Req.ASC->GetTagCount(Req.Tag);
+	const int32 Removed = Before - After;
+
+	if (Removed > 0) MCPSetUpdated(Result); else Result->SetBoolField(TEXT("updated"), false);
+	Result->SetBoolField(TEXT("unchanged"), Removed <= 0);
+	Result->SetBoolField(TEXT("alreadyRemoved"), false);
+	WriteLooseTagFields(Result, Req, Before, After);
+	Result->SetNumberField(TEXT("count"), Removed);
+
+	if (Removed <= 0)
+	{
+		Result->SetBoolField(TEXT("rollbackPossible"), false);
+		Result->SetStringField(TEXT("rollbackNote"),
+			TEXT("The count did not move. The tag is owned only through a child tag or an active GameplayEffect, ")
+			TEXT("which a loose removal cannot take off; use gas(action=\"remove_effect\") for an effect-granted tag."));
+		return MCPResult(Result);
+	}
+
+	TSharedPtr<FJsonObject> RollbackPayload = MakeShared<FJsonObject>();
+	RollbackPayload->SetStringField(TEXT("actorPath"), Req.Actor->GetPathName());
+	RollbackPayload->SetStringField(TEXT("tag"), Req.Tag.ToString());
+	RollbackPayload->SetNumberField(TEXT("count"), Removed);
+	RollbackPayload->SetStringField(TEXT("world"), OptionalString(Params, TEXT("world"), TEXT("auto")));
+	MCPSetRollback(Result, TEXT("add_loose_gameplay_tag"), RollbackPayload);
+	Result->SetBoolField(TEXT("rollbackLossy"), false);
+	return MCPResult(Result);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared resolution, exported for the other GAS translation units.
 //

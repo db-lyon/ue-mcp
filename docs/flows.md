@@ -32,20 +32,11 @@ That's it. The config is **hot-reloaded on every call** - edit the YAML and run 
 
 The response carries a `summary` line per step plus a `steps` array holding what each step answered, so an action called inside a flow returns the same data it returns when called directly.
 
-## The rest of the `flow` tool
-
-Running flows is three of the tool's seventeen actions: `run`, `plan` and `list`. The other fourteen are two surfaces that sit beside them.
-
-- **[Journal](journal.md)** - the nine `journal_*` actions, the record a run leaves behind: what was done, what it produced, and how it ended. Every `flow(action="run")` writes one automatically; open one by hand for work that is not a flow.
-- **[Skill packs](skill-packs.md)** - the five `skill_*` actions, covering the written workflows that say which calls to make in what order, including verifying that the calls they teach still exist.
-
-Neither surface reaches the editor, so both work with the editor down.
-
 ## Concepts
 
 ### Tasks
 
-A task is a named unit of work. UE-MCP ships with **<!-- count:actions -->1933+<!-- /count --> built-in tasks** across <!-- count:tools -->26<!-- /count --> categories - every action available through the MCP tools is also a flow task.
+A task is a named unit of work. UE-MCP ships with **<!-- count:actions -->1962+<!-- /count --> built-in tasks** across <!-- count:tools -->26<!-- /count --> categories - every action available through the MCP tools is also a flow task.
 
 Tasks are defined in the `tasks:` section of your config:
 
@@ -68,7 +59,7 @@ The fields:
 | `group` | No | Category for organization |
 | `options` | No | Default options passed to the task (can be overridden per-step) |
 
-You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->1933+<!-- /count --> actions. You define tasks when you want to **override** or **add** custom ones.
+You rarely need to define tasks yourself - the built-in defaults cover all <!-- count:actions -->1962+<!-- /count --> actions. You define tasks when you want to **override** or **add** custom ones.
 
 ### Flows
 
@@ -351,7 +342,7 @@ steps[i].partialWriteRollback = {
 - **Armed.** The runner already ran the undo, ahead of every other inverse. `rollback.attempted` counts it, and `rollback.errors` says whether it worked.
 - **Not armed.** Nothing replayed it. Run it as the step shown, or call the bridge method named in `record.payload.method` with the rest of the payload.
 
-The same call is appended to that step's `error.message` and printed under the step in the summary, because a message survives a summary line and a journal entry where a field does not. A task cannot see `rollback_on_failure`, so the message names both outcomes and the `replayed` flag says which one happened.
+The same call is appended to that step's `error.message` and printed under the step in the summary, because a message survives a summary line where a field does not. A task cannot see `rollback_on_failure`, so the message names both outcomes and the `replayed` flag says which one happened.
 
 A step carrying `ignore_failure: true` contributes its record on the same terms. The flag says the run may walk past that failure, not that what the step half-wrote should survive a rollback. Because an ignored step does not stop the run, a LATER real failure is what arms `rollback_on_failure`, and the unwind then covers the ignored step's partial write alongside the successful steps before it.
 
@@ -707,7 +698,7 @@ Configuration is loaded with [`@db-lyon/flowkit`'s config loader](https://github
 
 | Layer | File | Purpose |
 |-------|------|---------|
-| 1 (base) | Built-in defaults | All <!-- count:actions -->1933+<!-- /count --> tasks, no flows |
+| 1 (base) | Built-in defaults | All <!-- count:actions -->1962+<!-- /count --> tasks, no flows |
 | 2 | `ue-mcp.yml` | Your project config |
 | 3 | `ue-mcp.{env}.yml` | Environment overlay (set `UE_MCP_ENV`) |
 | 4 | `ue-mcp.local.yml` | Local-only overrides (gitignore this) |

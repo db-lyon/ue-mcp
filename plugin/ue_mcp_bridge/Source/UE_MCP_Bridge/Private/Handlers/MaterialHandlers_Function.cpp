@@ -34,26 +34,6 @@ namespace
 		}
 		return MF;
 	}
-
-	UClass* ResolveExpressionClass(const FString& InType)
-	{
-		FString ClassName = InType;
-		if (!ClassName.StartsWith(TEXT("MaterialExpression")) && !ClassName.StartsWith(TEXT("UMaterialExpression")))
-		{
-			ClassName = TEXT("UMaterialExpression") + ClassName;
-		}
-		else if (!ClassName.StartsWith(TEXT("U")))
-		{
-			ClassName = TEXT("U") + ClassName;
-		}
-		UClass* Result = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::ExactClass);
-		if (!Result)
-		{
-			Result = FindFirstObject<UClass>(*InType, EFindFirstObjectOptions::ExactClass);
-		}
-		if (!Result || !Result->IsChildOf(UMaterialExpression::StaticClass())) return nullptr;
-		return Result;
-	}
 }
 
 // material(action="create_function", name, packagePath?, description?, onConflict?)
@@ -100,7 +80,7 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialFunctionExpression(const TS
 	if (!MF) return MCPError(FString::Printf(TEXT("MaterialFunction not found: %s"), *FunctionPath));
 
 	UClass* ExprClass = ResolveExpressionClass(ExpressionType);
-	if (!ExprClass) return MCPError(FString::Printf(TEXT("Unknown expression type: %s"), *ExpressionType));
+	if (!ExprClass) return MCPError(FString::Printf(TEXT("Unknown expression type: '%s'"), *ExpressionType));
 
 	int32 PosX = (int32)OptionalNumber(Params, TEXT("positionX"), 0.0);
 	int32 PosY = (int32)OptionalNumber(Params, TEXT("positionY"), 0.0);
@@ -157,15 +137,11 @@ TSharedPtr<FJsonValue> FMaterialHandlers::AddMaterialFunctionExpression(const TS
 	Result->SetNumberField(TEXT("expressionIndex"), Index);
 	Result->SetStringField(TEXT("nodeId"), FString::FromInt(Index));
 
-	// No inverse. The surface has no delete-expression action for a
-	// MaterialFunction graph: delete_material_expression loads its target
-	// through LoadMaterialFromPath, which returns a UMaterial, and a
-	// UMaterialFunction is not one - pointing a rollback at it would fail with
-	// "Failed to load material". The node stays until such an action exists.
-	Result->SetBoolField(TEXT("rollbackPossible"), false);
-	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
-		TEXT("No action removes an expression from a MaterialFunction. delete_material_expression only operates on UMaterial graphs, so it cannot be used here. The node this call added is '%s' at index %d - remove it in the Material Function editor if the change has to be undone."),
-		*NewExpr->GetName(), Index));
+	// Rollback: delete the node by its engine name, which is unique in the function.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("functionPath"), MF->GetPathName());
+	Payload->SetStringField(TEXT("expressionName"), NewExpr->GetName());
+	MCPSetRollback(Result, TEXT("delete_material_expression"), Payload);
 	return MCPResult(Result);
 }
 
@@ -239,11 +215,26 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialFunctionExpressions(con
 		Before.Add(FPinSnapshot{ In->Expression, In->OutputIndex });
 	}
 
+	// The source's outputs by index. An empty name is the default output, which
+	// is what an omitted sourceOutput selects (#1138).
+	TArray<TSharedPtr<FJsonValue>> SourceOutputs;
+	TArray<FString> SourceOutputLabels;
+	for (const FExpressionOutput& Output : From->GetOutputs())
+	{
+		const FString OutputName = Output.OutputName.ToString();
+		SourceOutputs.Add(MakeShared<FJsonValueString>(OutputName));
+		SourceOutputLabels.Add(OutputName.IsEmpty() ? TEXT("(default)") : OutputName);
+	}
+
 	const bool bOk = UMaterialEditingLibrary::ConnectMaterialExpressions(From, SourceOutput, To, TargetInput);
 	if (!bOk)
 	{
-		return MCPError(FString::Printf(TEXT("ConnectMaterialExpressions failed: '%s' -> '%s' (output='%s' input='%s')"),
-			*From->GetName(), *To->GetName(), *SourceOutput, *TargetInput));
+		TSharedPtr<FJsonObject> Err = MakeShared<FJsonObject>();
+		Err->SetBoolField(TEXT("success"), false);
+		Err->SetStringField(TEXT("error"), FString::Printf(TEXT("ConnectMaterialExpressions failed: '%s' -> '%s' (output='%s' input='%s'). Source outputs: [%s]"),
+			*From->GetName(), *To->GetName(), *SourceOutput, *TargetInput, *FString::Join(SourceOutputLabels, TEXT(", "))));
+		Err->SetArrayField(TEXT("sourceOutputs"), SourceOutputs);
+		return MCPResult(Err);
 	}
 
 	int32 ChangedPin = INDEX_NONE;
@@ -269,6 +260,18 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ConnectMaterialFunctionExpressions(con
 	Result->SetStringField(TEXT("sourceOutput"), SourceOutput);
 	Result->SetStringField(TEXT("targetInput"), TargetInput);
 	Result->SetNumberField(TEXT("changedInputIndex"), ChangedPin);
+	Result->SetArrayField(TEXT("sourceOutputs"), SourceOutputs);
+	if (ChangedPin != INDEX_NONE)
+	{
+		if (FExpressionInput* Wired = To->GetInput(ChangedPin))
+		{
+			Result->SetNumberField(TEXT("connectedOutputIndex"), Wired->OutputIndex);
+			if (SourceOutputs.IsValidIndex(Wired->OutputIndex))
+			{
+				Result->SetStringField(TEXT("connectedOutputName"), SourceOutputs[Wired->OutputIndex]->AsString());
+			}
+		}
+	}
 
 	if (ChangedPin == INDEX_NONE)
 	{
@@ -376,5 +379,65 @@ TSharedPtr<FJsonValue> FMaterialHandlers::ListMaterialFunctionExpressions(const 
 	Result->SetStringField(TEXT("functionPath"), MF->GetPathName());
 	Result->SetArrayField(TEXT("expressions"), Arr);
 	Result->SetNumberField(TEXT("count"), Arr.Num());
+	return MCPResult(Result);
+}
+
+TSharedPtr<FJsonValue> FMaterialHandlers::DeleteFunctionExpression(UMaterialFunction* Function, UMaterialExpression* Expression, const FString& ExpressionName)
+{
+	const FString DeletedClass = Expression->GetClass()->GetName();
+	const FString DeletedDesc = Expression->Desc;
+	const int32 DeletedPosX = Expression->MaterialExpressionEditorX;
+	const int32 DeletedPosY = Expression->MaterialExpressionEditorY;
+	FString InputName;
+	FString OutputName;
+	if (UMaterialExpressionFunctionInput* In = Cast<UMaterialExpressionFunctionInput>(Expression)) InputName = In->InputName.ToString();
+	if (UMaterialExpressionFunctionOutput* Out = Cast<UMaterialExpressionFunctionOutput>(Expression)) OutputName = Out->OutputName.ToString();
+
+	// The wires into other nodes are what the rollback cannot restore, so name them.
+	TArray<TSharedPtr<FJsonValue>> SeveredWires;
+	for (UMaterialExpression* Other : Function->GetExpressions())
+	{
+		if (!Other || Other == Expression) continue;
+		for (int32 i = 0; ; ++i)
+		{
+			FExpressionInput* Input = Other->GetInput(i);
+			if (!Input) break;
+			if (Input->Expression != Expression) continue;
+			TSharedPtr<FJsonObject> Wire = MakeShared<FJsonObject>();
+			Wire->SetStringField(TEXT("targetExpression"), Other->GetName());
+			Wire->SetNumberField(TEXT("targetInputIndex"), i);
+			Wire->SetNumberField(TEXT("sourceOutputIndex"), Input->OutputIndex);
+			SeveredWires.Add(MakeShared<FJsonValueObject>(Wire));
+		}
+	}
+
+	Function->Modify();
+	// Breaks every link to the node before removing it.
+	UMaterialEditingLibrary::DeleteMaterialExpressionInFunction(Function, Expression);
+	UMaterialEditingLibrary::UpdateMaterialFunction(Function, nullptr);
+	const bool bSaved = UEditorAssetLibrary::SaveAsset(Function->GetPathName(), /*bOnlyIfIsDirty=*/false);
+
+	auto Result = MCPSuccess();
+	Result->SetStringField(TEXT("functionPath"), Function->GetPathName());
+	Result->SetStringField(TEXT("deletedExpression"), ExpressionName);
+	Result->SetStringField(TEXT("deletedClass"), DeletedClass);
+	Result->SetNumberField(TEXT("expressionCount"), Function->GetExpressions().Num());
+	Result->SetBoolField(TEXT("deleted"), true);
+	Result->SetBoolField(TEXT("saved"), bSaved);
+	Result->SetArrayField(TEXT("severedExpressionInputs"), SeveredWires);
+
+	// Rollback: a fresh node of the same class at the same spot. Values and wires are not restored.
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("functionPath"), Function->GetPathName());
+	Payload->SetStringField(TEXT("expressionType"), DeletedClass);
+	Payload->SetNumberField(TEXT("positionX"), DeletedPosX);
+	Payload->SetNumberField(TEXT("positionY"), DeletedPosY);
+	if (!InputName.IsEmpty()) Payload->SetStringField(TEXT("inputName"), InputName);
+	if (!OutputName.IsEmpty()) Payload->SetStringField(TEXT("outputName"), OutputName);
+	MCPSetRollback(Result, TEXT("add_expression_in_function"), Payload);
+	Result->SetBoolField(TEXT("rollbackLossy"), true);
+	Result->SetStringField(TEXT("rollbackNote"), FString::Printf(
+		TEXT("The rollback adds a fresh %s at the same position%s, with default values and no wiring. It does not restore this node's property values or the %d input(s) listed in severedExpressionInputs; rewire those with connect_function_expressions."),
+		*DeletedClass, DeletedDesc.IsEmpty() ? TEXT("") : TEXT(" (its description is not restored either)"), SeveredWires.Num()));
 	return MCPResult(Result);
 }

@@ -77,7 +77,7 @@ export function describeProtocolMismatch(
     return (
       `The Unreal bridge plugin speaks protocol version ${theirs}, this ue-mcp client (v${clientPackageVersion()}) speaks version ${ours}.` +
       `${missing}${built}` +
-      ` Rebuild the plugin against the current package: run 'npx ue-mcp update' in the project, then rebuild the editor binaries.`
+      ` Rebuild the plugin against the current package: run 'ue-mcp update --build' in the project (or 'ue-mcp deploy' then 'ue-mcp build'), then restart the editor.`
     );
   }
   return (

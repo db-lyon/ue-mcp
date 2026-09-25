@@ -447,6 +447,8 @@ void FLandscapeHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	// geographic coordinates into that landscape's world space.
 	Registry.RegisterHandlerWithTimeout(TEXT("plan_real_world_landscape"), &PlanRealWorldLandscape, 120.0f);
 	Registry.RegisterHandler(TEXT("project_geo_coordinates"), &ProjectGeoCoordinates);
+	Registry.RegisterHandler(TEXT("list_landscape_edit_layers"), &ListEditLayers);
+	Registry.RegisterHandlerWithTimeout(TEXT("merge_landscape_edit_layers"), &MergeEditLayers, 300.0f);
 }
 
 TSharedPtr<FJsonValue> FLandscapeHandlers::GetLandscapeInfo(const TSharedPtr<FJsonObject>& Params)

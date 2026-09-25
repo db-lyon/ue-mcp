@@ -460,6 +460,13 @@ TSharedPtr<FJsonValue> FLevelHandlers::QueryComponents(const TSharedPtr<FJsonObj
 		}
 	}
 
+	// Baseline for dirtiedPackages, so a package that was dirty before the call
+	// is not reported as dirtied by it (#1079).
+	if (LevelPath.IsEmpty())
+	{
+		MCPEditorState::CollectDirtyEditorPackageNames(InitialDirtyPackages);
+	}
+
 	// Everything below runs against this world. RestoreLevelPath is put back
 	// on every exit path from here on.
 	UWorld* World = LevelPath.IsEmpty()

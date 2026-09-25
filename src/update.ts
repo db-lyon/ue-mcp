@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { execSync } from "node:child_process";
+import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { collectDoctor, formatDoctor } from "./doctor.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
+import { editorOwnsProject, listEditorProcesses } from "./engine-observer.js";
 import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "./version-check.js";
 
 const RESET = "\x1b[0m";
@@ -43,6 +45,22 @@ function isGlobalInstall(): boolean {
   }
 }
 
+/** The .uproject an argument names (file or directory), else the one in cwd. */
+function findUProject(arg: string | undefined): string | null {
+  if (arg?.endsWith(".uproject")) return path.resolve(arg);
+  const dir = arg && fs.existsSync(arg) && fs.statSync(arg).isDirectory() ? arg : process.cwd();
+  const found = fs.readdirSync(dir).filter((f) => f.endsWith(".uproject"));
+  return found.length > 0 ? path.resolve(dir, found[0]) : null;
+}
+
+async function editorRunningFor(uproject: string): Promise<boolean> {
+  try {
+    return (await listEditorProcesses()).some((p) => editorOwnsProject(p, uproject));
+  } catch {
+    return false;
+  }
+}
+
 /** Run a sibling CLI from THIS package (not npx) so a local shadow can't intercept. */
 function runSelfCli(scriptBase: string, projectArg: string | undefined): boolean {
   const selfDir = path.dirname(fileURLToPath(import.meta.url));
@@ -65,12 +83,17 @@ async function update() {
     process.exit(1);
   }
   const args = target.rest;
-  const shouldBuild = args.includes("--build");
-  const shouldDeploy = shouldBuild || args.includes("--deploy");
-  const projectArg = target.projectPath ?? args.find((a) => !a.startsWith("-"));
+  // The package and the editor plugin are one product, so a bare update carries
+  // both. Stopping at npm left editors on an old plugin that answered
+  // "Unknown method" for actions the new server advertised.
+  const uproject = findUProject(target.projectPath ?? args.find((a) => !a.startsWith("-")));
+  const projectArg = uproject ?? undefined;
+  const shouldDeploy = !!uproject && !args.includes("--no-deploy");
+  // --build and --deploy are the old opt-ins, now the default; still accepted.
+  let shouldBuild = shouldDeploy && !args.includes("--no-build");
 
   console.log("");
-  console.log(`  ${BOLD}${CYAN}UE-MCP Update${shouldBuild ? " --build" : ""}${RESET}`);
+  console.log(`  ${BOLD}${CYAN}UE-MCP Update${RESET}`);
   console.log("");
 
   const installed = getInstalledVersion();
@@ -130,7 +153,11 @@ async function update() {
   }
 
   // 3. Deploy the bridge plugin sources into the project.
-  if (shouldDeploy) {
+  if (!uproject) {
+    console.log("");
+    console.log(`  ${YELLOW}No .uproject here, so the editor plugin was NOT updated.${RESET}`);
+    step("Run `ue-mcp update` from your project directory, or pass the .uproject path.");
+  } else if (shouldDeploy) {
     console.log("");
     step("Deploying bridge plugin...");
     console.log("");
@@ -140,10 +167,20 @@ async function update() {
     }
   } else {
     console.log("");
-    step("Run `ue-mcp deploy` to copy the new plugin sources into your project (or re-run with --deploy / --build).");
+    console.log(`  ${YELLOW}Skipped the plugin (--no-deploy). The editor still runs the old one until \`ue-mcp deploy\` and \`ue-mcp build\`.${RESET}`);
   }
 
-  // 4. Rebuild the editor (gated behind --build).
+  // 4. Rebuild the editor. A running editor holds the plugin DLL, so the build
+  //    would fail on a locked file; skip it and say what to run instead.
+  if (shouldBuild && uproject && (await editorRunningFor(uproject))) {
+    shouldBuild = false;
+    console.log("");
+    console.log(`  ${YELLOW}The editor is running, so the plugin was deployed but not rebuilt.${RESET}`);
+    step("Close the editor, then run `ue-mcp build`.");
+  } else if (shouldDeploy && !shouldBuild) {
+    console.log("");
+    step("Plugin deployed but not rebuilt (--no-build). Run `ue-mcp build` before the next editor launch.");
+  }
   if (shouldBuild) {
     console.log("");
     step("Rebuilding the editor (this can take a few minutes)...");

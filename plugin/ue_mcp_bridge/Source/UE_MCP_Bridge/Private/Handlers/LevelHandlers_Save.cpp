@@ -33,6 +33,7 @@
 #include "LevelHandlers.h"
 #include "HandlerRegistry.h"
 #include "HandlerUtils.h"
+#include "HandlerCommitSave.h"
 
 #include "Editor.h"
 #include "Engine/Level.h"
@@ -248,6 +249,16 @@ TSharedPtr<FJsonValue> FLevelHandlers::SaveLevel(const TSharedPtr<FJsonObject>& 
 	if (GEditor && (GEditor->PlayWorld != nullptr || GEditor->bIsSimulatingInEditor))
 	{
 		return MCPError(TEXT("Play In Editor is running; stop it before saving the level. Saving during PIE is what produced an unexplained failure before."));
+	}
+
+	// commitDeletes: the editor's own save path, which removes the external
+	// package of a deleted World Partition actor instead of failing on it.
+	if (OptionalBool(Params, TEXT("commitDeletes"), false))
+	{
+		TSharedPtr<FJsonObject> Committed = MCPSaveDirtyCommittingDeletes(true, true);
+		Committed->SetStringField(TEXT("levelName"), World->GetName());
+		Committed->SetStringField(TEXT("levelPath"), World->GetPathName());
+		return MCPResult(Committed);
 	}
 
 	ULevel* Level = World->GetCurrentLevel();

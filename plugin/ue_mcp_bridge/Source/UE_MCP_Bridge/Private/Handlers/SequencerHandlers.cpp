@@ -7,13 +7,7 @@
 #include "MovieSceneSequencePlayer.h"
 #include "MovieSceneTimeUnit.h"
 
-#include "Subsystems/AssetEditorSubsystem.h"
-#if !UE_MCP_HAS_5_5_API
-// The open sequencer, for the immediate evaluation ForceUpdate() performs on
-// newer engines.
-#include "ILevelSequenceEditorToolkit.h"
-#include "ISequencer.h"
-#endif
+#include "HandlerSequencerPlayhead.h"
 #include "HandlerAssetCreate.h"
 #include "LevelSequence.h"
 #include "LevelSequenceActor.h"
@@ -53,6 +47,8 @@ void FSequencerHandlers::RegisterHandlers(FMCPHandlerRegistry& Registry)
 	Registry.RegisterHandler(TEXT("add_sequence_track"), &AddTrack);
 	Registry.RegisterHandler(TEXT("play_sequence"), &SequenceControl);
 	Registry.RegisterHandler(TEXT("scrub_sequence"), &ScrubSequence);
+	// #1098: a whole frame range in one call, so it gets the long timeout.
+	Registry.RegisterHandlerWithTimeout(TEXT("render_sequence_frames"), &RenderSequenceFrames, 600.0f);
 	Registry.RegisterHandler(TEXT("set_sequence_playback_range"), &SetPlaybackRange);
 	Registry.RegisterHandler(TEXT("add_sequence_section"), &AddSection);
 	Registry.RegisterHandler(TEXT("set_sequence_keyframes"), &SetKeyframes);
@@ -151,6 +147,8 @@ TSharedPtr<FJsonValue> FSequencerHandlers::CreateLevelSequence(const TSharedPtr<
 
 TSharedPtr<FJsonValue> FSequencerHandlers::ReadSequenceInfo(const TSharedPtr<FJsonObject>& Params)
 {
+	if (auto Err = MCPRefuseDuringPlayInEditor(TEXT("get_sequence_info"))) return Err;
+
 	FString AssetPath;
 	if (auto Err = RequireStringAlt(Params, TEXT("assetPath"), TEXT("path"), AssetPath)) return Err;
 
@@ -844,36 +842,9 @@ TSharedPtr<FJsonValue> FSequencerHandlers::ScrubSequence(const TSharedPtr<FJsonO
 	const double PreviousDisplayFrame =
 		ULevelSequenceEditorBlueprintLibrary::GetGlobalPosition(EMovieSceneTimeUnit::DisplayRate).Frame.AsDecimal();
 
-	// Pause before scrubbing: a playing sequence moves the playhead again on the
-	// next tick, and the capture would not be at the time that was asked for.
-	ULevelSequenceEditorBlueprintLibrary::Pause();
-	const FMovieSceneSequencePlaybackParams ScrubTo(TargetDisplay, EUpdatePositionMethod::Scrub);
-	ULevelSequenceEditorBlueprintLibrary::SetGlobalPosition(ScrubTo, EMovieSceneTimeUnit::DisplayRate);
-	// Evaluate now instead of on the next tick. The playhead move alone does not
-	// write possessed-actor transforms; the evaluation does, and a capture taken
-	// before it would read the previous frame's world.
-#if UE_MCP_HAS_5_5_API
-	ULevelSequenceEditorBlueprintLibrary::ForceUpdate();
-#else
-	// ULevelSequenceEditorBlueprintLibrary::ForceUpdate() is newer than 5.4,
-	// and its own implementation is ISequencer::ForceEvaluate(). 5.4 has that
-	// call; what it lacks is the static wrapper, so the open sequence's toolkit
-	// is asked for its sequencer and the same evaluation is driven directly.
-	// RefreshCurrentLevelSequence() is NOT the substitute: it notifies of a data
-	// change and leaves the evaluation to a later tick, which is precisely the
-	// stale-frame read this call exists to prevent.
-	if (UAssetEditorSubsystem* AssetEditorSubsystem = GEditor ? GEditor->GetEditorSubsystem<UAssetEditorSubsystem>() : nullptr)
-	{
-		if (IAssetEditorInstance* EditorInstance = AssetEditorSubsystem->FindEditorForAsset(Current, /*bFocusIfOpen*/ false))
-		{
-			ILevelSequenceEditorToolkit* Toolkit = static_cast<ILevelSequenceEditorToolkit*>(EditorInstance);
-			if (const TSharedPtr<ISequencer> Sequencer = Toolkit->GetSequencer())
-			{
-				Sequencer->ForceEvaluate();
-			}
-		}
-	}
-#endif
+	// Pause before scrubbing (a playing sequence moves again on the next tick),
+	// then evaluate now so possessed-actor transforms are written.
+	UEMCP::SequencerPlayhead::ScrubAndEvaluate(Current, TargetDisplay);
 
 	const FFrameTime TargetTicks = FFrameRate::TransformTime(TargetDisplay, DisplayRate, TickResolution);
 	const double EvaluatedSeconds = DisplayRate.AsSeconds(TargetDisplay);
@@ -1187,6 +1158,8 @@ TSharedPtr<FJsonValue> FSequencerHandlers::AddSection(const TSharedPtr<FJsonObje
 // (default 0), channel, keyframes ([{seconds, value}]), interpolation? (cubic|linear).
 TSharedPtr<FJsonValue> FSequencerHandlers::SetKeyframes(const TSharedPtr<FJsonObject>& Params)
 {
+	if (auto PieErr = MCPRefuseDuringPlayInEditor(TEXT("set_sequence_keyframes"))) return PieErr;
+
 	FString Path, Err;
 	ULevelSequence* Sequence = LoadSequence(Params, Path, Err);
 	if (!Sequence) return MCPError(Err);

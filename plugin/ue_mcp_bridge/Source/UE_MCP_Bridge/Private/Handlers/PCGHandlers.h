@@ -35,4 +35,7 @@ private:
 	// issue #213 - bulk graph authoring via JSON spec.
 	static TSharedPtr<FJsonValue> ImportGraph(const TSharedPtr<FJsonObject>& Params);
 	static TSharedPtr<FJsonValue> ExportGraph(const TSharedPtr<FJsonObject>& Params);
+
+	// issue #1087 - convert UPCGSettingsInstance nodes to node-owned settings.
+	static TSharedPtr<FJsonValue> UnwrapInstanceNodes(const TSharedPtr<FJsonObject>& Params);
 };

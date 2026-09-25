@@ -17,6 +17,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "HandlerUtils.h"
+#include "Tests/MCPScopedTestMount.h"
 
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
@@ -30,34 +31,6 @@
 namespace
 {
 	const TCHAR* const MCPExtensionTestRoot = TEXT("/UEMCPPackageExtensionTest/");
-
-	/** Mount a private content root for the duration of the test and take it
-	 *  back down again, so no assertion here can touch a user's content. */
-	struct FScopedTestMount
-	{
-		FString RootPath;
-		FString ContentPath;
-
-		FScopedTestMount()
-			: RootPath(MCPExtensionTestRoot)
-			, ContentPath(FPaths::Combine(
-				FPaths::ConvertRelativePathToFull(FString(FPlatformProcess::UserTempDir())),
-				FString(TEXT("UEMCPPackageExtensionTest")),
-				FGuid::NewGuid().ToString(EGuidFormats::Digits)))
-		{
-			IFileManager::Get().MakeDirectory(*ContentPath, /*Tree=*/true);
-			FPackageName::RegisterMountPoint(RootPath, ContentPath);
-		}
-
-		~FScopedTestMount()
-		{
-			FPackageName::UnRegisterMountPoint(RootPath, ContentPath);
-			IFileManager::Get().DeleteDirectory(*ContentPath, /*RequireExists=*/false, /*Tree=*/true);
-		}
-
-		FScopedTestMount(const FScopedTestMount&) = delete;
-		FScopedTestMount& operator=(const FScopedTestMount&) = delete;
-	};
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -67,7 +40,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FPackageSaveExtensionTest::RunTest(const FString& Parameters)
 {
-	const FScopedTestMount Mount;
+	const FMCPScopedTestMount Mount{ FString(MCPExtensionTestRoot), TEXT("UEMCPPackageExtensionTest") };
 	IFileManager& FM = IFileManager::Get();
 
 	// A package with no world in it keeps the asset extension. This is the half

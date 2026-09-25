@@ -280,9 +280,9 @@ Then quit and relaunch your MCP client so it spawns the updated server.
 
 Different from the case above. Here the version is correct - `ue-mcp doctor` shows latest, the server is up to date - but a fix that changes **editor behavior** (a dialog being auto-cancelled, an actor placed wrong, anything the C++ plugin does) still happens.
 
-Cause: the bridge's editor-side half is a C++ plugin shipped as source. Your editor runs the **compiled** version of it, and a plain `ue-mcp update` neither deploys the new source into your project nor recompiles it. The version `doctor` reports is the npm/server half, so it looks up to date while the loaded plugin is stale. The fix never reaches the editor.
+Cause: the bridge's editor-side half is a C++ plugin shipped as source. Your editor runs the **compiled** version of it, and `ue-mcp update` run outside the project directory, or run by a version older than 1.3.10, neither deploys the new source into your project nor recompiles it. The version `doctor` reports is the npm/server half, so it looks up to date while the loaded plugin is stale. The fix never reaches the editor.
 
-Fix: rebuild the plugin, then restart the editor so the new binary loads.
+Fix: from the project directory, with the editor closed, rebuild the plugin, then restart the editor so the new binary loads.
 
 ```bash
 ue-mcp update --build
