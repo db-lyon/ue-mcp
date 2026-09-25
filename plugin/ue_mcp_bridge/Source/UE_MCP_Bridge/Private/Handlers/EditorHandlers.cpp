@@ -3149,11 +3149,8 @@ TSharedPtr<FJsonValue> FEditorHandlers::OpenAsset(const TSharedPtr<FJsonObject>&
 		return MCPError(FString::Printf(TEXT("Failed to load asset at '%s'"), *AssetPath));
 	}
 
-	// Root the loaded asset for the rest of the call. StaticLoadObject returns an
-	// unrooted pointer, and OpenEditorForAsset can run the GC, so reading
-	// Asset->GetClass() afterwards was an access violation when the asset was
-	// collected mid-call (crash 2026-09-23 14:31, FNameEntry::GetPlainNameString
-	// via OpenAsset).
+	// StaticLoadObject returns an unrooted pointer and OpenEditorForAsset can run
+	// the GC, so the asset is held for the rest of the call.
 	FGCObjectScopeGuard AssetScopeGuard(Asset);
 
 	if (!GEditor)
