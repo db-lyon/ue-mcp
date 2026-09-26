@@ -328,7 +328,7 @@ static void ConfigureColumnInput(FChooserColumnBase* Col, const FString& InputSt
 	// GetInputValue() (the parameter pointer) + GetInputType() (its struct).
 	const UScriptStruct* PSS = nullptr;
 	void* PData = nullptr;
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 	FInstancedStruct* InputPtr = Col->GetInputValuePtr();
 	if (!InputPtr || !InputPtr->IsValid()) return;
 	PSS = InputPtr->GetScriptStruct();
@@ -851,7 +851,7 @@ TSharedPtr<FJsonValue> FChooserHandlers::DeleteRow(const TSharedPtr<FJsonObject>
 	// Drop the per-row cell from every column, then the result + disabled flag.
 	// FChooserColumnBase::DeleteRows takes a TArrayView<int32> on UE 5.8+ and a
 	// TArray<uint32> on 5.7.
-#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8)
+#if UE_MCP_HAS_5_8_API
 	int32 RowToDelete = RowIndex;
 	TArrayView<int32> RowView(&RowToDelete, 1);
 #else
