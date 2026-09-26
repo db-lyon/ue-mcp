@@ -528,10 +528,10 @@ TSharedPtr<FJsonValue> FAudioHandlers::ExtractSoundWavePCM(const TSharedPtr<FJso
 	const double MaxSeconds = OptionalNumber(Params, TEXT("maxSeconds"), 0.0);
 	const bool bDownmix = OptionalBool(Params, TEXT("downmixMono"), false);
 
-	USoundWave* Wave = LoadObject<USoundWave>(nullptr, *SoundPath);
+	USoundWave* Wave = LoadAssetByPath<USoundWave>(SoundPath);
 	if (!Wave)
 	{
-		return MCPError(FString::Printf(TEXT("SoundWave not found: %s"), *SoundPath));
+		return MCPAssetLoadError(SoundPath, TEXT("SoundWave"));
 	}
 
 #if WITH_EDITOR
@@ -628,10 +628,10 @@ TSharedPtr<FJsonValue> FAudioHandlers::PlaySoundAtLocation(const TSharedPtr<FJso
 	const double Volume = OptionalNumber(Params, TEXT("volumeMultiplier"), 1.0);
 	const double Pitch = OptionalNumber(Params, TEXT("pitchMultiplier"), 1.0);
 
-	USoundBase* Sound = Cast<USoundBase>(UEditorAssetLibrary::LoadAsset(SoundPath));
+	USoundBase* Sound = LoadAssetByPath<USoundBase>(SoundPath);
 	if (!Sound)
 	{
-		return MCPError(FString::Printf(TEXT("Sound not found: %s"), *SoundPath));
+		return MCPAssetLoadError(SoundPath, TEXT("SoundBase"));
 	}
 
 	REQUIRE_EDITOR_WORLD(World);
@@ -664,10 +664,10 @@ TSharedPtr<FJsonValue> FAudioHandlers::SpawnAmbientSound(const TSharedPtr<FJsonO
 	double Volume = 1.0;
 	const bool bHasVolume = TryGetNumberParam(Params, TEXT("volumeMultiplier"), Volume);
 
-	USoundBase* Sound = Cast<USoundBase>(UEditorAssetLibrary::LoadAsset(SoundPath));
+	USoundBase* Sound = LoadAssetByPath<USoundBase>(SoundPath);
 	if (!Sound)
 	{
-		return MCPError(FString::Printf(TEXT("Sound not found: %s"), *SoundPath));
+		return MCPAssetLoadError(SoundPath, TEXT("SoundBase"));
 	}
 
 	REQUIRE_EDITOR_WORLD(World);

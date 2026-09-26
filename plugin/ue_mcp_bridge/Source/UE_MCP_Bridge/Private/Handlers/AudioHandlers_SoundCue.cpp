@@ -84,8 +84,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAddNode(const TSharedPtr<FJsonObj
 	const FString WavePath = OptionalString(Params, TEXT("soundWavePath"));
 	const bool bHasProperties = HasParam(Params, TEXT("properties"));
 
-	USoundCue* Cue = Cast<USoundCue>(UEditorAssetLibrary::LoadAsset(CuePath));
-	if (!Cue) return MCPError(FString::Printf(TEXT("SoundCue not found: %s"), *CuePath));
+	USoundCue* Cue = LoadAssetByPath<USoundCue>(CuePath);
+	if (!Cue) return MCPAssetLoadError(CuePath, TEXT("SoundCue"));
 
 	const FString T = NodeType.ToLower();
 	USoundNode* Node = ConstructCueNode(Cue, T);
@@ -95,7 +95,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAddNode(const TSharedPtr<FJsonObj
 	{
 		if (!WavePath.IsEmpty())
 		{
-			if (USoundWave* Wave = Cast<USoundWave>(UEditorAssetLibrary::LoadAsset(WavePath)))
+			if (USoundWave* Wave = LoadAssetByPath<USoundWave>(WavePath))
 			{
 				WP->SetSoundWave(Wave);
 			}
@@ -135,8 +135,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueConnect(const TSharedPtr<FJsonObj
 	const bool bHasChildIndex = HasParam(Params, TEXT("childIndex"));
 	const int32 RequestedChildIndex = OptionalInt(Params, TEXT("childIndex"), 0);
 
-	USoundCue* Cue = Cast<USoundCue>(UEditorAssetLibrary::LoadAsset(CuePath));
-	if (!Cue) return MCPError(FString::Printf(TEXT("SoundCue not found: %s"), *CuePath));
+	USoundCue* Cue = LoadAssetByPath<USoundCue>(CuePath);
+	if (!Cue) return MCPAssetLoadError(CuePath, TEXT("SoundCue"));
 
 	USoundNode* Child = FindSoundCueNodeByName(Cue, ChildNodeId);
 	if (!Child) return MCPError(FString::Printf(TEXT("Child node '%s' not found in cue."), *ChildNodeId));
@@ -231,8 +231,8 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueGetGraph(const TSharedPtr<FJsonOb
 	FString CuePath;
 	if (auto Err = RequireString(Params, TEXT("cuePath"), CuePath)) return Err;
 
-	USoundCue* Cue = Cast<USoundCue>(UEditorAssetLibrary::LoadAsset(CuePath));
-	if (!Cue) return MCPError(FString::Printf(TEXT("SoundCue not found: %s"), *CuePath));
+	USoundCue* Cue = LoadAssetByPath<USoundCue>(CuePath);
+	if (!Cue) return MCPAssetLoadError(CuePath, TEXT("SoundCue"));
 
 	TArray<TSharedPtr<FJsonValue>> Nodes;
 #if WITH_EDITORONLY_DATA
@@ -312,7 +312,7 @@ TSharedPtr<FJsonValue> FAudioHandlers::SoundCueAuthor(const TSharedPtr<FJsonObje
 				FString WavePath;
 				if (O->TryGetStringField(TEXT("soundWavePath"), WavePath) && !WavePath.IsEmpty())
 				{
-					if (USoundWave* Wave = Cast<USoundWave>(UEditorAssetLibrary::LoadAsset(WavePath)))
+					if (USoundWave* Wave = LoadAssetByPath<USoundWave>(WavePath))
 					{
 						WP->SetSoundWave(Wave);
 					}
