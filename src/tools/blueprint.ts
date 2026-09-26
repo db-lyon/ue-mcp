@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDef } from "../core/types.js";
 import { categoryTool } from "../surface/category-tool.js";
+import { callAction } from "../flow/action-call.js";
 import { actions as epicActions, schema as epicSchema } from "./epic/blueprint.generated.js";
 import { specBp, schema as specSchema } from "./specs/blueprint.generated.js";
 
@@ -84,29 +85,36 @@ export const blueprintTool: ToolDef = categoryTool(
         const assetPath = p.assetPath as string;
         if (!assetPath) throw new Error("Missing 'assetPath'");
         const steps: Array<{ step: string; target: string; ok: boolean; result?: unknown; error?: string }> = [];
-        const run = async (step: string, target: string, method: string, params: Record<string, unknown>) => {
-          try { const result = await ctx.bridge.call(method, params); steps.push({ step, target, ok: true, result }); }
-          catch (e) { steps.push({ step, target, ok: false, error: e instanceof Error ? e.message : String(e) }); }
+        // Each step runs the blueprint action through its task, so a child
+        // that answers success:false is recorded as failed, not as done.
+        const run = async (step: string, target: string, action: string, params: Record<string, unknown>) => {
+          const defined = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined));
+          const r = await callAction(ctx, `blueprint.${action}`, defined, blueprintTool);
+          steps.push({
+            step,
+            target,
+            ok: r.success,
+            ...(r.data !== undefined ? { result: r.data } : {}),
+            ...(r.success ? {} : { error: r.error?.message ?? `blueprint.${action} failed` }),
+          });
+          return r;
         };
         let created = false;
         if (p.parentClass) {
-          try {
-            const r = await ctx.bridge.call("create_blueprint", { path: assetPath, parentClass: p.parentClass }) as Record<string, unknown>;
-            created = r?.created !== false;
-            steps.push({ step: "create", target: assetPath, ok: true, result: r });
-          } catch (e) { steps.push({ step: "create", target: assetPath, ok: false, error: e instanceof Error ? e.message : String(e) }); }
+          const r = await run("create", assetPath, "create", { assetPath, parentClass: p.parentClass });
+          created = r.success && (r.data as Record<string, unknown> | undefined)?.created !== false;
         }
         for (const c of (p.components as Array<Record<string, unknown>> ?? [])) {
-          await run("add_component", String(c.componentClass ?? ""), "add_component", { path: assetPath, componentClass: c.componentClass, componentName: c.componentName ?? c.componentClass, parentComponent: c.parentComponent, childActorClass: c.childActorClass });
+          await run("add_component", String(c.componentClass ?? ""), "add_component", { assetPath, componentClass: c.componentClass, componentName: c.componentName ?? c.componentClass, parentComponent: c.parentComponent, childActorClass: c.childActorClass });
         }
         for (const v of (p.variables as Array<Record<string, unknown>> ?? [])) {
-          await run("add_variable", String(v.name ?? ""), "add_variable", { path: assetPath, name: v.name, type: v.varType ?? v.type });
+          await run("add_variable", String(v.name ?? ""), "add_variable", { assetPath, name: v.name, varType: v.varType ?? v.type });
         }
         for (const f of (p.functions as Array<Record<string, unknown>> ?? [])) {
-          await run("create_function", String(f.functionName ?? ""), "create_function", { path: assetPath, functionName: f.functionName });
+          await run("create_function", String(f.functionName ?? ""), "create_function", { assetPath, functionName: f.functionName });
         }
         if ((p.compile ?? true) !== false) {
-          await run("compile", assetPath, "compile_blueprint", { path: assetPath });
+          await run("compile", assetPath, "compile", { assetPath });
         }
         const failed = steps.filter(s => !s.ok);
         return { assetPath, created, stepCount: steps.length, failedCount: failed.length, ok: failed.length === 0, steps };

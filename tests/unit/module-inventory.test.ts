@@ -97,6 +97,7 @@ const PER_SESSION: Record<string, string> = {
   "flow/loader.ts": "Loads each project's own ue-mcp.yml.",
   "flow/config-cache.ts": "Caches one project's flow config, keyed by that project's config layer files.",
   "flow/config-layers.ts": "Stamps the config layer files of the project directory it is handed.",
+  "flow/action-call.ts": "Runs another action, or a handler's own bridge method, on the context's session bridge.",
   "flow/condition.ts": "Reads the project, editor and session of the context it is handed for flow references and conditions.",
   "flow/live-task.ts": "Resolves a live call through the addressed session's registry and task definitions.",
   "flow/git-snapshot.ts": "Snapshots the repository holding one project, through its bridge.",
