@@ -121,13 +121,44 @@ inline bool MCPIsForceDisableNanite(const UStaticMeshComponent* Component)
 
 // ── Quick result builders ────────────────────────────────────────────────────
 
-/** Return an error response: { success: false, error: "..." } */
-inline TSharedPtr<FJsonValue> MCPError(const FString& Message)
+/** A fresh { success: false, error: "..." } object, for an error that carries
+ *  more fields than the message. */
+inline TSharedPtr<FJsonObject> MCPErrorObject(const FString& Message)
 {
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 	Obj->SetBoolField(TEXT("success"), false);
 	Obj->SetStringField(TEXT("error"), Message);
+	return Obj;
+}
+
+/** Return an error response: { success: false, error: "..." } */
+inline TSharedPtr<FJsonValue> MCPError(const FString& Message)
+{
+	return MakeShared<FJsonValueObject>(MCPErrorObject(Message));
+}
+
+/** Return an error response with a machine-readable code:
+ *  { success: false, errorCode: "...", error: "..." } */
+inline TSharedPtr<FJsonValue> MCPErrorWithCode(const FString& Code, const FString& Message)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetBoolField(TEXT("success"), false);
+	Obj->SetStringField(TEXT("errorCode"), Code);
+	Obj->SetStringField(TEXT("error"), Message);
 	return MakeShared<FJsonValueObject>(Obj);
+}
+
+/** An action compiled out on this engine: errorCode unsupported_engine_version,
+ *  error "<Subject> requires Unreal Engine <MinVersion> or newer", then Detail
+ *  as a second sentence when given. */
+inline TSharedPtr<FJsonValue> MCPUnsupportedEngineError(
+	const FString& Subject,
+	const TCHAR* MinVersion,
+	const FString& Detail = FString())
+{
+	FString Message = FString::Printf(TEXT("%s requires Unreal Engine %s or newer"), *Subject, MinVersion);
+	if (!Detail.IsEmpty()) Message += TEXT(". ") + Detail;
+	return MCPErrorWithCode(TEXT("unsupported_engine_version"), Message);
 }
 
 /** Return a formatted error. Usage: MCPError(FString::Printf(TEXT("Not found: %s"), *Path)) */
@@ -679,9 +710,7 @@ inline TSharedPtr<FJsonValue> MCPAssetNotFoundError(const FString& AssetPath, co
 	const FString PlayNote = MCPPlayInEditorLoadNote();
 	if (!PlayNote.IsEmpty()) Message += PlayNote;
 
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), Message);
+	TSharedPtr<FJsonObject> Obj = MCPErrorObject(Message);
 	Obj->SetBoolField(TEXT("playInEditorActive"), !PlayNote.IsEmpty());
 	Obj->SetStringField(TEXT("assetPath"), AssetPath);
 	Obj->SetStringField(TEXT("packagePath"), Forms.PackagePath);
@@ -725,9 +754,7 @@ inline TSharedPtr<FJsonValue> MCPAssetWrongTypeError(
 	const UObject* Found,
 	const TCHAR* ExpectedType)
 {
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), FString::Printf(
+	TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 		TEXT("Asset is not a %s: '%s' (found a %s)."),
 		ExpectedType, *AssetPath,
 		Found ? *Found->GetClass()->GetName() : TEXT("null")));
@@ -924,9 +951,7 @@ inline TSharedPtr<FJsonValue> MCPAmbiguousActorError(
 	const TArray<AActor*>& Candidates)
 {
 	const int32 Cap = 25;
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), FString::Printf(
+	TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 		TEXT("Ambiguous actor selector: '%s' is the %s of %d actors. Editor labels are not unique, so this call refuses rather than picking one of them. Retry with '%s' set to one of the candidate paths below."),
 		*Token, MatchedBy, Candidates.Num(), PathKey));
 	Obj->SetBoolField(TEXT("ambiguous"), true);
@@ -2168,9 +2193,7 @@ inline TSharedPtr<FJsonValue> MCPClassNotFoundError(
 		Message += TEXT(" No loaded class name resembles it: the owning module may not be loaded yet (check reflection(is_module_loaded)).");
 	}
 
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), Message);
+	TSharedPtr<FJsonObject> Obj = MCPErrorObject(Message);
 	Obj->SetStringField(TEXT("reason"), TEXT("class_not_found"));
 	Obj->SetStringField(TEXT("requested"), Spec);
 	TArray<TSharedPtr<FJsonValue>> TriedJson;
@@ -2190,9 +2213,7 @@ inline TSharedPtr<FJsonValue> MCPClassUnusableError(
 	const FString& Reason,
 	const FString& Detail)
 {
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), FString::Printf(
+	TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 		TEXT("Class '%s' resolved to %s but cannot be used here: %s"),
 		*Spec, Resolved ? *Resolved->GetPathName() : TEXT("<null>"), *Detail));
 	Obj->SetStringField(TEXT("reason"), Reason);
@@ -2781,9 +2802,7 @@ inline TSharedPtr<FJsonValue> MCPAssetWriteBlockedError(
 	FString Reason;
 	if (!MCPPackageWriteBlocked(Asset, Reason)) return nullptr;
 
-	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
-	Obj->SetBoolField(TEXT("success"), false);
-	Obj->SetStringField(TEXT("error"), FString::Printf(
+	TSharedPtr<FJsonObject> Obj = MCPErrorObject(FString::Printf(
 		TEXT("Cannot %s: %s Nothing was changed."), Operation, *Reason));
 	Obj->SetStringField(TEXT("assetPath"), AssetPath);
 	Obj->SetStringField(TEXT("path"), AssetPath);
