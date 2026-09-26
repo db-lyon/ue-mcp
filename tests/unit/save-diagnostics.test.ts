@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { readHandlerFile } from "../../scripts/lib/cpp-registrations.mjs";
 
 const utils = readFileSync(
-  path.resolve("plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerUtils.h"),
+  path.resolve("plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerPackageSave.h"),
   "utf8",
 );
 const assetHandlers = readHandlerFile("AssetHandlers.cpp");

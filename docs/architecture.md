@@ -185,7 +185,18 @@ The plugin runs a raw WebSocket server on a dedicated thread, dispatches incomin
 | `FMCPBridgeServer` | WebSocket server (raw platform sockets, Windows + Linux/Mac) |
 | `FMCPHandlerRegistry` | Maps method names to C++ handler functions |
 | `FMCPGameThreadExecutor` | Queues tasks to the game thread (required for UE API access) |
-| `HandlerUtils.h` + `HandlerAssetCreate.h` | Shared utilities - `MCPError`/`MCPSuccess`/`MCPResult`, `RequireString`/`OptionalVec3`/`OptionalRotator`/etc., `FindActorByLabel`/`FindActorByLabelOrName`, `MCPCheckAssetExists`/`MCPCheckActorLabelExists`, `LoadAssetByPath<T>`, `LoadBlueprintCDO<T>`, `MCPCreateAssetIdempotent<T>`, `SaveAssetPackage`. |
+| `HandlerUtils.h` | Umbrella over the shared helper headers, and the one include external plugins rely on. |
+| `HandlerResult.h` | `MCPError`/`MCPSuccess`/`MCPResult`, `MCPErrorWithCode`, `MCPSetCreated`/`Existed`/`Updated`, `MCPSetRollback`/`MCPSetNoRollback`. |
+| `HandlerParams.h` | `RequireString`/`OptionalString`/`OptionalVec3`/`OptionalRotator`/etc., and the #1057 parameter read tracking. |
+| `HandlerAssetResolve.h` | `MCPLoadAssetObject`, `MCPAssetNotFoundError`, `LoadAssetByPath<T>`, `REQUIRE_ASSET`, `LoadBlueprintCDO<T>`, `MCPCheckAssetExists`, the protected-mount rule. |
+| `HandlerActorResolve.h` | `MCPResolveActor` and its selector, ambiguity refusals, `MCPCheckActorLabelExists`. |
+| `HandlerClassResolve.h` | `MCPResolveClass`/`MCPResolveClassOfType`, `MCPResolveScriptStruct`. |
+| `HandlerWorld.h` | `GetEditorWorld`, the PIE world lookups, `ResolveWorldFromParams`, `REQUIRE_EDITOR_WORLD`. |
+| `HandlerPackageSave.h` | `SaveAssetPackage`/`SaveAssetPackageChecked`, `MCPPackageWriteBlocked`, `MCPNoteSaveOutcome`. |
+| `HandlerJsonConvert.h` | Vector, rotator, colour, quaternion, transform and string-list JSON builders. |
+| `HandlerObjectUtils.h` | Property export, file dumps, `FGCRootScope`, subobject walks, component and collision lookup. |
+| `HandlerEngineVersion.h` | The `UE_MCP_HAS_5_x_API` gates and engine API shims. |
+| `HandlerAssetCreate.h` | `MCPCreateAssetIdempotent<T>`. |
 
 ### Handler Categories
 

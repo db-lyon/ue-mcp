@@ -275,7 +275,7 @@ the context has no registry graph accessor, such as a direct unit invocation.
 
 ## C++ Plugin Development
 
-Native USTRUCTs are registered without the leading `F`: `FTableRowBase` is the `UScriptStruct` named `TableRowBase`, path `/Script/Engine.TableRowBase`. `MCPResolveScriptStruct` in `HandlerUtils.h` is the shared lookup for `reflection(reflect_struct)` and `asset(create_datatable)`. It tries the literal spelling first, then strips one leading `F` from the name, including the leaf of a `/Script/Module.FName` path. Only `reflect_struct` also tries adding one `F`. A short name shared by more than one loaded struct is an error that lists the qualified `/Script/Module.Name` candidates, never an arbitrary pick. Shared header, not a file-local copy: see "File-local helpers and the unity build" below.
+Native USTRUCTs are registered without the leading `F`: `FTableRowBase` is the `UScriptStruct` named `TableRowBase`, path `/Script/Engine.TableRowBase`. `MCPResolveScriptStruct` in `HandlerClassResolve.h` is the shared lookup for `reflection(reflect_struct)` and `asset(create_datatable)`. It tries the literal spelling first, then strips one leading `F` from the name, including the leaf of a `/Script/Module.FName` path. Only `reflect_struct` also tries adding one `F`. A short name shared by more than one loaded struct is an error that lists the qualified `/Script/Module.Name` candidates, never an arbitrary pick. Shared header, not a file-local copy: see "File-local helpers and the unity build" below.
 
 The plugin source lives in `plugin/ue_mcp_bridge/`. When you modify C++ handler code:
 
@@ -314,7 +314,7 @@ AssetHandlers_BulkUpsert.cpp(53,6): error C2084: function
 
 The grouping is not stable. It shifts with file count, file order, and the adaptive-unity working set, which UBT derives from `git status`. A duplicate can therefore build clean on the machine that wrote it and fail on the next machine to compile the same source.
 
-When two handler files need the same helper, **put it in a shared header** (`Public/HandlerUtils.h` for anything asset- or actor-shaped) rather than copying it. Copies drift as well as collide: the guardrail this rule came from had four copies, two of which enforced weaker rules than the others.
+When two handler files need the same helper, **put it in a shared header** (one of the `Public/Handler*.h` headers that `HandlerUtils.h` gathers, for anything asset- or actor-shaped) rather than copying it. Copies drift as well as collide: the guardrail this rule came from had four copies, two of which enforced weaker rules than the others.
 
 ```bash
 npm run audit:unity      # duplicate file-local definitions, per module

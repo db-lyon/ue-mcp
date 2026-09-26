@@ -81,7 +81,7 @@ const ROLLBACK_MARKERS = [
  * exactly like an omission. A caller reading the result can tell them apart,
  * which is the whole point of emitting the field.
  *
- * `MCPSetNoRollback(Result, Reason)` in Public/HandlerUtils.h is the helper
+ * `MCPSetNoRollback(Result, Reason)` in Public/HandlerResult.h is the helper
  * spelling, and it sets the field and its note together. This list carried the
  * name before the helper was written, which made it a marker that could never
  * match: the audit advertised two accepted spellings and only ever recognised
@@ -109,7 +109,7 @@ const NO_ROLLBACK_MARKERS = [
  * scores it as debt, which makes the ledger wrong in the direction that costs
  * somebody a day writing markers for handlers that already answered.
  *
- * `MCPSetIdempotencyUnobservable(Result, Reason)` in Public/HandlerUtils.h is
+ * `MCPSetIdempotencyUnobservable(Result, Reason)` in Public/HandlerResult.h is
  * the helper spelling, and it sets the flag and its note together so the pair
  * cannot come apart. Both spellings are recognised because both exist.
  */

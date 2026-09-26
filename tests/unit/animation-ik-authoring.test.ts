@@ -115,8 +115,8 @@ describe("animation IK and retarget authoring", () => {
     const ik = readHandlerFile("AnimationHandlers_IKRigAuthoring.cpp");
     const retarget = readHandlerFile("AnimationHandlers_IKRetargeterAuthoring.cpp");
     const legacy = readHandlerFile("AnimationHandlers_StateMachine.cpp");
-    const handlerUtils = readFileSync(new URL(
-      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerUtils.h",
+    const assetResolve = readFileSync(new URL(
+      "../../plugin/ue_mcp_bridge/Source/UE_MCP_Bridge/Public/HandlerAssetResolve.h",
       import.meta.url,
     ), "utf8");
 
@@ -156,8 +156,8 @@ describe("animation IK and retarget authoring", () => {
     expect(setRig).toContain("FScopedTransaction");
     expect(setRig).toContain("UndoTransaction");
     expect(legacy).toContain("MCPIsProtectedAssetPath(TargetPath)");
-    expect(handlerUtils).toContain('Lower == TEXT("/engine")');
-    expect(handlerUtils).toContain('Lower == TEXT("/script")');
-    expect(handlerUtils).toContain("FPackageName::ExportTextPathToObjectPath(Normalized)");
+    expect(assetResolve).toContain('Lower == TEXT("/engine")');
+    expect(assetResolve).toContain('Lower == TEXT("/script")');
+    expect(assetResolve).toContain("FPackageName::ExportTextPathToObjectPath(Normalized)");
   });
 });
