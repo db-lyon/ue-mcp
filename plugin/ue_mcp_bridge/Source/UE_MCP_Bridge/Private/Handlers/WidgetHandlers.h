@@ -86,6 +86,10 @@ UWidgetBlueprint* ResolveWidgetBlueprintOrError(
  *  failed load. Separate message so the two stop looking identical. */
 TSharedPtr<FJsonValue> MissingWidgetTreeError(const FString& AssetPath);
 
+/** A UWidget class from a friendly alias ("textblock"), a class name or path,
+ *  or a Widget Blueprint asset path. Null when nothing widget-shaped matches. */
+UClass* ResolveWidgetClass(const FString& ClassName);
+
 }
 
 class FWidgetHandlers

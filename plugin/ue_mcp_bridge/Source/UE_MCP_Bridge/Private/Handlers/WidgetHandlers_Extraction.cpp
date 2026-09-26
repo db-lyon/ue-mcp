@@ -237,11 +237,7 @@ UClass* ResolveDestinationParentClass(const FString& RequestedClass)
 	{
 		return UUserWidget::StaticClass();
 	}
-	if (UClass* Resolved = FindClassByShortName(RequestedClass))
-	{
-		return Resolved;
-	}
-	return LoadObject<UClass>(nullptr, *RequestedClass);
+	return MCPResolveClassOfType(RequestedClass, UUserWidget::StaticClass());
 }
 }
 

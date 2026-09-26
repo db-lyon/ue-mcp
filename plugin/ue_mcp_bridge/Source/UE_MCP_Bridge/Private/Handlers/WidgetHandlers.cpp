@@ -734,15 +734,12 @@ TSharedPtr<FJsonValue> FWidgetHandlers::CreateWidgetBlueprint(const TSharedPtr<F
 	// (#134) Resolve parentClass string - accept short names ("UserWidget"),
 	// short names with U prefix, and full class paths. Default to UUserWidget
 	// only when the caller didn't pass a parentClass.
-	UClass* ParentClass = nullptr;
-	ParentClass = FindClassByShortName(ParentClassName);
+	UClass* ParentClass = MCPResolveClassOfType(ParentClassName, UUserWidget::StaticClass());
 	if (!ParentClass)
 	{
-		ParentClass = LoadObject<UClass>(nullptr, *ParentClassName);
-	}
-	if (!ParentClass)
-	{
-		ParentClass = UUserWidget::StaticClass();
+		UClass* Other = MCPResolveClass(ParentClassName);
+		if (!Other) return MCPClassNotFoundError(ParentClassName, TEXT("parentClass"));
+		ParentClass = Other;
 	}
 	if (!ParentClass->IsChildOf(UUserWidget::StaticClass()))
 	{
@@ -975,10 +972,13 @@ TSharedPtr<FJsonValue> FWidgetHandlers::RunEditorUtilityBlueprint(const TSharedP
 	return MCPResult(Result);
 }
 
-// ── Well-known short names → UClass lookup ────────────────────────────
-static UClass* ResolveWidgetClass(const FString& ClassName)
+// ── Widget class lookup ───────────────────────────────────────────────
+/** Friendly lower-case aliases first, then the shared class resolver restricted
+ *  to UWidget, then a Widget Blueprint asset path, whose class is generated. */
+UClass* MCPWidget::ResolveWidgetClass(const FString& ClassName)
 {
-	// Try well-known short names first (case-insensitive matching)
+	if (ClassName.IsEmpty()) return nullptr;
+
 	static const TMap<FString, FString> ShortNames = {
 		// Panels / containers
 		{ TEXT("canvaspanel"),       TEXT("/Script/UMG.CanvasPanel") },
@@ -1005,76 +1005,15 @@ static UClass* ResolveWidgetClass(const FString& ClassName)
 		{ TEXT("richtextblock"),     TEXT("/Script/UMG.RichTextBlock") },
 	};
 
-	FString Key = ClassName.ToLower();
-	if (const FString* FullPath = ShortNames.Find(Key))
+	if (const FString* AliasPath = ShortNames.Find(ClassName.ToLower()))
 	{
-		UClass* Found = FindObject<UClass>(nullptr, **FullPath);
-		if (Found) return Found;
+		if (UClass* Aliased = MCPResolveClassOfType(*AliasPath, UWidget::StaticClass())) return Aliased;
 	}
-
-	// Try as full class path  e.g. /Script/UMG.CanvasPanel
-	UClass* FullPathClass = FindObject<UClass>(nullptr, *ClassName);
-	if (FullPathClass && FullPathClass->IsChildOf(UWidget::StaticClass()))
+	if (UClass* Resolved = MCPResolveClassOfType(ClassName, UWidget::StaticClass())) return Resolved;
+	if (UBlueprint* BP = LoadAssetByPath<UBlueprint>(ClassName))
 	{
-		return FullPathClass;
+		if (BP->GeneratedClass && BP->GeneratedClass->IsChildOf(UWidget::StaticClass())) return BP->GeneratedClass;
 	}
-
-	// Try /Script/UMG.<ClassName>
-	FString Guess = FString::Printf(TEXT("/Script/UMG.%s"), *ClassName);
-	UClass* GuessClass = FindObject<UClass>(nullptr, *Guess);
-	if (GuessClass && GuessClass->IsChildOf(UWidget::StaticClass()))
-	{
-		return GuessClass;
-	}
-
-	// #576: custom user widget BP classes live in content and aren't loaded yet,
-	// so FindObject misses them. LoadObject a content path (with or without the
-	// generated-class _C suffix), or load the WidgetBlueprint and take its class.
-	if (ClassName.StartsWith(TEXT("/")))
-	{
-		if (UClass* PathClass = LoadObject<UClass>(nullptr, *ClassName))
-		{
-			if (PathClass->IsChildOf(UWidget::StaticClass())) return PathClass;
-		}
-		const FString WithC = ClassName.EndsWith(TEXT("_C")) ? ClassName : (ClassName + TEXT("_C"));
-		if (UClass* GenClass = LoadObject<UClass>(nullptr, *WithC))
-		{
-			if (GenClass->IsChildOf(UWidget::StaticClass())) return GenClass;
-		}
-		if (UObject* Asset = LoadObject<UObject>(nullptr, *ClassName))
-		{
-			if (UBlueprint* BP = Cast<UBlueprint>(Asset))
-			{
-				if (BP->GeneratedClass && BP->GeneratedClass->IsChildOf(UWidget::StaticClass()))
-				{
-					return BP->GeneratedClass;
-				}
-			}
-		}
-	}
-
-	// Nothing above knows about any module but UMG, so a widget from CommonUI or
-	// from the project's own C++ could be reached only by its full /Script path.
-	// Scan the loaded UWidget subclasses by short name, which is the same set
-	// widget(list_classes) reports, so a name a caller read there resolves here.
-	// Only an unambiguous match is accepted: two modules defining the same class
-	// name is a real possibility and guessing between them would silently build
-	// the wrong tree. The caller then passes the full path, which the branches
-	// above resolve exactly.
-	{
-		UClass* Match = nullptr;
-		int32 MatchCount = 0;
-		for (TObjectIterator<UClass> It; It; ++It)
-		{
-			UClass* Candidate = *It;
-			if (!Candidate->IsChildOf(UWidget::StaticClass())) continue;
-			if (!Candidate->GetName().Equals(ClassName, ESearchCase::IgnoreCase)) continue;
-			if (!Match) Match = Candidate;
-			++MatchCount;
-		}
-		if (MatchCount == 1) return Match;
-	}
-
 	return nullptr;
 }
 
@@ -1142,7 +1081,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::AddWidget(const TSharedPtr<FJsonObject>&
 	if (!WidgetBP->WidgetTree) return MCPWidget::MissingWidgetTreeError(AssetPath);
 
 	// ── Resolve the UClass ──
-	UClass* WClass = ResolveWidgetClass(WidgetClassName);
+	UClass* WClass = MCPWidget::ResolveWidgetClass(WidgetClassName);
 	if (!WClass)
 	{
 		return MCPError(FString::Printf(
@@ -1752,7 +1691,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::WrapRoot(const TSharedPtr<FJsonObject>& 
 		return MCPError(TEXT("WBP has no root widget yet - use add_widget to set a root first"));
 	}
 
-	UClass* WrapperCls = FindClassByShortName(WrapperClassName);
+	UClass* WrapperCls = MCPWidget::ResolveWidgetClass(WrapperClassName);
 	if (!WrapperCls)
 	{
 		return MCPError(FString::Printf(TEXT("Widget class not found: %s"), *WrapperClassName));

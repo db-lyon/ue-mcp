@@ -132,29 +132,6 @@ static bool WCui_ReadBindKind(const FProperty* Prop, bool& bOutOptional, bool& b
 	return false;
 }
 
-/** Resolve a class spec: short name, /Script path, or a Widget Blueprint path. */
-static UClass* WCui_ResolveWidgetClassSpec(const FString& Spec)
-{
-	if (Spec.IsEmpty()) return nullptr;
-
-	if (UClass* Direct = MCPResolveClass(Spec, /*bAllowLoad*/ true))
-	{
-		if (Direct->IsChildOf(UWidget::StaticClass())) return Direct;
-	}
-	// A Widget Blueprint path names the asset; its contract lives on the class.
-	if (UObject* Asset = LoadObject<UObject>(nullptr, *Spec))
-	{
-		if (UBlueprint* BP = Cast<UBlueprint>(Asset))
-		{
-			if (BP->GeneratedClass && BP->GeneratedClass->IsChildOf(UWidget::StaticClass()))
-			{
-				return BP->GeneratedClass;
-			}
-		}
-	}
-	return nullptr;
-}
-
 /** A CommonUI class by name, or null when the plugin is not loaded. */
 static UClass* WCui_CommonClass(const TCHAR* Module, const TCHAR* ClassName)
 {
@@ -255,7 +232,7 @@ TSharedPtr<FJsonValue> FWidgetHandlers::GetBindWidgetContract(const TSharedPtr<F
 
 	if (!ClassName.IsEmpty())
 	{
-		UClass* Named = WCui_ResolveWidgetClassSpec(ClassName);
+		UClass* Named = MCPWidget::ResolveWidgetClass(ClassName);
 		if (!Named)
 		{
 			return MCPError(FString::Printf(
