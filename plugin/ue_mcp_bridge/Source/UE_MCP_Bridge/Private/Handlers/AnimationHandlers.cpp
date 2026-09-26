@@ -3088,10 +3088,7 @@ TSharedPtr<FJsonValue> FAnimationHandlers::SetBlendSample(const TSharedPtr<FJson
 	}
 
 	int32 SampleIndex = -1;
-	if (!TryGetNumberParam(Params, TEXT("sampleIndex"), SampleIndex))
-	{
-		return MCPError(TEXT("Missing required parameter 'sampleIndex'"));
-	}
+	if (auto Err = RequireNumber(Params, TEXT("sampleIndex"), SampleIndex)) return Err;
 	if (SampleIndex < 0 || SampleIndex >= BlendSpace->GetNumberOfBlendSamples())
 	{
 		return MCPError(FString::Printf(
