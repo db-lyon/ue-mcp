@@ -13,10 +13,9 @@
 // Include this header instead of the moved ones. It is include paths only, no
 // API shims: the types themselves are the same on both sides of the move.
 //
-// On 5.4 the StructUtils module comes in transitively: Chooser and
-// StateTreeModule both list it as a public dependency and this module depends
-// on both, so the include path and the symbols are already there. Nothing has
-// to be added to Build.cs or the .uplugin for it.
+// On 5.4 the StructUtils include path comes in transitively through Chooser and
+// StateTreeModule, and Build.cs adds StructUtils as a private dependency below
+// 5.5 so its symbols link.
 
 #include "Runtime/Launch/Resources/Version.h"
 
