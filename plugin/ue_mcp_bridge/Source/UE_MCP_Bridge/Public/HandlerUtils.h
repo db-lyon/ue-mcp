@@ -25,6 +25,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "Components/SceneComponent.h"
+#include "Engine/CollisionProfile.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "EditorAssetLibrary.h"
@@ -3048,6 +3049,77 @@ inline void MCPGetNestedSubobjects(const UObjectBase* Outer, TArray<UObject*>& O
 	GetObjectsWithOuter(Outer, OutObjects, /*bIncludeNestedObjects*/ true,
 		RF_NoFlags, EInternalObjectFlags::Garbage);
 #endif
+}
+
+// ── Component and collision lookup ──────────────────────────────────────────
+
+/** The component of type T on Actor whose instance name equals Name, compared
+ *  case-insensitively (#539). Exact names only: a mutation must never land on a
+ *  sibling picked by class, prefix or substring. */
+template <typename T = UActorComponent>
+inline T* MCPFindComponentByName(AActor* Actor, const FString& Name)
+{
+	if (!Actor || Name.IsEmpty()) return nullptr;
+	for (UActorComponent* Component : Actor->GetComponents())
+	{
+		T* Typed = Cast<T>(Component);
+		if (Typed && Typed->GetName().Equals(Name, ESearchCase::IgnoreCase)) return Typed;
+	}
+	return nullptr;
+}
+
+/** Resolve a collision channel by the project's own channel name (so a
+ *  GameTraceChannel renamed "Weapon" answers to "Weapon"), then the built-in
+ *  names, then the ECollisionChannel enum spelling. A leading ECC_ is ignored.
+ *  OutResolvedName is the name the channel matched under. */
+inline bool MCPResolveCollisionChannel(const FString& InName, ECollisionChannel& OutChannel, FString& OutResolvedName)
+{
+	FString Name = InName.TrimStartAndEnd();
+	if (Name.StartsWith(TEXT("ECC_"))) Name = Name.RightChop(4);
+	if (Name.IsEmpty()) return false;
+
+	if (const UCollisionProfile* Profile = UCollisionProfile::Get())
+	{
+		for (int32 Index = 0; Index < ECC_MAX; ++Index)
+		{
+			const FName ChannelName = Profile->ReturnChannelNameFromContainerIndex(Index);
+			if (!ChannelName.IsNone() && ChannelName.ToString().Equals(Name, ESearchCase::IgnoreCase))
+			{
+				OutChannel = static_cast<ECollisionChannel>(Index);
+				OutResolvedName = ChannelName.ToString();
+				return true;
+			}
+		}
+	}
+
+	struct FBuiltInChannel { const TCHAR* Name; ECollisionChannel Channel; };
+	static const FBuiltInChannel BuiltIns[] = {
+		{ TEXT("WorldStatic"), ECC_WorldStatic }, { TEXT("WorldDynamic"), ECC_WorldDynamic },
+		{ TEXT("Pawn"), ECC_Pawn }, { TEXT("Visibility"), ECC_Visibility },
+		{ TEXT("Camera"), ECC_Camera }, { TEXT("PhysicsBody"), ECC_PhysicsBody },
+		{ TEXT("Vehicle"), ECC_Vehicle }, { TEXT("Destructible"), ECC_Destructible },
+	};
+	for (const FBuiltInChannel& Entry : BuiltIns)
+	{
+		if (Name.Equals(Entry.Name, ESearchCase::IgnoreCase))
+		{
+			OutChannel = Entry.Channel;
+			OutResolvedName = Entry.Name;
+			return true;
+		}
+	}
+
+	if (const UEnum* Enum = StaticEnum<ECollisionChannel>())
+	{
+		const int64 Value = Enum->GetValueByNameString(FString(TEXT("ECC_")) + Name);
+		if (Value != INDEX_NONE && Value < ECC_MAX)
+		{
+			OutChannel = static_cast<ECollisionChannel>(Value);
+			OutResolvedName = Name;
+			return true;
+		}
+	}
+	return false;
 }
 
 // ── Component bounds ─────────────────────────────────────────────────────────
