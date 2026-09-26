@@ -299,11 +299,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::ListObjectReferences(const TSharedPtr<F
 	const FString ClassFilter = OptionalString(Params, TEXT("classFilter"));
 	const FString PathFilter = OptionalString(Params, TEXT("pathFilter"));
 
-	UChooserTable* Chooser = Cast<UChooserTable>(UEditorAssetLibrary::LoadAsset(AssetPath));
-	if (!Chooser)
-	{
-		return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *AssetPath));
-	}
+	UChooserTable* Chooser = LoadAssetByPath<UChooserTable>(AssetPath);
+	if (!Chooser) return MCPAssetLoadError(AssetPath, TEXT("ChooserTable"));
 
 	TArray<FChooserObjectRef> Refs;
 	GatherAllRefs(Chooser, Refs);
@@ -362,11 +359,8 @@ TSharedPtr<FJsonValue> FChooserHandlers::RemapObjectReferences(const TSharedPtr<
 	const bool bDryRun = OptionalBool(Params, TEXT("dryRun"), true);
 	const bool bAllowMissing = OptionalBool(Params, TEXT("allowMissing"), false);
 
-	UChooserTable* Chooser = Cast<UChooserTable>(UEditorAssetLibrary::LoadAsset(AssetPath));
-	if (!Chooser)
-	{
-		return MCPError(FString::Printf(TEXT("ChooserTable not found: %s"), *AssetPath));
-	}
+	UChooserTable* Chooser = LoadAssetByPath<UChooserTable>(AssetPath);
+	if (!Chooser) return MCPAssetLoadError(AssetPath, TEXT("ChooserTable"));
 
 	const bool bExact = !From.IsEmpty() && !To.IsEmpty();
 	const bool bPrefix = !FromPrefix.IsEmpty() && !ToPrefix.IsEmpty();

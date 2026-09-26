@@ -130,7 +130,7 @@ static FString JsonValueToCellText(const TSharedPtr<FJsonValue>& Val)
 // ChooserTable). Returns false with error text on failure.
 static bool BuildOutputStruct(const FString& OutputPath, const FString& OutputType, FInstancedStruct& Out, FString& OutError)
 {
-	UObject* Obj = UEditorAssetLibrary::LoadAsset(OutputPath);
+	UObject* Obj = MCPLoadAssetObject(OutputPath);
 	if (!Obj) { OutError = FString::Printf(TEXT("output asset not found: %s"), *OutputPath); return false; }
 
 	if (OutputType == TEXT("evaluate"))

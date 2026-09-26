@@ -1261,7 +1261,7 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::AddState(const TSharedPtr<FJsonObject
 
 	if (bHasLinkedSubtree)
 	{
-		UStateTree* LinkedST = LoadObject<UStateTree>(nullptr, *SubtreePath);
+		UStateTree* LinkedST = LoadAssetByPath<UStateTree>(SubtreePath);
 		if (LinkedST)
 		{
 			NewState->LinkedAsset = LinkedST;
@@ -1441,11 +1441,8 @@ TSharedPtr<FJsonValue> FStateTreeHandlers::SetStateProperty(const TSharedPtr<FJs
 	}
 	else if (PropName == TEXT("linkedAsset"))
 	{
-		UStateTree* LinkedST = LoadObject<UStateTree>(nullptr, *Value);
-		if (!LinkedST)
-		{
-			return MCPError(FString::Printf(TEXT("Linked StateTree not found: %s"), *Value));
-		}
+		UStateTree* LinkedST = LoadAssetByPath<UStateTree>(Value);
+		if (!LinkedST) return MCPAssetLoadError(Value, TEXT("StateTree"));
 		State->LinkedAsset = LinkedST;
 	}
 	else if (PropName == TEXT("description"))
