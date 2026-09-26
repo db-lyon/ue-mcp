@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
-import { createRequire } from "node:module";
+
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+
 import { collectDoctor, formatDoctor } from "./doctor.js";
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { editorOwnsProject, listEditorProcesses } from "./engine-observer.js";
 import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
 import { distTagForVersion, isPrereleaseVersion, resolveUpdateTarget } from "./version-check.js";
+import { packageModulePath, packageRoot, packageVersion } from "./package-root.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -22,10 +23,6 @@ const ok = (msg: string) => console.log(`  ${GREEN}✓${RESET} ${msg}`);
 const fail = (msg: string) => console.log(`  ${RED}✗${RESET} ${msg}`);
 const step = (msg: string) => console.log(`  ${DIM}${msg}${RESET}`);
 
-function getInstalledVersion(): string {
-  const require = createRequire(import.meta.url);
-  return require("../package.json").version;
-}
 
 /** The version behind the `latest` dist-tag, which is the stable line. */
 function getLatestVersion(): string | null {
@@ -40,7 +37,8 @@ function getLatestVersion(): string | null {
 function isGlobalInstall(): boolean {
   try {
     const globalRoot = execSync("npm root -g", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
-    return import.meta.url.includes(globalRoot.replace(/\\/g, "/"));
+    const norm = (p: string) => path.resolve(p).toLowerCase();
+    return norm(packageRoot()).startsWith(norm(globalRoot));
   } catch {
     return false;
   }
@@ -64,8 +62,7 @@ async function editorRunningFor(uproject: string): Promise<boolean> {
 
 /** Run a sibling CLI from THIS package (not npx) so a local shadow can't intercept. */
 function runSelfCli(scriptBase: string, projectArg: string | undefined): boolean {
-  const selfDir = path.dirname(fileURLToPath(import.meta.url));
-  const script = path.join(selfDir, scriptBase);
+  const script = packageModulePath(scriptBase);
   const argSuffix = projectArg ? ` "${projectArg}"` : "";
   try {
     execSync(`"${process.execPath}" "${script}"${argSuffix}`, { stdio: "inherit" });
@@ -97,7 +94,7 @@ async function update() {
   console.log(`  ${BOLD}${CYAN}UE-MCP Update${RESET}`);
   console.log("");
 
-  const installed = getInstalledVersion();
+  const installed = packageVersion();
   console.log(`  Installed: ${BOLD}${installed}${RESET}`);
 
   const latest = getLatestVersion();

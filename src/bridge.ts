@@ -1,13 +1,14 @@
 import WebSocket from "ws";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { createRequire } from "node:module";
+
 import { McpError, ErrorCode } from "./errors.js";
 import { resolveBridgeTimeout, TIMEOUT_ENV_VAR } from "./bridge-timeouts.js";
 import { debug, warn } from "./log.js";
 import { DEFAULT_BRIDGE_PORT, deriveProjectPort } from "./port.js";
 import { isPidAlive, resolveLiveBridgeAddress } from "./editor-target.js";
 import { syncRequestedPort } from "./requested-port.js";
+import { packageVersion } from "./package-root.js";
 
 /**
  * The wire protocol this client speaks. Must match
@@ -63,17 +64,6 @@ export function describeUnregisteredMethod(method: string): string {
 /** What a bridge that predates the handshake looks like. */
 const LEGACY_CAPABILITIES: BridgeCapabilities = { protocolVersion: 1, legacy: true };
 
-let cachedClientVersion: string | null = null;
-function clientPackageVersion(): string {
-  if (cachedClientVersion) return cachedClientVersion;
-  try {
-    const require = createRequire(import.meta.url);
-    cachedClientVersion = (require("../package.json") as { version: string }).version;
-  } catch {
-    cachedClientVersion = "unknown";
-  }
-  return cachedClientVersion;
-}
 
 /**
  * Describe a client/plugin protocol mismatch in terms the reader can act on,
@@ -96,13 +86,13 @@ export function describeProtocolMismatch(
 
   if (theirs < ours) {
     return (
-      `The Unreal bridge plugin speaks protocol version ${theirs}, this ue-mcp client (v${clientPackageVersion()}) speaks version ${ours}.` +
+      `The Unreal bridge plugin speaks protocol version ${theirs}, this ue-mcp client (v${packageVersion()}) speaks version ${ours}.` +
       `${missing}${built}` +
       ` Rebuild the plugin against the current package: run 'ue-mcp update --build' in the project (or 'ue-mcp deploy' then 'ue-mcp build'), then restart the editor.`
     );
   }
   return (
-    `The Unreal bridge plugin speaks protocol version ${theirs}, this ue-mcp client (v${clientPackageVersion()}) speaks only version ${ours}.` +
+    `The Unreal bridge plugin speaks protocol version ${theirs}, this ue-mcp client (v${packageVersion()}) speaks only version ${ours}.` +
     `${built}` +
     ` Update the npm package to match the plugin: 'npm install ue-mcp@latest'.`
   );

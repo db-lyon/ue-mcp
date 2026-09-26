@@ -22,11 +22,12 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+
 import { execFileSync } from "node:child_process";
 import { checkPluginFreshness, type PluginFreshness } from "./plugin-freshness.js";
 import { trySelectEngine } from "./engine-root.js";
 import { ProjectContext } from "./project.js";
+import { packageRoot } from "./package-root.js";
 
 /**
  * Whether the project declares native modules of its own.
@@ -251,8 +252,7 @@ function readUpluginVersion(pluginDir: string): string | null {
 
 /** The plugin source this npm package ships. */
 function packagedPluginDir(): string {
-  const selfDir = path.dirname(fileURLToPath(import.meta.url));
-  return path.resolve(selfDir, "..", "plugin", "ue_mcp_bridge");
+  return path.join(packageRoot(), "plugin", "ue_mcp_bridge");
 }
 
 export interface InstallProblem {

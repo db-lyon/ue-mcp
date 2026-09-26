@@ -18,14 +18,14 @@ import { nearestActions } from "./action-schema.js";
 import { readPluginsList } from "./plugin/plugins-list.js";
 import { findInstalledPackage } from "./plugin/resolver.js";
 import { pluginSlug } from "./plugin/plugin-groups.js";
+import { packageRoot } from "./package-root.js";
 
 /** The owner name recorded for the skills that ship with ue-mcp itself. */
 export const CORE_OWNER = "ue-mcp";
 
-/** The `skills/` directory shipped in this package (sibling of `dist/`). */
+/** The `skills/` directory shipped in this package. */
 export function packagedSkillsRoot(): string {
-  const here = import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname);
-  return path.resolve(here, "..", "skills");
+  return path.join(packageRoot(), "skills");
 }
 
 /** Where installed skills live for a project. */

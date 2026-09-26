@@ -10,10 +10,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync } from "node:child_process";
-import { createRequire } from "node:module";
+
 import { takeEditorTarget, EditorFlagError } from "./editor-flag.js";
 import { isNewer } from "./version-check.js";
 import { UE_MCP_LAUNCH } from "./mcp-client-config.js";
+import { packageVersion } from "./package-root.js";
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -62,14 +63,6 @@ function readJsonVersion(pkgJsonPath: string): string | null {
   }
 }
 
-function selfVersion(): string {
-  try {
-    const require = createRequire(import.meta.url);
-    return require("../package.json").version;
-  } catch {
-    return "unknown";
-  }
-}
 
 function registryLatest(): string | null {
   return safeExec("npm view ue-mcp version");
@@ -310,7 +303,7 @@ export function collectDoctor(projectArg?: string, cwd: string = process.cwd()):
     return { ...s, servesTarget };
   });
   return {
-    selfVersion: selfVersion(),
+    selfVersion: packageVersion(),
     registryLatest: registryLatest(),
     npmGlobal: global,
     localShadow: shadow,

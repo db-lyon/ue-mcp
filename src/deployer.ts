@@ -4,6 +4,7 @@ import { execSync } from "node:child_process";
 import type { ProjectContext } from "./project.js";
 import { debug, warn } from "./log.js";
 import { UPluginSchema } from "./schemas.js";
+import { packageRoot } from "./package-root.js";
 
 export interface DeployResult {
   pythonPluginEnabled: boolean;
@@ -143,18 +144,8 @@ export function attachSummary(r: AttachResult): string {
   return "Bridge attach: " + notes.join("; ");
 }
 
-function selfDir(): string {
-  return import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
-}
-
 function packagedUpluginPath(): string {
-  return path.resolve(
-    selfDir(),
-    "..",
-    "plugin",
-    "ue_mcp_bridge",
-    "UE_MCP_Bridge.uplugin",
-  );
+  return path.join(packageRoot(), "plugin", "ue_mcp_bridge", "UE_MCP_Bridge.uplugin");
 }
 
 function readUpluginVersion(upluginPath: string): string | null {
@@ -337,7 +328,7 @@ export function deployPluginTree(sourcePluginDir: string, targetPluginDir: strin
 function deployCppPlugin(uprojectPath: string): boolean {
   const projectDir = path.dirname(uprojectPath);
   return deployPluginTree(
-    path.resolve(selfDir(), "..", "plugin", "ue_mcp_bridge"),
+    path.join(packageRoot(), "plugin", "ue_mcp_bridge"),
     path.join(projectDir, "Plugins", "UE_MCP_Bridge"),
   );
 }

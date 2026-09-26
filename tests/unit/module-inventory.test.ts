@@ -144,6 +144,7 @@ const SESSION_INDEPENDENT: Record<string, string> = {
   "instructions.ts": "The initialize payload is sent once per process and cannot be renegotiated.",
   "global-config.ts": "The user-global config layer, which applies to every project by definition.",
   "log.ts": "Process-wide stderr logging.",
+  "package-root.ts": "Where this installed package lives and its version; one answer per process.",
   "version-check.ts": "One npm check per process; the upgrade notice is emitted once.",
   "yaml-dump.ts": "Pure YAML serialization of the value it is handed.",
 

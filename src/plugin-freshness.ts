@@ -13,7 +13,8 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+import { packageRoot } from "./package-root.js";
+
 
 export interface PluginFreshness {
   /** False when something could not be located; the rest is then advisory. */
@@ -29,9 +30,6 @@ export interface PluginFreshness {
   message?: string;
 }
 
-function selfDir(): string {
-  return path.dirname(fileURLToPath(import.meta.url));
-}
 
 /** Newest mtime across the plugin's .h/.cpp/.cs sources. */
 function newestSource(dir: string): { file: string; mtimeMs: number } | null {
@@ -166,7 +164,7 @@ function computePluginFreshness(uprojectPath: string | null): PluginFreshness {
     // Compare against the source that actually got deployed, falling back to
     // the copy inside this package when the project has no Source tree.
     const deployedSource = path.join(deployedPluginDir, "Source");
-    const packagedSource = path.resolve(selfDir(), "..", "plugin", "ue_mcp_bridge", "Source");
+    const packagedSource = path.join(packageRoot(), "plugin", "ue_mcp_bridge", "Source");
     const source =
       newestSource(fs.existsSync(deployedSource) ? deployedSource : packagedSource) ??
       newestSource(packagedSource);

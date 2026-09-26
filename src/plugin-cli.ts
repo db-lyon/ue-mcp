@@ -58,6 +58,7 @@ import {
 } from "./skills.js";
 import { resolvePublishToken } from "./registry-auth.js";
 import { parseEditorFlag, resolveEditorFlag, EditorFlagError } from "./editor-flag.js";
+import { packageVersion } from "./package-root.js";
 
 // --editor names one of the editors this server drives; every project lookup
 // below starts from it instead of cwd. Taken before the subcommand is shifted
@@ -247,10 +248,10 @@ function cmdInstall(): void {
   }
 
   // minServerVersion gate at install time.
-  const pkgJson = JSON.parse(fs.readFileSync(path.join(__dirnameOrCwd(), "..", "package.json"), "utf-8")) as { version: string };
-  if (manifest.minServerVersion && !satisfiesMinimum(pkgJson.version, manifest.minServerVersion)) {
+  const serverVersion = packageVersion();
+  if (manifest.minServerVersion && !satisfiesMinimum(serverVersion, manifest.minServerVersion)) {
     fail(
-      `${name} requires ue-mcp >= ${manifest.minServerVersion}; this server is ${pkgJson.version}. ` +
+      `${name} requires ue-mcp >= ${manifest.minServerVersion}; this server is ${serverVersion}. ` +
       `Upgrade with \`npm install -g ue-mcp@latest\`.`,
     );
   }
@@ -555,7 +556,7 @@ function writeScaffold(dir: string, pkgName: string, prefix: string): void {
   // version that introduced it. Default the floor to the running server's
   // version so a freshly scaffolded plugin declares a dependency that can
   // actually resolve the import; an explicit env override still wins.
-  const minServer = process.env.UE_MCP_PLUGIN_MIN_SERVER ?? readServerVersion();
+  const minServer = process.env.UE_MCP_PLUGIN_MIN_SERVER ?? packageVersion();
   const year = new Date().getFullYear();
 
   const pkgJson = {
@@ -1057,29 +1058,6 @@ function uePluginEnabled(projectDir: string, name: string): boolean | undefined 
   }
 }
 
-/** Read the running ue-mcp server's version from its own package.json. */
-function readServerVersion(): string {
-  try {
-    const pkgJson = JSON.parse(
-      fs.readFileSync(path.join(__dirnameOrCwd(), "..", "package.json"), "utf-8"),
-    ) as { version?: string };
-    return pkgJson.version ?? "1.0.0";
-  } catch {
-    return "1.0.0";
-  }
-}
-
-/**
- * `__dirname` is not available in ESM. Fall back to the cwd so the relative
- * path-to-package.json lookup still works when the CLI is invoked directly.
- */
-function __dirnameOrCwd(): string {
-  try {
-    return path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
-  } catch {
-    return process.cwd();
-  }
-}
 
 /* ------------------------------------------------------------------ */
 /* publish - push a plugin listing (incl. its README) to the registry  */

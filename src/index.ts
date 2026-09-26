@@ -76,6 +76,7 @@ import {
   explainMissingAction,
   type SessionSurface,
 } from "./session-surface.js";
+import { packageVersion } from "./package-root.js";
 
 type TextBlock = { type: "text"; text: string };
 
@@ -152,10 +153,7 @@ async function main() {
 
   // Kick off the npm registry check in the background; the next tool response
   // injects the notice if a newer version is published.
-  const { createRequire } = await import("node:module");
-  const require = createRequire(import.meta.url);
-  const pkg = require("../package.json") as { version: string };
-  startVersionCheck(pkg.version);
+  startVersionCheck(packageVersion());
 
   // ── Project init ─────────────────────────────────────────────────
   // Moved ahead of tool registration so plugin resolution can walk the
@@ -238,7 +236,7 @@ async function main() {
     // one with nothing latched. startWatching is idempotent, so the later
     // pass over sessions.list() stays harmless.
     dialogGuardFor(session);
-    const load = await buildSessionLoad(session, pkg.version, sessions.size > 1);
+    const load = await buildSessionLoad(session, packageVersion(), sessions.size > 1);
     perSession.set(session, load);
     surfaces.push(load.surface);
   }
@@ -575,7 +573,7 @@ async function main() {
     if (inFlight) return inFlight;
 
     const build = (async () => {
-      const load = await buildSessionLoad(session, pkg.version, true);
+      const load = await buildSessionLoad(session, packageVersion(), true);
       applyContextStrategy(load);
       await buildRegistryFor(load);
       await buildGuardsFor(load);
@@ -643,7 +641,7 @@ async function main() {
     // Read from package.json, never written here. A literal was frozen at
     // 0.6.4 in April and every release since told its clients that, while
     // doctor and the update check read the real one and disagreed with it.
-    version: pkg.version,
+    version: packageVersion(),
   }, {
     instructions: serverInstructions,
   });
@@ -1469,10 +1467,7 @@ if (subcmd === "init") {
   process.argv.splice(2, 1);
   import("./context-cli.js");
 } else if (subcmd === "version" || subcmd === "--version" || subcmd === "-v") {
-  const { createRequire } = await import("node:module");
-  const require = createRequire(import.meta.url);
-  const pkg = require("../package.json");
-  console.log(pkg.version);
+  console.log(packageVersion());
 } else {
   main().catch((e) => {
     console.error(`[ue-mcp] Fatal error: ${e}`);
