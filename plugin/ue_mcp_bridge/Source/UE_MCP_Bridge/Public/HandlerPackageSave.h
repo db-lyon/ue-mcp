@@ -322,6 +322,16 @@ inline void MCPNoteSaveOutcome(
 	Result->SetBoolField(TEXT("saved"), bSaved);
 	if (bSaved) return;
 
+	// An object in the transient package has no file to write, so there is no
+	// save to fail. The edit is the whole result.
+	const FString TransientName = GetTransientPackage()->GetName();
+	if (AssetPath == TransientName || AssetPath.StartsWith(TransientName + TEXT("."))
+		|| AssetPath.StartsWith(TransientName + TEXT("/")))
+	{
+		Result->SetBoolField(TEXT("transient"), true);
+		return;
+	}
+
 	Result->SetBoolField(TEXT("success"), false);
 	Result->SetStringField(TEXT("saveError"), Reason);
 	Result->SetStringField(TEXT("error"), FString::Printf(
