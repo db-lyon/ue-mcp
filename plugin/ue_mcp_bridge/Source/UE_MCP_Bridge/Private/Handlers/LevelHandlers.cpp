@@ -5989,8 +5989,7 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetCurrentEditLevel(const TSharedPtr<FJso
 	REQUIRE_EDITOR_WORLD(World);
 	// levelPath is a spec alias, renamed to levelName before this runs (#1057).
 	FString LevelName;
-	TryGetStringParam(Params, TEXT("levelName"), LevelName);
-	if (LevelName.IsEmpty()) return MCPError(TEXT("Missing levelName (or levelPath)"));
+	if (auto Err = RequireString(Params, TEXT("levelName"), LevelName)) return Err;
 
 	ULevelEditorSubsystem* LES = GEditor ? GEditor->GetEditorSubsystem<ULevelEditorSubsystem>() : nullptr;
 	if (!LES) return MCPError(TEXT("LevelEditorSubsystem not available"));
@@ -6159,8 +6158,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::RemoveStreamingSublevel(const TSharedPtr<
 
 	REQUIRE_EDITOR_WORLD(World);
 	FString Name;
-	TryGetStringParam(Params, TEXT("levelName"), Name); // levelPath is a spec alias (#1057).
-	if (Name.IsEmpty()) return MCPError(TEXT("Missing levelName (or levelPath)"));
+	// levelPath is a spec alias, renamed to levelName before this runs (#1057).
+	if (auto Err = RequireString(Params, TEXT("levelName"), Name)) return Err;
 
 	ULevelStreaming* SL = FindStreamingByName(World, Name);
 	if (!SL)
@@ -6234,8 +6233,8 @@ TSharedPtr<FJsonValue> FLevelHandlers::SetStreamingSublevelProperties(const TSha
 
 	REQUIRE_EDITOR_WORLD(World);
 	FString Name;
-	TryGetStringParam(Params, TEXT("levelName"), Name); // levelPath is a spec alias (#1057).
-	if (Name.IsEmpty()) return MCPError(TEXT("Missing levelName (or levelPath)"));
+	// levelPath is a spec alias, renamed to levelName before this runs (#1057).
+	if (auto Err = RequireString(Params, TEXT("levelName"), Name)) return Err;
 
 	ULevelStreaming* SL = FindStreamingByName(World, Name);
 	if (!SL) return MCPError(FString::Printf(TEXT("Streaming sub-level not found: %s"), *Name));
